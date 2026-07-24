@@ -48,7 +48,8 @@ dependency plus the `-Asouther.source` compiler arg.
 | `businesstrip` | include (field composition) + a nested newtype invariant |
 | `member` | Member lookup. A `required behavior findMember` (outside-world dependency) + type routing `>->`. Actually compiles the Spring MVC + jOOQ boundary code (below) |
 | `account` | Account withdrawal, "read → check → write". Binds `withdraw` (which has two injected behaviors) from **Clojure + Pedestal rather than Java**, connected to H2 inside a transaction (below). It shows that the generated types are used the same way even when the boundary language changes |
-| `ordering` | Ordering + stock reservation. Two injected behaviors joined with `>->`, and it **actually starts Spring Boot, connects to H2, and shows transaction control**: if the second stage returns the `OutOfStock` case, the first stage's INSERT is rolled back too (below) |
+| `ordering` | Ordering + stock reservation. Two injected behaviors joined with `>->`, and it **actually starts Spring Boot, connects to H2, and shows transaction control**: if the second stage returns the `OutOfStock` case, the first stage's INSERT is rolled back too (below). Also a pure `report` over a recorded order — a sales summary showcasing `distinct` (the old standalone `sales` example, folded in here) |
+| `inventory` | The warehouse side. A third Souther module living inside the ordering project alongside `cart` and `ordering` (so it `import`s cart's `PricedCart`): `allocate` (read → aggregate check → write — read stock, check every line is covered with `all`, then commit), EAN-13 `inspectBarcode` (a check-digit fold with `List.indexedMap` / `List.sum`), whole-case `verifyShipment`, and `putAway` |
 
 Modules that are `.sou`-only with no hand-written Java (email/contact/expense/cart/businesstrip)
 carry a single minimal `package-info.java` to trigger the processor (javac does not run annotation

@@ -1,0 +1,154 @@
+// The warehouse side of fulfilment: a third Souther module in this project, alongside example.cart
+// and example.ordering. All three .sou under src/main/souther are compiled in one processor run, so
+// this module can `import example.cart` the same way ordering does — allocate reads and reserves
+// against cart's PricedCart. It is kept separate from ordering so ordering stays the order lifecycle
+// and this stays the warehouse.
+//
+// Four behaviors — allocate, inspectBarcode, verifyShipment, putAway — each checked at compile time by
+// its `example`s. No hand-written Java drives them; the smoke test only runs one to prove the
+// generated types decode / apply / encode.
+//
+// exposing is omitted, so every generated class is public — the smoke test references them by name.
+module example.inventory
+import List ( all, find )
+import example.cart ( Sku, LineItem, PricedCart )
+
+// === allocate: read stock, check every line is covered, then commit ===
+// Reads the current on-hand for the order's skus, folds "every line is within stock" with `all`, and
+// commits only if every line fits; one short line fails the whole allocation. This is the
+// "read -> aggregate check -> write" shape: member / account check a single row, this checks many
+// lines against read state.
+
+// One snapshot row: a sku and its current on-hand. sku is unique per snapshot — two rows for the same
+// sku would make currentStock's find (first match) ambiguous — so the uniqueness is an invariant.
+// List.allUniqueBy(.sku, rows) says "pull the sku out and there are no duplicates" in one line (a
+// property of the List, not of any single row; internally map -> distinct -> length compare, all
+// fold-derived, so it is allowed in an invariant).
+data StockLine =
+    { sku: Sku
+    , quantity: Int
+    }
+data StockSnapshot = { rows: List<StockLine> }
+    invariant List.allUniqueBy(.sku, rows)
+
+data Allocated = { total: Int }
+// One short line fails the whole allocation.
+data InsufficientStock
+
+// --- injected dependencies (Java) ---
+// readStock reads the current on-hand for the order's skus.
+behavior readStock : (order: PricedCart) -> StockSnapshot
+    constructs StockSnapshot, StockLine
+// commitStock writes: decrements the stock and returns Allocated.
+behavior commitStock : (order: PricedCart) -> Allocated
+    constructs Allocated
+
+// The on-hand for a sku in the snapshot: the matching row's quantity, or 0 if absent (out of stock).
+// find returns an Option; pipe it through map then withDefault to fall back. The lambda captures sku.
+let currentStock (rows: List<StockLine>, sku: Sku): Int =
+    find(r -> r.sku == sku, rows) |> Option.map(.quantity) |> Option.withDefault(0)
+
+// One line is allocatable when its on-hand is at least the ordered quantity.
+let allocatable (i: LineItem, rows: List<StockLine>): Bool = currentStock(rows, i.sku) >= i.quantity
+
+// read -> aggregate check -> write. The lambda passed to all captures the local snapshot.
+behavior allocate : (order: PricedCart) -> Allocated | InsufficientStock
+    requires readStock, commitStock
+
+let allocate (order, readStock, commitStock) = {
+    let snap = readStock(order)
+    require all(i -> allocatable(i, snap.rows), order.items)
+        else InsufficientStock
+    commitStock(order)
+}
+
+fake readStock
+    | (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ], total = 300, highValue = false })
+        -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = 5 } ] }
+    | _ -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = 1 } ] }
+
+fake commitStock
+    | _ -> Allocated { total = 300 }
+
+example allocate
+    | "every line within stock is allocated" :
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ], total = 300, highValue = false })
+            -> Allocated { total = 300 }
+    | "one line over stock fails the whole allocation" :
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 999, unitPrice = 150 } ], total = 149850, highValue = true })
+            -> InsufficientStock
+
+// === inspectBarcode: barcode read verification ===
+// On receiving, a barcode (JAN / EAN-13) is scanned. If the check digit does not match, the read is
+// rejected as a damaged or misread label and the goods are not put away. Digit count and being numeric
+// are format invariants; the check digit is a fold (an invariant cannot recurse), so it lives in the
+// behavior.
+data Barcode = String
+    invariant String.matches("[0-9]{13}", value)
+
+data InspectionPassed = { code: Barcode }
+data ScanError
+
+behavior inspectBarcode : (barcode: Barcode) -> InspectionPassed | ScanError
+    constructs InspectionPassed, ScanError
+
+// EAN-13 weighted sum: positions 1,3,5.. (even index from 0) weigh 1, positions 2,4,6.. (odd index)
+// weigh 3. A valid code has its 13-digit weighted sum divisible by 10 (the 13th check digit is chosen
+// so). Digits are numeric by the invariant, so digitValue = toCode(ch) - toCode("0") is total.
+// List.indexedMap (map with the index) weights each digit; List.sum adds them.
+let digitValue (ch: String) = String.toCode(ch) - String.toCode("0")
+let weightedSum (code: String) =
+    String.toChars(code)
+        |> List.indexedMap((i, ch) -> (if Int.modBy(2, i) == 0 then 1 else 3) * digitValue(ch))
+        |> List.sum
+
+let inspectBarcode (barcode) = {
+    require Int.modBy(10, weightedSum(barcode.value)) == 0 else ScanError
+    InspectionPassed { code = barcode }
+}
+
+example inspectBarcode
+    | "a correct barcode passes inspection" :
+        (Barcode("9784873115658")) -> InspectionPassed { code = Barcode("9784873115658") }
+    | "a wrong check digit is a scan error" :
+        (Barcode("9784873115659")) -> ScanError
+
+// === verifyShipment: only whole cases ship ===
+// The warehouse ships in case units (units per case). A requested quantity that is not a multiple of
+// the case size is rejected as a remainder; a multiple returns the case count. The remainder is
+// Int.modBy, the case count is integer division. "case size is at least 1" is an invariant.
+data CaseSize = Int
+    invariant value >= 1
+data Shippable = { cases: Int }
+data PartialCase = { leftover: Int }
+
+behavior verifyShipment : (caseSize: CaseSize, requested: Int) -> Shippable | PartialCase
+    constructs Shippable, PartialCase
+
+let verifyShipment (caseSize, requested) = {
+    let leftover = Int.modBy(caseSize.value, requested)
+    require leftover == 0 else PartialCase { leftover = leftover }
+    Shippable { cases = requested / caseSize.value }
+}
+
+example verifyShipment
+    | "a multiple of the case size ships (returns the case count)" : (CaseSize(12), 24) -> Shippable { cases = 2 }
+    | "a remainder is rejected" : (CaseSize(12), 25) -> PartialCase { leftover = 1 }
+
+// === putAway: a passed item onto a shelf location ===
+// A shelf location (aisle-bay-level, e.g. A-03-12). An inspected-and-passed barcode is put away to the
+// given shelf. The format is a matches invariant, so a missing digit or a typo is rejected at the
+// boundary.
+data Location = String
+    invariant String.matches("[A-Z]-[0-9]{2}-[0-9]{2}", value)
+data PutAwayRecord = { code: Barcode, location: Location }
+
+behavior putAway : (passed: InspectionPassed, location: Location) -> PutAwayRecord
+    constructs PutAwayRecord
+
+let putAway (passed, location) = PutAwayRecord { code = passed.code, location = location }
+
+example putAway
+    | "a passed item is put away to a shelf" :
+        (InspectionPassed { code = Barcode("9784873115658") }, Location("A-03-12"))
+            -> PutAwayRecord { code = Barcode("9784873115658"), location = Location("A-03-12") }
