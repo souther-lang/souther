@@ -1,5 +1,9 @@
 # Souther
 
+<p align="center">
+  <img src="docs/images/souther.png" alt="Souther" width="420">
+</p>
+
 Souther is a small JVM language for describing business data, value constraints, and state transitions, then generating types and behaviors that Java can use.
 
 You write business rules with `data` and `behavior`. `invariant` makes value constraints explicit, while behaviors implemented in Java make dependencies such as a database or a clock explicit. This keeps the domain model's boundary intact as it becomes an implementation.

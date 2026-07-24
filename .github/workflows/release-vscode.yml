@@ -1,0 +1,61 @@
+name: Release VS Code extension
+
+# Builds the language-server jar, bundles it into the VS Code extension, and produces a VSIX.
+# Push a `vscode-v*` tag (e.g. `vscode-v0.1.0`) to attach the VSIX to a GitHub Release.
+# `workflow_dispatch` builds and uploads the VSIX as a workflow artifact without releasing.
+# Publishing to a marketplace is done manually — see editors/vscode/README.md.
+
+on:
+  push:
+    tags:
+      - 'vscode-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Build the language-server jar
+        run: mvn -B --no-transfer-progress -pl souther-lsp -am package
+
+      - name: Bundle the jar into the extension
+        run: |
+          mkdir -p editors/vscode/server
+          cp souther-lsp/target/souther-lsp.jar editors/vscode/server/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install extension dependencies
+        working-directory: editors/vscode
+        run: npm ci
+
+      - name: Package the VSIX
+        working-directory: editors/vscode
+        run: npx @vscode/vsce package
+
+      - name: Upload VSIX as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: souther-vscode
+          path: editors/vscode/*.vsix
+
+      - name: Attach the VSIX to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: editors/vscode/*.vsix

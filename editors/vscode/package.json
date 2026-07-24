@@ -3,14 +3,35 @@
   "displayName": "Souther",
   "description": "Souther language support: syntax highlighting and the language server.",
   "version": "0.1.0",
-  "publisher": "unit8",
+  "publisher": "wolfchief",
+  "license": "EPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kawasima/souther.git",
+    "directory": "editors/vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/kawasima/souther/issues"
+  },
+  "homepage": "https://github.com/kawasima/souther#readme",
+  "keywords": [
+    "souther",
+    "language server",
+    "lsp",
+    "sou"
+  ],
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
     "Programming Languages"
   ],
+  "icon": "icon.png",
   "main": "./extension.js",
+  "scripts": {
+    "vscode:prepublish": "node -e \"require('fs').accessSync('server/souther-lsp.jar')\"",
+    "package": "vsce package"
+  },
   "activationEvents": [
     "onLanguage:souther"
   ],
@@ -52,5 +73,8 @@
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.1"
   }
 }

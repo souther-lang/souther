@@ -41,3 +41,36 @@ cd editors/vscode && npm install                   # fetch vscode-languageclient
 Then open `editors/vscode` in VS Code and press F5 (Extension Development Host), or package it with
 `vsce package`. Point `souther.server.jar` at another jar, or `souther.server.java` at a specific
 `java`, through the settings if the defaults do not fit.
+
+## Packaging and publishing
+
+The bundled `server/souther-lsp.jar` is a build output, not tracked in git. Build and stage it
+before packaging:
+
+```sh
+mvn -q -pl souther-lsp -am package
+mkdir -p editors/vscode/server
+cp souther-lsp/target/souther-lsp.jar editors/vscode/server/
+cd editors/vscode
+npm ci
+npm run package                                    # → souther-<version>.vsix
+```
+
+`npm run package` runs `@vscode/vsce` (a dev dependency). `vscode:prepublish` refuses to package
+if `server/souther-lsp.jar` is missing, so the VSIX never ships without the server.
+
+The `.github/workflows/release-vscode.yml` workflow automates this. Push a `vscode-v*` tag to build
+the jar, package the VSIX, and attach it to the matching GitHub Release:
+
+```sh
+git tag vscode-v0.1.0
+git push origin vscode-v0.1.0
+```
+
+`workflow_dispatch` runs the same build and uploads the VSIX as a workflow artifact without cutting
+a release.
+
+Publishing to a marketplace is manual. Download the `.vsix` from the GitHub Release (or build it
+locally with `npm run package`), then upload it under the `wolfchief` publisher at
+<https://marketplace.visualstudio.com/manage>. A manual upload needs neither a Personal Access Token
+nor an Azure subscription — both are only required for the `vsce publish` CLI.
