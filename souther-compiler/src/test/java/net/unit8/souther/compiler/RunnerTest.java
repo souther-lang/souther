@@ -113,7 +113,7 @@ class RunnerTest {
     }
 
     @Test
-    void refusesAPipelineBehavior() throws Exception {
+    void drivesASingleStageInLanguagePipeline() throws Exception {
         Path file = write("flow.sou", """
                 data In = { v: Int }
                 data Out = { v: Int }
@@ -121,9 +121,40 @@ class RunnerTest {
                 let stage (i) = Out { v = i.v }
                 behavior flow = stage
                 """);
+        assertEquals("{\"v\":1}", Runner.run(file, "flow", "{\"v\": 1}"));
+    }
+
+    @Test
+    void drivesAMultiStageInLanguagePipeline() throws Exception {
+        Path file = write("flow.sou", """
+                data In = { v: Int }
+                data Mid = { v: Int }
+                data Out = { v: Int }
+                behavior first : (i: In) -> Mid constructs Mid
+                let first (i) = Mid { v = i.v }
+                behavior second : (m: Mid) -> Out constructs Out
+                let second (m) = Out { v = m.v }
+                behavior flow = first >-> second
+                """);
+        assertEquals("{\"v\":42}", Runner.run(file, "flow", "{\"v\": 42}"));
+    }
+
+    @Test
+    void refusesAPipelineWhoseStageNeedsInjectedDependencies() throws Exception {
+        Path file = write("flow.sou", """
+                data In = { v: Int }
+                data Out = { at: String }
+                behavior now : () -> String
+                behavior stamp : (i: In) -> Out
+                    requires now
+                    constructs Out
+                let stamp (i, now) = Out { at = now() }
+                behavior flow = stamp
+                """);
         Runner.RunException e = assertThrows(Runner.RunException.class,
                 () -> Runner.run(file, "flow", "{\"v\": 1}"));
-        assertTrue(e.getMessage().contains("pipeline"), e.getMessage());
+        assertTrue(e.getMessage().contains("requires injected dependencies"), e.getMessage());
+        assertTrue(e.getMessage().contains("stamp"), e.getMessage());
     }
 
     @Test
