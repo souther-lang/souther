@@ -21,7 +21,6 @@
         <module>sales</module>
         <module>businesstrip</module>
         <module>member</module>
-        <module>account</module>
         <module>ordering</module>
     </modules>
 

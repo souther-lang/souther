@@ -60,7 +60,7 @@ returns `Result<T>`, and `Ok`/`Err` are told apart by pattern match — no wildc
 
 ```sh
 mvn -o install -DskipTests              # core (souther-runtime / souther-compiler) into ~/.m2
-mvn -o -f examples/pom.xml verify       # generate → compile → smoke-test every example
+mvn -o -f examples/pom.xml verify       # generate → compile → smoke-test every example (except account, which is Clojure — below)
 ```
 
 This is kept independent of the core reactor (the root `mvn test`) so the Spring/jOOQ dependencies
@@ -185,10 +185,12 @@ it with `require current.value >= request.amount.value`, and writes the new bala
 enough. The non-negativity of the new balance `Balance(current - amount)` is discharged at compile
 time by the require just above it. If funds are short it returns `InsufficientFunds` without writing.
 
-The `.sou`-side compile-time check (`fake` + `example` confirm the three cases with no DB) is run by
-the Maven annotation processor. The account module has no hand-written Java, so it carries a single
-minimal `package-info.java` to trigger the processor. **The Clojure app puts that generated output
-(`target/classes`) straight on its classpath** (`target/classes` is in `:paths` in `deps.edn`).
+The `.sou`-side compile-time check (`fake` + `example` confirm the three cases with no DB) runs
+whenever `SoutherProcessor` generates the classes — here that is `clojure -X:gen` (account is a
+Clojure/`deps.edn` project, not a Maven reactor module). The account module has no hand-written Java,
+so it carries a single minimal `package-info.java` to trigger the processor. **The Clojure app puts
+that generated output (`target/classes`) straight on its classpath** (`target/classes` is in
+`:paths` in `deps.edn`).
 
 ### Implementing an injected behavior from Clojure — `proxy` + `decoder()`
 
@@ -242,8 +244,9 @@ clojure -X:test                                  # the souther-clj library, beha
 clojure -M:run                                   # starts on localhost:8890
 ```
 
-`mvn -o -f examples/pom.xml -pl account compile` generates the same classes if you prefer the Maven
-path (it is what `mvn … verify` uses for the whole reactor).
+`clojure -X:gen` is the only generation path for account: unlike the other examples it is not a
+Maven reactor module, so `mvn … verify` does not build it — its `.sou` is checked by the `:gen` run
+above.
 
 ```sh
 curl localhost:8890/accounts/acc-1                                            # {"account":"acc-1","balance":1000}

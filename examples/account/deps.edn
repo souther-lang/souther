@@ -2,7 +2,7 @@
 ;;
 ;; `target/classes` is on the classpath: it holds the types SoutherProcessor generates from
 ;; account.sou (現在残高 / 残高を更新する / 出金する ...). Generate them first with
-;;   mvn -o -f examples/pom.xml -pl account compile
+;;   clojure -X:gen
 ;; then run the app with `clojure -M:run` or the tests with `clojure -X:test`.
 ;; `souther-clj/src` is the vendored reusable interop library (souther.decode / behavior / match),
 ;; written to be lifted out into its own repo unchanged (see souther-clj/README.md).
