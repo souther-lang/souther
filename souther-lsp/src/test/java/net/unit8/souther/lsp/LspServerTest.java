@@ -120,7 +120,160 @@ class LspServerTest {
         assertTrue(glob.contains("*.sou"), "watches Souther sources: " + glob);
     }
 
+    @Test
+    void capabilitiesAdvertiseFormatting() {
+        byte[] input = frames(message(1, "initialize", Map.of()));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        JsonNode caps = readFrames(out.toByteArray()).stream()
+                .filter(m -> m.has("id") && m.get("id").asInt() == 1).findFirst().orElseThrow()
+                .get("result").get("capabilities");
+        assertTrue(caps.get("documentFormattingProvider").asBoolean(), "formatting is advertised");
+        assertTrue(caps.get("renameProvider").asBoolean(), "rename is advertised");
+        assertTrue(caps.has("completionProvider"), "completion is advertised");
+        assertTrue(caps.has("codeActionProvider"), "code actions are advertised");
+    }
+
+    @Test
+    void renameReturnsAWorkspaceEditForEveryUse() {
+        String uri = "file:///r.sou";
+        String text = "module demo\ndata X = { a: Int }\nbehavior f : (x: X) -> X\nlet f (x) = x\n";
+        byte[] input = frames(
+                message(1, "initialize", Map.of()),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", text))),
+                message(2, "textDocument/rename", Map.of(
+                        "textDocument", Map.of("uri", uri),
+                        "position", Map.of("line", 1, "character", 5),   // on `data X`
+                        "newName", "Y")));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        JsonNode changes = responseFor(readFrames(out.toByteArray()), 2).get("changes");
+        JsonNode edits = changes.get(uri);
+        assertEquals(3, edits.size(), "the declaration plus its two type uses");
+        assertEquals("Y", edits.get(0).get("newText").asString());
+    }
+
+    @Test
+    void formattingReturnsAFullDocumentEdit() {
+        String uri = "file:///f.sou";
+        byte[] input = frames(
+                message(1, "initialize", Map.of()),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", "module demo\ndata X = { a: Int }\n"))),
+                message(2, "textDocument/formatting", Map.of(
+                        "textDocument", Map.of("uri", uri),
+                        "options", Map.of("tabSize", 4, "insertSpaces", true))));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        JsonNode edits = responseFor(readFrames(out.toByteArray()), 2);
+        assertEquals(1, edits.size(), "a single full-document edit");
+        String newText = edits.get(0).get("newText").asString();
+        assertTrue(newText.contains("{ a: Int"), newText);
+        JsonNode start = edits.get(0).get("range").get("start");
+        assertEquals(0, start.get("line").asInt());
+        assertEquals(0, start.get("character").asInt());
+    }
+
+    @Test
+    void completionReturnsNameCandidates() {
+        String uri = "file:///c.sou";
+        String text = "module demo\ndata Thing = { v: Int }\nbehavior f : (x: Thing) -> Thing\nlet f (x) = x\n";
+        byte[] input = frames(
+                message(1, "initialize", Map.of()),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", text))),
+                message(2, "textDocument/completion", Map.of(
+                        "textDocument", Map.of("uri", uri),
+                        "position", Map.of("line", 3, "character", 12))));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        JsonNode items = responseFor(readFrames(out.toByteArray()), 2);
+        boolean hasType = false;
+        boolean hasKeyword = false;
+        for (JsonNode it : items) {
+            String label = it.get("label").asString();
+            if (label.equals("Thing")) {
+                hasType = true;
+            }
+            if (label.equals("data")) {
+                hasKeyword = true;
+            }
+        }
+        assertTrue(hasType, "the data type is offered");
+        assertTrue(hasKeyword, "a keyword is offered");
+    }
+
+    @Test
+    void codeActionOffersASpellingQuickFix() {
+        String uri = "file:///q.sou";
+        String text = "module demo\nbehavior f : (value: Int) -> Int\nlet f (value) = valuee\n";
+        byte[] input = frames(
+                message(1, "initialize", Map.of()),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", text))),
+                message(2, "textDocument/codeAction", Map.of(
+                        "textDocument", Map.of("uri", uri),
+                        "range", Map.of("start", Map.of("line", 2, "character", 16),
+                                "end", Map.of("line", 2, "character", 22)),
+                        "context", Map.of("diagnostics", List.of(Map.of(
+                                "range", Map.of("start", Map.of("line", 2, "character", 16),
+                                        "end", Map.of("line", 2, "character", 22)),
+                                "message", "unknown identifier"))))));
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        JsonNode actions = responseFor(readFrames(out.toByteArray()), 2);
+        assertEquals(1, actions.size(), actions.toString());
+        assertEquals("quickfix", actions.get(0).get("kind").asString());
+        String newText = actions.get(0).get("edit").get("changes").get(uri).get(0).get("newText").asString();
+        assertEquals("value", newText);
+    }
+
+    @Test
+    void codeActionWithNoContextDiagnosticsOffersNothing() {
+        String uri = "file:///q2.sou";
+        String text = "module demo\nbehavior f : (value: Int) -> Int\nlet f (value) = valuee\n";
+        byte[] input = frames(
+                message(1, "initialize", Map.of()),
+                message(null, "initialized", Map.of()),
+                message(null, "textDocument/didOpen", Map.of(
+                        "textDocument", Map.of("uri", uri, "text", text))),
+                message(2, "textDocument/codeAction", Map.of(
+                        "textDocument", Map.of("uri", uri),
+                        "range", Map.of("start", Map.of("line", 2, "character", 16),
+                                "end", Map.of("line", 2, "character", 22)),
+                        "context", Map.of("diagnostics", List.of()))));   // client reports none in range
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new LspServer(new MessageConnection(new ByteArrayInputStream(input), out)).run();
+
+        JsonNode actions = responseFor(readFrames(out.toByteArray()), 2);
+        assertEquals(0, actions.size(), "with no context diagnostics the server skips the compile");
+    }
+
     // --- helpers: build and read framed JSON-RPC messages ---
+
+    /** The {@code result} array of the response to request {@code id}. */
+    private static JsonNode responseFor(List<JsonNode> messages, int id) {
+        return messages.stream()
+                .filter(m -> m.has("result") && m.has("id") && m.get("id").isNumber()
+                        && m.get("id").asInt() == id)
+                .findFirst().orElseThrow(() -> new AssertionError("no response for id " + id))
+                .get("result");
+    }
 
     private static String message(Integer id, String method, Object params) {
         Map<String, Object> m = new LinkedHashMap<>();

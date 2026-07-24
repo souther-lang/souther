@@ -28,6 +28,11 @@
             <groupId>net.unit8.souther</groupId>
             <artifactId>souther-compiler</artifactId>
         </dependency>
+        <!-- souther-fmt backs textDocument/formatting; it re-derives a canonical layout from the CST. -->
+        <dependency>
+            <groupId>net.unit8.souther</groupId>
+            <artifactId>souther-fmt</artifactId>
+        </dependency>
         <!-- souther-runtime is `provided` in souther-compiler; the LSP bundles it so a self-contained
              module compiled on save can load its generated classes and evaluate its `example`s (and
              CTFE constant checks). Without it, that evaluation is skipped rather than run. -->

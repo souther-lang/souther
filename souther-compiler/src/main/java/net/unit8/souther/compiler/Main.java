@@ -1,5 +1,7 @@
 package net.unit8.souther.compiler;
 
+import net.unit8.souther.compiler.cst.CstError;
+import net.unit8.souther.compiler.cst.CstParser;
 import net.unit8.souther.compiler.diag.CompileException;
 import net.unit8.souther.compiler.diag.Diagnostic;
 import net.unit8.souther.compiler.diag.DiagnosticRenderer;
@@ -7,6 +9,7 @@ import net.unit8.souther.compiler.diag.HumanRenderer;
 import net.unit8.souther.compiler.diag.JsonRenderer;
 import net.unit8.souther.compiler.diag.Messages;
 import net.unit8.souther.compiler.diag.SourceContext;
+import net.unit8.souther.compiler.fmt.Formatter;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,7 +35,8 @@ public final class Main {
             commands:
               compile <file.sou>... -d <outdir>                    compile to .class files
               run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
-            options (either command):
+              fmt <file.sou>... [-w] [--check]                     format source (stdout, or -w in place)
+            options (compile/run):
               --format human|json      how to render a compile error (default: human)
               --lang <tag>             message locale, e.g. ja or en (default: system, then ja)
               --color auto|always|never  color the human output (default: auto)""";
@@ -43,6 +47,7 @@ public final class Main {
         switch (command) {
             case "run" -> runSubcommand(rest);
             case "compile" -> compileSubcommand(rest);
+            case "fmt" -> fmtSubcommand(rest);
             default -> {
                 String hint = command.endsWith(".sou")
                         ? "no command given — did you mean `souther compile " + command
@@ -89,6 +94,86 @@ public final class Main {
             System.exit(1);
         } catch (IOException e) {
             System.err.println("io error: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    /**
+     * {@code souther fmt <file.sou>... [-w] [--check]}: rewrites each file into its canonical form
+     * (see {@link Formatter}). With no flag the formatted source is printed to stdout; {@code -w}
+     * writes it back in place; {@code --check} writes nothing and exits 1 if any file is not already
+     * formatted, listing those files. A file with a syntax error is reported and left untouched.
+     */
+    private static void fmtSubcommand(String[] args) {
+        boolean write = false;
+        boolean check = false;
+        List<Path> files = new ArrayList<>();
+        for (String a : args) {
+            switch (a) {
+                case "-w", "--write" -> write = true;
+                case "--check" -> check = true;
+                default -> files.add(Path.of(a));
+            }
+        }
+        if (files.isEmpty()) {
+            System.err.println("fmt takes at least one .sou file");
+            System.err.println(USAGE);
+            System.exit(2);
+            return;
+        }
+        if (write && check) {
+            System.err.println("`-w` and `--check` are mutually exclusive");
+            System.exit(2);
+            return;
+        }
+        if (!write && !check && files.size() > 1) {
+            // Concatenating several files to stdout gives an unattributable blob; make the intent explicit.
+            System.err.println("formatting multiple files needs `-w` (write in place) or `--check`");
+            System.exit(2);
+            return;
+        }
+        List<Path> unformatted = new ArrayList<>();
+        boolean failed = false;
+        for (Path file : files) {
+            String source;
+            try {
+                source = Files.readString(file);
+            } catch (IOException e) {
+                System.err.println("io error: " + file + ": " + e.getMessage());
+                failed = true;
+                continue;
+            }
+            CstParser.Result parsed = CstParser.parse(source);
+            if (!parsed.errors().isEmpty()) {
+                CstError first = parsed.errors().get(0);
+                System.err.println(file + ": syntax error: " + first.legacyMessage());
+                failed = true;
+                continue;   // the formatter assumes a clean parse; leave a broken file untouched
+            }
+            String formatted = Formatter.format(parsed.root());
+            if (check) {
+                if (!formatted.equals(source)) {
+                    unformatted.add(file);
+                }
+            } else if (write) {
+                if (!formatted.equals(source)) {
+                    try {
+                        Files.writeString(file, formatted);
+                    } catch (IOException e) {
+                        System.err.println("io error: " + file + ": " + e.getMessage());
+                        failed = true;
+                    }
+                }
+            } else {
+                System.out.print(formatted);
+            }
+        }
+        if (check) {
+            for (Path f : unformatted) {
+                System.out.println(f);
+            }
+        }
+        if (failed || (check && !unformatted.isEmpty())) {
             System.exit(1);
         }
     }

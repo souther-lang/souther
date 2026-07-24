@@ -24,8 +24,13 @@ mvn -q -pl souther-lsp -am package
 ```
 
 It provides diagnostics (all syntax errors plus the first semantic error), the document outline,
-hover, go-to-definition, and semantic tokens — the last read the CST, so a type name and a value are
-coloured differently even though Souther identifiers are not capitalised.
+hover, go-to-definition, find-references, rename, name completion, quick-fix code actions (a
+did-you-mean spelling fix), formatting, and semantic tokens — the last read the CST, so a type name
+and a value are coloured differently even though Souther identifiers are not capitalised.
+
+Formatting is also available on the command line: `souther fmt <file.sou>` prints the canonical
+form, `souther fmt -w <file.sou>` rewrites in place, and `souther fmt --check <file.sou>` exits
+non-zero if a file is not already formatted (for CI).
 
 ## Running the client in VS Code
 

@@ -4,6 +4,7 @@ import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
 import net.unit8.souther.lsp.protocol.Position;
+import net.unit8.souther.lsp.protocol.Range;
 import tools.jackson.databind.JsonNode;
 
 import java.util.List;
@@ -41,12 +42,26 @@ public final class InboundDecoders {
     public static final Decoder<JsonNode, Params.DocRef> DOC_REF =
             field("textDocument", field("uri", string())).map(Params.DocRef::new);
 
+    /** A {@code { line, character }} position object. */
+    private static final Decoder<JsonNode, Position> POSITION =
+            combine(field("line", int_()), field("character", int_())).map(Position::new);
+
     /** {@code { textDocument: { uri }, position: { line, character } }} */
     public static final Decoder<JsonNode, Params.PositionParams> POSITION_PARAMS =
-            combine(field("textDocument", field("uri", string())),
-                    field("position",
-                            combine(field("line", int_()), field("character", int_())).map(Position::new)))
+            combine(field("textDocument", field("uri", string())), field("position", POSITION))
                     .map(Params.PositionParams::new);
+
+    /** {@code { textDocument: { uri }, position: { line, character }, newName }} */
+    public static final Decoder<JsonNode, Params.RenameParams> RENAME =
+            combine(POSITION_PARAMS, field("newName", string()))
+                    .map((pos, newName) ->
+                            new Params.RenameParams(pos.uri(), pos.position(), newName));
+
+    /** {@code { textDocument: { uri }, range: { start, end } }} — the codeAction context is ignored. */
+    public static final Decoder<JsonNode, Params.CodeActionParams> CODE_ACTION =
+            combine(field("textDocument", field("uri", string())),
+                    field("range", combine(field("start", POSITION), field("end", POSITION)).map(Range::new)))
+                    .map(Params.CodeActionParams::new);
 
     /** Decodes {@code node} with {@code decoder}, or empty on any validation failure — a malformed
      * request is dropped rather than crashing the server. */

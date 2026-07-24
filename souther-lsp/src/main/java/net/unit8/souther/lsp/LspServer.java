@@ -1,9 +1,12 @@
 package net.unit8.souther.lsp;
 
+import net.unit8.souther.compiler.cst.LineIndex;
 import net.unit8.souther.lsp.analysis.Analyzer;
 import net.unit8.souther.lsp.analysis.DocumentStore;
 import net.unit8.souther.lsp.analysis.ModuleGraph;
 import net.unit8.souther.lsp.analysis.Workspace;
+import net.unit8.souther.lsp.protocol.CodeAction;
+import net.unit8.souther.lsp.protocol.CompletionItem;
 import net.unit8.souther.lsp.protocol.DocumentSymbol;
 import net.unit8.souther.lsp.protocol.Hover;
 import net.unit8.souther.lsp.protocol.Location;
@@ -86,6 +89,10 @@ public final class LspServer {
             case "textDocument/hover" -> respond(id, hover(params));
             case "textDocument/definition" -> respond(id, definition(params));
             case "textDocument/references" -> respond(id, references(params));
+            case "textDocument/completion" -> respond(id, completion(params));
+            case "textDocument/codeAction" -> respond(id, codeActions(params));
+            case "textDocument/rename" -> respond(id, rename(params));
+            case "textDocument/formatting" -> respond(id, formatting(params));
             case "shutdown" -> respond(id, null);
             case "exit" -> { return true; }
             default -> {
@@ -129,6 +136,10 @@ public final class LspServer {
         capabilities.put("hoverProvider", true);
         capabilities.put("definitionProvider", true);
         capabilities.put("referencesProvider", true);
+        capabilities.put("renameProvider", true);
+        capabilities.put("completionProvider", Map.of());   // invoked completion; no trigger characters
+        capabilities.put("codeActionProvider", true);
+        capabilities.put("documentFormattingProvider", true);
         Map<String, Object> semanticTokens = new LinkedHashMap<>();
         semanticTokens.put("legend", Map.of("tokenTypes", Analyzer.TOKEN_TYPES,
                 "tokenModifiers", List.of()));
@@ -228,6 +239,116 @@ public final class LspServer {
             return true;
         }
         return context.get("includeDeclaration").asBoolean();
+    }
+
+    // --- completion ---
+
+    private Object completion(JsonNode params) {
+        Params.PositionParams p = InboundDecoders.decode(InboundDecoders.POSITION_PARAMS, params)
+                .orElse(null);
+        String text = p == null ? null : documents.get(p.uri());
+        if (text == null) {
+            return List.of();
+        }
+        List<Object> items = new ArrayList<>();
+        for (CompletionItem item : analyzer.completions(text, p.position())) {
+            items.add(Map.of("label", item.label(), "kind", item.kind()));
+        }
+        return items;
+    }
+
+    // --- code actions ---
+
+    private Object codeActions(JsonNode params) {
+        Params.CodeActionParams p = InboundDecoders.decode(InboundDecoders.CODE_ACTION, params)
+                .orElse(null);
+        String text = p == null ? null : documents.get(p.uri());
+        // Only the range's diagnostics can be fixed, so with none in context there is nothing to offer.
+        // Short-circuiting here avoids a recompile — the analyzer's fix lookup compiles the file — on
+        // every lightbulb over clean code, which is the overwhelmingly common case.
+        if (text == null || !hasContextDiagnostics(params)) {
+            return List.of();
+        }
+        List<Object> out = new ArrayList<>();
+        for (CodeAction a : analyzer.codeActions(p.uri(), text, p.range())) {
+            Map<String, Object> action = new LinkedHashMap<>();
+            action.put("title", a.title());
+            action.put("kind", "quickfix");
+            action.put("edit", Map.of("changes", Map.of(a.uri(), List.of(textEdit(a.range(), a.newText())))));
+            out.add(action);
+        }
+        return out;
+    }
+
+    /** Whether the codeAction request carries any client-side diagnostics for its range. */
+    private static boolean hasContextDiagnostics(JsonNode params) {
+        if (params == null) {
+            return false;
+        }
+        JsonNode context = params.get("context");
+        if (context == null) {
+            return false;
+        }
+        JsonNode diagnostics = context.get("diagnostics");
+        return diagnostics != null && diagnostics.isArray() && !diagnostics.isEmpty();
+    }
+
+    // --- rename ---
+
+    /** A {@code WorkspaceEdit} renaming the top-level symbol under the cursor everywhere it is used,
+     * or {@code null} when the new name is not a legal identifier or the cursor is not on a
+     * renameable symbol — the client then reports the rename as unavailable. */
+    private Object rename(JsonNode params) {
+        Params.RenameParams p = InboundDecoders.decode(InboundDecoders.RENAME, params).orElse(null);
+        if (p == null || documents.get(p.uri()) == null || !analyzer.isValidName(p.newName())) {
+            return null;
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        Map<String, List<Range>> edits = analyzer.renameEdits(p.uri(), p.position(), graph);
+        if (edits.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> changes = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Range>> e : edits.entrySet()) {
+            List<Object> textEdits = new ArrayList<>();
+            for (Range r : e.getValue()) {
+                textEdits.add(textEdit(r, p.newName()));
+            }
+            changes.put(e.getKey(), textEdits);
+        }
+        return Map.of("changes", changes);
+    }
+
+    // --- formatting ---
+
+    private Object formatting(JsonNode params) {
+        String uri = InboundDecoders.decode(InboundDecoders.DOC_REF, params)
+                .map(Params.DocRef::uri).orElse(null);
+        String text = uri == null ? null : documents.get(uri);
+        if (text == null) {
+            return List.of();
+        }
+        return analyzer.format(text)
+                .filter(formatted -> !formatted.equals(text))   // no edit when already canonical
+                .<Object>map(formatted -> List.of(fullEdit(text, formatted)))
+                .orElse(List.of());
+    }
+
+    /** A single {@code TextEdit} replacing the whole document with {@code formatted}. */
+    private static Map<String, Object> fullEdit(String text, String formatted) {
+        LineIndex lines = new LineIndex(text);
+        int end = text.length();
+        Range range = new Range(new Position(0, 0),
+                new Position(lines.lspLine(end), lines.lspColumn(end)));
+        return textEdit(range, formatted);
+    }
+
+    /** A {@code TextEdit}: replace {@code range} with {@code newText}. */
+    private static Map<String, Object> textEdit(Range range, String newText) {
+        Map<String, Object> edit = new LinkedHashMap<>();
+        edit.put("range", rangeJson(range));
+        edit.put("newText", newText);
+        return edit;
     }
 
     // --- semantic tokens ---

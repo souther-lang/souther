@@ -1,5 +1,7 @@
 package net.unit8.souther.lsp.analysis;
 
+import net.unit8.souther.lsp.protocol.CodeAction;
+import net.unit8.souther.lsp.protocol.CompletionItem;
 import net.unit8.souther.lsp.protocol.DocumentSymbol;
 import net.unit8.souther.lsp.protocol.Hover;
 import net.unit8.souther.lsp.protocol.Location;
@@ -41,6 +43,22 @@ class AnalyzerTest {
         List<LspDiagnostic> diags = analyzer.diagnostics(src);
         assertTrue(!diags.isEmpty(), "expected a semantic diagnostic");
         assertTrue(diags.get(0).message().contains("type variable"), diags.get(0).message());
+    }
+
+    @Test
+    void formatReturnsCanonicalTextForACleanDocument() {
+        // a one-line product def is reflowed into the multi-line leading-comma block
+        Optional<String> formatted = analyzer.format("module demo\ndata X = { a: Int }\n");
+        assertTrue(formatted.isPresent(), "a clean document formats");
+        assertTrue(formatted.get().contains("{ a: Int"), formatted.get());
+        assertEquals(formatted.get(), analyzer.format(formatted.get()).orElseThrow(),
+                "formatting is idempotent");
+    }
+
+    @Test
+    void formatIsEmptyForADocumentWithASyntaxError() {
+        // `name String` is missing the `:`; the formatter needs a clean parse, so no formatting
+        assertTrue(analyzer.format("module demo\ndata M = { name String }\n").isEmpty());
     }
 
     @Test
@@ -292,6 +310,94 @@ class AnalyzerTest {
 
         // only a's own two declarations (behavior g, let g); c contributes nothing — its `g` is shadowed
         assertEquals(java.util.Set.of("file:///a.sou:2:9", "file:///a.sou:3:4"), keys(refs), refs.toString());
+    }
+
+    @Test
+    void renameEditsCoverEveryUseOfTheSymbolAcrossModules() {
+        String a = "module a exposing ( N )\ndata N = { v: Int }\n";
+        String b = "module b\nimport a ( N )\nbehavior f : (n: N) -> N\nlet f (n) = n\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
+
+        // cursor on the `data N` declaration in a (line 1, char 5)
+        java.util.Map<String, List<Range>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+
+        assertEquals(java.util.Set.of("file:///a.sou", "file:///b.sou"), edits.keySet(), edits.toString());
+        // a: the `exposing ( N )` entry (line 0) and the `data N` declaration (line 1)
+        assertEquals(2, edits.get("file:///a.sou").size(), "exposing entry + declaration in a: " + edits);
+        // b: the `import a ( N )` entry (line 1) and both type uses (line 2)
+        assertEquals(3, edits.get("file:///b.sou").size(), "import entry + both uses in b: " + edits);
+    }
+
+    @Test
+    void renameEditsIncludeExposingAndImportBindingSites() {
+        String a = "module a exposing ( N )\ndata N = { v: Int }\n";
+        String b = "module b\nimport a ( N )\nbehavior f : (n: N) -> N\nlet f (n) = n\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
+
+        java.util.Map<String, List<Range>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+
+        java.util.Set<Integer> aLines = new java.util.HashSet<>();
+        for (Range r : edits.get("file:///a.sou")) {
+            aLines.add(r.start().line());
+        }
+        assertTrue(aLines.contains(0), "the exposing clause on line 0 is renamed: " + aLines);
+
+        java.util.Set<Integer> bLines = new java.util.HashSet<>();
+        for (Range r : edits.get("file:///b.sou")) {
+            bLines.add(r.start().line());
+        }
+        assertTrue(bLines.contains(1), "the import list on line 1 is renamed: " + bLines);
+    }
+
+    @Test
+    void isValidNameAcceptsIdentifiersAndRejectsGarbage() {
+        assertTrue(analyzer.isValidName("従業員ID"), "a non-ASCII identifier is valid");
+        assertTrue(analyzer.isValidName("foo"));
+        assertTrue(!analyzer.isValidName(""), "empty is rejected");
+        assertTrue(!analyzer.isValidName("a b"), "two tokens are rejected");
+        assertTrue(!analyzer.isValidName("data"), "a keyword is not an identifier");
+    }
+
+    @Test
+    void completionsOfferKeywordsTopLevelNamesImportsAndLocals() {
+        String text = "module demo\n"
+                + "import String ( length )\n"
+                + "data Thing = { v: Int }\n"
+                + "behavior f : (x: Thing) -> Thing\n"
+                + "let f (x) = x\n";
+        // cursor in the body of `let f (x) = x` (line 4, on the trailing `x`)
+        List<CompletionItem> items = analyzer.completions(text, new Position(4, 12));
+
+        java.util.Set<String> labels = new java.util.HashSet<>();
+        for (CompletionItem i : items) {
+            labels.add(i.label());
+        }
+        assertTrue(labels.contains("behavior"), "a language keyword: " + labels);
+        assertTrue(labels.contains("Thing"), "the data type defined in the file: " + labels);
+        assertTrue(labels.contains("f"), "the function name: " + labels);
+        assertTrue(labels.contains("length"), "an imported name: " + labels);
+        assertTrue(labels.contains("x"), "the param in scope: " + labels);
+    }
+
+    @Test
+    void codeActionSuggestsReplacingAMisspelledName() {
+        // `valuee` in the body is a typo of the param `value`; the compiler carries a did-you-mean
+        String text = "module demo\nbehavior f : (value: Int) -> Int\nlet f (value) = valuee\n";
+        Range onTheTypo = new Range(new Position(2, 16), new Position(2, 22));
+        List<CodeAction> actions = analyzer.codeActions("file:///m.sou", text, onTheTypo);
+
+        assertEquals(1, actions.size(), actions.toString());
+        assertEquals("Replace with 'value'", actions.get(0).title());
+        assertEquals("value", actions.get(0).newText());
+    }
+
+    @Test
+    void codeActionIsEmptyWhenTheRangeIsAwayFromTheError() {
+        String text = "module demo\nbehavior f : (value: Int) -> Int\nlet f (value) = valuee\n";
+        Range onTheHeader = new Range(new Position(0, 0), new Position(0, 5));
+        assertEquals(List.of(), analyzer.codeActions("file:///m.sou", text, onTheHeader));
     }
 
     private static java.util.Set<String> keys(List<Location> refs) {

@@ -36,7 +36,13 @@ public final class Formatter {
     /** Formats source text into its canonical form. Assumes the source parses without syntax errors;
      * a caller that cannot assume that should check {@link CstParser#parse} first. */
     public static String format(String source) {
-        SyntaxNode file = CstParser.parse(source).root();
+        return format(CstParser.parse(source).root());
+    }
+
+    /** Formats an already-parsed file into its canonical form — for a caller that has parsed the
+     * source (e.g. to check for syntax errors) and need not parse it again. Assumes {@code file}
+     * came from a clean parse. */
+    public static String format(SyntaxNode file) {
         return new Formatter().file(file).render(WIDTH);
     }
 

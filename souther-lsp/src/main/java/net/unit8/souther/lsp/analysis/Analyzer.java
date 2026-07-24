@@ -3,7 +3,9 @@ package net.unit8.souther.lsp.analysis;
 import net.unit8.souther.compiler.Compiler;
 import net.unit8.souther.compiler.ast.Ast;
 import net.unit8.souther.compiler.cst.CstError;
+import net.unit8.souther.compiler.cst.CstLexer;
 import net.unit8.souther.compiler.cst.CstParser;
+import net.unit8.souther.compiler.cst.GreenToken;
 import net.unit8.souther.compiler.cst.LineIndex;
 import net.unit8.souther.compiler.diag.CompileException;
 import net.unit8.souther.compiler.diag.Diagnostic;
@@ -14,7 +16,10 @@ import net.unit8.souther.compiler.cst.SyntaxElement;
 import net.unit8.souther.compiler.cst.SyntaxKind;
 import net.unit8.souther.compiler.cst.SyntaxNode;
 import net.unit8.souther.compiler.cst.SyntaxToken;
+import net.unit8.souther.compiler.fmt.Formatter;
 import net.unit8.souther.compiler.frontend.CstFrontend;
+import net.unit8.souther.lsp.protocol.CodeAction;
+import net.unit8.souther.lsp.protocol.CompletionItem;
 import net.unit8.souther.lsp.protocol.DocumentSymbol;
 import net.unit8.souther.lsp.protocol.Hover;
 import net.unit8.souther.lsp.protocol.Location;
@@ -124,6 +129,65 @@ public final class Analyzer {
     }
 
     /**
+     * Quick-fix code actions overlapping {@code requested}: currently, replacing a misspelled name
+     * with the compiler's did-you-mean suggestion. The suggestion lives on the structured compiler
+     * diagnostic — which the published {@link LspDiagnostic} drops — so this recomputes the first
+     * semantic error to recover it. The type checker reports only that first error, so at most one
+     * fix is offered per compile.
+     */
+    public List<CodeAction> codeActions(String uri, String text, Range requested) {
+        List<CodeAction> out = new ArrayList<>();
+        if (!CstParser.parse(text).errors().isEmpty()) {
+            return out;   // a semantic suggestion needs a clean parse
+        }
+        Diagnostic d = firstSemanticDiagnostic(text);
+        if (d == null || d.suggestion() == null || d.region() == null) {
+            return out;
+        }
+        Range diagRange = rangeOf(new LineIndex(text), d);
+        if (overlaps(diagRange, requested)) {
+            out.add(new CodeAction("Replace with '" + d.suggestion() + "'", uri, diagRange, d.suggestion()));
+        }
+        return out;
+    }
+
+    /** The first semantic error a self-contained compile turns up, as the structured compiler
+     * {@link Diagnostic} (carrying its suggestion and region), or {@code null} when there is none —
+     * mirrors the semantic path of {@link #diagnostics(String)}. */
+    private Diagnostic firstSemanticDiagnostic(String text) {
+        try {
+            Ast.Module module = CstFrontend.parse(text, "Main");
+            if (!module.imports().isEmpty() || module.exampleFileTarget() != null) {
+                return null;   // a multi-module or examples file cannot be resolved from one file
+            }
+            Compiler.compile(text, "Main");
+            return null;
+        } catch (CompileException e) {
+            return e.diagnostic();
+        } catch (RuntimeException e) {
+            return null;   // analysis must never crash the server
+        }
+    }
+
+    private static boolean overlaps(Range a, Range b) {
+        return !before(a.end(), b.start()) && !before(b.end(), a.start());
+    }
+
+    private static boolean before(Position p, Position q) {
+        return p.line() < q.line() || (p.line() == q.line() && p.character() < q.character());
+    }
+
+    /** The document's canonical formatting (see {@link Formatter}), or empty when it has a syntax
+     * error — the formatter re-derives layout from a clean parse, so a broken document is left as-is. */
+    public Optional<String> format(String text) {
+        CstParser.Result parsed = CstParser.parse(text);
+        if (!parsed.errors().isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(Formatter.format(parsed.root()));
+    }
+
+    /**
      * Go-to-definition across the workspace: resolves the identifier under the cursor to the document
      * and name range of the top-level definition it names. A name defined in the current file resolves
      * locally; otherwise it is resolved through the file's imports to the module that exposes it, and
@@ -203,6 +267,187 @@ public final class Analyzer {
                     includeDeclaration && owns, out);
         }
         return out;
+    }
+
+    /**
+     * The edit ranges for renaming the top-level symbol under the cursor, grouped by document uri:
+     * every reference to it plus its declaration. Empty when the cursor is not on a renameable
+     * top-level symbol (a local param or {@code let} is out of scope, as it is for find-references).
+     */
+    public Map<String, List<Range>> renameEdits(String uri, Position pos, ModuleGraph graph) {
+        Map<String, List<Range>> byUri = new LinkedHashMap<>();
+        for (Location loc : references(uri, pos, graph, true)) {
+            byUri.computeIfAbsent(loc.uri(), k -> new ArrayList<>()).add(loc.range());
+        }
+        if (byUri.isEmpty()) {
+            return byUri;   // not a renameable top-level symbol
+        }
+        // references() treats a name in an `exposing`/`import` list as a binding site, not a use, and
+        // skips it. Rename must still update those, or the module stops exposing (and importers stop
+        // importing) the renamed symbol, breaking the build. Resolve the symbol again and add them.
+        String text = graph.text(uri);
+        SyntaxNode root = CstParser.parse(text).root();
+        SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        if (ident != null) {
+            String name = ident.text();
+            String definingModule = declaringDef(root, name) != null
+                    ? Compiler.moduleNameFromHeader(text) : importedFrom(text, name);
+            if (definingModule != null) {
+                addExposingAndImportSites(name, definingModule, graph, byUri);
+            }
+        }
+        return byUri;
+    }
+
+    /** Adds the {@code exposing ( name )} occurrence in the module that defines {@code name}, and each
+     * {@code import <definingModule> ( name )} occurrence in the modules that import it — the binding
+     * sites find-references skips but rename must carry along. */
+    private void addExposingAndImportSites(String name, String definingModule, ModuleGraph graph,
+                                           Map<String, List<Range>> byUri) {
+        for (String u : graph.uris()) {
+            String t = graph.text(u);
+            SyntaxNode root = CstParser.parse(t).root();
+            LineIndex lines = new LineIndex(t);
+            boolean owns = definingModule.equals(Compiler.moduleNameFromHeader(t));
+            for (SyntaxNode top : root.childNodes()) {
+                if (top.kind() == SyntaxKind.MODULE_HEADER && owns) {
+                    top.child(SyntaxKind.EXPOSING_CLAUSE).ifPresent(clause -> {
+                        for (SyntaxNode entry : clause.childNodes()) {
+                            if (entry.kind() != SyntaxKind.EXPOSED_ENTRY) {
+                                continue;
+                            }
+                            entry.child(SyntaxKind.QUALIFIED_NAME).ifPresent(qn -> {
+                                SyntaxToken tok = nameToken(qn);
+                                if (tok != null && tok.text().equals(name)) {
+                                    byUri.computeIfAbsent(u, k -> new ArrayList<>()).add(tokenRange(lines, tok));
+                                }
+                            });
+                        }
+                    });
+                } else if (top.kind() == SyntaxKind.IMPORT_DECL) {
+                    SyntaxNode module = top.child(SyntaxKind.QUALIFIED_NAME).orElse(null);
+                    if (module != null && definingModule.equals(dottedName(module))) {
+                        top.child(SyntaxKind.NAME_LIST).ifPresent(list -> {
+                            for (SyntaxElement e : list.children()) {
+                                if (e instanceof SyntaxToken tok && tok.kind() == SyntaxKind.IDENT
+                                        && tok.text().equals(name)) {
+                                    byUri.computeIfAbsent(u, k -> new ArrayList<>()).add(tokenRange(lines, tok));
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    /** The dotted spelling of a {@code QUALIFIED_NAME} node (its identifier tokens joined by {@code .}). */
+    private String dottedName(SyntaxNode qualifiedName) {
+        StringBuilder sb = new StringBuilder();
+        for (SyntaxElement e : qualifiedName.children()) {
+            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+                if (sb.length() > 0) {
+                    sb.append('.');
+                }
+                sb.append(t.text());
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Completion candidates at the cursor: the language keywords, the top-level names defined in this
+     * file (types, behaviors, functions), the names its imports bring in, and the params and
+     * {@code let} bindings of the definition the cursor sits in. Deduplicated by label, in that order.
+     * This is name completion, not context-sensitive member completion — a {@code .} field list is
+     * ADR-deferred, so every visible name is offered regardless of the position's expected type.
+     */
+    public List<CompletionItem> completions(String text, Position pos) {
+        LinkedHashMap<String, CompletionItem> byLabel = new LinkedHashMap<>();
+        for (String keyword : CstLexer.keywords()) {
+            byLabel.putIfAbsent(keyword, new CompletionItem(keyword, CompletionItem.KEYWORD));
+        }
+        SyntaxNode root = CstParser.parse(text).root();
+        for (SyntaxNode def : root.childNodes()) {
+            switch (def.kind()) {
+                case DATA_DEF -> addName(byLabel, def, CompletionItem.CLASS);
+                case BEHAVIOR_DEF -> addName(byLabel, def, CompletionItem.INTERFACE);
+                case FN_DEF -> addName(byLabel, def, CompletionItem.FUNCTION);
+                default -> { /* header, imports, error nodes contribute no completion name */ }
+            }
+        }
+        try {
+            for (Ast.Import imp : CstFrontend.parse(text, "Main").imports()) {
+                for (String name : imp.names()) {
+                    byLabel.putIfAbsent(name, new CompletionItem(name, CompletionItem.FUNCTION));
+                }
+            }
+        } catch (RuntimeException ignore) {
+            // a file that does not parse cleanly exposes no imports; the rest of the list still stands
+        }
+        SyntaxNode enclosing = enclosingDef(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        if (enclosing != null) {
+            collectLocalBindings(enclosing, byLabel);
+        }
+        return new ArrayList<>(byLabel.values());
+    }
+
+    private void addName(Map<String, CompletionItem> out, SyntaxNode def, int kind) {
+        SyntaxToken name = nameToken(def);
+        if (name != null) {
+            out.putIfAbsent(name.text(), new CompletionItem(name.text(), kind));
+        }
+    }
+
+    /** The top-level definition whose span contains {@code offset}, or {@code null} at the file level. */
+    private SyntaxNode enclosingDef(SyntaxNode root, int offset) {
+        for (SyntaxNode def : root.childNodes()) {
+            if ((def.kind() == SyntaxKind.DATA_DEF || def.kind() == SyntaxKind.BEHAVIOR_DEF
+                    || def.kind() == SyntaxKind.FN_DEF)
+                    && offset >= def.start() && offset <= def.end()) {
+                return def;
+            }
+        }
+        return null;
+    }
+
+    /** Adds every param and {@code let} name bound anywhere inside {@code node} as a variable candidate. */
+    private void collectLocalBindings(SyntaxNode node, Map<String, CompletionItem> out) {
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxNode child) {
+                if (VALUE_BINDINGS.contains(child.kind())) {
+                    SyntaxToken bound = firstIdent(child);
+                    if (bound != null) {
+                        out.putIfAbsent(bound.text(),
+                                new CompletionItem(bound.text(), CompletionItem.VARIABLE));
+                    }
+                }
+                collectLocalBindings(child, out);
+            }
+        }
+    }
+
+    /** Whether {@code name} is a legal rename target: a single identifier token, not a keyword. The
+     * lexer decides, so a non-ASCII name (Souther identifiers may be Japanese) is judged correctly. */
+    public boolean isValidName(String name) {
+        if (name == null || name.isBlank()) {
+            return false;
+        }
+        CstLexer.Result lexed = CstLexer.lex(name);
+        if (!lexed.errors().isEmpty()) {
+            return false;
+        }
+        GreenToken sole = null;
+        for (GreenToken t : lexed.tokens()) {
+            if (t.kind().isTrivia() || t.kind() == SyntaxKind.EOF) {
+                continue;
+            }
+            if (sole != null) {
+                return false;   // more than one token: not a bare identifier
+            }
+            sole = t;
+        }
+        return sole != null && sole.kind() == SyntaxKind.IDENT;
     }
 
     private boolean isTypeDef(SyntaxNode def) {
