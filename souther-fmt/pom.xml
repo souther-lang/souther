@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>net.unit8.souther</groupId>
+        <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc2</version>
+        <version>0.1.0-rc3</version>
     </parent>
 
     <artifactId>souther-fmt</artifactId>
@@ -21,7 +21,7 @@
 
     <dependencies>
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-syntax</artifactId>
         </dependency>
     </dependencies>

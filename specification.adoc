@@ -341,7 +341,7 @@ require 承認者ID == 申請.申請者.上長ID      // two 従業員ID built s
 * `+List<T>+` compares elements in order; `+Map<String,T>+` compares keys and values
 * `+T?+` is equal when both are `+None+`, or both are `+Some+` with equal contents
 
-Only *values of the same type* may be compared. Comparing different types is a compile error.
+Only *values of the same type* may be compared. Comparing different types is a compile error. A sum may also be compared with one of its *cases* (`+Role == Junior+`): a case value is a value of its sum (case→sum is transparent, <<sum-data>>), so this is a sum-vs-sum comparison — true when the sum value is that case. Pure case membership is written this way for a case with no fields (a unit data, the usual state / role enum); a field-bearing case compared with `+==+` compares its fields too. This mirrors Elm's `+x == Idle+` on a no-argument variant and F#'s equality on a nullary case.
 
 Ordering (`+<+` `+<=+` `+>+` `+>=+`) is defined for `+Int+` (numeric), `+String+` (lexicographic), `+Decimal+` (by value, ignoring scale), and `+Date+` / `+DateTime+` (chronological). A sum has no ordering, and neither does a product data. A single-value newtype (`+data X = Y+`; <<newtype>>) over one of the ordered types *is* ordered — by the value it wraps. Elm gives ordering only to `+Int+` / `+Float+` / `+Char+` / `+String+`, and dates are opaque types reduced to `+Int+` (milliseconds) before comparison, because it stands on JavaScript. Souther stands on the JVM, where `+BigDecimal+` / `+LocalDate+` / `+LocalDateTime+` are all `+Comparable+`, so it gives ordering to these as well.
 
@@ -355,7 +355,7 @@ A single-value newtype is compared by the value it wraps, for both equality and 
 * Two *different* newtypes over the same base do not compare: `+金額 <= 数量+` is a compile error, even though both wrap `+Int+`.
 * A non-literal value of the wrapped type is not taken implicitly: `+金額 <= n+` (where `+n+` is an `+Int+`) is a compile error — write `+金額 <= 金額(n)+`.
 
-The wrapped type must itself be ordered for `+<+` / `+<=+` / `+>+` / `+>=+`; equality works over any wrapped type. Arithmetic on a newtype is not defined.
+The wrapped type must itself be ordered for `+<+` / `+<=+` / `+>+` / `+>=+`; equality works over any wrapped type. Arithmetic on a newtype is `+{plus}+` / `+-+` only (<<newtype-arithmetic>>).
 
 `+Decimal+` ignores scale. `+1.0+` and `+1.00+` are equal.
 
@@ -368,6 +368,17 @@ data 金額 = Decimal
 Scale is not lost from the value. An Encoder emits the scale it read, so a round trip (<<round-trip>>) is preserved. Scale is dropped *only from identity comparison*. If the number of rounding digits is a domain concern, write it as an invariant or a separate field, not as `+Decimal+` scale.
 
 The `+hashCode+` of a data containing `+Decimal+` is computed after dropping scale (`+stripTrailingZeros+`). If equality ignores scale, the hash MUST ignore it too, or using the value as a `+Map+` key breaks. Java sees the same value equality: a generated data class implements `+equals+` / `+hashCode+` from all fields and can be used as a `+Map+` key directly (<<jvm-product>>). This is distinct from Java's `+==+` (reference) and `+BigDecimal.equals+` (scale-sensitive).
+
+[#newtype-arithmetic]
+===== Arithmetic on a newtype
+
+A single-value newtype over `+Int+` or `+Decimal+` supports `+{plus}+` and `+-+`, and the result stays in the newtype: `+Money {plus} Money+` and `+Money - Money+` are `+Money+`. The operator opens each operand to its wrapped value, computes on the base, and re-wraps the result — so the result's invariant is re-checked at construction, exactly as any other construction is (<<invariant-mvp>>). A subtraction that leaves the invariant (a non-negative `+Money+` going below zero) *aborts* inside the domain (<<violation-destination>>). To make that a business result, guard it with `+require ... else+` (<<require>>); the compiler then confirms the guard discharges the construction (<<invariant-discharge>>).
+
+Operand pairing is the same as comparison (<<newtype-comparison>>): the *same* newtype, or a newtype with a bare literal of its base (`+Money {plus} 100+`, the `+100+` taken as `+Money+`). Two *different* newtypes do not combine — `+Money - Quantity+` is a compile error even though both wrap `+Int+` — and a non-literal value of the wrapped type is not taken implicitly.
+
+`+*+` and `+/+` *scale* a newtype by a plain number of its base and stay in the newtype (`+Money * 2+`, `+2 * Money+`, `+Money / 2+`) — the dimension is unchanged. The scalar is a bare `+Int+` / `+Decimal+` (literal or variable) of the newtype's base, not itself coerced to the newtype. A product or quotient of *two* newtypes *does* change dimension (`+UnitPrice * Quantity+` is a `+Money+`, not a `+UnitPrice+`), which the language does not model, so `+newtype * newtype+` (and `+Money * Money+`) is a compile error; compute those on `+.value+` and wrap the result explicitly. Only a newtype whose value is *directly* `+Int+` or `+Decimal+` has arithmetic — a newtype over another newtype does not.
+
+Re-wrapping is a computation, not a fresh construction from raw data, so it needs no `+constructs+` (<<constructs>>) — as `+Int+` arithmetic does not "construct" an `+Int+`. A `+Money(...)+` literal construction (<<newtype>>) still does.
 
 [#collections]
 === Collection types
@@ -417,10 +428,11 @@ A decode-side violation does not abort; Raoh's `+Result+` failure carries it (<<
 
 ==== How Option appears
 
-`+Option<T>+` *cannot be written as a type* either. It appears only through two paths:
+`+Option<T>+` *cannot be written as a type* either. It appears only through these paths:
 
 * the desugaring of a field `+T?+` (<<optional>>)
-* the return value of a standard library function (`+List.get+` / `+Map.get+`; <<stdlib-list>>, <<stdlib-map>>)
+* the return value of a standard library function (`+List.get+` / `+Map.get+` / `+List.find+`; <<stdlib-list>>, <<stdlib-map>>)
+* the argument (and, for `+map+`, the result) of the `+Option+` module's functions (`+Option.map+` / `+Option.withDefault+`; <<stdlib-option>>), which consume an inferred `+Option+` without the caller ever naming the type or building a `+Some+`
 
 It MUST NOT be written in a behavior's output. To state "might not be found" as a business result, that is a domain sum (<<unmarked-sum>>).
 
@@ -450,7 +462,7 @@ This desugars to:
 事前承認者: Option<従業員ID>
 ----
 
-To put a value in a `+?+` field, write a `+従業員ID+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. Users never write `+Some(...)+` (as in <<algebraic-types>>, this form is built-in only).
+To put a value in a `+?+` field, write a `+従業員ID+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. Users never write `+Some(...)+` to construct a value (as in <<algebraic-types>>, this form is built-in only); `+Some(...)+` appears only as a destructuring pattern in `+match+` (<<match>>).
 
 [,text]
 ----
@@ -689,7 +701,7 @@ Allowed: comparison, logical operations, arithmetic, field reference, built-in f
 let 正の数 (v: Int) = v >= 0
 
 data 金額 = Int  invariant 正の数(value)
-data カゴ = { items: List<明細> } invariant List.all(items, x -> 正の数(x.数量))
+data カゴ = { items: List<明細> } invariant List.all(x -> 正の数(x.数量), items)
 ----
 
 What may be called is a `+let+`, not a behavior (<<fn>>). An invariant runs on a data's construction path, where touching the outside world is unacceptable. A behavior may touch the outside world — if no implementation is written, a Java implementation is injected — so it MUST NOT be called from an invariant. To name a business rule, use a `+let+`.
@@ -698,13 +710,13 @@ A `+let+` may be called from an invariant when it satisfies all of the following
 
 * the requirement set is empty (the corresponding behavior writes no `+requires+`; <<requires>>)
 * it constructs no data (the construction set of any helper `+let+` it calls is also empty; <<blocks>>)
-* it is not recursive
+* it is not `+partial+`
 
 The first is decided by reading the declaration. `+let 事前承認する+` does not touch the outside world directly and so is pure in the sense of <<purity>>, but `+behavior 事前承認する+` writes `+requires 現在時刻+`, so its requirement set is non-empty and it MUST NOT be called from an invariant.
 
-A helper `+let+` always satisfies the first and second. To touch the outside world it can only receive a function as an argument (<<fn-declaration>>), and an invariant has no way to pass one. The third (not recursive) can be broken only by a recursive helper (<<fn-declaration>>, ADR-0038), so an invariant calling a recursive helper is a compile error.
+A helper `+let+` always satisfies the first and second. To touch the outside world it can only receive a function as an argument (<<fn-declaration>>), and an invariant has no way to pass one. The third is about termination: an invariant is checked on every construction and must terminate. A `+partial+` helper disclaims totality and may loop, so it cannot appear in an invariant. A *total* helper is admissible even when it recurses — the compiler has proven it terminates (<<fn-declaration>>, ADR-0052). This is what lets the list quantifiers `+List.all+` / `+List.any+` / `+List.member+` and the uniqueness checks `+List.distinct+` / `+List.allUniqueBy+` appear in an invariant: each derives from the total stdlib fold `+List.foldFrom+`, which is bounded by the finite list (ADR-0051, ADR-0052). Only a `+partial+` helper in an invariant is a compile error.
 
-Forbidden: Decoder, Encoder, data construction, recursion, non-deterministic processing. A behavior call is not forbidden separately — an invariant calls a `+let+`, not a behavior (above), and if a `+let+` goes through a behavior that touches the outside world, its requirement set is that much non-empty and is rejected by condition 1. Only pure (empty-requirement-set) computation enters an invariant.
+Forbidden: Decoder, Encoder, data construction, `+partial+` recursion, non-deterministic processing. Data construction is barred throughout the invariant expression, including inside a quantifier's closure — an invariant observes the value being built, it does not build another. A behavior call is not forbidden separately — an invariant calls a `+let+`, not a behavior (above), and if a `+let+` goes through a behavior that touches the outside world, its requirement set is that much non-empty and is rejected by condition 1. Only pure (empty-requirement-set) computation enters an invariant.
 
 [#violation-destination]
 === A violation's destination differs inside and outside the boundary
@@ -725,6 +737,49 @@ behavior 値引きする : (d: 見積) -> 値引き済み          // no violati
 *A behavior's output needs no slot for the violation.* Constructing an invariant-bearing data does not change the output type.
 
 If the business decides "return a different result when the amount is negative", that is not an invariant violation but a business judgment and MUST be written explicitly with `+require ... else+` (<<require>>). These are different: an invariant declares "a value passing here is always so", while `+require+` is a business branch of "if not so, return this". The former breaking is a bug; the latter not holding is an expected result.
+
+[#invariant-discharge]
+=== Discharging an invariant at compile time
+
+An invariant is checked at run time on every construction (<<invariant-mvp>>), and inside the domain a violation aborts (<<violation-destination>>). The compiler *also* checks, per behavior, whether each construction's invariant is *established* where the value is built — so a construction that must abort is caught at compile time, and one a guard makes safe is confirmed.
+
+The check is intraprocedural. Within a behavior's `+let+` body it seeds what the input types guarantee — a newtype's own invariant, a product data's invariant over its fields — which is sound because an input of type `+T+` was built through `+T+`'s checked construction. It refines that along each `+require+` / `+if+` guard (<<require>>, <<if>>), and at every construction asks whether the guards prove its invariant.
+
+* *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
+* *Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
+* *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+require+`, or reify the relation into a type invariant (below).
+* *Not expressible* — an invariant outside the checked fragment. No diagnostic; the run-time check stands.
+
+[,text]
+----
+data Money = Decimal invariant value >= 0m
+data WithdrawRequest = { balance: Money, amount: Money }
+
+behavior withdraw : (req: WithdrawRequest) -> Money | InsufficientBalance
+let withdraw (req) = {
+    require req.amount <= req.balance
+        else InsufficientBalance
+    req.balance - req.amount          // discharged: the guard proves balance - amount >= 0
+}
+----
+
+The checked fragment is bounded: the decision procedure reasons over intervals and differences (`+value >= c+`, `+a <= b+`, and the like) with no external solver. The set of *flagged* constructions is tied to that fragment, so every flagged construction has a guard the procedure can verify — an invariant it cannot express (a non-linear or otherwise relational one) is left to the run-time check rather than reported as a possible violation no guard could silence.
+
+[#invariant-reify]
+==== Reifying a cross-behavior relation
+
+The check does not cross behaviors: a relation established in one behavior is not assumed in another (<<sequential-composition>>). Inferring such a precondition would be an implicit cross-unit contract, which the language declines — `+requires+` and an exposed composition's output are always declared, not inferred (<<requires>>, ADR-0017, ADR-0024). The consistent way to carry a relation is to *reify it as a type invariant*, which the seeding then assumes downstream for free.
+
+[,text]
+----
+data WithdrawRequest = { balance: Money, amount: Money }
+    invariant amount <= balance                 // the relation lives in the type
+
+behavior withdraw : (req: WithdrawRequest) -> Money
+let withdraw (req) = req.balance - req.amount   // discharged with no guard here
+----
+
+So a possible-violation warning over the fields of one input data is a prompt to declare their relation as that data's invariant. When a value's validity is guaranteed *outside* the language — a Java-side or injected contract stronger than any type — there is no type to reify onto, and that construction keeps its run-time check.
 
 [#decoder]
 == Decoder
@@ -1092,6 +1147,8 @@ A block and a `+let+` may be passed as arguments, and a `+let+` may take one as 
 
 A block may also be bound to a name with `+let+` and applied (`+let f = (x) -> ...+`, then `+f(a)+`). Like a named `+let+` (<<fn-declaration>>), as long as it does not escape — applied only, never leaving as a value — a block is expanded into its call/apply site and forms no closure. When it escapes — *returning* a function, or choosing at runtime (`+let f = if ... then (x) -> ... else ...+`) — a closure capturing free variables is generated. It is a synthesized class implementing the runtime `+Fn+`, holding the captured variables in fields. Where expandable it is expanded; only where necessary is it a closure. The *cannot place in a data field* constraint above is unchanged by closures: it is a representation constraint, separate from whether a closure exists.
 
+A bare field access `+.field+` is a getter block: it desugars to `+(x) -> x.field+`, so a field is projected point-free — `+List.map(.value, xs)+` instead of `+List.map(x -> x.value, xs)+`, and with the pipe `+xs |> List.map(.value)+`. It is single-layer (`+.value+`, not `+.a.b+`; reach through a newtype over a newtype with the destructuring pattern of <<match>>) and works for any field, so a newtype's `+.value+` and a record's `+.a+` read the same way. It is an ordinary second-class block, not a first-class getter value: it may sit in an argument or be bound with `+let+` and applied, but returning or storing it is the same `+block is not a value+` as any block. This is Elm's `+.field+` notation with Scala's `+_.field+` meaning (a lambda shorthand, not a first-class value); it never collides with the in-scope `+value+` an invariant refers to (<<invariant>>), which is a field name, not a getter.
+
 A block and a helper `+let+` are the same in constructing data. A block constructs under the enclosing behavior's `+constructs+`, and a hoisted helper `+let+` constructs under the `+constructs+` of the behavior that calls it (the construction set is inferred transitively and reconciled; <<constructs>>). Either way the construction authority is on the behavior and does not disappear with naming. So hoisting a constructing `+[高額出張 { 基準金額 = 基準 } | …]+` (<<stdlib-list>>) into `+let 高額出張を作る (基準) = 高額出張 { 基準金額 = 基準 }+` passes if the calling behavior declares `+constructs 高額出張+`.
 
 [#requires]
@@ -1236,7 +1293,7 @@ The body is an expression. `+{ ... }+` is a block expression (<<block-expression
 * A helper *may recurse* (self- and mutual recursion; ADR-0038). A non-recursive helper is inline-expanded at its call site; a recursive helper is not inlined but lowered to a method — self- and mutual calls become plain method calls. Traversal of self-referential data that `+fold+` cannot write (climbing the manager chain to the root, counting tree depth) is written this way.
 * A recursive helper MUST *declare its return type* (above). Without a declaration it is a compile error.
 * A recursive helper MUST be *pure*: its own body MUST NOT call an injected behavior (`+requires+`). It MAY apply a function argument that does — the effect is then the caller's, declared in the caller's `+requires+` and carried in by the closure (<<blocks>>). An effect touching the outside world is placed on the behavior that calls the helper, or on the function it is handed.
-* Recursion is *total by default* (ADR-0052). A recursive helper MUST be *structurally recursive*: a recursive call passes, in some argument position, a strictly smaller part of a parameter. That part comes from a `+match+` on a field or a case (`+match s.上司 with | Some b -> 深さ(b)+` passes the unwrapped `+社員+` — an org chart, or a two-`+Option+`-field binary tree), or from an element handed to a standard-library list combinator's closure over a list that is part of a parameter (`+List.fold((acc, c) -> acc + 深さ(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total). Either way it bottoms out on the finite self-referential data. A helper that is not structurally recursive is a compile error (E2001). Write `+partial let f ...+` to opt out: a `+partial+` helper is not checked and may not terminate. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` is trusted total. Mutual recursion is not yet checked (a non-`+partial+` mutually-recursive helper is rejected). An `+example+` is evaluated within a time budget, so a `+partial+` recursion that does not terminate is reported rather than hanging the compiler.
+* Recursion is *total by default* (ADR-0052). A recursive helper — or a group of mutually-recursive helpers — MUST terminate, proven by *size-change termination*: each recursive call relates caller parameters to callee arguments, an argument that is a strictly smaller part of a parameter is a strict decrease and one passed through unchanged is non-increasing, and every recursive cycle MUST strictly decrease some parameter. A strictly smaller part comes from a `+match+` on a field or a case (`+match s.上司 with | Some b -> 深さ(b)+` passes the unwrapped `+社員+` — an org chart, or a two-`+Option+`-field binary tree), or from a value handed to a standard-library container combinator's closure over a container that is part of a parameter — a list element (`+List.fold((acc, c) -> acc + 深さ(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total), or an `+Option+`'s unwrapped `+Some+` payload (`+s.上司 |> Option.map(b -> 深さ(b) + 1)+` — the payload of `+s.上司+` is a smaller `+社員+` than `+s+`, so `+Option.map+` recursion over a manager chain is total, exactly as the equivalent `+match+` is). Either way it bottoms out on the finite self-referential data. This one check covers self-recursion, mutual recursion, and structural lexicographic recursion (different calls decreasing different positions). A helper or group that cannot be shown to terminate is a compile error (E2001). Write `+partial let f ...+` to opt out: a `+partial+` helper is not checked and may not terminate, and a `+partial+` member opts its whole mutually-recursive group out. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` is trusted total. An `+example+` is evaluated within a time budget, so a `+partial+` recursion that does not terminate is reported rather than hanging the compiler.
 * A local lambda (`+let f = (x) -> ...+`) cannot recurse. Recursion is a property of a named module helper.
 * Two `+let+`s MUST NOT be written for one behavior.
 * A `+let+` may implement a behavior only when both are in the *same module*. A behavior of another module may be imported and called, but its implementation MUST NOT be given by a `+let+` in another module. This is the line that keeps the name-binding rule from conflicting with separate compilation.
@@ -1276,7 +1333,7 @@ Which behaviors get a `+let+` and which are injected is not decided mechanically
 [#java-base-class]
 === Java base-class generation
 
-A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*. It extends `+Behavior+` and, for each unit data listed in `+constructs+`, has a `+protected+` factory that constructs it.
+A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*, and for each unit data listed in `+constructs+` has a `+protected+` factory that constructs it. Whether it takes one input or several is orthogonal to injection, exactly as for a `+let+`-implemented behavior (<<jvm-behavior>>): a *single* input extends the unary `+Behavior<In, Out>+` (so it still composes with `+>->+`) and inherits its `+apply+`; *two or more* inputs make it a standalone abstract class with a typed multi-argument `+apply(A, B, …)+` and no `+Behavior+` supertype (it takes more than one argument, and `+>->+` passes a single value, so it is not a `+>->+` stage). A Java implementation overrides that typed `+apply+` directly, so several inputs are passed as arguments rather than bundled into a record. A collection parameter keeps its `+java.util.List+` / `+Map+` / `+Set+` (or the runtime `+Option+`) type with its element type, not `+Object+`.
 
 [,text]
 ----
@@ -1304,6 +1361,8 @@ This abstract base class is *always public*, regardless of whether it is in `+ex
 When a *non-unit* data is listed in `+constructs+` and that data is not exposed with `+exposing+`, it is a compile error (E1305). A factory is generated only for a unit data, and a non-exposed data has no decoder either, so a Java implementation would have no way to create that value. If exposed, it can be created via the decoder (<<jvm-codec>>). The requirement is that it be either a unit data or an exposed data.
 
 What is confined is <<invariant-on-construct>>. An invariant-bearing data is always checked whether it goes through `+__construct+` or the decoder. So even if it can be created from outside, *no unvalidated value can be created*. A unit data has nothing to validate, so nothing is lost by allowing it to be created from outside.
+
+The base is an ordinary JVM abstract class, so any JVM language implements it. Kotlin and Scala `+extends+`/`+:+` it and override `+apply+` as Java does; a collection parameter arrives as `+java.util.List+`/`+Map+`/`+Set+`, which a Kotlin or Scala collection or a Clojure persistent collection satisfies directly. Clojure extends the abstract base with `+proxy+` or `+gen-class+` (not `+reify+`, which is interface-only) and dispatches `+apply+` by arity; because the `+constructs+` factories are `+protected+`, a Clojure implementation reaches them through `+gen-class+`'s `+:exposes-methods+` (a `+proxy+` sees only public methods). The factories stay `+protected+` — that is the construction confinement, not an interop choice.
 
 [#java-impl-rules]
 === Rules for Java implementations
@@ -1550,7 +1609,7 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 
 A behavior with a `+let+` implementation is evaluated (<<fn>>). An injected behavior (no `+let+`, <<injected-behavior>>) or a `+>->+` composition cannot be — you fake an injected behavior, you do not example it (<<e1902>>). A behavior's `+requires+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
-An input and an expected value are fixtures: literals, newtype applications, and record constructions. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
+An input and an expected value are fixtures: literals, newtype applications, and record constructions. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
 
 [#example-fakes]
 === Faking a requires dependency
@@ -1565,7 +1624,7 @@ example 事前承認する
     | (事前承認待ち { ... }, 従業員ID("boss-1")) with 現在時刻 = "2026-07-20T09:00" -> 事前承認済み
 ----
 
-A *function dependency* — one whose result varies with its input — is given by a `+fake+` declaration: an input→output table matched by value equality, defaulting to a `+_+` row or, absent one, a miss error (<<e1909>>).
+A *function dependency* — one whose result varies with its input — is given by a `+fake+` declaration: an input→output table matched by value equality, defaulting to a `+_+` row or, absent one, a miss error (<<e1909>>). A multi-input injected dependency (<<java-base-class>>) is faked the same way, with the row's inputs matched as a tuple.
 
 [,text]
 ----
@@ -1629,6 +1688,15 @@ match c with
     | 会員 { id, メール }         -> ...   // { f } binds f to a same-named variable
 ----
 
+A newtype case is opened with the constructor form `+X(v)+`, the inverse of construction `+X(v)+` (<<newtype>>). `+v+` binds the wrapped value. Nesting it reaches through a newtype over a newtype in one pattern — `+| アクティベート済み(メールアドレス(s)) -> s+` binds `+s+` to the base `+String+`, so `+.value.value+` is not written; the shorter `+| アクティベート済み(a) -> ...+` binds `+a+` to the one wrapped layer (`+メールアドレス+`). Each written name MUST be the newtype opened at its layer: `+アクティベート済み(ソース(s))+` is a compile error when `+アクティベート済み+` wraps `+メールアドレス+`, not `+ソース+`. This mirrors F#'s `+let (Email s) = ...+` and Elm's `+Activated (Email s)+`. The single-layer accessor `+.value+` (<<newtype>>) stays for reading one layer inline; the pattern is for reaching through several.
+
+[,text]
+----
+match m with
+    | アクティベート済み(メールアドレス(s)) -> s   // s is the base String, two layers opened
+    | 未アクティベート(a)                 -> a.value   // a is メールアドレス, one layer opened
+----
+
 To route multiple cases to the same processing, list `+|+` within a case, `+| A | B -> ...+` (an or-pattern). It writes "these states are treated the same" for a state-machine sum in one line. The case-separator `+|+` and the or-pattern `+|+` are the same symbol, but `+->+` ends a case's pattern part, so they do not conflict.
 
 [,text]
@@ -1643,14 +1711,16 @@ An or-pattern's binding differs from a single case. A single case's `+as+` binds
 
 The `+Some+` of `+Option+` (<<algebraic-types>>) extracts the wrapped value by *positional binding*. The `+v+` in `+| Some v+` is bound to the contents, not to `+Some+` (as in F#'s `+Some x+` and Elm's `+Just x+`). `+Some+` is the only built-in case with a payload, so it reaches the contents by positional binding rather than `+as+` (which binds the whole value elsewhere). `+| Some as v+` cannot be written. A `+?+` field and the return of `+List.get+` / `+Map.get+` are extracted this way.
 
+When the contents are a newtype, the constructor-destructuring form nests inside the positional binding: `+| Some(従業員ID(v)) -> v+` opens the wrapped `+従業員ID+` and binds `+v+` to its base value, so the `+.value+` on the positional binding is not written. The first written name MUST be the element type — `+Some+` wraps `+従業員ID+`, so `+Some(メールアドレス(v))+` is a compile error — and each further name opens one more layer, the same rule as `+X(Y(s))+` on a user case. This nesting is allowed only in a pattern; `+Some(...)+` is still not a construction form (<<algebraic-types>>). The short `+| Some v+` (bind the whole contents) stays.
+
 [,text]
 ----
 data 出張完了 = { 事前承認者: 従業員ID? }
 
 let 承認者の表示 (c: 出張完了) =
     match c.事前承認者 with
-        | Some 承認者 -> 承認者.value      // 承認者 is 従業員ID (the contents)
-        | None        -> "なし"
+        | Some(従業員ID(v)) -> v         // v is the base value, no .value
+        | None              -> "なし"
 ----
 
 A match on sum data MUST be exhaustive. Exhaustiveness is decided over the direct cases the sum declared. A nested sum (`+自社負担+` of `+data 費用負担区分 = 自社負担 | 先方負担+` being further `+立替 | 仮払い | 会社カード+`) does not flatten leaf cases; receive `+自社負担+` and split with a nested `+match+`. Exhaustiveness is checked independently per layer, so cases never overlap. Case→sum assignment (<<sum-data>>) folds to the leaf; match is the reverse, descending the layers.
@@ -1717,13 +1787,13 @@ An outside-world dependency is declared as a behavior with no implementation, an
 [#reserved-namespace]
 === Reserved namespace
 
-The standard library is bundled with the compiler and referenced by short qualifiers — `+List+` (list), `+Map+` (map), `+Set+` (set), `+String+` (string), `+Bool+` (boolean), `+Int+` / `+Decimal+` (numbers), `+Date+` / `+DateTime+` (temporal). Every function is called through this qualifier: `+List.map(f, xs)+`, `+String.trim(s)+`, `+List.length(xs)+`. There is no automatic import — names are not delivered implicitly. What may be written bare is operators (`+==+` `+<+` `+{plus}{plus}+`, etc.), `+if+` / `+match+`, literals, and the current module's helpers. Argument order follows the convention of <<pipe>> (primary subject last).
+The standard library is bundled with the compiler and referenced by short qualifiers — `+List+` (list), `+Map+` (map), `+Set+` (set), `+String+` (string), `+Bool+` (boolean), `+Int+` / `+Decimal+` (numbers), `+Date+` / `+DateTime+` (temporal), `+Option+` (optional). Every function is called through this qualifier: `+List.map(f, xs)+`, `+String.trim(s)+`, `+List.length(xs)+`. There is no automatic import — names are not delivered implicitly. What may be written bare is operators (`+==+` `+<+` `+{plus}{plus}+`, etc.), `+if+` / `+match+`, literals, and the current module's helpers. Argument order follows the convention of <<pipe>> (primary subject last).
 
 To call a name bare, import it explicitly: writing `+import List ( map, filter )+` lets you write `+map(f, xs)+` unqualified thereafter. As in Elm's `+import List exposing (map)+`, qualified access always works, and `+import+` is only sugar to elide the qualifier. Importing the same bare name from two modules is ambiguous, so qualify one of them (e.g. `+String.length+` and `+List.length+` used together in one module; <<imports>>).
 
 Qualifiers such as `+List+` denote a module only in expression position, distinct from the type-position `+List<T>+` (angle brackets), which does not conflict (as in Elm). `+length+` / `+get+` span `+String+` and `+List+`, and `+List+` and `+Map+`, but they become distinct names `+String.length+` / `+List.length+`, `+List.get+` / `+Map.get+`, so they are not overloads but each module's own function.
 
-The entity the short qualifier denotes is placed in the reserved namespaces `+souther.string+` / `+souther.list+` / `+souther.map+` / `+souther.set+` / `+souther.bool+` / `+souther.date+` / `+souther.datetime+`. The `+souther+` namespace is reserved, and a user module MUST NOT name itself under it — `+module souther.foo+` is a compile error. Only the reserved namespace holds core's privileges (generics, recursion, intrinsics), and this is the line preventing a user from granting them to itself (the boundedness of <<algebraic-types>>). A name that merely starts with the string `+souther+`, such as `+southernmost+`, is an ordinary user name, not under this namespace.
+The entity the short qualifier denotes is placed in the reserved namespaces `+souther.string+` / `+souther.list+` / `+souther.map+` / `+souther.set+` / `+souther.bool+` / `+souther.date+` / `+souther.datetime+` / `+souther.option+`. The `+souther+` namespace is reserved, and a user module MUST NOT name itself under it — `+module souther.foo+` is a compile error. Only the reserved namespace holds core's privileges (generics, recursion, intrinsics), and this is the line preventing a user from granting them to itself (the boundedness of <<algebraic-types>>). A name that merely starts with the string `+souther+`, such as `+southernmost+`, is an ordinary user name, not under this namespace.
 
 [#type-variables]
 ==== Type variables
@@ -1744,6 +1814,14 @@ let trim (s: String) : String = intrinsic "string.trim"
 
 An intrinsic MUST declare its return type (it cannot be inferred from `+intrinsic+`). A call is type-checked against the declared signature — that is, `+trim+` is "a built-in function whose signature is placed in core", and this declaration, not a hardcoded compiler table, decides its arguments and return value — and the backend emits the bytecode for `+key+`. It is neither inlined nor lowered. Only the reserved namespace may write it. A user cannot call the JVM directly and only calls blessed functions (<<asymmetric-interop>>).
 
+Every standard-library function is declared in a core module this way, whether its body is Souther (self-hosted, like `+List.map+` over `+foldFrom+`) or `+intrinsic "key"+` (a JVM kernel). The declaration is the single source of truth for the signature; a hardcoded compiler table is not the normal way to add one. Three narrow cases stay integrated in the compiler, each for a reason a core declaration cannot yet capture, and only these:
+
+* the operators (`{plus}` `+-+` `+*+` `+/+` `+==+` `+<+` `+<=+` `+>+` `+>=+`) — they are syntax, and the arithmetic ones carry the closed-newtype rules (<<newtype>>) a plain function does not;
+* the ordered-constrained generics (`+List.sort+` / `+max+` / `+min+` / `+sortBy+` and the comparison operators) — Souther has no `+comparable+` type class, so "the element is an ordered value" is checked in the compiler rather than expressed in the signature;
+* the functions returning a primitive-headed union (`+Int.divide+` / `+Int.remainder+` / `+Decimal.divide+`, returning `+Int | DivisionByZero+`) — a core return type cannot yet name a union whose first member is a primitive.
+
+Everything else — including `+Int+` / `+Decimal+` `+add+` / `+subtract+` / `+multiply+` / `+compare+` / `+modBy+` — is a core declaration (ADR-0053).
+
 [#pipe]
 === The value pipe and argument order
 
@@ -1760,7 +1838,7 @@ To thread a value through functions, write `+|>+` left to right. `+e |> f(a)+` i
 
 Standard library arguments are set to F#'s and Elm's order to match — *the primary subject (collection, string, Map) last, functions, separators, and keys first*: `+List.map(f, xs)+`, `+List.filter(p, xs)+`, `+List.fold(step, seed, xs)+`, `+String.split(sep, s)+`, `+Map.get(key, m)+`. So the left value drops into the last argument and the pipe flows top to bottom. A `+fold+`'s folding block stays in `+(acc, x)+` order (F#'s `+List.fold+`).
 
-The right side admits only a function call or a function name; `+e |> 3+` is a compile error. `+|>+` is expanded to a call at parse time, so no later stage sees `+|>+` — the same pure syntactic sugar as `+require+` expanding to `+if+`. It is distinct from the `+>->+` that composes behavior stages (<<composition>>); that connects behaviors, this threads expression values.
+The right side admits only a function call or a function name; `+e |> 3+` is a compile error. A bare field getter is not a pipe target either — write `+e.field+` for a single value, or use the getter inside a call (`+xs |> List.map(.field)+`), not `+e |> .field+` (<<blocks>>). `+|>+` is expanded to a call at parse time, so no later stage sees `+|>+` — the same pure syntactic sugar as `+require+` expanding to `+if+`. It is distinct from the `+>->+` that composes behavior stages (<<composition>>); that connects behaviors, this threads expression values.
 
 [#stdlib-string]
 === String
@@ -1768,19 +1846,26 @@ The right side admits only a function call or a function name; `+e |> 3+` is a c
 [,text]
 ----
 length  trim  lowercase  uppercase  contains  startsWith  endsWith  substring  append
-split    join  replace    words      fromInt   concat
+split    join  replace    words      fromInt   concat       matches
+toChars  toCode  toInt
 ----
 
 `+append(a, b)+` joins two strings in their written order (Elm `+String.append+`); the `{plus}{plus}` operator is the common form, `+append(a, b)+` equals `+a {plus}{plus} b+` (<<stdlib-list>>).
 
-The lower row is the core of Elm's String module expressible in Souther's types (which lack `+Char+` / `+Maybe+` / `+Float+`). `+split(sep, s)+` splits by a separator into `+List<String>+`, keeping empty pieces (`+split(",", "a,,b")+` is `+["a", "", "b"]+`). `+words(s)+` splits by runs of whitespace, dropping empty pieces. `+join(sep, xs)+` joins with a separator. `+replace(target, replacement, s)+` replaces every occurrence of `+target+`. `+fromInt(n)+` makes an `+Int+` a decimal string. `+concat(xs)+` joins a `+List<String>+` with no separator (Elm `+String.concat+`, equal to `+join("", xs)+`). The primary subject string is last (<<pipe>>). Elm functions depending on `+Char+` or `+Maybe+` (such as `+String.map+` and `+toInt+`, which returns `+Maybe+`) are not ported, as there is no corresponding type.
+`+matches(pattern, s)+` is a whole-string regular-expression match (Java `+Pattern+` flavour, anchored: the *entire* string must match), returning a plain `+Bool+`. It is what states a format-constrained value as an invariant — `+data 郵便 = String invariant String.matches("[0-9]{3}-[0-9]{4}", value)+`. The `+pattern+` MUST be a string literal: it is validated at compile time (compiled once to confirm it is well-formed), so a malformed regex is a compile error rather than a runtime exception. At run time the pattern is compiled on first use and cached, not recompiled on each call. A regex backslash class is written with a doubled backslash (`+"\\d{3}"+`), since a string literal drops the backslash of an unknown escape (<<primitives>>). A pattern computed at run time is therefore not accepted (a future `+Regex+`/`+fromString+` would carry that, returning a case for an invalid pattern); the literal form is what the invariant needs. Regex living in core rather than a package is a departure from Elm (`+elm/regex+`), forced by Souther having no package layer. A pathological pattern can backtrack (a regex property shared with Elm/F#); keep invariant patterns simple.
+
+The middle row is the core of Elm's String module expressible in Souther's types (which lack `+Char+` / `+Maybe+` / `+Float+`). `+split(sep, s)+` splits by a separator into `+List<String>+`, keeping empty pieces (`+split(",", "a,,b")+` is `+["a", "", "b"]+`). `+words(s)+` splits by runs of whitespace, dropping empty pieces. `+join(sep, xs)+` joins with a separator. `+replace(target, replacement, s)+` replaces every occurrence of `+target+`. `+fromInt(n)+` makes an `+Int+` a decimal string. `+concat(xs)+` joins a `+List<String>+` with no separator (Elm `+String.concat+`, equal to `+join("", xs)+`). The primary subject string is last (<<pipe>>). Elm's `+String.map+` and the `+Char+` module are not ported: Souther has no `+Char+` type.
+
+The bottom row gives character access without a `+Char+` type — a character is a length-1 `+String+`. `+toChars(s)+` is Elm's `+String.toList+`: the characters of `+s+`, one per Unicode code point, as single-character strings (`+toChars("a12")+` is `+["a", "1", "2"]+`), so `+List.fold+` can walk them. `+toCode(ch)+` is Elm's `+Char.toCode+` on such a character — its first code point, `+-1+` for the empty string. `+toInt(s)+` is Elm's `+String.toInt+`, returning `+Int | NotANumber+` in place of `+Maybe+`: a named case, since `+Maybe+` has no surface form (ADR-0011) — the same case-return the `+/+` operator and `+Int.divide+` draw between abort and case. `+toInt("007")+` is `+7+` (leading zeros kept, unlike a numeric parse-and-reformat); `+toInt("12x")+` is `+NotANumber+`. Because `+toInt+` returns a primitive-headed union it is a compiler built-in, not a core declaration (ADR-0053); `+toChars+` / `+toCode+` are ordinary intrinsics.
+
+Together these make a checksum (Luhn, EAN, a mod-10 check digit) a plain `+let+` over `+List.fold+` in a behavior: validate the digits with `+matches("[0-9]+", value)+` in the type's invariant, read each digit as `+toCode(ch) - toCode("0")+` (total, because the invariant proved every character is a digit), and take the remainder with `+Int.modBy+`. A checksum is *not* an invariant — it folds, and an invariant may not recurse (<<invariant-expressions>>) — so it lives in a behavior, but a short one.
 
 [#stdlib-int]
 === Int
 
 [,text]
 ----
-add  subtract  multiply  divide  remainder  compare
+add  subtract  multiply  divide  remainder  compare  modBy
 ----
 
 `+Int+` is signed 64-bit (<<primitives>>). If an operation exceeds that range it *aborts* — it does not wrap. Overflow is a model bug, not a business result, so like an invariant violation it throws `+ConstraintViolation+` (<<algebraic-types>>, <<violation-destination>>, <<jvm-abort>>).
@@ -1788,6 +1873,8 @@ add  subtract  multiply  divide  remainder  compare
 Division by zero returns `+Int | DivisionByZero+`. This is a possible input on the business flow (a divisor of 0), so it is returned as a case rather than aborting.
 
 The four operations may also be written with the operators `{plus}` `+-+` `+*+` `+/+` (the symbol table of <<primitives>>). `+/+` is truncating division and *aborts* on division by zero (like overflow). To receive `+Int | DivisionByZero+` as a case, use the functions `+divide+` / `+remainder+` — operator = casual and aborting, function = safe with a case.
+
+`+modBy(divisor, n)+` is the modulo counterpart of that split: it is floored modulo (the result takes the sign of the divisor, unlike the truncating `+remainder+`, so `+Int.modBy(12, -1)+` is `+11+`), and a zero divisor *aborts* like `+/+` rather than returning a case. Its result is therefore a plain `+Int+`, which reads cleanly in an invariant — `+data 箱 = Int invariant Int.modBy(12, value) == 0+`. The divisor is the first argument (subject last, the pipe convention). Use `+remainder+` when a zero divisor must be a business case instead of an abort. (Elm's `+modBy+` / `+remainderBy+`.)
 
 [#stdlib-decimal]
 === Decimal
@@ -1851,12 +1938,12 @@ Note that `+申請者.役職 == 一般社員+` cannot be written as a condition.
 
 [,text]
 ----
-map  filter  fold  all  any  length  get
+map  filter  fold  all  any  length  get  indexedMap
 reverse  member  sum  product  concat  isEmpty  sort
-distinct  partition  groupBy  max  min  find  sortBy
+distinct  partition  groupBy  max  min  find  sortBy  allUniqueBy
 ----
 
-All are called through the qualifier `+List+` (<<stdlib>>). `+List.get+` returns `+Option<T>+`. `+List.map+` / `+List.filter+` / `+List.fold+` / `+List.all+` / `+List.any+` take a block (<<blocks>>). Import them as `+import List ( map, all )+` to write unqualified thereafter.
+All are called through the qualifier `+List+` (<<stdlib>>). `+List.get+` returns `+Option<T>+`. `+List.map+` / `+List.filter+` / `+List.fold+` / `+List.all+` / `+List.any+` / `+List.indexedMap+` take a block (<<blocks>>). Import them as `+import List ( map, all )+` to write unqualified thereafter.
 
 [,text]
 ----
@@ -1868,11 +1955,11 @@ all(r -> 軽微か(r), 理由リスト)
 
 If an injected thing is called from within a block, its requirement appears in the enclosing behavior's `+requires+` (<<requires>>).
 
-None of these is a compiler primitive. `+List.fold+` is a recursive `+let+` in `+souther.list+`: it walks the list with `+List.get+`, threads an accumulator, and takes its step as a function value (<<blocks>>). Its tail-recursive self-call is compiled to a loop, so it reads as a loop would — as `+fold+` is written in Elm or F# (<<stdlib>>, ADR-0051). `+map+` / `+filter+` / `+all+` / `+any+` are `+let+`s derived from it, expanded at the call site: `+map+` / `+filter+` seed with an empty list `+[]+` and grow it, `+all+` / `+any+` fold a `+Bool+`. `+List.length+` / `+String.length+` and `+List.get+` / `+Map.get+` are separate module functions, reached by their qualifier.
+None of these is a compiler primitive. `+List.fold+` is a recursive `+let+` in `+souther.list+`: it walks the list with `+List.get+`, threads an accumulator, and takes its step as a function value (<<blocks>>). Its tail-recursive self-call is compiled to a loop, so it reads as a loop would — as `+fold+` is written in Elm or F# (<<stdlib>>, ADR-0051). `+map+` / `+filter+` / `+all+` / `+any+` are `+let+`s derived from it, expanded at the call site: `+map+` / `+filter+` seed with an empty list `+[]+` and grow it, `+all+` / `+any+` fold a `+Bool+`. `+indexedMap(f, xs)+` is `+map+` that also hands `+f+` the element's 0-based index (Elm's `+List.indexedMap+`): `+fold+` carries no index, so it threads one in a pair accumulator `+(i, ys)+` and drops the counter at the end — the caller writes a weighted sum or positional transform (`+indexedMap((i, c) -> w(i) * d(c)) |> sum+`) without hand-rolling that `+(i, acc)+` fold. `+List.length+` / `+String.length+` and `+List.get+` / `+Map.get+` are separate module functions, reached by their qualifier.
 
 The lower row is also ported from Elm's List module; except `+sort+`, all are self-language `+let+`s derived from `+List.fold+`. `+reverse+` extends the seed to the front, `+sum+` / `+product+` fold numbers, `+concat+` folds with `{plus}{plus}` and flattens nesting (Elm's `+List.concat+`), and `+member+` folds with `+==+` so it works for comparable elements. `+isEmpty+` looks at length. Only `+sort+` is a primitive that cannot be derived from `+fold+` (as in Elm) — self-language sorting needs, besides comparison, a place to hold intermediate results, which `+fold+` does not give; it sorts by the element's natural order. Elements MUST be an ordered type (`+Int+` / `+String+` / `+Decimal+` / `+Date+` / `+DateTime+`; <<primitives>>), and passing a list of data or newtype to `+sort+` is a compile error (they have no ordering, so it is rejected up front rather than at runtime; to sort them, map to an ordered field first with `+List.map+`).
 
-The third row adds more of Elm's List module. `+distinct+` keeps the first occurrence of each element and drops later duplicates (Elm's `+List.Extra.unique+`), folding a `+Set+` of what it has seen; `+partition+` splits into `+(kept, rest)+` by a predicate; `+groupBy+` buckets elements into a `+Map<'k, List<'a>>+` by a key. These three are self-language `+let+`s that grow their result from within `+List.fold+`. `+max+` / `+min+` return the largest / smallest as an `+Option+` — `+None+` on an empty list — and compare by natural order, so like `+sort+` the element MUST be ordered (Elm's `+maximum+` / `+minimum+`); `+find+` returns the first element satisfying a predicate as an `+Option+`. `+sortBy(key, xs)+` orders by a projected ordered key rather than the element itself (F#/Elm `+List.sortBy+`): unlike `+sort+`, whose comparison is built in, its key is a runtime function value, so the sort carries an actual `+Fn+`. `+max+` / `+min+` / `+find+` / `+sortBy+` are primitives (they step outside `+fold+`); only Elm's `+List.head+` is still not ported — a domain reads the first element with `+List.get(0, xs)+`.
+The third row adds more of Elm's List module. `+distinct+` keeps the first occurrence of each element and drops later duplicates (Elm's `+List.Extra.unique+`), folding a `+Set+` of what it has seen; `+partition+` splits into `+(kept, rest)+` by a predicate; `+groupBy+` buckets elements into a `+Map<'k, List<'a>>+` by a key. These three are self-language `+let+`s that grow their result from within `+List.fold+`. `+max+` / `+min+` return the largest / smallest as an `+Option+` — `+None+` on an empty list — and compare by natural order, so like `+sort+` the element MUST be ordered (Elm's `+maximum+` / `+minimum+`); `+find+` returns the first element satisfying a predicate as an `+Option+`. `+sortBy(key, xs)+` orders by a projected ordered key rather than the element itself (F#/Elm `+List.sortBy+`): unlike `+sort+`, whose comparison is built in, its key is a runtime function value, so the sort carries an actual `+Fn+`. `+max+` / `+min+` / `+find+` / `+sortBy+` are primitives (they step outside `+fold+`); only Elm's `+List.head+` is still not ported — a domain reads the first element with `+List.get(0, xs)+`. `+allUniqueBy(key, xs)+` holds when the elements have distinct keys under `+key+` (Elm's `+List.Extra.allDifferentBy+`): the "this projection is a unique id" invariant, written as `+distinct+` of the projected keys compared against the length rather than by hand. Deriving from `+fold+` (through `+map+` / `+distinct+`), it may stand in an invariant, like `+distinct+` itself.
 
 [#stdlib-map]
 === Map
@@ -1884,14 +1971,28 @@ A `+Map+` is immutable and string-keyed (<<collections>>). The accessors read; t
 get  containsKey  keys  values                   // read
 empty  singleton  insert  remove  isEmpty  size  // build
 toList  fromList                                 // convert to / from entry tuples
-fold  map  update                                // higher-order
+fold  map  update  upsert                        // higher-order
 ----
 
 `+get+` returns `+Option<V>+`. `+empty+` is the empty map: like the empty list `+[]+`, its value type is fixed by context (a field or return position, or the first `+insert+`), so it is a built-in taking no argument rather than a call learning a type variable. `+singleton(k, v)+` is a one-entry map; `+insert(k, v, m)+` adds an entry or overwrites the existing one; `+remove(k, m)+` drops one, leaving `+m+` unchanged when the key is absent. Because a `+Map+` is immutable, `+insert+` / `+remove+` return a new map rather than mutating. `+size+` is the entry count and `+isEmpty+` whether there are none. The map operated on is last (<<pipe>>), so `+m |> Map.insert(k, v)+` reads left to right.
 
 `+toList(m)+` is the entries as a `+List<(String, V)>+` — a list of key/value tuples in the map's iteration order — and `+fromList(entries)+` builds a map back (a later entry wins on a duplicate key). Iteration order is a deterministic, implementation-defined hash order (not insertion order): the same set of keys always yields the same order, so encoding is reproducible, but a program must not depend on which order that is. The tuple type in these signatures is allowed because a signature is not a codec boundary (<<tuple>>, ADR-0037).
 
-`+fold+` / `+map+` / `+update+` are the operations that take a step function. `+Map.fold(step, seed, m)+` is layered on `+List.fold+` over the entries (`+toList+`) rather than walking the map itself, and the entries combine in the map's deterministic hash order. Its step is `+(acc, key, value)+` (F#'s `+Map.fold+` folder is `+state key value+`, Elm's `+Dict.foldl+` is `+k v acc+`). `+map(f, m)+` keeps the keys and rewrites the values (`+(key, value) -> value+`, Elm's `+Dict.map+` / F#'s `+Map.map+`), growing a fresh map through `+fold+`. `+update(key, f, m)+` rewrites the value under one key with `+f+` and is a no-op when the key is absent. Its step is `+('a) -> 'a+`, not Elm's `+Maybe v -> Maybe v+`: `+Option+` is not surface-writable (ADR-0011), so a step cannot return one — insert a new key with `+insert+`, drop one with `+remove+`, and let `+update+` cover changing what is already there.
+`+fold+` / `+map+` / `+update+` are the operations that take a step function. `+Map.fold(step, seed, m)+` is layered on `+List.fold+` over the entries (`+toList+`) rather than walking the map itself, and the entries combine in the map's deterministic hash order. Its step is `+(acc, key, value)+` (F#'s `+Map.fold+` folder is `+state key value+`, Elm's `+Dict.foldl+` is `+k v acc+`). `+map(f, m)+` keeps the keys and rewrites the values (`+(key, value) -> value+`, Elm's `+Dict.map+` / F#'s `+Map.map+`), growing a fresh map through `+fold+`. `+update(key, f, m)+` rewrites the value under one key with `+f+` and is a no-op when the key is absent. Its step is `+('a) -> 'a+`, not Elm's `+Maybe v -> Maybe v+`: `+Option+` is not surface-writable (ADR-0011), so a step cannot return one — insert a new key with `+insert+`, drop one with `+remove+`, and let `+update+` cover changing what is already there. `+upsert(key, default, f, m)+` collapses insert-if-absent / modify-if-present into one call: it applies `+f+` to a present key's value and inserts `+default+` for an absent one. Like `+update+` it keeps `+Option+` internal — the absent branch takes a plain value (`+default+`), not the `+Maybe -> Maybe+` step Elm's `+Dict.update+` needs (ADR-0011). Typical use is accumulation, e.g. counting `+upsert(k, 1, n -> n {plus} 1, m)+`.
+
+[#stdlib-option]
+=== Option
+
+`+List.get+` / `+Map.get+` / `+List.find+` and a `+T?+` field all yield an `+Option+` (<<algebraic-types>>). Before this module the only way to read one was a two-arm `+match+`, which ends the value pipe (<<pipe>>); these functions let the optional flow through `+|>+` instead.
+
+[,text]
+----
+map  withDefault
+----
+
+`+withDefault(default, opt)+` reads the option: the wrapped value when present, `+default+` when absent (Elm's `+Maybe.withDefault+`, F#'s `+Option.defaultValue+`). `+map(f, opt)+` transforms a present value with `+f+` and leaves an absent one absent, so its result is again an `+Option+` (Elm's `+Maybe.map+`, F#'s `+Option.map+`); `+f+` is a plain `+('a) -> 'b+` and never sees the absent case. Both take the option last (<<pipe>>), so it threads through the pipe: `+Map.get(k, m) |> Option.map(v -> v.value) |> Option.withDefault("なし")+`.
+
+`+Option+` stays non-surface (ADR-0011): the caller never writes `+Option<T>+` nor builds a `+Some+` — the optional is inferred and unnamed as it flows here, and `+map+`'s result stays inferred as it reaches `+withDefault+`. There is no `+andThen+`: its step would have to return an `+Option+`, which no user function can build under that rule (insert-if-present style folding stays with `+Map.upsert+` / `+update+`, which keep `+Option+` internal). For the same reason `+map+` cannot be self-hosted — a body cannot construct a `+Some+` — so it is a compiler built-in, while `+withDefault+`, which only reads, is an ordinary helper.
 
 [#stdlib-set]
 === Set
@@ -2017,7 +2118,7 @@ Reflection, Unsafe, and bytecode manipulation are out of scope for guarantees.
 [#jvm-abort]
 === Abort on invariant violation
 
-An invariant violation inside the domain (<<algebraic-types>>, <<violation-destination>>) appears in generated code as throwing `+net.unit8.souther.runtime.ConstraintViolation+`. It carries the broken data name and the invariant's location.
+An invariant violation inside the domain (<<algebraic-types>>, <<violation-destination>>) appears in generated code as throwing `+souther.runtime.ConstraintViolation+`. It carries the broken data name and the invariant's location.
 
 Souther code cannot catch this. There is no catching syntax, so it cannot control business flow (<<out-of-scope>>). The boundary Java can catch it, but handles it as distinct from a business failure. A business failure arrives as an output case (<<unmarked-sum>>) and maps to 400; an abort is a model bug and maps to 500.
 

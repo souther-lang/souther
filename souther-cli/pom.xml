@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>net.unit8.souther</groupId>
+        <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc2</version>
+        <version>0.1.0-rc3</version>
     </parent>
 
     <artifactId>souther-cli</artifactId>
@@ -21,11 +21,11 @@
              souther-runtime as provided; this module adds it back at runtime so the uber jar is
              self-contained (the compiler's own published POM stays unchanged). -->
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-compiler</artifactId>
         </dependency>
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
         </dependency>
     </dependencies>
@@ -63,7 +63,7 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>net.unit8.souther.compiler.Main</mainClass>
+                                    <mainClass>souther.compiler.Main</mainClass>
                                     <manifestEntries>
                                         <Multi-Release>true</Multi-Release>
                                     </manifestEntries>

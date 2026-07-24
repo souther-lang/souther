@@ -1,0 +1,107 @@
+package souther.compiler;
+
+import souther.compiler.diag.CompileException;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+/** End-to-end test for {@code match} over a sum type, including exhaustiveness (spec 16.3, 22.7). */
+class CompileMatchTest {
+
+    private static final String MODULE = """
+            module demo
+
+            data Label = String
+
+            data EmailContact = { email: String }
+            data PhoneContact = { phone: String }
+            data Contact = EmailContact | PhoneContact
+
+            behavior contactValue : (c: Contact) -> Label constructs Label
+
+            let contactValue (c) =
+                match c with
+                    | EmailContact as e -> Label { value = e.email }
+                    | PhoneContact as p -> Label { value = p.phone }
+            """;
+
+    private BytesClassLoader loader() {
+        return new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
+    }
+
+    private Object run(BytesClassLoader loader, Map<String, Object> contactInput) throws Exception {
+        Object contact = Codecs.decoded(loader, "demo.Contact", contactInput);
+
+        Object behavior = loader.loadClass("demo.ContactValue" + "$Impl").getConstructor().newInstance();
+        Object label = Codecs.apply(behavior, contact);
+
+        // Label is a single-field newtype, so its encoder yields the bare String.
+        return Codecs.encode(loader, "demo.Label", label);
+    }
+
+    @Test
+    void matchSelectsTheEmailCase() throws Exception {
+        BytesClassLoader loader = loader();
+        Object out = run(loader, Map.of("type", "EmailContact", "email", "a@b"));
+        assertEquals("a@b", out);
+    }
+
+    @Test
+    void matchSelectsThePhoneCase() throws Exception {
+        BytesClassLoader loader = loader();
+        Object out = run(loader, Map.of("type", "PhoneContact", "phone", "123"));
+        assertEquals("123", out);
+    }
+
+    @Test
+    void nonExhaustiveMatchIsE1201() {
+        String src = """
+                module demo
+                data A = { x: String }
+                data B = { y: String }
+                data AB = A | B
+                data Label = String
+                behavior pick : (v: AB) -> Label constructs Label
+
+                let pick (v) =
+                    match v with
+                        | A as a -> Label { value = a.x }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("E1201", e.code());
+    }
+
+    /** The leading `|` on the first case is optional (F# form). */
+    @Test
+    void firstCasePipeIsOptional() throws Exception {
+        String src = MODULE.replace("match c with\n                    | EmailContact",
+                "match c with\n                    EmailContact");
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object out = run(loader, Map.of("type", "EmailContact", "email", "a@b"));
+        assertEquals("a@b", out);
+    }
+
+    /** The old braced `match e { case P -> ... }` form no longer parses (ADR-0027). */
+    @Test
+    void bracedCaseFormNoLongerParses() {
+        String src = """
+                module demo
+                data A = { x: String }
+                data B = { y: String }
+                data AB = A | B
+                data Label = String
+                behavior pick : (v: AB) -> Label constructs Label
+
+                let pick (v) =
+                    match v {
+                        case A as a -> Label { value = a.x }
+                        case B as b -> Label { value = b.y }
+                    }
+                """;
+        assertThrows(CompileException.class, () -> Compiler.compile(src));
+    }
+}

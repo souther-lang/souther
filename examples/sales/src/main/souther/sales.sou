@@ -28,14 +28,14 @@ data 空注文
 behavior 集計する : (注: 注文) -> レポート | 空注文
     constructs レポート, 空注文
 
-// map に名前で渡す純粋ヘルパ。
-let 金額 (m: 明細) = m.金額
+// map に渡す射影。金額は field-getter .金額 で足りる。商品名 は .商品.value の2ホップで、
+// field-getter は単層なのでヘルパにする。
 let 商品名 (m: 明細) = m.商品.value
 
 let 集計する (注) = {
     require length(注.明細リスト) >= 1 else 空注文
     レポート {
-        総額 = sum(map(金額, 注.明細リスト)),
+        総額 = sum(map(.金額, 注.明細リスト)),
         取扱商品 = distinct(map(商品名, 注.明細リスト)),
         明細数 = length(注.明細リスト),
         高額明細数 = length(filter(m -> m.金額 >= 1000, 注.明細リスト))

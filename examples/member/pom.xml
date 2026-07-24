@@ -18,7 +18,7 @@
     </description>
 
     <dependencies>
-        <dependency><groupId>net.unit8.souther</groupId><artifactId>souther-runtime</artifactId></dependency>
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
         <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
 
         <!-- 境界の相互運用。生成物の利用側であって検証対象ではないので provided。 -->

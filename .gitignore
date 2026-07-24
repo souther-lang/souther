@@ -2,6 +2,11 @@
 target/
 *.class
 
+# Clojure tooling
+.cpcache/
+.clj-kondo/
+.lsp/
+
 # IDE
 .idea/
 *.iml
@@ -16,4 +21,8 @@ target/
 # Scratch
 /tmp/
 *.log
-/editors/
+
+# VS Code extension build artifacts (the source lives under editors/vscode/)
+editors/vscode/node_modules/
+editors/vscode/server/*.jar
+editors/vscode/*.vsix

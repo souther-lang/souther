@@ -29,6 +29,20 @@ let filter (keep: ('a) -> Bool, xs: List<'a>) = List.fold((acc, x) -> if keep(x)
 let all (p: ('a) -> Bool, xs: List<'a>) = List.fold((acc, x) -> acc && p(x), true, xs)
 let any (p: ('a) -> Bool, xs: List<'a>) = List.fold((acc, x) -> acc || p(x), false, xs)
 
+// `indexedMap` is Elm's `List.indexedMap`: it applies `f(index, element)` down the list, the index
+// starting at 0. `fold` carries no index of its own, so it threads one in a pair accumulator
+// `(i, ys)` — the same tuple-accumulator shape as `distinct`/`partition` below — and drops the
+// counter at the end. It saves the caller from hand-rolling that `(i, acc)` fold for a weighted sum
+// or a positional transform (a check-digit weighting reads `indexedMap((i, c) -> w(i) * d(c)) |> sum`).
+let indexedMap (f: (Int, 'a) -> 'b, xs: List<'a>) = {
+    let (_, out) = List.fold((acc, x) -> {
+        let (i, ys) = acc
+        let mapped = ys ++ [f(i, x)]
+        (i + 1, mapped)
+    }, (0, []), xs)
+    out
+}
+
 // More of Elm's List module. `sum`/`product` fold a number; `concat` folds with `++`; `member`
 // folds a Bool using `==` (so it works over any comparable element); `isEmpty` reads the length.
 // `List.concat` and `String.concat` are distinct now that names are qualified.
@@ -64,6 +78,14 @@ let distinct (xs: List<'a>) = {
     }, (Set.empty(), []), xs)
     out
 }
+
+// `allUniqueBy` holds when the elements have distinct keys under `key` (Elm's List.Extra
+// `allDifferentBy`): the "this projection is a unique id" invariant, written directly instead of as
+// a `length(distinct(map ...)) == length` by hand. It projects with `map`, drops duplicate keys with
+// `distinct`, and holds when nothing was dropped. Deriving from the total `fold` (through
+// `map`/`distinct`), it may stand in an invariant, like `distinct` itself.
+let allUniqueBy (key: ('a) -> 'k, xs: List<'a>) =
+    List.length(List.distinct(List.map(key, xs))) == List.length(xs)
 
 // `partition` splits the list by a predicate into (kept, rest), preserving order in each (Elm's
 // List.partition). It folds a pair of empty lists `([], [])`, appending each element to one side —

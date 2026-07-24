@@ -1,0 +1,23 @@
+// A `>->` pipeline run end to end. `run` drives a pipeline whose stages are all in-language
+// (each has a `let` and no `requires`): the pipeline compiles to a no-arg class that chains the
+// stages, so it runs like any other behavior.
+//
+//   souther run pipeline.sou --behavior checkout --input '{"quantity": 3, "unitPrice": 400}'
+//   => {"total":1200}
+
+data Order = {
+    quantity: Int
+    , unitPrice: Int
+}
+data Priced = { total: Int }
+data Receipt = { total: Int }
+
+behavior price : (order: Order) -> Priced
+    constructs Priced
+let price (order) = Priced { total = order.quantity * order.unitPrice }
+
+behavior settle : (priced: Priced) -> Receipt
+    constructs Receipt
+let settle (priced) = Receipt { total = priced.total }
+
+behavior checkout = price >-> settle
