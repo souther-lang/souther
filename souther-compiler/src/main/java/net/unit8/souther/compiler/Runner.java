@@ -30,10 +30,13 @@ import java.util.stream.Collectors;
  * behavior, and encodes the returned domain value back to JSON through its derived encoder. Souther
  * keeps no I/O of its own; a header-less {@code .sou} is named after the file (see {@link Parser}).
  *
- * <p>Only a self-contained module (no imports) and a simple behavior with a {@code let} and no
- * {@code requires} can be driven. An injected behavior (no implementation) or one that needs
- * injected dependencies has no in-language implementation to run, and a {@code >->} pipeline is not
- * yet supported; each is refused with a reason.
+ * <p>The runner drives a single self-contained {@code .sou} file: stdlib imports resolve, but it
+ * cannot link against other user modules. A behavior is runnable when it has a {@code let} and no
+ * {@code requires}, or when it is a {@code >->} pipeline whose stages are all themselves runnable
+ * (each has a {@code let} and no {@code requires}) — such a pipeline compiles to a no-arg {@code
+ * $Impl} that chains the stages, so it runs like any other behavior. An injected behavior (no
+ * implementation), one that needs injected dependencies, or a pipeline with such a stage has nothing
+ * for {@code run} to supply; each is refused with a reason.
  */
 public final class Runner {
 
@@ -103,7 +106,7 @@ public final class Runner {
         Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
         Map<String, TypeChecker.Sig> sigs = TypeChecker.signatures(module, symbols);
 
-        Ast.SpecBehavior spec = resolveBehavior(module, behaviorName);
+        Ast.BehaviorDef spec = resolveBehavior(module, behaviorName);
         TypeChecker.Sig sig = sigs.get(spec.name());
         List<Type> ins = sig.ins();
 
@@ -121,14 +124,18 @@ public final class Runner {
 
     // --- behavior selection ---------------------------------------------------------------------
 
-    private static Ast.SpecBehavior resolveBehavior(Ast.Module module, String requested) {
+    private static Ast.BehaviorDef resolveBehavior(Ast.Module module, String requested) {
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Ast.FnDef::name).collect(Collectors.toSet());
-        Map<String, Ast.SpecBehavior> runnable = new java.util.LinkedHashMap<>();
+        Map<String, List<String>> pipeStages = TypeChecker.pipelineStages(module);
+        Map<String, Ast.BehaviorDef> runnable = new java.util.LinkedHashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec
                     && implemented.contains(spec.name()) && spec.requires().isEmpty()) {
                 runnable.put(spec.name(), spec);
+            } else if (b instanceof Ast.PipeBehavior pipe
+                    && pipelineBlocker(module, pipe, implemented, pipeStages) == null) {
+                runnable.put(pipe.name(), pipe);
             }
         }
         if (requested == null) {
@@ -142,26 +149,59 @@ public final class Runner {
             throw usage("several runnable behaviors — pick one with --behavior: "
                     + String.join(", ", runnable.keySet()));
         }
-        Ast.SpecBehavior found = runnable.get(requested);
+        Ast.BehaviorDef found = runnable.get(requested);
         if (found != null) {
             return found;
         }
         throw new RunException(whyNotRunnable(module, requested, runnable.keySet()));
     }
 
+    /**
+     * Why a {@code >->} pipeline cannot be driven by {@code run}, or null when every stage is
+     * in-language. A pipeline whose flattened stages all have a {@code let} and no {@code requires}
+     * compiles to an {@code $Impl} with a public no-arg constructor, so it runs exactly like a simple
+     * behavior. A stage with no implementation (injected from Java) or one that needs its own injected
+     * dependencies would make that constructor take those behaviors, which {@code run} cannot supply.
+     */
+    private static String pipelineBlocker(Ast.Module module, Ast.PipeBehavior pipe,
+            java.util.Set<String> implemented, Map<String, List<String>> pipeStages) {
+        Map<String, Ast.SpecBehavior> specs = new java.util.HashMap<>();
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Ast.SpecBehavior spec) {
+                specs.put(spec.name(), spec);
+            }
+        }
+        for (String stage : TypeChecker.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
+            if (!implemented.contains(stage)) {
+                return "`" + pipe.name() + "` is a pipeline whose stage `" + stage
+                        + "` has no implementation (it is injected from Java), which `run` cannot supply.";
+            }
+            Ast.SpecBehavior spec = specs.get(stage);
+            if (spec != null && !spec.requires().isEmpty()) {
+                return "`" + pipe.name() + "` is a pipeline whose stage `" + stage
+                        + "` requires injected dependencies (" + String.join(", ", spec.requires())
+                        + "), which `run` cannot supply.";
+            }
+        }
+        return null;
+    }
+
     private static String whyNotRunnable(Ast.Module module, String name, java.util.Set<String> runnable) {
         String available = runnable.isEmpty() ? "none" : String.join(", ", runnable);
+        java.util.Set<String> implemented = module.fns().stream()
+                .map(Ast.FnDef::name).collect(Collectors.toSet());
+        Map<String, List<String>> pipeStages = TypeChecker.pipelineStages(module);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
                 continue;
             }
-            if (b instanceof Ast.PipeBehavior) {
-                return "`" + name + "` is a `>->` pipeline, which `run` cannot drive yet. "
-                        + "Runnable: " + available + ".";
+            if (b instanceof Ast.PipeBehavior pipe) {
+                String blocker = pipelineBlocker(module, pipe, implemented, pipeStages);
+                return (blocker == null ? "`" + name + "` is runnable." : blocker)
+                        + " Runnable: " + available + ".";
             }
             if (b instanceof Ast.SpecBehavior spec) {
-                boolean implemented = module.fns().stream().anyMatch(f -> f.name().equals(name));
-                if (!implemented) {
+                if (!implemented.contains(name)) {
                     return "`" + name + "` has no implementation (it is injected from Java). "
                             + "Runnable: " + available + ".";
                 }

@@ -77,7 +77,7 @@ mvn -pl souther-cli -am -DskipTests install
 # => "Hello, world"
 ```
 
-`--behavior` may be omitted when the module holds exactly one runnable behavior, and `--input` when the behavior takes no argument. A multi-argument behavior takes a JSON array (`--input '[3, 7]'`). Only a self-contained behavior with a `let` and no `requires` can be driven; an injected behavior or a `>->` pipeline is refused with a reason.
+`--behavior` may be omitted when the module holds exactly one runnable behavior, and `--input` when the behavior takes no argument. A multi-argument behavior takes a JSON array (`--input '[3, 7]'`). A behavior is runnable when it has a `let` and no `requires`, or when it is a `>->` pipeline whose stages are all runnable in that same sense; an injected behavior, one that needs injected dependencies, or a pipeline with such a stage is refused with a reason. The runner drives a single self-contained file — stdlib imports resolve, but it cannot link against other user modules.
 
 The same `souther` binary also compiles to `.class` files (`souther compile hello.sou -d out`). It runs on any Unix shell; on Windows, use it as a plain jar (`java -jar souther-cli/target/souther.jar …`).
 
