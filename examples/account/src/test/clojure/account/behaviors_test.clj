@@ -23,7 +23,7 @@
   (.value (.decode (WithdrawRequest/decoder) {"account" id "amount" amount})))
 
 (defn- withdraw [id amount]
-  (.apply (b/withdraw-behavior *ds*) (req id amount)))
+  ((b/withdraw-fn *ds*) (req id amount)))
 
 (defn- balance-of [id]
   (:BALANCE (jdbc/execute-one! *ds*

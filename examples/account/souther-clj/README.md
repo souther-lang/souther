@@ -13,7 +13,8 @@ JVM boundary that are otherwise hand-rolled at every call site:
   nested newtypes already unwrapped — so a boundary never chains `.value` / field accessors.
   `unwrap` is `encode` narrowed to a newtype (the bare value), throwing on a record/sum.
 - **`souther.behavior`** — `defbehavior` is sugar over `proxy` for implementing an injected
-  behavior's abstract base, mirroring the generated `apply` signature.
+  behavior's abstract base, mirroring the generated `apply` signature. `as-fn` turns a bound/unary
+  behavior into a plain Clojure fn, so it is called `(f input)` rather than `(.apply b input)`.
 - **`souther.match`** — `case-of` folds a sealed output union to a value and, at macro-expansion,
   checks that the handler map covers exactly the union's permitted subclasses. This restores at the
   Clojure boundary the totality that Souther's `match` guarantees inside generated code.
@@ -49,9 +50,10 @@ own test fixtures (a small generated module) and publishing coordinates.
       (construct NoAccount {}))))
 
 ;; Decode input at the boundary, then fold the sealed output exhaustively.
+;; `withdraw` is (as-fn (Withdraw/bind …)) — a plain fn, so no .apply.
 (let [[tag req] (decode (WithdrawRequest/decoder) json-body)]
   (when (= tag :ok)
-    (case-of WithdrawResult (.apply withdraw req)
+    (case-of WithdrawResult (withdraw req)
              {Withdrawn          on-withdrawn
               InsufficientFunds  on-short
               NoAccount          on-missing})))   ; omit a case → compile error

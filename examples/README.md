@@ -209,7 +209,8 @@ type and works by reflection over whatever generated classes the caller passes i
 - `souther.encode` — the inverse: `encode` runs a value's `encoder()` and returns Clojure data,
   unwrapping newtypes (a newtype → its bare value, a record → a keyword map with nested newtypes
   already unwrapped); `unwrap` is that narrowed to a single wrapper. No chains of `.value`.
-- `souther.behavior` — `defbehavior`, the `proxy` sugar for an injected behavior.
+- `souther.behavior` — `defbehavior`, the `proxy` sugar for an injected behavior; `as-fn`, which
+  turns a bound behavior into a plain Clojure fn (called `(f input)`, not `(.apply b input)`).
 - `souther.match` — `case-of`, which folds a sealed output union and checks **at macro-expansion**
   that the handlers cover exactly the union's permitted subclasses — carrying Souther's `match`
   totality across the boundary (drop a case and it is a compile error, not a silent fall-through).
@@ -217,8 +218,8 @@ type and works by reflection over whatever generated classes the caller passes i
 | Clojure file | Role |
 | --- | --- |
 | `account/db.clj` | The H2 DataSource, schema, and seed. The dynamic var `*conn*` is the seam that binds "read → check → write" into one transaction: the boundary rebinds it to the transaction's connection, and both behaviors query through `current`, so `currentBalance`'s SELECT and `updateBalance`'s UPDATE join the same connection |
-| `account/behaviors.clj` | Implements `currentBalance` / `updateBalance` with `souther.behavior/defbehavior`, building the return values with `souther.decode/construct` and reading newtype arguments with `souther.encode/unwrap` (no `.value`). Binds with `Withdraw/bind` (spec 19.5). SQL exceptions are not caught — they are thrown (platform failures pass through) |
-| `account/service.clj` | The Pedestal boundary. The whole request is the JSON body `{"account": …, "amount": …}`, handed straight to `WithdrawRequest/decoder` via `souther.decode/decode` (the `Amount` invariant `value >= 0` is rejected here → 400, and the Raoh issues are returned in the body). Then it runs `withdraw` inside `with-transaction`, folds the output with `souther.match/case-of` (miss a case and it will not compile), and `souther.encode/encode`s the result value to the JSON body — Withdrawn 200 `{account, newBalance}` / InsufficientFunds 409 / NoAccount 404 |
+| `account/behaviors.clj` | Implements `currentBalance` / `updateBalance` with `souther.behavior/defbehavior`, building the return values with `souther.decode/construct` and reading newtype arguments with `souther.encode/unwrap` (no `.value`). Exposes `withdraw-fn` / `current-balance-fn` — the bound behaviors as plain Clojure fns via `souther.behavior/as-fn`. SQL exceptions are not caught — they are thrown (platform failures pass through) |
+| `account/service.clj` | The Pedestal boundary. The whole request is the JSON body `{"account": …, "amount": …}`, handed straight to `WithdrawRequest/decoder` via `souther.decode/decode` (the `Amount` invariant `value >= 0` is rejected here → 400, and the Raoh issues are returned in the body). Then it calls `withdraw` (a fn) inside `with-transaction`, folds the output with `souther.match/case-of` (miss a case and it will not compile), and `souther.encode/encode`s the result value to the JSON body — Withdrawn 200 `{account, newBalance}` / InsufficientFunds 409 / NoAccount 404 |
 | `account/server.clj` | The `-main` that creates and seeds H2 and starts Jetty |
 
 `InsufficientFunds` / `NoAccount` arrive as **returned values**, and no write happened on those
@@ -237,7 +238,7 @@ JDK compiler API (`souther.build/generate!`), with `souther-compiler` on the ali
 ```sh
 cd examples/account
 clojure -X:gen                                   # .sou → target/classes (the .sou examples are checked here too)
-clojure -X:test                                  # the souther-clj library, behavior+DB, and Pedestal boundary tests (19 of them)
+clojure -X:test                                  # the souther-clj library, behavior+DB, and Pedestal boundary tests (20 of them)
 clojure -M:run                                   # starts on localhost:8890
 ```
 

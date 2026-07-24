@@ -7,7 +7,7 @@
             [next.jdbc.result-set :as rs]
             [souther.decode :refer [construct]]
             [souther.encode :refer [unwrap]]
-            [souther.behavior :refer [defbehavior]]
+            [souther.behavior :refer [defbehavior as-fn]]
             [account.db :as db])
   (:import [example.account Balance NoAccount Withdrawn CurrentBalance UpdateBalance Withdraw]))
 
@@ -32,7 +32,13 @@
       (jdbc/execute! (db/current ds) ["update account set balance=? where id=?" balance id])
       (construct Withdrawn {:account id :newBalance balance}))))
 
-(defn withdraw-behavior
-  "withdraw with its two required behaviors bound to the H2 implementations (19.5 bind)."
+(defn withdraw-fn
+  "withdraw with its two required behaviors bound to the H2 implementations (19.5 bind), as a
+   plain Clojure fn: `(withdraw-fn ds)` returns a function of a WithdrawRequest."
   [ds]
-  (Withdraw/bind (current-balance-impl ds) (update-balance-impl ds)))
+  (as-fn (Withdraw/bind (current-balance-impl ds) (update-balance-impl ds))))
+
+(defn current-balance-fn
+  "currentBalance bound to H2, as a plain Clojure fn of an AccountNo."
+  [ds]
+  (as-fn (current-balance-impl ds)))

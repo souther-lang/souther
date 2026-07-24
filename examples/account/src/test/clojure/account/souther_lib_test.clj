@@ -88,3 +88,8 @@
   (let [impl (fixed-balance 500)]
     (is (instance? CurrentBalance impl))
     (is (= 500 (.value (.apply impl (d/construct AccountNo "acc-1")))))))
+
+(deftest as-fn-makes-a-behavior-callable-as-a-clojure-fn
+  (let [f (b/as-fn (fixed-balance 500))]
+    (is (fn? f))
+    (is (= 500 (e/unwrap (f (d/construct AccountNo "acc-1")))))))
