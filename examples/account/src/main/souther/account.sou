@@ -13,9 +13,10 @@ data AccountNo = String
 data Amount = Int
     invariant value >= 0
 
-// A balance never goes below zero -- the account's aggregate invariant. Balance and Amount are
-// distinct newtypes, so the difference is taken over .value and re-wrapped with Balance(...)
-// (two different newtypes are not subtracted directly, 6.x).
+// A balance never goes below zero -- the account's aggregate invariant. Arithmetic stays closed
+// within one newtype (Balance - Balance : Balance), so Balance and Amount -- two distinct newtypes
+// over Int -- are combined through their `.value`s and the result re-wrapped with Balance(...). Two
+// different newtypes are not subtracted directly: they carry no shared dimension (6.x newtype-arithmetic).
 data Balance = Int
     invariant value >= 0
 

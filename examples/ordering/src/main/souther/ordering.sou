@@ -90,10 +90,11 @@ data 行在庫 =
     , 数量: Int
     }
 // 読んだ在庫スナップショット（注文に関係する sku 分）。sku は行ごとに一意：同じ sku が2行あると
-// 現在庫 の find（先頭一致）がどちらを読むかで結果が変わるため、一意性を不変条件で宣言する。sku を
-// 取り出して distinct した長さが元の行数と一致すれば重複はない（要素単体では表せない List の性質）。
+// 現在庫 の find（先頭一致）がどちらを読むかで結果が変わるため、一意性を不変条件で宣言する。
+// List.allUniqueBy(.sku, 明細) は「sku を取り出して重複が無い」を一発で表す（要素単体では表せない
+// List の性質。中身は map→distinct→長さ比較で、fold 由来なので invariant に置ける）。
 data 在庫スナップショット = { 明細: List<行在庫> }
-    invariant List.length(List.distinct(List.map(.sku, 明細))) == List.length(明細)
+    invariant List.allUniqueBy(.sku, 明細)
 
 data 引当済み = { total: Int }
 // 1行でも在庫が足りなければ引当は失敗する。
@@ -160,17 +161,13 @@ behavior 入荷検品する : (バーコード: JANコード) -> 検品合格 | 
 
 // EAN-13 の加重和：位置 1,3,5..（0始まりで偶数 index）は重み 1、位置 2,4,6..（奇数 index）は重み 3。
 // 有効なコードは13桁すべての加重和が 10 で割り切れる（13桁目の検査数字がそう選ばれている）。桁が数字で
-// あることは invariant が保証済みなので桁値 toCode(ch) - toCode("0") は total。index は畳み込みの
-// (index, 和) accumulator で持ち回る（distinct と同じ tuple accumulator）。
+// あることは invariant が保証済みなので桁値 toCode(ch) - toCode("0") は total。位置ごとの重み付けは
+// List.indexedMap（index を渡す map）で1桁を重み付き桁値に写し、List.sum で足す。
 let 桁値 (ch: String) = String.toCode(ch) - String.toCode("0")
-let 加重和 (コード: String) = {
-    let (_, 和) = List.fold((acc, ch) -> {
-        let (i, s) = acc
-        let 重み = if Int.modBy(2, i) == 0 then 1 else 3
-        (i + 1, s + 重み * 桁値(ch))
-    }, (0, 0), String.toChars(コード))
-    和
-}
+let 加重和 (コード: String) =
+    String.toChars(コード)
+        |> List.indexedMap((i, ch) -> (if Int.modBy(2, i) == 0 then 1 else 3) * 桁値(ch))
+        |> List.sum
 
 let 入荷検品する (バーコード) = {
     require Int.modBy(10, 加重和(バーコード.value)) == 0 else 読取不良

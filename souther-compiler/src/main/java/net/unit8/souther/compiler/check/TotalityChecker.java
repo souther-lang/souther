@@ -17,8 +17,9 @@ import java.util.Set;
  * that is not {@code partial} must terminate, proven by <em>size-change termination</em> (Lee–Jones–
  * Ben-Amram) over the structural sub-term order. Every recursive call is a size-change graph relating
  * caller parameters to callee arguments: an argument that is a strictly smaller part of a parameter
- * (a sub-term from a {@code match} on a field or a case, or an element handed to a list combinator's
- * closure) is a strict ({@code <}) arc; an argument passed through unchanged is a non-increasing
+ * (a sub-term from a {@code match} on a field or a case, or a value handed to a container combinator's
+ * closure — a list element, or an {@code Option}'s unwrapped payload) is a strict ({@code <}) arc; an
+ * argument passed through unchanged is a non-increasing
  * ({@code =}) arc. Composing these graphs to a fixpoint, the recursion terminates iff every idempotent
  * cycle carries a strictly decreasing parameter. Self-referential data is finite by construction (the
  * inhabitability check), so a proven descent bottoms out — the helper terminates, and its examples can
@@ -279,14 +280,20 @@ final class TotalityChecker {
                            Map<String, Set<String>> lt, Map<String, Set<String>> eq) {}
 
     /**
-     * A standard-library list combinator that hands the elements of its list argument to a closure:
-     * the closure is argument {@code closureArg}, its element is closure parameter {@code elementParam},
-     * and the list is argument {@code listArg}. Recursing on that element inside the closure is
-     * structural when the list is (part of) a parameter — the common way to walk an {@code List<T>}
-     * of children (spec §stdlib-list). An unlisted combinator is conservatively treated as
-     * non-element-producing (the recursion is rejected, never wrongly accepted).
+     * A standard-library combinator that hands the contents of its container argument to a closure:
+     * the closure is argument {@code closureArg}, the value it receives is closure parameter
+     * {@code elementParam}, and the container is argument {@code containerArg}. Recursing on that value
+     * inside the closure is structural when the container is (part of) a parameter — the common way to
+     * walk a {@code List<T>} of children, and equally the {@code Some} payload of an {@code Option<T>}
+     * (spec §stdlib-list): a list element is a sub-term of the list, and the unwrapped payload is a
+     * sub-term of the option, so either is a strictly smaller part of a parameter the container is
+     * rooted at. {@code Option.map(f, opt)} has the same shape as {@code List.map(f, xs)} — its closure
+     * receives the unwrapped value, {@code opt} last — so it is registered the same way. An unlisted
+     * combinator is conservatively treated as non-content-producing (the recursion is rejected, never
+     * wrongly accepted); a freshly-constructed container (`Some(p)`) roots at no parameter, so its
+     * payload is not credited as smaller.
      */
-    private record Combinator(int closureArg, int elementParam, int listArg) {}
+    private record Combinator(int closureArg, int elementParam, int containerArg) {}
 
     private static final Map<String, Combinator> COMBINATORS = Map.of(
             "List.fold", new Combinator(0, 1, 2),
@@ -296,7 +303,12 @@ final class TotalityChecker {
             "List.all", new Combinator(0, 0, 1),
             "List.any", new Combinator(0, 0, 1),
             "List.find", new Combinator(0, 0, 1),
-            "List.partition", new Combinator(0, 0, 1));
+            "List.partition", new Combinator(0, 0, 1),
+            // Option is a container of at most one element; its `Some` payload is a sub-term of the
+            // option, so `Option.map`'s closure receives a strictly smaller part when the option is
+            // (part of) a parameter — a manager chain `s.上司 |> Option.map(b -> depth(b) + 1)` walks
+            // structurally, exactly as the list combinators above do (`Option.andThen` does not exist).
+            "Option.map", new Combinator(0, 0, 1));
 
     /**
      * Walks {@code e}, threading {@code lt} (each local -&gt; the parameters it is a strictly smaller
@@ -337,12 +349,13 @@ final class TotalityChecker {
                     Ast.Expr arg = call.args().get(ai);
                     if (combo != null && ai == combo.closureArg() && arg instanceof Ast.Block step
                             && combo.elementParam() < step.params().size()
-                            && combo.listArg() < call.args().size()) {
-                        // `step` iterates the list argument; each element it is handed is a member of
-                        // that list, so if the list is (part of) a parameter, the element is a strictly
-                        // smaller part of it. Bind the element parameter accordingly for the step body.
+                            && combo.containerArg() < call.args().size()) {
+                        // `step` consumes the container argument; each value it is handed (a list
+                        // element, or an option's unwrapped payload) is a sub-term of that container, so
+                        // if the container is (part of) a parameter, the value is a strictly smaller
+                        // part of it. Bind the element parameter accordingly for the step body.
                         Set<String> elemRoots =
-                                rootParams(call.args().get(combo.listArg()), lt, eq, paramNames);
+                                rootParams(call.args().get(combo.containerArg()), lt, eq, paramNames);
                         Map<String, Set<String>> inner = elemRoots.isEmpty()
                                 ? lt
                                 : with(lt, step.params().get(combo.elementParam()), elemRoots);

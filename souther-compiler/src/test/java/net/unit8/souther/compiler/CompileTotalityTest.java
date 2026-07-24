@@ -35,6 +35,24 @@ class CompileTotalityTest {
         assertDoesNotThrow(() -> Compiler.compile(DEPTH));
     }
 
+    // The same manager-chain walk written through `Option.map`, which hands the closure the `Some`
+    // payload of `s.上司` — a sub-term of the option, hence a strictly smaller `社員`. `Option.map` is
+    // a container combinator like `List.map`, so its closure recursion is recognized as structural.
+    private static final String DEPTH_OPTION_MAP = """
+            module demo
+            data 社員 = { 上司: 社員?, 氏名: String }
+            data Depth = Int
+            behavior measure : (e: 社員) -> Depth constructs Depth
+            let 深さ (s: 社員): Int =
+                s.上司 |> Option.map(b -> 深さ(b) + 1) |> Option.withDefault(0)
+            let measure (e) = Depth(深さ(e))
+            """;
+
+    @Test
+    void recursionThroughAnOptionMapClosureIsTotal() {
+        assertDoesNotThrow(() -> Compiler.compile(DEPTH_OPTION_MAP));
+    }
+
     @Test
     void aNumericRecursiveHelperIsRejectedUnlessPartial() {
         String src = """

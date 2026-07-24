@@ -268,6 +268,84 @@ class CompileListLibTest {
         assertEquals(List.of(5L, 4L, 3L, 1L, 1L), encode(loader, out).get("byNegation"));
     }
 
+    @Test
+    void indexedMapAppliesTheZeroBasedIndexToEachElement() throws Exception {
+        // indexedMap threads a (i, ys) pair through fold — the same tuple-accumulator shape as
+        // distinct/partition — so the user writes a positional transform without hand-rolling it.
+        // Here it forms the EAN-13 weighted sum: even index weight 1, odd index weight 3.
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( indexedMap, sum )
+
+                data In = { ns: List<Int> }
+                data Out = { weighted: List<Int>, checksum: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = {
+                    let ws = indexedMap((idx, n) -> (if Int.modBy(2, idx) == 0 then 1 else 3) * n, i.ns)
+                    Out { weighted = ws, checksum = sum(ws) }
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, decodeIn(loader, List.of(9L, 7L, 8L, 4L)));
+        Map<?, ?> m = encode(loader, out);
+        // indices 0..3 -> weights 1,3,1,3 -> 9, 21, 8, 12
+        assertEquals(List.of(9L, 21L, 8L, 12L), m.get("weighted"));
+        assertEquals(50L, m.get("checksum"));
+
+        // empty list -> empty result (the fold never runs, the (0, []) seed is returned unmapped)
+        Map<?, ?> empty = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of())));
+        assertEquals(List.of(), empty.get("weighted"));
+        assertEquals(0L, empty.get("checksum"));
+
+        // single element -> index 0, weight 1
+        Map<?, ?> one = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of(5L))));
+        assertEquals(List.of(5L), one.get("weighted"));
+    }
+
+    @Test
+    void allUniqueByHoldsWhenTheProjectedKeysAreDistinct() throws Exception {
+        // allUniqueBy is the "this projection is a unique id" invariant: true when mapping the key
+        // over the list leaves no duplicates. It derives from map/distinct, both fold-based.
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( allUniqueBy )
+
+                data Row = { sku: String, qty: Int }
+                data In = { rows: List<Row> }
+                data Out = { unique: Bool }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { unique = allUniqueBy(r -> r.sku, i.rows) }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+
+        Object uniqueIn = Codecs.decoded(loader, "demo.In", Map.of("rows",
+                List.of(Map.of("sku", "apple", "qty", 1L), Map.of("sku", "pear", "qty", 2L))));
+        assertEquals(true, encode(loader, Codecs.apply(behavior, uniqueIn)).get("unique"));
+
+        Object dupIn = Codecs.decoded(loader, "demo.In", Map.of("rows",
+                List.of(Map.of("sku", "apple", "qty", 1L), Map.of("sku", "apple", "qty", 2L))));
+        assertEquals(false, encode(loader, Codecs.apply(behavior, dupIn)).get("unique"),
+                "a repeated key means the projection is not unique");
+
+        // empty list -> vacuously unique (0 == 0), the edge the ordering.sou invariant relies on
+        Object emptyIn = Codecs.decoded(loader, "demo.In", Map.of("rows", List.of()));
+        assertEquals(true, encode(loader, Codecs.apply(behavior, emptyIn)).get("unique"),
+                "an empty projection has no duplicates");
+
+        // single element -> unique
+        Object oneIn = Codecs.decoded(loader, "demo.In", Map.of("rows",
+                List.of(Map.of("sku", "apple", "qty", 1L))));
+        assertEquals(true, encode(loader, Codecs.apply(behavior, oneIn)).get("unique"));
+    }
+
     private static Object decodeIn(BytesClassLoader loader, List<Long> ns) throws Exception {
         return Codecs.decoded(loader, "demo.In", Map.of("ns", ns));
     }
