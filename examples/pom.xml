@@ -27,7 +27,7 @@
     <properties>
         <maven.compiler.release>25</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <souther.version>0.1.0-rc2</souther.version>
+        <souther.version>0.1.0-rc3</souther.version>
         <raoh.version>0.6.0</raoh.version>
         <junit.version>5.11.3</junit.version>
         <spring.version>7.0.8</spring.version>
@@ -36,7 +36,7 @@
 
     <dependencyManagement>
         <dependencies>
-            <dependency><groupId>net.unit8.souther</groupId><artifactId>souther-runtime</artifactId><version>${souther.version}</version></dependency>
+            <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId><version>${souther.version}</version></dependency>
             <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId><version>${raoh.version}</version></dependency>
             <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh-json</artifactId><version>${raoh.version}</version></dependency>
             <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh-jooq</artifactId><version>${raoh.version}</version></dependency>
@@ -77,7 +77,7 @@
                         <configuration>
                             <annotationProcessorPaths>
                                 <path>
-                                    <groupId>net.unit8.souther</groupId>
+                                    <groupId>org.souther-lang</groupId>
                                     <artifactId>souther-compiler</artifactId>
                                     <version>${souther.version}</version>
                                 </path>

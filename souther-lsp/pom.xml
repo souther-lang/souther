@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>net.unit8.souther</groupId>
+        <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc2</version>
+        <version>0.1.0-rc3</version>
     </parent>
 
     <artifactId>souther-lsp</artifactId>
@@ -21,23 +21,23 @@
 
     <dependencies>
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-syntax</artifactId>
         </dependency>
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-compiler</artifactId>
         </dependency>
         <!-- souther-fmt backs textDocument/formatting; it re-derives a canonical layout from the CST. -->
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-fmt</artifactId>
         </dependency>
         <!-- souther-runtime is `provided` in souther-compiler; the LSP bundles it so a self-contained
              module compiled on save can load its generated classes and evaluate its `example`s (and
              CTFE constant checks). Without it, that evaluation is skipped rather than run. -->
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
         </dependency>
         <!-- Raoh decodes inbound LSP messages from JSON; raoh-json is the Jackson JsonNode binding. -->
@@ -93,7 +93,7 @@
                             </filters>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <mainClass>net.unit8.souther.lsp.LspServer</mainClass>
+                                    <mainClass>souther.lsp.LspServer</mainClass>
                                     <manifestEntries>
                                         <Multi-Release>true</Multi-Release>
                                     </manifestEntries>

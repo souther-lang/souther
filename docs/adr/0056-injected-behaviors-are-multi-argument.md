@@ -18,7 +18,7 @@ Separately, a collection parameter of any multi-argument `apply` degraded to `Ob
 
 Because a multi-argument base has no shared `Behavior` interface, a required multi-argument behavior is stored and injected by its own base class and called with `invokevirtual <base>.apply(A, B, …)`, mirroring how a multi-argument fn behavior is already stored and called. A required single/zero-argument behavior stays a `Behavior` field called with `invokeinterface`. The `bind(...)` factory's external signature is unchanged (it already takes the named base type); only the `$Impl` field, constructor parameter, and call opcode become behavior-specific.
 
-**Collection parameters keep their runtime interface type.** A `List`/`Map`/`Set` parameter or return is the raw `java.util` interface with a generic `Signature` carrying the element type (an `Option` is the runtime `net.unit8.souther.runtime.Option`), the same convention a collection-typed data field already uses — not `Object`. This applies to both the multi-argument typed `apply` and the single-input `Behavior<In, Out>` signature.
+**Collection parameters keep their runtime interface type.** A `List`/`Map`/`Set` parameter or return is the raw `java.util` interface with a generic `Signature` carrying the element type (an `Option` is the runtime `souther.runtime.Option`), the same convention a collection-typed data field already uses — not `Object`. This applies to both the multi-argument typed `apply` and the single-input `Behavior<In, Out>` signature.
 
 ## Consequences
 

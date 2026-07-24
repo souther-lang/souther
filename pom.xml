@@ -4,9 +4,9 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>net.unit8.souther</groupId>
+    <groupId>org.souther-lang</groupId>
     <artifactId>souther-parent</artifactId>
-    <version>0.1.0-rc2</version>
+    <version>0.1.0-rc3</version>
     <packaging>pom</packaging>
 
     <name>Souther</name>
@@ -70,22 +70,22 @@
                 <version>${raoh.version}</version>
             </dependency>
             <dependency>
-                <groupId>net.unit8.souther</groupId>
+                <groupId>org.souther-lang</groupId>
                 <artifactId>souther-runtime</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>net.unit8.souther</groupId>
+                <groupId>org.souther-lang</groupId>
                 <artifactId>souther-syntax</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>net.unit8.souther</groupId>
+                <groupId>org.souther-lang</groupId>
                 <artifactId>souther-compiler</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>net.unit8.souther</groupId>
+                <groupId>org.souther-lang</groupId>
                 <artifactId>souther-fmt</artifactId>
                 <version>${project.version}</version>
             </dependency>

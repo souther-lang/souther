@@ -2118,7 +2118,7 @@ Reflection, Unsafe, and bytecode manipulation are out of scope for guarantees.
 [#jvm-abort]
 === Abort on invariant violation
 
-An invariant violation inside the domain (<<algebraic-types>>, <<violation-destination>>) appears in generated code as throwing `+net.unit8.souther.runtime.ConstraintViolation+`. It carries the broken data name and the invariant's location.
+An invariant violation inside the domain (<<algebraic-types>>, <<violation-destination>>) appears in generated code as throwing `+souther.runtime.ConstraintViolation+`. It carries the broken data name and the invariant's location.
 
 Souther code cannot catch this. There is no catching syntax, so it cannot control business flow (<<out-of-scope>>). The boundary Java can catch it, but handles it as distinct from a business failure. A business failure arrives as an output case (<<unmarked-sum>>) and maps to 400; an abort is a model bug and maps to 500.
 
