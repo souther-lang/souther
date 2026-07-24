@@ -7,7 +7,7 @@ lexer, so it stays in step with the language. Regenerate it with:
 
 ```sh
 mvn -q -pl souther-compiler exec:java \
-  -Dexec.mainClass=net.unit8.souther.compiler.highlight.TmLanguageGenerator \
+  -Dexec.mainClass=souther.compiler.highlight.TmLanguageGenerator \
   -Dexec.args="editors/vscode/syntaxes/souther.tmLanguage.json"
 ```
 

@@ -62,7 +62,7 @@ mvn install
 
 # Compile a .sou file to .class files.
 java -cp souther-compiler/target/classes:souther-runtime/target/classes \
-     net.unit8.souther.compiler.Main \
+     souther.compiler.Main \
      compile examples/businesstrip/src/main/souther/businesstrip.sou -d /tmp/out
 ```
 

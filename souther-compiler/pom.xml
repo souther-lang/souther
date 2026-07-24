@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>net.unit8.souther</groupId>
+        <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc2</version>
+        <version>0.1.0-rc3</version>
     </parent>
 
     <artifactId>souther-compiler</artifactId>
@@ -22,14 +22,14 @@
         <!-- souther-syntax carries the lossless CST and the diagnostics (SourcePos, CompileException,
              Diagnostic) the whole pipeline is built on. -->
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-syntax</artifactId>
         </dependency>
         <!-- souther-fmt backs the `souther fmt` CLI subcommand (see Main). It is not part of the
              compile/typecheck/codegen pipeline, but the CLI dispatcher lives in this module, so the
              formatter is on the compile classpath. It only pulls in souther-syntax, already a dependency. -->
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-fmt</artifactId>
         </dependency>
         <!-- souther-runtime is `provided`: the compiler loads a generated `$Ctfe.check` class to
@@ -38,7 +38,7 @@
              CTFE degrades gracefully to the run-time check if it is absent. Raoh stays test-only —
              CTFE runs the bare invariant, not the Raoh-returning decoder/__construct. -->
         <dependency>
-            <groupId>net.unit8.souther</groupId>
+            <groupId>org.souther-lang</groupId>
             <artifactId>souther-runtime</artifactId>
             <scope>provided</scope>
         </dependency>

@@ -7,7 +7,7 @@
     </parent>
     <artifactId>businesstrip</artifactId>
     <dependencies>
-        <dependency><groupId>net.unit8.souther</groupId><artifactId>souther-runtime</artifactId></dependency>
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
         <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
     </dependencies>
 </project>

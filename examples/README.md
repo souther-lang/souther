@@ -13,7 +13,7 @@ single primitive field is a newtype = the bare primitive; the discriminator fiel
 ## How generation works: a javac annotation processor
 
 `.sou → .class` is done not by a dedicated build-tool plugin but by a **javac annotation processor**
-(`net.unit8.souther.compiler.apt.SoutherProcessor`). Whenever `mvn compile` (or plain javac, or
+(`souther.compiler.apt.SoutherProcessor`). Whenever `mvn compile` (or plain javac, or
 Gradle) runs, the processor compiles the `.sou` files in `src/main/souther` and emits the generated
 types into `target/classes`. Because `target/classes` is on javac's compile classpath, the
 hand-written code (and the smoke tests) **compile directly against those generated types**. No exec
@@ -26,7 +26,7 @@ The whole Maven wiring is just this (set once for all modules in `examples/pom.x
   <artifactId>maven-compiler-plugin</artifactId>
   <configuration>
     <annotationProcessorPaths>
-      <path>net.unit8.souther:souther-compiler:0.1.0-SNAPSHOT</path>
+      <path>org.souther-lang:souther-compiler:0.1.0-SNAPSHOT</path>
     </annotationProcessorPaths>
     <compilerArgs><arg>-Asouther.source=${project.basedir}/src/main/souther</arg></compilerArgs>
   </configuration>

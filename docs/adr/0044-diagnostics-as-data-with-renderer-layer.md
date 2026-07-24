@@ -28,7 +28,7 @@ Elm view is one renderer, and JSON is another.
 
 ## Decision
 
-Model a diagnostic as a value (`net.unit8.souther.compiler.diag.Diagnostic`): a severity, an optional
+Model a diagnostic as a value (`souther.compiler.diag.Diagnostic`): a severity, an optional
 code, a primary `Region`, optional secondary `Region`s each with a label, a message (a catalog key
 plus arguments, or a compatibility literal), an optional found-vs-expected type pair, hints, and a
 suggestion. A `DiagnosticRenderer` turns it into text — `HumanRenderer` (Elm-style, with color when
