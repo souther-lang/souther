@@ -11,7 +11,7 @@
  :deps {org.clojure/clojure {:mvn/version "1.12.1"}
 
         ;; the Souther runtime + Raoh codecs the generated classes call into
-        org.souther-lang/souther-runtime {:mvn/version "0.1.0-rc3"}
+        org.souther-lang/souther-runtime {:mvn/version "0.1.0-SNAPSHOT"}
         net.unit8.raoh/raoh {:mvn/version "0.6.0"}
         tools.jackson.core/jackson-databind {:mvn/version "3.1.5"}
 
@@ -28,7 +28,7 @@
  {;; Generate the Souther classes without Maven: runs SoutherProcessor via the JDK compiler API.
   ;; `clojure -X:gen` reads src/main/souther and writes target/classes. souther-compiler is only
   ;; on this alias's classpath (discovered by ServiceLoader), never in the app runtime.
-  :gen {:extra-deps {org.souther-lang/souther-compiler {:mvn/version "0.1.0-rc3"}}
+  :gen {:extra-deps {org.souther-lang/souther-compiler {:mvn/version "0.1.0-SNAPSHOT"}}
         :exec-fn souther.build/generate!
         :exec-args {:source-dir "src/main/souther"
                     :trigger-dir "src/main/java"

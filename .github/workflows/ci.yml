@@ -9,6 +9,16 @@ permissions:
   contents: read
 
 jobs:
+  version-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # The Souther version is declared in the core reactor, the independent examples build, the
+      # Clojure account example's deps.edn, and the README snippet. This fails if a bump touched some
+      # but not all of them (which is how the rc3 bump first missed the examples build).
+      - name: Check version consistency
+        run: bin/check-version-consistency.sh
+
   build:
     runs-on: ubuntu-latest
     steps:
