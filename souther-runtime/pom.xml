@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.souther-lang</groupId>
         <artifactId>souther-parent</artifactId>
-        <version>0.1.0-rc3</version>
+        <version>0.1.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>souther-runtime</artifactId>
