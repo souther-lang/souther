@@ -1,44 +1,114 @@
-// 文字列編集のショーケース: 1本のタグ入力文字列を正規形にする。使う道具は souther.string の
-// split / trim / lowercase / join と、souther.list の map / filter / sort。Elm の String/List
-// モジュールから、Souther の型（Char/Maybe/Float を持たない）で表せる中核だけを移植したもの。
+// A small issue tracker, and the showcase for the Set and Map stdlib modules plus Option
+// destructuring. It grew out of a thinner "tag normalization" example: that string-editing core
+// survives as normalizeLabels (split / trim / lowercase over souther.string), but where the old
+// version only sorted to group duplicate tags, a Set now removes them outright.
 //
-// 値パイプ |> のショーケースでもある。左辺が右辺呼び出しの最後の引数に入るので、入力が上から下へ
-// split → map → filter → sort と流れる（F#/Elm の読み）。ネストの内から外へ読む必要が消える。
+// The features on show:
+//   - Set<Label> as a data field (labels): the derived codec reads a JSON array and dedups it into a
+//     Set; Set.fromList / insert / remove / intersect / toList / size drive the label operations.
+//   - Map<Label, Int> as a behavior output (countByLabel): Map.upsert counts each label across a
+//     board of issues (a String-backed newtype key is allowed as a map key).
+//   - Some(Assignee(name)) destructuring: assigneeOf opens the optional assignee's newtype in one
+//     match pattern (the outermost .value elided), with a None arm for the unassigned case.
 //
-// 重複除去は入れていない。Elm でも core の List には無く、list-extra 側の関数だから。代わりに
-// sort が同じタグを隣り合わせる（辞書順の正規形）。
+// The behaviors are pure, so there is no `fake`. Set / Map / Option values have no literal syntax, so
+// they cannot appear in `example` fixtures; correctness is checked by the JUnit smoke test, which
+// decodes JSON (arrays -> Set, objects -> Map) and reads results back through the encoder.
+//
+// exposing is omitted, so every generated class is public — the smoke test references them by name.
 module example.tagging
-import String ( split, trim, lowercase, join )
-import List ( map, filter, sort, length, all )
+import String ( split, trim, lowercase )
+import List ( map, filter, fold, distinct )
 
-data タグ入力 = { 生: String }
+data IssueId  = String
+    invariant String.length(value) >= 1
+data Label    = String
+    invariant String.length(value) >= 1
+data Assignee = String
+    invariant String.length(value) >= 1
 
-// 正規形: 整形済みのタグ列と、その表示用の一本の文字列。整形は空片を捨てるので、タグ列に空文字は
-// 残らない。その保証を不変条件で宣言する（各要素が非空＝all で畳む、構築時に検査される List の性質）。
-data タグ集合 =
-    { タグ: List<String>
-    , 表示: String
+// An issue carries a Set of labels (duplicates collapse) and an optional assignee.
+data Issue =
+    { id: IssueId
+    , title: String
+    , labels: Set<Label>
+    , assignee: Assignee?
     }
-    invariant all(t -> String.length(t) >= 1, タグ)
-// 整形すると空になる入力（空文字、空白やカンマだけ）の失敗ケース。
-data タグ無し
+// A board is just the issues; countByLabel folds over it.
+data Board = { issues: List<Issue> }
 
-behavior 正規化 : (入力: タグ入力) -> タグ集合 | タグ無し
-    constructs タグ集合, タグ無し
+// === normalizeLabels: raw text -> a deduplicated label set ===
+// The string-editing heritage: split on comma, trim + lowercase each piece, drop empties, wrap each
+// as a Label, then Set.fromList to remove duplicates. Empty input (or all-blank) has no labels.
+data RawLabels = { text: String }
+data LabelSet = { labels: Set<Label> }
+data NoLabels
 
-// 生入力をカンマで割り、各片を trim → lowercase し、空片を捨て、辞書順に整える。パイプで上から下へ。
-let 整形済み (入力: タグ入力) =
-    入力.生
+behavior normalizeLabels : (input: RawLabels) -> LabelSet | NoLabels
+    constructs LabelSet, NoLabels, Label
+
+// One raw string to the cleaned, non-empty label list (still a List here; the Set comes next).
+let cleaned (text: String): List<Label> =
+    text
         |> split(",")
-        |> map(片 -> 片 |> trim |> lowercase)
-        |> filter(片 -> String.length(片) >= 1)
-        |> sort
+        |> map(piece -> piece |> trim |> lowercase)
+        |> filter(piece -> String.length(piece) >= 1)
+        |> map(piece -> Label(piece))
 
-let 正規化 (入力) = {
-    let タグ列 = 整形済み(入力)
-    require length(タグ列) >= 1 else タグ無し
-    タグ集合 {
-        タグ = タグ列,
-        表示 = タグ列 |> join(", ")
-    }
+let normalizeLabels (input) = {
+    let labels = Set.fromList(cleaned(input.text))
+    require Set.size(labels) >= 1 else NoLabels
+    LabelSet { labels = labels }
+}
+
+// === addLabel / removeLabel: Set insert / remove on the labels field ===
+// Constructor spread reuses every other field; only labels changes.
+behavior addLabel : (issue: Issue, label: Label) -> Issue
+    constructs Issue
+let addLabel (issue, label) = Issue { ...issue, labels = Set.insert(label, issue.labels) }
+
+behavior removeLabel : (issue: Issue, label: Label) -> Issue
+    constructs Issue
+let removeLabel (issue, label) = Issue { ...issue, labels = Set.remove(label, issue.labels) }
+
+// === sharedLabels: the labels two issues have in common (Set intersection) ===
+behavior sharedLabels : (a: Issue, b: Issue) -> LabelSet
+    constructs LabelSet
+let sharedLabels (a, b) = LabelSet { labels = Set.intersect(a.labels, b.labels) }
+
+// === assigneeOf: open the optional assignee with a Some(Newtype) pattern ===
+// Some's first written layer opens the element type directly, so Some(Assignee(name)) binds name to
+// the bare String in one pattern; the None arm handles the unassigned issue.
+data Assigned = { name: String }
+data Unassigned
+
+behavior assigneeOf : (issue: Issue) -> Assigned | Unassigned
+    constructs Assigned, Unassigned
+let assigneeOf (issue) =
+    match issue.assignee with
+        | Some(Assignee(name)) -> Assigned { name = name }
+        | None -> Unassigned
+
+// === countByLabel: how many issues carry each label (Map.fromList) ===
+// Collect every label occurrence across the board as plain strings (Set.toList each issue's labels,
+// unwrap to the text, concatenate), then for each distinct key pair it with its occurrence count and
+// build the result with Map.fromList — a List<(String, Int)> of (key, count) tuples into a
+// Map<String, Int>. The key is the label text (Label.value); a Map key is a String or String-backed
+// newtype.
+data LabelCounts = { counts: Map<String, Int> }
+
+behavior countByLabel : (board: Board) -> LabelCounts
+    constructs LabelCounts
+
+// Every label occurrence on the board, as plain strings, with repeats.
+let labelKeys (issues: List<Issue>): List<String> =
+    fold((acc, issue) -> acc ++ map(l -> l.value, Set.toList(issue.labels)), [], issues)
+
+// How many times a key occurs in the collected list.
+let occurrences (keys: List<String>, key: String): Int =
+    List.length(filter(k -> k == key, keys))
+
+let countByLabel (board) = {
+    let keys = labelKeys(board.issues)
+    LabelCounts { counts = Map.fromList(map(k -> (k, occurrences(keys, k)), distinct(keys))) }
 }
