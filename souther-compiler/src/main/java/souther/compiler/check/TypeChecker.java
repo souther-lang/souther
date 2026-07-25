@@ -2155,10 +2155,7 @@ public final class TypeChecker {
         switch (elem) {
             case Ast.PrimEnc p -> {
                 if (!elemType.equals(primType(p.kind()))) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.elemenc").title("check.codec.title")
-                                    .at(pos).args(p.kind().toString(), Type.show(elemType)).build(),
-                            "element encoder " + p.kind() + " does not match " + elemType);
+                    throw elemEncMismatch(Type.show(primType(p.kind())), elemType, pos);
                 }
             }
             case Ast.DataEnc d -> {
@@ -2167,10 +2164,7 @@ public final class TypeChecker {
                 boolean hasEncoder = (def instanceof Ast.Data dd && dd.encoder().isPresent())
                         || (def instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!elemType.equals(Type.ref(d.typeName())) || !hasEncoder) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.elemenc").title("check.codec.title")
-                                    .at(pos).args("`" + d.typeName() + "`", Type.show(elemType)).build(),
-                            "element encoder `" + d.typeName() + "` does not match " + elemType);
+                    throw elemEncMismatch(d.typeName(), elemType, pos);
                 }
             }
             // a collection element is itself a collection: descend both the encoder and the type
@@ -2195,11 +2189,13 @@ public final class TypeChecker {
         }
     }
 
+    /** The element encoder and the element type disagree, both named as they are written — the
+     * encoder by the type it encodes (`String`, `商品ID`, `List`), the element by {@link Type#show}. */
     private static CompileException elemEncMismatch(String encoder, Type elemType, SourcePos pos) {
         return CompileException.of(
                 Diagnostic.of(null, "check.codec.elemenc").title("check.codec.title")
-                        .at(pos).args(encoder, Type.show(elemType)).build(),
-                "element encoder " + encoder + " does not match " + elemType);
+                        .at(pos).args("`" + encoder + "`", Type.show(elemType)).build(),
+                "element encoder `" + encoder + "` does not match " + Type.show(elemType));
     }
 
     // --- expression typing (shared with the backend) ---
