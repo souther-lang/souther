@@ -218,9 +218,12 @@ final class Descriptors {
     static final MethodTypeDesc MTD_longSign = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_decBound = MethodTypeDesc.of(CD_DecimalDecoder, CD_BigDecimal);
     static final MethodTypeDesc MTD_decSign = MethodTypeDesc.of(CD_DecimalDecoder);
-    static final MethodTypeDesc MTD_Rrefine =
-            MethodTypeDesc.of(CD_RDecoder, CD_Predicate, CD_String, CD_String, CD_Function);
-    static final MethodTypeDesc MTD_invariantMeta = MethodTypeDesc.of(CD_Map, CD_Object);
+    /** {@code Decoder.refine(Predicate, BiFunction)}: the failure is built by the caller, so it is a
+     *  {@code Result.fail} (resolvable) rather than the {@code failCustom} the message overload makes. */
+    static final MethodTypeDesc MTD_Rrefine = MethodTypeDesc.of(CD_RDecoder, CD_Predicate, CD_BiFunction);
+    static final MethodTypeDesc MTD_invariantFailure = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
+    static final MethodTypeDesc MTD_Rfail4 =
+            MethodTypeDesc.of(CD_RResult, CD_RPath, CD_String, CD_String, CD_Map);
     static final MethodTypeDesc MTD_ctfeCheckObject = MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     /** {@code LambdaMetafactory.metafactory} — the bootstrap that materialises a method reference as a
      *  functional-interface instance, so {@code Sets::fromList} becomes a {@code Function} for {@code map}. */

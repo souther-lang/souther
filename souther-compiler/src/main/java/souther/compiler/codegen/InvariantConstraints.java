@@ -130,14 +130,15 @@ final class InvariantConstraints {
             return Optional.empty();
         }
         Long bound = intLiteral(right);
-        if (bound == null || bound < 0 || bound > Integer.MAX_VALUE - 1) {
+        if (bound == null || bound < 0 || bound > Integer.MAX_VALUE) {
             return Optional.empty();
         }
         int n = bound.intValue();
-        // A length is a whole number, so `> n` admits exactly what `>= n + 1` admits.
+        // A length is a whole number, so `> n` admits exactly what `>= n + 1` admits — except at the
+        // top of the range, where there is no such length to name.
         return switch (op) {
             case GE -> Optional.of(new MinLength(n));
-            case GT -> Optional.of(new MinLength(n + 1));
+            case GT -> n == Integer.MAX_VALUE ? Optional.empty() : Optional.of(new MinLength(n + 1));
             case LE -> Optional.of(new MaxLength(n));
             case LT -> n == 0 ? Optional.empty() : Optional.of(new MaxLength(n - 1));
             case EQ -> Optional.of(new FixedLength(n));

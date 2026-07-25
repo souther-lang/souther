@@ -420,8 +420,9 @@ final class CodecGen {
             for (String keyType : keyTypes) {
                 emitRekeyHelper(cb, keyType);
             }
+            emitPatternFields(cb, invariants);
             if (invariants.hasUnmapped()) {
-                emitInvariantMetaHelper(cb, data.name());
+                emitInvariantFailureHelper(cb, data.name());
             }
         });
     }
@@ -828,7 +829,9 @@ final class CodecGen {
      * that constraint's code, metadata and default message at the value's path — {@code too_short}
      * with {@code min}, not one {@code invariant_violation} for every rule in the model. Whatever is
      * left calls {@code refine} with the invariant itself, under the shared code and the type name in
-     * the metadata, so a resolver can still tell which type rejected the value.
+     * the metadata, so a resolver can still tell which type rejected the value. That failure is built
+     * here rather than through {@code refine}'s message overload, which mints a custom-message issue a
+     * resolver refuses to touch — an invariant's text must stay replaceable.
      *
      * <p>Raoh chains constraints with {@code flatMap}, so the first failure stops the rest: the
      * {@code refine} predicate — which runs the whole invariant, recognised clauses included — is
@@ -841,9 +844,7 @@ final class CodecGen {
         }
         if (invariants.hasUnmapped()) {
             code.invokedynamic(invariantPredicateCallSite(cdName, base));
-            code.loadConstant("invariant_violation");
-            code.loadConstant("invariant violated on " + typeName(cdName));
-            code.invokedynamic(invariantMetaCallSite());
+            code.invokedynamic(invariantFailureCallSite());
             code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine);
         }
     }
@@ -863,8 +864,8 @@ final class CodecGen {
                 code.invokevirtual(CD_StringDecoder, "fixedLength", MTD_strLengthBound);
             }
             case InvariantConstraints.Pattern p -> {
-                code.loadConstant(p.regex());
-                code.invokestatic(CD_Pattern, "compile", MTD_patternCompile);
+                // compiled once into a static field, not on every decode
+                code.getstatic(decoderClass, patternField(p.regex()), CD_Pattern);
                 code.invokevirtual(CD_StringDecoder, "pattern", MTD_strPattern);
             }
             case InvariantConstraints.Min m -> {
@@ -921,27 +922,72 @@ final class CodecGen {
                 MethodTypeDesc.of(ConstantDescs.CD_boolean, boxed));             // instantiatedMethodType
     }
 
-    /** {@code invokedynamic} producing the {@code Function} that puts the rejecting type's name in
-     * the issue's metadata. */
-    private DynamicCallSiteDesc invariantMetaCallSite() {
+    /** {@code invokedynamic} producing the {@code BiFunction} that builds a refined invariant's
+     * failure — the issue this decoder reports when the value breaks a rule no constraint states. */
+    private DynamicCallSiteDesc invariantFailureCallSite() {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, decoderClass, "__invariantMeta", MTD_invariantMeta);
+                DirectMethodHandleDesc.Kind.STATIC, decoderClass, "__invariantFailure",
+                MTD_invariantFailure);
         return DynamicCallSiteDesc.of(
                 BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function),
-                MethodTypeDesc.of(CD_Object, CD_Object),                         // samMethodType
+                MethodTypeDesc.of(CD_BiFunction),
+                MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),              // samMethodType
                 impl,
-                MTD_invariantMeta);
+                MTD_invariantFailure);
     }
 
-    /** {@code static Map __invariantMeta(Object)}: the metadata a refined invariant failure carries. */
-    private void emitInvariantMetaHelper(ClassBuilder cb, String typeName) {
-        cb.withMethodBody("__invariantMeta", MTD_invariantMeta,
+    /**
+     * {@code static Result __invariantFailure(Object value, Path path)}: the issue a refined
+     * invariant reports. It is a {@code Result.fail}, so the message is Raoh's default and a
+     * {@code MessageResolver} may replace it; the rejecting type travels in the metadata, which is
+     * what a resolver switches on when the code is the shared one.
+     */
+    private void emitInvariantFailureHelper(ClassBuilder cb, String typeName) {
+        cb.withMethodBody("__invariantFailure", MTD_invariantFailure,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            code.aload(1);                                            // path
+            code.loadConstant("invariant_violation");
+            code.loadConstant("invariant violated on " + typeName);
             code.loadConstant("type");
             code.loadConstant(typeName);
             code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
+            code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
             code.areturn();
+        });
+    }
+
+    /** The static field holding a pattern constraint's compiled regex. */
+    private static String patternField(String regex) {
+        return "__pattern$" + Integer.toHexString(regex.hashCode());
+    }
+
+    /**
+     * Compiles each pattern the invariant states once, into a {@code static final} field: the
+     * constraint chain is rebuilt per decode call, and compiling a regex there would repeat the
+     * expensive part of it on every value.
+     */
+    private void emitPatternFields(ClassBuilder cb, Invariants invariants) {
+        List<String> regexes = new ArrayList<>();
+        for (InvariantConstraints.Constraint c : invariants.constraints()) {
+            if (c instanceof InvariantConstraints.Pattern p && !regexes.contains(p.regex())) {
+                regexes.add(p.regex());
+            }
+        }
+        if (regexes.isEmpty()) {
+            return;
+        }
+        for (String regex : regexes) {
+            cb.withField(patternField(regex), CD_Pattern,
+                    ClassFile.ACC_PRIVATE | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL);
+        }
+        cb.withMethodBody(ConstantDescs.CLASS_INIT_NAME, MTD_void,
+                ClassFile.ACC_STATIC, code -> {
+            for (String regex : regexes) {
+                code.loadConstant(regex);
+                code.invokestatic(CD_Pattern, "compile", MTD_patternCompile);
+                code.putstatic(decoderClass, patternField(regex), CD_Pattern);
+            }
+            code.return_();
         });
     }
 

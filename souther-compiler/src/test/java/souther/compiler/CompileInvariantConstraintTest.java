@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -46,7 +47,8 @@ class CompileInvariantConstraintTest {
         assertEquals("too_short", issue.code());
         assertEquals(1, issue.meta().get("min"));
         assertEquals(0, issue.meta().get("actual"));
-        assertEquals("must be at least 1 characters", issue.message());
+        // Raoh's own message, not one minted here, so a resolver may replace it
+        assertFalse(issue.customMessage(), "the message must stay replaceable");
     }
 
     @Test
@@ -147,6 +149,10 @@ class CompileInvariantConstraintTest {
                 """, "1a2");
         assertEquals("invariant_violation", issue.code());
         assertEquals("V", issue.meta().get("type"));
+        // the same replaceability the mapped constraints have: refine's message overload would mint a
+        // custom-message issue that a resolver refuses to touch, so the failure is built by hand
+        assertFalse(issue.customMessage(), "an invariant's text must stay replaceable");
+        assertEquals("resolved", issue.resolve((code, meta) -> "resolved").message());
     }
 
     @Test
@@ -176,6 +182,24 @@ class CompileInvariantConstraintTest {
         Issue issue = ((Err<?>) r).issues().asList().get(0);
         assertEquals("too_short", issue.code());
         assertEquals(List.of("label"), issue.path().segments());
+    }
+
+    @Test
+    void aPatternIsCompiledOncePerDecoderNotPerDecode() throws Exception {
+        // The constraint chain is rebuilt on every decode call, so a regex compiled there would be
+        // recompiled per value; it is held in a static field of the decoder instead.
+        ClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data V = String
+                    invariant String.matches("[0-9]{3}", value)
+                """), getClass().getClassLoader());
+        Class<?> dec = loader.loadClass("demo.V$Dec");
+        long patterns = java.util.Arrays.stream(dec.getDeclaredFields())
+                .filter(f -> f.getType() == java.util.regex.Pattern.class)
+                .filter(f -> java.lang.reflect.Modifier.isStatic(f.getModifiers()))
+                .count();
+        assertEquals(1, patterns, "the invariant's regex is a static field of the decoder");
     }
 
     @Test
