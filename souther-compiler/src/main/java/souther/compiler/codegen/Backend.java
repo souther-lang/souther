@@ -313,7 +313,10 @@ public final class Backend {
                     // A tail-position call to this same helper loops back here instead of recursing,
                     // so a self-tail-recursive helper runs in constant stack.
                     gen.beginSelfRecursion(h.name(), h.params());
-                    gen.emitTail(Core.of(h.body()), cdFns, Set.of(), Map.of());
+                    // a recursive helper declares its return type; thread it so a tail-position fold
+                    // over an empty seed materialises its step at the declared type, not a bottom (#70)
+                    Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
+                    gen.emitTail(Core.of(h.body()), cdFns, Set.of(), Map.of(), helperReturn);
                 });
             }
         });
@@ -697,7 +700,9 @@ public final class Backend {
                     unbox(code, pt, slot);
                     gen.bind(fn.params().get(i).name(), slot, pt);
                 }
-                gen.emitTail(Core.of(fn.body()), cdB, requiredNames, requiredSuccess);
+                // thread the behavior's declared output so a tail-position fold over an empty seed
+                // materialises its step at the output type, not a bottom (issue #70)
+                gen.emitTail(Core.of(fn.body()), cdB, requiredNames, requiredSuccess, successType(spec.ret()));
             });
             if (n != 1) {
                 List<Type> pts = new ArrayList<>();
