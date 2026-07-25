@@ -31,7 +31,14 @@ public final class HelperInliner {
     private final Map<String, Ast.FnDef> helpers;   // prelude + module-own, keyed by name (inlining)
     private final Map<String, Ast.FnDef> own;       // the module's own helpers (standalone check)
     private final Set<String> recursive = new HashSet<>();   // own helpers on a call cycle (spec 13.1)
+    private final Map<String, LambdaOrigin> lambdaOrigins = new HashMap<>();   // $k_p -> where it was written
     private int counter = 0;
+
+    /** Where a lambda given to a function parameter was written: the parameter it fills, the helper
+     * that declares that parameter, and the lambda's own position. The lambda is inlined under a
+     * synthetic {@code $k_p} name, which must never reach a diagnostic — an error about it is
+     * reported against these instead. */
+    private record LambdaOrigin(String param, String owner, SourcePos pos) {}
 
     private HelperInliner(Map<String, Ast.FnDef> helpers, Map<String, Ast.FnDef> own) {
         this.helpers = helpers;
@@ -227,6 +234,20 @@ public final class HelperInliner {
                     yield new Ast.Call(call.fn(), args, call.pos());
                 }
                 if (args.size() != helper.params().size()) {
+                    LambdaOrigin origin = lambdaOrigins.get(helper.name());
+                    if (origin != null) {
+                        // the callee is a lambda the caller wrote, applied by the combinator it was
+                        // given to: report the parameter count against the lambda, not the synthetic
+                        // name it is inlined under.
+                        throw CompileException.of(
+                                Diagnostic.of(null, "check.fn.blockparam.arity").title("check.fn.title")
+                                        .at(origin.pos())
+                                        .args(origin.param(), origin.owner(), args.size(),
+                                                helper.params().size()).build(),
+                                "the block passed to `" + origin.param() + "` of `let " + origin.owner()
+                                        + "` takes " + args.size() + " argument(s) but is written with "
+                                        + helper.params().size());
+                    }
                     throw CompileException.of(
                             Diagnostic.of(null, "check.helper.arity").title("check.arity.title")
                                     .at(call.pos(), call.fn().length())
@@ -263,6 +284,7 @@ public final class HelperInliner {
                             // the lambda's body is caller code, so it is not renamed by this helper's
                             // substitution — only the enclosing helper body is.
                             scopedLambdas.put(f, new Ast.FnDef(f, lparams, null, null, lambda.body(), lambda.pos()));
+                            lambdaOrigins.put(f, new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
                         } else {
                             throw CompileException.of(
                                     Diagnostic.of(null, "check.fn.mustbenamed").title("check.fn.title")

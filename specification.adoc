@@ -1611,6 +1611,10 @@ A behavior with a `+let+` implementation is evaluated (<<fn>>). An injected beha
 
 An input and an expected value are fixtures: literals, newtype applications, and record constructions. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
 
+A collection field is written as a list, and its declared type says what the list means: a `+List+` field keeps its order and repeats, a `+Set+` field drops duplicates on decode (`+labels = [ Label("bug"), Label("bug") ]+` is one label), and a `+Map+` field takes its entries as `+(key, value)+` pairs — `+counts = [ ("bug", 2), ("ui", 1) ]+` — the form `+Map.fromList+` takes (<<stdlib-map>>). A `+Date+` / `+DateTime+` field takes a written temporal (`+Date("2026-07-25")+`, <<temporal-literal>>). This is what lets a rule over dates, sets, or maps be fixed by its examples rather than only by a hand-written test at the boundary.
+
+When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior produced against what the row expects, both encoded through the data's derived Encoder (<<encoder>>) so the two read against each other.
+
 [#example-fakes]
 === Faking a requires dependency
 
@@ -1944,6 +1948,7 @@ Note that `+申請者.役職 == 一般社員+` cannot be written as a condition.
 map  filter  fold  all  any  length  get  indexedMap
 reverse  member  sum  product  concat  isEmpty  sort
 distinct  partition  groupBy  max  min  find  sortBy  allUniqueBy
+take  drop
 ----
 
 All are called through the qualifier `+List+` (<<stdlib>>). `+List.get+` returns `+Option<T>+`. `+List.map+` / `+List.filter+` / `+List.fold+` / `+List.all+` / `+List.any+` / `+List.indexedMap+` take a block (<<blocks>>). Import them as `+import List ( map, all )+` to write unqualified thereafter.
@@ -1963,6 +1968,8 @@ None of these is a compiler primitive. `+List.fold+` is a recursive `+let+` in `
 The lower row is also ported from Elm's List module; except `+sort+`, all are self-language `+let+`s derived from `+List.fold+`. `+reverse+` extends the seed to the front, `+sum+` / `+product+` fold numbers, `+concat+` folds with `{plus}{plus}` and flattens nesting (Elm's `+List.concat+`), and `+member+` folds with `+==+` so it works for comparable elements. `+isEmpty+` looks at length. Only `+sort+` is a primitive that cannot be derived from `+fold+` (as in Elm) — self-language sorting needs, besides comparison, a place to hold intermediate results, which `+fold+` does not give; it sorts by the element's natural order. Elements MUST be an ordered type (`+Int+` / `+String+` / `+Decimal+` / `+Date+` / `+DateTime+`; <<primitives>>), and passing a list of data or newtype to `+sort+` is a compile error (they have no ordering, so it is rejected up front rather than at runtime; to sort them, map to an ordered field first with `+List.map+`).
 
 The third row adds more of Elm's List module. `+distinct+` keeps the first occurrence of each element and drops later duplicates (Elm's `+List.Extra.unique+`), folding a `+Set+` of what it has seen; `+partition+` splits into `+(kept, rest)+` by a predicate; `+groupBy+` buckets elements into a `+Map<'k, List<'a>>+` by a key. These three are self-language `+let+`s that grow their result from within `+List.fold+`. `+max+` / `+min+` return the largest / smallest as an `+Option+` — `+None+` on an empty list — and compare by natural order, so like `+sort+` the element MUST be ordered (Elm's `+maximum+` / `+minimum+`); `+find+` returns the first element satisfying a predicate as an `+Option+`. `+sortBy(key, xs)+` orders by a projected ordered key rather than the element itself (F#/Elm `+List.sortBy+`): unlike `+sort+`, whose comparison is built in, its key is a runtime function value, so the sort carries an actual `+Fn+`. `+max+` / `+min+` / `+find+` / `+sortBy+` are primitives (they step outside `+fold+`); only Elm's `+List.head+` is still not ported — a domain reads the first element with `+List.get(0, xs)+`. `+allUniqueBy(key, xs)+` holds when the elements have distinct keys under `+key+` (Elm's `+List.Extra.allDifferentBy+`): the "this projection is a unique id" invariant, written as `+distinct+` of the projected keys compared against the length rather than by hand. Deriving from `+fold+` (through `+map+` / `+distinct+`), it may stand in an invariant, like `+distinct+` itself.
+
+`+take(n, xs)+` keeps the first `+n+` elements and `+drop(n, xs)+` skips them (Elm's `+List.take+` / `+List.drop+`) — the top-N of a ranking and the rest of it. Both clamp instead of failing: a count of 0 or less takes nothing / drops nothing, and a count past the end takes the whole list / leaves it empty. Like `+indexedMap+` they thread a pair accumulator `+(i, ys)+` through `+List.fold+` and keep the elements whose index falls on the wanted side of `+n+`.
 
 [#stdlib-map]
 === Map
@@ -2030,6 +2037,9 @@ not
 ----
 addDays  addMonths  addYears  daysBetween
 ----
+
+[#temporal-literal]
+A date is written `+Date("2026-07-25")+` and a date-time `+DateTime("2026-07-25T09:00")+`. The argument MUST be a written string: the compiler parses it where it stands, so a malformed date fails the build rather than a run, and an `+example+` fixture — which holds only written values (<<example-evaluable>>) — can carry a date at all. A computed date comes from the boundary or from the arithmetic below, not from this form.
 
 `+Date+` is a local calendar date (<<primitives>>). Calendar arithmetic is pure and belongs in the domain, not behind an injected behavior (<<injected-behavior>>) — only reading the *current* date needs the outside world. `+addDays(n, d)+` / `+addMonths(n, d)+` / `+addYears(n, d)+` shift `+d+` by `+n+` units (`+n+` may be negative), following `+java.time.LocalDate+`, which clamps the end of a month (`+addMonths(1, 2026-01-31)+` is `+2026-02-28+`). `+daysBetween(from, to)+` is the whole days from `+from+` to `+to+`, negative when `+to+` precedes `+from+`. The date operated on is last (<<pipe>>), so `+d |> Date.addDays(3)+` reads left to right.
 
@@ -2455,11 +2465,11 @@ Emitted when a row's expected arm is not one of the target behavior's output cas
 ----
 error E1905:
 This example does not hold.
-found: 提出済み
-expected: 却下
+found: 提出済み { 提出日時 = "2026-07-20T09:00" }
+expected: 却下 { 理由 = "high_cost" }
 ----
 
-Emitted when a row's evaluated result does not match the expected arm or value. Every failing row of a build is reported.
+Emitted when a row's evaluated result does not match the expected arm or value. Every failing row of a build is reported. Both sides are shown as values, encoded through the data's derived Encoder (<<encoder>>) — the arm name alone does not say what went wrong when a row fails inside one arm. A row that asserts only the arm (a bare case name, <<example-expected>>) shows just that name.
 
 [#e1906]
 === An examples file contains non-example declarations

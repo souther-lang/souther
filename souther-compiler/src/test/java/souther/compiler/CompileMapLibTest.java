@@ -146,6 +146,57 @@ class CompileMapLibTest {
         assertEquals(Map.of(), m.get("updated"), "update on an absent key of an empty map is empty");
     }
 
+    /** A {@code Map.fold} seeded with the empty list grows a list out of a map, the same shape
+     *  {@code List.fold} allows. The seed carries no element type of its own, so it takes the one
+     *  the result is used at — here the field the fold feeds. */
+    @Test
+    void foldGrowsAListFromAnEmptySeed() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import Map ( fold )
+
+                data In = { counts: Map<String, Int> }
+                data Out = { lines: List<String> }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    lines = fold((acc, k, v) -> acc ++ [k ++ "=" ++ String.fromInt(v)], [], i.counts)
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("counts", Map.of("a", 2L)));
+        Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
+        assertEquals(java.util.List.of("a=2"), m.get("lines"));
+    }
+
+    /** The same fold named on its own line: the binding's written type fixes the seed instead. */
+    @Test
+    void foldGrowsAListFromAnEmptySeedUnderAnAnnotatedBinding() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import Map ( fold )
+
+                data In = { counts: Map<String, Int> }
+                data Out = { keys: List<String> }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = {
+                    let keys: List<String> = fold((acc, k, v) -> acc ++ [k], [], i.counts)
+                    Out { keys = keys }
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("counts", Map.of("a", 2L)));
+        Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
+        assertEquals(java.util.List.of("a"), m.get("keys"));
+    }
+
     /** upsert collapses insert-if-absent / modify-if-present: it applies the step to a present key
      *  and inserts the default for an absent one ([#stdlib-map]). */
     @Test

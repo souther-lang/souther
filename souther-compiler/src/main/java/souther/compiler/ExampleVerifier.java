@@ -548,14 +548,110 @@ public final class ExampleVerifier {
         return arm != null ? Type.ref(arm) : declared;
     }
 
+    /** The written expectation, rendered as it was written: a bare arm stays the arm name, anything
+     * else is its neutral form under that arm ({@code Out { n = 7 }}). */
     private String describeExpected(Ast.Expr expected) {
         String arm = expectedArm(expected);
-        return arm != null ? arm : String.valueOf(rawOrNull(expected));
+        if (expected instanceof Ast.Var) {
+            return arm;   // a bare arm asserts only the case, so there is no value to show
+        }
+        // Render it through the same encoder the actual goes through, so the two sides are written
+        // in one notation and can be read against each other; the fixture's own neutral form (which
+        // still holds e.g. a LocalDate where the encoder writes its ISO text) is the fallback.
+        Object built = buildExpected(expected);
+        Object neutral = built == null || arm == null ? rawOrNull(expected) : encodedOrNull(built, arm);
+        if (neutral == null) {
+            neutral = rawOrNull(expected);
+        }
+        if (neutral == null) {
+            return arm != null ? arm : "?";
+        }
+        return arm != null ? show(arm, neutral) : showValue(neutral);
     }
 
+    /** What actually came out, in the same notation: the case name plus the value the derived encoder
+     * writes, so the two sides of a mismatch can be read against each other. A value with no encoder
+     * (or one that fails to encode) falls back to its case name alone. */
     private String describeActual(Object result) {
         String name = simpleName(result);
-        return name.isEmpty() ? String.valueOf(result) : name;
+        if (name.isEmpty()) {
+            return String.valueOf(result);
+        }
+        Object encoded = encodedOrNull(result, name);
+        if (encoded != null) {
+            return show(name, encoded);
+        }
+        return isScalar(result) ? showValue(result) : name;
+    }
+
+    /** Whether a value is a neutral scalar, so it can be shown as written rather than by class name. */
+    private static boolean isScalar(Object v) {
+        return v instanceof String || v instanceof Long || v instanceof Boolean
+                || v instanceof BigDecimal || v instanceof java.time.LocalDate
+                || v instanceof java.time.LocalDateTime;
+    }
+
+    /** {@code result} through its class's derived {@code encoder()}, or null when it has none. */
+    private Object encodedOrNull(Object result, String name) {
+        try {
+            String pkg = importedPackages.getOrDefault(name, module.name());
+            Class<?> c = loader.loadClass(pkg + "." + name);
+            Object encoder = c.getMethod("encoder").invoke(null);
+            return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
+                    .invoke(encoder, result);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** A case name with its neutral value: a record's fields in braces, a newtype's value in parens,
+     * a unit case as the bare name. */
+    private String show(String name, Object neutral) {
+        if (neutral instanceof Map<?, ?> fields) {
+            if (fields.isEmpty()) {
+                return name;
+            }
+            StringBuilder sb = new StringBuilder(name).append(" { ");
+            boolean first = true;
+            for (Map.Entry<?, ?> e : fields.entrySet()) {
+                if (!first) {
+                    sb.append(", ");
+                }
+                first = false;
+                sb.append(e.getKey()).append(" = ").append(showValue(e.getValue()));
+            }
+            return sb.append(" }").toString();
+        }
+        return name + "(" + showValue(neutral) + ")";
+    }
+
+    /** A neutral value in the notation a fixture is written in: a quoted string, a list in brackets,
+     * a map as its list of pairs, a date as {@code Date("...")}. */
+    private String showValue(Object v) {
+        if (v == null) {
+            return "None";
+        }
+        if (v instanceof String s) {
+            return "\"" + s + "\"";
+        }
+        if (v instanceof java.time.LocalDate || v instanceof java.time.LocalDateTime) {
+            return (v instanceof java.time.LocalDate ? "Date(\"" : "DateTime(\"") + v + "\")";
+        }
+        if (v instanceof Map<?, ?> m) {
+            List<String> entries = new ArrayList<>();
+            for (Map.Entry<?, ?> e : m.entrySet()) {
+                entries.add("(" + showValue(e.getKey()) + ", " + showValue(e.getValue()) + ")");
+            }
+            return "[ " + String.join(", ", entries) + " ]";
+        }
+        if (v instanceof Iterable<?> it) {
+            List<String> elements = new ArrayList<>();
+            for (Object e : it) {
+                elements.add(showValue(e));
+            }
+            return elements.isEmpty() ? "[]" : "[ " + String.join(", ", elements) + " ]";
+        }
+        return String.valueOf(v);
     }
 
     private Object rawOrNull(Ast.Expr e) {
@@ -607,6 +703,15 @@ public final class ExampleVerifier {
                 }
                 yield out;
             }
+            // a `(key, value)` pair: only a `Map` field's entries are written this way, and `shaped`
+            // collects them into the map the decoder reads (a tuple is not a data field type itself).
+            case Ast.Tuple t -> {
+                List<Object> out = new ArrayList<>();
+                for (Ast.Expr el : t.elements()) {
+                    out.add(raw(el));
+                }
+                yield out;
+            }
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
     }
@@ -626,11 +731,26 @@ public final class ExampleVerifier {
     }
 
     private Object newtypeInner(Ast.Call c) {
+        if (c.fn().equals("Date") || c.fn().equals("DateTime")) {
+            // a written date: the decoders take the parsed temporal, not its text (a Date field's
+            // neutral form is a LocalDate), so the fixture hands over the same value the checker read
+            if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
+                throw new FixtureException("`" + c.fn() + "` takes one written string");
+            }
+            return TypeChecker.parseTemporal(c.fn(), lit.value(), c.pos());
+        }
         if (!isNewtype(c.fn())) {
             throw new FixtureException("`" + c.fn() + "` is not a newtype; a fixture cannot call it");
         }
         if (c.args().size() != 1) {
             throw new FixtureException("`" + c.fn() + "` takes one argument");
+        }
+        // a newtype over a temporal (`data 貸出日 = Date`) wraps the parsed value, so its written
+        // string is read here as it would be for a bare `Date("...")`
+        String base = newtypeBase(c.fn());
+        if (("Date".equals(base) || "DateTime".equals(base))
+                && c.args().get(0) instanceof Ast.StringLit lit) {
+            return TypeChecker.parseTemporal(base, lit.value(), c.pos());
         }
         return raw(c.args().get(0));
     }
@@ -639,9 +759,10 @@ public final class ExampleVerifier {
         if (!nd.spreads().isEmpty()) {
             throw new FixtureException("a `...spread` cannot be used in an example fixture");
         }
+        Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName());
         Map<String, Object> map = new LinkedHashMap<>();
         for (Ast.FieldInit fi : nd.inits()) {
-            Object v = raw(fi.value());
+            Object v = shaped(raw(fi.value()), declared.get(fi.name()));
             // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads
             // it as absent (spec 8, absent -> None), the same neutral form as omitting the field.
             if (v == null) {
@@ -652,8 +773,60 @@ public final class ExampleVerifier {
         return map;
     }
 
+    /** A data's fields by name, following the `...includes` it composes in (spec §data). */
+    private Map<String, Ast.TypeRef> fieldTypes(String typeName) {
+        Map<String, Ast.TypeRef> out = new LinkedHashMap<>();
+        if (symbols.get(typeName) instanceof Ast.Data d) {
+            for (String inc : d.includes()) {
+                out.putAll(fieldTypes(inc));
+            }
+            for (Ast.Field f : d.fields()) {
+                out.put(f.name(), f.type());
+            }
+        }
+        return out;
+    }
+
+    /** Gives a fixture value the neutral shape its declared type decodes from. A {@code Map} field is
+     * written as a list of {@code (key, value)} pairs — Elm's {@code Dict.fromList}, and the same
+     * list literal a {@code Set} field takes — while the decoder wants a map, so the pairs are
+     * collected here. Everything else passes through; a {@code List} field written as a list stays
+     * one, since the declared type, not the literal, decides. */
+    private Object shaped(Object v, Ast.TypeRef type) {
+        if (type == null || v == null) {
+            return v;
+        }
+        if ("Map".equals(type.name()) && v instanceof List<?> entries) {
+            Ast.TypeRef value = type.arg();
+            Map<Object, Object> m = new LinkedHashMap<>();
+            for (Object entry : entries) {
+                if (!(entry instanceof List<?> pair) || pair.size() != 2) {
+                    throw new FixtureException("a `Map` fixture is a list of (key, value) pairs,"
+                            + " e.g. [ (\"apple\", 3) ]");
+                }
+                m.put(pair.get(0), shaped(pair.get(1), value));
+            }
+            return m;
+        }
+        if (("List".equals(type.name()) || "Set".equals(type.name())) && v instanceof List<?> elements) {
+            List<Object> out = new ArrayList<>(elements.size());
+            for (Object e : elements) {
+                out.add(shaped(e, type.arg()));
+            }
+            return out;
+        }
+        return v;
+    }
+
     private boolean isNewtype(String name) {
         return symbols.get(name) instanceof Ast.Data d && d.newtype();
+    }
+
+    /** The type a newtype wraps ({@code Date} for {@code data 貸出日 = Date}), or null. */
+    private String newtypeBase(String name) {
+        return symbols.get(name) instanceof Ast.Data d && d.newtype() && d.fields().size() == 1
+                ? d.fields().get(0).type().name()
+                : null;
     }
 
     private static Object negate(Object v) {

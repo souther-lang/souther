@@ -7,13 +7,16 @@
 //   - Set<Label> as a data field (labels): the derived codec reads a JSON array and dedups it into a
 //     Set; Set.fromList / insert / remove / intersect / toList / size drive the label operations.
 //   - Map<Label, Int> as a behavior output (countByLabel): Map.upsert counts each label across a
-//     board of issues (a String-backed newtype key is allowed as a map key).
+//     board of issues (a String-backed newtype key is allowed as a map key), and topLabels ranks those
+//     counts — Map.toList's (label, count) entries read through a tuple-typed helper, ordered with
+//     List.sortBy / reverse and cut with List.take.
 //   - Some(Assignee(name)) destructuring: assigneeOf opens the optional assignee's newtype in one
 //     match pattern (the outermost .value elided), with a None arm for the unassigned case.
 //
-// The behaviors are pure, so there is no `fake`. Set / Map / Option values have no literal syntax, so
-// they cannot appear in `example` fixtures; correctness is checked by the JUnit smoke test, which
-// decodes JSON (arrays -> Set, objects -> Map) and reads results back through the encoder.
+// The behaviors are pure, so there is no `fake`, and every one of them carries its `example`s: a Set
+// is written as a list (duplicates collapse on decode, as they do at the boundary), a Map as its list
+// of (key, value) pairs, and an optional as the bare value or `None`. The JUnit smoke test still runs
+// one behavior end to end, decoding JSON (arrays -> Set, objects -> Map) through the derived codecs.
 //
 // exposing is omitted, so every generated class is public — the smoke test references them by name.
 module example.tagging
@@ -61,6 +64,12 @@ let normalizeLabels (input) = {
     LabelSet { labels = labels }
 }
 
+example normalizeLabels
+    | "case and spacing collapse into one label" :
+        (RawLabels { text = "Bug, bug , UI" })
+            -> LabelSet { labels = [ Label("bug"), Label("ui") ] }
+    | "blank pieces leave no labels" : (RawLabels { text = " , " }) -> NoLabels
+
 // === addLabel / removeLabel: Set insert / remove on the labels field ===
 // Constructor spread reuses every other field; only labels changes.
 behavior addLabel : (issue: Issue, label: Label) -> Issue
@@ -71,10 +80,43 @@ behavior removeLabel : (issue: Issue, label: Label) -> Issue
     constructs Issue
 let removeLabel (issue, label) = Issue { ...issue, labels = Set.remove(label, issue.labels) }
 
+// A Set fixture is a list; adding a label already carried leaves the set as it was, and the optional
+// assignee is written bare (present) or as `None`.
+example addLabel
+    | "a new label joins the set" :
+        (Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug") ],
+            assignee = "kawasima" }, Label("ui"))
+        -> Issue { id = IssueId("i-1"), title = "crash on save",
+            labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
+    | "a label already carried changes nothing" :
+        (Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug") ],
+            assignee = None }, Label("bug"))
+        -> Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug") ],
+            assignee = None }
+
+example removeLabel
+    | "the label leaves the set" :
+        (Issue { id = IssueId("i-1"), title = "crash on save",
+            labels = [ Label("bug"), Label("ui") ], assignee = None }, Label("ui"))
+        -> Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug") ],
+            assignee = None }
+
 // === sharedLabels: the labels two issues have in common (Set intersection) ===
 behavior sharedLabels : (a: Issue, b: Issue) -> LabelSet
     constructs LabelSet
 let sharedLabels (a, b) = LabelSet { labels = Set.intersect(a.labels, b.labels) }
+
+example sharedLabels
+    | "only the labels both issues carry" :
+        (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+            assignee = None },
+         Issue { id = IssueId("i-2"), title = "b", labels = [ Label("ui"), Label("docs") ],
+            assignee = None })
+        -> LabelSet { labels = [ Label("ui") ] }
+    | "nothing in common is an empty set" :
+        (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None },
+         Issue { id = IssueId("i-2"), title = "b", labels = [ Label("docs") ], assignee = None })
+        -> LabelSet { labels = [] }
 
 // === assigneeOf: open the optional assignee with a Some(Newtype) pattern ===
 // Some's first written layer opens the element type directly, so Some(Assignee(name)) binds name to
@@ -89,13 +131,22 @@ let assigneeOf (issue) =
         | Some(Assignee(name)) -> Assigned { name = name }
         | None -> Unassigned
 
+example assigneeOf
+    | "an assigned issue names its assignee" :
+        (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ],
+            assignee = "kawasima" })
+        -> Assigned { name = "kawasima" }
+    | "an unassigned issue takes the None arm" :
+        (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None })
+        -> Unassigned
+
 // === countByLabel: how many issues carry each label (fold + Map.upsert) ===
 // Collect every label occurrence across the board as plain strings (Set.toList each issue's labels,
 // unwrap to the text, concatenate), then fold them into a Map<String, Int>, counting each key with
 // Map.upsert — seed 1 on first sight, +1 on every repeat. The empty-map seed's value type comes from
-// the binding's annotation `let counts: Map<String, Int>`: a written type is pushed into the value,
-// so a fold over an empty seed can be named on its own line instead of being inlined into the field
-// it feeds. The key is the label text (Label.value); a Map key is a String or String-backed newtype.
+// the helper's declared return type `Map<String, Int>`: a written type is pushed into the body, so a
+// fold over an empty seed can stand on its own rather than being inlined into the field it feeds. The
+// key is the label text (Label.value); a Map key is a String or a String-backed newtype.
 data LabelCounts = { counts: Map<String, Int> }
 
 behavior countByLabel : (board: Board) -> LabelCounts
@@ -105,8 +156,70 @@ behavior countByLabel : (board: Board) -> LabelCounts
 let labelKeys (issues: List<Issue>): List<String> =
     fold((acc, issue) -> acc ++ map(l -> l.value, Set.toList(issue.labels)), [], issues)
 
-let countByLabel (board) = {
-    let counts: Map<String, Int> =
-        fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), labelKeys(board.issues))
-    LabelCounts { counts = counts }
+// The counts themselves, shared with the ranking below. The helper's declared return type is pushed
+// into its body, so the empty-map seed takes its value type from `Map<String, Int>`.
+let labelCounts (issues: List<Issue>): Map<String, Int> =
+    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), labelKeys(issues))
+
+let countByLabel (board) = LabelCounts { counts = labelCounts(board.issues) }
+
+// A Map fixture is its list of (key, value) pairs, as `Map.fromList` takes it.
+example countByLabel
+    | "each label counted across the board" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+                assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
+                assignee = "kawasima" } ] })
+        -> LabelCounts { counts = [ ("bug", 2), ("ui", 1) ] }
+    | "an empty board counts nothing" : (Board { issues = [] }) -> LabelCounts { counts = [] }
+
+// === topLabels: the most-used labels, most frequent first ===
+// The ranking side of the same counts. `Map.toList` hands the counts over as `(label, count)` pairs;
+// a tuple type may be written in a helper signature, and `let (a, b) = e` opens one, so the entries
+// are read without leaving the pipe. `List.sortBy` + `List.reverse` order them by count, and
+// `List.take` keeps the head of the ranking. A tie falls back to the map's iteration order, which is
+// deterministic but unspecified — the example below avoids one.
+data LabelRanking = { labels: List<String> }
+
+behavior topLabels : (board: Board, n: Int) -> LabelRanking
+    constructs LabelRanking
+
+let entryLabel (e: (String, Int)): String = {
+    let (label, _) = e
+    label
 }
+
+let entryCount (e: (String, Int)): Int = {
+    let (_, count) = e
+    count
+}
+
+// The counts are named on their own line with their type: `Map.toList`'s parameter is generic, so
+// a fold over an empty seed feeding it directly would have nothing to fix its accumulator type.
+let topLabels (board, n) = {
+    let counts: Map<String, Int> = labelCounts(board.issues)
+    LabelRanking { labels =
+        Map.toList(counts)
+            |> List.sortBy(e -> entryCount(e))
+            |> List.reverse
+            |> List.take(n)
+            |> map(entryLabel)
+    }
+}
+
+example topLabels
+    | "the most-used label leads the ranking" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+                assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
+                assignee = None } ] }, 1)
+        -> LabelRanking { labels = [ "bug" ] }
+    | "asking for more than there are gives every label" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+                assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
+                assignee = None } ] }, 9)
+        -> LabelRanking { labels = [ "bug", "ui" ] }

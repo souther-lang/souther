@@ -861,6 +861,15 @@ final class BodyGen {
                     code.invokestatic(CD_Sets, "empty", MethodTypeDesc.of(CD_Set));
                     return expected instanceof Type.SetOf se ? se : Type.set(Type.NOTHING);
                 }
+                case "Date", "DateTime" -> {
+                    // a written date: the checker has already parsed the literal, so the text is
+                    // known good and this is a plain parse of a constant string.
+                    boolean isDate = call.fn().equals("Date");
+                    ClassDesc cd = isDate ? CD_LocalDate : CD_LocalDateTime;
+                    code.loadConstant(((Core.Str) call.args().get(0)).value());
+                    code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
+                    return isDate ? Type.DATE : Type.DATETIME;
+                }
                 case "Int.divide", "Decimal.divide" -> {
                     if (call.args().size() == 4) {
                         return decimalDivide(call);

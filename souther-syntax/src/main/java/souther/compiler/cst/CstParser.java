@@ -397,9 +397,12 @@ public final class CstParser {
         finish();
     }
 
-    /** A helper parameter's type: a function type when it opens with {@code (}, else an ordinary type. */
+    /** A helper parameter's type: a function type when it opens a parameter list ending in {@code ->},
+     * else an ordinary type — which may itself be a parenthesised tuple ({@code (String, Int)}, the
+     * entry type of {@code Map.toList}). Both start with {@code (} and read alike up to the closing
+     * paren, so the token after it decides. */
     private void paramType() {
-        if (at(SyntaxKind.LPAREN)) {
+        if (at(SyntaxKind.LPAREN) && atFnTypeParams()) {
             start(SyntaxKind.FN_TYPE);
             expect(SyntaxKind.LPAREN);
             if (!at(SyntaxKind.RPAREN)) {
@@ -525,6 +528,26 @@ public final class CstParser {
             typeRef();
         }
         finish();
+    }
+
+    /** Whether the parenthesised run at the cursor is a function type's parameter list: its closing
+     * paren is followed by {@code ->}. A tuple type is written the same way without the arrow. */
+    private boolean atFnTypeParams() {
+        int depth = 0;
+        for (int i = 0; ; i++) {
+            SyntaxKind k = nth(i);
+            if (k == SyntaxKind.EOF) {
+                return false;
+            }
+            if (k == SyntaxKind.LPAREN) {
+                depth++;
+            } else if (k == SyntaxKind.RPAREN) {
+                depth--;
+                if (depth == 0) {
+                    return nth(i + 1) == SyntaxKind.ARROW;
+                }
+            }
+        }
     }
 
     private void typeRef() {
@@ -937,7 +960,16 @@ public final class CstParser {
     private void casePattern() {
         expect(SyntaxKind.LPAREN);
         expect(SyntaxKind.IDENT);
-        if (at(SyntaxKind.LPAREN)) {
+        if (at(SyntaxKind.LBRACE)) {
+            // `Some(Booking { member })`: the parens open a *newtype*, so a record named in them has
+            // nothing to open. Its fields are destructured directly, as on a user case.
+            error("parse.case.record.direct",
+                    "a record's fields are destructured directly: write `| Some { field }`");
+            while (!at(SyntaxKind.RBRACE) && !at(SyntaxKind.EOF)) {
+                bump();
+            }
+            eat(SyntaxKind.RBRACE);
+        } else if (at(SyntaxKind.LPAREN)) {
             casePattern();
         }
         expect(SyntaxKind.RPAREN);
@@ -1003,6 +1035,11 @@ public final class CstParser {
             start(SyntaxKind.SPREAD_MEMBER);
             bump();   // ...
             expect(SyntaxKind.IDENT);
+            // a spread may name a field path (`...c.address`), not only a local
+            while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
+                bump();   // .
+                bump();   // field
+            }
             finish();
         } else {
             start(SyntaxKind.FIELD_INIT);

@@ -146,6 +146,44 @@ class CompileOptionMatchTest {
         assertTrue(e.getMessage().contains("Some"), e.getMessage());
     }
 
+    private static final String RECORD_ELEMENT = """
+            module demo
+
+            data Booking = { member: String }
+            data Queue = { head: Booking? }
+            data Next = { member: String }
+            data Nobody
+
+            behavior peek : (q: Queue) -> Next | Nobody constructs Next, Nobody
+
+            let peek (q) =
+                match q.head with
+                    | Some { member } -> Next { member = member }
+                    | None -> Nobody
+            """;
+
+    @Test
+    void someDestructuresTheWrappedRecordsFields() throws Exception {
+        // A record element is opened by the same `{ field }` pattern a user case takes; the fields are
+        // read off the wrapped value, so no `.field` on a positional binding is needed.
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(RECORD_ELEMENT), getClass().getClassLoader());
+        Object queue = Codecs.decoded(loader, "demo.Queue", Map.of("head", Map.of("member", "m-1")));
+        Object behavior = loader.loadClass("demo.Peek$Impl").getConstructor().newInstance();
+        Map<?, ?> next = (Map<?, ?>) Codecs.encode(loader, "demo.Next", Codecs.apply(behavior, queue));
+        assertEquals("m-1", next.get("member"));
+    }
+
+    @Test
+    void aRecordNamedInsideSomeParensPointsAtTheFieldPattern() {
+        // `Some(Booking { member })` is not a second spelling: the parens open a newtype, a record is
+        // destructured directly. The error says which form to write.
+        String src = RECORD_ELEMENT.replace("| Some { member }", "| Some(Booking { member })");
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("{ member }") || e.getMessage().contains("{ field }"),
+                e.getMessage());
+    }
+
     @Test
     void someAndNoneCannotBeDeclaredAsUserData() {
         // Some/None are the built-in Option cases; declaring one as a data type is rejected, so a
