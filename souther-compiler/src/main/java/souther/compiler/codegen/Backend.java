@@ -58,40 +58,13 @@ public final class Backend {
         this.checked = checked;
     }
 
-    /** The elaborated body of {@code name}, or — until the remaining slices of issue #81 land — the
-     * untyped translation of {@code body}, which the emitter types itself. */
-    private Core body(Map<String, Core> elaborated, String name, Ast.Expr body) {
-        Core core = elaborated.get(name);
-        return core != null ? core : Core.of(body);
-    }
-
     /** {@code ACC_PUBLIC} when the name is exposed (or the module exposes all), else 0. */
     private int pub(String name) {
         return ctx.pub(name);
     }
 
-    /** A checked module with no elaborated body: every body falls back to {@link Core#of} and the
-     * emitter's own synthesis. The remaining slices of issue #81 remove that fallback. */
-    private static final TypeChecker.Checked NO_ELABORATION =
-            new TypeChecker.Checked(Map.of(), Map.of(), List.of());
-
-    public static Map<String, byte[]> generate(Ast.Module module) {
-        return generate(module, NO_ELABORATION);
-    }
-
     public static Map<String, byte[]> generate(Ast.Module module, TypeChecker.Checked checked) {
         return generate(module, TypeChecker.symbols(module), Map.of(), Map.of(), Set.of(), checked);
-    }
-
-    public static Map<String, byte[]> generate(Ast.Module module, Map<String, Ast.Def> symbols,
-                                               Map<String, String> typePackage) {
-        return generate(module, symbols, typePackage, Map.of(), Set.of(), NO_ELABORATION);
-    }
-
-    public static Map<String, byte[]> generate(Ast.Module module, Map<String, Ast.Def> symbols,
-                                               Map<String, String> typePackage,
-                                               Map<String, TypeChecker.Sig> importedSigs) {
-        return generate(module, symbols, typePackage, importedSigs, Set.of(), NO_ELABORATION);
     }
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
@@ -338,7 +311,7 @@ public final class Backend {
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
-                    gen.emitTail(body(checked.recursiveHelpers(), h.name(), h.body()),
+                    gen.emitTail(checked.recursiveHelpers().get(h.name()),
                             cdFns, Set.of(), Map.of(), helperReturn);
                 });
             }
@@ -725,7 +698,7 @@ public final class Backend {
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
-                gen.emitTail(body(checked.behaviorBodies(), fn.name(), fn.body()),
+                gen.emitTail(checked.behaviorBodies().get(fn.name()),
                         cdB, requiredNames, requiredSuccess, successType(spec.ret()));
             });
             if (n != 1) {

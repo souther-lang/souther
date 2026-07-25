@@ -79,21 +79,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <configuration>
-                    <!-- The emitter reads the type the checker put on each Core node; where it still
-                         synthesises one itself, this makes a disagreement fail the test rather than
-                         surface later as a codegen crash (issue #81). -->
-                    <systemPropertyVariables>
-                        <souther.core.checkTypes>true</souther.core.checkTypes>
-                    </systemPropertyVariables>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
 </project>

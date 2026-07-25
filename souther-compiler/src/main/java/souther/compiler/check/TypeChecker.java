@@ -2267,7 +2267,7 @@ public final class TypeChecker {
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(li.name(), bindType);
                 Core body = elaborate(li.body(), inner, data, symbols, reqs, expected);
-                yield new Core.LetIn(li.name(), value, li.annotation(), body, body.type(), li.pos());
+                yield new Core.LetIn(li.name(), value, body, body.type(), li.pos());
             }
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
@@ -2911,13 +2911,25 @@ public final class TypeChecker {
             cores[i] = c;
         }
 
-        /** The elaborated arguments. An argument no typing rule reaches — the bare rounding mode of
-         * {@code divide}, which is a built-in identifier rather than an expression (spec 18.3) — is
-         * carried in its untyped form. */
+        /** Records argument {@code i} as carrying no type: it is not an expression at all, but a
+         * built-in identifier the call reads by name — the rounding mode of {@code divide}
+         * (spec 18.3), which {@code requireRoundingMode} has already checked is one. The emitter
+         * reads its name and never asks for its type. */
+        void untyped(int i) {
+            Ast.Var name = (Ast.Var) args.get(i);
+            cores[i] = new Core.Var(name.name(), null, name.pos());
+        }
+
+        /** The elaborated arguments. Every argument must have been reached: a rule that yields a type
+         * without touching one of its arguments would leave the emitter a node with no type. */
         List<Core> cores() {
             List<Core> out = new ArrayList<>();
             for (int i = 0; i < cores.length; i++) {
-                out.add(cores[i] != null ? cores[i] : Core.of(args.get(i)));
+                if (cores[i] == null) {
+                    throw new IllegalStateException(
+                            "argument " + (i + 1) + " was never typed at " + args.get(i).pos());
+                }
+                out.add(cores[i]);
             }
             return out;
         }
@@ -3069,6 +3081,8 @@ public final class TypeChecker {
                 // so accept it rather than demand the bottom. Otherwise the key must match.
                 if (!isBottom(mo.key())) {
                     ca.require(0, mo.key(), "key of Map.get");
+                } else {
+                    ca.type(0);   // nothing to check it against yet, but the key is still typed
                 }
                 yield Type.option(mo.value());
             }
@@ -3087,6 +3101,7 @@ public final class TypeChecker {
             }
             case "Date", "DateTime" -> {
                 arity(call, 1);
+                ca.type(0);   // the literal text, which temporalLiteral parses
                 yield temporalLiteral(call);
             }
             case "Int.remainder" -> {
@@ -3103,6 +3118,7 @@ public final class TypeChecker {
                     ca.require(1, Type.DECIMAL, "argument 2 of divide");
                     ca.require(2, Type.INT, "scale of divide");
                     requireRoundingMode(args.get(3));
+                    ca.untyped(3);   // a built-in identifier, not an expression
                     yield Type.union(new java.util.LinkedHashSet<>(List.of("Decimal", "DivisionByZero")));
                 }
                 arity(call, 2);
@@ -3797,7 +3813,7 @@ public final class TypeChecker {
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(li.name(), bound.type());
                 Core body = elaborateFunctionValue(li.body(), paramTypes, inner, data, symbols, reqs);
-                yield new Core.LetIn(li.name(), bound, li.annotation(), body, body.type(), li.pos());
+                yield new Core.LetIn(li.name(), bound, body, body.type(), li.pos());
             }
             default -> elaborate(value, env, data, symbols, reqs);
         };

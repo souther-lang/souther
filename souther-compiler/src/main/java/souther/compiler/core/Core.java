@@ -5,7 +5,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -18,72 +17,21 @@ import java.util.List;
  * lowering and closure conversion, and drop the corresponding special cases from the emitter.
  *
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
- * checker produces Core as it types a body — {@code TypeChecker.elaborate} — so the backend reads
- * the decision instead of inferring it a second time. A node built by {@link #of} instead of by the
- * checker has a {@code null} type: the codec emitters are still AST-level and reach the shared value
- * emitter through {@code of}, and the backend falls back to its own synthesis for those. That
- * fallback is what the remaining slices of #81 remove.
+ * checker is the only producer of Core — it builds the tree as it types a body
+ * ({@code TypeChecker.elaborate}) — so the backend reads those decisions instead of inferring the
+ * same types a second time. The one node with no type is the rounding mode of {@code divide}, a
+ * built-in identifier the emitter reads by name rather than as a value (spec 18.3).
  *
  * <p>A surface-only node (a list comprehension) never appears — the Lower stage has already
- * rewritten it — so translating one is a compiler bug, not a case to handle.
+ * rewritten it.
  */
 public sealed interface Core {
 
     SourcePos pos();
 
-    /** The type the checker decided for this expression, or {@code null} on a node {@link #of} built. */
+    /** The type the checker decided for this expression (null only on a built-in identifier
+     * the emitter reads by name — see the class comment). */
     Type type();
-
-    /**
-     * Rebuilds the equivalent surface expression. Two callers need AST rather than Core: the codec
-     * emitter, which is AST-level, reaches the shared value emitter through {@code Core.of} then here;
-     * and the backend's closure path, which asks the type checker (AST-based) about a runtime-selected
-     * function, since Core is untyped. {@code of} and {@code toAst} round-trip.
-     */
-    default Ast.Expr toAst() {
-        return switch (this) {
-            case Int x -> new Ast.IntLit(x.value(), x.pos());
-            case Decimal x -> new Ast.DecimalLit(x.value(), x.pos());
-            case Str x -> new Ast.StringLit(x.value(), x.pos());
-            case Bool x -> new Ast.BoolLit(x.value(), x.pos());
-            case Var x -> new Ast.Var(x.name(), x.pos());
-            case Neg n -> new Ast.Neg(n.operand().toAst(), n.pos());
-            case FieldAccess fa -> new Ast.FieldAccess(fa.target().toAst(), fa.field(), fa.pos());
-            case Binary b -> new Ast.Binary(b.op(), b.left().toAst(), b.right().toAst(), b.pos());
-            case Call c -> new Ast.Call(c.fn(), toAstAll(c.args()), c.pos());
-            case If iff -> new Ast.If(iff.cond().toAst(), iff.then().toAst(), iff.els().toAst(), iff.pos());
-            case LetIn li -> li.annotation() == null
-                    ? new Ast.LetIn(li.name(), li.value().toAst(), li.body().toAst(), li.pos())
-                    : Ast.LetIn.annotated(li.name(), li.value().toAst(), li.annotation(),
-                            li.body().toAst(), li.pos());
-            case Block bl -> new Ast.Block(bl.params(), bl.body().toAst(), bl.pos());
-            case ListLit l -> new Ast.ListLit(toAstAll(l.elements()), l.pos());
-            case Tuple t -> new Ast.Tuple(toAstAll(t.elements()), t.pos());
-            case TupleGet tg -> new Ast.TupleGet(tg.tuple().toAst(), tg.index(), tg.arity(), tg.pos());
-            case NewData nd -> {
-                List<Ast.FieldInit> inits = new ArrayList<>();
-                for (FieldInit i : nd.inits()) {
-                    inits.add(new Ast.FieldInit(i.name(), i.value().toAst(), i.pos()));
-                }
-                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.pos());
-            }
-            case Match m -> {
-                List<Ast.Case> cases = new ArrayList<>();
-                for (Case c : m.cases()) {
-                    cases.add(new Ast.Case(c.caseTypes(), c.binding(), c.body().toAst(), c.pos()));
-                }
-                yield new Ast.Match(m.scrutinee().toAst(), cases, m.pos());
-            }
-        };
-    }
-
-    private static List<Ast.Expr> toAstAll(List<Core> cs) {
-        List<Ast.Expr> out = new ArrayList<>();
-        for (Core c : cs) {
-            out.add(c.toAst());
-        }
-        return out;
-    }
 
     record Int(long value, Type type, SourcePos pos) implements Core {}
 
@@ -106,17 +54,10 @@ public sealed interface Core {
 
     record If(Core cond, Core then, Core els, Type type, SourcePos pos) implements Core {}
 
-    /** {@code annotation} is the type the source wrote on the binding ({@code let x: T = e}), or null.
-     * It is kept for the backend's fallback path, which re-derives the value's type; a node the
-     * checker produced carries the decided type on {@code value} instead.
-     * A type that helper inlining put on a binding is not an annotation and does not come along. */
-    record LetIn(String name, Core value, Ast.RetType annotation, Core body, Type type, SourcePos pos)
-            implements Core {
-
-        LetIn(String name, Core value, Core body, Type type, SourcePos pos) {
-            this(name, value, null, body, type, pos);
-        }
-    }
+    /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
+     * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an
+     * empty collection bound here materialises at the written type rather than a bottom (issue #71). */
+    record LetIn(String name, Core value, Core body, Type type, SourcePos pos) implements Core {}
 
     /** A second-class block: a step passed to a recursive combinator, or an escaping lambda a {@code
      * let} binds (a closure). Kept as its own node until closure conversion gets an explicit Core form.
@@ -139,71 +80,9 @@ public sealed interface Core {
                    SourcePos pos) implements Core {}
 
     /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
-     * narrows to, or the element a {@code Some x} opens (null on a node {@link #of} built). */
-    record Case(List<String> caseTypes, String binding, Core body, Type bindType, SourcePos pos) {
-
-        Case(List<String> caseTypes, String binding, Core body, SourcePos pos) {
-            this(caseTypes, binding, body, null, pos);
-        }
-    }
+     * narrows to, or the element a {@code Some x} opens. */
+    record Case(List<String> caseTypes, String binding, Core body, Type bindType, SourcePos pos) {}
 
     record Match(Core scrutinee, List<Case> cases, Type type, SourcePos pos) implements Core {}
 
-    /**
-     * Translates a lowered behavior body to Core without types, for the AST-level codec emitters.
-     * The behavior and helper bodies the backend emits come from the checker instead, with the type
-     * it decided on every node (issue #81).
-     */
-    public static Core of(Ast.Expr e) {
-        return switch (e) {
-            case Ast.IntLit x -> new Int(x.value(), null, x.pos());
-            case Ast.DecimalLit x -> new Decimal(x.value(), null, x.pos());
-            case Ast.StringLit x -> new Str(x.value(), null, x.pos());
-            case Ast.BoolLit x -> new Bool(x.value(), null, x.pos());
-            case Ast.Var x -> new Var(x.name(), null, x.pos());
-            case Ast.Neg n -> new Neg(of(n.operand()), null, n.pos());
-            case Ast.FieldAccess fa -> new FieldAccess(of(fa.target()), fa.field(), null, fa.pos());
-            case Ast.Binary b -> new Binary(b.op(), of(b.left()), of(b.right()), null, b.pos());
-            case Ast.If iff -> new If(of(iff.cond()), of(iff.then()), of(iff.els()), null, iff.pos());
-            case Ast.LetIn li -> new LetIn(li.name(), of(li.value()), li.annotation(), of(li.body()),
-                    null, li.pos());
-            case Ast.Block bl -> new Block(bl.params(), of(bl.body()), null, bl.pos());
-            case Ast.ListLit l -> new ListLit(ofAll(l.elements()), null, l.pos());
-            case Ast.Tuple t -> new Tuple(ofAll(t.elements()), null, t.pos());
-            case Ast.TupleGet tg -> new TupleGet(of(tg.tuple()), tg.index(), tg.arity(), null, tg.pos());
-            case Ast.NewData nd -> ofNewData(nd);
-            case Ast.Match m -> ofMatch(m);
-            case Ast.Call c -> ofCall(c);
-            case Ast.ListComp _ -> throw new IllegalStateException(
-                    "a list comprehension must be lowered to an `if` before Core translation");
-        };
-    }
-
-    private static Core ofCall(Ast.Call c) {
-        return new Call(c.fn(), ofAll(c.args()), null, c.pos());
-    }
-
-    private static Core ofNewData(Ast.NewData nd) {
-        List<FieldInit> inits = new ArrayList<>();
-        for (Ast.FieldInit i : nd.inits()) {
-            inits.add(new FieldInit(i.name(), of(i.value()), i.pos()));
-        }
-        return new NewData(nd.typeName(), inits, nd.spreads(), null, nd.pos());
-    }
-
-    private static Core ofMatch(Ast.Match m) {
-        List<Case> cases = new ArrayList<>();
-        for (Ast.Case c : m.cases()) {
-            cases.add(new Case(c.caseTypes(), c.binding(), of(c.body()), c.pos()));
-        }
-        return new Match(of(m.scrutinee()), cases, null, m.pos());
-    }
-
-    private static List<Core> ofAll(List<Ast.Expr> es) {
-        List<Core> out = new ArrayList<>();
-        for (Ast.Expr e : es) {
-            out.add(of(e));
-        }
-        return out;
-    }
 }
