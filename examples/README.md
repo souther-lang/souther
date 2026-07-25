@@ -46,7 +46,7 @@ dependency plus the `-Asouther.source` compiler arg.
 | `expense` | `List<T>` / nested newtypes / a product decode·encode round trip |
 | `cart` | List combinators `map`/`filter`/`all`/`any` (`souther.list` derives them from `fold`) + the empty list `[]`. Actually runs the behavior `quote` and checks its result cases |
 | `businesstrip` | include (field composition) + a nested newtype invariant |
-| `tagging` | A small issue tracker. Showcases the `Set` module (an issue's `labels` are a `Set<Label>` — the derived codec dedups a JSON array), the `Map` module (`countByLabel` builds a `Map<String, Int>` via `Map.fromList` over `(key, count)` tuples), and `Some(Assignee(name))` destructuring of an optional assignee. Verified by a JUnit smoke test |
+| `issuetracker` | A small issue tracker, and the **Kotlin** case: the boundary around the domain — REST and the H2 connection — is Spring Boot + Kotlin (below). Showcases the `Set` module (an issue's `labels` are a `Set<Label>` — the derived codec dedups a JSON array), the `Map` module (`countByLabel` builds a `Map<String, Int>` with `Map.upsert`), `Some(Assignee(name))` destructuring of an optional assignee, and three injected database behaviors whose read → transform → write sequencing is checked with `fake` + `example`. Like ordering it actually starts Boot and connects to H2 |
 | `member` | Member lookup. A `required behavior findMember` (outside-world dependency) + type routing `>->`. Actually compiles the Spring MVC + jOOQ boundary code (below) |
 | `account` | Account withdrawal, "read → check → write". Binds `withdraw` (which has two injected behaviors) from **Clojure + Pedestal rather than Java**, connected to H2 inside a transaction (below). It shows that the generated types are used the same way even when the boundary language changes |
 | `ordering` | Ordering + stock reservation. Two injected behaviors joined with `>->`, and it **actually starts Spring Boot, connects to H2, and shows transaction control**: if the second stage returns the `OutOfStock` case, the first stage's INSERT is rolled back too (below). Also a pure `report` over a recorded order — a sales summary showcasing `distinct` (the old standalone `sales` example, folded in here) |
@@ -68,9 +68,9 @@ mvn -o -f examples/pom.xml verify       # generate → compile → smoke-test ev
 This is kept independent of the core reactor (the root `mvn test`) so the Spring/jOOQ dependencies
 do not weigh the core build down.
 
-Only `ordering` actually starts Spring Boot, so **the first build needs network to fetch the
-starters** (run it once without `-o` and it lands in `~/.m2`; after that `-o` works). The other
-seven examples run offline.
+`ordering` and `issuetracker` actually start Spring Boot, and `issuetracker` also needs the Kotlin
+compiler, so **the first build needs network to fetch the starters and kotlin-maven-plugin** (run it
+once without `-o` and it lands in `~/.m2`; after that `-o` works). The other examples run offline.
 
 ## Java interop (Spring MVC + jOOQ) — member
 
@@ -164,10 +164,114 @@ cases **no order row remains in the DB** (the first stage's INSERT was rolled ba
 evidence of transaction control. As with member, the generated-path containment (spec 2.1) holds
 across the Java boundary, and reading values out goes through the encoder (spec 8.5).
 
-> Only this example fetches the Spring Boot starters on the first build, so **it needs network**
-> (the others run offline). Once they are in `~/.m2`, `-o` works after that. The DB connection info
-> is in `src/main/resources/application.properties` (in-memory H2), and the schema and stock seed
-> are in `schema.sql` / `data.sql`, both loaded at startup by Boot's autoconfig.
+> This example and `issuetracker` fetch the Spring Boot starters on the first build, so **they need
+> network** (the others run offline). Once they are in `~/.m2`, `-o` works after that. The DB
+> connection info is in `src/main/resources/application.properties` (in-memory H2), and the schema and
+> stock seed are in `schema.sql` / `data.sql`, both loaded at startup by Boot's autoconfig.
+
+## Kotlin + Spring Boot interop — issuetracker
+
+`issuetracker` is the same arrangement as ordering with the boundary language changed: `issues.sou` is
+the domain, and everything outside it — the REST routes and the H2 connection — is Kotlin. It starts
+Boot and drives every route over real HTTP against H2 in its tests.
+
+The domain has three injected behaviors and three composed ones. The label operations are read →
+transform → write, so their sequencing is checked at compile time with the database faked:
+
+```text
+behavior findIssue   : (id: IssueId) -> Issue | IssueNotFound   // SELECT (injected)
+behavior createIssue : (issue: Issue) -> Issue                  // INSERT (injected)
+behavior storeLabels : (issue: Issue) -> Issue                  // rewrite the label rows (injected)
+
+behavior openIssue   : (draft: NewIssue) -> Issue | NoLabels        requires createIssue
+behavior attachLabel : (request: LabelRequest) -> Issue | IssueNotFound  requires findIssue, storeLabels
+behavior detachLabel : (request: LabelRequest) -> Issue | IssueNotFound  requires findIssue, storeLabels
+```
+
+`attachLabel` reads the issue, inserts into its label `Set` and writes it back; an unknown id passes
+`IssueNotFound` through without writing. The remaining behaviors (`assigneeOf`, `sharedLabels`,
+`countByLabel`, `topLabels`) are pure, so they need no injection, and each one has a route.
+
+### Making a javac annotation processor work in a Kotlin module
+
+Souther generates through a javac annotation processor, and kotlinc is not javac — so the module needs
+an order: javac (with `SoutherProcessor`, over the one `package-info.java`) emits the generated classes
+into `target/classes`, and only then does kotlinc run, with `target/classes` on its compile classpath.
+Both plugins bind to the `compile` phase, and the parent pom declares maven-compiler-plugin while the
+module declares kotlin-maven-plugin, so the effective order is javac first. This is the reverse of the
+usual mixed Kotlin/Java setup, where kotlinc is pulled forward to `process-sources`; here nothing on
+the Java side depends on Kotlin, and everything on the Kotlin side depends on generated bytecode.
+
+Two details the module pins down: `kotlin.version` is declared as a property rather than taken from
+the imported `spring-boot-dependencies` BOM (a BOM property does not reach a plugin version), and
+`jvmTarget` is set, because kotlinc still defaults to a 1.8 target.
+
+### What Kotlin brings to the boundary
+
+An output union is generated as a Java `sealed` interface, so `when` over it is exhaustive and the
+compiler names the missing case. That is Souther's `match` totality carried across the boundary as a
+language feature — the thing account's `case-of` macro had to hand-build for Clojure, and that Java
+gets from a `switch` expression.
+
+Souther's `Option` is a sealed interface too, so it maps onto Kotlin's own nullability in one
+extension (`orNull()`), and the rest of the boundary uses `?.` and `?:`.
+
+A request body arrives as a plain `Map` and is handed to the derived decoder — there is no Kotlin
+data class mirroring the request shape. The shape is already declared in `issues.sou`, and the decoder
+is what checks the invariants and reports failures as Raoh issues with their JSON paths. A data class
+would duplicate the domain shape and would reject a malformed body in Jackson, before the decoder that
+holds the actual rules ever ran. So the module has no `jackson-module-kotlin` dependency: no request
+or response shape is a Kotlin type.
+
+The whole Kotlin-side glue is one file, `souther/Souther.kt`: an exception type, `decodeOrFail`,
+`orNull`, and an `operator invoke` so a bound behavior is called as `attachLabel(request)` rather than
+`attachLabel.apply(request)`. It names no domain type and is written to be lifted out unchanged, the
+same way `souther-clj` was.
+
+| Kotlin file | Role |
+| --- | --- |
+| `souther/Souther.kt` | The boundary glue, naming no domain type: `DecodeFailed`, `decodeOrFail` (decode or fail the request), `Option.orNull()`, and `operator invoke` for `Behavior` |
+| `IssueRows.kt` | The one place that knows the issue tables. An issue spans `issues` and its `issue_labels` rows, so reading one produces the Map `Issue.decoder()` takes (labels as a list → a `Set` on decode; an absent assignee left out of the Map → `None`). Reading values out of a domain value is plain typed accessor access — construction is the guarded direction, not reading |
+| `JooqIssueStore.kt` | The three injected implementations, each **extending** the generated abstract base. A Kotlin subclass reaches the base's `protected` factories, so the unit case is built with the inherited `IssueNotFound()`; values read out of storage go through the public `decoder()`, which re-checks their invariants. SQL exceptions are not caught |
+| `web/IssueTrackerConfig.kt` | The generated-side beans: the injected implementations, `AttachLabel.bind(...)` and friends, the pure behaviors' `of()`, and a jOOQ `Settings` that turns identifier quoting off. DataSource / DSLContext / TransactionManager come from autoconfig |
+| `web/IssueController.kt` | `@RestController`. Every route is decode → one behavior → fold the output union into a status and a body. `@Transactional` on the read-modify-write routes, so a concurrent call cannot drop a label by writing back a set it read too early |
+| `web/BoardQuery.kt` | The read side. `countByLabel` / `topLabels` are pure behaviors over a whole `Board`, and a summary makes no decision the domain needs to be in on, so this is not an injected behavior: the boundary reads the rows and builds the `Board` through the derived decoder |
+| `web/BoundaryErrors.kt` | The two failures that are not domain outcomes: a rejected input is 400 with Raoh's issues, and a `DataAccessException` that passed through Souther is 503 |
+
+| Route | Behavior | Outcomes |
+| --- | --- | --- |
+| `POST /issues` | `openIssue` | 201 with the stored issue / 400 `no_labels` when the raw label text leaves nothing |
+| `GET /issues/{id}` | `findIssue` | 200 / 404 |
+| `GET /issues/{id}/assignee` | `assigneeOf` | 200 with the name / 204 when unassigned |
+| `POST /issues/{id}/labels` | `attachLabel` | 200 with the issue / 404 |
+| `DELETE /issues/{id}/labels/{label}` | `detachLabel` | 200 with the issue / 404 |
+| `GET /issues/{a}/shared-labels/{b}` | `sharedLabels` | 200 with the intersection / 404 |
+| `GET /labels/counts` | `countByLabel` | 200 with a JSON object of label → count |
+| `GET /labels/top?n=` | `topLabels` | 200 with the ranking |
+
+`IssueTrackerApiTest` boots Tomcat on a random port and drives all of these over real HTTP with
+`RestTestClient`, checking the three failure kinds apart from each other: `NoLabels` is a domain
+outcome and arrives as a returned case (400 `no_labels`), an empty `label` is an invariant violation
+the decoder rejects before any behavior runs (400, with `/label` as the issue's path), and a dropped
+table is no case at all — it passes through Souther as an exception and becomes 503.
+
+### Running
+
+```sh
+mvn -o -f examples/pom.xml -pl issuetracker verify   # generate → kotlinc → boot → real HTTP over H2
+mvn -f examples/issuetracker/pom.xml spring-boot:run # starts on localhost:8080
+```
+
+```sh
+curl localhost:8080/issues/i-1
+# {"id":"i-1","title":"crash on save","labels":["bug","ui"],"assignee":"kawasima"}
+curl -X POST localhost:8080/issues/i-2/labels \
+     -H 'Content-Type: application/json' -d '{"label":"ui"}'      # 200, i-2 now carries bug and ui
+curl -X POST localhost:8080/issues \
+     -H 'Content-Type: application/json' \
+     -d '{"id":"i-3","title":"flaky test","labels":"Bug, bug , UI"}'  # 201, labels ["bug","ui"]
+curl localhost:8080/labels/top?n=1                                    # {"labels":["bug"]}
+```
 
 ## Clojure + Pedestal interop — account
 

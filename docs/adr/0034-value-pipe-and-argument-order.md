@@ -8,7 +8,7 @@ Souther aims to sit where Elm sits — a bounded, domain-facing language — whi
 core shapes (railway output, unmarked sums, `->`) from F#. Users of both languages reach for
 the value pipe `|>` constantly: they read a transformation top to bottom, `x |> f |> g`, not
 inside-out as `g(f(x))`. Souther had no such pipe, and its nested combinator calls read
-inside-out. A representative line from the `tagging` example:
+inside-out. A representative line from the `issuetracker` example (then named `tagging`):
 
 ```
 sort(filter(map(split(入力.生, ","), 片 -> lowercase(trim(片))), 片 -> String.length(片) >= 1))
@@ -46,7 +46,7 @@ This reverses two choices ADR-0028 recorded; that ADR is annotated accordingly.
 ## Consequences
 
 The pipe is pure sugar: it exists only in the lexer and parser, adds no AST node, and no type
-checker or backend case. The `tagging` example above becomes a chain read top to bottom:
+checker or backend case. The example above becomes a chain read top to bottom:
 
 ```
 入力.生
