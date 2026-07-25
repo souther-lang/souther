@@ -642,7 +642,7 @@ public final class ExampleVerifier {
             for (Map.Entry<?, ?> e : m.entrySet()) {
                 entries.add("(" + showValue(e.getKey()) + ", " + showValue(e.getValue()) + ")");
             }
-            return "[ " + String.join(", ", entries) + " ]";
+            return entries.isEmpty() ? "[]" : "[ " + String.join(", ", entries) + " ]";
         }
         if (v instanceof Iterable<?> it) {
             List<String> elements = new ArrayList<>();

@@ -81,6 +81,23 @@ class CompileExampleMismatchTest {
         assertTrue(rendered.contains("[ \"x\" ]"), rendered);
     }
 
+    /** An empty collection reads as `[]` on either side, whether it is a list, a set, or a map — the
+     * same form a fixture writes. */
+    @Test
+    void anEmptyCollectionReadsAsTheEmptyLiteral() {
+        String rendered = render("""
+                module demo
+                data In = { ns: List<Int> }
+                data Out = { counts: Map<String, Int>, tags: Set<String> }
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = Out { counts = Map.empty(), tags = Set.empty() }
+                example run
+                    | "wrong on purpose" : (In { ns = [] })
+                        -> Out { counts = [ ("a", 1) ], tags = [ "x" ] }
+                """);
+        assertTrue(rendered.contains("counts = [], tags = []"), rendered);
+    }
+
     @Test
     void aDateShowsAsTheDateItIs() {
         String rendered = render("""

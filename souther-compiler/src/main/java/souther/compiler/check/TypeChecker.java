@@ -3742,7 +3742,7 @@ public final class TypeChecker {
                     Diagnostic.of(null, "check.temporal.malformed").title("check.type.mismatch.title")
                             .at(pos, fn.length()).args(fn, text).build(),
                     "`" + text + "` is not a " + fn + " (expected "
-                            + (fn.equals("Date") ? "YYYY-MM-DD" : "YYYY-MM-DDThh:mm[:ss]") + ")");
+                            + (fn.equals("Date") ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm[:ss]") + ")");
         }
     }
 
