@@ -18,7 +18,7 @@
 // exposing is omitted, so every generated class is public — the smoke test references them by name.
 module example.tagging
 import String ( split, trim, lowercase )
-import List ( map, filter, fold, distinct )
+import List ( map, filter, fold )
 
 data IssueId  = String
     invariant String.length(value) >= 1
@@ -89,12 +89,12 @@ let assigneeOf (issue) =
         | Some(Assignee(name)) -> Assigned { name = name }
         | None -> Unassigned
 
-// === countByLabel: how many issues carry each label (Map.fromList) ===
+// === countByLabel: how many issues carry each label (fold + Map.upsert) ===
 // Collect every label occurrence across the board as plain strings (Set.toList each issue's labels,
-// unwrap to the text, concatenate), then for each distinct key pair it with its occurrence count and
-// build the result with Map.fromList — a List<(String, Int)> of (key, count) tuples into a
-// Map<String, Int>. The key is the label text (Label.value); a Map key is a String or String-backed
-// newtype.
+// unwrap to the text, concatenate), then fold them into a Map<String, Int>, counting each key with
+// Map.upsert — seed 1 on first sight, +1 on every repeat. The empty-map seed's value type is fixed
+// by the LabelCounts.counts field it feeds. The key is the label text (Label.value); a Map key is a
+// String or String-backed newtype.
 data LabelCounts = { counts: Map<String, Int> }
 
 behavior countByLabel : (board: Board) -> LabelCounts
@@ -104,11 +104,7 @@ behavior countByLabel : (board: Board) -> LabelCounts
 let labelKeys (issues: List<Issue>): List<String> =
     fold((acc, issue) -> acc ++ map(l -> l.value, Set.toList(issue.labels)), [], issues)
 
-// How many times a key occurs in the collected list.
-let occurrences (keys: List<String>, key: String): Int =
-    List.length(filter(k -> k == key, keys))
-
-let countByLabel (board) = {
-    let keys = labelKeys(board.issues)
-    LabelCounts { counts = Map.fromList(map(k -> (k, occurrences(keys, k)), distinct(keys))) }
-}
+let countByLabel (board) =
+    LabelCounts {
+        counts = fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), labelKeys(board.issues))
+    }

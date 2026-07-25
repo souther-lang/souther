@@ -266,6 +266,15 @@ final class BodyGen {
          * construction path.
          */
         void emitTail(Core e, ClassDesc cdB, Set<String> requiredNames, Map<String, Type> requiredSuccess) {
+            emitTail(e, cdB, requiredNames, requiredSuccess, null);
+        }
+
+        // {@code expected} is the declared return/output type of the body being emitted (issue #70): it
+        // is threaded to a tail-position fold the same way {@link #genExpr} threads it in value
+        // position, so a fold over an empty-collection seed materialises its step at the accumulator
+        // type the checker pinned rather than a bottom. Null when no declared type is in scope.
+        void emitTail(Core e, ClassDesc cdB, Set<String> requiredNames, Map<String, Type> requiredSuccess,
+                      Type expected) {
             emitLine(e);
             switch (e) {
                 case Core.LetIn li -> {
@@ -294,17 +303,17 @@ final class BodyGen {
                         store(code, slot, vt);
                         bind(li.name(), slot, vt);
                     }
-                    emitTail(li.body(), cdB, requiredNames, requiredSuccess);
+                    emitTail(li.body(), cdB, requiredNames, requiredSuccess, expected);
                 }
                 case Core.If iff -> {
                     genExpr(iff.cond());
                     Label elseL = code.newLabel();
                     code.ifeq(elseL);
-                    emitTail(iff.then(), cdB, requiredNames, requiredSuccess);
+                    emitTail(iff.then(), cdB, requiredNames, requiredSuccess, expected);
                     code.labelBinding(elseL);
-                    emitTail(iff.els(), cdB, requiredNames, requiredSuccess);
+                    emitTail(iff.els(), cdB, requiredNames, requiredSuccess, expected);
                 }
-                case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess);
+                case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
                 case Core.Call call when tcoName != null && call.fn().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.NewData nd when TypeChecker.isInvariantBearing(nd.typeName(), symbols) -> {
@@ -317,7 +326,7 @@ final class BodyGen {
                     code.areturn();
                 }
                 default -> {
-                    Type rt = genExpr(e);
+                    Type rt = genExpr(e, expected);
                     box(code, rt);
                     code.areturn();
                 }
@@ -366,7 +375,9 @@ final class BodyGen {
             for (String field : fields.keySet()) {
                 Core.FieldInit init = byName.get(field);
                 if (init != null) {
-                    genExpr(init.value());
+                    // push the field's declared type so a field valued by a fold over an empty seed
+                    // materialises its step closure at the field's type (issue #70)
+                    genExpr(init.value(), fields.get(field));
                     continue;
                 }
                 for (String sp : spreads) {
@@ -450,6 +461,14 @@ final class BodyGen {
          * inference lives in the checker, so the backend reuses it rather than re-deriving types.
          */
         Type genExpr(Core e) {
+            return genExpr(e, null);
+        }
+
+        // {@code expected} mirrors the checker's bidirectional pass (issue #70): it is pushed into a
+        // fold call so codegen materialises the step closure at the same accumulator type the checker
+        // validated, when an empty-collection seed would otherwise leave that type a bottom. Only the
+        // passthrough arms (if/let/match/call) forward it; every other arm ignores it.
+        Type genExpr(Core e, Type expected) {
             emitLine(e);
             return switch (e) {
                 case Core.Int x -> {
@@ -508,10 +527,10 @@ final class BodyGen {
                     Label elseL = code.newLabel();
                     Label end = code.newLabel();
                     code.ifeq(elseL);
-                    Type tt = genExpr(iff.then());
+                    Type tt = genExpr(iff.then(), expected);
                     code.goto_(end);
                     code.labelBinding(elseL);
-                    genExpr(iff.els());
+                    genExpr(iff.els(), expected);
                     code.labelBinding(end);
                     yield tt;
                 }
@@ -520,8 +539,8 @@ final class BodyGen {
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> binary(bin);
                 case Core.NewData nd -> newData(nd);
-                case Core.Match m -> match(m);
-                case Core.Call c -> call(c);
+                case Core.Match m -> match(m, expected);
+                case Core.Call c -> call(c, expected);
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
                     Type vt;
@@ -539,14 +558,14 @@ final class BodyGen {
                     int s = slot(vt);
                     store(code, s, vt);
                     bind(li.name(), s, vt);
-                    yield genExpr(li.body());
+                    yield genExpr(li.body(), expected);
                 }
                 // a block has no value of its own; it is inlined by the call it is passed to
                 case Core.Block b -> throw new CompileException(b.pos(), "a block is not a value");
             };
         }
 
-        private Type match(Core.Match m) {
+        private Type match(Core.Match m, Type expected) {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
@@ -559,7 +578,7 @@ final class BodyGen {
                 // after the arm, or a later arm reusing the name would resolve to this arm's slot.
                 Var prevBinding = c.binding() != null ? env.get(c.binding()) : null;
                 emitCaseGuard(c, sSlot, st, element, nextCase);
-                branchType = genExpr(c.body());
+                branchType = genExpr(c.body(), expected);
                 if (c.binding() != null) {
                     restore(c.binding(), prevBinding);
                 }
@@ -576,7 +595,7 @@ final class BodyGen {
          * List.get}) loops rather than recursing. Each arm returns (or tail-loops), so no join label is
          * needed — the next arm's dispatch follows its predecessor's {@code nextCase}. */
         private void emitTailMatch(Core.Match m, ClassDesc cdB, Set<String> requiredNames,
-                                   Map<String, Type> requiredSuccess) {
+                                   Map<String, Type> requiredSuccess, Type expected) {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
@@ -587,7 +606,7 @@ final class BodyGen {
                 // shadows before the next arm's dispatch.
                 Var prevBinding = c.binding() != null ? env.get(c.binding()) : null;
                 emitCaseGuard(c, sSlot, st, element, nextCase);
-                emitTail(c.body(), cdB, requiredNames, requiredSuccess);
+                emitTail(c.body(), cdB, requiredNames, requiredSuccess, expected);
                 if (c.binding() != null) {
                     restore(c.binding(), prevBinding);
                 }
@@ -744,7 +763,7 @@ final class BodyGen {
             code.l2i();
         }
 
-        private Type call(Core.Call call) {
+        private Type call(Core.Call call, Type expected) {
             Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(call.fn());
             if (intrinsic != null) {
                 return Intrinsics.emit(this, intrinsic.key(), call);
@@ -839,7 +858,7 @@ final class BodyGen {
                     }
                     Ast.FnDef rec = ctx.recursiveHelpers.get(call.fn());
                     if (rec != null) {
-                        return recursiveHelperCall(call, rec);
+                        return recursiveHelperCall(call, rec, expected);
                     }
                     if (reqNames.contains(call.fn())) {
                         return requiredCall(call);
@@ -855,7 +874,7 @@ final class BodyGen {
          * A function parameter is passed as a first-class {@code Fn} value (a closure): the argument
          * block is materialised rather than evaluated as a plain value, and an {@code Fn} is already a
          * reference, so it fits the {@code Object} slot without boxing. */
-        private Type recursiveHelperCall(Core.Call call, Ast.FnDef h) {
+        private Type recursiveHelperCall(Core.Call call, Ast.FnDef h, Type expected) {
             // Resolve the helper's type variables from the value arguments, so a function argument is
             // materialised at concrete parameter types — foldFrom's step is `(acc, x)` at the seed's
             // and the list element's types — matching how the checker typed this call. A monomorphic
@@ -865,6 +884,13 @@ final class BodyGen {
                 declared.add(TypeChecker.resolveParamType(p.type(), symbols));
             }
             Map<String, Type> bind = new HashMap<>();
+            // Pin the result-type variables from the expected type first (issue #70), through the same
+            // best-effort helper the checker's call typing uses, so a fold with a Map.empty()/[] seed
+            // materialises its step closure at the accumulator type the context fixed, not a bottom.
+            if (h.declaredReturn() != null) {
+                TypeChecker.pinResultTypeVars(successType(h.declaredReturn()), expected, bind, symbols,
+                        call.pos(), "result of " + call.fn());
+            }
             for (int i = 0; i < call.args().size(); i++) {
                 if (!(declared.get(i) instanceof Type.FnOf)) {
                     Type at = TypeChecker.typeOf(call.args().get(i).toAst(), typesEnvWithHelpers(), data, symbols, reqSigs());

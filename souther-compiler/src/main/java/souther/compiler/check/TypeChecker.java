@@ -430,11 +430,14 @@ public final class TypeChecker {
             // without a fixpoint (each declares its return type, spec 13.1).
             Map<String, Type> tenv = new HashMap<>(env);
             tenv.putAll(recursiveHelperFns);
-            Type bodyType = typeOf(body, tenv, null, symbols, reqSigs);
+            // push a declared return type into the body so an empty-collection body (Map.empty(), [])
+            // takes the declared element/value type rather than a bottom
+            Type declaredReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn(), symbols);
+            Type bodyType = typeOf(body, tenv, null, symbols, reqSigs, declaredReturn);
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored.
-            if (h.declaredReturn() != null) {
-                Type declared = successType(h.declaredReturn(), symbols);
+            if (declaredReturn != null) {
+                Type declared = declaredReturn;
                 if (!assignable(bodyType, declared, symbols)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.helper.return").title("check.helper.title")
@@ -857,7 +860,9 @@ public final class TypeChecker {
         Ast.Expr body = inlinedBody;
         rejectNonRequiredCalls(body, allBehaviors, reqSigs);
 
-        Type rt = typeOf(body, tenv, null, symbols, reqSigs);
+        // push the declared output type into the body so a body that is directly an empty collection
+        // (or a construction whose field is one) takes the declared type rather than a bottom
+        Type rt = typeOf(body, tenv, null, symbols, reqSigs, output);
         if (!assignable(rt, output, symbols)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.behavior.return").title("check.type.mismatch.title")
@@ -1898,7 +1903,9 @@ public final class TypeChecker {
                                 .at(init.pos(), init.name().length()).args(init.name(), typeName).build(),
                         "`" + init.name() + "` is not a field of `" + typeName + "`");
             }
-            Type vt = typeOf(init.value(), env, data, symbols, reqs);
+            // push the field's declared type into the value expression, so a field initialised from a
+            // fold over an empty-collection seed has its result pinned by the field type (issue #70)
+            Type vt = typeOf(init.value(), env, data, symbols, reqs, ft);
             if (!assignable(vt, ft, symbols)) {   // a case value widens to its sum-typed field (spec 8.3)
                 throw CompileException.of(
                         Diagnostic.of(null, "check.field.type").title("check.type.mismatch.title")
@@ -2067,6 +2074,17 @@ public final class TypeChecker {
 
     public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
                               Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+        return typeOf(e, env, data, symbols, reqs, null);
+    }
+
+    // Bidirectional typing: {@code expected} is the type this expression is checked against, pushed
+    // down from the surrounding context (a declared field type, a declared return type). It may be
+    // {@code null} — no context — in which case this behaves exactly as pure bottom-up synthesis.
+    // Only a few arms consume it: the empty-collection leaves ([], Map.empty, Set.empty) adopt it,
+    // and a generic call pre-binds its result-type variables from it, so a fold whose seed is an
+    // empty collection has its accumulator pinned by context before the step is checked.
+    public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
+                              Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
         return switch (e) {
             case Ast.IntLit _ -> Type.INT;
             case Ast.DecimalLit _ -> Type.DECIMAL;
@@ -2135,7 +2153,7 @@ public final class TypeChecker {
                     }
                     inner.put(li.name(), bindType);
                 }
-                yield typeOf(li.body(), inner, data, symbols, reqs);
+                yield typeOf(li.body(), inner, data, symbols, reqs, expected);
             }
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
@@ -2168,7 +2186,7 @@ public final class TypeChecker {
                         "unknown identifier `" + v.name() + "`" + Suggest.hint(v.name(), env.keySet()));
             }
             case Ast.FieldAccess fa -> typeOfFieldAccess(fa, env, data, symbols, reqs);
-            case Ast.Call call -> typeOfCall(call, env, data, symbols, reqs);
+            case Ast.Call call -> typeOfCall(call, env, data, symbols, reqs, expected);
             case Ast.Binary bin -> typeOfBinary(bin, env, data, symbols, reqs);
             case Ast.NewData nd -> {
                 if (!(symbols.get(nd.typeName()) instanceof Ast.Data owner)) {
@@ -2181,11 +2199,11 @@ public final class TypeChecker {
                         fieldTypes(owner, symbols), env, data, symbols, reqs);
                 yield Type.ref(nd.typeName());
             }
-            case Ast.Match m -> typeOfMatch(m, env, data, symbols, reqs);
+            case Ast.Match m -> typeOfMatch(m, env, data, symbols, reqs, expected);
             case Ast.If iff -> {
                 requireType(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
-                Type tt = typeOf(iff.then(), env, data, symbols, reqs);
-                Type et = typeOf(iff.els(), env, data, symbols, reqs);
+                Type tt = typeOf(iff.then(), env, data, symbols, reqs, expected);
+                Type et = typeOf(iff.els(), env, data, symbols, reqs, expected);
                 Type empty = absorbBottom(tt, et);   // one case may be `[]`, or a tuple of them (ADR-0028)
                 if (empty != null) {
                     yield empty;
@@ -2212,7 +2230,8 @@ public final class TypeChecker {
             }
             case Ast.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
-                    yield Type.EMPTY_LIST;   // `[]`: element type fixed by context (ADR-0028)
+                    // `[]`: element type fixed by context (ADR-0028); adopt an expected list type
+                    yield expected instanceof Type.ListOf le ? le : Type.EMPTY_LIST;
                 }
                 Type elem = null;
                 for (Ast.Expr el : lit.elements()) {
@@ -2301,6 +2320,93 @@ public final class TypeChecker {
         return t instanceof Type.Nothing;
     }
 
+    /** A syntactic empty-collection literal — {@code []}, {@code Map.empty()}, {@code Set.empty()} —
+     * whose element/value type is fixed by context rather than written. */
+    private static boolean isEmptyCollectionLiteral(Ast.Expr e) {
+        return (e instanceof Ast.ListLit l && l.elements().isEmpty())
+                || (e instanceof Ast.Call c && c.args().isEmpty()
+                        && (c.fn().equals("Map.empty") || c.fn().equals("Set.empty")));
+    }
+
+    /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context
+     * pushed down, into {@code bind}. Unifies into a scratch copy and merges only on success, so an
+     * expected type that does not fit the result leaves {@code bind} untouched and the ordinary checks
+     * report the mismatch rather than this throwing early. Shared by the checker's call typing and the
+     * backend's fold materialisation so both pin the same accumulator type (issue #70). */
+    public static void pinResultTypeVars(Type result, Type expected, Map<String, Type> bind,
+                                         Map<String, Ast.Def> symbols, SourcePos pos, String what) {
+        if (expected == null) {
+            return;
+        }
+        Map<String, Type> probe = new HashMap<>(bind);
+        try {
+            unify(result, expected, probe, symbols, pos, what);
+            bind.putAll(probe);
+        } catch (CompileException ignored) {
+            // the expected type does not fit this result; leave bind untouched
+        }
+    }
+
+    /** Whether a step-typing error is the unresolved-bottom error (an operand/branch reported as the
+     * bottom marker {@code _}), as opposed to an unrelated failure. The bottom renders as a standalone
+     * {@code _} token; a type merely named with an underscore ({@code My_Type}) does not match. */
+    private static boolean reportsUnresolvedBottom(CompileException e) {
+        Diagnostic d = e.diagnostic();
+        if (d == null) {
+            return false;
+        }
+        String marker = Type.show(Type.NOTHING);   // "_"
+        java.util.regex.Pattern standalone =
+                java.util.regex.Pattern.compile("(^|[^\\p{Alnum}])" + marker + "([^\\p{Alnum}]|$)");
+        if (d.diff() != null
+                && (standalone.matcher(d.diff().actualType()).find()
+                        || standalone.matcher(d.diff().expectedType()).find())) {
+            return true;
+        }
+        if (d.args() != null) {
+            for (Object a : d.args()) {
+                if (a != null && standalone.matcher(a.toString()).find()) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** The fold seed argument when it is an un-inferrable empty-collection literal — a genuine fold
+     * whose accumulator element type nothing has fixed — or {@code -1} otherwise. Used to point a
+     * step-typing failure at the seed rather than deep inside the step. Two guards keep this to real
+     * fold seeds so a non-fold call is never mis-reported as one (issue #70 review):
+     *
+     * <ul>
+     *   <li>the signature is fold-shaped — a step function at index 0 and, at the seed index 1, an
+     *       accumulator whose type is the fold's result. A higher-order function that merely takes a
+     *       closure and an empty collection ({@code List.map}/{@code filter} over {@code []}) does not
+     *       match, so its step failure is not relabelled as a fold-seed error; and</li>
+     *   <li>the seed's source position differs from the call's. A combinator inlined onto its call
+     *       site (e.g. {@code List.map}'s internal {@code []} accumulator, which desugars to a
+     *       {@code List.foldFrom}) carries the call's own position; the caller never wrote an empty
+     *       seed there, so it is excluded.</li>
+     * </ul>
+     */
+    private static int untypedEmptySeed(List<Ast.Expr> args, Type.FnOf fn, Map<String, Type> bind,
+                                        SourcePos callPos) {
+        int seed = 1;
+        if (fn.params().size() <= seed || args.size() <= seed) {
+            return -1;
+        }
+        boolean foldShaped = fn.params().get(0) instanceof Type.FnOf
+                && !(fn.params().get(seed) instanceof Type.FnOf)
+                && fn.params().get(seed).equals(fn.result());
+        if (foldShaped
+                && isEmptyCollectionLiteral(args.get(seed))
+                && !args.get(seed).pos().equals(callPos)
+                && Type.mentions(substitute(fn.params().get(seed), bind), TypeChecker::isBottom)) {
+            return seed;
+        }
+        return -1;
+    }
+
     /** Reads a bottom ({@code Nothing}) as the empty list — its run-time value when it is a list read
      * from an accumulator an empty collection seed grows (see the {@code CONCAT} case). Leaves any
      * other type untouched. */
@@ -2345,13 +2451,13 @@ public final class TypeChecker {
     }
 
     private static Type typeOfMatch(Ast.Match m, Map<String, Type> env, Ast.Data data,
-                                    Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+                                    Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
         Type st = typeOf(m.scrutinee(), env, data, symbols, reqs);
         if (st instanceof Type.OptionOf oo) {
-            return typeOfOptionMatch(m, oo.element(), env, data, symbols, reqs);
+            return typeOfOptionMatch(m, oo.element(), env, data, symbols, reqs, expected);
         }
         if (st instanceof Type.Union union) {
-            return typeOfCasesMatch(m, union.members(), "union " + union, st, env, data, symbols, reqs);
+            return typeOfCasesMatch(m, union.members(), "union " + union, st, env, data, symbols, reqs, expected);
         }
         if (!(st instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.SumData sum)) {
             throw CompileException.of(
@@ -2360,7 +2466,7 @@ public final class TypeChecker {
                     "match requires a sum-typed value, got " + st);
         }
         return typeOfCasesMatch(m, new HashSet<>(sum.cases()), "data `" + sum.name() + "`",
-                st, env, data, symbols, reqs);
+                st, env, data, symbols, reqs, expected);
     }
 
     /** Match over a fixed set of data cases (a named sum's cases, or an anonymous union's members).
@@ -2369,7 +2475,7 @@ public final class TypeChecker {
      * exactly once (E1201; a second cover is an overlap error). */
     private static Type typeOfCasesMatch(Ast.Match m, Set<String> cases, String what, Type scrutinee,
                                         Map<String, Type> env, Ast.Data data, Map<String, Ast.Def> symbols,
-                                        Map<String, ReqSig> reqs) {
+                                        Map<String, ReqSig> reqs, Type expected) {
         Set<String> covered = new HashSet<>();
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
@@ -2398,7 +2504,7 @@ public final class TypeChecker {
                 checkUnwrapAsserts(c, symbols);
             }
             branchType = mergeBranch(m, branchType,
-                    typeOf(c.body(), bound(env, c.binding(), bindType), data, symbols, reqs), c);
+                    typeOf(c.body(), bound(env, c.binding(), bindType), data, symbols, reqs, expected), c);
         }
         List<String> missing = new ArrayList<>();
         for (String caseName : cases) {
@@ -2422,7 +2528,7 @@ public final class TypeChecker {
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
      * {@code None}; both must be present (spec 16.3). */
     private static Type typeOfOptionMatch(Ast.Match m, Type element, Map<String, Type> env, Ast.Data data,
-                                          Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+                                          Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
         Set<String> covered = new HashSet<>();
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
@@ -2457,7 +2563,7 @@ public final class TypeChecker {
                         "`" + caseType + "` is matched by more than one case");
             }
             branchType = mergeBranch(m, branchType,
-                    typeOf(c.body(), bound(env, c.binding(), bind), data, symbols, reqs), c);
+                    typeOf(c.body(), bound(env, c.binding(), bind), data, symbols, reqs, expected), c);
         }
         List<String> missing = new ArrayList<>();
         for (String caseName : List.of("Some", "None")) {
@@ -2598,7 +2704,7 @@ public final class TypeChecker {
     }
 
     private static Type typeOfCall(Ast.Call call, Map<String, Type> env, Ast.Data data,
-                                   Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+                                   Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
         List<Ast.Expr> args = call.args();
         // A shipped intrinsic behaves like a built-in: check the call against its declared signature
         // (from the prelude) and yield its result type; the backend emits the primitive for its key.
@@ -2748,12 +2854,16 @@ public final class TypeChecker {
             }
             case "Map.empty" -> {
                 arity(call, 0);
-                // like `[]`, the empty map's key and value are bottoms fixed by context (ADR-0028)
-                yield Type.map(Type.NOTHING, Type.NOTHING);
+                // like `[]`, the empty map's key and value are bottoms fixed by context (ADR-0028).
+                // When the context supplies an expected map type, adopt it directly so the value type
+                // is concrete from the start — a Map.empty()-seeded fold no longer forces its
+                // accumulator (and any updater closure) to a bottom.
+                yield expected instanceof Type.MapOf me ? me : Type.map(Type.NOTHING, Type.NOTHING);
             }
             case "Set.empty" -> {
                 arity(call, 0);
-                yield Type.set(Type.NOTHING);   // empty set's element type fixed by context (ADR-0028)
+                // empty set's element type fixed by context (ADR-0028); adopt an expected set type
+                yield expected instanceof Type.SetOf se ? se : Type.set(Type.NOTHING);
             }
             case "Int.remainder" -> {
                 arity(call, 2);
@@ -2795,16 +2905,49 @@ public final class TypeChecker {
                     // binds the accumulator to a bottom; the step's result then grows it to the concrete
                     // type, so a function argument's result refines the binding (as the old fold did).
                     Map<String, Type> bind = new HashMap<>();
+                    // Pin the result-type variables from the surrounding context first (issue #70): a
+                    // fold whose seed is Map.empty()/[] has its accumulator `'acc` bound to the expected
+                    // result BEFORE the step (and any inlined Map.upsert closure) is checked, so the
+                    // seed's bottom no longer drives the step's parameter types.
+                    pinResultTypeVars(fn.result(), expected, bind, symbols, call.pos(),
+                            "result of " + call.fn());
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
                             Type at = typeOf(args.get(i), env, data, symbols, reqs);
                             unify(fn.params().get(i), at, bind, symbols, call.pos(), "argument " + (i + 1));
                         }
                     }
-                    for (int i = 0; i < args.size(); i++) {
-                        if (fn.params().get(i) instanceof Type.FnOf fp0) {
-                            resolveStepBinding(call.fn(), fp0, args.get(i), bind, env, data, symbols, reqs);
+                    // Type the step (function) arguments. A fold over an empty-collection seed whose
+                    // step needs the accumulator's element/value type can only get it from context;
+                    // with no expected type the accumulator stays a bottom and the step fails deep in
+                    // its (possibly inlined) body. Point at the seed — the empty collection whose type
+                    // could not be inferred — rather than the arithmetic/match the bottom reached (#70).
+                    try {
+                        for (int i = 0; i < args.size(); i++) {
+                            if (fn.params().get(i) instanceof Type.FnOf fp0) {
+                                resolveStepBinding(call.fn(), fp0, args.get(i), bind, env, data, symbols, reqs);
+                            }
                         }
+                    } catch (CompileException stepError) {
+                        // Only re-point at the seed when the failure is genuinely the unresolved bottom:
+                        // an empty-collection seed whose accumulator type nothing fixed, and an error
+                        // that actually reported that bottom (`_`). An unrelated error in the step (an
+                        // unknown identifier, a real type clash) is rethrown untouched so it is not
+                        // masked. This fires whether or not a context type was pushed — an expected type
+                        // that did not fit still leaves the accumulator a bottom (issue #70).
+                        int seed = untypedEmptySeed(args, fn, bind, call.pos());
+                        if (seed < 0 || !reportsUnresolvedBottom(stepError)) {
+                            throw stepError;
+                        }
+                        Diagnostic.Builder b = Diagnostic.of(null, "check.fold.seed.untyped")
+                                .title("check.fold.seed.title")
+                                .at(args.get(seed).pos(), width(args.get(seed)));
+                        if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
+                            b.secondary(stepError.diagnostic().region(), "check.fold.seed.here");
+                        }
+                        throw CompileException.of(b.build(),
+                                "cannot infer the element type of the empty collection seeding `"
+                                        + call.fn() + "`; annotate the declaration it feeds");
                     }
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
