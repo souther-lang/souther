@@ -185,6 +185,43 @@ class CompileListLibTest {
     }
 
     @Test
+    void indexByKeysTheElementsAndLetsTheLastDuplicateWin() throws Exception {
+        // The read-then-look-up shape: rows in, one entry per key out, read back with Map.get.
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( indexBy )
+                import Map ( size )
+
+                data 行 = { 品番: String, 数量: Int }
+                data In = { rows: List<行> }
+                data Out = { entries: Int, apple: Int, missing: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let 数量 (品番: String, m: Map<String, 行>): Int =
+                    match Map.get(品番, m) with
+                        | None -> 0
+                        | Some r -> r.数量
+
+                let run (i) = {
+                    let idx = indexBy(r -> r.品番, i.rows)
+                    Out { entries = size(idx), apple = 数量("apple", idx), missing = 数量("nope", idx) }
+                }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("rows", List.of(
+                Map.of("品番", "apple", "数量", 3L),
+                Map.of("品番", "orange", "数量", 5L),
+                Map.of("品番", "apple", "数量", 9L))));
+        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Map<?, ?> m = encode(loader, Codecs.apply(behavior, in));
+        assertEquals(2L, m.get("entries"), "the repeated key holds one entry");
+        assertEquals(9L, m.get("apple"), "the later row wins, as Map.fromList does");
+        assertEquals(0L, m.get("missing"));
+    }
+
+    @Test
     void maxAndMinReturnOptionAndAreNoneForAnEmptyList() throws Exception {
         // max/min are native builtins returning Option, like List.get — fold cannot build them
         // (Souther has no in-language Some/None to fold into).

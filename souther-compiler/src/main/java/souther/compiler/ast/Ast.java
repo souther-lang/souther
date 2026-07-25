@@ -335,12 +335,26 @@ public interface Ast {
     /** Encodes a {@code Set} as a JSON array: the set is listed, then each element encoded. */
     record SetEnc(Expr source, EncElem elem, SourcePos pos) implements RawExpr {}
 
-    /** How to encode a list element: a primitive or another data's {@code .encode}. */
-    sealed interface EncElem extends Ast permits PrimEnc, DataEnc {}
+    /** How to encode a list/set/map element: a primitive, another data's {@code .encode}, or another
+     * collection — a collection may hold a collection ({@code Map<String, List<商品ID>>}), so the
+     * element encoder nests as deeply as the type does. */
+    sealed interface EncElem extends Ast permits PrimEnc, DataEnc, ListElemEnc, SetElemEnc, MapElemEnc {}
 
     record PrimEnc(PrimKind kind, SourcePos pos) implements EncElem {}
 
     record DataEnc(String typeName, SourcePos pos) implements EncElem {}
+
+    /** A {@code List<T>} element, each {@code T} encoded by {@code elem}. */
+    record ListElemEnc(EncElem elem, SourcePos pos) implements EncElem {}
+
+    /** A {@code Set<T>} element: listed, then each element encoded by {@code elem}, as {@link SetEnc}
+     * does for a field. */
+    record SetElemEnc(EncElem elem, SourcePos pos) implements EncElem {}
+
+    /** A {@code Map<K, V>} element, each value encoded by {@code value}. {@code keyType} carries the
+     * String-backed newtype whose keys render bare, or {@code null} for a plain {@code String} key,
+     * as {@link MapEnc} does for a field. */
+    record MapElemEnc(EncElem value, String keyType, SourcePos pos) implements EncElem {}
 
     record RawEntry(String key, RawExpr value, SourcePos pos) implements Ast {}
 

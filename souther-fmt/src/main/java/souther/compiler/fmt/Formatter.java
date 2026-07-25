@@ -392,7 +392,9 @@ public final class Formatter {
                 cases.add(typeRef(c));
             }
         }
-        return Doc.join(text(" | "), cases);
+        Doc d = Doc.join(text(" | "), cases);
+        // `T?` in a core signature, the same mark a field carries
+        return n.token(SyntaxKind.QUESTION).isPresent() ? concat(d, text("?")) : d;
     }
 
     private Doc typeRef(SyntaxNode n) {

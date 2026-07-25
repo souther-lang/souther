@@ -808,7 +808,7 @@ public final class TypeChecker {
                     continue;
                 }
                 checkFunctionArg(h, h.params().get(i).name(), want,
-                        call.args().get(i), env, symbols, reqs, inliner);
+                        call.args().get(i), env, symbols, reqs, inliner, bind);
             }
         }
     }
@@ -828,9 +828,28 @@ public final class TypeChecker {
         return false;
     }
 
+    /** The block a combinator was handed answers with the wrong type, in written types on both sides
+     * (`'b?` / `String`), not in the checker's own spelling. */
+    private static CompileException blockReturnMismatch(Ast.FnDef h, String paramName, Type want,
+                                                        Type got, SourcePos pos) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.fn.blockparam.return").title("check.fn.title")
+                        .at(pos).args(paramName, h.name(), Type.show(want), Type.show(got)).build(),
+                "the block passed to `" + paramName + "` of `let " + h.name() + "` must return "
+                        + Type.show(want) + " but returns " + Type.show(got));
+    }
+
+    /** Whether a type still holds a type variable, so nothing concrete can be checked against it yet.
+     * A bare {@code 'b} is the common case (`map`'s result); a variable can also sit inside a
+     * constructor — {@code filterMap}'s step answers {@code 'b?} — and that is just as open. */
+    private static boolean isOpen(Type t) {
+        return Type.mentions(t, x -> x instanceof Type.Var);
+    }
+
     private static void checkFunctionArg(Ast.FnDef h, String paramName, Type.FnOf want, Ast.Expr arg,
                                          Map<String, Type> env, Map<String, Ast.Def> symbols,
-                                         Map<String, ReqSig> reqs, HelperInliner inliner) {
+                                         Map<String, ReqSig> reqs, HelperInliner inliner,
+                                         Map<String, Type> bind) {
         if (arg instanceof Ast.Block lambda) {
             if (lambda.params().size() != want.params().size()) {
                 throw CompileException.of(
@@ -843,7 +862,7 @@ public final class TypeChecker {
             }
             Map<String, Type> lenv = new HashMap<>(env);
             for (int j = 0; j < lambda.params().size(); j++) {
-                if (want.params().get(j) instanceof Type.Var) {
+                if (isOpen(want.params().get(j))) {
                     return;   // the parameter type is still open; nothing concrete to check
                 }
                 lenv.put(lambda.params().get(j), want.params().get(j));
@@ -854,13 +873,20 @@ public final class TypeChecker {
             } catch (CompileException ignored) {
                 return;   // best-effort; the inlined check reports a genuine error with full context
             }
-            if (!(want.result() instanceof Type.Var) && !assignable(got, want.result(), symbols)) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.fn.blockparam.return").title("check.fn.title")
-                                .at(lambda.pos()).args(paramName, h.name(), Type.show(want.result()),
-                                        Type.show(got)).build(),
-                        "the block passed to `" + paramName + "` of `let " + h.name() + "` must return "
-                                + want.result() + " but returns " + got);
+            if (isOpen(want.result())) {
+                // The declared result still has a variable in it, so the shape around the variable is
+                // what there is to check: `'b?` accepts a block answering with an optional and rejects
+                // one answering with a plain value. Unifying also pins `'b` for the arguments after
+                // this one. A failure is reported as the mismatch it is, in written types.
+                try {
+                    unify(want.result(), got, bind, symbols, lambda.pos(), "block result");
+                } catch (CompileException mismatch) {
+                    throw blockReturnMismatch(h, paramName, want.result(), got, lambda.pos());
+                }
+                return;
+            }
+            if (!assignable(got, want.result(), symbols)) {
+                throw blockReturnMismatch(h, paramName, want.result(), got, lambda.pos());
             }
         } else if (arg instanceof Ast.Var v && env.get(v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
             throw CompileException.of(
@@ -2129,10 +2155,7 @@ public final class TypeChecker {
         switch (elem) {
             case Ast.PrimEnc p -> {
                 if (!elemType.equals(primType(p.kind()))) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.elemenc").title("check.codec.title")
-                                    .at(pos).args(p.kind().toString(), Type.show(elemType)).build(),
-                            "element encoder " + p.kind() + " does not match " + elemType);
+                    throw elemEncMismatch(Type.show(primType(p.kind())), elemType, pos);
                 }
             }
             case Ast.DataEnc d -> {
@@ -2141,13 +2164,38 @@ public final class TypeChecker {
                 boolean hasEncoder = (def instanceof Ast.Data dd && dd.encoder().isPresent())
                         || (def instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!elemType.equals(Type.ref(d.typeName())) || !hasEncoder) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.codec.elemenc").title("check.codec.title")
-                                    .at(pos).args("`" + d.typeName() + "`", Type.show(elemType)).build(),
-                            "element encoder `" + d.typeName() + "` does not match " + elemType);
+                    throw elemEncMismatch(d.typeName(), elemType, pos);
                 }
             }
+            // a collection element is itself a collection: descend both the encoder and the type
+            case Ast.ListElemEnc l -> {
+                if (!(elemType instanceof Type.ListOf lo)) {
+                    throw elemEncMismatch("List", elemType, pos);
+                }
+                checkEncElem(l.elem(), lo.element(), pos, symbols);
+            }
+            case Ast.SetElemEnc s -> {
+                if (!(elemType instanceof Type.SetOf so)) {
+                    throw elemEncMismatch("Set", elemType, pos);
+                }
+                checkEncElem(s.elem(), so.element(), pos, symbols);
+            }
+            case Ast.MapElemEnc m -> {
+                if (!(elemType instanceof Type.MapOf mo)) {
+                    throw elemEncMismatch("Map", elemType, pos);
+                }
+                checkEncElem(m.value(), mo.value(), pos, symbols);
+            }
         }
+    }
+
+    /** The element encoder and the element type disagree, both named as they are written — the
+     * encoder by the type it encodes (`String`, `商品ID`, `List`), the element by {@link Type#show}. */
+    private static CompileException elemEncMismatch(String encoder, Type elemType, SourcePos pos) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.codec.elemenc").title("check.codec.title")
+                        .at(pos).args("`" + encoder + "`", Type.show(elemType)).build(),
+                "element encoder `" + encoder + "` does not match " + Type.show(elemType));
     }
 
     // --- expression typing (shared with the backend) ---
