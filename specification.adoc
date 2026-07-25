@@ -1693,6 +1693,20 @@ match 出張申請 with
 
 Place `+with+` after the scrutinee and list cases one per `+|+` (the same form as F#). The leading `+|+` of the first case is optional. Braces are not used. Souther is layout-independent, so Elm's `+case ... of+` (indentation-dependent) is not adopted; only `+|+`-separated cases hold without layout.
 
+The one place layout decides anything is which match an arm belongs to. A `+match+` written in an arm's body is ended by a `+|+` that reaches back to the enclosing match's arm column; a `+|+` indented past it is the inner match's own arm.
+
+[,text]
+----
+match 精算 with
+    | 固定精算 { 予算枠 } ->
+        match 予算枠 with
+            | 範囲予算 { 上限 } -> ...      // 内側の match のアーム
+            | 未定予算          -> ...
+    | 時間精算 { 単価 } -> ...              // 外側の match に戻る
+----
+
+Nothing else reads indentation, and a misplaced arm cannot silently change meaning: a case is a named data (<<sum-data>>), and a name belongs to one data, so an arm that lands on the wrong match is a compile error naming the case and the sum. Where the two matches are on one line, the columns cannot separate them — write the inner one in a block (`+-> { match … }+`), which ends it explicitly.
+
 A case value is bound with `+as+` (the `+s+` in `+| 提出済み as s+` is 提出済み, read as `+s.提出日時+`). `+as+` binds the whole matched value.
 
 Fields may be bound directly with a destructuring pattern, the inverse of construction. It uses the same `+{ }+`, `+,+`, `+=+` as construction `+会員 { id = x }+`, and `+{ id }+` is shorthand for binding to a same-named variable (paired with <<record-literal>>). Write only the fields used. Destructuring is possible only for a single named case; an or-pattern (below) binds to a sum type and has no fields. It may be combined with `+as+`: `+| 会員 { id } as 全体+` binds both fields and the whole.

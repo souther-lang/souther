@@ -725,7 +725,9 @@ public final class ExampleVerifier {
             return null;
         }
         if (symbols.get(name) instanceof Ast.UnitData) {
-            return Map.of();
+            Map<String, Object> unit = new LinkedHashMap<>();
+            tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
+            return unit;
         }
         throw new FixtureException("`" + name + "` is not a value a fixture can name");
     }
@@ -770,7 +772,29 @@ public final class ExampleVerifier {
             }
             map.put(fi.name(), v);
         }
+        tagged(nd.typeName(), map);
         return map;
+    }
+
+    /**
+     * Writes the discriminator a sum's decoder reads, when the constructed data is a case of one.
+     * A fixture names the case it means — `予算枠 = 未定予算`, or a whole `プロジェクト依頼 { … }` where
+     * the parameter is the sum `依頼` — the same way the domain writes a construction, while the
+     * decoder that reads it wants a tag on a key. Where the case is read as itself rather than
+     * through its sum, the tag is a field the decoder does not look at.
+     */
+    private void tagged(String caseName, Map<String, Object> map) {
+        for (Ast.Def def : symbols.values()) {
+            if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
+                continue;
+            }
+            for (Ast.Variant variant : sum.decoder().get().variants()) {
+                if (variant.caseType().equals(caseName)) {
+                    map.put(sum.decoder().get().key(), variant.tag());
+                    return;
+                }
+            }
+        }
     }
 
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
