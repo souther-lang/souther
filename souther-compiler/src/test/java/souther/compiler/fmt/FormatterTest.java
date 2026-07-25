@@ -103,6 +103,24 @@ class FormatterTest {
                 "formatted output does not re-parse for " + source + ":\n" + formatted);
     }
 
+    /** A spread naming a field path keeps its path: `...c.address`, not `...c`. */
+    @Test
+    void aNestedSpreadPathSurvivesFormatting() {
+        String src = """
+                module demo
+
+                data Address = { city: String, street: String }
+                data Customer = { name: String, address: Address }
+
+                behavior move : (c: Customer, city: String) -> Customer constructs Customer, Address
+
+                let move (c, city) = Customer { ...c, address = Address { ...c.address, city = city } }
+                """;
+        String formatted = Formatter.format(src);
+        assertTrue(formatted.contains("...c.address"), formatted);
+        assertEquals(code(src), code(formatted));
+    }
+
     @Test
     void canonicalFormOfASmallModule() {
         String messy = "module demo\n\n\ndata Id=String\n  invariant length(value)>0\n"

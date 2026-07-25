@@ -1,10 +1,16 @@
 package souther.compiler;
 
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Character access without a {@code Char} type (Issue #52): a character is a length-1 {@code String}.
@@ -71,6 +77,24 @@ class CompileStringCharsTest {
         assertEquals(-1L, runInt(src, "parse", Map.of("s", "")));     // NotANumber
         assertEquals(-1L, runInt(src, "parse", Map.of("s", " 5")));   // surrounding space: NotANumber
         assertEquals(-1L, runInt(src, "parse", Map.of("s", "99999999999999999999")));  // > Int64: NotANumber
+    }
+
+    /** A wrong case name over the parse union names its members, not the type's internal form. */
+    @Test
+    void aWrongCaseOverTheParseUnionNamesItsMembers() {
+        String src = """
+                module demo
+                data In = { s: String }
+                data Out = Int
+                behavior parse : (i: In) -> Out constructs Out
+                let parse (i) = match String.toInt(i.s) with
+                    | Some n -> Out(n)
+                    | NotANumber -> Out(-1)
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        String rendered = new HumanRenderer(false).render(e.diagnostic(), null, Locale.ENGLISH);
+        assertTrue(rendered.contains("Int | NotANumber"), rendered);
+        assertFalse(rendered.contains("Union["), "internal type form leaked:\n" + rendered);
     }
 
     @Test

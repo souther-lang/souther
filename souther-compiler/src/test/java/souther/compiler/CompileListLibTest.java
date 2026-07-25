@@ -346,6 +346,53 @@ class CompileListLibTest {
         assertEquals(true, encode(loader, Codecs.apply(behavior, oneIn)).get("unique"));
     }
 
+    /** {@code take}/{@code drop} cut the list at an index (Elm's List.take / List.drop), clamping at
+     * both ends: a non-positive count takes nothing, a count past the end takes everything. */
+    @Test
+    void takeAndDropCutTheListAndClamp() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( take, drop )
+
+                data In = { ns: List<Int> }
+                data Out = {
+                    firstTwo: List<Int>
+                    , rest: List<Int>
+                    , none: List<Int>
+                    , all: List<Int>
+                    , beyond: List<Int>
+                    , dropAll: List<Int>
+                }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    firstTwo = take(2, i.ns),
+                    rest = drop(2, i.ns),
+                    none = take(0, i.ns),
+                    all = drop(0, i.ns),
+                    beyond = take(99, i.ns),
+                    dropAll = drop(99, i.ns)
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Map<?, ?> m = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of(1L, 2L, 3L, 4L))));
+
+        assertEquals(List.of(1L, 2L), m.get("firstTwo"));
+        assertEquals(List.of(3L, 4L), m.get("rest"));
+        assertEquals(List.of(), m.get("none"));
+        assertEquals(List.of(1L, 2L, 3L, 4L), m.get("all"));
+        assertEquals(List.of(1L, 2L, 3L, 4L), m.get("beyond"), "a count past the end takes everything");
+        assertEquals(List.of(), m.get("dropAll"), "dropping past the end leaves nothing");
+
+        // a negative count behaves as 0 on both sides, and an empty input stays empty
+        Map<?, ?> neg = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of())));
+        assertEquals(List.of(), neg.get("firstTwo"));
+        assertEquals(List.of(), neg.get("rest"));
+    }
+
     private static Object decodeIn(BytesClassLoader loader, List<Long> ns) throws Exception {
         return Codecs.decoded(loader, "demo.In", Map.of("ns", ns));
     }

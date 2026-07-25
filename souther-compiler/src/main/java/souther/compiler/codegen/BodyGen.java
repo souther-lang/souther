@@ -821,7 +821,8 @@ final class BodyGen {
                     // find(p, xs) / sortBy(key, xs): the function is a value here (not inlined into a
                     // fold), so materialise it as an Fn, then pass the list. The list's element type
                     // gives the function's one parameter type.
-                    Type lt = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnv(), data, symbols, reqSigs());
+                    Type lt = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnvWithHelpers(),
+                            data, symbols, reqSigs());
                     Type elem = ((Type.ListOf) lt).element();
                     emitFunctionValue(call.args().get(0).toAst(), List.of(elem));   // Fn on the stack
                     genExpr(call.args().get(1));                                    // then the List
@@ -836,7 +837,8 @@ final class BodyGen {
                     // map(f, opt): materialise f as an Fn (its one parameter is the option's element
                     // type), then the option. `Option` is not surface-writable, so the rewrap into
                     // Some(f v) / None happens in the runtime kernel (Option.map), not in emitted code.
-                    Type ot = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnv(), data, symbols, reqSigs());
+                    Type ot = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnvWithHelpers(),
+                            data, symbols, reqSigs());
                     Type elem = ((Type.OptionOf) ot).element();
                     Type fnT = emitFunctionValue(call.args().get(0).toAst(), List.of(elem));  // Fn on the stack
                     genExpr(call.args().get(1));                                              // then the Option
@@ -860,6 +862,15 @@ final class BodyGen {
                 case "Set.empty" -> {
                     code.invokestatic(CD_Sets, "empty", MethodTypeDesc.of(CD_Set));
                     return expected instanceof Type.SetOf se ? se : Type.set(Type.NOTHING);
+                }
+                case "Date", "DateTime" -> {
+                    // a written date: the checker has already parsed the literal, so the text is
+                    // known good and this is a plain parse of a constant string.
+                    boolean isDate = call.fn().equals("Date");
+                    ClassDesc cd = isDate ? CD_LocalDate : CD_LocalDateTime;
+                    code.loadConstant(((Core.Str) call.args().get(0)).value());
+                    code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
+                    return isDate ? Type.DATE : Type.DATETIME;
                 }
                 case "Int.divide", "Decimal.divide" -> {
                     if (call.args().size() == 4) {

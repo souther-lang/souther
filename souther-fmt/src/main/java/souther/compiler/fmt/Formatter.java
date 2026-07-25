@@ -581,7 +581,7 @@ public final class Formatter {
         List<Doc> members = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
-                members.add(concat(text("..."), text(firstIdent(c))));
+                members.add(concat(text("..."), text(identPath(c))));   // `...c` or `...c.address`
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 var value = firstExprChildOpt(c);
                 members.add(value.map(v -> concat(text(firstIdent(c)), text(" = "), expr(v)))
@@ -742,6 +742,20 @@ public final class Formatter {
             }
         }
         return out;
+    }
+
+    /** Every identifier of a node, dotted — a spread's field path ({@code c.address}). */
+    private String identPath(SyntaxNode n) {
+        List<String> parts = new ArrayList<>();
+        for (SyntaxElement e : n.children()) {
+            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+                parts.add(t.text());
+            }
+        }
+        if (parts.isEmpty()) {
+            throw new IllegalStateException("no identifier in " + n.kind());
+        }
+        return String.join(".", parts);
     }
 
     private String firstIdent(SyntaxNode n) {

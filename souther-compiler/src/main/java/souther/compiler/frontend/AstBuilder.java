@@ -32,6 +32,7 @@ public final class AstBuilder {
     private int matchWholeCounter = 0;
     private int tupleCounter = 0;
     private int getterCounter = 0;
+    private int spreadCounter = 0;
 
     private AstBuilder(String source) {
         this.lines = new LineIndex(source);
@@ -581,9 +582,25 @@ public final class AstBuilder {
         String typeName = firstIdentText(n);
         List<Ast.FieldInit> inits = new ArrayList<>();
         List<String> spreads = new ArrayList<>();
+        // a spread naming a field path (`...c.address`) binds that path first, so the construction
+        // itself still spreads a plain local: `let $s0 = c.address in Address { ...$s0, ... }`
+        List<String> pathNames = new ArrayList<>();
+        List<Ast.Expr> pathValues = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
-                spreads.add(firstIdentText(c));
+                List<SyntaxToken> path = identTokens(c);
+                if (path.size() == 1) {
+                    spreads.add(path.get(0).text());
+                } else {
+                    String bound = "$s" + (spreadCounter++);
+                    Ast.Expr value = new Ast.Var(path.get(0).text(), posOf(path.get(0)));
+                    for (int i = 1; i < path.size(); i++) {
+                        value = new Ast.FieldAccess(value, path.get(i).text(), posOf(path.get(i)));
+                    }
+                    pathNames.add(bound);
+                    pathValues.add(value);
+                    spreads.add(bound);
+                }
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 String field = firstIdentText(c);
                 Optional<SyntaxNode> value = firstExprChildOpt(c);
@@ -593,7 +610,11 @@ public final class AstBuilder {
                 inits.add(new Ast.FieldInit(field, v, pos(c)));
             }
         }
-        return new Ast.NewData(typeName, inits, spreads, pos(n));
+        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, pos(n));
+        for (int i = pathNames.size() - 1; i >= 0; i--) {
+            built = new Ast.LetIn(pathNames.get(i), pathValues.get(i), built, pos(n));
+        }
+        return built;
     }
 
     private Ast.Expr matchExpr(SyntaxNode n) {

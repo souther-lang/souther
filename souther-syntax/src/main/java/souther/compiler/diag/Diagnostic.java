@@ -129,7 +129,21 @@ public record Diagnostic(Severity severity,
 
         public Diagnostic build() {
             return new Diagnostic(severity, code, titleKey, region, List.copyOf(secondary),
-                    messageKey, args, null, diff, List.copyOf(notes), suggestion);
+                    messageKey, args, null, diff, List.copyOf(withMessageArgs(notes)), suggestion);
+        }
+
+        /** A hint's text is written against the same numbered arguments as the message it follows
+         * ({@code Add `constructs {1}` to `{0}`}), so a site that names the hint without repeating
+         * them takes the message's. A hint given arguments of its own keeps them. */
+        private List<Note> withMessageArgs(List<Note> notes) {
+            if (args.length == 0) {
+                return notes;
+            }
+            List<Note> filled = new ArrayList<>(notes.size());
+            for (Note n : notes) {
+                filled.add(n.args().length == 0 ? new Note(n.messageKey(), args) : n);
+            }
+            return filled;
         }
     }
 }

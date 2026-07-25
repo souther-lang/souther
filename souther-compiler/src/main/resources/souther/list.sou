@@ -57,6 +57,28 @@ let concat (xss: List<List<'a>>) = List.fold((acc, xs) -> acc ++ xs, [], xss)
 let member (e: 'a, xs: List<'a>) = List.fold((acc, x) -> acc || x == e, false, xs)
 let isEmpty (xs: List<'a>) = List.length(xs) == 0
 
+// `take` keeps the first `n` elements and `drop` skips them (Elm's `List.take` / `List.drop`). Both
+// clamp rather than fail: a count of 0 or less takes nothing / drops nothing, and a count past the
+// end takes the whole list / leaves it empty. They thread the same `(i, ys)` pair accumulator
+// `indexedMap` uses, keeping the elements whose index falls on the wanted side of `n`.
+let take (n: Int, xs: List<'a>) = {
+    let (_, out) = List.fold((acc, x) -> {
+        let (i, ys) = acc
+        let next = i + 1
+        if i < n then (next, ys ++ [x]) else (next, ys)
+    }, (0, []), xs)
+    out
+}
+
+let drop (n: Int, xs: List<'a>) = {
+    let (_, out) = List.fold((acc, x) -> {
+        let (i, ys) = acc
+        let next = i + 1
+        if i >= n then (next, ys ++ [x]) else (next, ys)
+    }, (0, []), xs)
+    out
+}
+
 // `distinct` keeps the first occurrence of each element and drops later duplicates, comparing by
 // value equality (Elm's List.Extra `unique`). It folds a pair of a `Set` of the elements seen so far
 // and the result list: an element already in the set is skipped, otherwise it joins both. Consulting

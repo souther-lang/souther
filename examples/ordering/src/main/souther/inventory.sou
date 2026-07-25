@@ -152,3 +152,36 @@ example putAway
     | "a passed item is put away to a shelf" :
         (InspectionPassed { code = Barcode("9784873115658") }, Location("A-03-12"))
             -> PutAwayRecord { code = Barcode("9784873115658"), location = Location("A-03-12") }
+
+// === checkExpiry: a lot past its best-before date is held back ===
+// The warehouse stores dated lots. Whether a lot may ship today is a pure calendar computation —
+// `Date.daysBetween` over the lot's best-before date — so it stays in the domain rather than becoming
+// an injected behavior; only reading *today* needs the outside world, and it arrives as an input.
+// A date is written `Date("2026-07-25")`, in a body or in a fixture, so the rule is fixed by its
+// examples like any other.
+data Lot =
+    { sku: Sku
+    , bestBefore: Date
+    }
+data Fresh = { sku: Sku }
+data Expired = { daysPast: Int }
+
+behavior checkExpiry : (lot: Lot, today: Date) -> Fresh | Expired
+    constructs Fresh, Expired
+
+let checkExpiry (lot, today) = {
+    let past = Date.daysBetween(lot.bestBefore, today)
+    require past <= 0 else Expired { daysPast = past }
+    Fresh { sku = lot.sku }
+}
+
+example checkExpiry
+    | "a lot still within date ships" :
+        (Lot { sku = Sku("milk"), bestBefore = Date("2026-08-01") }, Date("2026-07-25"))
+            -> Fresh { sku = Sku("milk") }
+    | "a lot past its best-before is held back" :
+        (Lot { sku = Sku("milk"), bestBefore = Date("2026-07-20") }, Date("2026-07-25"))
+            -> Expired { daysPast = 5 }
+    | "the best-before day itself still ships" :
+        (Lot { sku = Sku("milk"), bestBefore = Date("2026-07-25") }, Date("2026-07-25"))
+            -> Fresh { sku = Sku("milk") }

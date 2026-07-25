@@ -750,10 +750,33 @@ public final class TypeChecker {
         }
         for (int i = 0; i < declared.size(); i++) {
             if (declared.get(i) instanceof Type.FnOf fn0) {
-                checkFunctionArg(h, h.params().get(i).name(), (Type.FnOf) substitute(fn0, bind),
+                Type.FnOf want = (Type.FnOf) substitute(fn0, bind);
+                if (carriesBottom(want)) {
+                    // An empty-collection seed ([], Map.empty) binds the accumulator to a bottom, and
+                    // the step is what grows it to the concrete type — exactly the shape a fold over
+                    // an empty seed has (`Map.fold(step, [], m)`). Nothing concrete to check against
+                    // here; the inlined check, which sees the expected type pushed down, decides.
+                    continue;
+                }
+                checkFunctionArg(h, h.params().get(i).name(), want,
                         call.args().get(i), env, symbols, reqs, inliner);
             }
         }
+    }
+
+    /** Whether a step's signature still carries an empty-collection bottom in a parameter or in its
+     * result — the accumulator of a fold seeded with {@code []} / {@code Map.empty()}, which only the
+     * step itself grows to a concrete type. */
+    private static boolean carriesBottom(Type.FnOf fn) {
+        if (Type.mentions(fn.result(), TypeChecker::isBottom)) {
+            return true;
+        }
+        for (Type p : fn.params()) {
+            if (Type.mentions(p, TypeChecker::isBottom)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static void checkFunctionArg(Ast.FnDef h, String paramName, Type.FnOf want, Ast.Expr arg,
@@ -2478,7 +2501,8 @@ public final class TypeChecker {
             return typeOfOptionMatch(m, oo.element(), env, data, symbols, reqs, expected);
         }
         if (st instanceof Type.Union union) {
-            return typeOfCasesMatch(m, union.members(), "union " + union, st, env, data, symbols, reqs, expected);
+            return typeOfCasesMatch(m, union.members(), "union `" + Type.show(union) + "`",
+                    st, env, data, symbols, reqs, expected);
         }
         if (!(st instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.SumData sum)) {
             throw CompileException.of(
@@ -2885,6 +2909,10 @@ public final class TypeChecker {
                 arity(call, 0);
                 // empty set's element type fixed by context (ADR-0028); adopt an expected set type
                 yield expected instanceof Type.SetOf se ? se : Type.set(Type.NOTHING);
+            }
+            case "Date", "DateTime" -> {
+                arity(call, 1);
+                yield temporalLiteral(call);
             }
             case "Int.remainder" -> {
                 arity(call, 2);
@@ -3682,6 +3710,40 @@ public final class TypeChecker {
                         .args(subject, Localizable.of("kind.ordered.list"), Type.show(element))
                         .hint("check.ordered.hint").build(),
                 legacy);
+    }
+
+    /** A written date — {@code Date("2026-07-01")} / {@code DateTime("2026-07-01T09:00")}. The
+     * argument must be a string literal: the compiler parses it here, so a malformed date fails the
+     * build rather than a run (and an {@code example} fixture, which may only hold literals, can
+     * carry a date at all). A computed date comes from the boundary or from {@code Date.addDays},
+     * not from this form. */
+    private static Type temporalLiteral(Ast.Call call) {
+        boolean isDate = call.fn().equals("Date");
+        if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.temporal.literal").title("check.type.mismatch.title")
+                            .at(call.pos(), call.fn().length()).args(call.fn()).build(),
+                    "`" + call.fn() + "(...)` takes a written string, e.g. "
+                            + (isDate ? "Date(\"2026-07-01\")" : "DateTime(\"2026-07-01T09:00\")"));
+        }
+        parseTemporal(call.fn(), lit.value(), call.pos());
+        return isDate ? Type.DATE : Type.DATETIME;
+    }
+
+    /** Parses a written temporal, reporting a malformed one against {@code pos}. Returns the parsed
+     * value so the backend and the example verifier share this one reading of the text. */
+    public static Object parseTemporal(String fn, String text, SourcePos pos) {
+        try {
+            return fn.equals("Date")
+                    ? java.time.LocalDate.parse(text)
+                    : java.time.LocalDateTime.parse(text);
+        } catch (java.time.format.DateTimeParseException e) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.temporal.malformed").title("check.type.mismatch.title")
+                            .at(pos, fn.length()).args(fn, text).build(),
+                    "`" + text + "` is not a " + fn + " (expected "
+                            + (fn.equals("Date") ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm[:ss]") + ")");
+        }
     }
 
     private static void arity(Ast.Call call, int n) {
