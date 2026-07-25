@@ -365,11 +365,36 @@ public interface Ast {
      * {@code let name = value} followed by {@code body} — what a body's {@code let} desugars to
      * (spec 16.1). Nesting the rest of the body inside keeps {@code value} from being evaluated
      * when an enclosing {@code if} (a desugared {@code require}) takes the other branch.
+     *
+     * <p>{@code declaredType} is the binding's declared type, if any, and {@code annotated} says
+     * where it came from. A source annotation ({@code let x: T = e}) is pushed into {@code value}
+     * as its expected type and checked against it, so a value only context can type — an empty
+     * collection — is pinned at the binding. A type supplied by helper inlining (the parameter's
+     * declared type, bound to the argument at the call site) is not: the argument's own type and
+     * the call-site check already cover it.
      */
-    record LetIn(String name, Expr value, ParamType declaredType, Expr body, SourcePos pos) implements Expr {
+    record LetIn(String name, Expr value, ParamType declaredType, boolean annotated, Expr body,
+                 SourcePos pos) implements Expr {
         /** An ordinary {@code let x = e}: the bound name takes {@code e}'s inferred type. */
         public LetIn(String name, Expr value, Expr body, SourcePos pos) {
-            this(name, value, null, body, pos);
+            this(name, value, null, false, body, pos);
+        }
+
+        /** A binding carrying an inlined helper parameter's declared type. */
+        public LetIn(String name, Expr value, ParamType declaredType, Expr body, SourcePos pos) {
+            this(name, value, declaredType, false, body, pos);
+        }
+
+        /** {@code let x: T = value} — a binding the source annotated. */
+        public static LetIn annotated(String name, Expr value, RetType type, Expr body, SourcePos pos) {
+            return new LetIn(name, value, type, true, body, pos);
+        }
+
+        /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
+         * ordinary type (a function type belongs only in a helper's parameter), so this is the one
+         * place that narrows {@code declaredType}, and a carrier from inlining never reads as one. */
+        public RetType annotation() {
+            return annotated && declaredType instanceof RetType rt ? rt : null;
         }
     }
 
@@ -459,7 +484,8 @@ public interface Ast {
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
             case Call c -> new Call(c.fn(), mapExprs(c.args(), f), c.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
-            case LetIn li -> new LetIn(li.name(), f.apply(li.value()), li.declaredType(), f.apply(li.body()), li.pos());
+            case LetIn li -> new LetIn(li.name(), f.apply(li.value()), li.declaredType(), li.annotated(),
+                    f.apply(li.body()), li.pos());
             case Block bl -> new Block(bl.params(), f.apply(bl.body()), bl.pos());
             case ListLit l -> new ListLit(mapExprs(l.elements(), f), l.pos());
             case ListComp comp -> new ListComp(f.apply(comp.element()), mapExprs(comp.guards(), f), comp.pos());

@@ -42,7 +42,10 @@ public sealed interface Core {
             case Binary b -> new Ast.Binary(b.op(), b.left().toAst(), b.right().toAst(), b.pos());
             case Call c -> new Ast.Call(c.fn(), toAstAll(c.args()), c.pos());
             case If iff -> new Ast.If(iff.cond().toAst(), iff.then().toAst(), iff.els().toAst(), iff.pos());
-            case LetIn li -> new Ast.LetIn(li.name(), li.value().toAst(), li.body().toAst(), li.pos());
+            case LetIn li -> li.annotation() == null
+                    ? new Ast.LetIn(li.name(), li.value().toAst(), li.body().toAst(), li.pos())
+                    : Ast.LetIn.annotated(li.name(), li.value().toAst(), li.annotation(),
+                            li.body().toAst(), li.pos());
             case Block bl -> new Ast.Block(bl.params(), bl.body().toAst(), bl.pos());
             case ListLit l -> new Ast.ListLit(toAstAll(l.elements()), l.pos());
             case Tuple t -> new Ast.Tuple(toAstAll(t.elements()), t.pos());
@@ -93,7 +96,17 @@ public sealed interface Core {
 
     record If(Core cond, Core then, Core els, SourcePos pos) implements Core {}
 
-    record LetIn(String name, Core value, Core body, SourcePos pos) implements Core {}
+    /** {@code annotation} is the type the source wrote on the binding ({@code let x: T = e}), or null.
+     * Core carries no types of its own; this is the written annotation, kept so the backend materialises
+     * an empty-collection value at the type the checker pinned it to rather than re-deriving a bottom.
+     * A type that helper inlining put on a binding is not an annotation and does not come along. */
+    record LetIn(String name, Core value, Ast.RetType annotation, Core body, SourcePos pos)
+            implements Core {
+
+        LetIn(String name, Core value, Core body, SourcePos pos) {
+            this(name, value, null, body, pos);
+        }
+    }
 
     /** A second-class block: a step passed to a recursive combinator, or an escaping lambda a {@code
      * let} binds (a closure). Kept as its own node until closure conversion gets an explicit Core form. */
@@ -129,7 +142,7 @@ public sealed interface Core {
             case Ast.FieldAccess fa -> new FieldAccess(of(fa.target()), fa.field(), fa.pos());
             case Ast.Binary b -> new Binary(b.op(), of(b.left()), of(b.right()), b.pos());
             case Ast.If iff -> new If(of(iff.cond()), of(iff.then()), of(iff.els()), iff.pos());
-            case Ast.LetIn li -> new LetIn(li.name(), of(li.value()), of(li.body()), li.pos());
+            case Ast.LetIn li -> new LetIn(li.name(), of(li.value()), li.annotation(), of(li.body()), li.pos());
             case Ast.Block bl -> new Block(bl.params(), of(bl.body()), bl.pos());
             case Ast.ListLit l -> new ListLit(ofAll(l.elements()), l.pos());
             case Ast.Tuple t -> new Tuple(ofAll(t.elements()), t.pos());

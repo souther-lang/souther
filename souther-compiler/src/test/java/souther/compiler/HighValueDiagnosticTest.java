@@ -73,10 +73,11 @@ class HighValueDiagnosticTest {
 
     @Test
     void foldOverEmptySeedWithNoContextPointsAtTheSeed() {
-        // No expected type reaches the fold (its value is bound to an un-annotated local, which
-        // Souther does not let you annotate), so the accumulator's value type is genuinely
-        // unknown. The error must point at the empty seed and suggest annotating, not at the
-        // arithmetic deep inside the inlined Map.upsert (issue #70, the misleading-location half).
+        // No expected type reaches the fold: its value is bound to a local the source left
+        // un-annotated, so the accumulator's value type is genuinely unknown. The error must point at
+        // the empty seed and say how to type it — annotate the binding (issue #71) or move the fold
+        // into a typed position — not at the arithmetic deep inside the inlined Map.upsert (issue #70,
+        // the misleading-location half).
         Diagnostic d = diagnosticOf("""
                 module demo
                 import List ( fold )

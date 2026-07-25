@@ -733,8 +733,14 @@ public final class AstBuilder {
         SyntaxNode s = stmts.get(index);
         SourcePos pos = pos(s);
         return switch (s.kind()) {
-            case LET_STMT -> new Ast.LetIn(firstIdentText(s), expr(onlyExpr(s)),
-                    foldStatements(stmts, index + 1, result), pos);
+            case LET_STMT -> {
+                Ast.RetType annotation = s.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
+                Ast.Expr value = expr(onlyExpr(s));
+                Ast.Expr rest = foldStatements(stmts, index + 1, result);
+                yield annotation == null
+                        ? new Ast.LetIn(firstIdentText(s), value, rest, pos)
+                        : Ast.LetIn.annotated(firstIdentText(s), value, annotation, rest, pos);
+            }
             case REQUIRE_STMT -> {
                 List<SyntaxNode> exprs = exprChildren(s);
                 yield new Ast.If(expr(exprs.get(0)), foldStatements(stmts, index + 1, result),

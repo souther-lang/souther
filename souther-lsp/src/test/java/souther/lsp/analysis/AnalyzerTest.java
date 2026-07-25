@@ -330,6 +330,30 @@ class AnalyzerTest {
     }
 
     @Test
+    void renameEditsIncludeATypeWrittenOnALocalBinding() {
+        // a local binding may carry a type annotation (issue #71); renaming the type must reach it,
+        // or the rename leaves a dangling name in the body.
+        String a = "module a\n"
+                + "data N = { v: Int }\n"
+                + "behavior f : (n: N) -> N\n"
+                + "let f (n) = {\n"
+                + "let kept: N = n\n"
+                + "kept\n"
+                + "}\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        // cursor on the `data N` declaration (line 1, char 5)
+        java.util.Map<String, List<Range>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+
+        java.util.Set<Integer> lines = new java.util.HashSet<>();
+        for (Range r : edits.get("file:///a.sou")) {
+            lines.add(r.start().line());
+        }
+        assertTrue(lines.contains(4), "the annotation on line 4 is renamed: " + lines);
+    }
+
+    @Test
     void renameEditsIncludeExposingAndImportBindingSites() {
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";
         String b = "module b\nimport a ( N )\nbehavior f : (n: N) -> N\nlet f (n) = n\n";
