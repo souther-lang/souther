@@ -58,6 +58,17 @@ public final class Backend {
         this.checked = checked;
     }
 
+    /** The body the checker elaborated for {@code name}. Codegen runs only on a module that type
+     * checked, and the check elaborates every body the backend emits, so a missing one is a compiler
+     * invariant violation rather than something to emit around. */
+    private static Core elaborated(Map<String, Core> bodies, String name) {
+        Core body = bodies.get(name);
+        if (body == null) {
+            throw new IllegalStateException("no elaborated body for `" + name + "`");
+        }
+        return body;
+    }
+
     /** {@code ACC_PUBLIC} when the name is exposed (or the module exposes all), else 0. */
     private int pub(String name) {
         return ctx.pub(name);
@@ -311,7 +322,7 @@ public final class Backend {
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
-                    gen.emitTail(checked.recursiveHelpers().get(h.name()),
+                    gen.emitTail(elaborated(checked.recursiveHelpers(), h.name()),
                             cdFns, Set.of(), Map.of(), helperReturn);
                 });
             }
@@ -698,7 +709,7 @@ public final class Backend {
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
-                gen.emitTail(checked.behaviorBodies().get(fn.name()),
+                gen.emitTail(elaborated(checked.behaviorBodies(), fn.name()),
                         cdB, requiredNames, requiredSuccess, successType(spec.ret()));
             });
             if (n != 1) {

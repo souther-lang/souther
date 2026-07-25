@@ -454,10 +454,16 @@ public final class TypeChecker {
             // inlined at its call sites and never emitted on its own, so its standalone check expands
             // its body here; a recursive helper hides its own parameters from helper resolution while
             // that expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
-            Ast.Expr lowered = recursive ? loweredBodies.get(h.name()) : null;
             Ast.Expr body = recursive
-                    ? (lowered != null ? lowered : inliner.inlineRecursiveBody(h))
+                    ? loweredBodies.get(h.name())
                     : inliner.inline(h.body());
+            if (recursive && body == null) {
+                // Lower keeps every recursive helper as a fn of the lowered module, and the backend
+                // emits from that same list, so a recursive helper without a lowered body would leave
+                // the backend a method to emit and no elaborated body to emit it from.
+                throw new IllegalStateException(
+                        "recursive helper `" + h.name() + "` has no lowered body");
+            }
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
@@ -479,8 +485,8 @@ public final class TypeChecker {
             Type declaredReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn(), symbols);
             Core elaboratedBody = elaborate(body, tenv, null, symbols, reqSigs, declaredReturn);
             Type bodyType = elaboratedBody.type();
-            if (lowered != null) {
-                elaborated.helpers.put(h.name(), elaboratedBody);
+            if (recursive) {
+                elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored.
@@ -2361,8 +2367,9 @@ public final class TypeChecker {
                 yield new Core.ListLit(elements, Type.list(elem), lit.pos());
             }
             case Ast.ListComp comp -> {
-                // A comprehension never reaches the backend — the Lower stage rewrites it to an `if`
-                // before a body is emitted. It still types here, on the pre-lowering paths (a helper's
+                // A comprehension never reaches the backend: the Lower stage rewrites it to an `if`
+                // before a body is emitted, and the codec emitters desugar the expression they hold
+                // before elaborating it. It still types here, on the pre-lowering paths (a helper's
                 // standalone check), so the node produced is a type carrier, not something to emit.
                 for (Ast.Expr g : comp.guards()) {
                     requireType(g, Type.BOOL, env, data, symbols, reqs, "guard of a comprehension");

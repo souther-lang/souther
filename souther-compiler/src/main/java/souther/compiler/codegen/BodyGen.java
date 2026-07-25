@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.diag.CompileException;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Lower;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
@@ -149,10 +150,13 @@ final class BodyGen {
         }
 
         /** Elaborates an AST expression at this body's environment — the codec emitters hold AST and
-         * build the Core nodes they pass back in. {@code expected} is the type the position wants, as
-         * the checker pushes a field's declared type into its initialiser. */
+         * build the Core nodes they pass back in. It is desugared first, by the same Lower rewrite a
+         * body gets, so a surface form with no Core node of its own (a comprehension) reaches the
+         * emitter in the shape it emits from. {@code expected} is the type the position wants, as the
+         * checker pushes a field's declared type into its initialiser. */
         Core elaborate(Ast.Expr e, Type expected) {
-            return TypeChecker.elaborate(e, typesEnvWithHelpers(), data, symbols, reqSigs(), expected);
+            return TypeChecker.elaborate(Lower.desugarExpr(e), typesEnvWithHelpers(), data, symbols,
+                    reqSigs(), expected);
         }
 
         private void emitFieldRead(CodeBuilder code, String ownerName, String field, Type ft) {

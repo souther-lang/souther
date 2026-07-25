@@ -65,6 +65,13 @@ public final class Lower {
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
+    /** Desugars one expression the way a body is desugared, for the paths that hold a single
+     * expression rather than a module: the codec emitters, whose decoders and encoders are still
+     * AST-level, run their expressions through this before they are typed and emitted. */
+    public static Ast.Expr desugarExpr(Ast.Expr e) {
+        return desugar(e);
+    }
+
     /** Post-order rewrite: desugar the children first, then the node itself if it is a comprehension. */
     private static Ast.Expr desugar(Ast.Expr e) {
         Ast.Expr mapped = Ast.mapChildren(e, Lower::desugar);
