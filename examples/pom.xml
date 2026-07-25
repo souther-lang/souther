@@ -17,7 +17,7 @@
 
     <modules>
         <module>contact</module>
-        <module>tagging</module>
+        <module>issuetracker</module>
         <module>businesstrip</module>
         <module>member</module>
         <module>ordering</module>

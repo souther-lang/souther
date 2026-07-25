@@ -1,7 +1,7 @@
-// A small issue tracker, and the showcase for the Set and Map stdlib modules plus Option
-// destructuring. It grew out of a thinner "tag normalization" example: that string-editing core
-// survives as normalizeLabels (split / trim / lowercase over souther.string), but where the old
-// version only sorted to group duplicate tags, a Set now removes them outright.
+// A small issue tracker: issues carry a Set of labels and an optional assignee, and the label
+// operations are read → transform → write over a database. It is the showcase for the Set and Map
+// stdlib modules plus Option destructuring, and — on the boundary side — for a Kotlin + Spring Boot
+// app driving the generated types (ordering does the same in Java, account in Clojure).
 //
 // The features on show:
 //   - Set<Label> as a data field (labels): the derived codec reads a JSON array and dedups it into a
@@ -12,14 +12,21 @@
 //     List.sortBy / reverse and cut with List.take.
 //   - Some(Assignee(name)) destructuring: assigneeOf opens the optional assignee's newtype in one
 //     match pattern (the outermost .value elided), with a None arm for the unassigned case.
+//   - Three injected behaviors (findIssue / createIssue / storeLabels) with no `let`: the database is
+//     outside, so the implementation comes from the boundary. The composed openIssue / attachLabel /
+//     detachLabel `require` them, which is what makes their sequencing checkable with `fake` +
+//     `example` — no database involved at compile time.
 //
-// The behaviors are pure, so there is no `fake`, and every one of them carries its `example`s: a Set
-// is written as a list (duplicates collapse on decode, as they do at the boundary), a Map as its list
-// of (key, value) pairs, and an optional as the bare value or `None`. The JUnit smoke test still runs
-// one behavior end to end, decoding JSON (arrays -> Set, objects -> Map) through the derived codecs.
+// The label text editing this example grew out of survives as the `cleaned` helper (split / trim /
+// lowercase over souther.string): openIssue takes a raw comma-separated string and turns it into the
+// label Set, reporting NoLabels when nothing survives.
 //
-// exposing is omitted, so every generated class is public — the smoke test references them by name.
-module example.tagging
+// Fixture notation: a Set is written as a list (duplicates collapse on decode, as they do at the
+// boundary), a Map as its list of (key, value) pairs, and an optional as the bare value or `None`.
+//
+// exposing is omitted, so every generated class is public — the Kotlin boundary references them by
+// name.
+module example.issuetracker
 import String ( split, trim, lowercase )
 import List ( map, filter, fold )
 
@@ -40,17 +47,39 @@ data Issue =
 // A board is just the issues; countByLabel folds over it.
 data Board = { issues: List<Issue> }
 
-// === normalizeLabels: raw text -> a deduplicated label set ===
-// The string-editing heritage: split on comma, trim + lowercase each piece, drop empties, wrap each
-// as a Label, then Set.fromList to remove duplicates. Empty input (or all-blank) has no labels.
-data RawLabels = { text: String }
-data LabelSet = { labels: Set<Label> }
+// The domain failure of a lookup by id. A unit data (no fields): the injected implementation builds it
+// through the protected factory it inherits. A platform failure (database down) is not this — it is an
+// exception the boundary throws and Souther passes through (ADR-0029).
+data IssueNotFound
+
+// === the injected database behaviors ===
+// No `let`, so the implementation is injected. An injected behavior's declaration is the input to
+// factory generation, so it writes `constructs` for the cases it has to build itself; a value it reads
+// out of the database (an Issue) is built through the public derived decoder instead.
+behavior findIssue : (id: IssueId) -> Issue | IssueNotFound
+    constructs IssueNotFound
+
+// Inserts a new issue and returns it as stored.
+behavior createIssue : (issue: Issue) -> Issue
+
+// Writes an existing issue's label set back and returns it as stored.
+behavior storeLabels : (issue: Issue) -> Issue
+
+// === openIssue: raw label text -> a stored issue ===
+// The string-editing heritage: split on comma, trim + lowercase each piece, drop empties, wrap each as
+// a Label, then Set.fromList to remove duplicates. Nothing surviving means NoLabels and no write.
+data NewIssue =
+    { id: IssueId
+    , title: String
+    , labels: String
+    , assignee: Assignee?
+    }
 data NoLabels
 
-behavior normalizeLabels : (input: RawLabels) -> LabelSet | NoLabels
-    constructs LabelSet, NoLabels, Label
+behavior openIssue : (draft: NewIssue) -> Issue | NoLabels
+    requires createIssue
 
-// One raw string to the cleaned, non-empty label list (still a List here; the Set comes next).
+// One raw string to the cleaned, non-empty labels (still a List here; the Set comes next).
 let cleaned (text: String): List<Label> =
     text
         |> split(",")
@@ -58,50 +87,92 @@ let cleaned (text: String): List<Label> =
         |> filter(piece -> String.length(piece) >= 1)
         |> map(piece -> Label(piece))
 
-let normalizeLabels (input) = {
-    let labels = Set.fromList(cleaned(input.text))
+let openIssue (draft, createIssue) = {
+    let labels = Set.fromList(cleaned(draft.labels))
     require Set.size(labels) >= 1 else NoLabels
-    LabelSet { labels = labels }
+    createIssue(Issue { id = draft.id, title = draft.title, labels = labels, assignee = draft.assignee })
 }
 
-example normalizeLabels
-    | "case and spacing collapse into one label" :
-        (RawLabels { text = "Bug, bug , UI" })
-            -> LabelSet { labels = [ Label("bug"), Label("ui") ] }
-    | "blank pieces leave no labels" : (RawLabels { text = " , " }) -> NoLabels
+fake createIssue
+    | _ -> Issue { id = IssueId("i-1"), title = "crash on save",
+        labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
 
-// === addLabel / removeLabel: Set insert / remove on the labels field ===
-// Constructor spread reuses every other field; only labels changes.
-behavior addLabel : (issue: Issue, label: Label) -> Issue
-    constructs Issue
-let addLabel (issue, label) = Issue { ...issue, labels = Set.insert(label, issue.labels) }
-
-behavior removeLabel : (issue: Issue, label: Label) -> Issue
-    constructs Issue
-let removeLabel (issue, label) = Issue { ...issue, labels = Set.remove(label, issue.labels) }
-
-// A Set fixture is a list; adding a label already carried leaves the set as it was, and the optional
-// assignee is written bare (present) or as `None`.
-example addLabel
-    | "a new label joins the set" :
-        (Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug") ],
-            assignee = "kawasima" }, Label("ui"))
+example openIssue
+    | "case and spacing collapse into one label, and the issue is stored" :
+        (NewIssue { id = IssueId("i-1"), title = "crash on save", labels = "Bug, bug , UI",
+            assignee = "kawasima" })
         -> Issue { id = IssueId("i-1"), title = "crash on save",
             labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
-    | "a label already carried changes nothing" :
-        (Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug") ],
-            assignee = None }, Label("bug"))
-        -> Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug") ],
-            assignee = None }
+    | "blank pieces leave no labels, so nothing is written" :
+        (NewIssue { id = IssueId("i-2"), title = "whitespace", labels = " , ", assignee = None })
+        -> NoLabels
 
-example removeLabel
-    | "the label leaves the set" :
-        (Issue { id = IssueId("i-1"), title = "crash on save",
-            labels = [ Label("bug"), Label("ui") ], assignee = None }, Label("ui"))
-        -> Issue { id = IssueId("i-1"), title = "crash on save", labels = [ Label("bug") ],
-            assignee = None }
+// === attachLabel / detachLabel: read the issue, change its label set, write it back ===
+// Set insert / remove on the labels field, with constructor spread reusing every other field. Both
+// `require` the read and the write, so the whole sequence is checked below with the database faked.
+// An unknown id passes IssueNotFound through, and nothing is written.
+data LabelRequest =
+    { id: IssueId
+    , label: Label
+    }
+
+behavior attachLabel : (request: LabelRequest) -> Issue | IssueNotFound
+    requires findIssue, storeLabels
+
+behavior detachLabel : (request: LabelRequest) -> Issue | IssueNotFound
+    requires findIssue, storeLabels
+
+let withLabel (issue: Issue, label: Label): Issue =
+    Issue { ...issue, labels = Set.insert(label, issue.labels) }
+
+let withoutLabel (issue: Issue, label: Label): Issue =
+    Issue { ...issue, labels = Set.remove(label, issue.labels) }
+
+let attachLabel (request, findIssue, storeLabels) =
+    match findIssue(request.id) with
+        | IssueNotFound  -> IssueNotFound
+        | Issue as issue -> storeLabels(withLabel(issue, request.label))
+
+let detachLabel (request, findIssue, storeLabels) =
+    match findIssue(request.id) with
+        | IssueNotFound  -> IssueNotFound
+        | Issue as issue -> storeLabels(withoutLabel(issue, request.label))
+
+// The fakes stand in for the two database behaviors: an input -> output table matched by value
+// equality, with a `_` default. A Set fixture is a list, so the stored issue's labels are written out
+// as the set they became.
+fake findIssue
+    | (IssueId("i-1")) -> Issue { id = IssueId("i-1"), title = "crash on save",
+        labels = [ Label("bug") ], assignee = "kawasima" }
+    | _ -> IssueNotFound
+
+fake storeLabels
+    | (Issue { id = IssueId("i-1"), title = "crash on save",
+        labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" })
+        -> Issue { id = IssueId("i-1"), title = "crash on save",
+            labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
+    | (Issue { id = IssueId("i-1"), title = "crash on save", labels = [], assignee = "kawasima" })
+        -> Issue { id = IssueId("i-1"), title = "crash on save", labels = [], assignee = "kawasima" }
+    | _ -> Issue { id = IssueId("i-0"), title = "unstored", labels = [], assignee = None }
+
+example attachLabel
+    | "a new label joins the set and is written back" :
+        (LabelRequest { id = IssueId("i-1"), label = Label("ui") })
+        -> Issue { id = IssueId("i-1"), title = "crash on save",
+            labels = [ Label("bug"), Label("ui") ], assignee = "kawasima" }
+    | "an unknown issue is not found, and nothing is written" :
+        (LabelRequest { id = IssueId("nope"), label = Label("ui") }) -> IssueNotFound
+
+example detachLabel
+    | "the label leaves the set and is written back" :
+        (LabelRequest { id = IssueId("i-1"), label = Label("bug") })
+        -> Issue { id = IssueId("i-1"), title = "crash on save", labels = [], assignee = "kawasima" }
+    | "an unknown issue is not found" :
+        (LabelRequest { id = IssueId("nope"), label = Label("bug") }) -> IssueNotFound
 
 // === sharedLabels: the labels two issues have in common (Set intersection) ===
+data LabelSet = { labels: Set<Label> }
+
 behavior sharedLabels : (a: Issue, b: Issue) -> LabelSet
     constructs LabelSet
 let sharedLabels (a, b) = LabelSet { labels = Set.intersect(a.labels, b.labels) }

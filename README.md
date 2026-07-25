@@ -85,7 +85,7 @@ mvn -pl souther-cli -am -DskipTests install
 
 The same `souther` binary also compiles to `.class` files (`souther compile hello.sou -d out`). It runs on any Unix shell; on Windows, use it as a plain jar (`java -jar souther-cli/target/souther.jar …`).
 
-To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. [`examples/README.md`](examples/README.md) contains that configuration and examples using the generated types from Java, Spring Boot, and jOOQ.
+To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. [`examples/README.md`](examples/README.md) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
 
 The Java API compiles a source string containing either one module or several linked modules:
 
@@ -136,7 +136,7 @@ Not yet implemented: incremental compilation, static invariant proofs, handwritt
 
 - [Language specification (Japanese)](specification.adoc): the normative syntax and semantics
 - [ADRs](docs/adr/README.md): design decisions, alternatives, and prior art
-- [Examples](examples/README.md): Maven / Gradle integration, decoders / encoders, and Java, Spring Boot, and jOOQ interop
+- [Examples](examples/README.md): Maven / Gradle integration, decoders / encoders, and Java / Kotlin / Clojure boundary interop (Spring Boot, jOOQ, Pedestal)
 
 The repository has two Maven modules:
 
