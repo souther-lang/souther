@@ -798,11 +798,13 @@ final class CodecGen {
      */
     private void emitConstructCall(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.Construct construct,
                                    Map<String, Type> fields) {
-        // The decoder is still AST-level; translate its field inits to Core so the shared
-        // emitFieldValues consumes one representation (ADR-0021).
+        // The decoder is still AST-level; elaborate its field inits so the shared emitFieldValues
+        // consumes one representation, with the type the checker decides for each (ADR-0021, #81).
+        // The field's declared type is pushed in, as the checker does when it checks a construction.
         List<Core.FieldInit> inits = new ArrayList<>();
         for (Ast.FieldInit init : construct.inits()) {
-            inits.add(new Core.FieldInit(init.name(), Core.of(init.value()), init.pos()));
+            inits.add(new Core.FieldInit(init.name(),
+                    gen.elaborate(init.value(), fields.get(init.name())), init.pos()));
         }
         gen.emitFieldValues(fields, inits, construct.spreads());
         code.invokestatic(cdName, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)));

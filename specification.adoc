@@ -2164,18 +2164,18 @@ The model author does not write this type name in Souther source; they only writ
 ----
 Source -> Lexer -> Parser -> AST
   -> Derive (fill decoder/encoder into the AST from a data's shape)
-  -> Lower (behavior / let bodies -> Core IR: helper inlining, desugaring)
-  -> Type Check
+  -> Lower (behavior / let bodies: helper inlining, desugaring)
+  -> Type Check -> Core IR (typed: the checker produces it as it types a body)
        name resolution / construction-authority check / requirement-set check and composition inference / exhaustiveness check / invariant type check
   -> ClassFile Backend -> .class (direct bytecode generation)
 ----
 
-Behavior and `+let+` bodies are lowered to a Core IR — helper inlining and surface desugaring happen once here — and the backend emits from it. Data definitions and derived decoders / encoders stay at the AST level; there is no separate Domain IR / Decoder IR / Encoder IR. Type checking verifies construction authority, requirement sets, exhaustiveness, and invariants together: the surface checks read the AST, and the body check reads the lowered Core. The backend generates `+.class+` with the Class-File API (`+java.lang.classfile+`) and does not go through javac.
+Behavior and `+let+` bodies are lowered — helper inlining and surface desugaring happen once here — and then typed. The type checker produces the Core IR as it types a body: every Core node carries the type decided for it, and the backend emits from that rather than inferring types a second time. Data definitions and derived decoders / encoders stay at the AST level, and their expressions are typed the same way where the backend emits them; there is no separate Domain IR / Decoder IR / Encoder IR. Type checking verifies construction authority, requirement sets, exhaustiveness, and invariants together: the surface checks read the AST, and the body check reads the lowered form. The backend generates `+.class+` with the Class-File API (`+java.lang.classfile+`) and does not go through javac.
 
 [#ast-tracking]
 == Information tracked by the AST and backend
 
-Apart from the Core IR that behavior and `+let+` bodies are lowered to (<<compiler-pipeline>>), the compiler keeps no separate intermediate representation; the following is held as the AST and the type-check results.
+Apart from the typed Core IR the type checker produces for behavior and `+let+` bodies (<<compiler-pipeline>>), the compiler keeps no separate intermediate representation; the following is held as the AST and the type-check results.
 
 [#ast-nodes]
 === AST definition nodes

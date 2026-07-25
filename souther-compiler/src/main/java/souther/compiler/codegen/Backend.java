@@ -46,13 +46,27 @@ public final class Backend {
 
     private final CodecGen codec;
     private final ValueClassGen value;
+    /** The checker's elaborated bodies: what this emits from (issue #81). */
+    private final TypeChecker.Checked checked;
 
-    private Backend(CodegenContext ctx) {
+    private Backend(CodegenContext ctx, TypeChecker.Checked checked) {
         this.ctx = ctx;
         this.pkg = ctx.pkg;
         this.symbols = ctx.symbols;
         this.codec = new CodecGen(ctx);
         this.value = new ValueClassGen(ctx, codec);
+        this.checked = checked;
+    }
+
+    /** The body the checker elaborated for {@code name}. Codegen runs only on a module that type
+     * checked, and the check elaborates every body the backend emits, so a missing one is a compiler
+     * invariant violation rather than something to emit around. */
+    private static Core elaborated(Map<String, Core> bodies, String name) {
+        Core body = bodies.get(name);
+        if (body == null) {
+            throw new IllegalStateException("no elaborated body for `" + name + "`");
+        }
+        return body;
     }
 
     /** {@code ACC_PUBLIC} when the name is exposed (or the module exposes all), else 0. */
@@ -60,30 +74,22 @@ public final class Backend {
         return ctx.pub(name);
     }
 
-    public static Map<String, byte[]> generate(Ast.Module module) {
-        return generate(module, TypeChecker.symbols(module), Map.of());
-    }
-
-    public static Map<String, byte[]> generate(Ast.Module module, Map<String, Ast.Def> symbols,
-                                               Map<String, String> typePackage) {
-        return generate(module, symbols, typePackage, Map.of(), Set.of());
-    }
-
-    public static Map<String, byte[]> generate(Ast.Module module, Map<String, Ast.Def> symbols,
-                                               Map<String, String> typePackage,
-                                               Map<String, TypeChecker.Sig> importedSigs) {
-        return generate(module, symbols, typePackage, importedSigs, Set.of());
+    public static Map<String, byte[]> generate(Ast.Module module, TypeChecker.Checked checked) {
+        return generate(module, TypeChecker.symbols(module), Map.of(), Map.of(), Set.of(), checked);
     }
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
      * {@code typePackage} maps an imported type or behavior name to its declaring module (spec 4);
      * {@code importedSigs} carries imported behaviors' signatures so a composition can name one as
      * a stage (spec 14); {@code importedInjected} are imported injection-target behaviors, which a
-     * composition here inherits as requirements to inject and bind (spec 13.2, 14.3). */
+     * composition here inherits as requirements to inject and bind (spec 13.2, 14.3);
+     * {@code checked} carries the type checker's elaborated bodies, which is what the emitter reads
+     * instead of inferring types again (issue #81). */
     public static Map<String, byte[]> generate(Ast.Module module, Map<String, Ast.Def> symbols,
                                                Map<String, String> typePackage,
                                                Map<String, TypeChecker.Sig> importedSigs,
-                                               Set<String> importedInjected) {
+                                               Set<String> importedInjected,
+                                               TypeChecker.Checked checked) {
         Map<String, List<String>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
@@ -109,7 +115,7 @@ public final class Backend {
         }
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers);
-        Backend b = new Backend(ctx);
+        Backend b = new Backend(ctx, checked);
         // A behavior's class capitalizes its first letter (spec 19.5). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
         // `Quote`. Reject the collision here rather than let one silently overwrite the other.
@@ -316,7 +322,8 @@ public final class Backend {
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
-                    gen.emitTail(Core.of(h.body()), cdFns, Set.of(), Map.of(), helperReturn);
+                    gen.emitTail(elaborated(checked.recursiveHelpers(), h.name()),
+                            cdFns, Set.of(), Map.of(), helperReturn);
                 });
             }
         });
@@ -702,7 +709,8 @@ public final class Backend {
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)
-                gen.emitTail(Core.of(fn.body()), cdB, requiredNames, requiredSuccess, successType(spec.ret()));
+                gen.emitTail(elaborated(checked.behaviorBodies(), fn.name()),
+                        cdB, requiredNames, requiredSuccess, successType(spec.ret()));
             });
             if (n != 1) {
                 List<Type> pts = new ArrayList<>();

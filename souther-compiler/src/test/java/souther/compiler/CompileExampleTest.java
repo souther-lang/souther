@@ -173,8 +173,9 @@ class CompileExampleTest {
                 souther.compiler.check.TypeChecker.symbols(module));
         var lowered = souther.compiler.check.Lower.run(module);
         var symbols = souther.compiler.check.TypeChecker.symbols(module);
-        souther.compiler.check.TypeChecker.check(module, symbols, java.util.Map.of(), lowered);
-        var classes = souther.compiler.codegen.Backend.generate(lowered);
+        var checked = souther.compiler.check.TypeChecker
+                .checkAndElaborate(module, symbols, java.util.Map.of(), lowered).checked();
+        var classes = souther.compiler.codegen.Backend.generate(lowered, checked);
         var sigs = souther.compiler.check.TypeChecker.signatures(module, symbols);
         var fails = ExampleVerifier.check(module, symbols, sigs, java.util.Map.of(), classes);
         assertEquals(2, fails.size());

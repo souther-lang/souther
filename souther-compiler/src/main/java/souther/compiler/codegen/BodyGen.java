@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.diag.CompileException;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Lower;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.core.Core;
@@ -138,12 +139,24 @@ final class BodyGen {
         }
 
         /**
-         * Emits an AST expression by lowering it to Core and emitting that (ADR-0021). The behavior
-         * body is already Core by the time it reaches the backend; this adapter remains for the codec
-         * paths (encoder/decoder), which still hold AST expressions.
+         * Emits an AST expression: the codec emitters (decoder, encoder) and a data's invariant are
+         * AST-level, so their expressions are elaborated here, at the environment the slots hold,
+         * before they are emitted. The types come from the checker either way — a behavior body
+         * arrives already elaborated, and these are elaborated on the spot — so there is one
+         * implementation of inference and the emitter reads its decisions (issue #81).
          */
         Type expr(Ast.Expr e) {
-            return genExpr(Core.of(e));
+            return genExpr(elaborate(e, null));
+        }
+
+        /** Elaborates an AST expression at this body's environment — the codec emitters hold AST and
+         * build the Core nodes they pass back in. It is desugared first, by the same Lower rewrite a
+         * body gets, so a surface form with no Core node of its own (a comprehension) reaches the
+         * emitter in the shape it emits from. {@code expected} is the type the position wants, as the
+         * checker pushes a field's declared type into its initialiser. */
+        Core elaborate(Ast.Expr e, Type expected) {
+            return TypeChecker.elaborate(Lower.desugarExpr(e), typesEnvWithHelpers(), data, symbols,
+                    reqSigs(), expected);
         }
 
         private void emitFieldRead(CodeBuilder code, String ownerName, String field, Type ft) {
@@ -177,7 +190,8 @@ final class BodyGen {
         /** Generates a synthetic {@code Fn} class for an escaping lambda: captured free variables become
          * {@code final} fields set by the constructor, and the body compiles into {@code apply}, which
          * unboxes its arguments from the {@code Object[]} and boxes its result (spec §blocks). */
-        private byte[] generateLambdaClass(ClassDesc cd, Ast.Block block, List<Type> paramTypes,
+        private byte[] generateLambdaClass(ClassDesc cd, List<String> params, Core body,
+                                           List<Type> paramTypes,
                                            Type resultType, List<String> valueNames, List<Type> valueTypes,
                                            List<String> injectedNames, Map<String, Type> reqSuccess,
                                            Map<String, List<Type>> reqParams) {
@@ -237,7 +251,7 @@ final class BodyGen {
                         pushInt(code, i);
                         code.aaload();
                         unbox(code, pt, s);
-                        g.bind(block.params().get(i), s, pt);
+                        g.bind(params.get(i), s, pt);
                     }
                     for (int i = 0; i < valueNames.size(); i++) {
                         Type ct = valueTypes.get(i);
@@ -247,7 +261,7 @@ final class BodyGen {
                         store(code, s, ct);
                         g.bind(valueNames.get(i), s, ct);
                     }
-                    Type rt = g.expr(block.body());
+                    Type rt = g.genExpr(body);
                     box(code, rt);
                     code.areturn();
                 });
@@ -282,22 +296,19 @@ final class BodyGen {
                         // call an injected required behavior; requiredCall handles both the unary
                         // Behavior contract and a multi-input base (issue #57), leaving the success
                         // value cast on the stack
-                        Type letType = requiredCall(call);
+                        Type letType = call.type();
+                        requiredCall(call);
                         int vSlot = slot(letType);
                         store(code, vSlot, letType);
                         bind(li.name(), vSlot, letType);
                     } else {
-                        // Type inference for a closure lives in the checker (AST); Core is untyped, so
-                        // the backend reaches it through toAst rather than re-deriving types.
-                        Ast.Expr valueAst = li.value().toAst();
-                        Type vt;
-                        if (TypeChecker.isFunctionSelection(valueAst)) {
-                            // a lambda chosen at runtime (e.g. by an `if`) — a first-class Fn (spec §blocks)
-                            List<Type> paramTypes = TypeChecker.inferFnParamTypes(
-                                    li.name(), li.body().toAst(), typesEnv(), data, symbols);
-                            vt = emitFunctionValue(valueAst, paramTypes);
+                        Type vt = li.value().type();
+                        if (vt instanceof Type.FnOf fn) {
+                            // a lambda chosen at runtime (e.g. by an `if`) — a first-class Fn
+                            // (spec §blocks), at the parameter types the checker inferred for it
+                            emitFunctionValue(li.value(), fn.params());
                         } else {
-                            vt = genExpr(li.value(), letExpected(li));
+                            genExpr(li.value(), vt);
                         }
                         int slot = slot(vt);
                         store(code, slot, vt);
@@ -394,54 +405,39 @@ final class BodyGen {
          * adopts a pushed-down list type, as {@code Map.empty}/{@code Set.empty} do and as the checker
          * already does: a written {@code let xs: List<Int> = []} otherwise emits at {@code List<_>},
          * and reading an element back unboxes the bottom (issue #74). */
-        private Type listLit(Core.ListLit lit, Type expected) {
+        private void listLit(Core.ListLit lit) {
             code.new_(CD_ArrayList);
             code.dup();
             code.invokespecial(CD_ArrayList, "<init>", MTD_void);
-            Type elem = null;
             for (Core el : lit.elements()) {
                 code.dup();
-                Type t = genExpr(el);
-                box(code, t);
+                box(code, genExpr(el));
                 code.invokevirtual(CD_ArrayList, "add", MTD_ArrayList_add);
                 code.pop();
-                elem = t;
             }
             code.invokestatic(CD_List, "copyOf", MTD_List_copyOf, true);
-            if (elem != null) {
-                return Type.list(elem);
-            }
-            return expected instanceof Type.ListOf le ? le : Type.EMPTY_LIST;   // `[]` (ADR-0028)
         }
 
         /** Builds a tuple {@code (e1, e2, ...)} as an {@code Object[]}, boxing each element (ADR-0036).
          * A pushed-down tuple type reaches each element, as it does in the checker, so a written
          * {@code (Map<String, Int>, List<String>)} seed materialises at those types (issue #74). */
-        private Type tuple(Core.Tuple t, Type expected) {
-            List<Type> want = expected instanceof Type.TupleOf te
-                    && te.elements().size() == t.elements().size() ? te.elements() : null;
-            List<Type> elems = new ArrayList<>();
+        private void tuple(Core.Tuple t) {
             pushInt(code, t.elements().size());
             code.anewarray(CD_Object);
             for (int i = 0; i < t.elements().size(); i++) {
                 code.dup();
                 pushInt(code, i);
-                Type et = genExpr(t.elements().get(i), want == null ? null : want.get(i));
-                box(code, et);
+                box(code, genExpr(t.elements().get(i)));
                 code.aastore();
-                elems.add(et);
             }
-            return Type.tuple(elems);
         }
 
         /** Reads a tuple element by index: {@code arr[i]}, cast back to the element's type. */
-        private Type tupleGet(Core.TupleGet tg) {
-            Type tt = genExpr(tg.tuple());
-            Type et = ((Type.TupleOf) tt).elements().get(tg.index());
+        private void tupleGet(Core.TupleGet tg) {
+            genExpr(tg.tuple());
             pushInt(code, tg.index());
             code.aaload();
-            castFromObject(code, et);
-            return et;
+            castFromObject(code, tg.type());
         }
 
         /** Whether {@code t} still carries the empty-collection bottom {@link Type#NOTHING} — an
@@ -474,78 +470,72 @@ final class BodyGen {
             return genExpr(e, null);
         }
 
-        // {@code expected} mirrors the checker's bidirectional pass (issue #70): it is pushed into a
-        // fold call so codegen materialises the step closure at the same accumulator type the checker
-        // validated, when an empty-collection seed would otherwise leave that type a bottom. Only the
-        // passthrough arms (if/let/match/call) forward it; every other arm ignores it.
+        /**
+         * Emits {@code e} and yields its type: the one the checker decided, read off the node
+         * (issue #81). Nothing here derives a type of its own — where a type drives the emission
+         * (which instruction, which descriptor, which slot), it is read from the node that carries it.
+         *
+         * <p>{@code expected} mirrors the checker's bidirectional pass (issue #70): it is pushed into
+         * a fold call so codegen materialises the step closure at the same accumulator type the
+         * checker validated. Only the passthrough arms (if/let/match/call) forward it.
+         */
         Type genExpr(Core e, Type expected) {
+            if (e.type() == null) {
+                throw new IllegalStateException("this node reached the emitter untyped: "
+                        + e.getClass().getSimpleName() + " at " + e.pos());
+            }
             emitLine(e);
-            return switch (e) {
-                case Core.Int x -> {
-                    code.loadConstant(x.value());
-                    yield Type.INT;
-                }
+            switch (e) {
+                case Core.Int x -> code.loadConstant(x.value());
                 case Core.Decimal x -> {
                     code.new_(CD_BigDecimal);
                     code.dup();
                     code.loadConstant(x.value().toString());
                     code.invokespecial(CD_BigDecimal, "<init>",
                             MethodTypeDesc.of(ConstantDescs.CD_void, CD_String));
-                    yield Type.DECIMAL;
                 }
-                case Core.Str x -> {
-                    code.loadConstant(x.value());
-                    yield Type.STRING;
-                }
+                case Core.Str x -> code.loadConstant(x.value());
                 case Core.Bool x -> {
                     if (x.value()) code.iconst_1(); else code.iconst_0();
-                    yield Type.BOOL;
                 }
                 case Core.Var v -> {
                     Var var = env.get(v.name());
                     if (var != null) {
                         load(code, var.slot(), var.type());
-                        yield var.type();
-                    }
-                    if (symbols.get(v.name()) instanceof Ast.UnitData) {
+                    } else if (symbols.get(v.name()) instanceof Ast.UnitData) {
                         ClassDesc cdU = cd(v.name());
                         code.new_(cdU);
                         code.dup();
                         code.invokespecial(cdU, "<init>", MTD_void);
-                        yield Type.ref(v.name());
+                    } else {
+                        throw new CompileException(v.pos(), "unbound identifier `" + v.name() + "`");
                     }
-                    throw new CompileException(v.pos(), "unbound identifier `" + v.name() + "`");
                 }
                 case Core.Neg n -> {
-                    Type t = genExpr(n.operand());
-                    if (t == Type.DECIMAL) {
+                    if (genExpr(n.operand()) == Type.DECIMAL) {
                         code.invokevirtual(CD_BigDecimal, "negate", MethodTypeDesc.of(CD_BigDecimal));
                     } else {
                         code.lneg();               // Int is carried as a long
                     }
-                    yield t;
                 }
                 case Core.FieldAccess fa -> {
                     Type targetType = genExpr(fa.target());
                     Ast.Data owner = (Ast.Data) symbols.get(((Type.Ref) targetType).name());
-                    Type ft = fieldTypes(owner).get(fa.field());
-                    emitFieldRead(code, owner.name(), fa.field(), ft);
-                    yield ft;
+                    emitFieldRead(code, owner.name(), fa.field(), fa.type());
                 }
                 case Core.If iff -> {
                     genExpr(iff.cond());
                     Label elseL = code.newLabel();
                     Label end = code.newLabel();
                     code.ifeq(elseL);
-                    Type tt = genExpr(iff.then(), expected);
+                    genExpr(iff.then(), expected);
                     code.goto_(end);
                     code.labelBinding(elseL);
                     genExpr(iff.els(), expected);
                     code.labelBinding(end);
-                    yield tt;
                 }
-                case Core.ListLit lit -> listLit(lit, expected);
-                case Core.Tuple t -> tuple(t, expected);
+                case Core.ListLit lit -> listLit(lit);
+                case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> binary(bin);
                 case Core.NewData nd -> newData(nd);
@@ -553,48 +543,38 @@ final class BodyGen {
                 case Core.Call c -> call(c, expected);
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
-                    Type vt;
-                    // Type inference for a closure lives in the checker (AST); Core is untyped, so
-                    // the backend reaches it through toAst rather than re-deriving types.
-                    Ast.Expr valueAst = li.value().toAst();
-                    if (TypeChecker.isFunctionSelection(valueAst)) {
-                        // a lambda chosen at runtime (e.g. by an `if`): a first-class Fn (spec §blocks)
-                        List<Type> paramTypes = TypeChecker.inferFnParamTypes(
-                                li.name(), li.body().toAst(), typesEnv(), data, symbols);
-                        vt = emitFunctionValue(valueAst, paramTypes);
+                    Type vt = li.value().type();
+                    if (vt instanceof Type.FnOf fn) {
+                        // a lambda chosen at runtime (e.g. by an `if`): a first-class Fn (spec §blocks),
+                        // at the parameter types the checker inferred from its applications
+                        emitFunctionValue(li.value(), fn.params());
                     } else {
-                        vt = genExpr(li.value(), letExpected(li));
+                        genExpr(li.value(), vt);
                     }
                     int s = slot(vt);
                     store(code, s, vt);
                     bind(li.name(), s, vt);
-                    yield genExpr(li.body(), expected);
+                    genExpr(li.body(), expected);
                 }
                 // a block has no value of its own; it is inlined by the call it is passed to
                 case Core.Block b -> throw new CompileException(b.pos(), "a block is not a value");
-            };
+            }
+            return e.type();
         }
 
-        /** The type a binding's value is emitted at when the source annotated it (issue #71) — the same
-         * pin the checker applied, so an empty-collection value materialises at the written type. */
-        private Type letExpected(Core.LetIn li) {
-            return li.annotation() == null ? null : successType(li.annotation());
-        }
-
-        private Type match(Core.Match m, Type expected) {
+        private void match(Core.Match m, Type expected) {
             Type st = genExpr(m.scrutinee());
             int sSlot = slot(st);
             store(code, sSlot, st);
             Type element = st instanceof Type.OptionOf oo ? oo.element() : null;
             Label end = code.newLabel();
-            Type branchType = null;
             for (Core.Case c : m.cases()) {
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm: save any outer binding it shadows and restore it
                 // after the arm, or a later arm reusing the name would resolve to this arm's slot.
                 Var prevBinding = c.binding() != null ? env.get(c.binding()) : null;
                 emitCaseGuard(c, sSlot, st, element, nextCase);
-                branchType = genExpr(c.body(), expected);
+                genExpr(c.body(), expected);
                 if (c.binding() != null) {
                     restore(c.binding(), prevBinding);
                 }
@@ -603,7 +583,6 @@ final class BodyGen {
             }
             emitMatchFallthrough();
             code.labelBinding(end);
-            return branchType;
         }
 
         /** Emits {@code match} in tail position: each arm body is emitted through {@link #emitTail}, so
@@ -659,7 +638,7 @@ final class BodyGen {
                 code.ifeq(nextCase);
                 if (c.binding() != null) {
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
-                    Type bt = TypeChecker.caseBindType(cases.get(0));
+                    Type bt = c.bindType();   // what the checker narrowed the scrutinee to here
                     code.aload(sSlot);
                     int bslot = slot(bt);
                     unbox(code, bt, bslot);
@@ -691,7 +670,7 @@ final class BodyGen {
             code.athrow();
         }
 
-        private Type newData(Core.NewData nd) {
+        private void newData(Core.NewData nd) {
             Ast.Data owner = (Ast.Data) symbols.get(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
@@ -703,14 +682,13 @@ final class BodyGen {
                 emitFieldValues(flds, nd.inits(), nd.spreads());
                 emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                 finishInvariantConstruct(cdType, flds);
-                return Type.ref(nd.typeName());
+                return;
             }
             code.new_(cdType);
             code.dup();
             emitFieldValues(flds, nd.inits(), nd.spreads());
             code.invokespecial(cdType, "<init>",
                     MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds)));
-            return Type.ref(nd.typeName());
         }
 
         /** Emits the checked-construction tail — {@code __construct(fields) -> Result}, {@code orThrow}
@@ -779,121 +757,96 @@ final class BodyGen {
             code.l2i();
         }
 
-        private Type call(Core.Call call, Type expected) {
+        private void call(Core.Call call, Type expected) {
             Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(call.fn());
             if (intrinsic != null) {
-                return Intrinsics.emit(this, intrinsic.key(), call);
+                Intrinsics.emit(this, intrinsic.key(), call);
+                return;
             }
             switch (call.fn()) {
                 case "String.length" -> {
                     genExpr(call.args().get(0));
                     code.invokevirtual(CD_String, "length", MethodTypeDesc.of(ConstantDescs.CD_int));
                     code.i2l();
-                    return Type.INT;
                 }
                 case "String.toInt" -> {
                     // Strings.toInt returns a boxed Long or NotANumber.INSTANCE — the Int | NotANumber
                     // union, carried as Object (like intDivide's DivisionByZero result).
                     genExpr(call.args().get(0));
                     code.invokestatic(CD_Strings, "toInt", MethodTypeDesc.of(CD_Object, CD_String));
-                    return Type.union(new java.util.LinkedHashSet<>(java.util.List.of("Int", "NotANumber")));
                 }
                 case "List.length" -> {
                     genExpr(call.args().get(0));
                     code.invokeinterface(CD_List, "size", MTD_size);
                     code.i2l();
-                    return Type.INT;
                 }
                 case "List.get" -> {
-                    Type ct = genExpr(call.args().get(1));      // get(index, xs): list then index (Lists.get)
-                    genExpr(call.args().get(0));                // long index
+                    genExpr(call.args().get(1));      // get(index, xs): list then index (Lists.get)
+                    genExpr(call.args().get(0));      // long index
                     code.invokestatic(CD_Lists, "get",
                             MethodTypeDesc.of(CD_Option, CD_List, ConstantDescs.CD_long));
-                    return Type.option(((Type.ListOf) ct).element());
                 }
                 case "List.max", "List.min" -> {
-                    Type ct = genExpr(call.args().get(0));
+                    genExpr(call.args().get(0));
                     code.invokestatic(CD_Lists, bareOp(call.fn()),   // "max" / "min"
                             MethodTypeDesc.of(CD_Option, CD_List));
-                    return Type.option(((Type.ListOf) ct).element());
                 }
                 case "List.find", "List.sortBy" -> {
                     // find(p, xs) / sortBy(key, xs): the function is a value here (not inlined into a
                     // fold), so materialise it as an Fn, then pass the list. The list's element type
                     // gives the function's one parameter type.
-                    Type lt = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnvWithHelpers(),
-                            data, symbols, reqSigs());
-                    Type elem = ((Type.ListOf) lt).element();
-                    emitFunctionValue(call.args().get(0).toAst(), List.of(elem));   // Fn on the stack
-                    genExpr(call.args().get(1));                                    // then the List
+                    Type elem = ((Type.ListOf) call.args().get(1).type()).element();
+                    emitFunctionValue(call.args().get(0), List.of(elem));   // Fn on the stack
+                    genExpr(call.args().get(1));                            // then the List
                     if (call.fn().equals("List.find")) {
                         code.invokestatic(CD_Lists, "find", MethodTypeDesc.of(CD_Option, CD_Fn, CD_List));
-                        return Type.option(elem);
+                    } else {
+                        code.invokestatic(CD_Lists, "sortBy", MethodTypeDesc.of(CD_List, CD_Fn, CD_List));
                     }
-                    code.invokestatic(CD_Lists, "sortBy", MethodTypeDesc.of(CD_List, CD_Fn, CD_List));
-                    return Type.list(elem);
                 }
                 case "Option.map" -> {
                     // map(f, opt): materialise f as an Fn (its one parameter is the option's element
                     // type), then the option. `Option` is not surface-writable, so the rewrap into
                     // Some(f v) / None happens in the runtime kernel (Option.map), not in emitted code.
-                    Type ot = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnvWithHelpers(),
-                            data, symbols, reqSigs());
-                    Type elem = ((Type.OptionOf) ot).element();
-                    Type fnT = emitFunctionValue(call.args().get(0).toAst(), List.of(elem));  // Fn on the stack
-                    genExpr(call.args().get(1));                                              // then the Option
+                    Type elem = ((Type.OptionOf) call.args().get(1).type()).element();
+                    emitFunctionValue(call.args().get(0), List.of(elem));   // Fn on the stack
+                    genExpr(call.args().get(1));                            // then the Option
                     code.invokestatic(CD_Options, "map", MethodTypeDesc.of(CD_Option, CD_Fn, CD_Option));
-                    return Type.option(((Type.FnOf) fnT).result());   // the option rewraps f's return type
                 }
                 case "Map.get" -> {
-                    Type ct = genExpr(call.args().get(1));      // get(key, m): map then key (Maps.get)
-                    genExpr(call.args().get(0));                // key (a reference)
+                    genExpr(call.args().get(1));      // get(key, m): map then key (Maps.get)
+                    genExpr(call.args().get(0));      // key (a reference)
                     code.invokestatic(CD_Maps, "get",
                             MethodTypeDesc.of(CD_Option, CD_Map, ConstantDescs.CD_Object));
-                    return Type.option(((Type.MapOf) ct).value());
                 }
-                case "Map.empty" -> {
-                    code.invokestatic(CD_Maps, "empty", MethodTypeDesc.of(CD_Map));
-                    // key/value fixed by context, like `[]` — adopt the pushed-down type as the checker
-                    // does, or a written seed type would be lost here and the fold's accumulator
-                    // re-derived at a bottom (issue #74)
-                    return expected instanceof Type.MapOf me ? me : Type.map(Type.NOTHING, Type.NOTHING);
-                }
-                case "Set.empty" -> {
-                    code.invokestatic(CD_Sets, "empty", MethodTypeDesc.of(CD_Set));
-                    return expected instanceof Type.SetOf se ? se : Type.set(Type.NOTHING);
-                }
+                case "Map.empty" -> code.invokestatic(CD_Maps, "empty", MethodTypeDesc.of(CD_Map));
+                case "Set.empty" -> code.invokestatic(CD_Sets, "empty", MethodTypeDesc.of(CD_Set));
                 case "Date", "DateTime" -> {
                     // a written date: the checker has already parsed the literal, so the text is
                     // known good and this is a plain parse of a constant string.
-                    boolean isDate = call.fn().equals("Date");
-                    ClassDesc cd = isDate ? CD_LocalDate : CD_LocalDateTime;
+                    ClassDesc cd = call.fn().equals("Date") ? CD_LocalDate : CD_LocalDateTime;
                     code.loadConstant(((Core.Str) call.args().get(0)).value());
                     code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
-                    return isDate ? Type.DATE : Type.DATETIME;
                 }
                 case "Int.divide", "Decimal.divide" -> {
                     if (call.args().size() == 4) {
-                        return decimalDivide(call);
+                        decimalDivide(call);
+                    } else {
+                        intDivide(call, true);
                     }
-                    return intDivide(call, true);
                 }
-                case "Int.remainder" -> {
-                    return intDivide(call, false);
-                }
+                case "Int.remainder" -> intDivide(call, false);
                 default -> {
                     Var fv = env.get(call.fn());
                     if (fv != null && fv.type() instanceof Type.FnOf fnType) {
-                        return applyFn(call, fv, fnType);
+                        applyFn(call, fnType);
+                    } else if (ctx.recursiveHelpers.containsKey(call.fn())) {
+                        recursiveHelperCall(call);
+                    } else if (reqNames.contains(call.fn())) {
+                        requiredCall(call);
+                    } else {
+                        throw new CompileException(call.pos(), "unknown function `" + call.fn() + "`");
                     }
-                    Ast.FnDef rec = ctx.recursiveHelpers.get(call.fn());
-                    if (rec != null) {
-                        return recursiveHelperCall(call, rec, expected);
-                    }
-                    if (reqNames.contains(call.fn())) {
-                        return requiredCall(call);
-                    }
-                    throw new CompileException(call.pos(), "unknown function `" + call.fn() + "`");
                 }
             }
         }
@@ -904,69 +857,47 @@ final class BodyGen {
          * A function parameter is passed as a first-class {@code Fn} value (a closure): the argument
          * block is materialised rather than evaluated as a plain value, and an {@code Fn} is already a
          * reference, so it fits the {@code Object} slot without boxing. */
-        private Type recursiveHelperCall(Core.Call call, Ast.FnDef h, Type expected) {
-            // Resolve the helper's type variables from the value arguments, so a function argument is
-            // materialised at concrete parameter types — foldFrom's step is `(acc, x)` at the seed's
-            // and the list element's types — matching how the checker typed this call. A monomorphic
-            // helper leaves the bindings empty and every type is already concrete.
-            List<Type> declared = new ArrayList<>();
-            for (Ast.FnParam p : h.params()) {
-                declared.add(TypeChecker.resolveParamType(p.type(), symbols));
-            }
-            Map<String, Type> bind = new HashMap<>();
-            // Pin the result-type variables from the expected type first (issue #70), through the same
-            // best-effort helper the checker's call typing uses, so a fold with a Map.empty()/[] seed
-            // materialises its step closure at the accumulator type the context fixed, not a bottom.
-            if (h.declaredReturn() != null) {
-                TypeChecker.pinResultTypeVars(successType(h.declaredReturn()), expected, bind, symbols,
-                        call.pos(), "result of " + call.fn());
-            }
-            for (int i = 0; i < call.args().size(); i++) {
-                if (!(declared.get(i) instanceof Type.FnOf)) {
-                    Type at = TypeChecker.typeOf(call.args().get(i).toAst(), typesEnvWithHelpers(), data, symbols, reqSigs());
-                    TypeChecker.unify(declared.get(i), at, bind, symbols, call.pos(), "argument " + (i + 1));
-                }
-            }
-            // Resolve the accumulator type for each function argument exactly as the checker did — an
-            // empty-collection seed's bottom refined from the step's result, a case-seeded accumulator
-            // widened to its sum only when the step needs it — so the closure is materialised at the
-            // same types the checker validated.
-            for (int i = 0; i < call.args().size(); i++) {
-                if (declared.get(i) instanceof Type.FnOf fn0
-                        && call.args().get(i).toAst() instanceof Ast.Block) {
-                    TypeChecker.resolveStepBinding(call.fn(), fn0, call.args().get(i).toAst(), bind,
-                            typesEnvWithHelpers(), data, symbols, reqSigs());
-                }
-            }
-            for (int i = 0; i < call.args().size(); i++) {
-                Type pi = TypeChecker.substitute(declared.get(i), bind);
-                if (pi instanceof Type.FnOf fn) {
-                    boolean stepDead = false;
-                    for (Type p : fn.params()) {
-                        stepDead |= p instanceof Type.Nothing;   // an element of an empty-literal list
-                    }
-                    if (stepDead) {
-                        // A step parameter is a bare Nothing: it is the element of an empty-literal
-                        // list, so there are no elements and the step never runs — foldFrom over `[]`
-                        // yields the seed. Pass a null Fn rather than materialise a closure that would
-                        // unbox the bottom element (as `acc + x` does with `x`) and crash. An empty
-                        // *seed* (a `List<Nothing>` accumulator) is a reference and still materialises.
+        private void recursiveHelperCall(Core.Call call) {
+            // The checker resolved this call's type variables when it typed it — the accumulator a
+            // fold's step runs at, the result the caller casts to — and left the decision on the
+            // nodes, so nothing is resolved a second time here (issue #81).
+            for (Core arg : call.args()) {
+                if (arg.type() instanceof Type.FnOf fn) {
+                    if (stepNeverRuns(fn)) {
                         code.aconst_null();
                     } else {
-                        emitFunctionValue(call.args().get(i).toAst(), fn.params());
+                        emitFunctionValue(arg, fn.params());
                     }
                 } else {
-                    Type at = genExpr(call.args().get(i));
-                    box(code, at);
+                    box(code, genExpr(arg));
                 }
             }
+            invokeRecursiveHelper(call);
+            castFromObject(code, call.type());
+        }
+
+        /**
+         * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
+         * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
+         * {@code []} yields the seed. Such a step is passed as a null {@code Fn} rather than
+         * materialised, since materialising it would unbox the bottom element (as {@code acc + x}
+         * does with {@code x}) and crash. An empty *seed* (a {@code List<Nothing>} accumulator) is a
+         * reference and still materialises.
+         */
+        private static boolean stepNeverRuns(Type.FnOf fn) {
+            for (Type p : fn.params()) {
+                if (p instanceof Type.Nothing) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void invokeRecursiveHelper(Core.Call call) {
             ClassDesc[] params = new ClassDesc[call.args().size()];
             java.util.Arrays.fill(params, CD_Object);
             code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.recursiveHelperMethod(call.fn()),
                     MethodTypeDesc.of(CD_Object, params));
-            Type rt = TypeChecker.substitute(successType(h.declaredReturn()), bind);
-            castFromObject(code, rt);
-            return rt;
         }
 
         /** The operation name from a qualified builtin call ({@code "List.max"} → {@code "max"}). */
@@ -977,7 +908,7 @@ final class BodyGen {
 
         /** {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,
          * otherwise the quotient/remainder is boxed (spec 18.2). */
-        private Type intDivide(Core.Call call, boolean divide) {
+        private void intDivide(Core.Call call, boolean divide) {
             genExpr(call.args().get(0));
             int aSlot = slot(Type.INT);
             code.lstore(aSlot);
@@ -1002,12 +933,11 @@ final class BodyGen {
             code.labelBinding(zero);
             code.getstatic(CD_DivisionByZero, "INSTANCE", CD_DivisionByZero);
             code.labelBinding(end);
-            return Type.union(new java.util.LinkedHashSet<>(java.util.List.of("Int", "DivisionByZero")));
         }
 
         /** {@code divide(a, b, scale, mode)} on Decimal: a zero divisor takes the DivisionByZero
          * case, otherwise {@code a.divide(b, scale, RoundingMode.mode)} (spec 18.3). */
-        private Type decimalDivide(Core.Call call) {
+        private void decimalDivide(Core.Call call) {
             genExpr(call.args().get(0));
             int aSlot = slot(Type.DECIMAL);
             code.astore(aSlot);
@@ -1030,12 +960,11 @@ final class BodyGen {
             code.labelBinding(zero);
             code.getstatic(CD_DivisionByZero, "INSTANCE", CD_DivisionByZero);
             code.labelBinding(end);
-            return Type.union(new java.util.LinkedHashSet<>(java.util.List.of("Decimal", "DivisionByZero")));
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on
          * the stack cast to the success type (spec 12.2, 13). */
-        private Type requiredCall(Core.Call call) {
+        private void requiredCall(Core.Call call) {
             Type success = reqSuccess.get(call.fn());
             if (ctx.isMultiArgRequired(call.fn())) {
                 // 2+ inputs: the required behavior is its own base class, called with a typed
@@ -1049,7 +978,7 @@ final class BodyGen {
                 }
                 code.invokevirtual(ctx.cdBehavior(call.fn()), "apply", desc);
                 stackCast(success);
-                return success;
+                return;
             }
             code.aload(0);
             code.getfield(cdName, call.fn(), CD_Behavior);
@@ -1061,7 +990,6 @@ final class BodyGen {
             }
             code.invokeinterface(CD_Behavior, "apply", MTD_apply);
             stackCast(success);
-            return success;
         }
 
         /** Casts the {@code Object} on the stack to {@code type}, unboxing primitives. */
@@ -1077,19 +1005,17 @@ final class BodyGen {
             }
         }
 
-        private Type binary(Core.Binary bin) {
+        private void binary(Core.Binary bin) {
             switch (bin.op()) {
                 case AND -> {
                     genExpr(bin.left());
                     genExpr(bin.right());
                     code.iand();
-                    return Type.BOOL;
                 }
                 case OR -> {
                     genExpr(bin.left());
                     genExpr(bin.right());
                     code.ior();
-                    return Type.BOOL;
                 }
                 // `+ - * /` work on two Int or two Decimal operands (spec 18.1). Int aborts on
                 // overflow, and `/` aborts on a zero divisor; Decimal does not overflow, and its `/`
@@ -1121,28 +1047,23 @@ final class BodyGen {
                         };
                         code.invokestatic(CD_IntMath, m, MTD_intExact);
                     }
-                    // Closed `+`/`-`: re-wrap the base result into the operand's newtype (the checker
-                    // has already validated admissibility, so this only picks the result newtype).
-                    Type nt = TypeChecker.closedNewtypeArithResult(lraw, rraw, symbols);
-                    return nt != null ? wrapNewtypeValue(((Type.Ref) nt).name(), t) : t;
+                    // Closed `+`/`-` and scalar `*`/`/` stay in the newtype: when the checker typed
+                    // this expression as one, re-wrap the base value it left on the stack.
+                    if (bin.type() instanceof Type.Ref ref) {
+                        wrapNewtypeValue(ref.name(), t);
+                    }
                 }
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
-                    Type rt = genExpr(bin.right());
+                    genExpr(bin.right());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
                     // sides are String here, so emit `a.concat(b)` rather than the list join.
                     if (lt == Type.STRING) {
                         code.invokevirtual(CD_String, "concat",
                                 MethodTypeDesc.of(CD_String, CD_String));
-                        return Type.STRING;
+                    } else {
+                        code.invokestatic(CD_Lists, "concat", MTD_Lists_concat);
                     }
-                    code.invokestatic(CD_Lists, "concat", MTD_Lists_concat);
-                    // the empty list contributes no element type; take the result's from the other
-                    // side, so a `[] ++ [x]` chain does not leave the element as `Nothing` (ADR-0028)
-                    if (lt.equals(Type.EMPTY_LIST)) {
-                        return rt;
-                    }
-                    return lt;
                 }
                 default -> {
                     // A single-value newtype compares by its underlying value: open each operand to
@@ -1163,7 +1084,7 @@ final class BodyGen {
                         code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
                         code.iconst_0();
                         comparisonMaterialize(bin.op(), false);
-                        return Type.BOOL;
+                        return;
                     }
                     if (lt == Type.STRING) {
                         code.invokevirtual(CD_String, "equals",
@@ -1172,7 +1093,7 @@ final class BodyGen {
                             code.iconst_1();
                             code.ixor();
                         }
-                        return Type.BOOL;
+                        return;
                     }
                     if (lt == Type.DECIMAL) {
                         emitDecimalEquals(code);          // by value, ignoring scale (spec 7.1)
@@ -1180,7 +1101,7 @@ final class BodyGen {
                             code.iconst_1();
                             code.ixor();
                         }
-                        return Type.BOOL;
+                        return;
                     }
                     if (isReference(lt)) {
                         // a data (or any boxed value) compares by its fields — the generated
@@ -1190,10 +1111,9 @@ final class BodyGen {
                             code.iconst_1();
                             code.ixor();
                         }
-                        return Type.BOOL;
+                        return;
                     }
                     comparisonMaterialize(bin.op(), lt == Type.INT);
-                    return Type.BOOL;
                 }
             }
         }
@@ -1242,6 +1162,9 @@ final class BodyGen {
         private Map<String, Type> typesEnvWithHelpers() {
             Map<String, Type> t = typesEnv();
             ctx.recursiveHelpers.forEach((name, h) -> {
+                if (t.containsKey(name)) {
+                    return;   // a local of the same name shadows the helper, as it does in the checker
+                }
                 List<Type> params = new ArrayList<>();
                 for (Ast.FnParam p : h.params()) {
                     params.add(TypeChecker.resolveParamType(p.type(), symbols));
@@ -1251,48 +1174,48 @@ final class BodyGen {
             return t;
         }
 
-        /** Emits a function value — a lambda, or an {@code if} that selects one — leaving an
-         * {@link souther.runtime.Fn} on the stack (spec §blocks). */
-        private Type emitFunctionValue(Ast.Expr value, List<Type> paramTypes) {
-            return switch (value) {
-                case Ast.Block b -> emitLambda(b, paramTypes);
-                case Ast.If iff -> {
-                    expr(iff.cond());
+        /** Emits a function value from its elaborated node: the parameter and result types are the
+         * ones the checker decided, so nothing is inferred here (issue #81). */
+        private void emitFunctionValue(Core value, List<Type> paramTypes) {
+            switch (value) {
+                case Core.Block b -> emitLambda(b, paramTypes);
+                case Core.If iff -> {
+                    genExpr(iff.cond());
                     Label elseL = code.newLabel();
                     Label end = code.newLabel();
                     code.ifeq(elseL);
-                    Type t = emitFunctionValue(iff.then(), paramTypes);
+                    emitFunctionValue(iff.then(), paramTypes);
                     code.goto_(end);
                     code.labelBinding(elseL);
                     emitFunctionValue(iff.els(), paramTypes);
                     code.labelBinding(end);
-                    yield t;
                 }
-                case Ast.LetIn li -> {
+                case Core.LetIn li -> {
                     // a capture binding around the function: bind it here so the lambda captures it
-                    Type vt = expr(li.value());
+                    Type vt = genExpr(li.value());
                     int s = slot(vt);
                     store(code, s, vt);
                     bind(li.name(), s, vt);
-                    yield emitFunctionValue(li.body(), paramTypes);
+                    emitFunctionValue(li.body(), paramTypes);
                 }
-                default -> expr(value);
-            };
+                default -> genExpr(value);
+            }
         }
 
         /** Compiles a lambda to a synthetic {@code Fn} class and emits {@code new} of it, passing the
-         * captured free variables (and any injected behaviors it calls) to its constructor. */
-        private Type emitLambda(Ast.Block block, List<Type> paramTypes) {
-            Map<String, Type> inner = typesEnvWithHelpers();
-            for (int i = 0; i < paramTypes.size(); i++) {
-                inner.put(block.params().get(i), paramTypes.get(i));
-            }
-            Type resultType = TypeChecker.typeOf(block.body(), inner, data, symbols, reqSigs());
+         * captured free variables (and any injected behaviors it calls) to its constructor. Its
+         * parameter and result types are the ones the checker put on the block (issue #81). */
+        private void emitLambda(Core.Block block, List<Type> paramTypes) {
+            emitLambda(block.params(), block.body(), paramTypes,
+                    ((Type.FnOf) block.type()).result(), freeVars(block));
+        }
 
+        private void emitLambda(List<String> params, Core body, List<Type> paramTypes,
+                                Type resultType, List<String> free) {
             List<String> valueNames = new ArrayList<>();
             List<Type> valueTypes = new ArrayList<>();
             List<String> injectedNames = new ArrayList<>();
-            for (String c : freeVars(block)) {
+            for (String c : free) {
                 if (env.containsKey(c)) {
                     valueNames.add(c);
                     valueTypes.add(env.get(c).type());
@@ -1302,7 +1225,7 @@ final class BodyGen {
             }
             String className = pkg + ".$Fn" + ctx.nextLambdaId();
             ClassDesc cd = ClassDesc.of(className);
-            ctx.addSynth(className, generateLambdaClass(cd, block, paramTypes, resultType,
+            ctx.addSynth(className, generateLambdaClass(cd, params, body, paramTypes, resultType,
                     valueNames, valueTypes, injectedNames, reqSuccess, reqParams));
 
             code.new_(cd);
@@ -1319,12 +1242,12 @@ final class BodyGen {
             }
             code.invokespecial(cd, "<init>",
                     MethodTypeDesc.of(ConstantDescs.CD_void, ctorDescs.toArray(new ClassDesc[0])));
-            return Type.fn(paramTypes, resultType);
         }
 
         /** Applies a first-class function value: {@code f.apply(new Object[]{args...})}, then casts
          * the {@code Object} result back to the function's result type. */
-        private Type applyFn(Core.Call call, Var fv, Type.FnOf fnType) {
+        private void applyFn(Core.Call call, Type.FnOf fnType) {
+            Var fv = env.get(call.fn());
             load(code, fv.slot(), fv.type());   // the Fn receiver
             pushInt(code, call.args().size());
             code.anewarray(CD_Object);
@@ -1337,48 +1260,47 @@ final class BodyGen {
             }
             code.invokeinterface(CD_Fn, "apply", MTD_Fn_apply);
             stackCast(fnType.result());   // Object result -> the function's result type
-            return fnType.result();
         }
 
         /** The free variables of a lambda: names its body reads that are bound in the enclosing
          * scope (so must be captured), in first-seen order. */
-        private List<String> freeVars(Ast.Block block) {
+        private List<String> freeVars(Core.Block block) {
             LinkedHashSet<String> free = new LinkedHashSet<>();
             collectFree(block.body(), new HashSet<>(block.params()), free);
             return new ArrayList<>(free);
         }
 
-        private void collectFree(Ast.Expr e, Set<String> bound, LinkedHashSet<String> free) {
+        private void collectFree(Core e, Set<String> bound, LinkedHashSet<String> free) {
             switch (e) {
-                case Ast.Var v -> maybeFree(v.name(), bound, free);
-                case Ast.Call c -> {
+                case Core.Var v -> maybeFree(v.name(), bound, free);
+                case Core.Call c -> {
                     maybeFree(c.fn(), bound, free);   // an applied function value is captured too
                     c.args().forEach(a -> collectFree(a, bound, free));
                 }
-                case Ast.FieldAccess fa -> collectFree(fa.target(), bound, free);
-                case Ast.Binary bin -> {
+                case Core.FieldAccess fa -> collectFree(fa.target(), bound, free);
+                case Core.Binary bin -> {
                     collectFree(bin.left(), bound, free);
                     collectFree(bin.right(), bound, free);
                 }
-                case Ast.Neg neg -> collectFree(neg.operand(), bound, free);
-                case Ast.NewData nd -> {
+                case Core.Neg neg -> collectFree(neg.operand(), bound, free);
+                case Core.NewData nd -> {
                     nd.inits().forEach(i -> collectFree(i.value(), bound, free));
-                    nd.spreads().forEach(s -> maybeFree(s, bound, free));
+                    nd.spreads().forEach(sp -> maybeFree(sp, bound, free));
                 }
-                case Ast.If iff -> {
+                case Core.If iff -> {
                     collectFree(iff.cond(), bound, free);
                     collectFree(iff.then(), bound, free);
                     collectFree(iff.els(), bound, free);
                 }
-                case Ast.LetIn li -> {
+                case Core.LetIn li -> {
                     collectFree(li.value(), bound, free);
                     Set<String> inner = new HashSet<>(bound);
                     inner.add(li.name());
                     collectFree(li.body(), inner, free);
                 }
-                case Ast.Match m -> {
+                case Core.Match m -> {
                     collectFree(m.scrutinee(), bound, free);
-                    for (Ast.Case c : m.cases()) {
+                    for (Core.Case c : m.cases()) {
                         Set<String> inner = bound;
                         if (c.binding() != null) {
                             inner = new HashSet<>(bound);
@@ -1387,22 +1309,18 @@ final class BodyGen {
                         collectFree(c.body(), inner, free);
                     }
                 }
-                case Ast.Block b -> {
+                case Core.Block b -> {
                     Set<String> inner = new HashSet<>(bound);
                     inner.addAll(b.params());
                     collectFree(b.body(), inner, free);
                 }
-                case Ast.ListLit lit -> lit.elements().forEach(x -> collectFree(x, bound, free));
-                case Ast.Tuple tup -> tup.elements().forEach(x -> collectFree(x, bound, free));
-                case Ast.TupleGet tg -> collectFree(tg.tuple(), bound, free);
-                case Ast.ListComp comp -> {
-                    collectFree(comp.element(), bound, free);
-                    comp.guards().forEach(g -> collectFree(g, bound, free));
-                }
-                case Ast.IntLit _ -> { }
-                case Ast.DecimalLit _ -> { }
-                case Ast.StringLit _ -> { }
-                case Ast.BoolLit _ -> { }
+                case Core.ListLit lit -> lit.elements().forEach(x -> collectFree(x, bound, free));
+                case Core.Tuple tup -> tup.elements().forEach(x -> collectFree(x, bound, free));
+                case Core.TupleGet tg -> collectFree(tg.tuple(), bound, free);
+                case Core.Int _ -> { }
+                case Core.Decimal _ -> { }
+                case Core.Str _ -> { }
+                case Core.Bool _ -> { }
             }
         }
 
