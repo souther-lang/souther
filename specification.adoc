@@ -1282,6 +1282,8 @@ let 適用する (xs: List<Int>, p: (Int) -> Bool) = List.all(p, xs)
 
 The return type is inferred. However, a *recursive helper* MUST declare its return type — `+let 深さ (s: 社員): Int = ...+` — because the result type cannot be inferred through the cycle, and only with a declaration can a self-call be type-checked. The declaration is required only for a recursive helper. A non-recursive helper is inferred as before, and a `+let+` with a same-named behavior cannot write a return type (the type comes from the behavior).
 
+A written return type is a declaration into the body, and it stays one where the helper is expanded: it is pushed into the body at each call site, so a value only its context can type — an empty `+[]+` / `+Map.empty()+` / `+Set.empty()+`, or a `+fold+` over one — takes the declared element type even where the call site itself expects nothing concrete (a generic parameter such as `+Map.toList+`'s). This is the same direction a binding's `+let x: T = v+` has (<<block-expression>>).
+
 The body is an expression. `+{ ... }+` is a block expression (<<block-expression>>), written to place a `+let+` or `+require+`. `+let 正の数 (v: Int) = v >= 0+` and `+let 正の数 (v: Int) = { v >= 0 }+` are the same.
 
 `+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow (as in F# and Elm). Binding a lambda to a named definition (`+let f = (x) -> ...+`) is not adopted.

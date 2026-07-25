@@ -821,7 +821,8 @@ final class BodyGen {
                     // find(p, xs) / sortBy(key, xs): the function is a value here (not inlined into a
                     // fold), so materialise it as an Fn, then pass the list. The list's element type
                     // gives the function's one parameter type.
-                    Type lt = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnv(), data, symbols, reqSigs());
+                    Type lt = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnvWithHelpers(),
+                            data, symbols, reqSigs());
                     Type elem = ((Type.ListOf) lt).element();
                     emitFunctionValue(call.args().get(0).toAst(), List.of(elem));   // Fn on the stack
                     genExpr(call.args().get(1));                                    // then the List
@@ -836,7 +837,8 @@ final class BodyGen {
                     // map(f, opt): materialise f as an Fn (its one parameter is the option's element
                     // type), then the option. `Option` is not surface-writable, so the rewrap into
                     // Some(f v) / None happens in the runtime kernel (Option.map), not in emitted code.
-                    Type ot = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnv(), data, symbols, reqSigs());
+                    Type ot = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnvWithHelpers(),
+                            data, symbols, reqSigs());
                     Type elem = ((Type.OptionOf) ot).element();
                     Type fnT = emitFunctionValue(call.args().get(0).toAst(), List.of(elem));  // Fn on the stack
                     genExpr(call.args().get(1));                                              // then the Option

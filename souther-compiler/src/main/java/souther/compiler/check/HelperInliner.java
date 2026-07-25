@@ -218,6 +218,73 @@ public final class HelperInliner {
         }
     }
 
+    /** Keeps a helper's declared return type on the body spliced into the caller, as the annotation of
+     * a binding the body flows through ({@code let $r0: Map<String, Int> = <body> in $r0}). A declared
+     * return is a declaration into the body (spec §fn-declaration), and inlining is where it would
+     * otherwise be lost: at a call site that expects nothing concrete — a generic parameter such as
+     * {@code Map.toList}'s — the declaration is the only thing that can fix an empty-collection seed
+     * inside the body.
+     *
+     * <p>Only a collection-bearing return type is carried. A scalar return has nothing to fix, and
+     * leaving those bodies bare keeps a constant-foldable expression ({@code 金額(税込(100))}) a plain
+     * expression for the compile-time invariant check. A union return is left alone too: the binding
+     * would name one type where the body may produce several. */
+    private Ast.Expr keepDeclaredReturn(Ast.FnDef helper, Ast.Expr body, SourcePos pos, int k) {
+        Ast.RetType declared = helper.declaredReturn();
+        if (declared == null || declared.cases().size() != 1
+                || !carriesCollection(declared.cases().get(0))
+                || mentionsTypeVar(declared.cases().get(0))) {
+            return body;
+        }
+        String bound = "$r" + k;
+        return Ast.LetIn.annotated(bound, body, declared, new Ast.Var(bound, pos), pos);
+    }
+
+    /** Whether a written type has a collection anywhere inside it — the types whose element/value type
+     * an empty literal leaves open until something declares it. */
+    private static boolean carriesCollection(Ast.TypeRef ref) {
+        if (ref == null) {
+            return false;
+        }
+        if ("List".equals(ref.name()) || "Map".equals(ref.name()) || "Set".equals(ref.name())) {
+            return true;
+        }
+        if (carriesCollection(ref.arg())) {
+            return true;
+        }
+        if (ref.tupleElems() != null) {
+            for (Ast.TypeRef e : ref.tupleElems()) {
+                if (carriesCollection(e)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /** Whether a written type has a type variable inside it. A generic declared return ({@code
+     * Map.upsert}'s {@code Map<'k, 'a>}) says nothing concrete at a call site, so it is not carried —
+     * the caller's own arguments are what fix those variables. */
+    private static boolean mentionsTypeVar(Ast.TypeRef ref) {
+        if (ref == null) {
+            return false;
+        }
+        if (ref.name() != null && ref.name().startsWith("'")) {
+            return true;
+        }
+        if (mentionsTypeVar(ref.arg())) {
+            return true;
+        }
+        if (ref.tupleElems() != null) {
+            for (Ast.TypeRef e : ref.tupleElems()) {
+                if (mentionsTypeVar(e)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** Rewrites every helper call in {@code e} to its inlined body. */
     public Ast.Expr inline(Ast.Expr e) {
         return switch (e) {
@@ -310,6 +377,7 @@ public final class HelperInliner {
                 SourcePos at = own.containsKey(helper.name()) ? null : call.pos();
                 Ast.Expr body = inline(rename(helper.body(), subst, fnParams, at));   // expand nested helpers too
                 scopedLambdas.keySet().forEach(helpers::remove);
+                body = keepDeclaredReturn(helper, body, call.pos(), k);
                 // wrap innermost-first so the value parameters bind in declared order
                 for (int i = letNames.size() - 1; i >= 0; i--) {
                     body = new Ast.LetIn(letNames.get(i), letValues.get(i), letTypes.get(i), body, call.pos());

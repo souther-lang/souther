@@ -157,7 +157,8 @@ let labelKeys (issues: List<Issue>): List<String> =
     fold((acc, issue) -> acc ++ map(l -> l.value, Set.toList(issue.labels)), [], issues)
 
 // The counts themselves, shared with the ranking below. The helper's declared return type is pushed
-// into its body, so the empty-map seed takes its value type from `Map<String, Int>`.
+// into its body wherever it expands, so the empty-map seed takes its value type from
+// `Map<String, Int>` — including under `Map.toList`, whose parameter says nothing concrete.
 let labelCounts (issues: List<Issue>): Map<String, Int> =
     fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), labelKeys(issues))
 
@@ -195,18 +196,14 @@ let entryCount (e: (String, Int)): Int = {
     count
 }
 
-// The counts are named on their own line with their type: `Map.toList`'s parameter is generic, so
-// a fold over an empty seed feeding it directly would have nothing to fix its accumulator type.
-let topLabels (board, n) = {
-    let counts: Map<String, Int> = labelCounts(board.issues)
+let topLabels (board, n) =
     LabelRanking { labels =
-        Map.toList(counts)
+        Map.toList(labelCounts(board.issues))
             |> List.sortBy(e -> entryCount(e))
             |> List.reverse
             |> List.take(n)
             |> map(entryLabel)
     }
-}
 
 example topLabels
     | "the most-used label leads the ranking" :
