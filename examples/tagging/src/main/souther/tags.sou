@@ -92,9 +92,10 @@ let assigneeOf (issue) =
 // === countByLabel: how many issues carry each label (fold + Map.upsert) ===
 // Collect every label occurrence across the board as plain strings (Set.toList each issue's labels,
 // unwrap to the text, concatenate), then fold them into a Map<String, Int>, counting each key with
-// Map.upsert — seed 1 on first sight, +1 on every repeat. The empty-map seed's value type is fixed
-// by the LabelCounts.counts field it feeds. The key is the label text (Label.value); a Map key is a
-// String or String-backed newtype.
+// Map.upsert — seed 1 on first sight, +1 on every repeat. The empty-map seed's value type comes from
+// the binding's annotation `let counts: Map<String, Int>`: a written type is pushed into the value,
+// so a fold over an empty seed can be named on its own line instead of being inlined into the field
+// it feeds. The key is the label text (Label.value); a Map key is a String or String-backed newtype.
 data LabelCounts = { counts: Map<String, Int> }
 
 behavior countByLabel : (board: Board) -> LabelCounts
@@ -104,7 +105,8 @@ behavior countByLabel : (board: Board) -> LabelCounts
 let labelKeys (issues: List<Issue>): List<String> =
     fold((acc, issue) -> acc ++ map(l -> l.value, Set.toList(issue.labels)), [], issues)
 
-let countByLabel (board) =
-    LabelCounts {
-        counts = fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), labelKeys(board.issues))
-    }
+let countByLabel (board) = {
+    let counts: Map<String, Int> =
+        fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), labelKeys(board.issues))
+    LabelCounts { counts = counts }
+}
