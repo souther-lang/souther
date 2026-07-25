@@ -390,8 +390,11 @@ final class BodyGen {
             }
         }
 
-        /** Builds an ArrayList of the literal's elements and returns it immutably. */
-        private Type listLit(Core.ListLit lit) {
+        /** Builds an ArrayList of the literal's elements and returns it immutably. An empty {@code []}
+         * adopts a pushed-down list type, as {@code Map.empty}/{@code Set.empty} do and as the checker
+         * already does: a written {@code let xs: List<Int> = []} otherwise emits at {@code List<_>},
+         * and reading an element back unboxes the bottom (issue #74). */
+        private Type listLit(Core.ListLit lit, Type expected) {
             code.new_(CD_ArrayList);
             code.dup();
             code.invokespecial(CD_ArrayList, "<init>", MTD_void);
@@ -405,7 +408,10 @@ final class BodyGen {
                 elem = t;
             }
             code.invokestatic(CD_List, "copyOf", MTD_List_copyOf, true);
-            return elem == null ? Type.EMPTY_LIST : Type.list(elem);   // `[]` is the empty list (ADR-0028)
+            if (elem != null) {
+                return Type.list(elem);
+            }
+            return expected instanceof Type.ListOf le ? le : Type.EMPTY_LIST;   // `[]` (ADR-0028)
         }
 
         /** Builds a tuple {@code (e1, e2, ...)} as an {@code Object[]}, boxing each element (ADR-0036).
@@ -538,7 +544,7 @@ final class BodyGen {
                     code.labelBinding(end);
                     yield tt;
                 }
-                case Core.ListLit lit -> listLit(lit);
+                case Core.ListLit lit -> listLit(lit, expected);
                 case Core.Tuple t -> tuple(t, expected);
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> binary(bin);

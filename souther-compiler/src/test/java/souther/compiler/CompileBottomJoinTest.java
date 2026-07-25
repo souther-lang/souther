@@ -189,6 +189,48 @@ class CompileBottomJoinTest {
         assertEquals(3L, run(loader, Map.of("ks", List.of("a", "b", "a", "c"))).get("n"));
     }
 
+    /** {@code []} adopts a pushed-down type in the backend as {@code Map.empty}/{@code Set.empty} do.
+     * Without it an annotated empty list binds at {@code List<_>} during emission, so reading an
+     * element back yields an {@code Option<_>} and the arm unboxes a bottom — invalid bytecode. */
+    @Test
+    void annotatedEmptyListReachesTheBackend() throws Exception {
+        BytesClassLoader loader = loader("""
+                module demo
+
+                data In = { k: Int }
+                data Out = { n: Int }
+
+                behavior work : (i: In) -> Out constructs Out
+                let work (i) = {
+                    let xs: List<Int> = []
+                    let v = match List.get(0, xs) with | Some n -> n + 1 | None -> 0
+                    Out { n = v }
+                }
+                """);
+        assertEquals(0L, run(loader, Map.of("k", 1)).get("n"));
+    }
+
+    /** The same through a written tuple type: the component {@code List<Int>} reaches the {@code []}
+     * the tuple holds. */
+    @Test
+    void annotatedEmptyListInsideATupleReachesTheBackend() throws Exception {
+        BytesClassLoader loader = loader("""
+                module demo
+
+                data In = { k: Int }
+                data Out = { n: Int }
+
+                behavior work : (i: In) -> Out constructs Out
+                let work (i) = {
+                    let seed: (List<Int>, Int) = ([], 0)
+                    let (xs, _) = seed
+                    let v = match List.get(0, xs) with | Some n -> n + 1 | None -> 0
+                    Out { n = v }
+                }
+                """);
+        assertEquals(0L, run(loader, Map.of("k", 1)).get("n"));
+    }
+
     /** {@code List.distinct} is written in the branchy form this join permits: the skip branch
      * returns the accumulator untouched. First occurrences are kept, in order. */
     @Test
