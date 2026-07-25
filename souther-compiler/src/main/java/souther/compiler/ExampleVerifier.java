@@ -782,6 +782,12 @@ public final class ExampleVerifier {
      * the parameter is the sum `依頼` — the same way the domain writes a construction, while the
      * decoder that reads it wants a tag on a key. Where the case is read as itself rather than
      * through its sum, the tag is a field the decoder does not look at.
+     *
+     * <p>A field the fixture wrote itself is never replaced. A case whose own field is named like its
+     * sum's discriminator is already ambiguous at the boundary — the case encoder and the sum encoder
+     * both claim that key — and overwriting here would hide that behind an example that passes while
+     * decoding something the author did not write. Leaving the written value in place makes the row
+     * fail on the tag it cannot match, which is the honest outcome.
      */
     private void tagged(String caseName, Map<String, Object> map) {
         for (Ast.Def def : symbols.values()) {
@@ -790,7 +796,7 @@ public final class ExampleVerifier {
             }
             for (Ast.Variant variant : sum.decoder().get().variants()) {
                 if (variant.caseType().equals(caseName)) {
-                    map.put(sum.decoder().get().key(), variant.tag());
+                    map.putIfAbsent(sum.decoder().get().key(), variant.tag());
                     return;
                 }
             }

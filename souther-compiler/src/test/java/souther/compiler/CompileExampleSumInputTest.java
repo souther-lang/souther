@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An {@code example} whose input is a sum names the case it means, the same way a body constructs one.
@@ -43,6 +44,33 @@ class CompileExampleSumInputTest {
     @Test
     void aFixtureNamesTheCaseForASumTypedInput() {
         assertDoesNotThrow(() -> Compiler.compile(MODULE));
+    }
+
+    @Test
+    void aFieldTheFixtureWroteIsNotReplacedByTheTag() {
+        // A case whose own field is named like its sum's discriminator is already ambiguous at the
+        // boundary. The fixture's value stays, so the row fails on the tag it cannot match instead of
+        // passing while decoding something the author did not write.
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data A = { type: String, n: Int }
+                data B = { m: Int }
+                data S = A | B
+                data Out = { v: Int }
+
+                behavior run : (s: S) -> Out constructs Out
+
+                let run (s) =
+                    match s with
+                        | A { n } -> Out { v = n }
+                        | B { m } -> Out { v = m }
+
+                example run
+                    | "the written `type` is what is decoded" : (A { type = "wat", n = 7 })
+                        -> Out { v = 7 }
+                """));
+        assertTrue(e.getMessage().contains("A") && e.getMessage().contains("B"), e.getMessage());
     }
 
     @Test
