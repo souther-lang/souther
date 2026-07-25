@@ -596,14 +596,14 @@ public final class CstParser {
                 break;
             }
         }
-        if (!at(SyntaxKind.RBRACE) && !at(SyntaxKind.EOF)) {
-            expr();   // the result expression
-        } else if (at(SyntaxKind.RBRACE)) {
-            // The block closes with nothing to be its value. Reported here rather than left to the AST
-            // builder, which would have no node to build from. The usual cause is not a missing line
-            // but an absorbed one: Souther is layout-independent, so a statement ending in a name and
-            // a following line starting with `(` are one call.
+        if (at(SyntaxKind.RBRACE)) {
+            // The block closes with nothing to be its value. Often the result was not omitted but
+            // absorbed: layout does not end a statement, so a line starting with `(`, `.` or an
+            // operator continues the line above. At EOF the block is merely unterminated, which
+            // blockExpr's expect(RBRACE) reports instead — one error, not two.
             error("parse.block.noresult", "a block ends in a result expression, and this one has none");
+        } else if (!at(SyntaxKind.EOF)) {
+            expr();   // the result expression
         }
     }
 
