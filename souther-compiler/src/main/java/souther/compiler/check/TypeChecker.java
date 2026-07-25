@@ -3237,6 +3237,16 @@ public final class TypeChecker {
                 // partial: a zero divisor produces the DivisionByZero case (spec 18.2)
                 yield Type.union(new java.util.LinkedHashSet<>(List.of("Int", "DivisionByZero")));
             }
+            case "Decimal.toInt" -> {
+                // The narrowing states its rounding, as `divide` does: dropping a fraction is a
+                // domain decision (spec 18.3). The widening `Decimal.fromInt` needs no such word and
+                // is an ordinary stdlib function.
+                arity(call, 2);
+                ca.require(0, Type.DECIMAL, "argument 1 of toInt");
+                requireRoundingMode(args.get(1));
+                ca.untyped(1);   // a built-in identifier, not an expression
+                yield Type.INT;
+            }
             case "Int.divide", "Decimal.divide" -> {
                 if (args.size() == 4) {
                     // Decimal divide states its rounding: divide(a, b, scale, mode) (spec 18.3)

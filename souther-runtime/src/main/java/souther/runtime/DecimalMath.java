@@ -32,4 +32,27 @@ public final class DecimalMath {
     public static long compare(BigDecimal a, BigDecimal b) {
         return a.compareTo(b);
     }
+
+    /** {@code Decimal.fromInt(n)}: every Int is a Decimal exactly, so the widening needs nothing
+     *  stated. The narrowing does — see {@link #toInt}. */
+    public static BigDecimal fromInt(long n) {
+        return BigDecimal.valueOf(n);
+    }
+
+    /**
+     * {@code Decimal.toInt(d, mode)}: the whole number {@code d} rounds to under {@code mode}. The
+     * mode is written at the call because dropping a fraction is a domain decision — a tax is
+     * truncated or rounded by rule, not by default — the same reason {@code Decimal.divide} states
+     * its scale and mode.
+     *
+     * <p>A value too large for {@code Int} aborts, as an Int overflow does ({@link IntMath}): it is a
+     * model bug rather than a business result.
+     */
+    public static long toInt(BigDecimal d, RoundingMode mode) {
+        try {
+            return d.setScale(0, mode).longValueExact();
+        } catch (ArithmeticException e) {
+            throw new ConstraintViolation("Decimal does not fit in an Int: " + d.toPlainString());
+        }
+    }
 }

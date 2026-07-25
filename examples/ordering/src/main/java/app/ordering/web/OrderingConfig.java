@@ -1,5 +1,6 @@
 package app.ordering.web;
 
+import app.ordering.JooqRateOf;
 import app.ordering.JooqRecordOrder;
 import app.ordering.JooqReserveStock;
 
@@ -9,6 +10,8 @@ import example.cart.Quote;
 import example.ordering.Place;
 import example.ordering.RecordOrder;
 import example.ordering.ReserveStock;
+import example.tax.RateOf;
+import example.tax.TaxFor;
 
 
 import org.jooq.DSLContext;
@@ -75,5 +78,17 @@ public class OrderingConfig {
     @Bean
     public Place place(RecordOrder recordOrder, ReserveStock reserveStock) {
         return Place.bind(recordOrder, reserveStock);
+    }
+
+    /** tax's injected rate lookup: the one NUMERIC column in the schema (example.tax). */
+    @Bean
+    public RateOf rateOf(DSLContext dsl) {
+        return new JooqRateOf(dsl);
+    }
+
+    /** The tax calculation, bound to that lookup. Pure arithmetic once the rate is in hand. */
+    @Bean
+    public TaxFor taxFor(RateOf rateOf) {
+        return TaxFor.bind(rateOf);
     }
 }

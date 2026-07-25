@@ -1911,7 +1911,7 @@ The four operations may also be written with the operators `{plus}` `+-+` `+*+` 
 
 [,text]
 ----
-add  subtract  multiply  divide  compare
+add  subtract  multiply  divide  compare  fromInt  toInt
 ----
 
 Division makes the rounding scale and mode explicit as arguments. `+Decimal.divide(a, b, 2, HALF_UP)+` rounds HALF_UP at 2 decimal places. The rounding mode is a built-in identifier, resolved as a built-in value like `+None+` (<<unit-data>>).
@@ -1922,6 +1922,8 @@ HALF_UP  HALF_EVEN  HALF_DOWN  UP  DOWN  CEILING  FLOOR
 ----
 
 These correspond to `+java.math.RoundingMode+`. `+Decimal.divide(a, b)+` without scale and mode cannot be written — to surface rounding as a domain decision, the same position as "scale is incidental" in <<primitives>>. Division by zero returns `+Decimal | DivisionByZero+`.
+
+`+Int+` and `+Decimal+` meet only where the conversion is written. `+Decimal.fromInt(n)+` widens an `+Int+`; it is exact, so nothing has to be stated. `+Decimal.toInt(d, mode)+` narrows back, and because that drops a fraction it names the rounding at the call, as `+divide+` does. There is no implicit widening: an arithmetic operator takes two operands of one type (<<primitives>>), so a rate applied to an amount in yen reads `+Decimal.fromInt(税抜) * 税率+` — the conversion sits where the value stops being an amount. This is F#'s position for operators (`+n * 0.1m+` does not compile; `+decimal n * 0.1m+` does). A `+Decimal+` too large for an `+Int+` aborts, as an `+Int+` overflow does (<<primitives>>).
 
 The four operations may also be written with the operators `{plus}` `+-+` `+*+` `+/+`. The operator `+/+` divides with a default rounding — significant digits (about 29) and HALF_UP, following F#/.NET's `+System.Decimal+` — so `+10m / 3m+` is `+3.3333…+` and does not abort. Division by zero *aborts*. To make rounding an explicit domain decision, or to receive division by zero as a case, use the function `+Decimal.divide(a, b, scale, mode)+`.
 

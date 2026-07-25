@@ -836,6 +836,7 @@ final class BodyGen {
                     }
                 }
                 case "Int.remainder" -> intDivide(call, false);
+                case "Decimal.toInt" -> decimalToInt(call);
                 default -> {
                     Var fv = env.get(call.fn());
                     if (fv != null && fv.type() instanceof Type.FnOf fnType) {
@@ -960,6 +961,16 @@ final class BodyGen {
             code.labelBinding(zero);
             code.getstatic(CD_DivisionByZero, "INSTANCE", CD_DivisionByZero);
             code.labelBinding(end);
+        }
+
+        /** {@code toInt(d, mode)}: the whole number `d` rounds to under `mode`, which is written at
+         * the call as `divide`'s is. The kernel aborts on a value too large for an Int. */
+        private void decimalToInt(Core.Call call) {
+            genExpr(call.args().get(0));
+            String mode = ((Core.Var) call.args().get(1)).name();
+            code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
+            code.invokestatic(CD_DecimalMath, "toInt",
+                    MethodTypeDesc.of(ConstantDescs.CD_long, CD_BigDecimal, CD_RoundingMode));
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on
