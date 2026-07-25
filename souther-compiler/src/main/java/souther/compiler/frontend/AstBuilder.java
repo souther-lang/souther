@@ -723,6 +723,12 @@ public final class AstBuilder {
                 default -> result = c;   // the trailing result expression
             }
         }
+        if (result == null) {
+            // the parser reports this, so the compiler never gets here; a build over a CST that was
+            // parsed with errors (an editor's, say) says so rather than dereferencing the missing node
+            throw error(pos(n), "parse.block.noresult",
+                    "a block ends in a result expression, and this one has none");
+        }
         return foldStatements(stmts, 0, result);
     }
 
