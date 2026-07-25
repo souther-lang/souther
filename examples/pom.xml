@@ -17,6 +17,7 @@
 
     <modules>
         <module>contact</module>
+        <module>joboffer</module>
         <module>issuetracker</module>
         <module>businesstrip</module>
         <module>member</module>
