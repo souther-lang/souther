@@ -1,0 +1,48 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>example.souther</groupId>
+        <artifactId>souther-examples</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>joboffer</artifactId>
+
+    <description>
+        The nested-sum example: a crowdsourcing job offer whose shape is a sum of sums of sums
+        (依頼 -> プロジェクト依頼 -> 精算方式 -> 固定精算 -> 予算 -> 範囲予算). It is a port of
+        kawasima/validation-modeling's raoh joboffer, where the same model is written as hand-built
+        Raoh decoders; here the constraints live in the newtypes' invariants and the decoder is
+        derived from them. No database: the two behaviors are pure, so the boundary decodes, runs
+        them and answers. It is the one example that reads a Jackson JsonNode through the generated
+        `jsonDecoder()` — which is also what lets a date arrive as JSON text.
+    </description>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>4.0.7</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- Souther 生成物のランタイムと、その decoder/encoder が呼ぶ Raoh -->
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
+        <!-- jsonDecoder() が読む JsonNode 側。Jackson 3 (tools.jackson) で Boot 4 と同じ系統 -->
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh-json</artifactId></dependency>
+
+        <!-- 実行する境界。DB は無いので web スターターだけ -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    </dependencies>
+</project>

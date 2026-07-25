@@ -2665,6 +2665,35 @@ public final class TypeChecker {
                 st, env, data, symbols, reqs, expected);
     }
 
+    /**
+     * An arm names something that is not a case of what is being matched. When that name is a case of
+     * another sum, say which — the author wrote an arm for a different match. The layout rule
+     * (<<match>>) settles that by column, except where both matches are on one line: there the inner
+     * match takes every `|` after it, so an arm meant for the outer one lands here, and the report
+     * says how to end the inner match.
+     */
+    private static CompileException notCase(String caseName, String what, Ast.Case c, Ast.Match m,
+                                            Set<String> cases, Map<String, Ast.Def> symbols) {
+        String otherSum = null;
+        for (Ast.Def def : symbols.values()) {
+            if (def instanceof Ast.SumData sum && sum.cases().contains(caseName)
+                    && !cases.containsAll(sum.cases())) {
+                otherSum = sum.name();
+                break;
+            }
+        }
+        Diagnostic.Builder d = Diagnostic.of(null, "check.match.notcase").title("check.match.title")
+                .at(c.pos()).args(caseName, what);
+        if (otherSum != null) {
+            d = d.hint("check.match.notcase.other", caseName, otherSum);
+            if (c.pos().line() == m.pos().line()) {
+                d = d.hint("check.match.notcase.online");
+            }
+        }
+        return CompileException.of(d.build(), "`" + caseName + "` is not a case of " + what
+                + (otherSum == null ? "" : " (it is a case of `" + otherSum + "`)"));
+    }
+
     /** Match over a fixed set of data cases (a named sum's cases, or an anonymous union's members).
      * A single-case case binds that case's type; an or-pattern ({@code A | B}) binds {@code scrutinee}
      * (the sum type), since no one case type fits all its alternatives. Every case must be covered
@@ -2679,10 +2708,7 @@ public final class TypeChecker {
         for (Ast.Case c : m.cases()) {
             for (String caseName : c.caseTypes()) {
                 if (!cases.contains(caseName)) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.match.notcase").title("check.match.title")
-                                    .at(c.pos()).args(caseName, what).build(),
-                            "`" + caseName + "` is not a case of " + what);
+                    throw notCase(caseName, what, c, m, cases, symbols);
                 }
                 if (!covered.add(caseName)) {
                     throw CompileException.of(
@@ -2900,10 +2926,57 @@ public final class TypeChecker {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
             }
         }
+        List<String> cases = sumCases(target, symbols);
+        if (cases != null) {
+            // A sum carries no fields of its own — its cases do, and which case it is is not known
+            // until it is opened. Saying that is the difference between "this value has no such
+            // field" and "read it in each case", which is what the author has to write.
+            List<String> without = new ArrayList<>();
+            for (String c : cases) {
+                if (!(symbols.get(c) instanceof Ast.Data cd)
+                        || !fieldTypes(cd, symbols).containsKey(fa.field())) {
+                    without.add(c);
+                }
+            }
+            Diagnostic.Builder d = Diagnostic.of(null, "check.access.sum")
+                    .title("check.type.mismatch.title")
+                    .at(fa.pos(), fa.field().length()).args(fa.field(), Type.show(target));
+            if (!without.isEmpty()) {
+                d = d.hint("check.access.sum.missing", fa.field(), String.join(", ", without));
+            }
+            throw CompileException.of(d.build(),
+                    "cannot read a field `" + fa.field() + "` on the sum `" + Type.show(target)
+                            + "`: a sum has no fields of its own; open it with `match`");
+        }
         throw CompileException.of(
                 Diagnostic.of(null, "check.access").title("check.type.mismatch.title")
                         .at(fa.pos(), fa.field().length()).args(fa.field()).build(),
                 "cannot access field `" + fa.field() + "` on this value");
+    }
+
+    /** The cases of {@code t} when it is a sum — a declared {@code data S = A | B} or the union a
+     * branch widened to — with a case that is itself a sum folded to its own cases. Null when
+     * {@code t} is not a sum at all. */
+    private static List<String> sumCases(Type t, Map<String, Ast.Def> symbols) {
+        List<String> names;
+        if (t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum) {
+            names = sum.cases();
+        } else if (t instanceof Type.Union union) {
+            names = List.copyOf(union.members());
+        } else {
+            return null;
+        }
+        List<String> leaves = new ArrayList<>();
+        for (String name : names) {
+            List<String> nested = symbols.get(name) instanceof Ast.SumData
+                    ? sumCases(Type.ref(name), symbols) : null;
+            if (nested == null) {
+                leaves.add(name);
+            } else {
+                leaves.addAll(nested);
+            }
+        }
+        return leaves;
     }
 
     private static Core elaborateCall(Ast.Call call, Map<String, Type> env, Ast.Data data,

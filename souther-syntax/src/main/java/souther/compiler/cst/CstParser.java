@@ -38,6 +38,9 @@ public final class CstParser {
     private int pos = 0;          // index into tokens (may point at trivia)
     private final Deque<Frame> stack = new ArrayDeque<>();
     private final List<CstError> errors = new ArrayList<>();
+    /** The arm column of each match currently parsing its arms, innermost on top. A nested match
+     * stops at a `|` that reaches back to one of these columns. */
+    private final Deque<Integer> matchArmColumns = new ArrayDeque<>();
 
     private CstParser(List<GreenToken> tokens) {
         this.tokens = tokens;
@@ -892,6 +895,13 @@ public final class CstParser {
         finish();
     }
 
+    /**
+     * {@code match e with | A -> … | B -> …}. An arm belongs to the innermost match whose arms it is
+     * indented past: a {@code |} at or left of the enclosing match's arm column closes this match and
+     * is left for that one. Without the column rule a match inside an arm body swallows the arms that
+     * follow it — the enclosing match's own cases — and the error surfaces far from the layout that
+     * caused it (`B is not a case of <the inner sum>`).
+     */
     private void matchExpr() {
         start(SyntaxKind.MATCH_EXPR);
         bump();   // match
@@ -900,12 +910,33 @@ public final class CstParser {
         expr();   // scrutinee
         noConstruct = saved;
         expect(SyntaxKind.WITH_KW);
+        int enclosing = matchArmColumns.isEmpty() ? -1 : matchArmColumns.peek();
+        // this match's arm column: the leading `|` when written, else the first case's own column
+        int armColumn = columnOf(mi(0));
         eat(SyntaxKind.PIPE);   // optional leading `|`
+        matchArmColumns.push(armColumn);
         matchCase();
-        while (eat(SyntaxKind.PIPE)) {
+        while (at(SyntaxKind.PIPE) && columnOf(mi(0)) > enclosing) {
+            bump();   // |
             matchCase();
         }
+        matchArmColumns.pop();
         finish();
+    }
+
+    /** The 0-based column of the token at {@code index}, walking back to the last newline in the
+     * trivia. A match arm's column is what decides which match it belongs to. */
+    private int columnOf(int index) {
+        int column = 0;
+        for (int i = index - 1; i >= 0; i--) {
+            String text = tokens.get(i).text();
+            int newline = text.lastIndexOf('\n');
+            if (newline >= 0) {
+                return column + (text.length() - newline - 1);
+            }
+            column += text.length();
+        }
+        return column;
     }
 
     /** {@code A [| B ...] [binding] [{ fields }] [as x] -> body} — kept structural for lowering. */
