@@ -113,6 +113,26 @@ class HighValueDiagnosticTest {
     }
 
     @Test
+    void aMapOverEmptyLiteralIsNotReattributedToAFoldSeed() {
+        // `List.map` over an empty literal cannot infer its element type, so its closure fails on the
+        // bottom-typed parameter. `List.map` inlines to a `List.foldFrom` whose accumulator seed is
+        // the combinator's own internal `[]`, stamped onto the call site — not a seed the caller
+        // wrote. The failure must surface as its own step error, not a misleading `check.fold.seed.*`
+        // naming `List.foldFrom`, a helper the user never called (issue #70 review).
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data Out = { xs: List<Int> }
+                behavior run : (i: Int) -> Out constructs Out
+                let run (i) = {
+                    let ys = List.map(n -> n + 1, [])
+                    Out { xs = ys }
+                }
+                """);
+        assertEquals("check.type.mismatch.title", d.titleKey(),
+                "a non-fold combinator over [] surfaces its own step error, not a fold-seed message");
+    }
+
+    @Test
     void concatMismatchPointsAtBothOperands() {
         Diagnostic d = diagnosticOf("""
                 module demo

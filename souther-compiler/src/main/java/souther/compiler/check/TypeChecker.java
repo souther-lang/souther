@@ -2373,17 +2373,36 @@ public final class TypeChecker {
         return false;
     }
 
-    /** The index of a non-function argument that is an empty-collection literal whose parameter type,
-     * after binding from the value arguments, still mentions a bottom — i.e. a fold seed whose element
-     * type nothing has fixed. Used to point a step-typing failure at the seed rather than deep inside
-     * the step. Returns -1 when no such seed exists. */
-    private static int untypedEmptySeed(List<Ast.Expr> args, Type.FnOf fn, Map<String, Type> bind) {
-        for (int i = 0; i < args.size(); i++) {
-            if (!(fn.params().get(i) instanceof Type.FnOf)
-                    && isEmptyCollectionLiteral(args.get(i))
-                    && Type.mentions(substitute(fn.params().get(i), bind), TypeChecker::isBottom)) {
-                return i;
-            }
+    /** The fold seed argument when it is an un-inferrable empty-collection literal — a genuine fold
+     * whose accumulator element type nothing has fixed — or {@code -1} otherwise. Used to point a
+     * step-typing failure at the seed rather than deep inside the step. Two guards keep this to real
+     * fold seeds so a non-fold call is never mis-reported as one (issue #70 review):
+     *
+     * <ul>
+     *   <li>the signature is fold-shaped — a step function at index 0 and, at the seed index 1, an
+     *       accumulator whose type is the fold's result. A higher-order function that merely takes a
+     *       closure and an empty collection ({@code List.map}/{@code filter} over {@code []}) does not
+     *       match, so its step failure is not relabelled as a fold-seed error; and</li>
+     *   <li>the seed's source position differs from the call's. A combinator inlined onto its call
+     *       site (e.g. {@code List.map}'s internal {@code []} accumulator, which desugars to a
+     *       {@code List.foldFrom}) carries the call's own position; the caller never wrote an empty
+     *       seed there, so it is excluded.</li>
+     * </ul>
+     */
+    private static int untypedEmptySeed(List<Ast.Expr> args, Type.FnOf fn, Map<String, Type> bind,
+                                        SourcePos callPos) {
+        int seed = 1;
+        if (fn.params().size() <= seed || args.size() <= seed) {
+            return -1;
+        }
+        boolean foldShaped = fn.params().get(0) instanceof Type.FnOf
+                && !(fn.params().get(seed) instanceof Type.FnOf)
+                && fn.params().get(seed).equals(fn.result());
+        if (foldShaped
+                && isEmptyCollectionLiteral(args.get(seed))
+                && !args.get(seed).pos().equals(callPos)
+                && Type.mentions(substitute(fn.params().get(seed), bind), TypeChecker::isBottom)) {
+            return seed;
         }
         return -1;
     }
@@ -2916,7 +2935,7 @@ public final class TypeChecker {
                         // unknown identifier, a real type clash) is rethrown untouched so it is not
                         // masked. This fires whether or not a context type was pushed — an expected type
                         // that did not fit still leaves the accumulator a bottom (issue #70).
-                        int seed = untypedEmptySeed(args, fn, bind);
+                        int seed = untypedEmptySeed(args, fn, bind, call.pos());
                         if (seed < 0 || !reportsUnresolvedBottom(stepError)) {
                             throw stepError;
                         }
