@@ -28,8 +28,10 @@ class CompileTypeVariableTest {
     /** Compiles a core (reserved-namespace) module directly, bypassing the user-facing guard. */
     private static Map<String, byte[]> compileCore(String src) {
         Ast.Module m = Deriver.derive(CstFrontend.parse(src));
-        TypeChecker.check(m);
-        return Backend.generate(Lower.run(m));
+        Ast.Module lowered = Lower.run(m);
+        TypeChecker.Checked checked =
+                TypeChecker.checkOrThrow(m, TypeChecker.symbols(m), Map.of(), lowered);
+        return Backend.generate(lowered, checked);
     }
 
     @Test

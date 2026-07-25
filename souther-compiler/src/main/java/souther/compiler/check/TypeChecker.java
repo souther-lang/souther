@@ -35,18 +35,34 @@ public final class TypeChecker {
     }
 
     /**
+     * What a successful check produced for the backend (issue #81): the Core of every body it typed,
+     * carrying the type decided for each node, plus the warnings the check raised. The backend emits
+     * from these rather than translating the AST and inferring the same types a second time.
+     */
+    public record Checked(Map<String, Core> behaviorBodies, Map<String, Core> recursiveHelpers,
+                          List<Diagnostic> warnings) {}
+
+    /** The bodies elaborated so far, filled as the check walks them. */
+    private static final class Elaborated {
+        private final Map<String, Core> behaviors = new LinkedHashMap<>();
+        private final Map<String, Core> helpers = new LinkedHashMap<>();
+    }
+
+    /**
      * Type-checks {@code module} and, if any error was found, throws the first — the fail-fast entry
      * point for the CLI and the annotation processor, which stop at the first error. The recovering
      * {@link #check(Ast.Module, Map, Map, Ast.Module)} collects every error for the LSP instead.
      */
-    public static List<Diagnostic> checkOrThrow(Ast.Module module, Map<String, Ast.Def> symbols,
+    public static Checked checkOrThrow(Ast.Module module, Map<String, Ast.Def> symbols,
                                                 Map<String, Sig> importedSigs, Ast.Module lowered) {
         List<Diagnostic> warnings = new ArrayList<>();
-        List<CompileException> errors = checkCollecting(module, symbols, importedSigs, lowered, warnings);
+        Elaborated elaborated = new Elaborated();
+        List<CompileException> errors =
+                checkCollecting(module, symbols, importedSigs, lowered, warnings, elaborated);
         if (!errors.isEmpty()) {
             throw errors.get(0);   // the original exception, so its rendered message is unchanged
         }
-        return warnings;
+        return new Checked(elaborated.behaviors, elaborated.helpers, warnings);
     }
 
     /** Every error found in {@code module}, recovering past each so the whole module is checked; the
@@ -54,10 +70,10 @@ public final class TypeChecker {
      * check would have thrown), deduped. */
     private static List<CompileException> checkCollecting(Ast.Module module, Map<String, Ast.Def> symbols,
                                                           Map<String, Sig> importedSigs, Ast.Module lowered,
-                                                          List<Diagnostic> warnings) {
+                                                          List<Diagnostic> warnings, Elaborated elaborated) {
         List<CompileException> errors = new ArrayList<>();
         try {
-            checkRecovering(module, symbols, importedSigs, lowered, errors, warnings);
+            checkRecovering(module, symbols, importedSigs, lowered, errors, warnings, elaborated);
         } catch (CompileException e) {
             // A structural / prerequisite check (a duplicate name, an `exposing` violation, a module
             // cycle) is fail-fast: it can leave later phases without the state they read, so its first
@@ -108,13 +124,24 @@ public final class TypeChecker {
      */
     public static List<Diagnostic> check(Ast.Module module, Map<String, Ast.Def> symbols,
                              Map<String, Sig> importedSigs, Ast.Module lowered) {
+        return checkAndElaborate(module, symbols, importedSigs, lowered).diagnostics();
+    }
+
+    /** The diagnostics of a recovering check together with what it elaborated — the entry point for a
+     * multi-module compile, which reports every module's errors and emits only the clean ones. */
+    public record CheckResult(List<Diagnostic> diagnostics, Checked checked) {}
+
+    public static CheckResult checkAndElaborate(Ast.Module module, Map<String, Ast.Def> symbols,
+                                                Map<String, Sig> importedSigs, Ast.Module lowered) {
         List<Diagnostic> out = new ArrayList<>();
         List<Diagnostic> warnings = new ArrayList<>();
-        for (CompileException e : checkCollecting(module, symbols, importedSigs, lowered, warnings)) {
+        Elaborated elaborated = new Elaborated();
+        for (CompileException e : checkCollecting(module, symbols, importedSigs, lowered, warnings,
+                elaborated)) {
             out.add(e.diagnostic());
         }
         out.addAll(warnings);
-        return out;
+        return new CheckResult(out, new Checked(elaborated.behaviors, elaborated.helpers, warnings));
     }
 
     /**
@@ -126,7 +153,8 @@ public final class TypeChecker {
      */
     private static void checkRecovering(Ast.Module module, Map<String, Ast.Def> symbols,
                                         Map<String, Sig> importedSigs, Ast.Module lowered,
-                                        List<CompileException> errors, List<Diagnostic> warnings) {
+                                        List<CompileException> errors, List<Diagnostic> warnings,
+                                        Elaborated elaborated) {
         Map<String, Ast.Expr> loweredBodies = new HashMap<>();
         for (Ast.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.body());
@@ -263,7 +291,8 @@ public final class TypeChecker {
         // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
         // helper is checked standalone against its own declared parameter types (spec 13.1). Recovered
         // so a broken helper does not hide the behavior-body errors checked below.
-        collect(errors, () -> checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns, module));
+        collect(errors, () -> checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns, module,
+                loweredBodies, elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
         collect(errors, () -> TotalityChecker.check(inliner));
@@ -275,8 +304,10 @@ public final class TypeChecker {
             if (b instanceof Ast.SpecBehavior spec) {
                 Ast.FnDef fn = fns.get(spec.name());
                 if (fn != null) {
-                    collect(errors, () -> checkSpecFn(spec, fn, loweredBodies.get(spec.name()), symbols,
-                            allBehaviors, reqSigs, inliner, recursiveHelperFns, recHelperConstructs, warnings));
+                    collect(errors, () -> elaborated.behaviors.put(fn.name(),
+                            checkSpecFn(spec, fn, loweredBodies.get(spec.name()), symbols,
+                            allBehaviors, reqSigs, inliner, recursiveHelperFns, recHelperConstructs,
+                            warnings)));
                 }
             }
         }
@@ -377,7 +408,8 @@ public final class TypeChecker {
      */
     private static void checkHelpers(HelperInliner inliner, Map<String, Ast.Def> symbols,
                                      Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
-                                     Ast.Module module) {
+                                     Ast.Module module, Map<String, Ast.Expr> loweredBodies,
+                                     Elaborated elaborated) {
         // Call sites that inference reads argument types from, built once for the whole module (each is
         // a top-level fn body with the environment its parameters bind).
         List<CallScope> callScopes = inferenceScopes(module, symbols);
@@ -416,9 +448,16 @@ public final class TypeChecker {
                     env.put(h.params().get(idx).name(), types.get(idx));
                 }
             }
-            // a recursive helper hides its own parameters from helper resolution while its body is
-            // expanded (foldFrom's `step` is a parameter, not a same-named user helper).
-            Ast.Expr body = recursive ? inliner.inlineRecursiveBody(h) : inliner.inline(h.body());
+            // A recursive helper survives to the backend as a method on `$Fns`, so it is typed on the
+            // body the Lower stage produced — the same tree the backend emits — and the Core this
+            // check produces is what the backend emits from (issue #81). A non-recursive helper is
+            // inlined at its call sites and never emitted on its own, so its standalone check expands
+            // its body here; a recursive helper hides its own parameters from helper resolution while
+            // that expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
+            Ast.Expr lowered = recursive ? loweredBodies.get(h.name()) : null;
+            Ast.Expr body = recursive
+                    ? (lowered != null ? lowered : inliner.inlineRecursiveBody(h))
+                    : inliner.inline(h.body());
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
@@ -438,7 +477,11 @@ public final class TypeChecker {
             // push a declared return type into the body so an empty-collection body (Map.empty(), [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn(), symbols);
-            Type bodyType = typeOf(body, tenv, null, symbols, reqSigs, declaredReturn);
+            Core elaboratedBody = elaborate(body, tenv, null, symbols, reqSigs, declaredReturn);
+            Type bodyType = elaboratedBody.type();
+            if (lowered != null) {
+                elaborated.helpers.put(h.name(), elaboratedBody);
+            }
             // a declared return type — required on a recursive helper, allowed on any helper — must
             // match the body; a lying annotation is not silently ignored.
             if (declaredReturn != null) {
@@ -822,7 +865,7 @@ public final class TypeChecker {
         }
     }
 
-    private static void checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
+    private static Core checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
                                     Map<String, Ast.Def> symbols, Set<String> allBehaviors,
                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
@@ -896,7 +939,8 @@ public final class TypeChecker {
 
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
-        Type rt = typeOf(body, tenv, null, symbols, reqSigs, output);
+        Core elaboratedBody = elaborate(body, tenv, null, symbols, reqSigs, output);
+        Type rt = elaboratedBody.type();
         if (!assignable(rt, output, symbols)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.behavior.return").title("check.type.mismatch.title")
@@ -968,6 +1012,7 @@ public final class TypeChecker {
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);
         }
+        return elaboratedBody;
     }
 
     /**
@@ -1918,11 +1963,13 @@ public final class TypeChecker {
         checkConstruction(c.typeName(), c.inits(), c.spreads(), c.pos(), fields, env, data, symbols, NO_REQS);
     }
 
-    private static void checkConstruction(String typeName, List<Ast.FieldInit> inits, List<String> spreads,
+    private static List<Core.FieldInit> checkConstruction(String typeName, List<Ast.FieldInit> inits,
+                                          List<String> spreads,
                                           SourcePos pos, Map<String, Type> fields, Map<String, Type> env,
                                           Ast.Data data, Map<String, Ast.Def> symbols,
                                           Map<String, ReqSig> reqs) {
         Map<String, Ast.FieldInit> byName = new HashMap<>();
+        List<Core.FieldInit> elaborated = new ArrayList<>();
         for (Ast.FieldInit init : inits) {
             if (byName.put(init.name(), init) != null) {
                 throw CompileException.of(
@@ -1939,7 +1986,9 @@ public final class TypeChecker {
             }
             // push the field's declared type into the value expression, so a field initialised from a
             // fold over an empty-collection seed has its result pinned by the field type (issue #70)
-            Type vt = typeOf(init.value(), env, data, symbols, reqs, ft);
+            Core value = elaborate(init.value(), env, data, symbols, reqs, ft);
+            elaborated.add(new Core.FieldInit(init.name(), value, init.pos()));
+            Type vt = value.type();
             if (!assignable(vt, ft, symbols)) {   // a case value widens to its sum-typed field (spec 8.3)
                 throw CompileException.of(
                         Diagnostic.of(null, "check.field.type").title("check.type.mismatch.title")
@@ -1980,6 +2029,7 @@ public final class TypeChecker {
                                 + f.getValue());
             }
         }
+        return elaborated;
     }
 
     private static void checkEncoder(Ast.EncoderDef enc, Ast.Data data, Map<String, Ast.Def> symbols) {
@@ -2111,33 +2161,54 @@ public final class TypeChecker {
         return typeOf(e, env, data, symbols, reqs, null);
     }
 
-    // Bidirectional typing: {@code expected} is the type this expression is checked against, pushed
-    // down from the surrounding context (a declared field type, a declared return type). It may be
-    // {@code null} — no context — in which case this behaves exactly as pure bottom-up synthesis.
-    // Only a few arms consume it: the empty-collection leaves ([], Map.empty, Set.empty) adopt it,
-    // and a generic call pre-binds its result-type variables from it, so a fold whose seed is an
-    // empty collection has its accumulator pinned by context before the step is checked.
+    /** The type of {@code e}, discarding the Core the elaboration produced — for the checks that ask
+     * only whether an expression types (a decoder, an invariant, a helper's standalone check). */
     public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
                               Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
+        return elaborate(e, env, data, symbols, reqs, expected).type();
+    }
+
+    public static Core elaborate(Ast.Expr e, Map<String, Type> env, Ast.Data data,
+                                 Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+        return elaborate(e, env, data, symbols, reqs, null);
+    }
+
+    /**
+     * Types {@code e} and produces the Core node for it, carrying the type this decided (issue #81).
+     * The backend emits from what this returns instead of inferring the same types a second time.
+     *
+     * <p>Bidirectional typing: {@code expected} is the type this expression is checked against, pushed
+     * down from the surrounding context (a declared field type, a declared return type). It may be
+     * {@code null} — no context — in which case this behaves exactly as pure bottom-up synthesis.
+     * Only a few arms consume it: the empty-collection leaves ([], Map.empty, Set.empty) adopt it,
+     * and a generic call pre-binds its result-type variables from it, so a fold whose seed is an
+     * empty collection has its accumulator pinned by context before the step is checked.
+     */
+    public static Core elaborate(Ast.Expr e, Map<String, Type> env, Ast.Data data,
+                                 Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
         return switch (e) {
-            case Ast.IntLit _ -> Type.INT;
-            case Ast.DecimalLit _ -> Type.DECIMAL;
-            case Ast.StringLit _ -> Type.STRING;
-            case Ast.BoolLit _ -> Type.BOOL;
+            case Ast.IntLit x -> new Core.Int(x.value(), Type.INT, x.pos());
+            case Ast.DecimalLit x -> new Core.Decimal(x.value(), Type.DECIMAL, x.pos());
+            case Ast.StringLit x -> new Core.Str(x.value(), Type.STRING, x.pos());
+            case Ast.BoolLit x -> new Core.Bool(x.value(), Type.BOOL, x.pos());
             case Ast.Tuple tup -> {
                 // A pushed-down tuple type reaches each element, so a written `(Set<Int>, List<Int>)`
                 // fixes the empty collections the tuple seeds rather than leaving them bottoms (#74).
                 List<Type> want = expected instanceof Type.TupleOf te
                         && te.elements().size() == tup.elements().size() ? te.elements() : null;
-                List<Type> elems = new ArrayList<>();
+                List<Core> elems = new ArrayList<>();
+                List<Type> elemTypes = new ArrayList<>();
                 for (int i = 0; i < tup.elements().size(); i++) {
-                    elems.add(typeOf(tup.elements().get(i), env, data, symbols, reqs,
-                            want == null ? null : want.get(i)));
+                    Core el = elaborate(tup.elements().get(i), env, data, symbols, reqs,
+                            want == null ? null : want.get(i));
+                    elems.add(el);
+                    elemTypes.add(el.type());
                 }
-                yield Type.tuple(elems);
+                yield new Core.Tuple(elems, Type.tuple(elemTypes), tup.pos());
             }
             case Ast.TupleGet tg -> {
-                Type tt = typeOf(tg.tuple(), env, data, symbols, reqs);
+                Core tuple = elaborate(tg.tuple(), env, data, symbols, reqs);
+                Type tt = tuple.type();
                 if (!(tt instanceof Type.TupleOf to)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.tuple.pattern").title("check.type.mismatch.title")
@@ -2151,10 +2222,12 @@ public final class TypeChecker {
                             "this pattern binds " + tg.arity()
                                     + " name(s) but the tuple has " + to.elements().size() + " element(s)");
                 }
-                yield to.elements().get(tg.index());
+                yield new Core.TupleGet(tuple, tg.index(), tg.arity(),
+                        to.elements().get(tg.index()), tg.pos());
             }
             case Ast.Neg neg -> {
-                Type t = typeOf(neg.operand(), env, data, symbols, reqs);
+                Core operand = elaborate(neg.operand(), env, data, symbols, reqs);
+                Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.neg.msg")
@@ -2164,10 +2237,11 @@ public final class TypeChecker {
                                     .build(),
                             "unary minus needs an Int or Decimal, got " + t);
                 }
-                yield t;
+                yield new Core.Neg(operand, t, neg.pos());
             }
             case Ast.LetIn li -> {
                 Type annotation = annotatedType(li, symbols);
+                Core value;
                 Type bindType;
                 if (isFunctionSelection(li.value())) {
                     // a lambda bound to a local that could not be inlined (e.g. chosen by an `if`):
@@ -2177,20 +2251,23 @@ public final class TypeChecker {
                         throw functionAnnotation(li);   // no ordinary type describes a function value
                     }
                     List<Type> paramTypes = inferFnParamTypes(li.name(), li.body(), env, data, symbols, reqs);
-                    bindType = typeFunctionValue(li.value(), paramTypes, env, data, symbols, reqs);
+                    value = elaborateFunctionValue(li.value(), paramTypes, env, data, symbols, reqs);
+                    bindType = value.type();
                 } else if (annotation != null) {
                     // the written type is the value's expected type, so an empty collection bound here
                     // takes its element/value type from the annotation rather than staying a bottom
-                    Type valueType = typeOf(li.value(), env, data, symbols, reqs, annotation);
-                    checkLetAnnotation(li, annotation, valueType, symbols);
+                    value = elaborate(li.value(), env, data, symbols, reqs, annotation);
+                    checkLetAnnotation(li, annotation, value.type(), symbols);
                     bindType = annotation;
                 } else {
-                    bindType = carriedType(li, typeOf(li.value(), env, data, symbols, reqs), symbols);
+                    value = elaborate(li.value(), env, data, symbols, reqs);
+                    bindType = carriedType(li, value.type(), symbols);
                 }
                 // the binding is visible only inside the body, so a sibling branch cannot see it
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(li.name(), bindType);
-                yield typeOf(li.body(), inner, data, symbols, reqs, expected);
+                Core body = elaborate(li.body(), inner, data, symbols, reqs, expected);
+                yield new Core.LetIn(li.name(), value, li.annotation(), body, body.type(), li.pos());
             }
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
@@ -2203,11 +2280,11 @@ public final class TypeChecker {
             case Ast.Var v -> {
                 Type t = env.get(v.name());
                 if (t != null) {
-                    yield t;
+                    yield new Core.Var(v.name(), t, v.pos());
                 }
                 // a bare name that isn't a local is a unit-data value (spec 8.4)
                 if (symbols.get(v.name()) instanceof Ast.UnitData) {
-                    yield Type.ref(v.name());
+                    yield new Core.Var(v.name(), Type.ref(v.name()), v.pos());
                 }
                 if (v.name().equals("null")) {
                     throw new CompileException(v.pos(), "E1301",
@@ -2222,9 +2299,9 @@ public final class TypeChecker {
                                 .build(),
                         "unknown identifier `" + v.name() + "`" + Suggest.hint(v.name(), env.keySet()));
             }
-            case Ast.FieldAccess fa -> typeOfFieldAccess(fa, env, data, symbols, reqs);
-            case Ast.Call call -> typeOfCall(call, env, data, symbols, reqs, expected);
-            case Ast.Binary bin -> typeOfBinary(bin, env, data, symbols, reqs);
+            case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, data, symbols, reqs);
+            case Ast.Call call -> elaborateCall(call, env, data, symbols, reqs, expected);
+            case Ast.Binary bin -> elaborateBinary(bin, env, data, symbols, reqs);
             case Ast.NewData nd -> {
                 if (!(symbols.get(nd.typeName()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
@@ -2232,26 +2309,29 @@ public final class TypeChecker {
                                     .at(nd.pos(), nd.typeName().length()).args(nd.typeName()).build(),
                             "cannot construct `" + nd.typeName() + "`");
                 }
-                checkConstruction(nd.typeName(), nd.inits(), nd.spreads(), nd.pos(),
-                        fieldTypes(owner, symbols), env, data, symbols, reqs);
-                yield Type.ref(nd.typeName());
+                List<Core.FieldInit> inits = checkConstruction(nd.typeName(), nd.inits(), nd.spreads(),
+                        nd.pos(), fieldTypes(owner, symbols), env, data, symbols, reqs);
+                yield new Core.NewData(nd.typeName(), inits, nd.spreads(),
+                        Type.ref(nd.typeName()), nd.pos());
             }
-            case Ast.Match m -> typeOfMatch(m, env, data, symbols, reqs, expected);
+            case Ast.Match m -> elaborateMatch(m, env, data, symbols, reqs, expected);
             case Ast.If iff -> {
-                requireType(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
-                Type tt = typeOf(iff.then(), env, data, symbols, reqs, expected);
-                Type et = typeOf(iff.els(), env, data, symbols, reqs, expected);
+                Core cond = requireTyped(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
+                Core then = elaborate(iff.then(), env, data, symbols, reqs, expected);
+                Core els = elaborate(iff.els(), env, data, symbols, reqs, expected);
+                Type tt = then.type();
+                Type et = els.type();
                 Type empty = absorbBottom(tt, et);   // one case may be `[]`, or a tuple of them (ADR-0028)
                 if (empty != null) {
-                    yield empty;
+                    yield new Core.If(cond, then, els, empty, iff.pos());
                 }
                 if (tt.equals(et)) {
-                    yield tt;
+                    yield new Core.If(cond, then, els, tt, iff.pos());
                 }
                 if (isDataLike(tt) && isDataLike(et)) {
                     Set<String> names = new HashSet<>(namesOf(tt));
                     names.addAll(namesOf(et));
-                    yield Type.union(names);
+                    yield new Core.If(cond, then, els, Type.union(names), iff.pos());
                 }
                 throw CompileException.of(
                         Diagnostic.of(null, "check.if.msg")
@@ -2268,22 +2348,38 @@ public final class TypeChecker {
             case Ast.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
                     // `[]`: element type fixed by context (ADR-0028); adopt an expected list type
-                    yield expected instanceof Type.ListOf le ? le : Type.EMPTY_LIST;
+                    yield new Core.ListLit(List.of(),
+                            expected instanceof Type.ListOf le ? le : Type.EMPTY_LIST, lit.pos());
                 }
+                List<Core> elements = new ArrayList<>();
                 Type elem = null;
                 for (Ast.Expr el : lit.elements()) {
-                    Type t = typeOf(el, env, data, symbols, reqs);
-                    elem = elem == null ? t : unifyElem(elem, t, lit.pos());
+                    Core c = elaborate(el, env, data, symbols, reqs);
+                    elements.add(c);
+                    elem = elem == null ? c.type() : unifyElem(elem, c.type(), lit.pos());
                 }
-                yield Type.list(elem);
+                yield new Core.ListLit(elements, Type.list(elem), lit.pos());
             }
             case Ast.ListComp comp -> {
+                // A comprehension never reaches the backend — the Lower stage rewrites it to an `if`
+                // before a body is emitted. It still types here, on the pre-lowering paths (a helper's
+                // standalone check), so the node produced is a type carrier, not something to emit.
                 for (Ast.Expr g : comp.guards()) {
                     requireType(g, Type.BOOL, env, data, symbols, reqs, "guard of a comprehension");
                 }
-                yield Type.list(typeOf(comp.element(), env, data, symbols, reqs));
+                Core element = elaborate(comp.element(), env, data, symbols, reqs);
+                yield new Core.ListLit(List.of(element), Type.list(element.type()), comp.pos());
             }
         };
+    }
+
+    /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is
+     * bottom-up, as {@link #requireType} is: the expected type is not pushed into the expression. */
+    private static Core requireTyped(Ast.Expr e, Type expected, Map<String, Type> env, Ast.Data data,
+                                     Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, String what) {
+        Core c = elaborate(e, env, data, symbols, reqs);
+        requireType(e, c.type(), expected, symbols, what);
+        return c;
     }
 
     /** Refines the type-variable bindings from a function argument's actual result: where the
@@ -2494,14 +2590,16 @@ public final class TypeChecker {
                 "list elements disagree on type: " + a + " vs " + b);
     }
 
-    private static Type typeOfMatch(Ast.Match m, Map<String, Type> env, Ast.Data data,
-                                    Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
-        Type st = typeOf(m.scrutinee(), env, data, symbols, reqs);
+    private static Core elaborateMatch(Ast.Match m, Map<String, Type> env, Ast.Data data,
+                                       Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs,
+                                       Type expected) {
+        Core scrutinee = elaborate(m.scrutinee(), env, data, symbols, reqs);
+        Type st = scrutinee.type();
         if (st instanceof Type.OptionOf oo) {
-            return typeOfOptionMatch(m, oo.element(), env, data, symbols, reqs, expected);
+            return elaborateOptionMatch(m, scrutinee, oo.element(), env, data, symbols, reqs, expected);
         }
         if (st instanceof Type.Union union) {
-            return typeOfCasesMatch(m, union.members(), "union `" + Type.show(union) + "`",
+            return elaborateCasesMatch(m, scrutinee, union.members(), "union `" + Type.show(union) + "`",
                     st, env, data, symbols, reqs, expected);
         }
         if (!(st instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.SumData sum)) {
@@ -2510,7 +2608,7 @@ public final class TypeChecker {
                             .at(m.pos(), 5).args(Type.show(st)).build(),
                     "match requires a sum-typed value, got " + st);
         }
-        return typeOfCasesMatch(m, new HashSet<>(sum.cases()), "data `" + sum.name() + "`",
+        return elaborateCasesMatch(m, scrutinee, new HashSet<>(sum.cases()), "data `" + sum.name() + "`",
                 st, env, data, symbols, reqs, expected);
     }
 
@@ -2518,10 +2616,12 @@ public final class TypeChecker {
      * A single-case case binds that case's type; an or-pattern ({@code A | B}) binds {@code scrutinee}
      * (the sum type), since no one case type fits all its alternatives. Every case must be covered
      * exactly once (E1201; a second cover is an overlap error). */
-    private static Type typeOfCasesMatch(Ast.Match m, Set<String> cases, String what, Type scrutinee,
+    private static Core elaborateCasesMatch(Ast.Match m, Core scrutineeCore, Set<String> cases,
+                                        String what, Type scrutinee,
                                         Map<String, Type> env, Ast.Data data, Map<String, Ast.Def> symbols,
                                         Map<String, ReqSig> reqs, Type expected) {
         Set<String> covered = new HashSet<>();
+        List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
             for (String caseName : c.caseTypes()) {
@@ -2548,8 +2648,9 @@ public final class TypeChecker {
                 }
                 checkUnwrapAsserts(c, symbols);
             }
-            branchType = mergeBranch(m, branchType,
-                    typeOf(c.body(), bound(env, c.binding(), bindType), data, symbols, reqs, expected), c);
+            Core body = elaborate(c.body(), bound(env, c.binding(), bindType), data, symbols, reqs, expected);
+            arms.add(new Core.Case(c.caseTypes(), c.binding(), body, bindType, c.pos()));
+            branchType = mergeBranch(m, branchType, body.type(), c);
         }
         List<String> missing = new ArrayList<>();
         for (String caseName : cases) {
@@ -2567,14 +2668,16 @@ public final class TypeChecker {
                             .at(m.pos(), 5).build(),
                     "match has no cases");
         }
-        return branchType;
+        return new Core.Match(scrutineeCore, arms, branchType, m.pos());
     }
 
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
      * {@code None}; both must be present (spec 16.3). */
-    private static Type typeOfOptionMatch(Ast.Match m, Type element, Map<String, Type> env, Ast.Data data,
+    private static Core elaborateOptionMatch(Ast.Match m, Core scrutineeCore, Type element,
+                                          Map<String, Type> env, Ast.Data data,
                                           Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
         Set<String> covered = new HashSet<>();
+        List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
             if (c.caseTypes().size() != 1) {
@@ -2607,8 +2710,9 @@ public final class TypeChecker {
                                 .at(c.pos()).args(caseType).build(),
                         "`" + caseType + "` is matched by more than one case");
             }
-            branchType = mergeBranch(m, branchType,
-                    typeOf(c.body(), bound(env, c.binding(), bind), data, symbols, reqs, expected), c);
+            Core body = elaborate(c.body(), bound(env, c.binding(), bind), data, symbols, reqs, expected);
+            arms.add(new Core.Case(c.caseTypes(), c.binding(), body, bind, c.pos()));
+            branchType = mergeBranch(m, branchType, body.type(), c);
         }
         List<String> missing = new ArrayList<>();
         for (String caseName : List.of("Some", "None")) {
@@ -2619,7 +2723,7 @@ public final class TypeChecker {
         if (!missing.isEmpty()) {
             throw nonExhaustive(m.pos(), "Option", missing);
         }
-        return branchType;
+        return new Core.Match(scrutineeCore, arms, branchType, m.pos());
     }
 
     /** The type a match case binds. A primitive-named case (e.g. {@code Int} in {@code Int |
@@ -2733,13 +2837,14 @@ public final class TypeChecker {
     }
 
 
-    private static Type typeOfFieldAccess(Ast.FieldAccess fa, Map<String, Type> env, Ast.Data data,
+    private static Core elaborateFieldAccess(Ast.FieldAccess fa, Map<String, Type> env, Ast.Data data,
                                           Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
-        Type target = typeOf(fa.target(), env, data, symbols, reqs);
+        Core targetCore = elaborate(fa.target(), env, data, symbols, reqs);
+        Type target = targetCore.type();
         if (target instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data owner) {
             Type ft = fieldTypes(owner, symbols).get(fa.field());
             if (ft != null) {
-                return ft;
+                return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
             }
         }
         throw CompileException.of(
@@ -2748,7 +2853,77 @@ public final class TypeChecker {
                 "cannot access field `" + fa.field() + "` on this value");
     }
 
-    private static Type typeOfCall(Ast.Call call, Map<String, Type> env, Ast.Data data,
+    private static Core elaborateCall(Ast.Call call, Map<String, Type> env, Ast.Data data,
+                                      Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs,
+                                      Type expected) {
+        CallArgs ca = new CallArgs(call.args(), env, data, symbols, reqs);
+        Type result = typeOfCall(ca, call, env, data, symbols, reqs, expected);
+        return new Core.Call(call.fn(), ca.cores(), result, call.pos());
+    }
+
+    /**
+     * The arguments of one call, each elaborated once, as the call's typing rule reaches it. A rule
+     * types its arguments in its own order and shape — some through a required type, a step through
+     * the accumulator the other arguments fixed — so the Core for each argument is collected here
+     * rather than by a separate walk that would have to reconstruct that context.
+     */
+    private static final class CallArgs {
+        private final List<Ast.Expr> args;
+        private final Core[] cores;
+        private final Map<String, Type> env;
+        private final Ast.Data data;
+        private final Map<String, Ast.Def> symbols;
+        private final Map<String, ReqSig> reqs;
+
+        CallArgs(List<Ast.Expr> args, Map<String, Type> env, Ast.Data data,
+                 Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+            this.args = args;
+            this.cores = new Core[args.size()];
+            this.env = env;
+            this.data = data;
+            this.symbols = symbols;
+            this.reqs = reqs;
+        }
+
+        /** The type of argument {@code i}, elaborated with no expected type (bottom-up). */
+        Type type(int i) {
+            Core c = elaborate(args.get(i), env, data, symbols, reqs);
+            cores[i] = c;
+            return c.type();
+        }
+
+        /** Argument {@code i} checked against {@code expected}, as {@link #requireType} does. */
+        void require(int i, Type expected, String what) {
+            Core c = elaborate(args.get(i), env, data, symbols, reqs);
+            cores[i] = c;
+            requireType(args.get(i), c.type(), expected, symbols, what);
+        }
+
+        /** Argument {@code i} as a block (or a function value standing in for one), returning the
+         * result type the block yields at {@code paramTypes}. */
+        Type block(int i, String fnName, List<Type> paramTypes) {
+            Core c = elaborateBlockArg(fnName, args.get(i), paramTypes, env, data, symbols, reqs);
+            cores[i] = c;
+            return ((Type.FnOf) c.type()).result();
+        }
+
+        void put(int i, Core c) {
+            cores[i] = c;
+        }
+
+        /** The elaborated arguments. An argument no typing rule reaches — the bare rounding mode of
+         * {@code divide}, which is a built-in identifier rather than an expression (spec 18.3) — is
+         * carried in its untyped form. */
+        List<Core> cores() {
+            List<Core> out = new ArrayList<>();
+            for (int i = 0; i < cores.length; i++) {
+                out.add(cores[i] != null ? cores[i] : Core.of(args.get(i)));
+            }
+            return out;
+        }
+    }
+
+    private static Type typeOfCall(CallArgs ca, Ast.Call call, Map<String, Type> env, Ast.Data data,
                                    Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
         List<Ast.Expr> args = call.args();
         // A shipped intrinsic behaves like a built-in: check the call against its declared signature
@@ -2765,7 +2940,7 @@ public final class TypeChecker {
             }
             Map<String, Type> bindings = new HashMap<>();
             for (int i = 0; i < args.size(); i++) {
-                Type argType = typeOf(args.get(i), env, data, symbols, reqs);
+                Type argType = ca.type(i);
                 unify(intrinsic.params().get(i), argType, bindings, symbols, call.pos(),
                         "argument " + (i + 1) + " of " + call.fn());
             }
@@ -2789,19 +2964,19 @@ public final class TypeChecker {
         return switch (call.fn()) {
             case "String.length" -> {
                 arity(call, 1);
-                requireType(args.get(0), Type.STRING, env, data, symbols, reqs, "argument of String.length");
+                ca.require(0, Type.STRING, "argument of String.length");
                 yield Type.INT;
             }
             case "String.toInt" -> {
                 arity(call, 1);
-                requireType(args.get(0), Type.STRING, env, data, symbols, reqs, "argument of String.toInt");
+                ca.require(0, Type.STRING, "argument of String.toInt");
                 // a non-numeric string produces the NotANumber case; a primitive-headed union a core
                 // declaration cannot name, so this stays a built-in like Int.divide
                 yield Type.union(new java.util.LinkedHashSet<>(List.of("Int", "NotANumber")));
             }
             case "List.length" -> {
                 arity(call, 1);
-                Type t = typeOf(args.get(0), env, data, symbols, reqs);
+                Type t = ca.type(0);
                 if (!(t instanceof Type.ListOf)) {
                     throw expects(call.pos(), "List.length", "kind.list", t,
                             "argument of List.length must be a List but is " + t);
@@ -2810,7 +2985,7 @@ public final class TypeChecker {
             }
             case "List.max", "List.min" -> {
                 arity(call, 1);
-                Type t = typeOf(args.get(0), env, data, symbols, reqs);
+                Type t = ca.type(0);
                 if (!(t instanceof Type.ListOf lo)) {
                     throw expects(call.pos(), call.fn(), "kind.list", t,
                             "argument of " + call.fn() + " must be a List but is " + t);
@@ -2828,12 +3003,12 @@ public final class TypeChecker {
             }
             case "List.find" -> {
                 arity(call, 2);   // find(p, xs): predicate first, list last (F#/Elm order)
-                Type t = typeOf(args.get(1), env, data, symbols, reqs);
+                Type t = ca.type(1);
                 if (!(t instanceof Type.ListOf lo)) {
                     throw expects(call.pos(), "List.find", "kind.list", t,
                             "List.find expects a List, got " + t);
                 }
-                Type pr = blockType(call.fn(), args.get(0), List.of(lo.element()), env, data, symbols, reqs);
+                Type pr = ca.block(0, call.fn(), List.of(lo.element()));
                 if (pr != Type.BOOL) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.fn.predicatebool").title("check.fn.title")
@@ -2844,24 +3019,24 @@ public final class TypeChecker {
             }
             case "Option.map" -> {
                 arity(call, 2);   // map(f, opt): function first, option last (F#/Elm order)
-                Type t = typeOf(args.get(1), env, data, symbols, reqs);
+                Type t = ca.type(1);
                 if (!(t instanceof Type.OptionOf oo)) {
                     throw expects(call.pos(), "Option.map", "kind.option", t,
                             "Option.map expects an Option, got " + t);
                 }
                 // `f` sees the contained value; the option's element type gives its one parameter type.
                 // The result re-wraps `f`'s return, so the whole call is `Option<'b>`.
-                Type r = blockType(call.fn(), args.get(0), List.of(oo.element()), env, data, symbols, reqs);
+                Type r = ca.block(0, call.fn(), List.of(oo.element()));
                 yield Type.option(r);
             }
             case "List.sortBy" -> {
                 arity(call, 2);   // sortBy(key, xs): key first, list last (F#/Elm order)
-                Type t = typeOf(args.get(1), env, data, symbols, reqs);
+                Type t = ca.type(1);
                 if (!(t instanceof Type.ListOf lo)) {
                     throw expects(call.pos(), "List.sortBy", "kind.list", t,
                             "List.sortBy expects a List, got " + t);
                 }
-                Type keyT = blockType(call.fn(), args.get(0), List.of(lo.element()), env, data, symbols, reqs);
+                Type keyT = ca.block(0, call.fn(), List.of(lo.element()));
                 if (!isBottom(keyT) && !isOrdered(keyT)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.ordered.key").title("check.type.mismatch.title")
@@ -2874,17 +3049,17 @@ public final class TypeChecker {
             }
             case "List.get" -> {
                 arity(call, 2);
-                Type first = typeOf(args.get(1), env, data, symbols, reqs);   // get(index, xs): list last
+                Type first = ca.type(1);   // get(index, xs): list last
                 if (!(first instanceof Type.ListOf lo)) {
                     throw expects(call.pos(), "List.get", "kind.list", first,
                             "List.get expects a List, got " + first);
                 }
-                requireType(args.get(0), Type.INT, env, data, symbols, reqs, "index of List.get");
+                ca.require(0, Type.INT, "index of List.get");
                 yield Type.option(lo.element());
             }
             case "Map.get" -> {
                 arity(call, 2);
-                Type first = typeOf(args.get(1), env, data, symbols, reqs);   // get(key, m): map last
+                Type first = ca.type(1);   // get(key, m): map last
                 if (!(first instanceof Type.MapOf mo)) {
                     throw expects(call.pos(), "Map.get", "kind.map", first,
                             "Map.get expects a Map, got " + first);
@@ -2893,7 +3068,7 @@ public final class TypeChecker {
                 // the block growing it — `Map.get(k, acc)` in a groupBy fold — supplies the real key,
                 // so accept it rather than demand the bottom. Otherwise the key must match.
                 if (!isBottom(mo.key())) {
-                    requireType(args.get(0), mo.key(), env, data, symbols, reqs, "key of Map.get");
+                    ca.require(0, mo.key(), "key of Map.get");
                 }
                 yield Type.option(mo.value());
             }
@@ -2916,23 +3091,23 @@ public final class TypeChecker {
             }
             case "Int.remainder" -> {
                 arity(call, 2);
-                requireType(args.get(0), Type.INT, env, data, symbols, reqs, "argument 1 of remainder");
-                requireType(args.get(1), Type.INT, env, data, symbols, reqs, "argument 2 of remainder");
+                ca.require(0, Type.INT, "argument 1 of remainder");
+                ca.require(1, Type.INT, "argument 2 of remainder");
                 // partial: a zero divisor produces the DivisionByZero case (spec 18.2)
                 yield Type.union(new java.util.LinkedHashSet<>(List.of("Int", "DivisionByZero")));
             }
             case "Int.divide", "Decimal.divide" -> {
                 if (args.size() == 4) {
                     // Decimal divide states its rounding: divide(a, b, scale, mode) (spec 18.3)
-                    requireType(args.get(0), Type.DECIMAL, env, data, symbols, reqs, "argument 1 of divide");
-                    requireType(args.get(1), Type.DECIMAL, env, data, symbols, reqs, "argument 2 of divide");
-                    requireType(args.get(2), Type.INT, env, data, symbols, reqs, "scale of divide");
+                    ca.require(0, Type.DECIMAL, "argument 1 of divide");
+                    ca.require(1, Type.DECIMAL, "argument 2 of divide");
+                    ca.require(2, Type.INT, "scale of divide");
                     requireRoundingMode(args.get(3));
                     yield Type.union(new java.util.LinkedHashSet<>(List.of("Decimal", "DivisionByZero")));
                 }
                 arity(call, 2);
-                requireType(args.get(0), Type.INT, env, data, symbols, reqs, "argument 1 of divide");
-                requireType(args.get(1), Type.INT, env, data, symbols, reqs, "argument 2 of divide");
+                ca.require(0, Type.INT, "argument 1 of divide");
+                ca.require(1, Type.INT, "argument 2 of divide");
                 yield Type.union(new java.util.LinkedHashSet<>(List.of("Int", "DivisionByZero")));
             }
             default -> {
@@ -2962,7 +3137,7 @@ public final class TypeChecker {
                             "result of " + call.fn());
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
-                            Type at = typeOf(args.get(i), env, data, symbols, reqs);
+                            Type at = ca.type(i);
                             unify(fn.params().get(i), at, bind, symbols, call.pos(), "argument " + (i + 1));
                         }
                     }
@@ -2974,7 +3149,7 @@ public final class TypeChecker {
                     try {
                         for (int i = 0; i < args.size(); i++) {
                             if (fn.params().get(i) instanceof Type.FnOf fp0) {
-                                resolveStepBinding(call.fn(), fp0, args.get(i), bind, env, data, symbols, reqs);
+                                ca.put(i, resolveStepBinding(call.fn(), fp0, args.get(i), bind, env, data, symbols, reqs));
                             }
                         }
                     } catch (CompileException stepError) {
@@ -3000,8 +3175,7 @@ public final class TypeChecker {
                     }
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
-                            requireType(args.get(i), substitute(fn.params().get(i), bind), env, data,
-                                    symbols, reqs, "argument " + (i + 1) + " of " + call.fn());
+                            ca.require(i, substitute(fn.params().get(i), bind), "argument " + (i + 1) + " of " + call.fn());
                         }
                     }
                     yield substitute(fn.result(), bind);
@@ -3039,8 +3213,7 @@ public final class TypeChecker {
                 }
                 arity(call, callee.params().size());
                 for (int i = 0; i < callee.params().size(); i++) {
-                    requireType(args.get(i), callee.params().get(i), env, data, symbols, reqs,
-                            "argument " + (i + 1) + " of " + call.fn());
+                    ca.require(i, callee.params().get(i), "argument " + (i + 1) + " of " + call.fn());
                 }
                 yield callee.success();
             }
@@ -3061,13 +3234,15 @@ public final class TypeChecker {
         return Optional.empty();
     }
 
-    private static Type typeOfBinary(Ast.Binary bin, Map<String, Type> env, Ast.Data data,
+    private static Core elaborateBinary(Ast.Binary bin, Map<String, Type> env, Ast.Data data,
                                      Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
         return switch (bin.op()) {
             case AND, OR -> {
-                requireType(bin.left(), Type.BOOL, env, data, symbols, reqs, "operand of logical operator");
-                requireType(bin.right(), Type.BOOL, env, data, symbols, reqs, "operand of logical operator");
-                yield Type.BOOL;
+                Core left = requireTyped(bin.left(), Type.BOOL, env, data, symbols, reqs,
+                        "operand of logical operator");
+                Core right = requireTyped(bin.right(), Type.BOOL, env, data, symbols, reqs,
+                        "operand of logical operator");
+                yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }
             case LT, LE, GT, GE -> {
                 // The ordered primitives: Int numerically, String lexicographically, Decimal by
@@ -3076,8 +3251,10 @@ public final class TypeChecker {
                 // LocalDateTime are Comparable, so it orders them too. A single-value newtype over an
                 // ordered type is ordered by that value; the operands stay the same newtype (nominal),
                 // except that a bare literal takes the other side's newtype from context.
-                Type lt = typeOf(bin.left(), env, data, symbols, reqs);
-                Type rt = typeOf(bin.right(), env, data, symbols, reqs);
+                Core left = elaborate(bin.left(), env, data, symbols, reqs);
+                Core right = elaborate(bin.right(), env, data, symbols, reqs);
+                Type lt = left.type();
+                Type rt = right.type();
                 if (!orderedComparable(lt, rt, bin.left(), bin.right(), symbols)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.compare.ordered").title("check.type.mismatch.title")
@@ -3086,28 +3263,32 @@ public final class TypeChecker {
                                     + " String, Decimal, Date, DateTime, or a newtype over one of these),"
                                     + " got " + lt + " and " + rt);
                 }
-                yield Type.BOOL;
+                yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }
             case ADD, SUB, MUL, DIV -> {
                 // `+ - * /` work on two Int or two Decimal operands (spec 18.1). Int aborts on
                 // overflow and `/` aborts on a zero divisor; Decimal `/` rounds by the default
                 // scale/mode. Case handling for a zero divisor is the `divide`/`remainder` functions.
-                Type lt = typeOf(bin.left(), env, data, symbols, reqs);
-                Type rt = typeOf(bin.right(), env, data, symbols, reqs);
+                Core left = elaborate(bin.left(), env, data, symbols, reqs);
+                Core right = elaborate(bin.right(), env, data, symbols, reqs);
+                Type lt = left.type();
+                Type rt = right.type();
                 boolean addSub = bin.op() == Ast.BinOp.ADD || bin.op() == Ast.BinOp.SUB;
                 // Closed newtype arithmetic (spec §newtype-arithmetic): `+`/`-` over a single-value
                 // numeric newtype yield that newtype. The result is re-wrapped and its invariant re-checked at construction,
                 // which a behavior's guard discharges. The operands are the same newtype, or a newtype
                 // with a bare literal of its base (as for comparison).
                 if (addSub && arithClosedNewtype(lt, rt, bin.left(), bin.right(), symbols)) {
-                    yield closedNewtypeArithResult(lt, rt, symbols);
+                    yield new Core.Binary(bin.op(), left, right,
+                            closedNewtypeArithResult(lt, rt, symbols), bin.pos());
                 }
                 // Scalar newtype arithmetic: `*`/`/` scale a numeric newtype by a plain Int/Decimal of
                 // the same base (`金額 * 2`), staying in the newtype — the dimension is unchanged.
                 // `金額 * 金額` and `金額 * 数量` (a dimension change / units, not modeled) fall through
                 // to the base path below, an error.
                 if (!addSub && scalarNewtypeArith(lt, rt, bin.op(), symbols)) {
-                    yield closedNewtypeArithResult(lt, rt, symbols);
+                    yield new Core.Binary(bin.op(), left, right,
+                            closedNewtypeArithResult(lt, rt, symbols), bin.pos());
                 }
                 if (lt != Type.INT && lt != Type.DECIMAL) {
                     throw CompileException.of(
@@ -3116,15 +3297,17 @@ public final class TypeChecker {
                             "operand of arithmetic must be Int or Decimal, got " + lt);
                 }
                 requireType(bin.right(), rt, lt, symbols, "operand of arithmetic");   // rt reused, no re-type
-                yield lt;
+                yield new Core.Binary(bin.op(), left, right, lt, bin.pos());
             }
             case CONCAT -> {
                 // `++` is Elm's appendable operator: two strings concatenate to a string, two lists to
                 // a list (spec 18.1). Strings are checked first, before the empty-list absorption below.
-                Type lraw = typeOf(bin.left(), env, data, symbols, reqs);
-                Type rraw = typeOf(bin.right(), env, data, symbols, reqs);
+                Core left = elaborate(bin.left(), env, data, symbols, reqs);
+                Core right = elaborate(bin.right(), env, data, symbols, reqs);
+                Type lraw = left.type();
+                Type rraw = right.type();
                 if (lraw == Type.STRING && rraw == Type.STRING) {
-                    yield Type.STRING;
+                    yield new Core.Binary(bin.op(), left, right, Type.STRING, bin.pos());
                 }
                 // A bottom operand ({@code Nothing}) is a list read from an accumulator an empty
                 // collection seed grows — the value at a key of a `Map.empty`-seeded fold, whose element
@@ -3145,11 +3328,14 @@ public final class TypeChecker {
                                     .build(),
                             "`++` needs two lists or two strings, got " + lt + " and " + rt);
                 }
-                yield Type.list(unifyElem(lo.element(), ro.element(), bin.pos()));
+                yield new Core.Binary(bin.op(), left, right,
+                        Type.list(unifyElem(lo.element(), ro.element(), bin.pos())), bin.pos());
             }
             case EQ, NE -> {
-                Type lt = typeOf(bin.left(), env, data, symbols, reqs);
-                Type rt = typeOf(bin.right(), env, data, symbols, reqs);
+                Core left = elaborate(bin.left(), env, data, symbols, reqs);
+                Core right = elaborate(bin.right(), env, data, symbols, reqs);
+                Type lt = left.type();
+                Type rt = right.type();
                 // two values of the same data compare by their fields (spec 16.2); across different
                 // types there is nothing to compare. An operand may be the scalar empty-collection
                 // bottom (`Nothing`) when it reads an accumulator a `[]` seed grows — the `e` in
@@ -3182,7 +3368,7 @@ public final class TypeChecker {
                                     .build(),
                             "cannot compare " + lt + " with " + rt);
                 }
-                yield Type.BOOL;
+                yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }
         };
     }
@@ -3337,14 +3523,16 @@ public final class TypeChecker {
      * the way. Shared by the checker's call typing and the backend's step materialization, so the two
      * resolve identically.
      */
-    public static void resolveStepBinding(String fnName, Type.FnOf declaredStep, Ast.Expr stepArg,
+    public static Core resolveStepBinding(String fnName, Type.FnOf declaredStep, Ast.Expr stepArg,
                                           Map<String, Type> bind, Map<String, Type> env, Ast.Data data,
                                           Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
         Type.FnOf narrow = (Type.FnOf) substitute(declaredStep, bind);
+        Core narrowCore = null;
         Type narrowGot = null;
         CompileException narrowFailed = null;
         try {
-            narrowGot = blockType(fnName, stepArg, narrow.params(), env, data, symbols, reqs);
+            narrowCore = elaborateBlockArg(fnName, stepArg, narrow.params(), env, data, symbols, reqs);
+            narrowGot = ((Type.FnOf) narrowCore.type()).result();
         } catch (CompileException e) {
             narrowFailed = e;
         }
@@ -3352,7 +3540,7 @@ public final class TypeChecker {
             refineBottom(declaredStep.result(), narrowGot, bind);
             Type want = substitute(declaredStep.result(), bind);
             if (want instanceof Type.Var || assignable(narrowGot, want, symbols)) {
-                return;   // the narrow accumulator is a fixpoint
+                return narrowCore;   // the narrow accumulator is a fixpoint
             }
         }
         // The step matches on, or grows the accumulator into, the sum the seed's case belongs to.
@@ -3361,11 +3549,12 @@ public final class TypeChecker {
             if (sum != null) {
                 Map<String, Type> widened = new HashMap<>(bind);
                 widened.put(accVar.name(), sum);
-                Type got = blockType(fnName, stepArg,
+                Core widenedCore = elaborateBlockArg(fnName, stepArg,
                         ((Type.FnOf) substitute(declaredStep, widened)).params(), env, data, symbols, reqs);
+                Type got = ((Type.FnOf) widenedCore.type()).result();
                 if (assignable(got, sum, symbols)) {
                     bind.put(accVar.name(), sum);
-                    return;
+                    return widenedCore;   // the step is emitted at the widened accumulator
                 }
             }
         }
@@ -3380,13 +3569,16 @@ public final class TypeChecker {
                         + ", but the accumulator is " + Type.show(substitute(declaredStep.result(), bind)));
     }
 
-    private static Type blockType(String fnName, Ast.Expr arg, List<Type> paramTypes,
+    /** Elaborates a block argument at {@code paramTypes}; the node it returns carries the
+     * {@link Type.FnOf} of the block — the parameter types the call fixed, and the body's result. */
+    private static Core elaborateBlockArg(String fnName, Ast.Expr arg, List<Type> paramTypes,
                                   Map<String, Type> env, Ast.Data data,
                                   Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
         if (!(arg instanceof Ast.Block block)) {
             // a function-typed value — a helper's function parameter (spec §fn-declaration) —
             // stands in for a block: check its shape and yield its result type.
-            if (typeOf(arg, env, data, symbols, reqs) instanceof Type.FnOf fn) {
+            Core value = elaborate(arg, env, data, symbols, reqs);
+            if (value.type() instanceof Type.FnOf fn) {
                 if (fn.params().size() != paramTypes.size()) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.fn.callarity").title("check.fn.title")
@@ -3406,7 +3598,7 @@ public final class TypeChecker {
                                         + fn.params().get(i));
                     }
                 }
-                return fn.result();
+                return value;
             }
             throw CompileException.of(
                     Diagnostic.of(null, "check.fn.expectsblock").title("check.fn.title")
@@ -3425,7 +3617,8 @@ public final class TypeChecker {
         for (int i = 0; i < paramTypes.size(); i++) {
             inner.put(block.params().get(i), paramTypes.get(i));
         }
-        return typeOf(block.body(), inner, data, symbols, reqs);
+        Core body = elaborate(block.body(), inner, data, symbols, reqs);
+        return new Core.Block(block.params(), body, Type.fn(paramTypes, body.type()), block.pos());
     }
 
     /** Whether an expression bound to a {@code let} is a function value: a lambda, or an {@code if}
@@ -3565,7 +3758,7 @@ public final class TypeChecker {
     /** Types a function value against inferred parameter types: a lambda binds its parameters and
      * yields {@code FnOf(params, resultOfBody)}; an {@code if} requires both branches to be the same
      * function type (spec §blocks). */
-    private static Type typeFunctionValue(Ast.Expr value, List<Type> paramTypes, Map<String, Type> env,
+    private static Core elaborateFunctionValue(Ast.Expr value, List<Type> paramTypes, Map<String, Type> env,
                                           Ast.Data data, Map<String, Ast.Def> symbols,
                                           Map<String, ReqSig> reqs) {
         return switch (value) {
@@ -3581,27 +3774,32 @@ public final class TypeChecker {
                 for (int i = 0; i < paramTypes.size(); i++) {
                     inner.put(b.params().get(i), paramTypes.get(i));
                 }
-                yield Type.fn(paramTypes, typeOf(b.body(), inner, data, symbols, reqs));
+                Core body = elaborate(b.body(), inner, data, symbols, reqs);
+                yield new Core.Block(b.params(), body, Type.fn(paramTypes, body.type()), b.pos());
             }
             case Ast.If iff -> {
-                requireType(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
-                Type t = typeFunctionValue(iff.then(), paramTypes, env, data, symbols, reqs);
-                Type f = typeFunctionValue(iff.els(), paramTypes, env, data, symbols, reqs);
+                Core cond = requireTyped(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
+                Core then = elaborateFunctionValue(iff.then(), paramTypes, env, data, symbols, reqs);
+                Core els = elaborateFunctionValue(iff.els(), paramTypes, env, data, symbols, reqs);
+                Type t = then.type();
+                Type f = els.type();
                 if (!t.equals(f)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.fn.branchtypes").title("check.fn.title")
                                     .at(iff.pos(), 2).args(Type.show(t), Type.show(f)).build(),
                             "the two branches produce different function types: " + t + " vs " + f);
                 }
-                yield t;
+                yield new Core.If(cond, then, els, t, iff.pos());
             }
             case Ast.LetIn li -> {
                 // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)
+                Core bound = elaborate(li.value(), env, data, symbols, reqs);
                 Map<String, Type> inner = new HashMap<>(env);
-                inner.put(li.name(), typeOf(li.value(), env, data, symbols, reqs));
-                yield typeFunctionValue(li.body(), paramTypes, inner, data, symbols, reqs);
+                inner.put(li.name(), bound.type());
+                Core body = elaborateFunctionValue(li.body(), paramTypes, inner, data, symbols, reqs);
+                yield new Core.LetIn(li.name(), bound, li.annotation(), body, body.type(), li.pos());
             }
-            default -> typeOf(value, env, data, symbols, reqs);
+            default -> elaborate(value, env, data, symbols, reqs);
         };
     }
 

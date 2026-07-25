@@ -34,6 +34,20 @@ import static souther.compiler.codegen.JvmTypes.*;
  */
 final class BodyGen {
 
+    /**
+     * Whether to check what this emitter synthesises against the type the checker put on the node
+     * (issue #81). The node's type is what the emitter uses either way; this only decides whether a
+     * disagreement is reported. It is on in the compiler's own test runs (surefire sets the property),
+     * where a divergence means the emitter's remaining synthesis is wrong and should be found here
+     * rather than as a crash. The synthesis goes away with the last slice of #81, and this with it.
+     *
+     * <p>The check is assignability, not equality: the emitter's synthesis is allowed to be the
+     * narrower of the two, because it reads one branch where the checker merged both — an {@code if}
+     * over two cases of a sum is {@code 管理職} here and {@code 一般社員 | 管理職} there. What it may
+     * not be is a type the checker's decision does not admit.
+     */
+    private static final boolean CHECK_TYPES = Boolean.getBoolean("souther.core.checkTypes");
+
     private final CodegenContext ctx;
     /** Aliases of {@link CodegenContext#pkg}/{@link CodegenContext#symbols}, read as bare names. */
     private final String pkg;
@@ -177,7 +191,8 @@ final class BodyGen {
         /** Generates a synthetic {@code Fn} class for an escaping lambda: captured free variables become
          * {@code final} fields set by the constructor, and the body compiles into {@code apply}, which
          * unboxes its arguments from the {@code Object[]} and boxes its result (spec §blocks). */
-        private byte[] generateLambdaClass(ClassDesc cd, Ast.Block block, List<Type> paramTypes,
+        private byte[] generateLambdaClass(ClassDesc cd, List<String> params, Core body,
+                                           List<Type> paramTypes,
                                            Type resultType, List<String> valueNames, List<Type> valueTypes,
                                            List<String> injectedNames, Map<String, Type> reqSuccess,
                                            Map<String, List<Type>> reqParams) {
@@ -237,7 +252,7 @@ final class BodyGen {
                         pushInt(code, i);
                         code.aaload();
                         unbox(code, pt, s);
-                        g.bind(block.params().get(i), s, pt);
+                        g.bind(params.get(i), s, pt);
                     }
                     for (int i = 0; i < valueNames.size(); i++) {
                         Type ct = valueTypes.get(i);
@@ -247,7 +262,7 @@ final class BodyGen {
                         store(code, s, ct);
                         g.bind(valueNames.get(i), s, ct);
                     }
-                    Type rt = g.expr(block.body());
+                    Type rt = g.genExpr(body);
                     box(code, rt);
                     code.areturn();
                 });
@@ -474,11 +489,29 @@ final class BodyGen {
             return genExpr(e, null);
         }
 
+        /**
+         * Emits {@code e} and yields its type: the one the checker decided, read off the node
+         * (issue #81). A node the checker did not produce — a codec expression, which is still
+         * AST-level — has no type, and the synthesis below stands in for it.
+         */
+        Type genExpr(Core e, Type expected) {
+            Type synthesised = genExprSynth(e, expected);
+            if (e.type() == null) {
+                return synthesised;
+            }
+            if (CHECK_TYPES && !TypeChecker.assignable(synthesised, e.type(), symbols)) {
+                throw new IllegalStateException("the checker typed this " + Type.show(e.type())
+                        + " but the emitter synthesised " + Type.show(synthesised)
+                        + " at " + e.pos() + " (" + e.getClass().getSimpleName() + ")");
+            }
+            return e.type();
+        }
+
         // {@code expected} mirrors the checker's bidirectional pass (issue #70): it is pushed into a
         // fold call so codegen materialises the step closure at the same accumulator type the checker
         // validated, when an empty-collection seed would otherwise leave that type a bottom. Only the
         // passthrough arms (if/let/match/call) forward it; every other arm ignores it.
-        Type genExpr(Core e, Type expected) {
+        private Type genExprSynth(Core e, Type expected) {
             emitLine(e);
             return switch (e) {
                 case Core.Int x -> {
@@ -554,14 +587,17 @@ final class BodyGen {
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
                     Type vt;
-                    // Type inference for a closure lives in the checker (AST); Core is untyped, so
-                    // the backend reaches it through toAst rather than re-deriving types.
-                    Ast.Expr valueAst = li.value().toAst();
-                    if (TypeChecker.isFunctionSelection(valueAst)) {
-                        // a lambda chosen at runtime (e.g. by an `if`): a first-class Fn (spec §blocks)
+                    if (li.value().type() instanceof Type.FnOf fn) {
+                        // a lambda chosen at runtime (e.g. by an `if`): a first-class Fn (spec §blocks).
+                        // Its parameter types are the ones the checker inferred from the applications
+                        // in the body, read off the node (issue #81).
+                        vt = emitFunctionValue(li.value(), fn.params());
+                    } else if (li.value().type() == null
+                            && TypeChecker.isFunctionSelection(li.value().toAst())) {
+                        // an untyped node (a codec expression): the checker is asked, as before
                         List<Type> paramTypes = TypeChecker.inferFnParamTypes(
                                 li.name(), li.body().toAst(), typesEnv(), data, symbols);
-                        vt = emitFunctionValue(valueAst, paramTypes);
+                        vt = emitFunctionValue(li.value().toAst(), paramTypes);
                     } else {
                         vt = genExpr(li.value(), letExpected(li));
                     }
@@ -575,9 +611,13 @@ final class BodyGen {
             };
         }
 
-        /** The type a binding's value is emitted at when the source annotated it (issue #71) — the same
-         * pin the checker applied, so an empty-collection value materialises at the written type. */
+        /** The type a binding's value is emitted at: the one the checker decided for it, so an
+         * empty-collection value materialises at the type the context pinned rather than a bottom
+         * (issue #71). A node the checker did not produce falls back to the written annotation. */
         private Type letExpected(Core.LetIn li) {
+            if (li.value().type() != null) {
+                return li.value().type();
+            }
             return li.annotation() == null ? null : successType(li.annotation());
         }
 
@@ -659,7 +699,7 @@ final class BodyGen {
                 code.ifeq(nextCase);
                 if (c.binding() != null) {
                     // a data case binds the instance; a primitive case (e.g. Int) unboxes the value
-                    Type bt = TypeChecker.caseBindType(cases.get(0));
+                    Type bt = c.bindType() != null ? c.bindType() : TypeChecker.caseBindType(cases.get(0));
                     code.aload(sSlot);
                     int bslot = slot(bt);
                     unbox(code, bt, bslot);
@@ -821,10 +861,9 @@ final class BodyGen {
                     // find(p, xs) / sortBy(key, xs): the function is a value here (not inlined into a
                     // fold), so materialise it as an Fn, then pass the list. The list's element type
                     // gives the function's one parameter type.
-                    Type lt = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnvWithHelpers(),
-                            data, symbols, reqSigs());
+                    Type lt = argType(call, 1);
                     Type elem = ((Type.ListOf) lt).element();
-                    emitFunctionValue(call.args().get(0).toAst(), List.of(elem));   // Fn on the stack
+                    emitFunction(call.args().get(0), List.of(elem));   // Fn on the stack
                     genExpr(call.args().get(1));                                    // then the List
                     if (call.fn().equals("List.find")) {
                         code.invokestatic(CD_Lists, "find", MethodTypeDesc.of(CD_Option, CD_Fn, CD_List));
@@ -837,10 +876,9 @@ final class BodyGen {
                     // map(f, opt): materialise f as an Fn (its one parameter is the option's element
                     // type), then the option. `Option` is not surface-writable, so the rewrap into
                     // Some(f v) / None happens in the runtime kernel (Option.map), not in emitted code.
-                    Type ot = TypeChecker.typeOf(call.args().get(1).toAst(), typesEnvWithHelpers(),
-                            data, symbols, reqSigs());
+                    Type ot = argType(call, 1);
                     Type elem = ((Type.OptionOf) ot).element();
-                    Type fnT = emitFunctionValue(call.args().get(0).toAst(), List.of(elem));  // Fn on the stack
+                    Type fnT = emitFunction(call.args().get(0), List.of(elem));  // Fn on the stack
                     genExpr(call.args().get(1));                                              // then the Option
                     code.invokestatic(CD_Options, "map", MethodTypeDesc.of(CD_Option, CD_Fn, CD_Option));
                     return Type.option(((Type.FnOf) fnT).result());   // the option rewraps f's return type
@@ -898,6 +936,22 @@ final class BodyGen {
             }
         }
 
+        /** The type of a call's argument: the checker's, or — for a node it did not produce — inferred
+         * from the AST as before. */
+        private Type argType(Core.Call call, int i) {
+            Core arg = call.args().get(i);
+            return arg.type() != null ? arg.type()
+                    : TypeChecker.typeOf(arg.toAst(), typesEnvWithHelpers(), data, symbols, reqSigs());
+        }
+
+        /** Materialises a function argument as an {@code Fn}, from its node when the checker produced
+         * one and from the AST otherwise. */
+        private Type emitFunction(Core value, List<Type> paramTypes) {
+            return value.type() != null
+                    ? emitFunctionValue(value, paramTypes)
+                    : emitFunctionValue(value.toAst(), paramTypes);
+        }
+
         /** Calls a recursive helper as a static method on {@code $Fns} (spec 13.1): each argument is
          * evaluated and boxed, the {@code invokestatic} returns {@code Object}, and the result is cast
          * back to the helper's declared return type. A self- or mutual call reaches here the same way.
@@ -905,6 +959,64 @@ final class BodyGen {
          * block is materialised rather than evaluated as a plain value, and an {@code Fn} is already a
          * reference, so it fits the {@code Object} slot without boxing. */
         private Type recursiveHelperCall(Core.Call call, Ast.FnDef h, Type expected) {
+            if (call.type() != null && allArgsTyped(call)) {
+                // The checker resolved this call's type variables when it typed it — the accumulator a
+                // fold's step runs at, the result the caller casts to — and left the decision on the
+                // nodes, so nothing is resolved a second time here (issue #81).
+                for (Core arg : call.args()) {
+                    if (arg.type() instanceof Type.FnOf fn) {
+                        if (stepNeverRuns(fn)) {
+                            code.aconst_null();
+                        } else {
+                            emitFunctionValue(arg, fn.params());
+                        }
+                    } else {
+                        box(code, genExpr(arg));
+                    }
+                }
+                invokeRecursiveHelper(call);
+                castFromObject(code, call.type());
+                return call.type();
+            }
+            return recursiveHelperCallSynth(call, h, expected);
+        }
+
+        private static boolean allArgsTyped(Core.Call call) {
+            for (Core arg : call.args()) {
+                if (arg.type() == null) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
+         * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
+         * {@code []} yields the seed. Such a step is passed as a null {@code Fn} rather than
+         * materialised, since materialising it would unbox the bottom element (as {@code acc + x}
+         * does with {@code x}) and crash. An empty *seed* (a {@code List<Nothing>} accumulator) is a
+         * reference and still materialises.
+         */
+        private static boolean stepNeverRuns(Type.FnOf fn) {
+            for (Type p : fn.params()) {
+                if (p instanceof Type.Nothing) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void invokeRecursiveHelper(Core.Call call) {
+            ClassDesc[] params = new ClassDesc[call.args().size()];
+            java.util.Arrays.fill(params, CD_Object);
+            code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.recursiveHelperMethod(call.fn()),
+                    MethodTypeDesc.of(CD_Object, params));
+        }
+
+        /** The pre-#81 path: resolve the helper's type variables here, for a call whose nodes the
+         * checker did not produce (a codec expression). */
+        private Type recursiveHelperCallSynth(Core.Call call, Ast.FnDef h, Type expected) {
             // Resolve the helper's type variables from the value arguments, so a function argument is
             // materialised at concrete parameter types — foldFrom's step is `(acc, x)` at the seed's
             // and the list element's types — matching how the checker typed this call. A monomorphic
@@ -941,16 +1053,7 @@ final class BodyGen {
             for (int i = 0; i < call.args().size(); i++) {
                 Type pi = TypeChecker.substitute(declared.get(i), bind);
                 if (pi instanceof Type.FnOf fn) {
-                    boolean stepDead = false;
-                    for (Type p : fn.params()) {
-                        stepDead |= p instanceof Type.Nothing;   // an element of an empty-literal list
-                    }
-                    if (stepDead) {
-                        // A step parameter is a bare Nothing: it is the element of an empty-literal
-                        // list, so there are no elements and the step never runs — foldFrom over `[]`
-                        // yields the seed. Pass a null Fn rather than materialise a closure that would
-                        // unbox the bottom element (as `acc + x` does with `x`) and crash. An empty
-                        // *seed* (a `List<Nothing>` accumulator) is a reference and still materialises.
+                    if (stepNeverRuns(fn)) {
                         code.aconst_null();
                     } else {
                         emitFunctionValue(call.args().get(i).toAst(), fn.params());
@@ -960,10 +1063,7 @@ final class BodyGen {
                     box(code, at);
                 }
             }
-            ClassDesc[] params = new ClassDesc[call.args().size()];
-            java.util.Arrays.fill(params, CD_Object);
-            code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.recursiveHelperMethod(call.fn()),
-                    MethodTypeDesc.of(CD_Object, params));
+            invokeRecursiveHelper(call);
             Type rt = TypeChecker.substitute(successType(h.declaredReturn()), bind);
             castFromObject(code, rt);
             return rt;
@@ -1280,19 +1380,71 @@ final class BodyGen {
             };
         }
 
+        /** Emits a function value from its elaborated node: the parameter and result types are the
+         * ones the checker decided, so nothing is inferred here (issue #81). */
+        private Type emitFunctionValue(Core value, List<Type> paramTypes) {
+            return switch (value) {
+                case Core.Block b -> emitLambda(b, paramTypes);
+                case Core.If iff -> {
+                    genExpr(iff.cond());
+                    Label elseL = code.newLabel();
+                    Label end = code.newLabel();
+                    code.ifeq(elseL);
+                    Type t = emitFunctionValue(iff.then(), paramTypes);
+                    code.goto_(end);
+                    code.labelBinding(elseL);
+                    emitFunctionValue(iff.els(), paramTypes);
+                    code.labelBinding(end);
+                    yield t;
+                }
+                case Core.LetIn li -> {
+                    // a capture binding around the function: bind it here so the lambda captures it
+                    Type vt = genExpr(li.value());
+                    int s = slot(vt);
+                    store(code, s, vt);
+                    bind(li.name(), s, vt);
+                    yield emitFunctionValue(li.body(), paramTypes);
+                }
+                default -> genExpr(value);
+            };
+        }
+
+        /** As {@link #emitLambda(Ast.Block, List)}, from the elaborated block: its body is emitted
+         * from Core and its result type read off the node rather than inferred again. */
+        private Type emitLambda(Core.Block block, List<Type> paramTypes) {
+            Type resultType = block.type() instanceof Type.FnOf fn
+                    ? fn.result()
+                    : TypeChecker.typeOf(block.toAst(), lambdaEnv(block.params(), paramTypes), data,
+                            symbols, reqSigs());
+            return emitLambda(block.params(), block.body(), paramTypes, resultType,
+                    freeVars((Ast.Block) block.toAst()));
+        }
+
         /** Compiles a lambda to a synthetic {@code Fn} class and emits {@code new} of it, passing the
          * captured free variables (and any injected behaviors it calls) to its constructor. */
         private Type emitLambda(Ast.Block block, List<Type> paramTypes) {
+            Type resultType = TypeChecker.typeOf(block.body(),
+                    lambdaEnv(block.params(), paramTypes), data, symbols, reqSigs());
+            return emitLambda(block.params(), Core.of(block.body()), paramTypes, resultType,
+                    freeVars(block));
+        }
+
+        /** The enclosing environment with a lambda's parameters bound, for the paths that still infer
+         * a lambda body's result type. */
+        private Map<String, Type> lambdaEnv(List<String> params, List<Type> paramTypes) {
             Map<String, Type> inner = typesEnvWithHelpers();
             for (int i = 0; i < paramTypes.size(); i++) {
-                inner.put(block.params().get(i), paramTypes.get(i));
+                inner.put(params.get(i), paramTypes.get(i));
             }
-            Type resultType = TypeChecker.typeOf(block.body(), inner, data, symbols, reqSigs());
+            return inner;
+        }
 
+        private Type emitLambda(List<String> params, Core body, List<Type> paramTypes,
+                                Type resultType, List<String> free) {
             List<String> valueNames = new ArrayList<>();
             List<Type> valueTypes = new ArrayList<>();
             List<String> injectedNames = new ArrayList<>();
-            for (String c : freeVars(block)) {
+            for (String c : free) {
                 if (env.containsKey(c)) {
                     valueNames.add(c);
                     valueTypes.add(env.get(c).type());
@@ -1302,7 +1454,7 @@ final class BodyGen {
             }
             String className = pkg + ".$Fn" + ctx.nextLambdaId();
             ClassDesc cd = ClassDesc.of(className);
-            ctx.addSynth(className, generateLambdaClass(cd, block, paramTypes, resultType,
+            ctx.addSynth(className, generateLambdaClass(cd, params, body, paramTypes, resultType,
                     valueNames, valueTypes, injectedNames, reqSuccess, reqParams));
 
             code.new_(cd);

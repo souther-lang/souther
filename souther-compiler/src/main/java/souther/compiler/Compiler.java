@@ -77,8 +77,10 @@ public final class Compiler {
         module = NewtypeDesugar.rewrite(module, TypeChecker.symbols(module));
         module = Compiler.injectRecursivePrelude(module);
         Ast.Module lowered = Lower.run(module);
-        warningsOut.addAll(TypeChecker.checkOrThrow(module, TypeChecker.symbols(module), Map.of(), lowered));
-        Map<String, byte[]> out = Backend.generate(lowered);
+        TypeChecker.Checked checked =
+                TypeChecker.checkOrThrow(module, TypeChecker.symbols(module), Map.of(), lowered);
+        warningsOut.addAll(checked.warnings());
+        Map<String, byte[]> out = Backend.generate(lowered, checked);
         verifyConstConstructions(module, TypeChecker.symbols(module), out);
         Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
         ExampleVerifier.verify(module, symbols, TypeChecker.signatures(module, symbols), Map.of(), out);
@@ -239,8 +241,10 @@ public final class Compiler {
             Set<String> importedInjected = importedInjectedBehaviors(m, derived);
             m = injectRecursivePrelude(m);
             Ast.Module lowered = Lower.run(m);
-            warningsOut.addAll(TypeChecker.checkOrThrow(m, symbols, importedSigs, lowered));
-            out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs, importedInjected));
+            TypeChecker.Checked checked = TypeChecker.checkOrThrow(m, symbols, importedSigs, lowered);
+            warningsOut.addAll(checked.warnings());
+            out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs,
+                    importedInjected, checked));
         }
         // every module's classes are now present, so CTFE and example evaluation can resolve
         // cross-module references
@@ -344,7 +348,9 @@ public final class Compiler {
                 Set<String> importedInjected = importedInjectedBehaviors(m, derived);
                 m = injectRecursivePrelude(m);
                 Ast.Module lowered = Lower.run(m);
-                List<Diagnostic> typeErrors = TypeChecker.check(m, symbols, importedSigs, lowered);
+                TypeChecker.CheckResult result0 =
+                        TypeChecker.checkAndElaborate(m, symbols, importedSigs, lowered);
+                List<Diagnostic> typeErrors = result0.diagnostics();
                 if (!typeErrors.isEmpty()) {
                     // a type-invalid module must not reach codegen; report every error and skip it,
                     // so its importers are skipped too rather than compiled against a broken module.
@@ -352,7 +358,8 @@ public final class Compiler {
                     failed.add(original.name());
                     continue;
                 }
-                out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs, importedInjected));
+                out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs,
+                        importedInjected, result0.checked()));
                 verifyConstConstructions(m, symbols, out);
                 Map<String, TypeChecker.Sig> sigs =
                         TypeChecker.signatures(m, symbols, importedBehaviorSigs(m, derived));

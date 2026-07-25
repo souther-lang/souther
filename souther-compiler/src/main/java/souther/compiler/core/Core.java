@@ -1,5 +1,6 @@
 package souther.compiler.core;
 
+import souther.compiler.check.Type;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 
@@ -16,13 +17,22 @@ import java.util.List;
  * own node here, so the backend only emits. Later slices add explicit nodes for {@code match}
  * lowering and closure conversion, and drop the corresponding special cases from the emitter.
  *
- * <p>Core is structural, not typed: the backend infers types as it emits, as it does from the AST
- * today. A surface-only node (a list comprehension) never appears — the Lower stage has already
+ * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
+ * checker produces Core as it types a body — {@code TypeChecker.elaborate} — so the backend reads
+ * the decision instead of inferring it a second time. A node built by {@link #of} instead of by the
+ * checker has a {@code null} type: the codec emitters are still AST-level and reach the shared value
+ * emitter through {@code of}, and the backend falls back to its own synthesis for those. That
+ * fallback is what the remaining slices of #81 remove.
+ *
+ * <p>A surface-only node (a list comprehension) never appears — the Lower stage has already
  * rewritten it — so translating one is a compiler bug, not a case to handle.
  */
 public sealed interface Core {
 
     SourcePos pos();
+
+    /** The type the checker decided for this expression, or {@code null} on a node {@link #of} built. */
+    Type type();
 
     /**
      * Rebuilds the equivalent surface expression. Two callers need AST rather than Core: the codec
@@ -75,78 +85,92 @@ public sealed interface Core {
         return out;
     }
 
-    record Int(long value, SourcePos pos) implements Core {}
+    record Int(long value, Type type, SourcePos pos) implements Core {}
 
-    record Decimal(BigDecimal value, SourcePos pos) implements Core {}
+    record Decimal(BigDecimal value, Type type, SourcePos pos) implements Core {}
 
-    record Str(String value, SourcePos pos) implements Core {}
+    record Str(String value, Type type, SourcePos pos) implements Core {}
 
-    record Bool(boolean value, SourcePos pos) implements Core {}
+    record Bool(boolean value, Type type, SourcePos pos) implements Core {}
 
-    record Var(String name, SourcePos pos) implements Core {}
+    record Var(String name, Type type, SourcePos pos) implements Core {}
 
-    record Neg(Core operand, SourcePos pos) implements Core {}
+    record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
-    record FieldAccess(Core target, String field, SourcePos pos) implements Core {}
+    record FieldAccess(Core target, String field, Type type, SourcePos pos) implements Core {}
 
-    record Binary(Ast.BinOp op, Core left, Core right, SourcePos pos) implements Core {}
+    record Binary(Ast.BinOp op, Core left, Core right, Type type, SourcePos pos) implements Core {}
 
     /** A call to a builtin, an injected behavior, or an intrinsic (a helper fn is already inlined). */
-    record Call(String fn, List<Core> args, SourcePos pos) implements Core {}
+    record Call(String fn, List<Core> args, Type type, SourcePos pos) implements Core {}
 
-    record If(Core cond, Core then, Core els, SourcePos pos) implements Core {}
+    record If(Core cond, Core then, Core els, Type type, SourcePos pos) implements Core {}
 
     /** {@code annotation} is the type the source wrote on the binding ({@code let x: T = e}), or null.
-     * Core carries no types of its own; this is the written annotation, kept so the backend materialises
-     * an empty-collection value at the type the checker pinned it to rather than re-deriving a bottom.
+     * It is kept for the backend's fallback path, which re-derives the value's type; a node the
+     * checker produced carries the decided type on {@code value} instead.
      * A type that helper inlining put on a binding is not an annotation and does not come along. */
-    record LetIn(String name, Core value, Ast.RetType annotation, Core body, SourcePos pos)
+    record LetIn(String name, Core value, Ast.RetType annotation, Core body, Type type, SourcePos pos)
             implements Core {
 
-        LetIn(String name, Core value, Core body, SourcePos pos) {
-            this(name, value, null, body, pos);
+        LetIn(String name, Core value, Core body, Type type, SourcePos pos) {
+            this(name, value, null, body, type, pos);
         }
     }
 
     /** A second-class block: a step passed to a recursive combinator, or an escaping lambda a {@code
-     * let} binds (a closure). Kept as its own node until closure conversion gets an explicit Core form. */
-    record Block(List<String> params, Core body, SourcePos pos) implements Core {}
+     * let} binds (a closure). Kept as its own node until closure conversion gets an explicit Core form.
+     * Its {@code type} is the {@link Type.FnOf} the checker gave it — the parameter types the context
+     * fixed, and the body's result type. */
+    record Block(List<String> params, Core body, Type type, SourcePos pos) implements Core {}
 
-    record ListLit(List<Core> elements, SourcePos pos) implements Core {}
+    record ListLit(List<Core> elements, Type type, SourcePos pos) implements Core {}
 
     /** A tuple {@code (e1, e2, ...)} (ADR-0036); the backend emits it as an {@code Object[]}. */
-    record Tuple(List<Core> elements, SourcePos pos) implements Core {}
+    record Tuple(List<Core> elements, Type type, SourcePos pos) implements Core {}
 
     /** Reads a tuple element by index (a {@code let (x, y) = t} destructure); {@code arity} is the
      * pattern's name count, checked against the tuple's size (ADR-0036). */
-    record TupleGet(Core tuple, int index, int arity, SourcePos pos) implements Core {}
+    record TupleGet(Core tuple, int index, int arity, Type type, SourcePos pos) implements Core {}
 
     record FieldInit(String name, Core value, SourcePos pos) {}
 
-    record NewData(String typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
-            implements Core {}
+    record NewData(String typeName, List<FieldInit> inits, List<String> spreads, Type type,
+                   SourcePos pos) implements Core {}
 
-    record Case(List<String> caseTypes, String binding, Core body, SourcePos pos) {}
+    /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
+     * narrows to, or the element a {@code Some x} opens (null on a node {@link #of} built). */
+    record Case(List<String> caseTypes, String binding, Core body, Type bindType, SourcePos pos) {
 
-    record Match(Core scrutinee, List<Case> cases, SourcePos pos) implements Core {}
+        Case(List<String> caseTypes, String binding, Core body, SourcePos pos) {
+            this(caseTypes, binding, body, null, pos);
+        }
+    }
 
-    /** Translates a lowered behavior body (helpers inlined, surface forms desugared) to Core. */
-    static Core of(Ast.Expr e) {
+    record Match(Core scrutinee, List<Case> cases, Type type, SourcePos pos) implements Core {}
+
+    /**
+     * Translates a lowered behavior body to Core without types, for the AST-level codec emitters.
+     * The behavior and helper bodies the backend emits come from the checker instead, with the type
+     * it decided on every node (issue #81).
+     */
+    public static Core of(Ast.Expr e) {
         return switch (e) {
-            case Ast.IntLit x -> new Int(x.value(), x.pos());
-            case Ast.DecimalLit x -> new Decimal(x.value(), x.pos());
-            case Ast.StringLit x -> new Str(x.value(), x.pos());
-            case Ast.BoolLit x -> new Bool(x.value(), x.pos());
-            case Ast.Var x -> new Var(x.name(), x.pos());
-            case Ast.Neg n -> new Neg(of(n.operand()), n.pos());
-            case Ast.FieldAccess fa -> new FieldAccess(of(fa.target()), fa.field(), fa.pos());
-            case Ast.Binary b -> new Binary(b.op(), of(b.left()), of(b.right()), b.pos());
-            case Ast.If iff -> new If(of(iff.cond()), of(iff.then()), of(iff.els()), iff.pos());
-            case Ast.LetIn li -> new LetIn(li.name(), of(li.value()), li.annotation(), of(li.body()), li.pos());
-            case Ast.Block bl -> new Block(bl.params(), of(bl.body()), bl.pos());
-            case Ast.ListLit l -> new ListLit(ofAll(l.elements()), l.pos());
-            case Ast.Tuple t -> new Tuple(ofAll(t.elements()), t.pos());
-            case Ast.TupleGet tg -> new TupleGet(of(tg.tuple()), tg.index(), tg.arity(), tg.pos());
+            case Ast.IntLit x -> new Int(x.value(), null, x.pos());
+            case Ast.DecimalLit x -> new Decimal(x.value(), null, x.pos());
+            case Ast.StringLit x -> new Str(x.value(), null, x.pos());
+            case Ast.BoolLit x -> new Bool(x.value(), null, x.pos());
+            case Ast.Var x -> new Var(x.name(), null, x.pos());
+            case Ast.Neg n -> new Neg(of(n.operand()), null, n.pos());
+            case Ast.FieldAccess fa -> new FieldAccess(of(fa.target()), fa.field(), null, fa.pos());
+            case Ast.Binary b -> new Binary(b.op(), of(b.left()), of(b.right()), null, b.pos());
+            case Ast.If iff -> new If(of(iff.cond()), of(iff.then()), of(iff.els()), null, iff.pos());
+            case Ast.LetIn li -> new LetIn(li.name(), of(li.value()), li.annotation(), of(li.body()),
+                    null, li.pos());
+            case Ast.Block bl -> new Block(bl.params(), of(bl.body()), null, bl.pos());
+            case Ast.ListLit l -> new ListLit(ofAll(l.elements()), null, l.pos());
+            case Ast.Tuple t -> new Tuple(ofAll(t.elements()), null, t.pos());
+            case Ast.TupleGet tg -> new TupleGet(of(tg.tuple()), tg.index(), tg.arity(), null, tg.pos());
             case Ast.NewData nd -> ofNewData(nd);
             case Ast.Match m -> ofMatch(m);
             case Ast.Call c -> ofCall(c);
@@ -156,7 +180,7 @@ public sealed interface Core {
     }
 
     private static Core ofCall(Ast.Call c) {
-        return new Call(c.fn(), ofAll(c.args()), c.pos());
+        return new Call(c.fn(), ofAll(c.args()), null, c.pos());
     }
 
     private static Core ofNewData(Ast.NewData nd) {
@@ -164,7 +188,7 @@ public sealed interface Core {
         for (Ast.FieldInit i : nd.inits()) {
             inits.add(new FieldInit(i.name(), of(i.value()), i.pos()));
         }
-        return new NewData(nd.typeName(), inits, nd.spreads(), nd.pos());
+        return new NewData(nd.typeName(), inits, nd.spreads(), null, nd.pos());
     }
 
     private static Core ofMatch(Ast.Match m) {
@@ -172,7 +196,7 @@ public sealed interface Core {
         for (Ast.Case c : m.cases()) {
             cases.add(new Case(c.caseTypes(), c.binding(), of(c.body()), c.pos()));
         }
-        return new Match(of(m.scrutinee()), cases, m.pos());
+        return new Match(of(m.scrutinee()), cases, null, m.pos());
     }
 
     private static List<Core> ofAll(List<Ast.Expr> es) {
