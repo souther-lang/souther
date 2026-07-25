@@ -1890,8 +1890,6 @@ public final class TypeChecker {
                 for (Ast.DecStmt stmt : prim.stmts()) {
                     switch (stmt) {
                         case Ast.Let let -> env.put(let.name(), typeOf(let.value(), env, data, symbols));
-                        case Ast.Require req -> requireType(req.cond(), Type.BOOL, env, data, symbols,
-                                NO_REQS, "require condition");
                     }
                 }
                 checkConstruct(prim.result(), data, fields, env, symbols);

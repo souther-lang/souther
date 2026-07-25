@@ -124,10 +124,14 @@ class IssueTrackerApiTest {
 
     @Test
     fun `an invariant violation is rejected by the decoder, before any behavior runs`() {
-        // Label's invariant is length >= 1, so an empty label never becomes a domain value.
+        // Label's invariant is length >= 1, so an empty label never becomes a domain value. The
+        // rule reaches the boundary as the Raoh constraint that states it, so the issue names what
+        // was broken — `too_short` at `/label`, not one code shared by every invariant.
         postJson("/issues/i-1/labels", """{"label":""}""")
             .expectStatus().isBadRequest()
-            .expectBody().jsonPath("$.issues[0].path").isEqualTo("/label")
+            .expectBody()
+            .jsonPath("$.issues[0].path").isEqualTo("/label")
+            .jsonPath("$.issues[0].code").isEqualTo("too_short")
 
         assertEquals(setOf("bug", "ui"), labelsOf("i-1"), "the label set is untouched")
     }

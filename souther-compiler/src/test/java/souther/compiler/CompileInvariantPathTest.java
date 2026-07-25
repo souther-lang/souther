@@ -48,7 +48,8 @@ class CompileInvariantPathTest {
 
         List<Issue> issues = ((Err<?>) r).issues().asList();
         Set<String> codes = issues.stream().map(Issue::code).collect(Collectors.toSet());
-        assertEquals(Set.of("invariant_violation"), codes);
+        // `value > 0` is Raoh's positive() on the leaf, so both carry that constraint's code (#83)
+        assertEquals(Set.of("out_of_range"), codes);
 
         // The two failures must be told apart by their path — first vs second, not both root.
         Set<List<String>> paths = issues.stream()
@@ -65,7 +66,9 @@ class CompileInvariantPathTest {
 
         List<Issue> issues = ((Err<?>) r).issues().asList();
         assertEquals(1, issues.size(), "only second breaks the invariant");
-        assertEquals("invariant_violation", issues.get(0).code());
+        assertEquals("out_of_range", issues.get(0).code());
+        assertEquals(1L, issues.get(0).meta().get("min"), "the bound the invariant states");
+        assertEquals(-3L, issues.get(0).meta().get("actual"), "the value that broke it");
         assertEquals(List.of("second"), issues.get(0).path().segments());
     }
 

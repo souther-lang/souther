@@ -885,6 +885,12 @@ This differs from a violation inside the domain (<<algebraic-types>>). A break a
 
 At the boundary (HTTP, etc.), the `+Result+` failure is received and mapped to an appropriate response (e.g. 400). The `+MemberController+` branching on the decode `+Result+` in <<java-example>> is this form.
 
+==== Codes an invariant produces
+
+A newtype's invariant reaches the boundary as the Raoh constraint that states the same rule, so the failure carries that constraint's `+code+` and metadata: `+String.length(value) >= 1+` fails as `+too_short+` with `+min+`, `+String.matches(p, value)+` as `+invalid_format+`, and a numeric bound as `+out_of_range+` with `+min+` / `+max+`. The vocabulary is Raoh's, so a `+MessageResolver+` keyed on the standard codes resolves and localises these without Souther supplying message text. Which type rejected the value is told by `+path+`, as for any other decode failure.
+
+Only a rule with an exact Raoh equivalent is mapped this way. Anything else — a quantifier over a list, a check across two fields, an object's invariant — runs as the invariant it is and fails with the code `+invariant_violation+`, carrying the rejecting type's name in the metadata as `+type+`. A mapped rule is checked before an unmapped one, and construction re-checks every invariant regardless (<<violation-destination>>): the constraints are how a failure is *reported*, not what makes a value valid.
+
 [#codec-generation]
 === Generation method and Raoh
 

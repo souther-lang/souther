@@ -283,11 +283,9 @@ public interface Ast {
     enum PrimKind { STRING, INT, BOOL, DECIMAL, DATE, DATETIME }
 
     /** A statement in a single-value decoder body. */
-    sealed interface DecStmt extends Ast permits Let, Require {}
+    sealed interface DecStmt extends Ast permits Let {}
 
     record Let(String name, Expr value, SourcePos pos) implements DecStmt {}
-
-    record Require(Expr cond, String errorCode, SourcePos pos) implements DecStmt {}
 
     /** A typed record literal {@code TypeName { ..src, field: expr, ... }} — a construction. */
     record Construct(String typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)

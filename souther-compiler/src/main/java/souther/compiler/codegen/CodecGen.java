@@ -13,6 +13,7 @@ import java.lang.classfile.Label;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
+import java.lang.constant.ConstantDescs;
 import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.constant.DynamicCallSiteDesc;
 import java.lang.constant.MethodHandleDesc;
@@ -22,6 +23,7 @@ import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import static souther.compiler.codegen.Descriptors.*;
@@ -29,8 +31,8 @@ import static souther.compiler.codegen.JvmTypes.*;
 
 /**
  * Generates a data/sum/unit type's decoders and encoders at the Raoh boundary (spec 10.6, 15, 27.7):
- * the three input sources (neutral/JSON/jOOQ), object/leaf/newtype/sum decoding, the require and
- * construct checks, and the encoder raw expressions. Name resolution and the synthetic-class sink come
+ * the three input sources (neutral/JSON/jOOQ), object/leaf/newtype/sum decoding, a newtype's
+ * invariant as Raoh constraints, the construct check, and the encoder raw expressions. Name resolution and the synthetic-class sink come
  * from {@link CodegenContext}; body expressions are emitted through a {@link BodyGen} built per method.
  */
 final class CodecGen {
@@ -395,6 +397,7 @@ final class CodecGen {
                                         Map<String, Type> fields, Src src) {
         ClassDesc cdDec = cd(data.name() + srcSuffix(src));
         decoderClass = cdDec;
+        Invariants invariants = invariantsOf(data, fields);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -403,9 +406,11 @@ final class CodecGen {
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 3);
                 switch (dec) {
-                    case Ast.PrimDecoder prim -> emitPrimDecode(code, gen, cdName, prim, fields, src);
+                    case Ast.PrimDecoder prim ->
+                            emitPrimDecode(code, gen, cdName, prim, fields, src, invariants);
                     case Ast.ObjectDecoder obj -> emitObjectDecode(code, gen, cdName, obj, fields, src);
-                    case Ast.NewtypeDecoder nt -> emitNewtypeDecode(code, gen, cdName, nt, fields, src);
+                    case Ast.NewtypeDecoder nt ->
+                            emitNewtypeDecode(code, gen, cdName, nt, fields, src, invariants);
                 }
             });
             // One key-remap helper per String-backed newtype used as a map key anywhere in this
@@ -415,7 +420,45 @@ final class CodecGen {
             for (String keyType : keyTypes) {
                 emitRekeyHelper(cb, keyType);
             }
+            emitPatternFields(cb, invariants);
+            if (invariants.hasUnmapped()) {
+                emitInvariantFailureHelper(cb, data.name());
+            }
         });
+    }
+
+    /**
+     * A newtype's invariant as seen by its decoder (issue #83): the clauses that map onto a Raoh
+     * constraint, and whether any clause does not — those are left to {@code refine}, which runs the
+     * invariant itself.
+     */
+    private record Invariants(List<InvariantConstraints.Constraint> constraints, boolean hasUnmapped) {
+
+        static final Invariants NONE = new Invariants(List.of(), false);
+    }
+
+    private Invariants invariantsOf(Ast.Data data, Map<String, Type> fields) {
+        if (!data.newtype()) {
+            return Invariants.NONE;   // an object's invariant has no single value to constrain
+        }
+        List<Ast.Expr> declared = TypeChecker.effectiveInvariants(data, symbols);
+        if (declared.isEmpty()) {
+            return Invariants.NONE;
+        }
+        Type base = fields.get("value");
+        List<InvariantConstraints.Constraint> constraints = new ArrayList<>();
+        boolean unmapped = false;
+        for (Ast.Expr inv : declared) {
+            for (Ast.Expr clause : InvariantConstraints.clauses(inv)) {
+                Optional<InvariantConstraints.Constraint> c = InvariantConstraints.of(clause, base);
+                if (c.isPresent()) {
+                    constraints.add(c.get());
+                } else {
+                    unmapped = true;
+                }
+            }
+        }
+        return new Invariants(constraints, unmapped);
     }
 
     /** Collects the String-backed newtypes used as map keys anywhere in a derived decoder. */
@@ -579,7 +622,7 @@ final class CodecGen {
     }
 
     private void emitPrimDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.PrimDecoder prim,
-                                Map<String, Type> fields, Src src) {
+                                Map<String, Type> fields, Src src, Invariants invariants) {
         Type inputType = TypeChecker.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
         switch (prim.from()) {
@@ -590,6 +633,7 @@ final class CodecGen {
             case DATE -> emitTemporalLeaf(code, src, "date");
             case DATETIME -> emitTemporalLeaf(code, src, "dateTime");
         }
+        emitInvariantConstraints(code, cdName, inputType, invariants);
         code.aload(1);                                                 // in (bare value)
         code.aload(2);                                                 // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);      // Result
@@ -617,7 +661,6 @@ final class CodecGen {
                     store(code, slot, t);
                     gen.bind(let.name(), slot, t);
                 }
-                case Ast.Require req -> emitRequire(code, gen, req);
             }
         }
         emitConstructCall(code, gen, cdName, prim.result(), fields);
@@ -629,8 +672,11 @@ final class CodecGen {
      * Y's decoder rather than a primitive one.
      */
     private void emitNewtypeDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.NewtypeDecoder dec,
-                                   Map<String, Type> fields, Src src) {
+                                   Map<String, Type> fields, Src src, Invariants invariants) {
         emitDecoderObject(code, dec.inner(), src);                    // Y's decoder (for this source)
+        // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the invariant
+        // says is checked through refine (and again by __construct).
+        emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
         code.aload(1);                                               // in
         code.aload(2);                                               // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);   // Result
@@ -777,16 +823,177 @@ final class CodecGen {
         }
     }
 
-    private void emitRequire(CodeBuilder code, BodyGen gen, Ast.Require req) {
-        gen.expr(req.cond());
-        Label cont = code.newLabel();
-        code.ifne(cont);
-        code.getstatic(CD_RPath, "ROOT", CD_RPath);
-        code.loadConstant(req.errorCode());
-        code.loadConstant(req.errorCode());
-        code.invokestatic(CD_RResult, "fail", MTD_Rfail, true);
-        code.areturn();
-        code.labelBinding(cont);
+    /**
+     * Constrains the leaf decoder on the stack with the newtype's invariant (issue #83). A clause the
+     * mapping recognises becomes the Raoh constraint that says the same thing, so the failure carries
+     * that constraint's code, metadata and default message at the value's path — {@code too_short}
+     * with {@code min}, not one {@code invariant_violation} for every rule in the model. Whatever is
+     * left calls {@code refine} with the invariant itself, under the shared code and the type name in
+     * the metadata, so a resolver can still tell which type rejected the value. That failure is built
+     * here rather than through {@code refine}'s message overload, which mints a custom-message issue a
+     * resolver refuses to touch — an invariant's text must stay replaceable.
+     *
+     * <p>Raoh chains constraints with {@code flatMap}, so the first failure stops the rest: the
+     * {@code refine} predicate — which runs the whole invariant, recognised clauses included — is
+     * reached only once the mapped constraints have passed, and no rule is reported twice.
+     */
+    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
+                                          Invariants invariants) {
+        for (InvariantConstraints.Constraint c : invariants.constraints()) {
+            emitConstraint(code, c);
+        }
+        if (invariants.hasUnmapped()) {
+            code.invokedynamic(invariantPredicateCallSite(cdName, base));
+            code.invokedynamic(invariantFailureCallSite());
+            code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine);
+        }
+    }
+
+    private void emitConstraint(CodeBuilder code, InvariantConstraints.Constraint c) {
+        switch (c) {
+            case InvariantConstraints.MinLength m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_StringDecoder, "minLength", MTD_strLengthBound);
+            }
+            case InvariantConstraints.MaxLength m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_StringDecoder, "maxLength", MTD_strLengthBound);
+            }
+            case InvariantConstraints.FixedLength f -> {
+                pushInt(code, f.n());
+                code.invokevirtual(CD_StringDecoder, "fixedLength", MTD_strLengthBound);
+            }
+            case InvariantConstraints.Pattern p -> {
+                // compiled once into a static field, not on every decode
+                code.getstatic(decoderClass, patternField(p.regex()), CD_Pattern);
+                code.invokevirtual(CD_StringDecoder, "pattern", MTD_strPattern);
+            }
+            case InvariantConstraints.Min m -> {
+                code.loadConstant(m.n());
+                code.invokevirtual(CD_LongDecoder, "min", MTD_longBound);
+            }
+            case InvariantConstraints.Max m -> {
+                code.loadConstant(m.n());
+                code.invokevirtual(CD_LongDecoder, "max", MTD_longBound);
+            }
+            case InvariantConstraints.Positive _ ->
+                    code.invokevirtual(CD_LongDecoder, "positive", MTD_longSign);
+            case InvariantConstraints.NonNegative _ ->
+                    code.invokevirtual(CD_LongDecoder, "nonNegative", MTD_longSign);
+            case InvariantConstraints.DecimalMin m -> {
+                emitBigDecimal(code, m.n());
+                code.invokevirtual(CD_DecimalDecoder, "min", MTD_decBound);
+            }
+            case InvariantConstraints.DecimalMax m -> {
+                emitBigDecimal(code, m.n());
+                code.invokevirtual(CD_DecimalDecoder, "max", MTD_decBound);
+            }
+            case InvariantConstraints.DecimalPositive _ ->
+                    code.invokevirtual(CD_DecimalDecoder, "positive", MTD_decSign);
+            case InvariantConstraints.DecimalNonNegative _ ->
+                    code.invokevirtual(CD_DecimalDecoder, "nonNegative", MTD_decSign);
+        }
+    }
+
+    private void emitBigDecimal(CodeBuilder code, java.math.BigDecimal value) {
+        code.new_(CD_BigDecimal);
+        code.dup();
+        code.loadConstant(value.toString());
+        code.invokespecial(CD_BigDecimal, "<init>", MethodTypeDesc.of(ConstantDescs.CD_void, CD_String));
+    }
+
+    /** {@code invokedynamic} producing a {@code Predicate} over the type's {@code $Ctfe.check} — the
+     * invariant as a plain boolean, already emitted for compile-time construction checking
+     * (ADR-0032). */
+    private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base) {
+        ClassDesc cdCtfe = cd(typeName(cdName) + "$Ctfe");
+        MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
+        // A Predicate's argument is a reference, so the instantiated type takes the decoded value's
+        // boxed form and the metafactory unboxes it into `check`'s primitive parameter.
+        ClassDesc boxed = JvmTypes.boxedPrim(base) != null ? JvmTypes.boxedPrim(base)
+                : JvmTypes.jvmType(base, ctx);
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, cdCtfe, "check", check);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "test",
+                MethodTypeDesc.of(CD_Predicate),                                 // no captures
+                MTD_ctfeCheckObject,                                             // samMethodType
+                impl,
+                MethodTypeDesc.of(ConstantDescs.CD_boolean, boxed));             // instantiatedMethodType
+    }
+
+    /** {@code invokedynamic} producing the {@code BiFunction} that builds a refined invariant's
+     * failure — the issue this decoder reports when the value breaks a rule no constraint states. */
+    private DynamicCallSiteDesc invariantFailureCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, decoderClass, "__invariantFailure",
+                MTD_invariantFailure);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_BiFunction),
+                MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),              // samMethodType
+                impl,
+                MTD_invariantFailure);
+    }
+
+    /**
+     * {@code static Result __invariantFailure(Object value, Path path)}: the issue a refined
+     * invariant reports. It is a {@code Result.fail}, so the message is Raoh's default and a
+     * {@code MessageResolver} may replace it; the rejecting type travels in the metadata, which is
+     * what a resolver switches on when the code is the shared one.
+     */
+    private void emitInvariantFailureHelper(ClassBuilder cb, String typeName) {
+        cb.withMethodBody("__invariantFailure", MTD_invariantFailure,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            code.aload(1);                                            // path
+            code.loadConstant("invariant_violation");
+            code.loadConstant("invariant violated on " + typeName);
+            code.loadConstant("type");
+            code.loadConstant(typeName);
+            code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
+            code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
+            code.areturn();
+        });
+    }
+
+    /** The static field holding a pattern constraint's compiled regex. */
+    private static String patternField(String regex) {
+        return "__pattern$" + Integer.toHexString(regex.hashCode());
+    }
+
+    /**
+     * Compiles each pattern the invariant states once, into a {@code static final} field: the
+     * constraint chain is rebuilt per decode call, and compiling a regex there would repeat the
+     * expensive part of it on every value.
+     */
+    private void emitPatternFields(ClassBuilder cb, Invariants invariants) {
+        List<String> regexes = new ArrayList<>();
+        for (InvariantConstraints.Constraint c : invariants.constraints()) {
+            if (c instanceof InvariantConstraints.Pattern p && !regexes.contains(p.regex())) {
+                regexes.add(p.regex());
+            }
+        }
+        if (regexes.isEmpty()) {
+            return;
+        }
+        for (String regex : regexes) {
+            cb.withField(patternField(regex), CD_Pattern,
+                    ClassFile.ACC_PRIVATE | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL);
+        }
+        cb.withMethodBody(ConstantDescs.CLASS_INIT_NAME, MTD_void,
+                ClassFile.ACC_STATIC, code -> {
+            for (String regex : regexes) {
+                code.loadConstant(regex);
+                code.invokestatic(CD_Pattern, "compile", MTD_patternCompile);
+                code.putstatic(decoderClass, patternField(regex), CD_Pattern);
+            }
+            code.return_();
+        });
+    }
+
+    /** The Souther type name behind a generated class descriptor. */
+    private static String typeName(ClassDesc cdName) {
+        return cdName.displayName();
     }
 
     /**

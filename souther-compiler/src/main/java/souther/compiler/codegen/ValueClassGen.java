@@ -95,9 +95,11 @@ final class ValueClassGen {
         data.encoder().ifPresent(enc ->
                 out.put(pkg + "." + data.name() + "$Enc", codec.generateEncoderClass(cdName, data, enc)));
 
-        // A CTFE helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that
-        // runs the same invariant bytecode as __construct (via gen.expr), so a constant construction
-        // can be verified at compile time — 金額(-5) is a compile error, not a runtime abort (ADR-0032).
+        // A helper for an invariant-bearing newtype: a Raoh-free `boolean check(value)` that runs the
+        // same invariant bytecode as __construct (via gen.expr). Two callers: a constant construction
+        // is verified at compile time through it — 金額(-5) is a compile error, not a runtime abort
+        // (ADR-0032) — and the derived decoder passes it to Raoh's `refine` for an invariant no
+        // constraint states exactly (issue #83).
         if (data.newtype() && !TypeChecker.effectiveInvariants(data, symbols).isEmpty()) {
             emitCtfeCheck(data, fields, out);
         }
