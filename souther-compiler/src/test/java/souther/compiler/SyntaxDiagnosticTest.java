@@ -43,35 +43,37 @@ class SyntaxDiagnosticTest {
         assertTrue(en.contains("SYNTAX ERROR") && ja.contains("構文エラー"));
     }
 
-    // Issue #75: `i.v` and the following line's `(a)` read as one call — Souther is
-    // layout-independent — which leaves the block with statements and no result expression. That used
-    // to reach the AST builder and die with a NullPointerException.
     @Test
-    void aBlockWhoseResultWasAbsorbedByTheLineAboveIsASyntaxError() {
+    void aBlockOfOnlyStatementsIsASyntaxError() {
         Diagnostic d = diagnosticOf("""
                 module demo
-                data Out = { v: Int }
-                behavior run : (i: Out) -> Out constructs Out
                 let run (i) = {
-                    let a = i.v
-                    (a)
+                    let a = i
                 }
                 """);
         assertEquals("parse.title", d.titleKey());
         assertEquals("parse.block.noresult", d.messageKey());
     }
 
+    // Issue #75: `i` and the following line's `(a)` read as one call, so the block is left with no
+    // result. It used to reach the AST builder and die with a NullPointerException; the message says
+    // what happened, in both locales.
     @Test
-    void aBlockOfOnlyStatementsIsASyntaxError() {
-        Diagnostic d = diagnosticOf("""
+    void aResultAbsorbedByTheLineAboveIsReportedRatherThanCrashing() {
+        String source = """
                 module demo
-                data Out = { v: Int }
-                behavior run : (i: Out) -> Out constructs Out
                 let run (i) = {
-                    let a = i.v
+                    let a = i
+                    (a)
                 }
-                """);
+                """;
+        Diagnostic d = diagnosticOf(source);
         assertEquals("parse.block.noresult", d.messageKey());
+        SourceContext src = new SourceContext("m.sou", source);
+        String en = new HumanRenderer(false).render(d, src, Locale.ENGLISH);
+        String ja = new HumanRenderer(false).render(d, src, Locale.JAPANESE);
+        assertTrue(en.contains("A block ends in one expression, which is its value"), en);
+        assertTrue(ja.contains("ブロックは最後に値となる式を1つ置きます"), ja);
     }
 
     @Test

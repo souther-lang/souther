@@ -37,9 +37,16 @@ public final class AstBuilder {
         this.lines = new LineIndex(source);
     }
 
-    /** Builds a module from a parsed source file. A header-less source is named
-     * {@code defaultModuleName}; a {@code null} default makes the header required. */
-    public static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName) {
+    /**
+     * Builds a module from a parsed source file. A header-less source is named
+     * {@code defaultModuleName}; a {@code null} default makes the header required.
+     *
+     * <p>Requires a CST the parser accepted: every node it reads has the children the grammar gives
+     * it, and a missing one is dereferenced rather than reported. {@link CstFrontend#parse} is the
+     * one caller and raises the parser's first error before building — which is why this is
+     * package-private, and what a second caller would have to guarantee.
+     */
+    static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName) {
         return new AstBuilder(source).module(sourceFile, defaultModuleName);
     }
 
@@ -722,12 +729,6 @@ public final class AstBuilder {
                 case LET_STMT, TUPLE_DESTRUCTURE, REQUIRE_STMT -> stmts.add(c);
                 default -> result = c;   // the trailing result expression
             }
-        }
-        if (result == null) {
-            // the parser reports this, so the compiler never gets here; a build over a CST that was
-            // parsed with errors (an editor's, say) says so rather than dereferencing the missing node
-            throw error(pos(n), "parse.block.noresult",
-                    "a block ends in a result expression, and this one has none");
         }
         return foldStatements(stmts, 0, result);
     }
