@@ -125,7 +125,8 @@ public sealed interface Type
                 case RAW -> "Raw";
             };
             case Ref r -> r.name();
-            case Var v -> "'" + v.name();
+            // the name carries the `'` it was written with (`'a`), so it is not added twice
+            case Var v -> v.name().startsWith("'") ? v.name() : "'" + v.name();
             case Nothing _ -> "_";
             case ListOf l -> "List<" + show(l.element()) + ">";
             case SetOf s -> "Set<" + show(s.element()) + ">";

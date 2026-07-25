@@ -9,7 +9,9 @@
 //   - Map<Label, Int> as a behavior output (countByLabel): Map.upsert counts each label across a
 //     board of issues (a String-backed newtype key is allowed as a map key), and topLabels ranks those
 //     counts — Map.toList's (label, count) entries read through a tuple-typed helper, ordered with
-//     List.sortBy / reverse and cut with List.take.
+//     List.sortBy / reverse and cut with List.take. groupByAssignee buckets the issues themselves
+//     rather than counting them, so its output nests: a Map<String, List<IssueId>>. Its key is the
+//     optional assignee, so List.filterMap turns the issues into the entries that have one first.
 //   - Some(Assignee(name)) destructuring: assigneeOf opens the optional assignee's newtype in one
 //     match pattern (the outermost .value elided), with a None arm for the unassigned case.
 //   - Three injected behaviors (findIssue / createIssue / storeLabels) with no `let`: the database is
@@ -28,7 +30,7 @@
 // name.
 module example.issuetracker
 import String ( split, trim, lowercase )
-import List ( map, filter, fold )
+import List ( map, filter, fold, filterMap )
 
 data IssueId  = String
     invariant String.length(value) >= 1
@@ -291,3 +293,55 @@ example topLabels
             , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
                 assignee = None } ] }, 9)
         -> LabelRanking { labels = [ "bug", "ui" ] }
+
+// === groupByAssignee: the board's issues bucketed by assignee (filterMap + groupBy) ===
+// The other direction of the same board: not a count per key but the elements themselves under it.
+// The assignee is optional and a grouping key has to be total, so the issues become (assignee, id)
+// entries first: `Option.map` rewrites the assignee that is there into an entry and leaves None
+// alone, and `List.filterMap` keeps the entries that exist — the unassigned issue drops out with no
+// stand-in value written for it. `List.groupBy` then buckets the entries by their key, each bucket in
+// board order, and `Map.map` rewrites the buckets to the ids the boundary shows.
+data Workload = { byAssignee: Map<String, List<IssueId>> }
+
+behavior groupByAssignee : (board: Board) -> Workload
+    constructs Workload
+
+// One issue as the entry it contributes, or nothing when it is unassigned. The optional never gets a
+// name here: it arrives from the `assignee` field and leaves through Option.map.
+let assigneeEntry (issue: Issue) =
+    Option.map(a -> (a.value, issue.id), issue.assignee)
+
+let entryKey (e: (String, IssueId)): String = {
+    let (key, _) = e
+    key
+}
+
+let entryId (e: (String, IssueId)): IssueId = {
+    let (_, id) = e
+    id
+}
+
+let groupByAssignee (board) =
+    Workload { byAssignee =
+        board.issues
+            |> filterMap(assigneeEntry)
+            |> List.groupBy(entryKey)
+            |> Map.map((_, entries) -> map(entryId, entries))
+    }
+
+example groupByAssignee
+    | "each assignee holds the issues assigned to them, in board order" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ],
+                assignee = "kawasima" }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("ui") ],
+                assignee = "aoyagi" }
+            , Issue { id = IssueId("i-3"), title = "c", labels = [ Label("bug") ],
+                assignee = "kawasima" } ] })
+        -> Workload { byAssignee =
+            [ ("kawasima", [ IssueId("i-1"), IssueId("i-3") ])
+            , ("aoyagi", [ IssueId("i-2") ]) ] }
+    | "an unassigned issue is bucketed under nobody" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None } ] })
+        -> Workload { byAssignee = [] }

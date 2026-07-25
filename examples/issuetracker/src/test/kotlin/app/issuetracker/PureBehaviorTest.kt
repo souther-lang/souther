@@ -11,11 +11,13 @@ import example.issuetracker.Assigned
 import example.issuetracker.AssigneeOf
 import example.issuetracker.Board
 import example.issuetracker.CountByLabel
+import example.issuetracker.GroupByAssignee
 import example.issuetracker.Issue
 import example.issuetracker.LabelCounts
 import example.issuetracker.LabelSet
 import example.issuetracker.SharedLabels
 import example.issuetracker.Unassigned
+import example.issuetracker.Workload
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertInstanceOf
@@ -41,6 +43,24 @@ class PureBehaviorTest {
         val counts = LabelCounts.encoder().encode(CountByLabel.of().apply(board))["counts"]
 
         assertEquals(mapOf("bug" to 2L, "ui" to 1L), counts, "a Map output encodes to a JSON object")
+    }
+
+    @Test
+    fun `groupByAssignee buckets the issue ids under each assignee`() {
+        val board = board(
+            issueMap("i-1", "crash on save", listOf("bug"), assignee = "kawasima"),
+            issueMap("i-2", "typo", listOf("ui"), assignee = "aoyagi"),
+            issueMap("i-3", "npe", listOf("bug"), assignee = "kawasima"),
+            issueMap("i-4", "nobody looks at this", listOf("bug")),
+        )
+
+        val byAssignee = Workload.encoder().encode(GroupByAssignee.of().apply(board))["byAssignee"]
+
+        assertEquals(
+            mapOf("kawasima" to listOf("i-1", "i-3"), "aoyagi" to listOf("i-2")),
+            byAssignee,
+            "a list under a map value encodes as a JSON array, each id bare; the unassigned issue is absent",
+        )
     }
 
     @Test

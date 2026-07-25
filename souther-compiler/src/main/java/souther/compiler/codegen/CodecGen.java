@@ -1172,13 +1172,62 @@ final class CodecGen {
         code.labelBinding(end);
     }
 
-    /** Pushes a Raoh {@link net.unit8.raoh.encode.Encoder} for a list/map element. */
+    /** Pushes a Raoh {@link net.unit8.raoh.encode.Encoder} for a list/set/map element. A nested
+     * collection composes the same combinators the field encoders use, so a
+     * {@code Map<String, List<商品ID>>} encodes as {@code mapOf(list(商品ID.encoder()))}. Set and
+     * newtype-keyed Map are not Raoh shapes on their own — they are the list / String-keyed map
+     * encoder with the value converted first, which {@code contramap} does. */
     private void pushElemEncoder(CodeBuilder code, Ast.EncElem elem) {
         switch (elem) {
             case Ast.PrimEnc p -> code.invokestatic(CD_ObjectEncoders, leafEncoderName(p.kind()),
                     MTD_Rencode_leaf);
             case Ast.DataEnc d -> invokeCodec(code, d.typeName(), "encoder", MTD_Rencoder);
+            case Ast.ListElemEnc l -> {
+                pushElemEncoder(code, l.elem());
+                code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
+            }
+            case Ast.SetElemEnc s -> {
+                pushElemEncoder(code, s.elem());
+                code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
+                code.invokedynamic(setToListCallSite());                    // Function<Set, List>
+                code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
+            }
+            case Ast.MapElemEnc m -> {
+                pushElemEncoder(code, m.value());
+                code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);
+                if (m.keyType() != null) {
+                    code.invokedynamic(keyValueCallSite(m.keyType()));      // Function<K, String>
+                    code.invokedynamic(mapKeysCallSite());                  // Function<Map<K,V>, Map<String,V>>
+                    code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
+                }
+            }
         }
+    }
+
+    /** {@code Sets::toList} as a {@code Function}, so a nested Set reaches the list encoder. */
+    private static DynamicCallSiteDesc setToListCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Sets, "toList", MTD_Sets_toList);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MTD_Sets_toList);                                        // instantiatedMethodType: (Set) -> List
+    }
+
+    /** {@code m -> Maps.mapKeysWith(keyFn, m)} as a {@code Function}, capturing the key function
+     * already on the stack: a nested newtype-keyed Map renders its keys bare before the String-keyed
+     * map encoder sees it. */
+    private static DynamicCallSiteDesc mapKeysCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Maps, "mapKeysWith", MTD_mapKeysWith);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_Function, CD_Function),             // captures the key Function
+                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
+                impl,
+                MethodTypeDesc.of(CD_Map, CD_Map));                      // instantiatedMethodType: (Map) -> Map
     }
 
     /** The Raoh {@code ObjectEncoders} leaf method for each primitive (matches the leaf decoders). */

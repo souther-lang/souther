@@ -139,7 +139,7 @@ class CompileBlockTest {
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertTrue(e.getMessage().contains("filter"), e.getMessage());
-        assertTrue(e.getMessage().contains("BOOL"), e.getMessage());
+        assertTrue(e.getMessage().contains("must return Bool but returns Int"), e.getMessage());
         assertTrue(e.getMessage().startsWith("3:"), "points at the user's call, not the prelude: " + e.getMessage());
     }
 

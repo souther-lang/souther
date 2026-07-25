@@ -382,7 +382,32 @@ public final class AstBuilder {
                 cases.add(typeRef(c));
             }
         }
+        if (n.token(SyntaxKind.QUESTION).isPresent()) {
+            cases = List.of(optional(cases, pos(n)));
+        }
         return new Ast.RetType(cases, cases.get(0).pos());
+    }
+
+    /**
+     * {@code T?} in a signature — a stdlib combinator that consumes an optional says so in its own
+     * type ({@code List.filterMap(f: ('a) -> 'b?, …)}). Like a type variable it is written only in the
+     * shipped core: a user still writes an optional on a field and never names one anywhere else
+     * (ADR-0011), so the type stays out of the surface language. A sum cannot take the mark — an
+     * absent {@code A | B} has no case to be absent as.
+     */
+    private Ast.TypeRef optional(List<Ast.TypeRef> cases, SourcePos pos) {
+        if (!isReservedNamespace(moduleName)) {
+            throw error(pos, "parse.optional.core",
+                    "an optional type `T?` may be written only on a data field, or in the core (the"
+                            + " reserved `souther` namespace); a user model never names an optional"
+                            + " elsewhere (ADR-0011)");
+        }
+        if (cases.size() > 1) {
+            throw error(pos, "parse.optional.sum",
+                    "`?` marks a single type optional, but it follows a sum of "
+                            + cases.size() + " cases");
+        }
+        return new Ast.TypeRef("Option", cases.get(0), cases.get(0).pos());
     }
 
     private Ast.TypeRef typeRef(SyntaxNode n) {

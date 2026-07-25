@@ -527,6 +527,7 @@ public final class CstParser {
         while (eat(SyntaxKind.PIPE)) {
             typeRef();
         }
+        eat(SyntaxKind.QUESTION);   // `T?` in a signature — core only, rejected later for a user module
         finish();
     }
 

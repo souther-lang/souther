@@ -103,4 +103,12 @@ public final class Maps {
         }
         return out;
     }
+
+    /** {@link #mapKeys} with the key function first, so a lambda can capture it and take the map per
+     *  call. A nested {@code Map<商品ID, V>} — one inside a list or another map — is encoded by a
+     *  single element encoder reused for every occurrence, which therefore has to hold the key
+     *  function rather than receive it alongside each map. */
+    public static <K, V> Map<Object, V> mapKeysWith(java.util.function.Function<K, ?> keyFn, Map<K, V> m) {
+        return mapKeys(m, keyFn);
+    }
 }

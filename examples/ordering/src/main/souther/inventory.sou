@@ -10,17 +10,17 @@
 //
 // exposing is omitted, so every generated class is public — the smoke test references them by name.
 module example.inventory
-import List ( all, find )
+import List ( all, indexBy )
 import example.cart ( Sku, LineItem, PricedCart )
 
-// === allocate: read stock, check every line is covered, then commit ===
-// Reads the current on-hand for the order's skus, folds "every line is within stock" with `all`, and
-// commits only if every line fits; one short line fails the whole allocation. This is the
-// "read -> aggregate check -> write" shape: member / account check a single row, this checks many
-// lines against read state.
+// === allocate: read stock, index it, check every line is covered, then commit ===
+// Reads the current on-hand for the order's skus, turns the rows into a lookup map, folds "every line
+// is within stock" with `all`, and commits only if every line fits; one short line fails the whole
+// allocation. This is the "read -> aggregate check -> write" shape: member / account check a single
+// row, this checks many lines against read state.
 
 // One snapshot row: a sku and its current on-hand. sku is unique per snapshot — two rows for the same
-// sku would make currentStock's find (first match) ambiguous — so the uniqueness is an invariant.
+// sku would collapse into one entry when the rows are indexed — so the uniqueness is an invariant.
 // List.allUniqueBy(.sku, rows) says "pull the sku out and there are no duplicates" in one line (a
 // property of the List, not of any single row; internally map -> distinct -> length compare, all
 // fold-derived, so it is allowed in an invariant).
@@ -43,21 +43,29 @@ behavior readStock : (order: PricedCart) -> StockSnapshot
 behavior commitStock : (order: PricedCart) -> Allocated
     constructs Allocated
 
-// The on-hand for a sku in the snapshot: the matching row's quantity, or 0 if absent (out of stock).
-// find returns an Option; pipe it through map then withDefault to fall back. The lambda captures sku.
-let currentStock (rows: List<StockLine>, sku: Sku): Int =
-    find(r -> r.sku == sku, rows) |> Option.map(.quantity) |> Option.withDefault(0)
+// The snapshot as a lookup index, built once: `List.indexBy` keys the rows by their sku into a
+// `Map<Sku, StockLine>`. Scanning the rows per line with `find` costs a pass per line; indexing costs
+// one pass total and every line then reads a key. A `Sku` may be a map key because it is a
+// String-backed newtype. Two rows for one sku would collapse into one entry (the later winning),
+// which is exactly what the uniqueness invariant above rules out.
+let onHand (snap: StockSnapshot): Map<Sku, StockLine> = indexBy(.sku, snap.rows)
+
+// The on-hand for a sku: the indexed row's quantity, or 0 for a sku the snapshot never mentioned (out
+// of stock). Map.get returns an Option, so map then withDefault read through it.
+let currentStock (stock: Map<Sku, StockLine>, sku: Sku): Int =
+    Map.get(sku, stock) |> Option.map(.quantity) |> Option.withDefault(0)
 
 // One line is allocatable when its on-hand is at least the ordered quantity.
-let allocatable (i: LineItem, rows: List<StockLine>): Bool = currentStock(rows, i.sku) >= i.quantity
+let allocatable (i: LineItem, stock: Map<Sku, StockLine>): Bool =
+    currentStock(stock, i.sku) >= i.quantity
 
-// read -> aggregate check -> write. The lambda passed to all captures the local snapshot.
+// read -> index -> aggregate check -> write. The lambda passed to all captures the local index.
 behavior allocate : (order: PricedCart) -> Allocated | InsufficientStock
     requires readStock, commitStock
 
 let allocate (order, readStock, commitStock) = {
-    let snap = readStock(order)
-    require all(i -> allocatable(i, snap.rows), order.items)
+    let stock = onHand(readStock(order))
+    require all(i -> allocatable(i, stock), order.items)
         else InsufficientStock
     commitStock(order)
 }

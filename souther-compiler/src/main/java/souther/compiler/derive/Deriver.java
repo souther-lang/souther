@@ -80,12 +80,15 @@ public final class Deriver {
             Ast.Construct result = new Ast.Construct(d.name(),
                     List.of(new Ast.FieldInit(only.getKey(), new Ast.Var("__in", pos), pos)),
                     List.of(), pos);
-            return new Ast.NewtypeDecoder(decRef(only.getValue(), d, pos), "__in", result, pos);
+            return new Ast.NewtypeDecoder(
+                    decRef(only.getValue(), d, only.getKey(), fieldPos(d, only.getKey())),
+                    "__in", result, pos);
         }
         List<Ast.Bind> binds = new ArrayList<>();
         List<Ast.FieldInit> inits = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
-            binds.add(new Ast.Bind(f.getKey(), f.getKey(), decRef(f.getValue(), d, pos), pos));
+            binds.add(new Ast.Bind(f.getKey(), f.getKey(),
+                    decRef(f.getValue(), d, f.getKey(), fieldPos(d, f.getKey())), pos));
             inits.add(new Ast.FieldInit(f.getKey(), new Ast.Var(f.getKey(), pos), pos));
         }
         return new Ast.ObjectDecoder(binds, new Ast.Construct(d.name(), inits, List.of(), pos), pos);
@@ -129,7 +132,7 @@ public final class Deriver {
         return Ast.PrimKind.INT;
     }
 
-    private static Ast.DecRef decRef(Type t, Ast.Data d, SourcePos pos) {
+    private static Ast.DecRef decRef(Type t, Ast.Data d, String field, SourcePos pos) {
         if (t == Type.STRING || t == Type.INT || t == Type.BOOL
                 || t == Type.DECIMAL || t == Type.DATE || t == Type.DATETIME) {
             return new Ast.PrimDecRef(primKind(t), pos);
@@ -138,26 +141,18 @@ public final class Deriver {
             return new Ast.DataDecRef(r.name(), pos);
         }
         if (t instanceof Type.ListOf lo) {
-            return new Ast.ListDecRef(decRef(lo.element(), d, pos), pos);
+            return new Ast.ListDecRef(decRef(lo.element(), d, field, pos), pos);
         }
         if (t instanceof Type.SetOf so) {
-            return new Ast.SetDecRef(decRef(so.element(), d, pos), pos);
+            return new Ast.SetDecRef(decRef(so.element(), d, field, pos), pos);
         }
         if (t instanceof Type.OptionOf oo) {
-            return new Ast.OptionDecRef(decRef(oo.element(), d, pos), pos);
+            return new Ast.OptionDecRef(decRef(oo.element(), d, field, pos), pos);
         }
         if (t instanceof Type.MapOf mo) {
-            return new Ast.MapDecRef(decRef(mo.value(), d, pos), mapKeyType(mo), pos);
+            return new Ast.MapDecRef(decRef(mo.value(), d, field, pos), mapKeyType(mo), pos);
         }
-        if (t instanceof Type.TupleOf) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.derive.tuplefield").title("check.boundary.title")
-                            .at(pos).args(d.name()).build(),
-                    "a tuple cannot be a data field in `" + d.name() + "`: a tuple has no external"
-                            + " representation, so no decoder can be derived (ADR-0036). Use a named data.");
-        }
-        throw new CompileException(pos,
-                "cannot derive a decoder for field type " + t + " in `" + d.name() + "`");
+        throw noCodec(t, d, field, pos);
     }
 
     // --- encoder derivation ---
@@ -179,7 +174,8 @@ public final class Deriver {
         }
         List<Ast.RawEntry> entries = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
-            entries.add(new Ast.RawEntry(f.getKey(), rawFor(f.getValue(), f.getKey(), d, pos), pos));
+            entries.add(new Ast.RawEntry(f.getKey(),
+                    rawFor(f.getValue(), f.getKey(), d, fieldPos(d, f.getKey())), pos));
         }
         return new Ast.EncoderDef("self", new Ast.ObjectRaw(entries, pos), pos);
     }
@@ -206,10 +202,12 @@ public final class Deriver {
     }
 
     private static Ast.RawExpr rawFor(Type t, String field, Ast.Data d, SourcePos pos) {
-        return rawForAccess(t, new Ast.FieldAccess(new Ast.Var("self", pos), field, pos), d, pos);
+        return rawForAccess(t, new Ast.FieldAccess(new Ast.Var("self", pos), field, pos),
+                d, field, pos);
     }
 
-    private static Ast.RawExpr rawForAccess(Type t, Ast.Expr access, Ast.Data d, SourcePos pos) {
+    private static Ast.RawExpr rawForAccess(Type t, Ast.Expr access, Ast.Data d, String field,
+                                            SourcePos pos) {
         if (isPrim(t)) {
             return primRaw(t, access, pos);
         }
@@ -217,28 +215,20 @@ public final class Deriver {
             return new Ast.EncodeRaw(r.name(), access, pos);
         }
         if (t instanceof Type.ListOf lo) {
-            return new Ast.ListEnc(access, encElem(lo.element(), d, pos), pos);
+            return new Ast.ListEnc(access, encElem(lo.element(), d, field, pos), pos);
         }
         if (t instanceof Type.SetOf so) {
-            return new Ast.SetEnc(access, encElem(so.element(), d, pos), pos);
+            return new Ast.SetEnc(access, encElem(so.element(), d, field, pos), pos);
         }
         if (t instanceof Type.OptionOf oo) {
             String elemVar = "$opt";
-            Ast.RawExpr inner = rawForAccess(oo.element(), new Ast.Var(elemVar, pos), d, pos);
+            Ast.RawExpr inner = rawForAccess(oo.element(), new Ast.Var(elemVar, pos), d, field, pos);
             return new Ast.OptionRaw(access, inner, elemVar, pos);
         }
         if (t instanceof Type.MapOf mo) {
-            return new Ast.MapEnc(access, encElem(mo.value(), d, pos), mapKeyType(mo), pos);
+            return new Ast.MapEnc(access, encElem(mo.value(), d, field, pos), mapKeyType(mo), pos);
         }
-        if (t instanceof Type.TupleOf) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.derive.tuplefield").title("check.boundary.title")
-                            .at(pos).args(d.name()).build(),
-                    "a tuple cannot be a data field in `" + d.name() + "`: a tuple has no external"
-                            + " representation, so no encoder can be derived (ADR-0036). Use a named data.");
-        }
-        throw new CompileException(pos,
-                "cannot derive an encoder for field type " + t + " in `" + d.name() + "`");
+        throw noCodec(t, d, field, pos);
     }
 
     /** The newtype a map's keys carry at the boundary, or {@code null} for a plain {@code String} key.
@@ -248,15 +238,60 @@ public final class Deriver {
         return mo.key() instanceof Type.Ref r ? r.name() : null;
     }
 
-    private static Ast.EncElem encElem(Type t, Ast.Data d, SourcePos pos) {
+    /** The encoder for one element of a collection. A collection may hold a collection
+     * ({@code Map<String, List<商品ID>>}), so this recurses the same way {@link #decRef} does on the
+     * decoding side — the two stay symmetric, and what decodes in encodes back out. */
+    private static Ast.EncElem encElem(Type t, Ast.Data d, String field, SourcePos pos) {
         if (isPrim(t)) {
             return new Ast.PrimEnc(primKind(t), pos);   // every primitive has a leaf encoder
         }
         if (t instanceof Type.Ref r) {
             return new Ast.DataEnc(r.name(), pos);
         }
-        throw new CompileException(pos,
-                "cannot derive a list-element encoder for " + t + " in `" + d.name() + "`");
+        if (t instanceof Type.ListOf lo) {
+            return new Ast.ListElemEnc(encElem(lo.element(), d, field, pos), pos);
+        }
+        if (t instanceof Type.SetOf so) {
+            return new Ast.SetElemEnc(encElem(so.element(), d, field, pos), pos);
+        }
+        if (t instanceof Type.MapOf mo) {
+            return new Ast.MapElemEnc(encElem(mo.value(), d, field, pos), mapKeyType(mo), pos);
+        }
+        throw noCodec(t, d, field, pos);
+    }
+
+    /**
+     * The one report for a field whose type has no boundary representation, wherever in the type it
+     * sits: it names the field and prints the type as it was written
+     * ({@code Map<String, (String, Int)>}), and it is positioned on the field rather than on the
+     * data, so the caret lands on what has to change. The message says what is unrepresentable — a
+     * tuple has no field names to write — rather than naming the codec that gave up.
+     */
+    private static CompileException noCodec(Type t, Ast.Data d, String field, SourcePos pos) {
+        if (t instanceof Type.TupleOf) {
+            return CompileException.of(
+                    Diagnostic.of(null, "check.derive.tuplefield").title("check.boundary.title")
+                            .at(pos).args(d.name(), field, Type.show(t)).build(),
+                    "field `" + field + "` of `" + d.name() + "` is " + Type.show(t) + ": a tuple has"
+                            + " no external representation, so no codec can be derived (ADR-0036)."
+                            + " Use a named data.");
+        }
+        return CompileException.of(
+                Diagnostic.of(null, "check.derive.nocodec").title("check.boundary.title")
+                        .at(pos).args(d.name(), field, Type.show(t)).build(),
+                "no codec can be derived for field `" + field + "` of `" + d.name() + "`: "
+                        + Type.show(t) + " has no external representation");
+    }
+
+    /** Where the field was written, for a diagnostic to point at. A field a data takes in through
+     * {@code ...Included} was written elsewhere, so that one falls back to the data itself. */
+    private static SourcePos fieldPos(Ast.Data d, String field) {
+        for (Ast.Field f : d.fields()) {
+            if (f.name().equals(field)) {
+                return f.pos();
+            }
+        }
+        return d.pos();
     }
 
     // --- sum derivation ---

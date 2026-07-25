@@ -122,6 +122,26 @@ let groupBy (key: ('a) -> 'k, xs: List<'a>) =
             acc),
         Map.empty(), xs)
 
+// `filterMap` maps and drops in one pass (Elm's `List.filterMap`, F#'s `List.choose`): `f` answers
+// with an optional, and only what is there joins the result. This is how an optional field becomes a
+// plain list — `filterMap(i -> i.assignee, issues)` — without the caller writing a sentinel value to
+// filter on afterwards. `f`'s result type is written `'b?`, an optional in a signature, which is a
+// core privilege like the type variables around it: the caller's lambda returns an optional it read
+// (a `?` field, `Map.get`, `List.find`) and never names the type (ADR-0011).
+let filterMap (f: ('a) -> 'b?, xs: List<'a>) =
+    List.fold((acc, x) ->
+        match f(x) with
+            | None -> acc
+            | Some v -> acc ++ [v], [], xs)
+
+// `indexBy` keys the elements by `key`, one entry each, into a `Map<'k, 'a>` (Elm's
+// `Dict.Extra.fromListBy`, the sibling of the `groupBy` above): the rows a read hands back become a
+// lookup, so a caller reads a key instead of scanning the list once per lookup. Two elements with the
+// same key collapse and the later one wins, as `Map.fromList` does — say the key is an id with
+// `List.allUniqueBy` and the collapse cannot happen.
+let indexBy (key: ('a) -> 'k, xs: List<'a>) =
+    List.fold((acc, x) -> Map.insert(key(x), x, acc), Map.empty(), xs)
+
 // `sort` orders by the elements' natural order (Elm `List.sort`). Like Elm it is a native
 // primitive, not a fold: an in-language sort needs comparison plus a place to remember the
 // half-built result, which `fold` alone does not give.
