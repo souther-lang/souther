@@ -255,6 +255,11 @@ public final class TypeChecker {
                 checkInjectionConstructs(spec, symbols, exposeAll, exposed);
             }
         }
+        // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
+        // lowering has already expanded such a binding away at each of its applications.
+        for (Ast.FnDef fn : module.fns()) {
+            collect(errors, () -> rejectAnnotatedLambdaBindings(fn.body()));
+        }
         // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
         // helper is checked standalone against its own declared parameter types (spec 13.1). Recovered
         // so a broken helper does not hide the behavior-body errors checked below.
@@ -581,10 +586,16 @@ public final class TypeChecker {
         if (e instanceof Ast.LetIn li) {
             collectHelperCalls(li.value(), env, target, symbols, reqs, inliner, onCall);
             Map<String, Type> inner = new HashMap<>(env);
-            try {
-                inner.put(li.name(), typeOf(inliner.inline(li.value()), env, null, symbols, reqs));
-            } catch (CompileException ignored) {
-                // an untypeable value leaves its name unbound; a later reference just won't infer.
+            if (annotatedType(li, symbols) instanceof Type declared) {
+                // an annotated binding already states its type, so inference reads it rather than
+                // re-deriving one from a value that context alone can type (issue #71)
+                inner.put(li.name(), declared);
+            } else {
+                try {
+                    inner.put(li.name(), typeOf(inliner.inline(li.value()), env, null, symbols, reqs));
+                } catch (CompileException ignored) {
+                    // an untypeable value leaves its name unbound; a later reference just won't infer.
+                }
             }
             collectHelperCalls(li.body(), inner, target, symbols, reqs, inliner, onCall);
             return;
@@ -2128,31 +2139,29 @@ public final class TypeChecker {
                 yield t;
             }
             case Ast.LetIn li -> {
-                // the binding is visible only inside the body, so a sibling branch cannot see it
-                Map<String, Type> inner = new HashMap<>(env);
+                Type annotation = annotatedType(li, symbols);
+                Type bindType;
                 if (isFunctionSelection(li.value())) {
                     // a lambda bound to a local that could not be inlined (e.g. chosen by an `if`):
                     // it is a first-class function value. Its parameter types are unannotated, so
                     // infer them from how the body applies it (spec §blocks).
-                    List<Type> paramTypes = inferFnParamTypes(li.name(), li.body(), env, data, symbols, reqs);
-                    inner.put(li.name(), typeFunctionValue(li.value(), paramTypes, env, data, symbols, reqs));
-                } else {
-                    Type valueType = typeOf(li.value(), env, data, symbols, reqs);
-                    Type bindType = valueType;
-                    if (li.declaredType() instanceof Ast.RetType rt) {
-                        // A binding carrying an inlined helper's declared parameter type. When that type
-                        // is a sum, keep it: a case argument widens to its sum (spec 8.3), so a `match`
-                        // in the body still sees the sum rather than the argument's specific case. Other
-                        // declared types (a type variable in a generic prelude helper, a record, a list)
-                        // are left to the argument's own type, which monomorphisation and the call-site
-                        // check already handle.
-                        Type declared = resolveParamType(rt, symbols);
-                        if (isSumType(declared, symbols) && assignable(valueType, declared, symbols)) {
-                            bindType = declared;
-                        }
+                    if (annotation != null) {
+                        throw functionAnnotation(li);   // no ordinary type describes a function value
                     }
-                    inner.put(li.name(), bindType);
+                    List<Type> paramTypes = inferFnParamTypes(li.name(), li.body(), env, data, symbols, reqs);
+                    bindType = typeFunctionValue(li.value(), paramTypes, env, data, symbols, reqs);
+                } else if (annotation != null) {
+                    // the written type is the value's expected type, so an empty collection bound here
+                    // takes its element/value type from the annotation rather than staying a bottom
+                    Type valueType = typeOf(li.value(), env, data, symbols, reqs, annotation);
+                    checkLetAnnotation(li, annotation, valueType, symbols);
+                    bindType = annotation;
+                } else {
+                    bindType = carriedType(li, typeOf(li.value(), env, data, symbols, reqs), symbols);
                 }
+                // the binding is visible only inside the body, so a sibling branch cannot see it
+                Map<String, Type> inner = new HashMap<>(env);
+                inner.put(li.name(), bindType);
                 yield typeOf(li.body(), inner, data, symbols, reqs, expected);
             }
             // reached only where a block escapes: it may be passed as an argument, or bound to a
@@ -3391,6 +3400,69 @@ public final class TypeChecker {
             case Ast.LetIn li -> producesFunction(li.body());
             default -> false;
         };
+    }
+
+    /** The type a source annotation declares on a binding ({@code let x: T = e}), or null when the
+     * binding carries none. Read wherever a binding's type is needed, so the annotation and the
+     * inference, the checker and the backend cannot drift apart. */
+    private static Type annotatedType(Ast.LetIn li, Map<String, Ast.Def> symbols) {
+        return li.annotation() == null ? null : successType(li.annotation(), symbols);
+    }
+
+    /**
+     * A local binding's written type must be the type of its value (spec 16.1). A declared type that
+     * the value does not have is an error rather than a comment the checker ignores — the same rule a
+     * helper's declared return type follows.
+     */
+    private static void checkLetAnnotation(Ast.LetIn li, Type declared, Type valueType,
+                                           Map<String, Ast.Def> symbols) {
+        if (assignable(valueType, declared, symbols)) {
+            return;
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.let.annotation").title("check.type.mismatch.title")
+                        .at(li.pos()).args(li.name(), Type.show(declared), Type.show(valueType))
+                        .diff(Type.show(valueType), Type.show(declared)).build(),
+                "the binding `" + li.name() + "` declares " + Type.show(declared)
+                        + " but its value is " + Type.show(valueType));
+    }
+
+    /**
+     * The type to bind an un-annotated binding at. A binding carrying an inlined helper's declared
+     * parameter type keeps that type when it is a sum: a case argument widens to its sum (spec 8.3),
+     * so a {@code match} in the body still sees the sum rather than the argument's specific case.
+     * Other declared types (a type variable in a generic prelude helper, a record, a list) are left to
+     * the argument's own type, which monomorphisation and the call-site check already handle.
+     */
+    private static Type carriedType(Ast.LetIn li, Type valueType, Map<String, Ast.Def> symbols) {
+        if (li.declaredType() instanceof Ast.RetType rt) {
+            Type declared = resolveParamType(rt, symbols);
+            if (isSumType(declared, symbols) && assignable(valueType, declared, symbols)) {
+                return declared;
+            }
+        }
+        return valueType;
+    }
+
+    /** {@code let f: T = <function>} — a binding whose value is a function takes no annotation, because
+     * a function type may be written only in a helper's parameter (spec 13.1) and no ordinary type
+     * describes a function. Raised from the surface check below and from the value path, so the two
+     * shapes a function binding takes (a bare lambda, one an {@code if} chooses) read the same. */
+    private static CompileException functionAnnotation(Ast.LetIn li) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.fn.annotation").title("check.fn.title")
+                        .at(li.pos()).args(li.name()).hint("check.fn.annotation.hint").build(),
+                "the binding `" + li.name() + "` is a function, so it takes no annotation: a function"
+                        + " type may be written only in a helper's parameter (spec 13.1)");
+    }
+
+    /** Rejects an annotation on a lambda binding, read on the surface body: lowering expands such a
+     * binding away at its applications, so by the time the body is checked the annotation is gone. */
+    private static void rejectAnnotatedLambdaBindings(Ast.Expr e) {
+        if (e instanceof Ast.LetIn li && li.annotation() != null && li.value() instanceof Ast.Block) {
+            throw functionAnnotation(li);
+        }
+        forEachChild(e, TypeChecker::rejectAnnotatedLambdaBindings);
     }
 
     /** A function value that could not be inlined away and so becomes a first-class {@code Fn}: a

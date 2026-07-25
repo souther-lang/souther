@@ -297,7 +297,7 @@ final class BodyGen {
                                     li.name(), li.body().toAst(), typesEnv(), data, symbols);
                             vt = emitFunctionValue(valueAst, paramTypes);
                         } else {
-                            vt = genExpr(li.value());
+                            vt = genExpr(li.value(), letExpected(li));
                         }
                         int slot = slot(vt);
                         store(code, slot, vt);
@@ -553,7 +553,7 @@ final class BodyGen {
                                 li.name(), li.body().toAst(), typesEnv(), data, symbols);
                         vt = emitFunctionValue(valueAst, paramTypes);
                     } else {
-                        vt = genExpr(li.value());
+                        vt = genExpr(li.value(), letExpected(li));
                     }
                     int s = slot(vt);
                     store(code, s, vt);
@@ -563,6 +563,12 @@ final class BodyGen {
                 // a block has no value of its own; it is inlined by the call it is passed to
                 case Core.Block b -> throw new CompileException(b.pos(), "a block is not a value");
             };
+        }
+
+        /** The type a binding's value is emitted at when the source annotated it (issue #71) — the same
+         * pin the checker applied, so an empty-collection value materialises at the written type. */
+        private Type letExpected(Core.LetIn li) {
+            return li.annotation() == null ? null : successType(li.annotation());
         }
 
         private Type match(Core.Match m, Type expected) {

@@ -321,14 +321,18 @@ public final class Formatter {
         return Doc.join(text(", "), names);
     }
 
+    /** The {@code : T} a node wrote, or nothing — a helper's return type, a local binding's annotation. */
+    private Doc writtenType(SyntaxNode n) {
+        return n.child(SyntaxKind.RET_TYPE).map(rt -> concat(text(": "), retType(rt))).orElse(Doc.NIL);
+    }
+
     // --- fn ---
 
     private Doc fnDef(SyntaxNode n) {
         String name = firstIdent(n);
         Doc params = fnParamList(n.child(SyntaxKind.FN_PARAM_LIST).orElseThrow());
-        Doc ret = n.child(SyntaxKind.RET_TYPE).map(rt -> concat(text(": "), retType(rt))).orElse(Doc.NIL);
         Doc keyword = n.child(SyntaxKind.PARTIAL_MODIFIER).isPresent() ? text("partial let ") : text("let ");
-        Doc head = concat(keyword, text(name), text(" "), params, ret);
+        Doc head = concat(keyword, text(name), text(" "), params, writtenType(n));
 
         var intrinsic = n.child(SyntaxKind.INTRINSIC_BODY);
         if (intrinsic.isPresent()) {
@@ -596,7 +600,8 @@ public final class Formatter {
         List<Doc> lines = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
             Doc d = switch (c.kind()) {
-                case LET_STMT -> concat(text("let "), text(firstIdent(c)), text(" = "), expr(onlyExpr(c)));
+                case LET_STMT -> concat(text("let "), text(firstIdent(c)), writtenType(c),
+                        text(" = "), expr(onlyExpr(c)));
                 case TUPLE_DESTRUCTURE -> tupleDestructure(c);
                 case REQUIRE_STMT -> requireStmt(c);
                 default -> expr(c);   // the result expression

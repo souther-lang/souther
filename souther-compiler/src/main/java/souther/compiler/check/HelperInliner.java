@@ -334,10 +334,11 @@ public final class HelperInliner {
                 // escapes, which needs a runtime closure. Keep the binding so the "a block is not a
                 // value" check reports it.
                 yield mentions(body, li.name())
-                        ? new Ast.LetIn(li.name(), inline(lambda), li.declaredType(), body, li.pos())
+                        ? new Ast.LetIn(li.name(), inline(lambda), li.declaredType(), li.annotated(), body, li.pos())
                         : body;
             }
-            case Ast.LetIn li -> new Ast.LetIn(li.name(), inline(li.value()), li.declaredType(), inline(li.body()), li.pos());
+            case Ast.LetIn li -> new Ast.LetIn(li.name(), inline(li.value()), li.declaredType(), li.annotated(),
+                    inline(li.body()), li.pos());
             case Ast.ListLit lit -> new Ast.ListLit(inlineList(lit.elements()), lit.pos());
             case Ast.Tuple tup -> new Ast.Tuple(inlineList(tup.elements()), tup.pos());
             case Ast.TupleGet tg -> new Ast.TupleGet(inline(tg.tuple()), tg.index(), tg.arity(), tg.pos());
@@ -451,7 +452,7 @@ public final class HelperInliner {
             case Ast.LetIn li -> {
                 Ast.Expr value = rename(li.value(), subst, fnParams, at);
                 Ast.Expr body = rename(li.body(), without(subst, li.name()), fnParams, at);
-                yield new Ast.LetIn(li.name(), value, li.declaredType(), body, at(at, li.pos()));
+                yield new Ast.LetIn(li.name(), value, li.declaredType(), li.annotated(), body, at(at, li.pos()));
             }
             case Ast.ListLit lit -> new Ast.ListLit(renameList(lit.elements(), subst, fnParams, at), at(at, lit.pos()));
             case Ast.Tuple tup -> new Ast.Tuple(renameList(tup.elements(), subst, fnParams, at), at(at, tup.pos()));

@@ -145,6 +145,25 @@ class FormatterTest {
     }
 
     @Test
+    void formattingKeepsALocalLetTypeAnnotation() {
+        // the annotation is what pins an empty-collection value at the binding (issue #71); dropping it
+        // would turn a compiling module into one that cannot infer the accumulator's type.
+        String source = "module demo\n"
+                + "data In = { keys: List<String> }\n"
+                + "data Out = { m: Map<String, Int> }\n"
+                + "behavior run : (i: In) -> Out constructs Out\n"
+                + "let run (i) = {\n"
+                + "let counted:Map<String,Int> = Map.empty()\n"
+                + "Out { m = counted }\n"
+                + "}\n";
+        String formatted = Formatter.format(source);
+        assertEquals(code(source), code(formatted), "the code token stream changed");
+        assertTrue(formatted.contains("let counted: Map<String, Int> ="),
+                "formatter dropped the annotation:\n" + formatted);
+        assertTrue(CstParser.parse(formatted).errors().isEmpty(), "formatted output does not re-parse");
+    }
+
+    @Test
     void canonicalFormOfAnExample() {
         String messy = "module demo\n"
                 + "data M={ n:Int }\n"

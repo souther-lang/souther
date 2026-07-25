@@ -1649,9 +1649,12 @@ The base form is written inline, in the same source as the behavior. To keep fix
 [,text]
 ----
 let normalized = String.trim(input)
+let counted: Map<String, Int> = List.fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), keys)
 ----
 
 Reassignment is forbidden. A `+let+` is placed inside a block expression (<<block-expression>>). What follows `+let x = v+` is the scope of that binding, nested at desugaring time.
+
+A binding may carry its type, `+let x: T = v+`. The type is optional — a binding otherwise takes the type of its value — and writing it does two things: the declared type is pushed into the value, so a value only its context can type (an empty `+[]+`, `+Map.empty()+`, `+Set.empty()+`, including one produced by a `+fold+` over such a seed) takes the declared element type instead of staying undetermined (<<algebraic-types>>); and the value is checked against it, so a declared type the value does not have is a compile error rather than an ignored comment. This is the same declaration-into-body direction a helper's declared return type has (<<fn-declaration>>) — it is a declaration, not an extension of inference. As with a helper's return, `+T+` is an ordinary type: a function type belongs only in a helper's parameter position (<<fn-declaration>>), so a binding whose value is a lambda takes no annotation, and neither does a tuple destructure (`+let (a, b) = t+`).
 
 [#if]
 === if
