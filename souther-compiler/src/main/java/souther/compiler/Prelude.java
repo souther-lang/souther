@@ -66,7 +66,7 @@ public final class Prelude {
             "String.length", "String.toInt",
             "Map.get", "Map.empty", "Set.empty",
             "Option.map",
-            "Int.remainder", "Int.divide", "Decimal.divide");
+            "Int.remainder", "Int.divide", "Decimal.divide", "Decimal.toInt");
 
     /** Every qualifier a call may carry: the four prelude modules plus the arithmetic built-in
      *  namespaces {@code Int}/{@code Decimal} (spec §stdlib). */

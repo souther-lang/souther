@@ -13,3 +13,14 @@ let multiply (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.multiply"
 
 // compare returns -1, 0, or 1 by numeric value, ignoring scale.
 let compare (a: Decimal, b: Decimal) : Int = intrinsic "decimal.compare"
+
+// `fromInt` widens an Int to a Decimal. It is exact — every Int is a Decimal — so nothing has to be
+// stated and it is an ordinary function. The narrowing back, `Decimal.toInt(d, mode)`, is not: it
+// drops a fraction, and by which rule is a domain decision, so the mode is written at the call and
+// the function stays compiler-integrated (like `divide`, whose mode is a bare built-in identifier).
+//
+// There is no implicit widening. An arithmetic operator takes two operands of one type, so a rate
+// applied to an amount is written `Decimal.fromInt(税抜) * 税率` — the conversion is visible where the
+// value stops being an amount in yen. This is F#'s position for operators (`n * 0.1m` does not
+// compile; `decimal n * 0.1m` does).
+let fromInt (n: Int) : Decimal = intrinsic "decimal.fromInt"

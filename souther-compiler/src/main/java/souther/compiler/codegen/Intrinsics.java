@@ -239,6 +239,7 @@ final class Intrinsics {
         t.put("decimal.subtract", jdk(CD_BigDecimal, "subtract", MTD_bdArith, order(0, 1), Type.DECIMAL));
         t.put("decimal.multiply", jdk(CD_BigDecimal, "multiply", MTD_bdArith, order(0, 1), Type.DECIMAL));
         t.put("decimal.compare", rt(CD_DecimalMath, "compare", order(0, 1), ts -> Type.INT));
+        t.put("decimal.fromInt", rt(CD_DecimalMath, "fromInt", order(0), ts -> Type.DECIMAL));
 
         return Map.copyOf(t);
     }
