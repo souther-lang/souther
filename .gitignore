@@ -21,8 +21,3 @@ target/
 # Scratch
 /tmp/
 *.log
-
-# VS Code extension build artifacts (the source lives under editors/vscode/)
-editors/vscode/node_modules/
-editors/vscode/server/*.jar
-editors/vscode/*.vsix
