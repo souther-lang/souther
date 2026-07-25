@@ -2102,9 +2102,14 @@ public final class TypeChecker {
             case Ast.StringLit _ -> Type.STRING;
             case Ast.BoolLit _ -> Type.BOOL;
             case Ast.Tuple tup -> {
+                // A pushed-down tuple type reaches each element, so a written `(Set<Int>, List<Int>)`
+                // fixes the empty collections the tuple seeds rather than leaving them bottoms (#74).
+                List<Type> want = expected instanceof Type.TupleOf te
+                        && te.elements().size() == tup.elements().size() ? te.elements() : null;
                 List<Type> elems = new ArrayList<>();
-                for (Ast.Expr el : tup.elements()) {
-                    elems.add(typeOf(el, env, data, symbols, reqs));
+                for (int i = 0; i < tup.elements().size(); i++) {
+                    elems.add(typeOf(tup.elements().get(i), env, data, symbols, reqs,
+                            want == null ? null : want.get(i)));
                 }
                 yield Type.tuple(elems);
             }
@@ -2258,27 +2263,6 @@ public final class TypeChecker {
         };
     }
 
-    /** The common element type of two list positions: identical types collapse; two data-like
-     * types widen to the union of their cases (so {@code [High] ++ [LowRole]} is a list of both). */
-    /** When one of two joined positions ({@code if}/{@code match} cases) is the empty list {@code []}
-     * and the other is a concrete list, the join is that concrete list — the empty list takes on its
-     * type (ADR-0028). Returns {@code null} when neither is empty, so the caller falls through to its
-     * ordinary rules. Two empty lists stay empty. */
-    private static Type absorbEmptyList(Type a, Type b) {
-        if (a.equals(Type.EMPTY_LIST)) {
-            return b;
-        }
-        if (b.equals(Type.EMPTY_LIST)) {
-            return a;
-        }
-        return null;
-    }
-
-    /** Reconciles two joined positions where one may carry the empty-collection bottom, recursing
-     * through tuples so a {@code ([], [])} accumulator grown on either side joins to {@code (T, T)}
-     * (the {@code partition} shape). Beyond the whole empty list {@link #absorbEmptyList} handles, it
-     * joins same-arity tuples element-wise. Returns {@code null} when the two do not reconcile, so the
-     * caller falls through to its ordinary rules. */
     /** Refines the type-variable bindings from a function argument's actual result: where the
      * function's declared result is a type variable and its current binding is unknown or an
      * empty-collection bottom, replace it with the concrete result the step grows. This is how a
@@ -2300,13 +2284,39 @@ public final class TypeChecker {
         }
     }
 
+    /** Reconciles two joined positions ({@code if} branches, {@code match} arms) where one may carry
+     * an empty-collection bottom: the bottom takes on the other side's type (ADR-0028). It recurses
+     * through every container, so a {@code Set.empty()} accumulator returned bare on one branch joins
+     * with the {@code Set<Int>} the other grows, and a {@code (Set.empty(), [])} accumulator joins
+     * position by position (the {@code distinct}/{@code partition} shape). Returns {@code null} when
+     * the two do not reconcile, so the caller falls through to its ordinary rules — widening two
+     * data-like types to their union, or reporting the disagreement. */
     private static Type absorbBottom(Type a, Type b) {
         if (a.equals(b)) {
             return a;
         }
-        Type list = absorbEmptyList(a, b);
-        if (list != null) {
-            return list;
+        if (isBottom(a)) {
+            return b;
+        }
+        if (isBottom(b)) {
+            return a;
+        }
+        if (a instanceof Type.ListOf la && b instanceof Type.ListOf lb) {
+            Type e = absorbBottom(la.element(), lb.element());
+            return e == null ? null : Type.list(e);
+        }
+        if (a instanceof Type.SetOf sa && b instanceof Type.SetOf sb) {
+            Type e = absorbBottom(sa.element(), sb.element());
+            return e == null ? null : Type.set(e);
+        }
+        if (a instanceof Type.OptionOf oa && b instanceof Type.OptionOf ob) {
+            Type e = absorbBottom(oa.element(), ob.element());
+            return e == null ? null : Type.option(e);
+        }
+        if (a instanceof Type.MapOf ma && b instanceof Type.MapOf mb) {
+            Type k = absorbBottom(ma.key(), mb.key());
+            Type v = absorbBottom(ma.value(), mb.value());
+            return k == null || v == null ? null : Type.map(k, v);
         }
         if (a instanceof Type.TupleOf ta && b instanceof Type.TupleOf tb
                 && ta.elements().size() == tb.elements().size()) {
@@ -2435,6 +2445,8 @@ public final class TypeChecker {
                         && ta.elements().size() == tb.elements().size());
     }
 
+    /** The common element type of two list positions: identical types collapse; two data-like
+     * types widen to the union of their cases (so {@code [High] ++ [LowRole]} is a list of both). */
     private static Type unifyElem(Type a, Type b, SourcePos pos) {
         if (a == Type.NOTHING) {   // the empty list absorbs into the other's element type (ADR-0028)
             return b;
@@ -2679,7 +2691,7 @@ public final class TypeChecker {
         if (branchType.equals(bt)) {
             return branchType;
         }
-        Type empty = absorbEmptyList(branchType, bt);   // one case may be `[]` (ADR-0028)
+        Type empty = absorbBottom(branchType, bt);   // one case may be an empty collection (ADR-0028)
         if (empty != null) {
             return empty;
         }
