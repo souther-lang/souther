@@ -598,6 +598,12 @@ public final class CstParser {
         }
         if (!at(SyntaxKind.RBRACE) && !at(SyntaxKind.EOF)) {
             expr();   // the result expression
+        } else if (at(SyntaxKind.RBRACE)) {
+            // The block closes with nothing to be its value. Reported here rather than left to the AST
+            // builder, which would have no node to build from. The usual cause is not a missing line
+            // but an absorbed one: Souther is layout-independent, so a statement ending in a name and
+            // a following line starting with `(` are one call.
+            error("parse.block.noresult", "a block ends in a result expression, and this one has none");
         }
     }
 

@@ -43,6 +43,37 @@ class SyntaxDiagnosticTest {
         assertTrue(en.contains("SYNTAX ERROR") && ja.contains("構文エラー"));
     }
 
+    // Issue #75: `i.v` and the following line's `(a)` read as one call — Souther is
+    // layout-independent — which leaves the block with statements and no result expression. That used
+    // to reach the AST builder and die with a NullPointerException.
+    @Test
+    void aBlockWhoseResultWasAbsorbedByTheLineAboveIsASyntaxError() {
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data Out = { v: Int }
+                behavior run : (i: Out) -> Out constructs Out
+                let run (i) = {
+                    let a = i.v
+                    (a)
+                }
+                """);
+        assertEquals("parse.title", d.titleKey());
+        assertEquals("parse.block.noresult", d.messageKey());
+    }
+
+    @Test
+    void aBlockOfOnlyStatementsIsASyntaxError() {
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data Out = { v: Int }
+                behavior run : (i: Out) -> Out constructs Out
+                let run (i) = {
+                    let a = i.v
+                }
+                """);
+        assertEquals("parse.block.noresult", d.messageKey());
+    }
+
     @Test
     void lexerErrorIsLocalized() {
         Diagnostic d = diagnosticOf("module demo\ndata M = Int\nlet x = 1.5\n");
