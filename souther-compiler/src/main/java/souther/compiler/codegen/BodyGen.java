@@ -408,15 +408,19 @@ final class BodyGen {
             return elem == null ? Type.EMPTY_LIST : Type.list(elem);   // `[]` is the empty list (ADR-0028)
         }
 
-        /** Builds a tuple {@code (e1, e2, ...)} as an {@code Object[]}, boxing each element (ADR-0036). */
-        private Type tuple(Core.Tuple t) {
+        /** Builds a tuple {@code (e1, e2, ...)} as an {@code Object[]}, boxing each element (ADR-0036).
+         * A pushed-down tuple type reaches each element, as it does in the checker, so a written
+         * {@code (Map<String, Int>, List<String>)} seed materialises at those types (issue #74). */
+        private Type tuple(Core.Tuple t, Type expected) {
+            List<Type> want = expected instanceof Type.TupleOf te
+                    && te.elements().size() == t.elements().size() ? te.elements() : null;
             List<Type> elems = new ArrayList<>();
             pushInt(code, t.elements().size());
             code.anewarray(CD_Object);
             for (int i = 0; i < t.elements().size(); i++) {
                 code.dup();
                 pushInt(code, i);
-                Type et = genExpr(t.elements().get(i));
+                Type et = genExpr(t.elements().get(i), want == null ? null : want.get(i));
                 box(code, et);
                 code.aastore();
                 elems.add(et);
@@ -535,7 +539,7 @@ final class BodyGen {
                     yield tt;
                 }
                 case Core.ListLit lit -> listLit(lit);
-                case Core.Tuple t -> tuple(t);
+                case Core.Tuple t -> tuple(t, expected);
                 case Core.TupleGet tg -> tupleGet(tg);
                 case Core.Binary bin -> binary(bin);
                 case Core.NewData nd -> newData(nd);
@@ -842,11 +846,14 @@ final class BodyGen {
                 }
                 case "Map.empty" -> {
                     code.invokestatic(CD_Maps, "empty", MethodTypeDesc.of(CD_Map));
-                    return Type.map(Type.NOTHING, Type.NOTHING);   // key/value fixed by context, like `[]`
+                    // key/value fixed by context, like `[]` — adopt the pushed-down type as the checker
+                    // does, or a written seed type would be lost here and the fold's accumulator
+                    // re-derived at a bottom (issue #74)
+                    return expected instanceof Type.MapOf me ? me : Type.map(Type.NOTHING, Type.NOTHING);
                 }
                 case "Set.empty" -> {
                     code.invokestatic(CD_Sets, "empty", MethodTypeDesc.of(CD_Set));
-                    return Type.set(Type.NOTHING);   // element type fixed by context, like `[]`
+                    return expected instanceof Type.SetOf se ? se : Type.set(Type.NOTHING);
                 }
                 case "Int.divide", "Decimal.divide" -> {
                     if (call.args().size() == 4) {

@@ -63,18 +63,10 @@ let isEmpty (xs: List<'a>) = List.length(xs) == 0
 // a `Set` (O(log n)) rather than scanning the growing list with `member` (O(n)) is what keeps it
 // O(n log n); the result list keeps first-seen order. The seen-set is discarded at the end. This is
 // the same shape as `groupBy`, which grows a `Map` accumulator from within `List.fold`.
-//
-// The seen-set is inserted into on every element, including duplicates (a duplicate insert is a
-// no-op that returns the same set). That is deliberate: only the list side is conditional. If the
-// whole step were `if seen then acc else (insert, ys ++ [x])`, the skip branch would return the bare
-// empty-seeded accumulator, whose element types are still the `[]`/`Set.empty` bottoms, and the two
-// `if` branches would disagree with the concrete else branch. Keeping the tuple's shape the same in
-// both branches (the set always grows, only the list is guarded) keeps both sides concretely typed.
 let distinct (xs: List<'a>) = {
     let (_, out) = List.fold((acc, x) -> {
         let (seen, ys) = acc
-        let nextYs = if Set.contains(x, seen) then ys else ys ++ [x]
-        (Set.insert(x, seen), nextYs)
+        if Set.contains(x, seen) then acc else (Set.insert(x, seen), ys ++ [x])
     }, (Set.empty(), []), xs)
     out
 }
@@ -88,8 +80,7 @@ let allUniqueBy (key: ('a) -> 'k, xs: List<'a>) =
     List.length(List.distinct(List.map(key, xs))) == List.length(xs)
 
 // `partition` splits the list by a predicate into (kept, rest), preserving order in each (Elm's
-// List.partition). It folds a pair of empty lists `([], [])`, appending each element to one side —
-// the accumulator's real shape is the pair of lists the block grows, not the bottoms the seed holds.
+// List.partition). It folds a pair of empty lists `([], [])`, appending each element to one side.
 let partition (keep: ('a) -> Bool, xs: List<'a>) =
     List.fold((acc, x) -> {
         let (yes, no) = acc
