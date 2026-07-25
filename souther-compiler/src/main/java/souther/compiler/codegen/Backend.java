@@ -3,8 +3,11 @@ package souther.compiler.codegen;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.PipelineSigs;
+import souther.compiler.check.Sig;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
 import java.lang.classfile.ClassBuilder;
@@ -87,7 +90,7 @@ public final class Backend {
      * instead of inferring types again (issue #81). */
     public static Map<String, byte[]> generate(Ast.Module module, Map<String, Ast.Def> symbols,
                                                Map<String, String> typePackage,
-                                               Map<String, TypeChecker.Sig> importedSigs,
+                                               Map<String, Sig> importedSigs,
                                                Set<String> importedInjected,
                                                TypeChecker.Checked checked) {
         Map<String, List<String>> caseToSums = new HashMap<>();
@@ -240,7 +243,7 @@ public final class Backend {
         // here) is a requirement too; take its arity from the imported signature so the unary-vs-multi
         // dispatch treats a cross-module multi-input dependency the same as a local one (issue #57).
         for (String name : importedInjected) {
-            TypeChecker.Sig sig = importedSigs.get(name);
+            Sig sig = importedSigs.get(name);
             if (sig != null) {
                 requiredParam.put(name, sig.ins());
                 requiredSuccess.put(name, sig.out());
@@ -249,9 +252,9 @@ public final class Backend {
         // The unary-vs-multi dispatch for required behaviors reads these; set once, so the base class,
         // the $Impl field/ctor, the bind factory, and every call site agree (issue #57).
         b.ctx.setRequiredSignatures(requiredParam, requiredSuccess);
-        Map<String, TypeChecker.Sig> sigs = TypeChecker.signatures(module, b.symbols, importedSigs);
+        Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
         Map<String, List<String>> behaviorDeps = requirementSets(module, requiredNames);
-        Map<String, List<String>> pipeStages = TypeChecker.pipelineStages(module);
+        Map<String, List<String>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef bd : module.behaviors()) {
             switch (bd) {
                 case Ast.SpecBehavior spec -> {
@@ -274,7 +277,7 @@ public final class Backend {
                 case Ast.PipeBehavior pipe -> {
                     out.put(module.name() + "." + CodegenContext.behaviorImplClass(pipe.name()),
                             b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
-                    TypeChecker.Sig sig = TypeChecker.stageSig(pipe.name(), sigs, symbols, pipe.pos());
+                    Sig sig = PipelineSigs.stageSig(pipe.name(), sigs, symbols, pipe.pos());
                     out.put(module.name() + "." + behaviorClass(pipe.name()),
                             b.generateBehaviorInterface(pipe.name(), sig.ins(), sig.out(),
                                     behaviorDeps.getOrDefault(pipe.name(), List.of())));
@@ -310,7 +313,7 @@ public final class Backend {
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. resolveParamType handles both shapes.
-                        Type pt = TypeChecker.resolveParamType(h.params().get(i).type(), symbols);
+                        Type pt = TypeOps.resolveParamType(h.params().get(i).type(), symbols);
                         code.aload(i);
                         int slot = gen.slot(pt);
                         unbox(code, pt, slot);
@@ -601,15 +604,15 @@ public final class Backend {
      * order is sorted for deterministic bytecode.
      */
     private Map<String, List<String>> behaviorResultInterfaces(Ast.Module module,
-                                                               Map<String, TypeChecker.Sig> importedSigs) {
-        Map<String, TypeChecker.Sig> sigs = TypeChecker.signatures(module, symbols, importedSigs);
+                                                               Map<String, Sig> importedSigs) {
+        Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);
         Map<String, List<String>> results = new LinkedHashMap<>();
         for (Ast.BehaviorDef bd : module.behaviors()) {
-            TypeChecker.Sig sig = sigs.get(bd.name());
+            Sig sig = sigs.get(bd.name());
             if (sig == null || !(sig.out() instanceof Type.Union)) {
                 continue;
             }
-            List<String> cases = new ArrayList<>(TypeChecker.leafCases(sig.out(), symbols));
+            List<String> cases = new ArrayList<>(TypeOps.leafCases(sig.out(), symbols));
             Collections.sort(cases);
             results.put(CodegenContext.behaviorResultClass(bd.name()), cases);
         }
@@ -779,17 +782,17 @@ public final class Backend {
     }
 
     private byte[] generatePipe(Ast.PipeBehavior pipe, Set<String> requiredNames,
-                                Map<String, TypeChecker.Sig> sigs, Map<String, List<String>> behaviorDeps,
+                                Map<String, Sig> sigs, Map<String, List<String>> behaviorDeps,
                                 Map<String, List<String>> pipeStages) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
         // Flatten nested pipeline stages so the routing is over leaf behaviors (spec 14.2): a named
         // intermediate `half = split >-> work` inlines to `split, work`, which keeps a retired case
         // retired across the composition, making `>->` associative.
-        List<String> flat = TypeChecker.flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<String> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
         // the pipeline's injected fields are the union of its stages' requirements (spec 14.3)
         List<String> reqStages = behaviorDeps.getOrDefault(pipe.name(), List.of());
         // the pipeline takes whatever its first stage takes (spec 14.1)
-        int arity = TypeChecker.stageSig(flat.get(0), sigs, symbols, pipe.pos()).ins().size();
+        int arity = PipelineSigs.stageSig(flat.get(0), sigs, symbols, pipe.pos()).ins().size();
         ClassDesc[] applyParams = new ClassDesc[arity];
         java.util.Arrays.fill(applyParams, CD_Object);
         MethodTypeDesc mtdApply = MethodTypeDesc.of(CD_Object, applyParams);
@@ -805,18 +808,18 @@ public final class Backend {
                 List<String> stages = flat;
                 // stage 0 consumes the pipeline's arguments unconditionally
                 applyFirstStage(code, cdP, stages.get(0), arity, requiredNames, behaviorDeps);
-                Type mainline = TypeChecker.stageSig(stages.get(0), sigs, symbols, pipe.pos()).out();
+                Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).out();
                 Label end = code.newLabel();
                 for (int i = 1; i < stages.size(); i++) {
                     String stage = stages.get(i);
-                    TypeChecker.Sig g = TypeChecker.stageSig(stage, sigs, symbols, pipe.pos());
-                    if (TypeChecker.isDataLike(mainline)) {
+                    Sig g = PipelineSigs.stageSig(stage, sigs, symbols, pipe.pos());
+                    if (TypeOps.isDataLike(mainline)) {
                         // Apply g only when the running value is one of the main-line cases it
                         // accepts. Anything else has left the main line: jump to the end rather
                         // than offering it to the stages after this one (spec 14.2). Branching to
                         // the end is what makes a retired case unreachable without tagging it — the
                         // same case type may legitimately reappear on the main line downstream.
-                        List<String> accepted = TypeChecker.mainlineCases(mainline, g, symbols);
+                        List<String> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
                         Label doApply = code.newLabel();
                         for (String caseName : accepted) {
                             code.aload(1);
@@ -829,14 +832,14 @@ public final class Backend {
                     } else {
                         applyStage(code, cdP, stage, requiredNames, behaviorDeps);
                     }
-                    mainline = TypeChecker.stageOut(mainline, g, symbols, pipe.pos());
+                    mainline = PipelineSigs.stageOut(mainline, g, symbols, pipe.pos());
                 }
                 code.labelBinding(end);
                 code.aload(1);
                 code.areturn();
             });
             if (arity != 1) {
-                TypeChecker.Sig sig = TypeChecker.stageSig(pipe.name(), sigs, symbols, pipe.pos());
+                Sig sig = PipelineSigs.stageSig(pipe.name(), sigs, symbols, pipe.pos());
                 emitTypedApplyBridge(cb, cdP, typedApplyDesc(pipe.name(), sig.ins(), sig.out()));
             }
         });

@@ -2,7 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
-import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 
 import java.lang.classfile.ClassFile;
 import java.lang.constant.ClassDesc;
@@ -247,15 +247,15 @@ final class CodegenContext {
     }
 
     Map<String, Type> fieldTypes(Ast.Data data) {
-        return TypeChecker.fieldTypes(data, symbols);
+        return TypeOps.fieldTypes(data, symbols);
     }
 
     Type resolveType(Ast.TypeRef ref) {
-        return TypeChecker.resolveType(ref, symbols);
+        return TypeOps.resolveType(ref, symbols);
     }
 
     Type successType(Ast.RetType ret) {
-        return TypeChecker.successType(ret, symbols);
+        return TypeOps.successType(ret, symbols);
     }
 
     /** Whether {@code name} is an imported type or behavior (declared in another module, spec 4). */

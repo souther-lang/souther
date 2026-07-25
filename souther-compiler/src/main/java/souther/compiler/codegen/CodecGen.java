@@ -3,7 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
-import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
 import java.lang.classfile.ClassBuilder;
@@ -441,7 +441,7 @@ final class CodecGen {
         if (!data.newtype()) {
             return Invariants.NONE;   // an object's invariant has no single value to constrain
         }
-        List<Ast.Expr> declared = TypeChecker.effectiveInvariants(data, symbols);
+        List<Ast.Expr> declared = TypeOps.effectiveInvariants(data, symbols);
         if (declared.isEmpty()) {
             return Invariants.NONE;
         }
@@ -623,7 +623,7 @@ final class CodecGen {
 
     private void emitPrimDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.PrimDecoder prim,
                                 Map<String, Type> fields, Src src, Invariants invariants) {
-        Type inputType = TypeChecker.primType(prim.from());
+        Type inputType = TypeOps.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
         switch (prim.from()) {
             case TEXT -> code.invokestatic(leaf, "string", MTD_leafString);
@@ -770,7 +770,7 @@ final class CodecGen {
 
     private Type bindType(Ast.DecRef ref) {
         return switch (ref) {
-            case Ast.PrimDecRef p -> TypeChecker.primType(p.kind());
+            case Ast.PrimDecRef p -> TypeOps.primType(p.kind());
             case Ast.DataDecRef d -> Type.ref(d.typeName());
             case Ast.ListDecRef l -> Type.list(bindType(l.element()));
             case Ast.SetDecRef s -> Type.set(bindType(s.element()));

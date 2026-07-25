@@ -1,0 +1,695 @@
+package souther.compiler.check;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.core.Core;
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
+import souther.compiler.diag.SourcePos;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Types an expression and produces the Core node for it, carrying the type this decided (issue #81):
+ * the backend emits from what this returns instead of inferring the same types a second time.
+ *
+ * <p>The switch over expression kinds is here; the kinds with rules of their own live next door —
+ * {@link CallElaborator}, {@link BinaryElaborator}, {@link MatchElaborator} — and the bottom an
+ * empty collection carries is {@link BottomInfer}'s.
+ */
+public final class Elaborator {
+
+    private Elaborator() {}
+
+    // --- expression typing (shared with the backend) ---
+
+    /** No required behaviors are in scope (decoders, encoders, invariants — spec 9.3, 17). */
+    static final Map<String, ReqSig> NO_REQS = Map.of();
+
+    public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
+                              Map<String, Ast.Def> symbols) {
+        return typeOf(e, env, data, symbols, NO_REQS);
+    }
+
+    public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
+                              Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+        return typeOf(e, env, data, symbols, reqs, null);
+    }
+
+    /** The type of {@code e}, discarding the Core the elaboration produced — for the checks that ask
+     * only whether an expression types (a decoder, an invariant, a helper's standalone check). */
+    public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
+                              Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
+        return elaborate(e, env, data, symbols, reqs, expected).type();
+    }
+
+    public static Core elaborate(Ast.Expr e, Map<String, Type> env, Ast.Data data,
+                                 Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+        return elaborate(e, env, data, symbols, reqs, null);
+    }
+
+    /**
+     * Types {@code e} and produces the Core node for it, carrying the type this decided (issue #81).
+     * The backend emits from what this returns instead of inferring the same types a second time.
+     *
+     * <p>Bidirectional typing: {@code expected} is the type this expression is checked against, pushed
+     * down from the surrounding context (a declared field type, a declared return type). It may be
+     * {@code null} — no context — in which case this behaves exactly as pure bottom-up synthesis.
+     * Only a few arms consume it: the empty-collection leaves ([], Map.empty, Set.empty) adopt it,
+     * and a generic call pre-binds its result-type variables from it, so a fold whose seed is an
+     * empty collection has its accumulator pinned by context before the step is checked.
+     */
+    public static Core elaborate(Ast.Expr e, Map<String, Type> env, Ast.Data data,
+                                 Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
+        return switch (e) {
+            case Ast.IntLit x -> new Core.Int(x.value(), Type.INT, x.pos());
+            case Ast.DecimalLit x -> new Core.Decimal(x.value(), Type.DECIMAL, x.pos());
+            case Ast.StringLit x -> new Core.Str(x.value(), Type.STRING, x.pos());
+            case Ast.BoolLit x -> new Core.Bool(x.value(), Type.BOOL, x.pos());
+            case Ast.Tuple tup -> {
+                // A pushed-down tuple type reaches each element, so a written `(Set<Int>, List<Int>)`
+                // fixes the empty collections the tuple seeds rather than leaving them bottoms (#74).
+                List<Type> want = expected instanceof Type.TupleOf te
+                        && te.elements().size() == tup.elements().size() ? te.elements() : null;
+                List<Core> elems = new ArrayList<>();
+                List<Type> elemTypes = new ArrayList<>();
+                for (int i = 0; i < tup.elements().size(); i++) {
+                    Core el = elaborate(tup.elements().get(i), env, data, symbols, reqs,
+                            want == null ? null : want.get(i));
+                    elems.add(el);
+                    elemTypes.add(el.type());
+                }
+                yield new Core.Tuple(elems, Type.tuple(elemTypes), tup.pos());
+            }
+            case Ast.TupleGet tg -> {
+                Core tuple = elaborate(tg.tuple(), env, data, symbols, reqs);
+                Type tt = tuple.type();
+                if (!(tt instanceof Type.TupleOf to)) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.tuple.pattern").title("check.type.mismatch.title")
+                                    .at(tg.pos()).args(Type.show(tt)).build(),
+                            "a tuple pattern needs a tuple, got " + tt);
+                }
+                if (to.elements().size() != tg.arity()) {   // exact arity, in either direction (Elm)
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.tuple.arity").title("check.type.mismatch.title")
+                                    .at(tg.pos()).args(tg.arity(), to.elements().size()).build(),
+                            "this pattern binds " + tg.arity()
+                                    + " name(s) but the tuple has " + to.elements().size() + " element(s)");
+                }
+                yield new Core.TupleGet(tuple, tg.index(), tg.arity(),
+                        to.elements().get(tg.index()), tg.pos());
+            }
+            case Ast.Neg neg -> {
+                Core operand = elaborate(neg.operand(), env, data, symbols, reqs);
+                Type t = operand.type();
+                if (t != Type.INT && t != Type.DECIMAL) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.neg.msg")
+                                    .title("check.neg.title")
+                                    .at(neg.pos(), width(neg.operand()))
+                                    .args(Type.show(t))
+                                    .build(),
+                            "unary minus needs an Int or Decimal, got " + t);
+                }
+                yield new Core.Neg(operand, t, neg.pos());
+            }
+            case Ast.LetIn li -> {
+                Type annotation = annotatedType(li, symbols);
+                Core value;
+                Type bindType;
+                if (isFunctionSelection(li.value())) {
+                    // a lambda bound to a local that could not be inlined (e.g. chosen by an `if`):
+                    // it is a first-class function value. Its parameter types are unannotated, so
+                    // infer them from how the body applies it (spec §blocks).
+                    if (annotation != null) {
+                        throw functionAnnotation(li);   // no ordinary type describes a function value
+                    }
+                    List<Type> paramTypes = inferFnParamTypes(li.name(), li.body(), env, data, symbols, reqs);
+                    value = elaborateFunctionValue(li.value(), paramTypes, env, data, symbols, reqs);
+                    bindType = value.type();
+                } else if (annotation != null) {
+                    // the written type is the value's expected type, so an empty collection bound here
+                    // takes its element/value type from the annotation rather than staying a bottom
+                    value = elaborate(li.value(), env, data, symbols, reqs, annotation);
+                    checkLetAnnotation(li, annotation, value.type(), symbols);
+                    bindType = annotation;
+                } else {
+                    value = elaborate(li.value(), env, data, symbols, reqs);
+                    bindType = carriedType(li, value.type(), symbols);
+                }
+                // the binding is visible only inside the body, so a sibling branch cannot see it
+                Map<String, Type> inner = new HashMap<>(env);
+                inner.put(li.name(), bindType);
+                Core body = elaborate(li.body(), inner, data, symbols, reqs, expected);
+                yield new Core.LetIn(li.name(), value, body, body.type(), li.pos());
+            }
+            // reached only where a block escapes: it may be passed as an argument, or bound to a
+            // `let` and applied, but it is not a value that can be returned or stored, because that
+            // would need a runtime closure (spec 12.5)
+            case Ast.Block block -> throw CompileException.of(
+                    Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
+                            .at(block.pos()).build(),
+                    "a block is not a value: it may be passed as an argument or bound to a `let` and "
+                            + "applied, but it cannot be returned or stored in a data (spec 12.5)");
+            case Ast.Var v -> {
+                Type t = env.get(v.name());
+                if (t != null) {
+                    yield new Core.Var(v.name(), t, v.pos());
+                }
+                // a bare name that isn't a local is a unit-data value (spec 8.4)
+                if (symbols.get(v.name()) instanceof Ast.UnitData) {
+                    yield new Core.Var(v.name(), Type.ref(v.name()), v.pos());
+                }
+                if (v.name().equals("null")) {
+                    throw new CompileException(v.pos(), "E1301",
+                            "`null` is not part of the language. Use an optional field with `?`.");
+                }
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.unknown.name.msg")
+                                .title("check.unknown.title")
+                                .at(v.pos(), v.name().length())
+                                .args(v.name())
+                                .suggestion(Suggest.candidate(v.name(), env.keySet()))
+                                .build(),
+                        "unknown identifier `" + v.name() + "`" + Suggest.hint(v.name(), env.keySet()));
+            }
+            case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, data, symbols, reqs);
+            case Ast.Call call -> CallElaborator.elaborateCall(call, env, data, symbols, reqs, expected);
+            case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, data, symbols, reqs);
+            case Ast.NewData nd -> {
+                if (!(symbols.get(nd.typeName()) instanceof Ast.Data owner)) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.construct.no").title("check.construct.title")
+                                    .at(nd.pos(), nd.typeName().length()).args(nd.typeName()).build(),
+                            "cannot construct `" + nd.typeName() + "`");
+                }
+                List<Core.FieldInit> inits = DataChecker.checkConstruction(nd.typeName(), nd.inits(), nd.spreads(),
+                        nd.pos(), TypeOps.fieldTypes(owner, symbols), env, data, symbols, reqs);
+                yield new Core.NewData(nd.typeName(), inits, nd.spreads(),
+                        Type.ref(nd.typeName()), nd.pos());
+            }
+            case Ast.Match m -> MatchElaborator.elaborateMatch(m, env, data, symbols, reqs, expected);
+            case Ast.If iff -> {
+                Core cond = requireTyped(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
+                Core then = elaborate(iff.then(), env, data, symbols, reqs, expected);
+                Core els = elaborate(iff.els(), env, data, symbols, reqs, expected);
+                Type tt = then.type();
+                Type et = els.type();
+                Type empty = BottomInfer.absorbBottom(tt, et);   // one case may be `[]`, or a tuple of them (ADR-0028)
+                if (empty != null) {
+                    yield new Core.If(cond, then, els, empty, iff.pos());
+                }
+                if (tt.equals(et)) {
+                    yield new Core.If(cond, then, els, tt, iff.pos());
+                }
+                if (TypeOps.isDataLike(tt) && TypeOps.isDataLike(et)) {
+                    Set<String> names = new HashSet<>(TypeOps.namesOf(tt));
+                    names.addAll(TypeOps.namesOf(et));
+                    yield new Core.If(cond, then, els, Type.union(names), iff.pos());
+                }
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.if.msg")
+                                .title("check.if.title")
+                                .at(iff.pos(), 2)
+                                .secondary(Region.ofWidth(iff.then().pos(), width(iff.then())),
+                                        "check.if.then", Type.show(tt))
+                                .secondary(Region.ofWidth(iff.els().pos(), width(iff.els())),
+                                        "check.if.else", Type.show(et))
+                                .hint("check.if.hint")
+                                .build(),
+                        "if branches disagree: " + tt + " vs " + et);
+            }
+            case Ast.ListLit lit -> {
+                if (lit.elements().isEmpty()) {
+                    // `[]`: element type fixed by context (ADR-0028); adopt an expected list type
+                    yield new Core.ListLit(List.of(),
+                            expected instanceof Type.ListOf le ? le : Type.EMPTY_LIST, lit.pos());
+                }
+                List<Core> elements = new ArrayList<>();
+                Type elem = null;
+                for (Ast.Expr el : lit.elements()) {
+                    Core c = elaborate(el, env, data, symbols, reqs);
+                    elements.add(c);
+                    elem = elem == null ? c.type() : BottomInfer.unifyElem(elem, c.type(), lit.pos());
+                }
+                yield new Core.ListLit(elements, Type.list(elem), lit.pos());
+            }
+            case Ast.ListComp comp -> {
+                // A comprehension never reaches the backend: the Lower stage rewrites it to an `if`
+                // before a body is emitted, and the codec emitters desugar the expression they hold
+                // before elaborating it. It still types here, on the pre-lowering paths (a helper's
+                // standalone check), so the node produced is a type carrier, not something to emit.
+                for (Ast.Expr g : comp.guards()) {
+                    requireType(g, Type.BOOL, env, data, symbols, reqs, "guard of a comprehension");
+                }
+                Core element = elaborate(comp.element(), env, data, symbols, reqs);
+                yield new Core.ListLit(List.of(element), Type.list(element.type()), comp.pos());
+            }
+        };
+    }
+
+    /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is
+     * bottom-up, as {@link #requireType} is: the expected type is not pushed into the expression. */
+    static Core requireTyped(Ast.Expr e, Type expected, Map<String, Type> env, Ast.Data data,
+                                     Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, String what) {
+        Core c = elaborate(e, env, data, symbols, reqs);
+        requireType(e, c.type(), expected, symbols, what);
+        return c;
+    }
+
+
+    static Core elaborateFieldAccess(Ast.FieldAccess fa, Map<String, Type> env, Ast.Data data,
+                                          Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+        Core targetCore = elaborate(fa.target(), env, data, symbols, reqs);
+        Type target = targetCore.type();
+        if (target instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data owner) {
+            Type ft = TypeOps.fieldTypes(owner, symbols).get(fa.field());
+            if (ft != null) {
+                return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
+            }
+        }
+        List<String> cases = TypeOps.sumCases(target, symbols);
+        if (cases != null) {
+            // A sum carries no fields of its own — its cases do, and which case it is is not known
+            // until it is opened. Saying that is the difference between "this value has no such
+            // field" and "read it in each case", which is what the author has to write.
+            List<String> without = new ArrayList<>();
+            for (String c : cases) {
+                if (!(symbols.get(c) instanceof Ast.Data cd)
+                        || !TypeOps.fieldTypes(cd, symbols).containsKey(fa.field())) {
+                    without.add(c);
+                }
+            }
+            Diagnostic.Builder d = Diagnostic.of(null, "check.access.sum")
+                    .title("check.type.mismatch.title")
+                    .at(fa.pos(), fa.field().length()).args(fa.field(), Type.show(target));
+            if (!without.isEmpty()) {
+                d = d.hint("check.access.sum.missing", fa.field(), String.join(", ", without));
+            }
+            throw CompileException.of(d.build(),
+                    "cannot read a field `" + fa.field() + "` on the sum `" + Type.show(target)
+                            + "`: a sum has no fields of its own; open it with `match`");
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.access").title("check.type.mismatch.title")
+                        .at(fa.pos(), fa.field().length()).args(fa.field()).build(),
+                "cannot access field `" + fa.field() + "` on this value");
+    }
+
+    /**
+     * Types a block argument, binding its parameters to {@code paramTypes} (spec 12.5).
+     *
+     * <p>The parameters are visible only inside the block's body, and its requirement set is
+     * whatever it calls — which flows outward into the enclosing behavior's, so nothing about
+     * requirements has to be written down (spec 29).
+     */
+    /**
+     * Resolves the accumulator type for one function argument (a fold's step) of a helper call,
+     * updating {@code bind}. The step is first typed at the accumulator the value arguments fixed —
+     * the seed's type, which may be a narrow case. That type stands when the step is a fixpoint there
+     * (it reads the seed's fields and returns the same case). Only when the narrow case does not type
+     * (the step matches on the accumulator, which needs its sum) or is not a fixpoint (the step grows
+     * the accumulator into its sum) is the accumulator widened to the sum that case belongs to, and the
+     * step re-typed there. An empty-collection seed's bottom is refined from the block's result along
+     * the way. Shared by the checker's call typing and the backend's step materialization, so the two
+     * resolve identically.
+     */
+    public static Core resolveStepBinding(String fnName, Type.FnOf declaredStep, Ast.Expr stepArg,
+                                          Map<String, Type> bind, Map<String, Type> env, Ast.Data data,
+                                          Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+        Type.FnOf narrow = (Type.FnOf) TypeOps.substitute(declaredStep, bind);
+        Core narrowCore = null;
+        Type narrowGot = null;
+        CompileException narrowFailed = null;
+        try {
+            narrowCore = elaborateBlockArg(fnName, stepArg, narrow.params(), env, data, symbols, reqs);
+            narrowGot = ((Type.FnOf) narrowCore.type()).result();
+        } catch (CompileException e) {
+            narrowFailed = e;
+        }
+        if (narrowGot != null) {
+            BottomInfer.refineBottom(declaredStep.result(), narrowGot, bind);
+            Type want = TypeOps.substitute(declaredStep.result(), bind);
+            if (want instanceof Type.Var || TypeOps.assignable(narrowGot, want, symbols)) {
+                return narrowCore;   // the narrow accumulator is a fixpoint
+            }
+        }
+        // The step matches on, or grows the accumulator into, the sum the seed's case belongs to.
+        if (declaredStep.result() instanceof Type.Var accVar) {
+            Type sum = TypeOps.enclosingSum(TypeOps.substitute(declaredStep.result(), bind), symbols);
+            if (sum != null) {
+                Map<String, Type> widened = new HashMap<>(bind);
+                widened.put(accVar.name(), sum);
+                Core widenedCore = elaborateBlockArg(fnName, stepArg,
+                        ((Type.FnOf) TypeOps.substitute(declaredStep, widened)).params(), env, data, symbols, reqs);
+                Type got = ((Type.FnOf) widenedCore.type()).result();
+                if (TypeOps.assignable(got, sum, symbols)) {
+                    bind.put(accVar.name(), sum);
+                    return widenedCore;   // the step is emitted at the widened accumulator
+                }
+            }
+        }
+        if (narrowGot == null) {
+            throw narrowFailed;   // the narrow type errored and there was no sum to fall back to
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.fn.argtype").title("check.fn.title")
+                        .at(stepArg.pos()).args(fnName, Type.show(narrowGot),
+                                Type.show(TypeOps.substitute(declaredStep.result(), bind))).build(),
+                "the step of " + fnName + " returns " + Type.show(narrowGot)
+                        + ", but the accumulator is " + Type.show(TypeOps.substitute(declaredStep.result(), bind)));
+    }
+
+    /** Elaborates a block argument at {@code paramTypes}; the node it returns carries the
+     * {@link Type.FnOf} of the block — the parameter types the call fixed, and the body's result. */
+    static Core elaborateBlockArg(String fnName, Ast.Expr arg, List<Type> paramTypes,
+                                  Map<String, Type> env, Ast.Data data,
+                                  Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+        if (!(arg instanceof Ast.Block block)) {
+            // a function-typed value — a helper's function parameter (spec §fn-declaration) —
+            // stands in for a block: check its shape and yield its result type.
+            Core value = elaborate(arg, env, data, symbols, reqs);
+            if (value.type() instanceof Type.FnOf fn) {
+                if (fn.params().size() != paramTypes.size()) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.fn.callarity").title("check.fn.title")
+                                    .at(arg.pos()).args(fnName, paramTypes.size(), fn.params().size())
+                                    .build(),
+                            fnName + " calls its function with " + paramTypes.size()
+                                    + " argument(s), but it takes " + fn.params().size());
+                }
+                for (int i = 0; i < paramTypes.size(); i++) {
+                    if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i), symbols)) {
+                        throw CompileException.of(
+                                Diagnostic.of(null, "check.fn.argtype").title("check.fn.title")
+                                        .at(arg.pos()).args(fnName, Type.show(paramTypes.get(i)),
+                                                Type.show(fn.params().get(i))).build(),
+                                fnName + "'s element type " + paramTypes.get(i)
+                                        + " is not acceptable to the function, which takes "
+                                        + fn.params().get(i));
+                    }
+                }
+                return value;
+            }
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.fn.expectsblock").title("check.fn.title")
+                            .at(arg.pos()).args(fnName).build(),
+                    fnName + " expects a block, e.g. `" + fnName
+                            + "((acc, x) -> ..., seed, xs)` (spec 12.5)");
+        }
+        if (block.params().size() != paramTypes.size()) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.fn.blockarity").title("check.fn.title")
+                            .at(block.pos()).args(paramTypes.size(), block.params().size()).build(),
+                    "this block takes " + paramTypes.size() + " parameter(s), got "
+                            + block.params().size());
+        }
+        Map<String, Type> inner = new HashMap<>(env);
+        for (int i = 0; i < paramTypes.size(); i++) {
+            inner.put(block.params().get(i), paramTypes.get(i));
+        }
+        Core body = elaborate(block.body(), inner, data, symbols, reqs);
+        return new Core.Block(block.params(), body, Type.fn(paramTypes, body.type()), block.pos());
+    }
+
+    /** Whether an expression bound to a {@code let} is a function value: a lambda, or an {@code if}
+     * whose branches are functions. Such a value cannot be inlined (the inliner leaves it), so it
+     * becomes a first-class {@code Fn} (spec §blocks). */
+    public static boolean producesFunction(Ast.Expr e) {
+        return switch (e) {
+            case Ast.Block _ -> true;
+            case Ast.If iff -> producesFunction(iff.then()) || producesFunction(iff.els());
+            // a lambda returned under its capture bindings, e.g. inlining `adder(5)` leaves
+            // `let $n = 5 in (x) -> x + $n` (spec §blocks)
+            case Ast.LetIn li -> producesFunction(li.body());
+            default -> false;
+        };
+    }
+
+    /** The type a source annotation declares on a binding ({@code let x: T = e}), or null when the
+     * binding carries none. Read wherever a binding's type is needed, so the annotation and the
+     * inference, the checker and the backend cannot drift apart. */
+    static Type annotatedType(Ast.LetIn li, Map<String, Ast.Def> symbols) {
+        return li.annotation() == null ? null : TypeOps.successType(li.annotation(), symbols);
+    }
+
+    /**
+     * A local binding's written type must be the type of its value (spec 16.1). A declared type that
+     * the value does not have is an error rather than a comment the checker ignores — the same rule a
+     * helper's declared return type follows.
+     */
+    static void checkLetAnnotation(Ast.LetIn li, Type declared, Type valueType,
+                                           Map<String, Ast.Def> symbols) {
+        if (TypeOps.assignable(valueType, declared, symbols)) {
+            return;
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.let.annotation").title("check.type.mismatch.title")
+                        .at(li.pos()).args(li.name(), Type.show(declared), Type.show(valueType))
+                        .diff(Type.show(valueType), Type.show(declared)).build(),
+                "the binding `" + li.name() + "` declares " + Type.show(declared)
+                        + " but its value is " + Type.show(valueType));
+    }
+
+    /**
+     * The type to bind an un-annotated binding at. A binding carrying an inlined helper's declared
+     * parameter type keeps that type when it is a sum: a case argument widens to its sum (spec 8.3),
+     * so a {@code match} in the body still sees the sum rather than the argument's specific case.
+     * Other declared types (a type variable in a generic prelude helper, a record, a list) are left to
+     * the argument's own type, which monomorphisation and the call-site check already handle.
+     */
+    static Type carriedType(Ast.LetIn li, Type valueType, Map<String, Ast.Def> symbols) {
+        if (li.declaredType() instanceof Ast.RetType rt) {
+            Type declared = TypeOps.resolveParamType(rt, symbols);
+            if (TypeOps.isSumType(declared, symbols) && TypeOps.assignable(valueType, declared, symbols)) {
+                return declared;
+            }
+        }
+        return valueType;
+    }
+
+    /** {@code let f: T = <function>} — a binding whose value is a function takes no annotation, because
+     * a function type may be written only in a helper's parameter (spec 13.1) and no ordinary type
+     * describes a function. Raised from the surface check below and from the value path, so the two
+     * shapes a function binding takes (a bare lambda, one an {@code if} chooses) read the same. */
+    static CompileException functionAnnotation(Ast.LetIn li) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.fn.annotation").title("check.fn.title")
+                        .at(li.pos()).args(li.name()).hint("check.fn.annotation.hint").build(),
+                "the binding `" + li.name() + "` is a function, so it takes no annotation: a function"
+                        + " type may be written only in a helper's parameter (spec 13.1)");
+    }
+
+    /** Rejects an annotation on a lambda binding, read on the surface body: lowering expands such a
+     * binding away at its applications, so by the time the body is checked the annotation is gone. */
+    static void rejectAnnotatedLambdaBindings(Ast.Expr e) {
+        if (e instanceof Ast.LetIn li && li.annotation() != null && li.value() instanceof Ast.Block) {
+            throw functionAnnotation(li);
+        }
+        TypeChecker.forEachChild(e, Elaborator::rejectAnnotatedLambdaBindings);
+    }
+
+    /** A function value that could not be inlined away and so becomes a first-class {@code Fn}: a
+     * function chosen at runtime by an {@code if} (spec §blocks). A bare lambda is not here — it is
+     * either inlined at its application or, if it escapes, reported as "a block is not a value". */
+    public static boolean isFunctionSelection(Ast.Expr e) {
+        return !(e instanceof Ast.Block) && producesFunction(e);
+    }
+
+    /** The backend re-derives a let-bound function's parameter types the same way (spec §blocks). */
+    public static List<Type> inferFnParamTypes(String name, Ast.Expr body, Map<String, Type> env,
+                                               Ast.Data data, Map<String, Ast.Def> symbols) {
+        return inferFnParamTypes(name, body, env, data, symbols, NO_REQS);
+    }
+
+    /** Infers a let-bound function's parameter types from how the body applies it: every
+     * {@code f(args)} in the body must agree on the argument types (spec §blocks). A function that
+     * is never applied cannot have its type inferred. */
+    static List<Type> inferFnParamTypes(String name, Ast.Expr body, Map<String, Type> env,
+                                                Ast.Data data, Map<String, Ast.Def> symbols,
+                                                Map<String, ReqSig> reqs) {
+        List<List<Type>> uses = new ArrayList<>();
+        collectApplications(name, body, env, data, symbols, reqs, uses);
+        if (uses.isEmpty()) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.fn.noinfer").title("check.fn.title")
+                            .at(body.pos()).args(name).build(),
+                    "cannot infer the type of the function `" + name + "`: apply it (as `" + name
+                            + "(x)`) at least once so its parameter types are known. A function passed"
+                            + " on rather than applied — e.g. to a combinator — must be written inline"
+                            + " instead (`map(xs, x -> ...)`)");
+        }
+        List<Type> first = uses.get(0);
+        for (List<Type> u : uses) {
+            if (!u.equals(first)) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.fn.difftypes").title("check.fn.title")
+                                .at(body.pos()).args(name, first.toString(), u.toString()).build(),
+                        "the function `" + name + "` is applied with different argument types: "
+                                + first + " vs " + u);
+            }
+        }
+        return first;
+    }
+
+    /** Collects the argument-type lists of every application {@code name(args)} in {@code e}. */
+    static void collectApplications(String name, Ast.Expr e, Map<String, Type> env,
+                                            Ast.Data data, Map<String, Ast.Def> symbols,
+                                            Map<String, ReqSig> reqs, List<List<Type>> out) {
+        if (e instanceof Ast.Call call && call.fn().equals(name)) {
+            List<Type> argTypes = new ArrayList<>();
+            for (Ast.Expr a : call.args()) {
+                argTypes.add(typeOf(a, env, data, symbols, reqs));
+            }
+            out.add(argTypes);
+        }
+        TypeChecker.forEachChild(e, sub -> collectApplications(name, sub, env, data, symbols, reqs, out));
+    }
+
+    /** Types a function value against inferred parameter types: a lambda binds its parameters and
+     * yields {@code FnOf(params, resultOfBody)}; an {@code if} requires both branches to be the same
+     * function type (spec §blocks). */
+    static Core elaborateFunctionValue(Ast.Expr value, List<Type> paramTypes, Map<String, Type> env,
+                                          Ast.Data data, Map<String, Ast.Def> symbols,
+                                          Map<String, ReqSig> reqs) {
+        return switch (value) {
+            case Ast.Block b -> {
+                if (b.params().size() != paramTypes.size()) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.fn.lambdaarity").title("check.fn.title")
+                                    .at(b.pos()).args(b.params().size(), paramTypes.size()).build(),
+                            "this lambda takes " + b.params().size() + " parameter(s) but is applied with "
+                                    + paramTypes.size());
+                }
+                Map<String, Type> inner = new HashMap<>(env);
+                for (int i = 0; i < paramTypes.size(); i++) {
+                    inner.put(b.params().get(i), paramTypes.get(i));
+                }
+                Core body = elaborate(b.body(), inner, data, symbols, reqs);
+                yield new Core.Block(b.params(), body, Type.fn(paramTypes, body.type()), b.pos());
+            }
+            case Ast.If iff -> {
+                Core cond = requireTyped(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
+                Core then = elaborateFunctionValue(iff.then(), paramTypes, env, data, symbols, reqs);
+                Core els = elaborateFunctionValue(iff.els(), paramTypes, env, data, symbols, reqs);
+                Type t = then.type();
+                Type f = els.type();
+                if (!t.equals(f)) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.fn.branchtypes").title("check.fn.title")
+                                    .at(iff.pos(), 2).args(Type.show(t), Type.show(f)).build(),
+                            "the two branches produce different function types: " + t + " vs " + f);
+                }
+                yield new Core.If(cond, then, els, t, iff.pos());
+            }
+            case Ast.LetIn li -> {
+                // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)
+                Core bound = elaborate(li.value(), env, data, symbols, reqs);
+                Map<String, Type> inner = new HashMap<>(env);
+                inner.put(li.name(), bound.type());
+                Core body = elaborateFunctionValue(li.body(), paramTypes, inner, data, symbols, reqs);
+                yield new Core.LetIn(li.name(), bound, body, body.type(), li.pos());
+            }
+            default -> elaborate(value, env, data, symbols, reqs);
+        };
+    }
+
+    /** The built-in rounding modes (spec 18.3), each a bare identifier resolving to a
+     * {@code java.math.RoundingMode} — like {@code None}, a built-in value, not a data (spec 8.4). */
+    public static final Set<String> ROUNDING_MODES = Set.of(
+            "HALF_UP", "HALF_EVEN", "HALF_DOWN", "UP", "DOWN", "CEILING", "FLOOR");
+
+    /** Built-in values written as bare identifiers ({@code None}, the rounding modes): a binding may
+     * not take one of these names, because it would shadow the built-in and make it unreachable. */
+    static final Set<String> BUILTIN_VALUES = builtinValues();
+
+    static Set<String> builtinValues() {
+        Set<String> s = new HashSet<>(ROUNDING_MODES);
+        s.add("None");
+        return Set.copyOf(s);
+    }
+
+    static void rejectBuiltinShadow(String name, SourcePos pos) {
+        if (BUILTIN_VALUES.contains(name)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.builtin.shadow").title("check.reserved.title")
+                            .at(pos, name.length()).args(name).build(),
+                    "`" + name + "` is a built-in value and cannot be used as a binding name — it would"
+                            + " shadow the built-in; choose another name");
+        }
+    }
+
+    /** Rejects any binder in {@code e} — a {@code let}, {@code match} binding, or lambda parameter —
+     * that takes a built-in value's name. */
+    static void rejectBuiltinShadowing(Ast.Expr e) {
+        switch (e) {
+            case Ast.LetIn li -> {
+                rejectBuiltinShadow(li.name(), li.pos());
+                rejectBuiltinShadowing(li.value());
+                rejectBuiltinShadowing(li.body());
+            }
+            case Ast.Block b -> {
+                for (String p : b.params()) {
+                    rejectBuiltinShadow(p, b.pos());
+                }
+                rejectBuiltinShadowing(b.body());
+            }
+            case Ast.Match m -> {
+                rejectBuiltinShadowing(m.scrutinee());
+                for (Ast.Case c : m.cases()) {
+                    if (c.binding() != null) {
+                        rejectBuiltinShadow(c.binding(), c.pos());
+                    }
+                    rejectBuiltinShadowing(c.body());
+                }
+            }
+            default -> TypeChecker.forEachChild(e, Elaborator::rejectBuiltinShadowing);
+        }
+    }
+
+    static void requireType(Ast.Expr e, Type expected, Map<String, Type> env, Ast.Data data,
+                                    Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, String what) {
+        requireType(e, typeOf(e, env, data, symbols, reqs), expected, symbols, what);
+    }
+
+    /** As {@link #requireType(Ast.Expr, Type, Map, Ast.Data, Map, Map, String)}, but with the
+     * operand's type already computed — a caller that has typed {@code e} does not re-type its
+     * subtree. */
+    static void requireType(Ast.Expr e, Type actual, Type expected,
+                                    Map<String, Ast.Def> symbols, String what) {
+        if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec 8.3)
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.type.mismatch.msg")
+                            .title("check.type.mismatch.title")
+                            .at(e.pos(), width(e))
+                            .args(what)
+                            .diff(Type.show(actual), Type.show(expected))
+                            .hint("check.type.mismatch.hint")
+                            .build(),
+                    what + " must be " + expected + " but is " + actual);
+        }
+    }
+
+    /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source
+     * text is known, otherwise 1. The renderer underlines this many columns from the node's start. */
+    static int width(Ast.Expr e) {
+        return switch (e) {
+            case Ast.Var v -> v.name().length();
+            case Ast.StringLit s -> s.value().length() + 2;
+            case Ast.IntLit i -> Long.toString(i.value()).length();
+            case Ast.BoolLit b -> b.value() ? 4 : 5;
+            case Ast.DecimalLit d -> d.value().toPlainString().length() + 1;
+            case Ast.FieldAccess fa -> fa.field().length();
+            case Ast.Call c -> c.fn().length();
+            default -> 1;
+        };
+    }
+}

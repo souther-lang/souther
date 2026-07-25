@@ -165,7 +165,7 @@ final class InvariantChecker {
      * {@code resolve}. A definite violation is an error; an unproven one a warning; a fully-discharged
      * or non-expressible invariant is silent. */
     private void check(Ast.Data type, Function<String, LinearForm> resolve, NumericDomain d, SourcePos pos) {
-        List<Ast.Expr> invs = TypeChecker.effectiveInvariants(type, symbols);
+        List<Ast.Expr> invs = TypeOps.effectiveInvariants(type, symbols);
         if (invs.isEmpty()) {
             return;
         }
@@ -260,7 +260,7 @@ final class InvariantChecker {
         if (depth > 2 || !(t instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)) {
             return d;
         }
-        Map<String, Type> fields = TypeChecker.fieldTypes(data, symbols);
+        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
         Function<String, LinearForm> resolve = fieldName -> {
             if (data.newtype() && fieldName.equals("value")) {
                 return LinearForm.atom(path);
@@ -268,7 +268,7 @@ final class InvariantChecker {
             return fields.containsKey(fieldName) ? LinearForm.atom(path + "." + fieldName) : null;
         };
         NumericDomain out = d;
-        for (Ast.Expr inv : TypeChecker.effectiveInvariants(data, symbols)) {
+        for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
             List<Constraint> cs = invConstraints(inv, resolve);
             if (cs != null) {
                 for (Constraint c : cs) {
@@ -377,7 +377,7 @@ final class InvariantChecker {
             case Ast.FieldAccess fa -> {
                 Type owner = typeExpr(fa.target(), types);
                 yield owner instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.Data d
-                        ? TypeChecker.fieldTypes(d, symbols).get(fa.field()) : null;
+                        ? TypeOps.fieldTypes(d, symbols).get(fa.field()) : null;
             }
             case Ast.NewData nd -> Type.ref(nd.typeName());
             case Ast.Neg n -> typeExpr(n.operand(), types);
@@ -394,7 +394,7 @@ final class InvariantChecker {
         // Closed `+`/`-` and scalar `*`/`/` both yield the newtype (the checker has already validated
         // admissibility, so a newtype operand here means the result is that newtype).
         if (isArith(b.op())) {
-            Type nt = TypeChecker.closedNewtypeArithResult(lt, rt, symbols);
+            Type nt = TypeOps.closedNewtypeArithResult(lt, rt, symbols);
             if (nt != null) {
                 return nt;
             }
@@ -410,7 +410,7 @@ final class InvariantChecker {
     }
 
     private boolean numericNewtype(Type t) {
-        return TypeChecker.directNumericNewtypeBase(t, symbols) != null;
+        return TypeOps.directNumericNewtypeBase(t, symbols) != null;
     }
 
     private boolean isNumeric(Type t) {

@@ -7,7 +7,10 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Lower;
+import souther.compiler.check.DataChecker;
 import souther.compiler.check.NewtypeDesugar;
+import souther.compiler.check.PipelineSigs;
+import souther.compiler.check.Sig;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
@@ -83,7 +86,7 @@ public final class Compiler {
         Map<String, byte[]> out = Backend.generate(lowered, checked);
         verifyConstConstructions(module, TypeChecker.symbols(module), out);
         Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
-        ExampleVerifier.verify(module, symbols, TypeChecker.signatures(module, symbols), Map.of(), out);
+        ExampleVerifier.verify(module, symbols, PipelineSigs.signatures(module, symbols), Map.of(), out);
         return out;
     }
 
@@ -115,12 +118,12 @@ public final class Compiler {
      */
     private static void verifyConstConstructions(Ast.Module module, Map<String, Ast.Def> symbols,
                                                  Map<String, byte[]> classes) {
-        List<TypeChecker.ConstCheck> checks = TypeChecker.constNewtypeChecks(module, symbols);
+        List<DataChecker.ConstCheck> checks = DataChecker.constNewtypeChecks(module, symbols);
         if (checks.isEmpty()) {
             return;
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, Compiler.class.getClassLoader());
-        for (TypeChecker.ConstCheck c : checks) {
+        for (DataChecker.ConstCheck c : checks) {
             boolean holds;
             try {
                 Class<?> ctfe = Class.forName(module.name() + "." + c.typeName() + "$Ctfe", true, loader);
@@ -237,7 +240,7 @@ public final class Compiler {
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
             Map<String, Ast.Def> symbols = visibleDefs(m, derived);
-            Map<String, TypeChecker.Sig> importedSigs = importedBehaviorSigs(m, derived);
+            Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
             Set<String> importedInjected = importedInjectedBehaviors(m, derived);
             m = injectRecursivePrelude(m);
             Ast.Module lowered = Lower.run(m);
@@ -252,8 +255,8 @@ public final class Compiler {
             Ast.Module m = derived.get(original.name());
             Map<String, Ast.Def> symbols = visibleDefs(m, derived);
             verifyConstConstructions(m, symbols, out);
-            Map<String, TypeChecker.Sig> sigs =
-                    TypeChecker.signatures(m, symbols, importedBehaviorSigs(m, derived));
+            Map<String, Sig> sigs =
+                    PipelineSigs.signatures(m, symbols, importedBehaviorSigs(m, derived));
             ExampleVerifier.verify(m, symbols, sigs, importedPackages(m), out);
         }
         return out;
@@ -344,7 +347,7 @@ public final class Compiler {
                 Ast.Module m = NewtypeDesugar.rewrite(d, visibleDefs(d, derived));
                 derived.put(original.name(), m);
                 Map<String, Ast.Def> symbols = visibleDefs(m, derived);
-                Map<String, TypeChecker.Sig> importedSigs = importedBehaviorSigs(m, derived);
+                Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
                 Set<String> importedInjected = importedInjectedBehaviors(m, derived);
                 m = injectRecursivePrelude(m);
                 Ast.Module lowered = Lower.run(m);
@@ -361,8 +364,8 @@ public final class Compiler {
                 out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs,
                         importedInjected, result0.checked()));
                 verifyConstConstructions(m, symbols, out);
-                Map<String, TypeChecker.Sig> sigs =
-                        TypeChecker.signatures(m, symbols, importedBehaviorSigs(m, derived));
+                Map<String, Sig> sigs =
+                        PipelineSigs.signatures(m, symbols, importedBehaviorSigs(m, derived));
                 ready.put(original.name(), new VerifyContext(m, symbols, sigs, importedPackages(m)));
             } catch (CompileException e) {
                 result.get(idByName.get(original.name())).add(e.diagnostic());
@@ -409,7 +412,7 @@ public final class Compiler {
 
     /** The resolution context a module's examples evaluate against, retained from its compile pass. */
     private record VerifyContext(Ast.Module module, Map<String, Ast.Def> symbols,
-                                 Map<String, TypeChecker.Sig> sigs, Map<String, String> importedPackages) {}
+                                 Map<String, Sig> sigs, Map<String, String> importedPackages) {}
 
     /** Evaluates {@code examples} against {@code ctx}'s module (its defs and bytecode), using
      * {@code fakes} for any {@code requires} dependencies; returns one diagnostic per failing row. */
@@ -533,16 +536,16 @@ public final class Compiler {
     /** Signatures of the behaviors {@code m} imports from other modules (spec 4, 14), so a
      * composition here can name one as a stage. The declaring module's own signatures are computed
      * against its visible defs; a behavior it in turn imports is out of scope for now. */
-    private static Map<String, TypeChecker.Sig> importedBehaviorSigs(
+    private static Map<String, Sig> importedBehaviorSigs(
             Ast.Module m, Map<String, Ast.Module> registry) {
-        Map<String, TypeChecker.Sig> result = new HashMap<>();
+        Map<String, Sig> result = new HashMap<>();
         for (Ast.Import imp : m.imports()) {
             Ast.Module src = registry.get(imp.module());
             if (src == null) {
                 continue; // an unknown module is reported by visibleDefs
             }
             Set<String> behaviors = behaviorNames(src);
-            Map<String, TypeChecker.Sig> srcSigs = null;
+            Map<String, Sig> srcSigs = null;
             for (String name : imp.names()) {
                 if (!behaviors.contains(name)) {
                     continue;
@@ -552,7 +555,7 @@ public final class Compiler {
                     // (an import chain deeper than one hop), so seed its own imported signatures
                     // when computing its signatures — recursively, up the import graph. Cycles are
                     // already rejected by detectCycles, so this terminates.
-                    srcSigs = TypeChecker.signatures(src, visibleDefs(src, registry),
+                    srcSigs = PipelineSigs.signatures(src, visibleDefs(src, registry),
                             importedBehaviorSigs(src, registry));
                 }
                 result.put(name, srcSigs.get(name));
