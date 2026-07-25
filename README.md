@@ -94,6 +94,12 @@ Map<String, byte[]> classes = Compiler.compile(source);
 Map<String, byte[]> linked = Compiler.compileModules(List.of(employeeSource, tripSource));
 ```
 
+## Editor support
+
+The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/souther-lang/souther-vscode) and is published to the Visual Studio Marketplace and Open VSX. It bundles the language server and fetches a Java 25 runtime by itself when the machine does not already have one, so installing it and opening a `.sou` file is enough. It gives diagnostics, the document outline, hover, go-to-definition, find-references, rename, completion, quick-fix code actions, formatting, and semantic tokens.
+
+The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -jar souther-lsp.jar`. Formatting is also on the command line: `souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted.
+
 ## What Souther guarantees
 
 ### Construction of invalid data is confined

@@ -1,7 +1,0 @@
-.vscode/**
-.vscode-test/**
-**/*.map
-demo.sou
-package-lock.json
-.gitignore
-.vscodeignore

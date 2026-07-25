@@ -4,14 +4,14 @@ import souther.compiler.cst.CstLexer;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The generated TextMate grammar is valid JSON, categorises every lexer keyword, and matches the
@@ -41,10 +41,13 @@ class TmLanguageGeneratorTest {
 
     @Test
     void theCommittedGrammarMatchesTheGenerator() throws Exception {
-        Path committed = Path.of("..", "editors", "vscode", "syntaxes", "souther.tmLanguage.json");
-        assertTrue(Files.exists(committed), "run TmLanguageGenerator to write " + committed);
-        String onDisk = Files.readString(committed, StandardCharsets.UTF_8);
-        assertEquals(TmLanguageGenerator.generate(), onDisk,
+        String committed;
+        try (InputStream in = TmLanguageGenerator.class.getResourceAsStream(
+                TmLanguageGenerator.RESOURCE)) {
+            assertNotNull(in, "run TmLanguageGenerator to write " + TmLanguageGenerator.COMMITTED);
+            committed = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        }
+        assertEquals(TmLanguageGenerator.generate(), committed,
                 "the committed grammar is stale — regenerate it with TmLanguageGenerator");
     }
 

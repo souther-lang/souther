@@ -21,8 +21,24 @@ import java.util.TreeSet;
  * <p>A regex grammar deliberately stops at what the token stream can classify (keywords, operators,
  * literals, comments, stdlib qualifiers). Distinguishing a type name from a value — which in Souther
  * are Japanese identifiers, not capitalised — is left to the LSP's semantic tokens.
+ *
+ * <p>Regenerate the committed grammar with:
+ * <pre>{@code
+ * mvn -q -pl souther-compiler exec:java -Dexec.mainClass=souther.compiler.highlight.TmLanguageGenerator
+ * }</pre>
+ * A release attaches the result so the VS Code extension (souther-lang/souther-vscode) can fetch it
+ * instead of building the compiler.
  */
 public final class TmLanguageGenerator {
+
+    /** The generated grammar is committed here, as a resource of this module, so a release can attach
+     *  it and the editor extension can pick it up without building the compiler. Relative to the
+     *  repository root, which is where {@code mvn exec:java} runs. */
+    public static final String COMMITTED =
+            "souther-compiler/src/main/resources/souther/compiler/highlight/souther.tmLanguage.json";
+
+    /** The same file as a classpath resource, for reading it back. */
+    public static final String RESOURCE = "souther.tmLanguage.json";
 
     /** Declaration keywords — the top-level shapes. */
     private static final Set<String> DECLARATION =
@@ -50,10 +66,10 @@ public final class TmLanguageGenerator {
     private TmLanguageGenerator() {
     }
 
-    /** Writes the grammar to the path given as the first argument. */
+    /** Writes the grammar to the path given as the first argument, defaulting to the committed
+     *  resource. */
     public static void main(String[] args) throws Exception {
-        Path out = Path.of(args.length > 0 ? args[0]
-                : "editors/vscode/syntaxes/souther.tmLanguage.json");
+        Path out = Path.of(args.length > 0 ? args[0] : COMMITTED);
         Files.createDirectories(out.getParent());
         Files.writeString(out, generate());
     }
