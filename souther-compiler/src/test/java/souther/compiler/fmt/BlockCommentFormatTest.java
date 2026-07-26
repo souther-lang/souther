@@ -6,10 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A comment inside a block body survives formatting. {@code block} walked only the block's child
- * nodes, so a comment explaining a step — the one place a body wants one — was dropped on the first
- * format. No example wrote one until a module with multi-step bodies did, and the formatter's own
- * round-trip test over the repository's {@code .sou} files caught it there.
+ * Formatting a body that carries comments, in the shape a real module writes them. Where a comment
+ * may go at all is enumerated by {@link CommentSurvivalTest}; this keeps the two multi-step bodies
+ * that first exposed the problem, because they are what the repository's own `.sou` files look like.
  */
 class BlockCommentFormatTest {
 
