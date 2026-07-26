@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A name that arrives twice says so. Two bounded contexts each exposing {@code Amount} is ordinary,
+ * A name that arrives twice says so. Two bounded contexts each exposing {@code Amount} are ordinary,
  * and the module integrating both used to be told the import "conflicts with a local definition" —
  * one it had never written (issue #101). The two cases are told apart, and the import collision names
  * both modules it came from.
@@ -31,7 +31,7 @@ class CompileImportCollisionTest {
             """;
 
     @Test
-    void twoImportsOfTheSameNameNameBothModules() {
+    void twoImportsOfTheSameNameReportBothModules() {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(A, B, """
                         module probe.c

@@ -746,9 +746,9 @@ public final class Compiler {
 
     /**
      * The name arrived twice. {@code earlier} is the import that already brought it in, or null when
-     * the module defines it itself — the two are different problems and the second is not solvable by
-     * touching the import. Neither has an in-module resolution today (there is no import alias), so
-     * the message's job is to say which one happened.
+     * the module defines it itself. The local case has a way out inside the module: rename the local
+     * definition or drop it. The import-vs-import case has none — there is no import alias — so the
+     * message names both modules and leaves the choice of which one to keep to the module.
      */
     private static CompileException importCollision(String name, Ast.Import imp, Ast.Import earlier) {
         if (earlier == null) {
