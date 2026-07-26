@@ -361,41 +361,6 @@ public final class SpecChecker {
         }
     }
 
-    /**
-     * A behavior may only construct types its own module declares.
-     *
-     * <p>What is decided is that construction goes through declared paths only (ADR-0002): a value of
-     * {@code T} comes from {@code T}'s decoder, from a behavior whose construction set includes it, or
-     * from generated code. That much is the language's guarantee and holds wherever the behavior is.
-     *
-     * <p>That those paths must be in {@code T}'s own module is <em>not</em> a decided rule — no ADR
-     * states it. It is where the compiler has arrived: the generated {@code __construct} is
-     * package-private, so a {@code constructs} naming an imported type compiled and then failed with
-     * an {@code IllegalAccessError} when the behavior ran. Rejecting the declaration turns that into
-     * a compile error (issue #113) and is right either way, because a declaration the runtime cannot
-     * honour should not compile. Whether it should be honoured instead — by emitting a construction
-     * path the declaring module opens — is open (issue #121).
-     *
-     * <p>Which module declares a name is known from the import list, so the clause is answered where
-     * it is written.
-     */
-    static void rejectImportedConstructs(Ast.SpecBehavior spec, Ast.Module module) {
-        for (String constructed : spec.constructs()) {
-            for (Ast.Import imp : module.imports()) {
-                if (!imp.names().contains(constructed)) {
-                    continue;
-                }
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.constructs.imported").title("check.boundary.title")
-                                .at(spec.pos()).args(spec.name(), constructed, imp.module())
-                                .hint("check.constructs.imported.hint").build(),
-                        "`behavior " + spec.name() + "` declares `constructs " + constructed
-                                + "`, but `" + constructed + "` is declared by `" + imp.module()
-                                + "`; a behavior constructs only what its own module declares");
-            }
-        }
-    }
-
     private static boolean refHasTuple(Ast.TypeRef ref) {
         return ref.isTuple() || (ref.arg() != null && refHasTuple(ref.arg()));
     }
@@ -411,7 +376,12 @@ public final class SpecChecker {
             if (d == null || d instanceof Ast.UnitData) {
                 continue;   // unknown names are caught elsewhere; a unit has a generated factory
             }
-            if (!exposeAll && !exposed.contains(c)) {
+            TypeName built = symbols.resolve(c);
+            // What Java needs is a way in: the decoder, which a module publishes by exposing the type.
+            // For a type of another module that is its own `exposing` to answer, not this one's.
+            boolean buildable = symbols.isForeign(built)
+                    ? symbols.isExposed(built) : exposeAll || exposed.contains(c);
+            if (!buildable) {
                 throw CompileException.of(
                         Diagnostic.of("E1305", "e1305.msg").at(spec.pos())
                                 .args(spec.name(), c).hint("e1305.hint").build(),

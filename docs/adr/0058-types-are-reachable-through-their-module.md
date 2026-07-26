@@ -23,7 +23,7 @@ Elm, OCaml and Java all give a name its home before anything else uses it. Elm c
 - A name written inside a declaration is resolved in the module that wrote it, not in the module reading it.
 - A dependency counts however it is written, so a cycle closed by a qualified reference is E1501 like one closed by an `import`.
 
-Qualified form is accepted in type positions and as a `match` arm's case name. It is not accepted in a construction, because construction is closed to the declaring module's paths anyway (ADR-0002): there is nothing a qualified constructor could reach that a bare one could not.
+Qualified form is accepted in type positions and as a `match` arm's case name. A construction expression takes the bare name of an imported type, which is enough to reach it; the qualified form there is not accepted yet.
 
 ## Alternatives considered
 

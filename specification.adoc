@@ -97,6 +97,8 @@ A behavior that merely writes `+T+` as its return type MUST NOT be able to const
 
 A helper `+let+` with no corresponding behavior (<<fn-declaration>>) MAY also construct data. In that case the constructed data MUST appear in the `+constructs+` of the behavior that calls that `+let+`.
 
+The type need not be declared in the same module. A behavior constructs what its `+constructs+` names, and a type another module exposes is built through the same checked entry as any other, so its invariant runs either way. A type a module does not expose cannot be built elsewhere — there is no name for it, and no entry — which is also why arithmetic that would build one is a compile error (<<newtype-arithmetic>>).
+
 [#invariant-on-construct]
 === Invariants are checked on every construction
 
@@ -428,6 +430,8 @@ The `+hashCode+` of a data containing `+Decimal+` is computed after dropping sca
 A single-value newtype over `+Int+` or `+Decimal+` supports `+{plus}+` and `+-+`, and the result stays in the newtype: `+Money {plus} Money+` and `+Money - Money+` are `+Money+`. The operator opens each operand to its wrapped value, computes on the base, and re-wraps the result — so the result's invariant is re-checked at construction, exactly as any other construction is (<<invariant-mvp>>). A subtraction that leaves the invariant (a non-negative `+Money+` going below zero) *aborts* inside the domain (<<violation-destination>>). To make that a business result, guard it with `+require ... else+` (<<require>>); the compiler then confirms the guard discharges the construction (<<invariant-discharge>>).
 
 Operand pairing is the same as comparison (<<newtype-comparison>>): the *same* newtype, or a newtype with a bare literal of its base (`+Money {plus} 100+`, the `+100+` taken as `+Money+`). Two *different* newtypes do not combine — `+Money - Quantity+` is a compile error even though both wrap `+Int+` — and a non-literal value of the wrapped type is not taken implicitly.
+
+Arithmetic builds a value, so it is subject to <<closed-construction>>: a newtype of another module is built through the entry that module opens by exposing it. A value of a type its module does *not* expose can still arrive here — through a field of a data it does expose — and arithmetic on that value is a compile error, since there is no entry to build the result with.
 
 `+*+` and `+/+` *scale* a newtype by a plain number of its base and stay in the newtype (`+Money * 2+`, `+2 * Money+`, `+Money / 2+`) — the dimension is unchanged. The scalar is a bare `+Int+` / `+Decimal+` (literal or variable) of the newtype's base, not itself coerced to the newtype. A product or quotient of *two* newtypes *does* change dimension (`+UnitPrice * Quantity+` is a `+Money+`, not a `+UnitPrice+`), which the language does not model, so `+newtype * newtype+` (and `+Money * Money+`) is a compile error; compute those on `+.value+` and wrap the result explicitly. Only a newtype whose value is *directly* `+Int+` or `+Decimal+` has arithmetic — a newtype over another newtype does not.
 
@@ -2244,9 +2248,9 @@ The generated names are derived from the behavior name (first letter capitalized
 [#jvm-construction-privacy]
 === Preventing exposure of construction authority
 
-A data's constructor is non-public (package-private), and internal construction methods such as `+__construct+` are also non-public. The Java implementation of a behavior with no implementation extends the generated abstract base class (<<java-base-class>>) and constructs failure cases via the base's `+protected+` factories. There is no back door to call a data's constructor, so the implementation may be placed outside the generated package (same-package placement is not required).
+A data's constructor is non-public (package-private): nothing reaches the fields without the invariant. The checked entry `+__construct+` is public for an exposed data and non-public otherwise, so a construction declared in another module (<<closed-construction>>) has the path its declaration names, and a data a module keeps to itself has none. The Java implementation of a behavior with no implementation extends the generated abstract base class (<<java-base-class>>) and constructs failure cases via the base's `+protected+` factories; it may be placed outside the generated package.
 
-What is guaranteed to Java is that no unvalidated value can be created — not that no value can be created. `+decoder()+` is public API (<<jvm-codec>>), so Java may attempt decode at any time. But the invariant is checked there (<<invariant-on-construct>>), and a violation becomes a `+Result+` failure. A unit data ignores input and decodes (<<codec-generation>>), so its `+decoder()+` lets anyone construct it — but a unit data has nothing to validate.
+What is guaranteed to Java is that no unvalidated value can be created — not that no value can be created. `+decoder()+` is public API (<<jvm-codec>>) and `+__construct+` is public for an exposed data, so Java may build one at any time; the invariant is checked on both paths (<<invariant-on-construct>>), a decode violation becoming a `+Result+` failure. A unit data ignores input and decodes (<<codec-generation>>), so its `+decoder()+` lets anyone construct it — but a unit data has nothing to validate.
 
 Reflection, Unsafe, and bytecode manipulation are out of scope for guarantees.
 
