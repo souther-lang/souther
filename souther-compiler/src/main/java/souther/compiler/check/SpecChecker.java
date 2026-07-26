@@ -21,6 +21,46 @@ public final class SpecChecker {
     private SpecChecker() {}
 
     /**
+     * A {@code requires} names injection targets (spec 12.6, 13.2): a behavior with no {@code let},
+     * here or in a module this one imports. Reported where the clause is written, so a behavior that
+     * carries an implementation and one that was never declared are told apart — the body check sees
+     * only a call it cannot type and reports both as an arbitrary JVM call (E1401, issue #96).
+     */
+    static void checkRequiresAreInjectionTargets(Ast.Module module, Map<String, ReqSig> reqSigs,
+                                                 Set<String> importedBehaviors) {
+        Set<String> behaviorNames = new HashSet<>();
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            behaviorNames.add(b.name());
+        }
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            if (!(b instanceof Ast.SpecBehavior spec)) {
+                continue;
+            }
+            for (String req : spec.requires()) {
+                if (reqSigs.containsKey(req)) {
+                    continue;
+                }
+                if (behaviorNames.contains(req) || importedBehaviors.contains(req)) {
+                    throw CompileException.of(
+                            Diagnostic.of("E1607", "e1607.implemented").title("e1607.title")
+                                    .at(spec.pos()).args(spec.name(), req)
+                                    .hint("e1607.implemented.hint").build(),
+                            "`behavior " + spec.name() + "` declares `requires " + req + "`, but `"
+                                    + req + "` carries an implementation, so it is not an injection"
+                                    + " target — compose it with `>->` instead (spec 13.2)");
+                }
+                throw CompileException.of(
+                        Diagnostic.of("E1607", "e1607.unknown").title("e1607.title")
+                                .at(spec.pos()).args(spec.name(), req)
+                                .suggestion(Suggest.candidate(req, reqSigs.keySet()))
+                                .hint("e1607.unknown.hint").build(),
+                        "`behavior " + spec.name() + "` declares `requires " + req + "`, which is not a"
+                                + " behavior in scope" + Suggest.hint(req, reqSigs.keySet()));
+            }
+        }
+    }
+
+    /**
      * An exposed composition ({@code >->}) behavior must declare its output in the {@code exposing}
      * list ({@code exposing ( name : A | B )}, spec 14.5, ADR-0024), and the declaration must match
      * the inferred output exactly. A far-away change that grows the output then fails here, at the

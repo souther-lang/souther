@@ -7,7 +7,6 @@ import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -37,25 +36,20 @@ public final class PipelineSigs {
      */
     public static Map<String, Sig> signatures(Ast.Module module, Map<String, Ast.Def> symbols,
                                               Map<String, Sig> imported) {
-        Set<String> fnNames = new HashSet<>();
-        for (Ast.FnDef fn : module.fns()) {
-            fnNames.add(fn.name());
-        }
         Map<String, Sig> sigs = new HashMap<>(imported);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec) {
-                if (fnNames.contains(spec.name())) {
-                    // implemented: any arity — a multi-input behavior can be a pipeline's first stage (14.1)
-                    List<Type> ins = new ArrayList<>();
-                    for (Ast.Param p : spec.params()) {
-                        ins.add(TypeOps.successType(p.type(), symbols));
-                    }
-                    sigs.put(spec.name(), new Sig(ins, TypeOps.successType(spec.ret(), symbols)));
-                } else if (spec.params().size() == 1) {
-                    // injected: only a single-input one can be a stage; a zero-arg one cannot (14.1)
-                    sigs.put(spec.name(), new Sig(TypeOps.successType(spec.params().get(0).type(), symbols),
-                            TypeOps.successType(spec.ret(), symbols)));
+                // A behavior's signature is what it declares, whether a `let` implements it here or the
+                // Java side is injected (spec 13.2): both are named the same way from a `>->` or a
+                // `requires`, and both need the output union's generated interface. Where the arity
+                // rules out a use — every stage after the first takes one input (14.1) — the composition
+                // says so; leaving the name out of this map instead reports it as one that was never
+                // declared (issue #96).
+                List<Type> ins = new ArrayList<>();
+                for (Ast.Param p : spec.params()) {
+                    ins.add(TypeOps.successType(p.type(), symbols));
                 }
+                sigs.put(spec.name(), new Sig(ins, TypeOps.successType(spec.ret(), symbols)));
             }
         }
         Map<String, List<String>> pipeStages = pipelineStages(module);

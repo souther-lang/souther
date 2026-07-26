@@ -1170,7 +1170,9 @@ behavior 事前承認する : (申請: 事前承認待ち, 承認者ID: 従業�
     constructs 事前承認済み, 承認権限なし
 ----
 
-What is written is the name of a behavior with no implementation (<<injected-behavior>>). Write it if the `+let+` uses that name. Even when used indirectly by passing it to a helper `+let+`, the one passing is you, so you write it.
+What is written is the name of a behavior with no implementation (<<injected-behavior>>), declared in this module or imported from another (<<module>>). Write it if the `+let+` uses that name. Even when used indirectly by passing it to a helper `+let+`, the one passing is you, so you write it.
+
+A name that is not an injection target is rejected where the clause is written (<<e1607>>): a behavior with an implementation is composed with `+>->+`, not injected, and a name that was never declared is not a dependency at all.
 
 Only a simple behavior with a `+let+` may have `+requires+`. A behavior with no implementation does not write it: it is the leaf of the dependency, and its name being listed is itself the statement of dependency. A `+>->+` composition does not write it either: it is decided by the union over stages, readable from the stages (<<composition-with-requirements>>).
 
@@ -1342,7 +1344,7 @@ Which behaviors get a `+let+` and which are injected is not decided mechanically
 [#java-base-class]
 === Java base-class generation
 
-A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*, and for each unit data listed in `+constructs+` has a `+protected+` factory that constructs it. Whether it takes one input or several is orthogonal to injection, exactly as for a `+let+`-implemented behavior (<<jvm-behavior>>): a *single* input extends the unary `+Behavior<In, Out>+` (so it still composes with `+>->+`) and inherits its `+apply+`; *two or more* inputs make it a standalone abstract class with a typed multi-argument `+apply(A, B, …)+` and no `+Behavior+` supertype (it takes more than one argument, and `+>->+` passes a single value, so it is not a `+>->+` stage). A Java implementation overrides that typed `+apply+` directly, so several inputs are passed as arguments rather than bundled into a record. A collection parameter keeps its `+java.util.List+` / `+Map+` / `+Set+` (or the runtime `+Option+`) type with its element type, not `+Object+`.
+A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*, and for each unit data listed in `+constructs+` has a `+protected+` factory that constructs it. Whether it takes one input or several is orthogonal to injection, exactly as for a `+let+`-implemented behavior (<<jvm-behavior>>): a *single* input extends the unary `+Behavior<In, Out>+` (so it still composes with `+>->+`) and inherits its `+apply+`; *two or more* inputs make it a standalone abstract class with a typed multi-argument `+apply(A, B, …)+` and no `+Behavior+` supertype (it takes more than one argument, and `+>->+` passes a single value, so it cannot follow an arrow; it can still be a pipeline's first stage, which receives the pipeline's own arguments — <<sequential-composition>>). A Java implementation overrides that typed `+apply+` directly, so several inputs are passed as arguments rather than bundled into a record. A collection parameter keeps its `+java.util.List+` / `+Map+` / `+Set+` (or the runtime `+Option+`) type with its element type, not `+Object+`.
 
 [,text]
 ----
@@ -1451,7 +1453,7 @@ behavior handle = findMember >-> toResponse
 
 The stage following `+>->+` is single-input (a 1-argument behavior). `+>->+` passes one value to the next stage, so the receiver cannot take two or more. To place a multi-argument behavior downstream, call it inline in the implementation or receive it with `+match+` instead of making it a stage.
 
-*The first stage is not restricted.* The first receives the pipeline's own arguments, so any number is fine; the pipeline receives them as is.
+*The first stage is not restricted.* The first receives the pipeline's own arguments, so any number is fine; the pipeline receives them as is. A behavior subject to injection is a first stage on the same terms as an implemented one (<<java-base-class>>): the pipeline inherits it as a requirement and calls it with those arguments.
 
 [,text]
 ----
@@ -2450,6 +2452,19 @@ write `exposing ( 注文を確定する : 確定注文 | 在庫不足 )`
 ----
 
 A `+>->+` composition exposed with `+exposing+` requires an output signature (<<declared-composition-output>>). Its absence is this error. Writing a signature in `+exposing+` for a non-composition behavior is also E1605, since the type is fixed at the definition.
+
+[#e1607]
+=== requires does not name an injection target
+
+[,text]
+----
+error E1607:
+`behavior 出荷する` declares `requires 引き当てる`, but `引き当てる` carries
+an implementation, so it is not an injection target.
+Compose `引き当てる` with `>->`, or remove its `let` so it becomes an injection target.
+----
+
+`+requires+` names a behavior with no `+let+`, declared here or imported (<<requires>>). A name carrying an implementation is E1607, and so is a name that is no behavior in scope — reported at the clause, where it was written.
 
 [#e1305]
 === An injected behavior constructs an uncreatable data

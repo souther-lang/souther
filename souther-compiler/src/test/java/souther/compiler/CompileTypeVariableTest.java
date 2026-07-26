@@ -12,6 +12,7 @@ import souther.compiler.frontend.CstFrontend;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -30,7 +31,7 @@ class CompileTypeVariableTest {
         Ast.Module m = Deriver.derive(CstFrontend.parse(src));
         Ast.Module lowered = Lower.run(m);
         TypeChecker.Checked checked =
-                TypeChecker.checkOrThrow(m, TypeChecker.symbols(m), Map.of(), lowered);
+                TypeChecker.checkOrThrow(m, TypeChecker.symbols(m), Map.of(), Set.of(), lowered);
         return Backend.generate(lowered, checked);
     }
 

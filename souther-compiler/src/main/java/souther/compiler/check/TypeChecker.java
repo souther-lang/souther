@@ -27,7 +27,7 @@ public final class TypeChecker {
 
     /** Type-checks a self-contained module against its own symbols, collecting every error. */
     public static List<Diagnostic> check(Ast.Module module) {
-        return check(module, symbols(module), Map.of(), Lower.run(module));
+        return check(module, symbols(module), Map.of(), Set.of(), Lower.run(module));
     }
 
     /**
@@ -47,14 +47,16 @@ public final class TypeChecker {
     /**
      * Type-checks {@code module} and, if any error was found, throws the first — the fail-fast entry
      * point for the CLI and the annotation processor, which stop at the first error. The recovering
-     * {@link #check(Ast.Module, Map, Map, Ast.Module)} collects every error for the LSP instead.
+     * {@link #check(Ast.Module, Map, Map, Set, Ast.Module)} collects every error for the LSP instead.
      */
     public static Checked checkOrThrow(Ast.Module module, Map<String, Ast.Def> symbols,
-                                                Map<String, Sig> importedSigs, Ast.Module lowered) {
+                                                Map<String, Sig> importedSigs, Set<String> importedInjected,
+                                                Ast.Module lowered) {
         List<Diagnostic> warnings = new ArrayList<>();
         Elaborated elaborated = new Elaborated();
         List<CompileException> errors =
-                checkCollecting(module, symbols, importedSigs, lowered, warnings, elaborated);
+                checkCollecting(module, symbols, importedSigs, importedInjected, lowered, warnings,
+                        elaborated);
         if (!errors.isEmpty()) {
             throw errors.get(0);   // the original exception, so its rendered message is unchanged
         }
@@ -65,11 +67,13 @@ public final class TypeChecker {
      * originating exceptions in the order they were found (so the first is the one the old fail-fast
      * check would have thrown), deduped. */
     static List<CompileException> checkCollecting(Ast.Module module, Map<String, Ast.Def> symbols,
-                                                          Map<String, Sig> importedSigs, Ast.Module lowered,
+                                                          Map<String, Sig> importedSigs,
+                                                          Set<String> importedInjected, Ast.Module lowered,
                                                           List<Diagnostic> warnings, Elaborated elaborated) {
         List<CompileException> errors = new ArrayList<>();
         try {
-            checkRecovering(module, symbols, importedSigs, lowered, errors, warnings, elaborated);
+            checkRecovering(module, symbols, importedSigs, importedInjected, lowered, errors, warnings,
+                    elaborated);
         } catch (CompileException e) {
             // A structural / prerequisite check (a duplicate name, an `exposing` violation, a module
             // cycle) is fail-fast: it can leave later phases without the state they read, so its first
@@ -119,8 +123,9 @@ public final class TypeChecker {
      * un-inlined helper calls they inspect.
      */
     public static List<Diagnostic> check(Ast.Module module, Map<String, Ast.Def> symbols,
-                             Map<String, Sig> importedSigs, Ast.Module lowered) {
-        return checkAndElaborate(module, symbols, importedSigs, lowered).diagnostics();
+                             Map<String, Sig> importedSigs, Set<String> importedInjected,
+                             Ast.Module lowered) {
+        return checkAndElaborate(module, symbols, importedSigs, importedInjected, lowered).diagnostics();
     }
 
     /** The diagnostics of a recovering check together with what it elaborated — the entry point for a
@@ -128,12 +133,13 @@ public final class TypeChecker {
     public record CheckResult(List<Diagnostic> diagnostics, Checked checked) {}
 
     public static CheckResult checkAndElaborate(Ast.Module module, Map<String, Ast.Def> symbols,
-                                                Map<String, Sig> importedSigs, Ast.Module lowered) {
+                                                Map<String, Sig> importedSigs, Set<String> importedInjected,
+                                                Ast.Module lowered) {
         List<Diagnostic> out = new ArrayList<>();
         List<Diagnostic> warnings = new ArrayList<>();
         Elaborated elaborated = new Elaborated();
-        for (CompileException e : checkCollecting(module, symbols, importedSigs, lowered, warnings,
-                elaborated)) {
+        for (CompileException e : checkCollecting(module, symbols, importedSigs, importedInjected, lowered,
+                warnings, elaborated)) {
             out.add(e.diagnostic());
         }
         out.addAll(warnings);
@@ -148,7 +154,8 @@ public final class TypeChecker {
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
     static void checkRecovering(Ast.Module module, Map<String, Ast.Def> symbols,
-                                        Map<String, Sig> importedSigs, Ast.Module lowered,
+                                        Map<String, Sig> importedSigs, Set<String> importedInjected,
+                                        Ast.Module lowered,
                                         List<CompileException> errors, List<Diagnostic> warnings,
                                         Elaborated elaborated) {
         Map<String, Ast.Expr> loweredBodies = new HashMap<>();
@@ -280,6 +287,18 @@ public final class TypeChecker {
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
             }
         }
+        // An imported injection target is one here too (spec 14.3): the module that names it injects and
+        // binds it, whether it named it as a `>->` stage or as a `requires` dependency. Its signature
+        // comes from the module that declared it; a local behavior of the same name wins.
+        for (String name : importedInjected) {
+            Sig sig = importedSigs.get(name);
+            if (sig != null) {
+                reqSigs.putIfAbsent(name, new ReqSig(sig.ins(), sig.out()));
+            }
+        }
+        // Fail-fast with the reqSigs it reads: a `requires` that named something else leaves the call
+        // untypeable, and the body check would report it as a call to an unknown name (E1401).
+        SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, importedSigs.keySet());
         // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {
