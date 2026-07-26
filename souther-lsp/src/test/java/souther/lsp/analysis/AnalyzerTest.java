@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AnalyzerTest {
@@ -450,5 +451,22 @@ class AnalyzerTest {
         List<LspDiagnostic> diags = analyzer.diagnostics(src);
         assertEquals(1, diags.size(), diags.toString());
         assertEquals("E1905", diags.get(0).code());
+    }
+
+    @Test
+    void everyFailingInlineExampleRowIsSquiggled() {
+        // the single-file path used to keep only the first failure the compile threw, so a second
+        // failing row was left unmarked in the editor (issue #98)
+        String src = "module demo\n"
+                + "data M = { n: Int }\n"
+                + "behavior f : (x: M) -> M\n"
+                + "let f (x) = x\n"
+                + "example f\n"
+                + "  | (M { n = 1 }) -> M { n = 2 }\n"
+                + "  | (M { n = 3 }) -> M { n = 4 }\n";
+        List<LspDiagnostic> diags = analyzer.diagnostics(src);
+        assertEquals(2, diags.size(), diags.toString());
+        assertNotEquals(diags.get(0).range().start().line(), diags.get(1).range().start().line(),
+                "each marks its own row: " + diags);
     }
 }

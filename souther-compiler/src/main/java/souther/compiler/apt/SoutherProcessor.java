@@ -85,7 +85,9 @@ public final class SoutherProcessor extends AbstractProcessor {
                 }
             }
         } catch (CompileException e) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, render(e, sources));
+            for (String reported : render(e, sources)) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, reported);
+            }
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "souther: io error: " + e.getMessage());
         }
@@ -95,18 +97,23 @@ public final class SoutherProcessor extends AbstractProcessor {
     /**
      * The compile error as the CLI would print it: an Elm-style snippet in the chosen locale, with
      * no color since this goes to a build log. The snippet comes from the source the compiler names
-     * — the only one, or the module it was working on when a module set is linked.
+     * — the only one, or the module it was working on when a module set is linked. An error that
+     * carries several diagnostics — every failing {@code example} row — is reported once per row.
      */
-    private String render(CompileException e, List<Source> sources) {
-        souther.compiler.diag.Diagnostic d = e.diagnostic();
-        if (d == null) {
-            return "souther: " + e.getMessage();   // not yet structured
+    private List<String> render(CompileException e, List<Source> sources) {
+        if (e.diagnostic() == null) {
+            return List.of("souther: " + e.getMessage());   // not yet structured
         }
         Source origin = originOf(e, sources);
         SourceContext src = origin == null ? null
                 : new SourceContext(origin.path().getFileName().toString(), origin.text());
         Locale locale = Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
-        return new HumanRenderer(false).render(d, src, locale);
+        HumanRenderer renderer = new HumanRenderer(false);
+        List<String> reported = new ArrayList<>();
+        for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
+            reported.add(renderer.render(d, src, locale));
+        }
+        return reported;
     }
 
     /** The source the error came from, or null when it names none (so no line is quoted). */

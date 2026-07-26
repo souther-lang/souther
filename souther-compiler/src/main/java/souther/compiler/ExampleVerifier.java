@@ -75,21 +75,15 @@ public final class ExampleVerifier {
         if (failures.isEmpty()) {
             return;
         }
-        // The diagnostic infrastructure carries one diagnostic per exception; report the first and
-        // summarize the rest in its hint so a single build surfaces every failing example.
+        // Every failing row is reported with its own position and reason. Collapsing them into one
+        // count-only diagnostic left the author with a number and no cause, and forced a row to be
+        // commented out to see the next one (issue #98).
         Diagnostic first = failures.get(0);
         if (failures.size() == 1) {
             throw CompileException.of(first, legacyOf(first));
         }
-        Diagnostic aggregate = Diagnostic.of(first.code(), "check.example.failed.more")
-                .title("check.example.title")
-                .at(first.region())
-                .args(failures.size())
-                .hint("check.example.failed.more.hint", failures.size() - 1)
-                .diff(first.diff() == null ? "" : first.diff().actualType(),
-                        first.diff() == null ? "" : first.diff().expectedType())
-                .build();
-        throw CompileException.of(aggregate, failures.size() + " examples do not hold; " + legacyOf(first));
+        throw CompileException.ofAll(failures,
+                failures.size() + " examples do not hold; " + legacyOf(first));
     }
 
     /** A one-line message for a failing example, used where only the legacy string is shown (the LSP

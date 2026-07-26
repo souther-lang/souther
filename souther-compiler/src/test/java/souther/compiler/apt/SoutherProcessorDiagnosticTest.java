@@ -95,6 +95,30 @@ class SoutherProcessorDiagnosticTest {
         assertTrue(reported.contains("^"), reported);
     }
 
+    @Test
+    void everyFailingExampleRowIsReportedWithItsOwnReason(@TempDir Path dir) throws IOException {
+        Path source = write(dir, "member.sou", """
+                module demo
+                import String ( length )
+                data 従業員ID = String
+                    invariant length(value) > 0
+                data 名札 = { id: 従業員ID }
+                behavior 作る : (id: 従業員ID) -> 名札
+                    constructs 名札
+                let 作る (id) = 名札 { id = id }
+                example 作る
+                  | "first" : (従業員ID("")) -> 名札 { id = 従業員ID("x") }
+                  | "second" : (従業員ID("")) -> 名札 { id = 従業員ID("y") }
+                """);
+
+        String reported = compile(dir, source, "en");
+
+        assertTrue(reported.contains("member.sou:10:"), reported);   // the first failing row
+        assertTrue(reported.contains("member.sou:11:"), reported);   // and the second
+        assertFalse(reported.contains("examples do not hold"),
+                "a count does not stand in for the reason: " + reported);
+    }
+
     /** Runs javac over one throwaway Java file with the processor pointed at {@code source}, and
      *  returns what the processor reported. The compilation must fail. */
     private static String compile(Path dir, Path source, String lang) throws IOException {

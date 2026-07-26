@@ -209,10 +209,10 @@ public final class Main {
     }
 
     /** Renders a compile error: an Elm-style snippet (or JSON) in the chosen locale, or the legacy
-     * one-line form when the error is not yet structured. */
+     * one-line form when the error is not yet structured. An error that carries several diagnostics
+     * — every failing {@code example} row — prints each, so none of the reasons is lost. */
     private static void reportCompileError(CompileException e, Path source, RenderOptions render) {
-        Diagnostic d = e.diagnostic();
-        if (d == null) {
+        if (e.diagnostic() == null) {
             System.err.println(e.getMessage());
             return;
         }
@@ -227,7 +227,9 @@ public final class Main {
         Locale locale = Messages.resolveLocale(render.lang);
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
-        System.err.println(renderer.render(d, src, locale));
+        for (Diagnostic d : e.diagnostics()) {
+            System.err.println(renderer.render(d, src, locale));
+        }
     }
 
     /** The first non-option argument of {@code run} — the source file, for the error snippet. */
