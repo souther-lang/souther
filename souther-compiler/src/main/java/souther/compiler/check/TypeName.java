@@ -4,7 +4,7 @@ package souther.compiler.check;
  * A data type's identity: the module that declares it and the name written there. Two modules may
  * both declare {@code 金額}; those are different types, and only the pair tells them apart.
  *
- * <p>Every {@link Type.Ref} carries one of these, so a name that reached the checker has already
+ * <p>Every {@link Type.Ref} carries one oでf these, so a name that reached the checker has already
  * been resolved to its declaring module. What the source wrote — a bare {@code 金額}, a qualified
  * {@code probe.b.金額}, or an alias {@code B.金額} — is settled during resolution and does not
  * survive into the type.

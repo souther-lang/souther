@@ -284,6 +284,8 @@ Both parts of an `+import+` are optional: `+import example.pricing as Pricing+` 
 
 A dependency is a dependency however it is written, so a cycle closed by a qualified reference is the same compile error (<<e1501>>) as one closed by an `+import+`.
 
+`+exposing+` lists what a module declares and does not re-export a name it imported (ADR-0058). A module downstream of an integration module names an upstream type through the module that declares it, so the integration module translates a type it consumes rather than republishing it.
+
 [#reserved-words]
 == Reserved words
 
