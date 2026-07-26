@@ -633,12 +633,26 @@ public final class ExampleVerifier {
                 || v instanceof java.time.LocalDateTime;
     }
 
+    /**
+     * The generated {@code decoder()} / {@code encoder()} of a type, reached whether or not the type
+     * is exposed. {@code exposing} decides what leaves the module, and an {@code example} does not
+     * leave it: the fixture is built and the result read back inside the module being compiled, so a
+     * module-local type has to be readable here. Its generated class is package-private, which
+     * {@link Class#getMethod} cannot reach from this classloader, so the declared method is taken and
+     * opened.
+     */
+    private static Object staticCodec(Class<?> c, String name) throws ReflectiveOperationException {
+        java.lang.reflect.Method m = c.getDeclaredMethod(name);
+        m.setAccessible(true);
+        return m.invoke(null);
+    }
+
     /** {@code result} through its class's derived {@code encoder()}, or null when it has none. */
     private Object encodedOrNull(Object result, String name) {
         try {
             String pkg = importedPackages.getOrDefault(name, module.name());
             Class<?> c = loader.loadClass(pkg + "." + name);
-            Object encoder = c.getMethod("encoder").invoke(null);
+            Object encoder = staticCodec(c, "encoder");
             return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
                     .invoke(encoder, result);
         } catch (ReflectiveOperationException | RuntimeException e) {
@@ -796,7 +810,24 @@ public final class ExampleVerifier {
                 && c.args().get(0) instanceof Ast.StringLit lit) {
             return CallElaborator.parseTemporal(base, lit.value(), c.pos());
         }
-        return raw(c.args().get(0));
+        return adjacentlyTagged(c.fn(), raw(c.args().get(0)));
+    }
+
+    /**
+     * A newtype case of a sum decodes from the adjacent form its sum's decoder reads — the inner value
+     * under {@code value}, next to the discriminator (spec 10.3) — while a fixture names the case the
+     * way the domain constructs it, {@code アクティベート済み(メールアドレス("a@example.com"))}. Wrap it
+     * here, as {@link #record} does for a product case and {@link #unitInput} for a unit one; a newtype
+     * that is nobody's case is its bare inner value, unchanged.
+     */
+    private Object adjacentlyTagged(String caseName, Object inner) {
+        Map<String, Object> tagged = new LinkedHashMap<>();
+        tagged(caseName, tagged);
+        if (tagged.isEmpty()) {
+            return inner;   // not a case of any sum: the newtype's own form is its inner value
+        }
+        tagged.put("value", inner);
+        return tagged;
     }
 
     private Object record(Ast.NewData nd) {
@@ -1005,7 +1036,7 @@ public final class ExampleVerifier {
             String pkg = importedPackages.getOrDefault(ref.name(), module.name());
             try {
                 Class<?> c = loader.loadClass(pkg + "." + ref.name());
-                return (Decoder<Object, ?>) c.getMethod("decoder").invoke(null);
+                return (Decoder<Object, ?>) staticCodec(c, "decoder");
             } catch (ReflectiveOperationException e) {
                 throw new FixtureException("no decoder for `" + ref.name() + "`");
             }
@@ -1109,6 +1140,16 @@ public final class ExampleVerifier {
         }
     }
 
+    /** The {@code $Impl}'s constructor, opened. A behavior its module does not expose generates a
+     * package-private class, and an {@code example} runs inside the module rather than across its
+     * boundary, so exposure does not decide whether it can be evaluated. */
+    private static java.lang.reflect.Constructor<?> openCtor(Class<?> c, Class<?>... params)
+            throws ReflectiveOperationException {
+        java.lang.reflect.Constructor<?> ctor = c.getDeclaredConstructor(params);
+        ctor.setAccessible(true);
+        return ctor;
+    }
+
     private Object invokeNow(Ast.SpecBehavior spec, Object[] args, Object[] fakes) {
         // The public name is now an interface; the fields, constructor and erased apply live on its
         // $Impl (spec 19.8). Instantiate and call apply on the $Impl.
@@ -1117,7 +1158,7 @@ public final class ExampleVerifier {
             Class<?> c = loader.loadClass(className);
             Object instance;
             if (spec.requires().isEmpty()) {
-                instance = c.getConstructor().newInstance();
+                instance = openCtor(c).newInstance();
             } else {
                 // the injecting constructor takes one param per requires: the unary Behavior for a
                 // single-input dep (a Proxy), or the dep's own base class for a multi-input dep (a
@@ -1129,11 +1170,13 @@ public final class ExampleVerifier {
                             ? behaviorIface
                             : fakes[i].getClass().getSuperclass();
                 }
-                instance = c.getConstructor(ctorParams).newInstance(fakes);
+                instance = openCtor(c, ctorParams).newInstance(fakes);
             }
             Class<?>[] paramTypes = new Class<?>[args.length];
             java.util.Arrays.fill(paramTypes, Object.class);
-            return c.getMethod("apply", paramTypes).invoke(instance, args);
+            java.lang.reflect.Method apply = c.getDeclaredMethod("apply", paramTypes);
+            apply.setAccessible(true);
+            return apply.invoke(instance, args);
         } catch (java.lang.reflect.InvocationTargetException ite) {
             Throwable cause = ite.getCause();
             if (cause instanceof FakeMissException fm) {
