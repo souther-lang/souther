@@ -1,8 +1,10 @@
 package souther.runtime;
 
 import java.util.AbstractSet;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -47,11 +49,19 @@ public final class PersistentHashSet<E> extends AbstractSet<E> {
         if (src instanceof PersistentHashSet<?> phs) {
             return (PersistentHashSet<E>) phs;
         }
-        PersistentHashSet<E> out = empty();
-        for (E e : src) {
-            out = out.with(e);
+        return build(src.iterator());
+    }
+
+    /** Drains {@code elements} into a set in one pass, through the backing map's bulk builder: the
+     *  trie never leaves this method, so its nodes are filled in place rather than cloned per
+     *  element. Every set operation that produces a fresh set goes through here. */
+    private static <E> PersistentHashSet<E> build(java.util.Iterator<? extends E> elements) {
+        PersistentHashMap.Builder<E, Object> b = new PersistentHashMap.Builder<>();
+        while (elements.hasNext()) {
+            b.put(elements.next(), PRESENT);
         }
-        return out;
+        PersistentHashMap<E, Object> m = b.build();
+        return m.isEmpty() ? empty() : new PersistentHashSet<>(m);
     }
 
     /** This set with {@code value} added (unchanged when already present). */
@@ -85,34 +95,44 @@ public final class PersistentHashSet<E> extends AbstractSet<E> {
     public static <E> PersistentHashSet<E> union(Set<? extends E> a, Set<? extends E> b) {
         Set<? extends E> larger = a.size() >= b.size() ? a : b;
         Set<? extends E> smaller = a.size() >= b.size() ? b : a;
-        PersistentHashSet<E> out = from(larger);
-        for (E e : smaller) {
-            out = out.with(e);
+        if (smaller.isEmpty()) {
+            return from(larger);
         }
-        return out;
+        PersistentHashMap.Builder<E, Object> out = new PersistentHashMap.Builder<>();
+        for (E e : larger) {
+            out.put(e, PRESENT);
+        }
+        for (E e : smaller) {
+            out.put(e, PRESENT);
+        }
+        PersistentHashMap<E, Object> m = out.build();
+        return m.isEmpty() ? empty() : new PersistentHashSet<>(m);
     }
 
     /** The elements in both {@code a} and {@code b} (scans the smaller). */
     public static <E> PersistentHashSet<E> intersect(Set<? extends E> a, Set<? extends E> b) {
         Set<?> larger = a.size() >= b.size() ? a : b;
         Set<? extends E> smaller = a.size() >= b.size() ? b : a;
-        PersistentHashSet<E> out = empty();
+        List<E> kept = new ArrayList<>();
         for (E e : smaller) {
             if (larger.contains(e)) {
-                out = out.with(e);
+                kept.add(e);
             }
         }
-        return out;
+        return kept.isEmpty() ? empty() : build(kept.iterator());
     }
 
     /** The elements of {@code a} that are not in {@code b}. */
     public static <E> PersistentHashSet<E> difference(Set<? extends E> a, Set<? extends E> b) {
-        PersistentHashSet<E> out = from(a);
-        for (Object e : b) {
-            @SuppressWarnings("unchecked")
-            E el = (E) e;
-            out = out.without(el);
+        if (b.isEmpty()) {
+            return from(a);
         }
-        return out;
+        List<E> kept = new ArrayList<>();
+        for (E e : a) {
+            if (!b.contains(e)) {
+                kept.add(e);
+            }
+        }
+        return kept.isEmpty() ? empty() : build(kept.iterator());
     }
 }

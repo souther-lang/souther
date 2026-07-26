@@ -66,11 +66,11 @@ public final class Maps {
      *  with the same key. */
     @SuppressWarnings("unchecked")
     public static <K, V> Map<K, V> fromList(List<Object[]> entries) {
-        PersistentHashMap<K, V> out = PersistentHashMap.empty();
+        PersistentHashMap.Builder<K, V> out = new PersistentHashMap.Builder<>();
         for (Object[] e : entries) {
-            out = out.assoc((K) e[0], (V) e[1]);
+            out.put((K) e[0], (V) e[1]);
         }
-        return out;
+        return out.build();
     }
 
     /** {@code Some(value)} when {@code key} is present, else {@code None}. A Souther map never stores a
@@ -97,11 +97,11 @@ public final class Maps {
      *  The encoder uses it to render a {@code Map<商品ID, V>}'s keys bare (each key's {@code value})
      *  before the boundary map encoder writes a {@code String}-keyed object. */
     public static <K, V> Map<Object, V> mapKeys(Map<K, V> m, java.util.function.Function<K, ?> keyFn) {
-        PersistentHashMap<Object, V> out = PersistentHashMap.empty();
+        PersistentHashMap.Builder<Object, V> out = new PersistentHashMap.Builder<>();
         for (Map.Entry<K, V> e : m.entrySet()) {
-            out = out.assoc(keyFn.apply(e.getKey()), e.getValue());
+            out.put(keyFn.apply(e.getKey()), e.getValue());
         }
-        return out;
+        return out.build();
     }
 
     /** {@link #mapKeys} with the key function first, so a lambda can capture it and take the map per

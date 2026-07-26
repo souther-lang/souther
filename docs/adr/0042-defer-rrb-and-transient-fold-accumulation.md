@@ -77,6 +77,8 @@ stays deferred on the reasoning above.
 
 - ADR-0060 (the claimed tail: the runtime-side half of the accumulation cost, taken once the
   workload this ADR asked for existed)
+- ADR-0061 (why the same treatment does not reach `Map`/`Set`, and what a bulk builder does reach
+  instead)
 - ADR-0028 (the stdlib is Souther over an intrinsic kernel; the fold path this ADR chooses not
   to further optimize)
 - ADR-0051 (`fold` is a recursive helper, not a privileged loop)
