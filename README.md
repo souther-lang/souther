@@ -94,6 +94,24 @@ Map<String, byte[]> classes = Compiler.compile(source);
 Map<String, byte[]> linked = Compiler.compileModules(List.of(employeeSource, tripSource));
 ```
 
+### Compact object headers suit the shape of a domain model
+
+A Souther model is many small immutable values — a newtype per identifier and per amount, a data per state. On JDK 25 the application running the generated code can take four bytes off every object header with `-XX:+UseCompactObjectHeaders` (JEP 519, production-ready and off by default). It is the deploying application's flag, not Souther's, and it needs no rebuild: the generated `.class` files stay at Java 21.
+
+Four bytes off a header turns into eight bytes off an allocation when it crosses the eight-byte alignment boundary, and into nothing when it does not — so the gain is uneven and worth measuring rather than assuming. Bytes actually allocated per instance, on GraalVM 25.0.3 (arm64):
+
+| value | default | compact |
+| --- | --- | --- |
+| a newtype over `Int` (one `long` field) | 24 | 16 |
+| a data with two fields | 24 | 16 |
+| a boxed `Long` — one element of a `List<Int>` | 24 | 16 |
+| a newtype over `String` (one reference) | 16 | 16 |
+| the 32-slot block a `List` grows in | 144 | 144 |
+
+End to end, a behavior building a 1000-element `List<Int>` through `List.map` goes from 66.1 to 57.8 bytes per element. A pure `PersistentVector.append` is unchanged at 50, because the vector's own size does not cross a boundary.
+
+The compiler suite and every example pass under the flag (`mvn test -DargLine="-XX:+UseCompactObjectHeaders"`), including the Spring Boot and jOOQ boundaries.
+
 ## Editor support
 
 The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/souther-lang/souther-vscode) and is published to the Visual Studio Marketplace and Open VSX. It bundles the language server and fetches a Java 25 runtime by itself when the machine does not already have one, so installing it and opening a `.sou` file is enough. It gives diagnostics, the document outline, hover, go-to-definition, find-references, rename, completion, quick-fix code actions, formatting, and semantic tokens.
