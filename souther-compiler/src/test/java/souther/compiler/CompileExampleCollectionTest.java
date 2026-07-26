@@ -99,6 +99,28 @@ class CompileExampleCollectionTest {
     }
 
     @Test
+    void everyBadKeyOfANewtypeKeyedMapIsReported() {
+        // the derived decoder's rekey helper merges the failures of every key; the one built here
+        // does the same, so a fixture with two bad keys names both
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Sku = String
+                    invariant String.matches("[A-Z]-[0-9]+", value)
+                data Level = { n: Int }
+
+                behavior count : (stock: Map<Sku, Int>) -> Level
+                    constructs Level
+                let count (stock) = Level { n = Map.size(stock) }
+
+                example count
+                    | "two bad keys" : ([ (Sku("a"), 1), (Sku("b"), 2) ]) -> Level { n = 2 }
+                """));
+        assertEquals("E1903", e.code(), e.getMessage());
+        assertTrue(e.getMessage().contains("a: ") && e.getMessage().contains("b: "),
+                "both keys are reported, each named: " + e.getMessage());
+    }
+
+    @Test
     void aNestedCollectionArgumentIsExampled() {
         Compiler.compile("""
                 module demo

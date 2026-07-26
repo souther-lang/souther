@@ -12,6 +12,7 @@ import souther.compiler.diag.SourcePos;
 import souther.runtime.Sets;
 
 import net.unit8.raoh.Err;
+import net.unit8.raoh.Issues;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
@@ -965,8 +966,14 @@ public final class ExampleVerifier {
         if (result instanceof Ok<?> ok) {
             return ok.value();
         }
+        // Name where each failure landed. A decoder reports at a path, and a fixture that breaks the
+        // same rule twice — two keys of a newtype-keyed map, two elements of a list — otherwise reads
+        // as one message repeated, with nothing to say which value it is about.
         String detail = ((Err<?>) result).issues().asList().stream()
-                .map(net.unit8.raoh.Issue::message)
+                .map(issue -> {
+                    String at = String.join(".", issue.path().segments());
+                    return at.isEmpty() ? issue.message() : at + ": " + issue.message();
+                })
                 .collect(java.util.stream.Collectors.joining("; "));
         throw new FixtureException(detail);
     }
@@ -1032,19 +1039,22 @@ public final class ExampleVerifier {
      * A map whose keys are a newtype ({@code Map<商品ID, Int>}, ADR-0040): the values decode first, as
      * the derived decoder does, then each key is built through its own type — so the key's invariant
      * runs and a fixture that breaks it is reported instead of reaching the behavior as a bare string.
+     * Every key is tried and its failures merged, as the derived decoder's rekey helper does, so a
+     * fixture with two bad keys names both rather than stopping at the first.
      */
     private Decoder<Object, ?> rekeyed(Decoder<Object, ?> values, Type.Ref key) {
         Decoder<Object, ?> keyDecoder = decoderFor(key);
         return values.flatMapWithPath((decoded, path) -> {
             Map<Object, Object> out = new LinkedHashMap<>();
+            Issues issues = Issues.EMPTY;
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) decoded).entrySet()) {
                 Result<?> k = keyDecoder.decode(entry.getKey(), path.append(String.valueOf(entry.getKey())));
-                if (!(k instanceof Ok<?> ok)) {
-                    return (Result<Object>) k;
+                switch (k) {
+                    case Ok<?> ok -> out.put(ok.value(), entry.getValue());
+                    case Err<?> err -> issues = issues.merge(err.issues());
                 }
-                out.put(ok.value(), entry.getValue());
             }
-            return Result.ok(out);
+            return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
         });
     }
 
