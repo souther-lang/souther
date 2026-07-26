@@ -48,10 +48,12 @@
             <groupId>net.unit8.raoh</groupId>
             <artifactId>raoh</artifactId>
         </dependency>
+        <!-- raoh-json: the `souther run` input is JSON, so it decodes with the JSON source: the
+             same decoders the boundary reads JSON with, where a temporal is a parsed string rather
+             than a java.time value (issue #119). -->
         <dependency>
             <groupId>net.unit8.raoh</groupId>
             <artifactId>raoh-json</artifactId>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>net.unit8.raoh</groupId>

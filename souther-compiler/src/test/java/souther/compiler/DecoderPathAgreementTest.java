@@ -5,6 +5,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -52,6 +54,28 @@ class DecoderPathAgreementTest {
         acceptedEverywhere("Map<String, Int>", Map.of("a", 1L), "{\"a\": 1}", 1L);
     }
 
+    /**
+     * A temporal was missing from this table, and that gap is how issue #119 shipped: `run` parsed
+     * JSON and decoded it with the neutral-source decoders, so a Date could not be passed to it at
+     * all — as a parameter or inside a data — while the boundary and a fixture both read one.
+     */
+    @Test
+    void aDateIsReadByAllThree() throws Exception {
+        acceptedEverywhere("Date", LocalDate.parse("2026-01-31"), "\"2026-01-31\"", 31L);
+    }
+
+    @Test
+    void aDateTimeIsReadByAllThree() throws Exception {
+        acceptedEverywhere("DateTime", LocalDateTime.parse("2026-01-31T09:00"),
+                "\"2026-01-31T09:00\"", 31L);
+    }
+
+    @Test
+    void aListOfDatesIsReadByAllThree() throws Exception {
+        acceptedEverywhere("List<Date>", List.of(LocalDate.parse("2026-01-01")),
+                "[\"2026-01-01\"]", 1L);
+    }
+
     // === where they part ===
 
     /**
@@ -96,6 +120,9 @@ class DecoderPathAgreementTest {
             case "Wrapped" -> "Wrapped(3)";
             case "List<Int>" -> "[ 1, 2 ]";
             case "Map<String, Int>" -> "[ (\"a\", 1) ]";
+            case "Date" -> "Date(\"2026-01-31\")";
+            case "DateTime" -> "DateTime(\"2026-01-31T09:00\")";
+            case "List<Date>" -> "[ Date(\"2026-01-01\") ]";
             default -> throw new IllegalArgumentException(type);
         };
     }
@@ -149,6 +176,11 @@ class DecoderPathAgreementTest {
         if (type.startsWith("List<")) {
             return "List.length(v)";
         }
-        return type.equals("Wrapped") ? "v.value" : "v";
+        return switch (type) {
+            case "Wrapped" -> "v.value";
+            case "Date" -> "Date.day(v)";
+            case "DateTime" -> "Date.day(DateTime.toDate(v))";
+            default -> "v";
+        };
     }
 }
