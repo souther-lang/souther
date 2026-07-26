@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static souther.compiler.codegen.Descriptors.*;
 import static souther.compiler.codegen.JvmTypes.*;
@@ -197,6 +198,7 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
             // Dispatch on the runtime case type, encode that case to a Map, then inject the
             // discriminator key = case tag (spec 11.2).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
@@ -232,6 +234,7 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdDec);
             // Build a Raoh discriminate decoder and delegate: the tag is read from the
             // discriminator key of the source, each case dispatches to that case's decoder for the
             // same source (spec 10.3). discriminate/variant are the core (input-generic) combinators.
@@ -267,10 +270,9 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdDec);
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
-                code.new_(cdU);
-                code.dup();
-                code.invokespecial(cdU, "<init>", MTD_void);
+                loadSharedInstance(code, cdU);   // a unit type has exactly one value
                 code.invokestatic(CD_RResult, "ok", MTD_Rok, true);
                 code.areturn();
             });
@@ -283,6 +285,7 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 code.new_(CD_LinkedHashMap);
                 code.dup();
@@ -311,9 +314,7 @@ final class CodecGen {
                 ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC, mb -> {
                     mb.with(SignatureAttribute.of(sig));
                     mb.withCode(code -> {
-                        code.new_(impl);
-                        code.dup();
-                        code.invokespecial(impl, "<init>", MTD_void);
+                        loadSharedInstance(code, impl);
                         code.areturn();
                     });
                 });
@@ -477,7 +478,7 @@ final class CodecGen {
             for (Ast.DecRef key : keyTypes.values()) {
                 emitRekeyHelper(cb, key);
             }
-            emitPatternFields(cb, invariants);
+            emitSharedInstance(cb, cdDec, ClassFile.ACC_PUBLIC, emitPatternFields(cb, invariants));
             if (invariants.hasUnmapped()) {
                 emitInvariantFailureHelper(cb, data.name());
             }
@@ -1022,8 +1023,12 @@ final class CodecGen {
      * Compiles each pattern the invariant states once, into a {@code static final} field: the
      * constraint chain is rebuilt per decode call, and compiling a regex there would repeat the
      * expensive part of it on every value.
+     *
+     * <p>Emits the fields and returns how to initialize them ({@code null} when there are none),
+     * rather than writing a {@code <clinit>} of its own — a class carries at most one, and
+     * {@code emitSharedInstance} is what writes it.
      */
-    private void emitPatternFields(ClassBuilder cb, Invariants invariants) {
+    private Consumer<CodeBuilder> emitPatternFields(ClassBuilder cb, Invariants invariants) {
         List<String> regexes = new ArrayList<>();
         for (InvariantConstraints.Constraint c : invariants.constraints()) {
             if (c instanceof InvariantConstraints.Pattern p && !regexes.contains(p.regex())) {
@@ -1031,22 +1036,22 @@ final class CodecGen {
             }
         }
         if (regexes.isEmpty()) {
-            return;
+            return null;
         }
         for (String regex : regexes) {
             cb.withField(patternField(regex), CD_Pattern,
                     ClassFile.ACC_PRIVATE | ClassFile.ACC_STATIC | ClassFile.ACC_FINAL);
         }
-        cb.withMethodBody(ConstantDescs.CLASS_INIT_NAME, MTD_void,
-                ClassFile.ACC_STATIC, code -> {
+        ClassDesc owner = decoderClass;
+        return code -> {
             for (String regex : regexes) {
                 code.loadConstant(regex);
                 code.invokestatic(CD_Pattern, "compile", MTD_patternCompile);
-                code.putstatic(decoderClass, patternField(regex), CD_Pattern);
+                code.putstatic(owner, patternField(regex), CD_Pattern);
             }
-            code.return_();
-        });
+        };
     }
+
 
     /** The Souther type name behind a generated class descriptor. */
     private static String typeName(ClassDesc cdName) {
@@ -1102,6 +1107,7 @@ final class CodecGen {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_REncoder);
             emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 2);
                 code.aload(1);

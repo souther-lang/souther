@@ -65,8 +65,18 @@ against the oracle harness already sketched; if allocation on the fold path show
 transient accumulator can be revisited behind a linearity check. The decision is "not now, for this
 cost/benefit," not "never" — reopen it with a workload, not on principle.
 
+The workload arrived, and ADR-0060 takes the half of it that does not need the compiler: a tail slot
+is claimed at run time, so `append` extends the array in place instead of copying it (144 → 66 bytes
+per element). The objections above are objections to a *compiler-side* transient — the combinators'
+fourteen step shapes, and linearity that is not statically self-evident — and a runtime claim is
+blind to the shape of a step, so none of them apply to it. What ADR-0060 cannot remove is the
+`PersistentVector` allocated per append; that still needs the transient accumulator, and that half
+stays deferred on the reasoning above.
+
 ## References
 
+- ADR-0060 (the claimed tail: the runtime-side half of the accumulation cost, taken once the
+  workload this ADR asked for existed)
 - ADR-0028 (the stdlib is Souther over an intrinsic kernel; the fold path this ADR chooses not
   to further optimize)
 - ADR-0051 (`fold` is a recursive helper, not a privileged loop)

@@ -457,14 +457,12 @@ public final class Backend {
         });
     }
 
-    /** A no-arg factory for a unit case: the ctor runs nothing, so it is built directly. */
+    /** A no-arg factory for a unit case: the type has exactly one value, so it hands that out. */
     private void emitUnitFactory(ClassBuilder cb, String typeName) {
         ClassDesc caseCd = cd(typeName);
         cb.withMethodBody(typeName, MethodTypeDesc.of(caseCd),
                 ClassFile.ACC_PROTECTED | ClassFile.ACC_FINAL, code -> {
-                    code.new_(caseCd);
-                    code.dup();
-                    code.invokespecial(caseCd, "<init>", MTD_void);
+                    loadSharedInstance(code, caseCd);
                     code.areturn();
                 });
     }
