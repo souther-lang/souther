@@ -8,8 +8,21 @@
 // checked at compile time by its `example`s. No hand-written Java drives them; the smoke test only
 // runs one to prove the generated types decode / apply / encode.
 //
-// exposing is omitted, so every generated class is public — the smoke test references them by name.
-module example.inventory
+// example.shipping imports this module, so it now writes an `exposing` list: a module with none
+// exports nothing to import. Writing one turned out to settle three things at once, which is worth
+// knowing before adding a second module that depends on this one:
+//   - what another module may `import` — shipping speaks Allocated, Location and StockLine;
+//   - what is public on the JVM — everything unlisted is package-private, which the smoke test in
+//     this same package can still read;
+//   - what an injected Java implementation may construct — an injected behavior's `constructs` needs
+//     its types exposed or E1305 rejects it, which is why StockSnapshot is listed even though no
+//     other module imports it. readStock builds it from the outside.
+module example.inventory exposing (
+    Allocated,
+    Location,
+    StockLine,
+    StockSnapshot
+)
 import List ( all, indexBy )
 import example.cart ( Sku, LineItem, PricedCart )
 

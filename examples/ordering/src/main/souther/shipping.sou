@@ -1,0 +1,253 @@
+// The dispatch side of fulfilment, and the first module in this project that sits two import hops
+// from the shared vocabulary: shipping imports example.inventory, which imports example.cart. Three
+// things about module boundaries only show up at that depth, and each one shaped this module.
+//
+//   - `exposing` lists a module's own definitions and nothing it imported, so there is no
+//     re-export. This module speaks cart's Sku and LineItem, so it imports example.cart directly
+//     even though inventory already does. A shared vocabulary is imported by everyone that speaks
+//     it, not handed down a chain.
+//   - A behavior's output union is built from its own module's cases (E1606, ADR-0057). The failure
+//     of `planPicks` is this module's `NothingToShip`, not inventory's `InsufficientStock`, however
+//     alike the two read. A context that departs states its own departure.
+//   - `Date` and `DateTime` both offer `addDays`. Importing both bare would leave the name
+//     undetermined, so every temporal call here stays qualified — the same rule the standard library
+//     states for `String.length` against `List.length`.
+//
+// The features on show:
+//   - `List.sortBy` over a `Location` key. A String-backed newtype is ordered by the value it wraps,
+//     so a pick list is walked in shelf order without projecting to `.value` first.
+//   - `List.partition` splitting one pick list into what ships now and what waits, read back with
+//     `let (ready, waiting) = ...`. A tuple is fine inside a body; the behavior returns a named data
+//     because a tuple has no external representation.
+//   - `Map<Date, Int>` as a behavior output: the shipment calendar counts dispatches per day. A
+//     temporal map key crosses the boundary as its ISO form, so the JSON is `{"2026-07-25": 2}`.
+//   - `DateTime` arithmetic for the carrier cut-off and `Date` arithmetic for the delivery promise,
+//     with `Date` keys read back in order by `List.sort` — a Date is ordered like any primitive.
+module example.shipping exposing (
+    ShipmentId,
+    Carrier,
+    PickLine,
+    PickList,
+    Shipment,
+    SplitShipment,
+    DispatchPlan,
+    ShipmentCalendar,
+    NothingToShip,
+    PastCutoff,
+    planPicks,
+    splitPicks,
+    dispatchWindow,
+    planCalendar
+)
+import example.cart ( Sku, LineItem, PricedCart )
+import example.inventory ( Allocated, Location, StockLine )
+import List ( map, fold, filterMap, length, sum )
+
+// A dispatch note number. Assigned by the carrier, so it only ever arrives from outside and its
+// format is all this module can say about it.
+data ShipmentId = String
+    invariant String.matches("SH-[0-9]{6}", value)
+
+// The carrier code. Two carriers, two cut-off hours; which one applies is an input, not a lookup.
+data Carrier = String
+    invariant String.length(value) >= 2
+
+// === planPicks: an order becomes a walk through the warehouse ===
+// A picker walks the aisles once, so the lines have to come out in shelf order. `List.sortBy` takes
+// the `Location` straight as the key: a String-backed newtype is ordered by the value it wraps
+// (ADR-0047), so nothing has to be projected to `.value` and re-wrapped first.
+//
+// A line whose sku has no shelf cannot be picked. `List.filterMap` drops those in the same pass that
+// builds the pickable ones — `Map.get` answers with an optional and only what is there joins the
+// result — and if nothing survives there is no walk to make.
+data PickLine =
+    { sku: Sku
+    , quantity: Int
+    , location: Location
+    }
+data PickList = { lines: List<PickLine> }
+
+// This module's own departure. inventory has `InsufficientStock` for the allocation that could not
+// be made; this is the different thing of having nothing to walk to (E1606 would reject reusing it
+// here anyway, and the two are not the same event).
+data NothingToShip
+
+behavior planPicks : (order: PricedCart, shelf: Map<Sku, Location>) -> PickList | NothingToShip
+    constructs PickList, PickLine, NothingToShip
+
+let pickLineFor (i: LineItem, shelf: Map<Sku, Location>): Option<PickLine> =
+    Map.get(i.sku, shelf)
+        |> Option.map(loc -> PickLine { sku = i.sku, quantity = i.quantity, location = loc })
+
+let planPicks (order, shelf) = {
+    let pickable = filterMap(i -> pickLineFor(i, shelf), order.items)
+    require length(pickable) >= 1 else NothingToShip
+    PickList { lines = List.sortBy(.location, pickable) }
+}
+
+example planPicks
+    | "the walk comes out in shelf order, not order-line order" :
+        (PricedCart { items =
+            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 }
+            , LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ]
+            , total = 200300, highValue = true }
+        , [ (Sku("tv"), Location("C-01-01")), (Sku("apple"), Location("A-03-12")) ])
+            -> PickList { lines =
+                [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") }
+                , PickLine { sku = Sku("tv"), quantity = 1, location = Location("C-01-01") } ] }
+    | "a line whose sku has no shelf is not walked to" :
+        (PricedCart { items =
+            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 }
+            , LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ]
+            , total = 200300, highValue = true }
+        , [ (Sku("apple"), Location("A-03-12")) ])
+            -> PickList { lines =
+                [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") } ] }
+    | "no line has a shelf, so there is no walk" :
+        (PricedCart { items =
+            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 } ]
+            , total = 200000, highValue = true }
+        , [ (Sku("apple"), Location("A-03-12")) ])
+            -> NothingToShip
+
+// === splitPicks: what ships today and what waits ===
+// Allocation says the order as a whole fits (inventory.allocate); a pick can still find a shelf
+// short by the time the picker gets there. The list is split rather than failed: the covered lines
+// go out and the rest are backordered. `List.partition` gives both sides in one pass as a tuple,
+// which `let (ready, waiting) = ...` opens — a tuple lives inside a body, and what leaves is the
+// named data the boundary can encode.
+data SplitShipment =
+    { ready: List<PickLine>
+    , backordered: List<PickLine>
+    , readyUnits: Int
+    }
+
+behavior splitPicks : (picks: PickList, onHand: Map<Sku, Int>) -> SplitShipment
+    constructs SplitShipment
+
+let coveredBy (p: PickLine, onHand: Map<Sku, Int>): Bool = {
+    let have = Map.get(p.sku, onHand) |> Option.withDefault(0)
+    have >= p.quantity
+}
+
+let splitPicks (picks, onHand) = {
+    let (ready, waiting) = List.partition(p -> coveredBy(p, onHand), picks.lines)
+    SplitShipment {
+        ready = ready,
+        backordered = waiting,
+        readyUnits = sum(map(.quantity, ready))
+    }
+}
+
+example splitPicks
+    | "a shelf short at pick time backorders that line and ships the rest" :
+        (PickList { lines =
+            [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") }
+            , PickLine { sku = Sku("tv"), quantity = 1, location = Location("C-01-01") } ] }
+        , [ (Sku("apple"), 5), (Sku("tv"), 0) ])
+            -> SplitShipment {
+                ready = [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") } ],
+                backordered = [ PickLine { sku = Sku("tv"), quantity = 1, location = Location("C-01-01") } ],
+                readyUnits = 2 }
+    | "a sku the shelf never mentions is backordered, not assumed" :
+        (PickList { lines =
+            [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") } ] }
+        , [ (Sku("tv"), 9) ])
+            -> SplitShipment { ready = [], backordered =
+                [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") } ],
+                readyUnits = 0 }
+
+// === dispatchWindow: the carrier's cut-off, and the promise that follows from it ===
+// An order placed before the cut-off goes out the same day; one placed after it goes out the next.
+// The cut-off is a wall-clock hour, so the comparison is between two `DateTime`s and the answer is a
+// `Date` — `DateTime.toDate` is what crosses between them. `DateTime.minutesBetween` says how much
+// of the window is left, which is what a picker is told.
+//
+// Past the last dispatch of the day with nothing left to run, there is no window at all: this
+// module's own `PastCutoff`.
+data DispatchPlan =
+    { dispatchOn: Date
+    , minutesToCutoff: Int
+    , deliverBy: Date
+    }
+data PastCutoff = { minutesPast: Int }
+
+behavior dispatchWindow : (orderedAt: DateTime, cutoff: DateTime, transitDays: Int)
+        -> DispatchPlan | PastCutoff
+    constructs DispatchPlan, PastCutoff
+
+let dispatchWindow (orderedAt, cutoff, transitDays) = {
+    let left = DateTime.minutesBetween(orderedAt, cutoff)
+    // The next day's run opens 24 hours after this one's cut-off; nothing later than that is a
+    // window this behavior can plan.
+    require left > 0 - 1440 else PastCutoff { minutesPast = 0 - left }
+    let dispatchOn = if left > 0
+        then DateTime.toDate(orderedAt)
+        else DateTime.toDate(DateTime.addDays(1, orderedAt))
+    DispatchPlan {
+        dispatchOn = dispatchOn,
+        minutesToCutoff = Int.max(left, 0),
+        deliverBy = Date.addDays(transitDays, dispatchOn)
+    }
+}
+
+example dispatchWindow
+    | "before the cut-off, it goes out today" :
+        (DateTime("2026-07-25T09:30"), DateTime("2026-07-25T15:00"), 2)
+            -> DispatchPlan { dispatchOn = Date("2026-07-25"), minutesToCutoff = 330,
+                              deliverBy = Date("2026-07-27") }
+    | "after the cut-off, it goes out tomorrow with no time left today" :
+        (DateTime("2026-07-25T16:00"), DateTime("2026-07-25T15:00"), 2)
+            -> DispatchPlan { dispatchOn = Date("2026-07-26"), minutesToCutoff = 0,
+                              deliverBy = Date("2026-07-28") }
+    | "a day past the cut-off is no window this behavior plans" :
+        (DateTime("2026-07-26T16:00"), DateTime("2026-07-25T15:00"), 2)
+            -> PastCutoff { minutesPast = 1500 }
+
+// === planCalendar: how many go out each day ===
+// The warehouse plans staffing from the count per dispatch day, so the output is keyed by the day
+// itself: `Map<Date, Int>`. A temporal key crosses the boundary as its ISO 8601 form — the same
+// string a `Date` field already carries — so this reaches the outside as `{"2026-07-25": 2}` and
+// needs no stringly stand-in for the day.
+//
+// The count is folded with `Map.upsert`, which starts a day at zero the first time it is seen. The
+// busiest-day readout then reads the map two more ways: `Map.values` for the peak and `Map.keys`
+// put in order by `List.sort`, a `Date` being ordered like any primitive.
+data Shipment =
+    { id: ShipmentId
+    , dispatchOn: Date
+    , units: Int
+    }
+data ShipmentCalendar =
+    { perDay: Map<Date, Int>
+    , days: List<Date>
+    , busiestCount: Int
+    }
+
+behavior planCalendar : (shipments: List<Shipment>) -> ShipmentCalendar
+    constructs ShipmentCalendar
+
+let planCalendar (shipments) = {
+    // The seed is the empty-map bottom, and nothing around this `let` says what it is a map of, so
+    // the accumulator is annotated here. That is what a local type annotation is for: the fold's
+    // step would pin the types at the call, but the binding is read before the step is.
+    let perDay: Map<Date, Int> = fold((acc, s) -> Map.upsert(s.dispatchOn, 0, n -> n + 1, acc),
+                                      Map.empty(), shipments)
+    ShipmentCalendar {
+        perDay = perDay,
+        days = List.sort(Map.keys(perDay)),
+        busiestCount = List.max(Map.values(perDay)) |> Option.withDefault(0)
+    }
+}
+
+example planCalendar
+    | "two dispatches on one day and one on the next" :
+        ([ Shipment { id = ShipmentId("SH-000001"), dispatchOn = Date("2026-07-26"), units = 3 }
+         , Shipment { id = ShipmentId("SH-000002"), dispatchOn = Date("2026-07-25"), units = 1 }
+         , Shipment { id = ShipmentId("SH-000003"), dispatchOn = Date("2026-07-25"), units = 4 } ])
+            -> ShipmentCalendar {
+                perDay = [ (Date("2026-07-26"), 1), (Date("2026-07-25"), 2) ],
+                days = [ Date("2026-07-25"), Date("2026-07-26") ],
+                busiestCount = 2 }
+    | "no shipments is an empty calendar, not a missing one" :
+        ([]) -> ShipmentCalendar { perDay = [], days = [], busiestCount = 0 }
