@@ -24,26 +24,25 @@ public final class MatchElaborator {
 
     private MatchElaborator() {}
 
-    static Core elaborateMatch(Ast.Match m, Map<String, Type> env, Ast.Data data,
-                                       Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs,
+    static Core elaborateMatch(Ast.Match m, Map<String, Type> env, CheckContext ctx,
                                        Type expected) {
-        Core scrutinee = Elaborator.elaborate(m.scrutinee(), env, data, symbols, reqs);
+        Core scrutinee = Elaborator.elaborate(m.scrutinee(), env, ctx);
         Type st = scrutinee.type();
         if (st instanceof Type.OptionOf oo) {
-            return elaborateOptionMatch(m, scrutinee, oo.element(), env, data, symbols, reqs, expected);
+            return elaborateOptionMatch(m, scrutinee, oo.element(), env, ctx, expected);
         }
         if (st instanceof Type.Union union) {
             return elaborateCasesMatch(m, scrutinee, union.members(), "union `" + Type.show(union) + "`",
-                    st, env, data, symbols, reqs, expected);
+                    st, env, ctx, expected);
         }
-        if (!(st instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.SumData sum)) {
+        if (!(st instanceof Type.Ref ref) || !(ctx.symbols().get(ref.name()) instanceof Ast.SumData sum)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.match.notsum").title("check.match.title")
                             .at(m.pos(), 5).args(Type.show(st)).build(),
                     "match requires a sum-typed value, got " + st);
         }
         return elaborateCasesMatch(m, scrutinee, new HashSet<>(sum.cases()), "data `" + sum.name() + "`",
-                st, env, data, symbols, reqs, expected);
+                st, env, ctx, expected);
     }
 
     /**
@@ -81,15 +80,14 @@ public final class MatchElaborator {
      * exactly once (E1201; a second cover is an overlap error). */
     static Core elaborateCasesMatch(Ast.Match m, Core scrutineeCore, Set<String> cases,
                                         String what, Type scrutinee,
-                                        Map<String, Type> env, Ast.Data data, Map<String, Ast.Def> symbols,
-                                        Map<String, ReqSig> reqs, Type expected) {
+                                        Map<String, Type> env, CheckContext ctx, Type expected) {
         Set<String> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
             for (String caseName : c.caseTypes()) {
                 if (!cases.contains(caseName)) {
-                    throw notCase(caseName, what, c, m, cases, symbols);
+                    throw notCase(caseName, what, c, m, cases, ctx.symbols());
                 }
                 if (!covered.add(caseName)) {
                     throw CompileException.of(
@@ -106,9 +104,9 @@ public final class MatchElaborator {
                                     .at(c.pos()).build(),
                             "a constructor destructuring opens a single case, not an or-pattern");
                 }
-                checkUnwrapAsserts(c, symbols);
+                checkUnwrapAsserts(c, ctx.symbols());
             }
-            Core body = Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), data, symbols, reqs, expected);
+            Core body = Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx, expected);
             arms.add(new Core.Case(c.caseTypes(), c.binding(), body, bindType, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c);
         }
@@ -134,8 +132,7 @@ public final class MatchElaborator {
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
      * {@code None}; both must be present (spec 16.3). */
     static Core elaborateOptionMatch(Ast.Match m, Core scrutineeCore, Type element,
-                                          Map<String, Type> env, Ast.Data data,
-                                          Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
+                                          Map<String, Type> env, CheckContext ctx, Type expected) {
         Set<String> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
@@ -162,7 +159,7 @@ public final class MatchElaborator {
                                     .at(c.pos()).args(caseType).build(),
                             "`" + caseType + "` has no value, so it cannot be opened with `" + caseType + "(...)`");
                 }
-                checkOptionUnwrapAsserts(c, element, symbols);
+                checkOptionUnwrapAsserts(c, element, ctx.symbols());
             }
             if (!covered.add(caseType)) {
                 throw CompileException.of(
@@ -170,7 +167,7 @@ public final class MatchElaborator {
                                 .at(c.pos()).args(caseType).build(),
                         "`" + caseType + "` is matched by more than one case");
             }
-            Core body = Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), data, symbols, reqs, expected);
+            Core body = Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected);
             arms.add(new Core.Case(c.caseTypes(), c.binding(), body, bind, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c);
         }

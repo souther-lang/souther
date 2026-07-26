@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.diag.CompileException;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.CheckContext;
 import souther.compiler.check.Elaborator;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
@@ -159,8 +160,8 @@ final class BodyGen {
          * emitter in the shape it emits from. {@code expected} is the type the position wants, as the
          * checker pushes a field's declared type into its initialiser. */
         Core elaborate(Ast.Expr e, Type expected) {
-            return Elaborator.elaborate(Lower.desugarExpr(e), typesEnvWithHelpers(), data, symbols,
-                    reqSigs(), expected);
+            return Elaborator.elaborate(Lower.desugarExpr(e), typesEnvWithHelpers(),
+                    new CheckContext(symbols, data, reqSigs()), expected);
         }
 
         private void emitFieldRead(CodeBuilder code, String ownerName, String field, Type ft) {

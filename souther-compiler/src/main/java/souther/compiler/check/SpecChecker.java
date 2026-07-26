@@ -165,7 +165,7 @@ public final class SpecChecker {
 
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
-        Core elaboratedBody = Elaborator.elaborate(body, tenv, null, symbols, reqSigs, output);
+        Core elaboratedBody = Elaborator.elaborate(body, tenv, new CheckContext(symbols, null, reqSigs), output);
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, symbols)) {
             throw CompileException.of(

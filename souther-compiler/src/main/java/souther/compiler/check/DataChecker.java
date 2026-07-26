@@ -256,28 +256,28 @@ public final class DataChecker {
         return false;
     }
 
-    static void checkData(Ast.Data data, Map<String, Ast.Def> symbols,
+    static void checkData(CheckContext ctx,
                                   Map<String, Type> recursiveHelperFns) {
-        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+        Map<String, Type> fields = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
 
         for (Map.Entry<String, Type> e : fields.entrySet()) {
             if (SpecChecker.containsTuple(e.getValue())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.field.tuple").title("check.boundary.title")
-                                .at(data.pos()).args(data.name(), e.getKey()).build(),
-                        "a tuple cannot be a data field (`" + data.name() + "." + e.getKey()
+                                .at(ctx.data().pos()).args(ctx.data().name(), e.getKey()).build(),
+                        "a tuple cannot be a data field (`" + ctx.data().name() + "." + e.getKey()
                                 + "`): a tuple has no external representation, so it cannot cross a"
                                 + " decoder/encoder boundary (ADR-0036). Use a named data.");
             }
         }
 
-        data.invariant().ifPresent(expr -> {
+        ctx.data().invariant().ifPresent(expr -> {
             // A total recursive helper — the stdlib fold behind the list quantifiers, or a user helper
             // proven total — is callable from an invariant, so its signature must be in scope here. A
             // field of the same name as a helper wins: a bare name in an invariant is a field reference.
             Map<String, Type> invEnv = new HashMap<>(recursiveHelperFns);
             invEnv.putAll(fields);
-            Type t = Elaborator.typeOf(expr, invEnv, data, symbols);
+            Type t = Elaborator.typeOf(expr, invEnv, ctx);
             if (t != Type.BOOL) {
                 throw CompileException.of(
                         Diagnostic.of("E1101", "e1101.msg").at(expr.pos()).args(Type.show(t)).build(),
@@ -285,12 +285,11 @@ public final class DataChecker {
             }
         });
 
-        data.decoder().ifPresent(dec -> checkDecoder(dec, data, fields, symbols));
-        data.encoder().ifPresent(enc -> checkEncoder(enc, data, symbols));
+        ctx.data().decoder().ifPresent(dec -> checkDecoder(dec, ctx, fields));
+        ctx.data().encoder().ifPresent(enc -> checkEncoder(enc, ctx));
     }
 
-    private static void checkDecoder(Ast.DecoderDef dec, Ast.Data data, Map<String, Type> fields,
-                                     Map<String, Ast.Def> symbols) {
+    private static void checkDecoder(Ast.DecoderDef dec, CheckContext ctx, Map<String, Type> fields) {
         switch (dec) {
             case Ast.PrimDecoder prim -> {
                 Type inputType = TypeOps.primType(prim.from());
@@ -298,22 +297,22 @@ public final class DataChecker {
                 env.put(prim.inputName(), inputType);
                 for (Ast.DecStmt stmt : prim.stmts()) {
                     switch (stmt) {
-                        case Ast.Let let -> env.put(let.name(), Elaborator.typeOf(let.value(), env, data, symbols));
+                        case Ast.Let let -> env.put(let.name(), Elaborator.typeOf(let.value(), env, ctx));
                     }
                 }
-                checkConstruct(prim.result(), data, fields, env, symbols);
+                checkConstruct(prim.result(), ctx, fields, env);
             }
             case Ast.ObjectDecoder obj -> {
                 Map<String, Type> env = new HashMap<>();
                 for (Ast.Bind bind : obj.binds()) {
-                    env.put(bind.name(), decRefType(bind.ref(), symbols));
+                    env.put(bind.name(), decRefType(bind.ref(), ctx.symbols()));
                 }
-                checkConstruct(obj.result(), data, fields, env, symbols);
+                checkConstruct(obj.result(), ctx, fields, env);
             }
             case Ast.NewtypeDecoder nt -> {
                 Map<String, Type> env = new HashMap<>();
-                env.put(nt.inputName(), decRefType(nt.inner(), symbols));
-                checkConstruct(nt.result(), data, fields, env, symbols);
+                env.put(nt.inputName(), decRefType(nt.inner(), ctx.symbols()));
+                checkConstruct(nt.result(), ctx, fields, env);
             }
         }
     }
@@ -342,23 +341,22 @@ public final class DataChecker {
         };
     }
 
-    private static void checkConstruct(Ast.Construct c, Ast.Data data, Map<String, Type> fields,
-                                       Map<String, Type> env, Map<String, Ast.Def> symbols) {
-        if (!c.typeName().equals(data.name())) {
+    private static void checkConstruct(Ast.Construct c, CheckContext ctx, Map<String, Type> fields,
+                                       Map<String, Type> env) {
+        if (!c.typeName().equals(ctx.data().name())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.codec.mustconstruct").title("check.codec.title")
-                            .at(c.pos()).args(data.name(), c.typeName()).build(),
-                    "decoder for `" + data.name() + "` must construct `" + data.name()
+                            .at(c.pos()).args(ctx.data().name(), c.typeName()).build(),
+                    "decoder for `" + ctx.data().name() + "` must construct `" + ctx.data().name()
                             + "`, but constructs `" + c.typeName() + "`");
         }
-        checkConstruction(c.typeName(), c.inits(), c.spreads(), c.pos(), fields, env, data, symbols, Elaborator.NO_REQS);
+        checkConstruction(c.typeName(), c.inits(), c.spreads(), c.pos(), fields, env, ctx);
     }
 
     static List<Core.FieldInit> checkConstruction(String typeName, List<Ast.FieldInit> inits,
                                           List<String> spreads,
                                           SourcePos pos, Map<String, Type> fields, Map<String, Type> env,
-                                          Ast.Data data, Map<String, Ast.Def> symbols,
-                                          Map<String, ReqSig> reqs) {
+                                          CheckContext ctx) {
         Map<String, Ast.FieldInit> byName = new HashMap<>();
         List<Core.FieldInit> elaborated = new ArrayList<>();
         for (Ast.FieldInit init : inits) {
@@ -377,10 +375,10 @@ public final class DataChecker {
             }
             // push the field's declared type into the value expression, so a field initialised from a
             // fold over an empty-collection seed has its result pinned by the field type (issue #70)
-            Core value = Elaborator.elaborate(init.value(), env, data, symbols, reqs, ft);
+            Core value = Elaborator.elaborate(init.value(), env, ctx, ft);
             elaborated.add(new Core.FieldInit(init.name(), value, init.pos()));
             Type vt = value.type();
-            if (!TypeOps.assignable(vt, ft, symbols)) {   // a case value widens to its sum-typed field (spec 8.3)
+            if (!TypeOps.assignable(vt, ft, ctx.symbols())) {   // a case value widens to its sum-typed field (spec 8.3)
                 throw CompileException.of(
                         Diagnostic.of(null, "check.field.type").title("check.type.mismatch.title")
                                 .at(init.pos(), init.name().length())
@@ -392,13 +390,13 @@ public final class DataChecker {
         Map<String, Type> provided = new HashMap<>();
         for (String sp : spreads) {
             if (!(env.get(sp) instanceof Type.Ref ref)
-                    || !(symbols.get(ref.name()) instanceof Ast.Data sd)) {
+                    || !(ctx.symbols().get(ref.name()) instanceof Ast.Data sd)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.spread.notdata").title("check.construct.title")
                                 .at(pos).args(sp).build(),
                         "spread `.." + sp + "` must be a data value");
             }
-            provided.putAll(TypeOps.fieldTypes(sd, symbols));
+            provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
         }
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             if (byName.containsKey(f.getKey())) {
@@ -411,7 +409,7 @@ public final class DataChecker {
                                 .args(typeName, f.getKey()).hint("e1005.hint").build(),
                         "construction of `" + typeName + "` is missing field `" + f.getKey() + "`");
             }
-            if (!TypeOps.assignable(pv, f.getValue(), symbols)) {
+            if (!TypeOps.assignable(pv, f.getValue(), ctx.symbols())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.spread.provides").title("check.type.mismatch.title")
                                 .at(pos).args(f.getKey(), Type.show(pv), typeName, Type.show(f.getValue()))
@@ -423,24 +421,23 @@ public final class DataChecker {
         return elaborated;
     }
 
-    private static void checkEncoder(Ast.EncoderDef enc, Ast.Data data, Map<String, Ast.Def> symbols) {
-        Map<String, Type> env = Map.of(enc.selfName(), Type.ref(data.name()));
-        checkRawExpr(enc.result(), env, data, symbols);
+    private static void checkEncoder(Ast.EncoderDef enc, CheckContext ctx) {
+        Map<String, Type> env = Map.of(enc.selfName(), Type.ref(ctx.data().name()));
+        checkRawExpr(enc.result(), env, ctx);
     }
 
-    private static void checkRawExpr(Ast.RawExpr raw, Map<String, Type> env, Ast.Data data,
-                                     Map<String, Ast.Def> symbols) {
+    private static void checkRawExpr(Ast.RawExpr raw, Map<String, Type> env, CheckContext ctx) {
         switch (raw) {
-            case Ast.TextRaw t -> Elaborator.requireType(t.arg(), Type.STRING, env, data, symbols, Elaborator.NO_REQS,
+            case Ast.TextRaw t -> Elaborator.requireType(t.arg(), Type.STRING, env, ctx,
                     "argument of Text");
-            case Ast.IntRaw i -> Elaborator.requireType(i.arg(), Type.INT, env, data, symbols, Elaborator.NO_REQS,
+            case Ast.IntRaw i -> Elaborator.requireType(i.arg(), Type.INT, env, ctx,
                     "argument of Int");
-            case Ast.BoolRaw b -> Elaborator.requireType(b.arg(), Type.BOOL, env, data, symbols, Elaborator.NO_REQS,
+            case Ast.BoolRaw b -> Elaborator.requireType(b.arg(), Type.BOOL, env, ctx,
                     "argument of Bool");
-            case Ast.DecimalRaw d -> Elaborator.requireType(d.arg(), Type.DECIMAL, env, data, symbols, Elaborator.NO_REQS,
+            case Ast.DecimalRaw d -> Elaborator.requireType(d.arg(), Type.DECIMAL, env, ctx,
                     "argument of Decimal");
             case Ast.IsoTextRaw t -> {
-                Type at = Elaborator.typeOf(t.arg(), env, data, symbols);
+                Type at = Elaborator.typeOf(t.arg(), env, ctx);
                 if (at != Type.DATE && at != Type.DATETIME) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.iso").title("check.codec.title")
@@ -449,7 +446,7 @@ public final class DataChecker {
                 }
             }
             case Ast.OptionRaw o -> {
-                Type at = Elaborator.typeOf(o.access(), env, data, symbols);
+                Type at = Elaborator.typeOf(o.access(), env, ctx);
                 if (!(at instanceof Type.OptionOf oo)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.option").title("check.codec.title")
@@ -458,15 +455,15 @@ public final class DataChecker {
                 }
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(o.elemVar(), oo.element());
-                checkRawExpr(o.inner(), inner, data, symbols);
+                checkRawExpr(o.inner(), inner, ctx);
             }
             case Ast.ObjectRaw o -> {
                 for (Ast.RawEntry entry : o.entries()) {
-                    checkRawExpr(entry.value(), env, data, symbols);
+                    checkRawExpr(entry.value(), env, ctx);
                 }
             }
             case Ast.EncodeRaw e -> {
-                Ast.Def encDef = symbols.get(e.typeName());
+                Ast.Def encDef = ctx.symbols().get(e.typeName());
                 boolean hasEncoder = (encDef instanceof Ast.Data ed && ed.encoder().isPresent())
                         || (encDef instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!hasEncoder) {
@@ -475,38 +472,38 @@ public final class DataChecker {
                                     .at(e.pos()).args(e.typeName()).build(),
                             "`" + e.typeName() + "` has no encoder to call `" + e.typeName() + ".encode`");
                 }
-                Elaborator.requireType(e.arg(), Type.ref(e.typeName()), env, data, symbols, Elaborator.NO_REQS,
+                Elaborator.requireType(e.arg(), Type.ref(e.typeName()), env, ctx,
                         "argument of " + e.typeName() + ".encode");
             }
             case Ast.ListEnc le -> {
-                Type st = Elaborator.typeOf(le.source(), env, data, symbols);
+                Type st = Elaborator.typeOf(le.source(), env, ctx);
                 if (!(st instanceof Type.ListOf lo)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.listsource").title("check.codec.title")
                                     .at(le.pos()).args(Type.show(st)).build(),
                             "list(...) source must be a List, got " + st);
                 }
-                checkEncElem(le.elem(), lo.element(), le.pos(), symbols);
+                checkEncElem(le.elem(), lo.element(), le.pos(), ctx.symbols());
             }
             case Ast.SetEnc se -> {
-                Type st = Elaborator.typeOf(se.source(), env, data, symbols);
+                Type st = Elaborator.typeOf(se.source(), env, ctx);
                 if (!(st instanceof Type.SetOf so)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.setsource").title("check.codec.title")
                                     .at(se.pos()).args(Type.show(st)).build(),
                             "set encoder source must be a Set, got " + st);
                 }
-                checkEncElem(se.elem(), so.element(), se.pos(), symbols);
+                checkEncElem(se.elem(), so.element(), se.pos(), ctx.symbols());
             }
             case Ast.MapEnc me -> {
-                Type st = Elaborator.typeOf(me.source(), env, data, symbols);
+                Type st = Elaborator.typeOf(me.source(), env, ctx);
                 if (!(st instanceof Type.MapOf mo)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.mapsource").title("check.codec.title")
                                     .at(me.pos()).args(Type.show(st)).build(),
                             "map encoder source must be a Map, got " + st);
                 }
-                checkEncElem(me.elem(), mo.value(), me.pos(), symbols);
+                checkEncElem(me.elem(), mo.value(), me.pos(), ctx.symbols());
             }
         }
     }

@@ -27,11 +27,10 @@ public final class CallElaborator {
 
     private CallElaborator() {}
 
-    static Core elaborateCall(Ast.Call call, Map<String, Type> env, Ast.Data data,
-                                      Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs,
+    static Core elaborateCall(Ast.Call call, Map<String, Type> env, CheckContext ctx,
                                       Type expected) {
-        CallArgs ca = new CallArgs(call.args(), env, data, symbols, reqs);
-        Type result = typeOfCall(ca, call, env, data, symbols, reqs, expected);
+        CallArgs ca = new CallArgs(call.args(), env, ctx);
+        Type result = typeOfCall(ca, call, env, ctx, expected);
         return new Core.Call(call.fn(), ca.cores(), result, call.pos());
     }
 
@@ -45,38 +44,33 @@ public final class CallElaborator {
         private final List<Ast.Expr> args;
         private final Core[] cores;
         private final Map<String, Type> env;
-        private final Ast.Data data;
-        private final Map<String, Ast.Def> symbols;
-        private final Map<String, ReqSig> reqs;
+        private final CheckContext ctx;
 
-        CallArgs(List<Ast.Expr> args, Map<String, Type> env, Ast.Data data,
-                 Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+        CallArgs(List<Ast.Expr> args, Map<String, Type> env, CheckContext ctx) {
             this.args = args;
             this.cores = new Core[args.size()];
             this.env = env;
-            this.data = data;
-            this.symbols = symbols;
-            this.reqs = reqs;
+            this.ctx = ctx;
         }
 
         /** The type of argument {@code i}, elaborated with no expected type (bottom-up). */
         Type type(int i) {
-            Core c = Elaborator.elaborate(args.get(i), env, data, symbols, reqs);
+            Core c = Elaborator.elaborate(args.get(i), env, ctx);
             cores[i] = c;
             return c.type();
         }
 
         /** Argument {@code i} checked against {@code expected}, as {@link #requireType} does. */
         void require(int i, Type expected, String what) {
-            Core c = Elaborator.elaborate(args.get(i), env, data, symbols, reqs);
+            Core c = Elaborator.elaborate(args.get(i), env, ctx);
             cores[i] = c;
-            Elaborator.requireType(args.get(i), c.type(), expected, symbols, what);
+            Elaborator.requireType(args.get(i), c.type(), expected, ctx.symbols(), what);
         }
 
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
          * result type the block yields at {@code paramTypes}. */
         Type block(int i, String fnName, List<Type> paramTypes) {
-            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), paramTypes, env, data, symbols, reqs);
+            Core c = Elaborator.elaborateBlockArg(fnName, args.get(i), paramTypes, env, ctx);
             cores[i] = c;
             return ((Type.FnOf) c.type()).result();
         }
@@ -109,8 +103,7 @@ public final class CallElaborator {
         }
     }
 
-    static Type typeOfCall(CallArgs ca, Ast.Call call, Map<String, Type> env, Ast.Data data,
-                                   Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
+    static Type typeOfCall(CallArgs ca, Ast.Call call, Map<String, Type> env, CheckContext ctx, Type expected) {
         List<Ast.Expr> args = call.args();
         // A shipped intrinsic behaves like a built-in: check the call against its declared signature
         // (from the prelude) and yield its result type; the backend emits the primitive for its key.
@@ -127,7 +120,7 @@ public final class CallElaborator {
             Map<String, Type> bindings = new HashMap<>();
             for (int i = 0; i < args.size(); i++) {
                 Type argType = ca.type(i);
-                TypeOps.unify(intrinsic.params().get(i), argType, bindings, symbols, call.pos(),
+                TypeOps.unify(intrinsic.params().get(i), argType, bindings, ctx.symbols(), call.pos(),
                         "argument " + (i + 1) + " of " + call.fn());
             }
             Type result = TypeOps.substitute(intrinsic.result(), bindings);
@@ -333,12 +326,12 @@ public final class CallElaborator {
                     // fold whose seed is Map.empty()/[] has its accumulator `'acc` bound to the expected
                     // result BEFORE the step (and any inlined Map.upsert closure) is checked, so the
                     // seed's bottom no longer drives the step's parameter types.
-                    BottomInfer.pinResultTypeVars(fn.result(), expected, bind, symbols, call.pos(),
+                    BottomInfer.pinResultTypeVars(fn.result(), expected, bind, ctx.symbols(), call.pos(),
                             "result of " + call.fn());
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
                             Type at = ca.type(i);
-                            TypeOps.unify(fn.params().get(i), at, bind, symbols, call.pos(), "argument " + (i + 1));
+                            TypeOps.unify(fn.params().get(i), at, bind, ctx.symbols(), call.pos(), "argument " + (i + 1));
                         }
                     }
                     // Type the step (function) arguments. A fold over an empty-collection seed whose
@@ -349,7 +342,7 @@ public final class CallElaborator {
                     try {
                         for (int i = 0; i < args.size(); i++) {
                             if (fn.params().get(i) instanceof Type.FnOf fp0) {
-                                ca.put(i, Elaborator.resolveStepBinding(call.fn(), fp0, args.get(i), bind, env, data, symbols, reqs));
+                                ca.put(i, Elaborator.resolveStepBinding(call.fn(), fp0, args.get(i), bind, env, ctx));
                             }
                         }
                     } catch (CompileException stepError) {
@@ -389,7 +382,7 @@ public final class CallElaborator {
                             "`" + call.fn() + "` is not a standard-library function.");
                 }
                 // a required behavior called inline (spec 12.2, 13): type it as its success case
-                ReqSig callee = reqs.get(call.fn());
+                ReqSig callee = ctx.reqs().get(call.fn());
                 if (callee == null) {
                     String qualified = Prelude.qualifiedFor(call.fn());
                     if (qualified != null) {
@@ -403,11 +396,11 @@ public final class CallElaborator {
                     throw CompileException.of(
                             Diagnostic.of("E1401", "e1401.msg").at(call.pos(), call.fn().length())
                                     .args(call.fn())
-                                    .suggestion(Suggest.candidate(call.fn(), reqs.keySet()))
+                                    .suggestion(Suggest.candidate(call.fn(), ctx.reqs().keySet()))
                                     .hint("e1401.hint")
                                     .build(),
                             "`" + call.fn() + "` is not a behavior or builtin"
-                                    + Suggest.hint(call.fn(), reqs.keySet())
+                                    + Suggest.hint(call.fn(), ctx.reqs().keySet())
                                     + ". Calling arbitrary JVM methods is not allowed; declare a behavior"
                                     + " without a `let` and implement it from Java.");
                 }

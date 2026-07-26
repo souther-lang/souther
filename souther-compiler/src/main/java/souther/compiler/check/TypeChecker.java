@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.diag.CompileException;
-import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.Diagnostic;
@@ -183,7 +182,8 @@ public final class TypeChecker {
         for (Ast.Def def : module.defs()) {
             collect(errors, () -> {
                 switch (def) {
-                    case Ast.Data data -> DataChecker.checkData(data, symbols, recursiveHelperFns);
+                    case Ast.Data data ->
+                            DataChecker.checkData(CheckContext.of(symbols).forData(data), recursiveHelperFns);
                     case Ast.SumData sum -> DataChecker.checkSum(sum, symbols);
                     case Ast.UnitData _ -> { }
                 }

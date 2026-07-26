@@ -33,26 +33,19 @@ public final class Elaborator {
     /** No required behaviors are in scope (decoders, encoders, invariants — spec 9.3, 17). */
     static final Map<String, ReqSig> NO_REQS = Map.of();
 
-    public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
-                              Map<String, Ast.Def> symbols) {
-        return typeOf(e, env, data, symbols, NO_REQS);
-    }
 
-    public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
-                              Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
-        return typeOf(e, env, data, symbols, reqs, null);
+    public static Type typeOf(Ast.Expr e, Map<String, Type> env, CheckContext ctx) {
+        return typeOf(e, env, ctx, null);
     }
 
     /** The type of {@code e}, discarding the Core the elaboration produced — for the checks that ask
      * only whether an expression types (a decoder, an invariant, a helper's standalone check). */
-    public static Type typeOf(Ast.Expr e, Map<String, Type> env, Ast.Data data,
-                              Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
-        return elaborate(e, env, data, symbols, reqs, expected).type();
+    public static Type typeOf(Ast.Expr e, Map<String, Type> env, CheckContext ctx, Type expected) {
+        return elaborate(e, env, ctx, expected).type();
     }
 
-    public static Core elaborate(Ast.Expr e, Map<String, Type> env, Ast.Data data,
-                                 Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
-        return elaborate(e, env, data, symbols, reqs, null);
+    public static Core elaborate(Ast.Expr e, Map<String, Type> env, CheckContext ctx) {
+        return elaborate(e, env, ctx, null);
     }
 
     /**
@@ -66,8 +59,7 @@ public final class Elaborator {
      * and a generic call pre-binds its result-type variables from it, so a fold whose seed is an
      * empty collection has its accumulator pinned by context before the step is checked.
      */
-    public static Core elaborate(Ast.Expr e, Map<String, Type> env, Ast.Data data,
-                                 Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, Type expected) {
+    public static Core elaborate(Ast.Expr e, Map<String, Type> env, CheckContext ctx, Type expected) {
         return switch (e) {
             case Ast.IntLit x -> new Core.Int(x.value(), Type.INT, x.pos());
             case Ast.DecimalLit x -> new Core.Decimal(x.value(), Type.DECIMAL, x.pos());
@@ -81,7 +73,7 @@ public final class Elaborator {
                 List<Core> elems = new ArrayList<>();
                 List<Type> elemTypes = new ArrayList<>();
                 for (int i = 0; i < tup.elements().size(); i++) {
-                    Core el = elaborate(tup.elements().get(i), env, data, symbols, reqs,
+                    Core el = elaborate(tup.elements().get(i), env, ctx,
                             want == null ? null : want.get(i));
                     elems.add(el);
                     elemTypes.add(el.type());
@@ -89,7 +81,7 @@ public final class Elaborator {
                 yield new Core.Tuple(elems, Type.tuple(elemTypes), tup.pos());
             }
             case Ast.TupleGet tg -> {
-                Core tuple = elaborate(tg.tuple(), env, data, symbols, reqs);
+                Core tuple = elaborate(tg.tuple(), env, ctx);
                 Type tt = tuple.type();
                 if (!(tt instanceof Type.TupleOf to)) {
                     throw CompileException.of(
@@ -108,7 +100,7 @@ public final class Elaborator {
                         to.elements().get(tg.index()), tg.pos());
             }
             case Ast.Neg neg -> {
-                Core operand = elaborate(neg.operand(), env, data, symbols, reqs);
+                Core operand = elaborate(neg.operand(), env, ctx);
                 Type t = operand.type();
                 if (t != Type.INT && t != Type.DECIMAL) {
                     throw CompileException.of(
@@ -122,7 +114,7 @@ public final class Elaborator {
                 yield new Core.Neg(operand, t, neg.pos());
             }
             case Ast.LetIn li -> {
-                Type annotation = annotatedType(li, symbols);
+                Type annotation = annotatedType(li, ctx.symbols());
                 Core value;
                 Type bindType;
                 if (isFunctionSelection(li.value())) {
@@ -132,23 +124,23 @@ public final class Elaborator {
                     if (annotation != null) {
                         throw functionAnnotation(li);   // no ordinary type describes a function value
                     }
-                    List<Type> paramTypes = inferFnParamTypes(li.name(), li.body(), env, data, symbols, reqs);
-                    value = elaborateFunctionValue(li.value(), paramTypes, env, data, symbols, reqs);
+                    List<Type> paramTypes = inferFnParamTypes(li.name(), li.body(), env, ctx);
+                    value = elaborateFunctionValue(li.value(), paramTypes, env, ctx);
                     bindType = value.type();
                 } else if (annotation != null) {
                     // the written type is the value's expected type, so an empty collection bound here
                     // takes its element/value type from the annotation rather than staying a bottom
-                    value = elaborate(li.value(), env, data, symbols, reqs, annotation);
-                    checkLetAnnotation(li, annotation, value.type(), symbols);
+                    value = elaborate(li.value(), env, ctx, annotation);
+                    checkLetAnnotation(li, annotation, value.type(), ctx.symbols());
                     bindType = annotation;
                 } else {
-                    value = elaborate(li.value(), env, data, symbols, reqs);
-                    bindType = carriedType(li, value.type(), symbols);
+                    value = elaborate(li.value(), env, ctx);
+                    bindType = carriedType(li, value.type(), ctx.symbols());
                 }
                 // the binding is visible only inside the body, so a sibling branch cannot see it
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(li.name(), bindType);
-                Core body = elaborate(li.body(), inner, data, symbols, reqs, expected);
+                Core body = elaborate(li.body(), inner, ctx, expected);
                 yield new Core.LetIn(li.name(), value, body, body.type(), li.pos());
             }
             // reached only where a block escapes: it may be passed as an argument, or bound to a
@@ -165,7 +157,7 @@ public final class Elaborator {
                     yield new Core.Var(v.name(), t, v.pos());
                 }
                 // a bare name that isn't a local is a unit-data value (spec 8.4)
-                if (symbols.get(v.name()) instanceof Ast.UnitData) {
+                if (ctx.symbols().get(v.name()) instanceof Ast.UnitData) {
                     yield new Core.Var(v.name(), Type.ref(v.name()), v.pos());
                 }
                 if (v.name().equals("null")) {
@@ -181,26 +173,26 @@ public final class Elaborator {
                                 .build(),
                         "unknown identifier `" + v.name() + "`" + Suggest.hint(v.name(), env.keySet()));
             }
-            case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, data, symbols, reqs);
-            case Ast.Call call -> CallElaborator.elaborateCall(call, env, data, symbols, reqs, expected);
-            case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, data, symbols, reqs);
+            case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
+            case Ast.Call call -> CallElaborator.elaborateCall(call, env, ctx, expected);
+            case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Ast.NewData nd -> {
-                if (!(symbols.get(nd.typeName()) instanceof Ast.Data owner)) {
+                if (!(ctx.symbols().get(nd.typeName()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.construct.no").title("check.construct.title")
                                     .at(nd.pos(), nd.typeName().length()).args(nd.typeName()).build(),
                             "cannot construct `" + nd.typeName() + "`");
                 }
                 List<Core.FieldInit> inits = DataChecker.checkConstruction(nd.typeName(), nd.inits(), nd.spreads(),
-                        nd.pos(), TypeOps.fieldTypes(owner, symbols), env, data, symbols, reqs);
+                        nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
                 yield new Core.NewData(nd.typeName(), inits, nd.spreads(),
                         Type.ref(nd.typeName()), nd.pos());
             }
-            case Ast.Match m -> MatchElaborator.elaborateMatch(m, env, data, symbols, reqs, expected);
+            case Ast.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
             case Ast.If iff -> {
-                Core cond = requireTyped(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
-                Core then = elaborate(iff.then(), env, data, symbols, reqs, expected);
-                Core els = elaborate(iff.els(), env, data, symbols, reqs, expected);
+                Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
+                Core then = elaborate(iff.then(), env, ctx, expected);
+                Core els = elaborate(iff.els(), env, ctx, expected);
                 Type tt = then.type();
                 Type et = els.type();
                 Type empty = BottomInfer.absorbBottom(tt, et);   // one case may be `[]`, or a tuple of them (ADR-0028)
@@ -236,7 +228,7 @@ public final class Elaborator {
                 List<Core> elements = new ArrayList<>();
                 Type elem = null;
                 for (Ast.Expr el : lit.elements()) {
-                    Core c = elaborate(el, env, data, symbols, reqs);
+                    Core c = elaborate(el, env, ctx);
                     elements.add(c);
                     elem = elem == null ? c.type() : BottomInfer.unifyElem(elem, c.type(), lit.pos());
                 }
@@ -248,9 +240,9 @@ public final class Elaborator {
                 // before elaborating it. It still types here, on the pre-lowering paths (a helper's
                 // standalone check), so the node produced is a type carrier, not something to emit.
                 for (Ast.Expr g : comp.guards()) {
-                    requireType(g, Type.BOOL, env, data, symbols, reqs, "guard of a comprehension");
+                    requireType(g, Type.BOOL, env, ctx, "guard of a comprehension");
                 }
-                Core element = elaborate(comp.element(), env, data, symbols, reqs);
+                Core element = elaborate(comp.element(), env, ctx);
                 yield new Core.ListLit(List.of(element), Type.list(element.type()), comp.pos());
             }
         };
@@ -258,33 +250,31 @@ public final class Elaborator {
 
     /** Elaborates {@code e} and checks it against {@code expected}, returning its Core. The check is
      * bottom-up, as {@link #requireType} is: the expected type is not pushed into the expression. */
-    static Core requireTyped(Ast.Expr e, Type expected, Map<String, Type> env, Ast.Data data,
-                                     Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, String what) {
-        Core c = elaborate(e, env, data, symbols, reqs);
-        requireType(e, c.type(), expected, symbols, what);
+    static Core requireTyped(Ast.Expr e, Type expected, Map<String, Type> env, CheckContext ctx, String what) {
+        Core c = elaborate(e, env, ctx);
+        requireType(e, c.type(), expected, ctx.symbols(), what);
         return c;
     }
 
 
-    static Core elaborateFieldAccess(Ast.FieldAccess fa, Map<String, Type> env, Ast.Data data,
-                                          Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
-        Core targetCore = elaborate(fa.target(), env, data, symbols, reqs);
+    static Core elaborateFieldAccess(Ast.FieldAccess fa, Map<String, Type> env, CheckContext ctx) {
+        Core targetCore = elaborate(fa.target(), env, ctx);
         Type target = targetCore.type();
-        if (target instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data owner) {
-            Type ft = TypeOps.fieldTypes(owner, symbols).get(fa.field());
+        if (target instanceof Type.Ref ref && ctx.symbols().get(ref.name()) instanceof Ast.Data owner) {
+            Type ft = TypeOps.fieldTypes(owner, ctx.symbols()).get(fa.field());
             if (ft != null) {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
             }
         }
-        List<String> cases = TypeOps.sumCases(target, symbols);
+        List<String> cases = TypeOps.sumCases(target, ctx.symbols());
         if (cases != null) {
             // A sum carries no fields of its own — its cases do, and which case it is is not known
             // until it is opened. Saying that is the difference between "this value has no such
             // field" and "read it in each case", which is what the author has to write.
             List<String> without = new ArrayList<>();
             for (String c : cases) {
-                if (!(symbols.get(c) instanceof Ast.Data cd)
-                        || !TypeOps.fieldTypes(cd, symbols).containsKey(fa.field())) {
+                if (!(ctx.symbols().get(c) instanceof Ast.Data cd)
+                        || !TypeOps.fieldTypes(cd, ctx.symbols()).containsKey(fa.field())) {
                     without.add(c);
                 }
             }
@@ -323,14 +313,13 @@ public final class Elaborator {
      * resolve identically.
      */
     public static Core resolveStepBinding(String fnName, Type.FnOf declaredStep, Ast.Expr stepArg,
-                                          Map<String, Type> bind, Map<String, Type> env, Ast.Data data,
-                                          Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+                                          Map<String, Type> bind, Map<String, Type> env, CheckContext ctx) {
         Type.FnOf narrow = (Type.FnOf) TypeOps.substitute(declaredStep, bind);
         Core narrowCore = null;
         Type narrowGot = null;
         CompileException narrowFailed = null;
         try {
-            narrowCore = elaborateBlockArg(fnName, stepArg, narrow.params(), env, data, symbols, reqs);
+            narrowCore = elaborateBlockArg(fnName, stepArg, narrow.params(), env, ctx);
             narrowGot = ((Type.FnOf) narrowCore.type()).result();
         } catch (CompileException e) {
             narrowFailed = e;
@@ -338,20 +327,20 @@ public final class Elaborator {
         if (narrowGot != null) {
             BottomInfer.refineBottom(declaredStep.result(), narrowGot, bind);
             Type want = TypeOps.substitute(declaredStep.result(), bind);
-            if (want instanceof Type.Var || TypeOps.assignable(narrowGot, want, symbols)) {
+            if (want instanceof Type.Var || TypeOps.assignable(narrowGot, want, ctx.symbols())) {
                 return narrowCore;   // the narrow accumulator is a fixpoint
             }
         }
         // The step matches on, or grows the accumulator into, the sum the seed's case belongs to.
         if (declaredStep.result() instanceof Type.Var accVar) {
-            Type sum = TypeOps.enclosingSum(TypeOps.substitute(declaredStep.result(), bind), symbols);
+            Type sum = TypeOps.enclosingSum(TypeOps.substitute(declaredStep.result(), bind), ctx.symbols());
             if (sum != null) {
                 Map<String, Type> widened = new HashMap<>(bind);
                 widened.put(accVar.name(), sum);
                 Core widenedCore = elaborateBlockArg(fnName, stepArg,
-                        ((Type.FnOf) TypeOps.substitute(declaredStep, widened)).params(), env, data, symbols, reqs);
+                        ((Type.FnOf) TypeOps.substitute(declaredStep, widened)).params(), env, ctx);
                 Type got = ((Type.FnOf) widenedCore.type()).result();
-                if (TypeOps.assignable(got, sum, symbols)) {
+                if (TypeOps.assignable(got, sum, ctx.symbols())) {
                     bind.put(accVar.name(), sum);
                     return widenedCore;   // the step is emitted at the widened accumulator
                 }
@@ -371,12 +360,11 @@ public final class Elaborator {
     /** Elaborates a block argument at {@code paramTypes}; the node it returns carries the
      * {@link Type.FnOf} of the block — the parameter types the call fixed, and the body's result. */
     static Core elaborateBlockArg(String fnName, Ast.Expr arg, List<Type> paramTypes,
-                                  Map<String, Type> env, Ast.Data data,
-                                  Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+                                  Map<String, Type> env, CheckContext ctx) {
         if (!(arg instanceof Ast.Block block)) {
             // a function-typed value — a helper's function parameter (spec §fn-declaration) —
             // stands in for a block: check its shape and yield its result type.
-            Core value = elaborate(arg, env, data, symbols, reqs);
+            Core value = elaborate(arg, env, ctx);
             if (value.type() instanceof Type.FnOf fn) {
                 if (fn.params().size() != paramTypes.size()) {
                     throw CompileException.of(
@@ -387,7 +375,7 @@ public final class Elaborator {
                                     + " argument(s), but it takes " + fn.params().size());
                 }
                 for (int i = 0; i < paramTypes.size(); i++) {
-                    if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i), symbols)) {
+                    if (!TypeOps.assignable(paramTypes.get(i), fn.params().get(i), ctx.symbols())) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.fn.argtype").title("check.fn.title")
                                         .at(arg.pos()).args(fnName, Type.show(paramTypes.get(i)),
@@ -416,7 +404,7 @@ public final class Elaborator {
         for (int i = 0; i < paramTypes.size(); i++) {
             inner.put(block.params().get(i), paramTypes.get(i));
         }
-        Core body = elaborate(block.body(), inner, data, symbols, reqs);
+        Core body = elaborate(block.body(), inner, ctx);
         return new Core.Block(block.params(), body, Type.fn(paramTypes, body.type()), block.pos());
     }
 
@@ -504,20 +492,14 @@ public final class Elaborator {
         return !(e instanceof Ast.Block) && producesFunction(e);
     }
 
-    /** The backend re-derives a let-bound function's parameter types the same way (spec §blocks). */
-    public static List<Type> inferFnParamTypes(String name, Ast.Expr body, Map<String, Type> env,
-                                               Ast.Data data, Map<String, Ast.Def> symbols) {
-        return inferFnParamTypes(name, body, env, data, symbols, NO_REQS);
-    }
 
     /** Infers a let-bound function's parameter types from how the body applies it: every
      * {@code f(args)} in the body must agree on the argument types (spec §blocks). A function that
      * is never applied cannot have its type inferred. */
     static List<Type> inferFnParamTypes(String name, Ast.Expr body, Map<String, Type> env,
-                                                Ast.Data data, Map<String, Ast.Def> symbols,
-                                                Map<String, ReqSig> reqs) {
+                                                CheckContext ctx) {
         List<List<Type>> uses = new ArrayList<>();
-        collectApplications(name, body, env, data, symbols, reqs, uses);
+        collectApplications(name, body, env, ctx, uses);
         if (uses.isEmpty()) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.fn.noinfer").title("check.fn.title")
@@ -542,24 +524,22 @@ public final class Elaborator {
 
     /** Collects the argument-type lists of every application {@code name(args)} in {@code e}. */
     static void collectApplications(String name, Ast.Expr e, Map<String, Type> env,
-                                            Ast.Data data, Map<String, Ast.Def> symbols,
-                                            Map<String, ReqSig> reqs, List<List<Type>> out) {
+                                            CheckContext ctx, List<List<Type>> out) {
         if (e instanceof Ast.Call call && call.fn().equals(name)) {
             List<Type> argTypes = new ArrayList<>();
             for (Ast.Expr a : call.args()) {
-                argTypes.add(typeOf(a, env, data, symbols, reqs));
+                argTypes.add(typeOf(a, env, ctx));
             }
             out.add(argTypes);
         }
-        TypeChecker.forEachChild(e, sub -> collectApplications(name, sub, env, data, symbols, reqs, out));
+        TypeChecker.forEachChild(e, sub -> collectApplications(name, sub, env, ctx, out));
     }
 
     /** Types a function value against inferred parameter types: a lambda binds its parameters and
      * yields {@code FnOf(params, resultOfBody)}; an {@code if} requires both branches to be the same
      * function type (spec §blocks). */
     static Core elaborateFunctionValue(Ast.Expr value, List<Type> paramTypes, Map<String, Type> env,
-                                          Ast.Data data, Map<String, Ast.Def> symbols,
-                                          Map<String, ReqSig> reqs) {
+                                          CheckContext ctx) {
         return switch (value) {
             case Ast.Block b -> {
                 if (b.params().size() != paramTypes.size()) {
@@ -573,13 +553,13 @@ public final class Elaborator {
                 for (int i = 0; i < paramTypes.size(); i++) {
                     inner.put(b.params().get(i), paramTypes.get(i));
                 }
-                Core body = elaborate(b.body(), inner, data, symbols, reqs);
+                Core body = elaborate(b.body(), inner, ctx);
                 yield new Core.Block(b.params(), body, Type.fn(paramTypes, body.type()), b.pos());
             }
             case Ast.If iff -> {
-                Core cond = requireTyped(iff.cond(), Type.BOOL, env, data, symbols, reqs, "if condition");
-                Core then = elaborateFunctionValue(iff.then(), paramTypes, env, data, symbols, reqs);
-                Core els = elaborateFunctionValue(iff.els(), paramTypes, env, data, symbols, reqs);
+                Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
+                Core then = elaborateFunctionValue(iff.then(), paramTypes, env, ctx);
+                Core els = elaborateFunctionValue(iff.els(), paramTypes, env, ctx);
                 Type t = then.type();
                 Type f = els.type();
                 if (!t.equals(f)) {
@@ -592,13 +572,13 @@ public final class Elaborator {
             }
             case Ast.LetIn li -> {
                 // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)
-                Core bound = elaborate(li.value(), env, data, symbols, reqs);
+                Core bound = elaborate(li.value(), env, ctx);
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(li.name(), bound.type());
-                Core body = elaborateFunctionValue(li.body(), paramTypes, inner, data, symbols, reqs);
+                Core body = elaborateFunctionValue(li.body(), paramTypes, inner, ctx);
                 yield new Core.LetIn(li.name(), bound, body, body.type(), li.pos());
             }
-            default -> elaborate(value, env, data, symbols, reqs);
+            default -> elaborate(value, env, ctx);
         };
     }
 
@@ -655,9 +635,8 @@ public final class Elaborator {
         }
     }
 
-    static void requireType(Ast.Expr e, Type expected, Map<String, Type> env, Ast.Data data,
-                                    Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, String what) {
-        requireType(e, typeOf(e, env, data, symbols, reqs), expected, symbols, what);
+    static void requireType(Ast.Expr e, Type expected, Map<String, Type> env, CheckContext ctx, String what) {
+        requireType(e, typeOf(e, env, ctx), expected, ctx.symbols(), what);
     }
 
     /** As {@link #requireType(Ast.Expr, Type, Map, Ast.Data, Map, Map, String)}, but with the

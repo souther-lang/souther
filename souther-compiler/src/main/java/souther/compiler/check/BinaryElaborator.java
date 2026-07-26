@@ -25,13 +25,12 @@ public final class BinaryElaborator {
 
     private BinaryElaborator() {}
 
-    static Core elaborateBinary(Ast.Binary bin, Map<String, Type> env, Ast.Data data,
-                                     Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs) {
+    static Core elaborateBinary(Ast.Binary bin, Map<String, Type> env, CheckContext ctx) {
         return switch (bin.op()) {
             case AND, OR -> {
-                Core left = Elaborator.requireTyped(bin.left(), Type.BOOL, env, data, symbols, reqs,
+                Core left = Elaborator.requireTyped(bin.left(), Type.BOOL, env, ctx,
                         "operand of logical operator");
-                Core right = Elaborator.requireTyped(bin.right(), Type.BOOL, env, data, symbols, reqs,
+                Core right = Elaborator.requireTyped(bin.right(), Type.BOOL, env, ctx,
                         "operand of logical operator");
                 yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }
@@ -42,11 +41,11 @@ public final class BinaryElaborator {
                 // LocalDateTime are Comparable, so it orders them too. A single-value newtype over an
                 // ordered type is ordered by that value; the operands stay the same newtype (nominal),
                 // except that a bare literal takes the other side's newtype from context.
-                Core left = Elaborator.elaborate(bin.left(), env, data, symbols, reqs);
-                Core right = Elaborator.elaborate(bin.right(), env, data, symbols, reqs);
+                Core left = Elaborator.elaborate(bin.left(), env, ctx);
+                Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
-                if (!orderedComparable(lt, rt, bin.left(), bin.right(), symbols)) {
+                if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.compare.ordered").title("check.type.mismatch.title")
                                     .at(bin.pos()).args(Type.show(lt), Type.show(rt)).build(),
@@ -60,8 +59,8 @@ public final class BinaryElaborator {
                 // `+ - * /` work on two Int or two Decimal operands (spec 18.1). Int aborts on
                 // overflow and `/` aborts on a zero divisor; Decimal `/` rounds by the default
                 // scale/mode. Case handling for a zero divisor is the `divide`/`remainder` functions.
-                Core left = Elaborator.elaborate(bin.left(), env, data, symbols, reqs);
-                Core right = Elaborator.elaborate(bin.right(), env, data, symbols, reqs);
+                Core left = Elaborator.elaborate(bin.left(), env, ctx);
+                Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
                 boolean addSub = bin.op() == Ast.BinOp.ADD || bin.op() == Ast.BinOp.SUB;
@@ -69,17 +68,17 @@ public final class BinaryElaborator {
                 // numeric newtype yield that newtype. The result is re-wrapped and its invariant re-checked at construction,
                 // which a behavior's guard discharges. The operands are the same newtype, or a newtype
                 // with a bare literal of its base (as for comparison).
-                if (addSub && arithClosedNewtype(lt, rt, bin.left(), bin.right(), symbols)) {
+                if (addSub && arithClosedNewtype(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
                     yield new Core.Binary(bin.op(), left, right,
-                            TypeOps.closedNewtypeArithResult(lt, rt, symbols), bin.pos());
+                            TypeOps.closedNewtypeArithResult(lt, rt, ctx.symbols()), bin.pos());
                 }
                 // Scalar newtype arithmetic: `*`/`/` scale a numeric newtype by a plain Int/Decimal of
                 // the same base (`金額 * 2`), staying in the newtype — the dimension is unchanged.
                 // `金額 * 金額` and `金額 * 数量` (a dimension change / units, not modeled) fall through
                 // to the base path below, an error.
-                if (!addSub && scalarNewtypeArith(lt, rt, bin.op(), symbols)) {
+                if (!addSub && scalarNewtypeArith(lt, rt, bin.op(), ctx.symbols())) {
                     yield new Core.Binary(bin.op(), left, right,
-                            TypeOps.closedNewtypeArithResult(lt, rt, symbols), bin.pos());
+                            TypeOps.closedNewtypeArithResult(lt, rt, ctx.symbols()), bin.pos());
                 }
                 if (lt != Type.INT && lt != Type.DECIMAL) {
                     throw CompileException.of(
@@ -87,14 +86,14 @@ public final class BinaryElaborator {
                                     .at(bin.pos()).args(Type.show(lt)).build(),
                             "operand of arithmetic must be Int or Decimal, got " + lt);
                 }
-                Elaborator.requireType(bin.right(), rt, lt, symbols, "operand of arithmetic");   // rt reused, no re-type
+                Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");   // rt reused, no re-type
                 yield new Core.Binary(bin.op(), left, right, lt, bin.pos());
             }
             case CONCAT -> {
                 // `++` is Elm's appendable operator: two strings concatenate to a string, two lists to
                 // a list (spec 18.1). Strings are checked first, before the empty-list absorption below.
-                Core left = Elaborator.elaborate(bin.left(), env, data, symbols, reqs);
-                Core right = Elaborator.elaborate(bin.right(), env, data, symbols, reqs);
+                Core left = Elaborator.elaborate(bin.left(), env, ctx);
+                Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lraw = left.type();
                 Type rraw = right.type();
                 if (lraw == Type.STRING && rraw == Type.STRING) {
@@ -123,8 +122,8 @@ public final class BinaryElaborator {
                         Type.list(BottomInfer.unifyElem(lo.element(), ro.element(), bin.pos())), bin.pos());
             }
             case EQ, NE -> {
-                Core left = Elaborator.elaborate(bin.left(), env, data, symbols, reqs);
-                Core right = Elaborator.elaborate(bin.right(), env, data, symbols, reqs);
+                Core left = Elaborator.elaborate(bin.left(), env, ctx);
+                Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
                 // two values of the same data compare by their fields (spec 16.2); across different
@@ -141,11 +140,11 @@ public final class BinaryElaborator {
                 // collections (covariance), which would wrongly let `List<一般社員> == List<役職>` compare;
                 // the exemption is only the direct sum<->case scalar relationship. Unrelated types
                 // (`金額 == 数量`) have disjoint case sets and still fail.
-                Set<String> lCases = TypeOps.leafCases(lt, symbols);
-                Set<String> rCases = TypeOps.leafCases(rt, symbols);
+                Set<String> lCases = TypeOps.leafCases(lt, ctx.symbols());
+                Set<String> rCases = TypeOps.leafCases(rt, ctx.symbols());
                 boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
                         && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
-                if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), symbols)
+                if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())
                         && !caseOfSum && !BottomInfer.isBottom(lt) && !BottomInfer.isBottom(rt)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.compare.msg")

@@ -111,7 +111,7 @@ public final class HelperTyping {
             // push a declared return type into the body so an empty-collection body (Map.empty(), [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn(), symbols);
-            Core elaboratedBody = Elaborator.elaborate(body, tenv, null, symbols, reqSigs, declaredReturn);
+            Core elaboratedBody = Elaborator.elaborate(body, tenv, new CheckContext(symbols, null, reqSigs), declaredReturn);
             Type bodyType = elaboratedBody.type();
             if (recursive) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
@@ -190,7 +190,7 @@ public final class HelperTyping {
                 for (int idx : inferred) {
                     Type t;
                     try {
-                        t = Elaborator.typeOf(inliner.inline(call.args().get(idx)), env, null, symbols, reqSigs);
+                        t = Elaborator.typeOf(inliner.inline(call.args().get(idx)), env, new CheckContext(symbols, null, reqSigs));
                     } catch (CompileException ignored) {
                         untypeable.putIfAbsent(idx, call.args().get(idx));
                         continue;
@@ -269,7 +269,7 @@ public final class HelperTyping {
                 inner.put(li.name(), declared);
             } else {
                 try {
-                    inner.put(li.name(), Elaborator.typeOf(inliner.inline(li.value()), env, null, symbols, reqs));
+                    inner.put(li.name(), Elaborator.typeOf(inliner.inline(li.value()), env, new CheckContext(symbols, null, reqs)));
                 } catch (CompileException ignored) {
                     // an untypeable value leaves its name unbound; a later reference just won't infer.
                 }
@@ -419,7 +419,7 @@ public final class HelperTyping {
                 continue;
             }
             try {
-                Type at = Elaborator.typeOf(inliner.inline(call.args().get(i)), env, null, symbols, reqs);
+                Type at = Elaborator.typeOf(inliner.inline(call.args().get(i)), env, new CheckContext(symbols, null, reqs));
                 TypeOps.unify(declared.get(i), at, bind, symbols, call.pos(), "argument " + (i + 1));
             } catch (CompileException ignored) {
                 return;   // can't pin the types here; leave it to the inlined check
@@ -497,7 +497,7 @@ public final class HelperTyping {
             }
             Type got;
             try {
-                got = Elaborator.typeOf(inliner.inline(lambda.body()), lenv, null, symbols, reqs);
+                got = Elaborator.typeOf(inliner.inline(lambda.body()), lenv, new CheckContext(symbols, null, reqs));
             } catch (CompileException ignored) {
                 return;   // best-effort; the inlined check reports a genuine error with full context
             }
