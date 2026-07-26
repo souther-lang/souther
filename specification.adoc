@@ -282,6 +282,17 @@ data 明細 =
 
 Both parts of an `+import+` are optional: `+import example.pricing as Pricing+` only renames, and `+import example.pricing+` only writes the dependency down. What a qualified reference reaches is still what the declaring module exposes — qualifying a name that module keeps to itself is a compile error, as is qualifying with a name that is no module of this compilation.
 
+A behavior of another module is named the same way, as a `+>->+` stage and as a `+requires+`. What the qualifier says is which module the behavior comes from, which is what an `+import+` says, so a qualified stage or requirement needs no import line either.
+
+[,text]
+----
+behavior 出荷する = inventory.引き当てる >-> 送り状を作る
+behavior 通知する : (注文: 確定注文) -> 通知済み constructs 通知済み
+    requires messaging.メールを送る
+----
+
+Unlike a type, a behavior's name is also a member name in what is generated: an injected behavior is a field of the implementing class, and its name is that field's name (<<jvm-behavior>>). So one module cannot reach two behaviors of the same name, whether written bare or qualified — qualifying them does not separate the fields. Naming both is a compile error; the module translates one into a behavior of its own, or the name is changed upstream.
+
 A dependency is a dependency however it is written, so a cycle closed by a qualified reference is the same compile error (<<e1501>>) as one closed by an `+import+`.
 
 [#reserved-words]

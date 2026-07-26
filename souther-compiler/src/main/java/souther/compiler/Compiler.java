@@ -275,6 +275,18 @@ public final class Compiler {
                         .inSource(sourceIndex(sourceOfModule, m.name()));
             }
         }
+        // A qualified behavior reference needs no import line (spec §qualified-reference); this is
+        // where not writing one becomes the same thing as writing it, so everything downstream — the
+        // imported signatures, the injected set, the class each name comes from — reads one shape.
+        List<Ast.Module> bound = new ArrayList<>();
+        for (Ast.Module m : parsed) {
+            bound.add(bindQualifiedBehaviors(m, byName));
+        }
+        parsed = bound;
+        byName.clear();
+        for (Ast.Module m : parsed) {
+            byName.put(m.name(), m);
+        }
         detectCycles(parsed, byName, sourceOfModule);
 
         // pass 1: derive each module's codecs, resolving imported types against the original defs
@@ -638,32 +650,138 @@ public final class Compiler {
     private static Map<String, Sig> importedBehaviorSigs(
             Ast.Module m, Map<String, Ast.Module> registry) {
         Map<String, Sig> result = new HashMap<>();
-        for (Ast.Import imp : m.imports()) {
-            Ast.Module src = registry.get(imp.module());
-            if (src == null) {
-                continue; // an unknown module is reported by visibleDefs
+        Map<String, String> fromModule = new HashMap<>();   // bare name → the module it came from
+        Map<String, Map<String, Sig>> sigsOf = new HashMap<>();
+        for (BehaviorRef ref : behaviorRefs(m, registry)) {
+            Ast.Module src = registry.get(ref.module());
+            if (!behaviorNames(src).contains(ref.name())) {
+                continue;   // a type import, or a name the module does not declare
             }
-            Set<String> behaviors = behaviorNames(src);
-            Map<String, Sig> srcSigs = null;
-            for (String name : imp.names()) {
-                if (!behaviors.contains(name)) {
-                    continue;
+            // The declaring module may itself import the behaviors its definitions compose (an
+            // import chain deeper than one hop), so seed its own imported signatures when computing
+            // its signatures — recursively, up the graph. Cycles are already rejected, so this ends.
+            Map<String, Sig> srcSigs = sigsOf.computeIfAbsent(ref.module(), name ->
+                    PipelineSigs.signatures(src, visibleDefs(src, registry),
+                            importedBehaviorSigs(src, registry)));
+            Sig sig = srcSigs.get(ref.name());
+            if (sig == null) {
+                continue;
+            }
+            String earlier = fromModule.put(ref.name(), ref.module());
+            if (earlier != null && !earlier.equals(ref.module())) {
+                throw behaviorCollision(ref, earlier);
+            }
+            result.put(ref.name(), sig);
+        }
+        return result;
+    }
+
+    /**
+     * Rewrites every qualified behavior reference in {@code m} — a {@code >->} stage or a
+     * {@code requires} naming another module's behavior — to the bare name, and records the module it
+     * came from as an import. A behavior's name is a member name in the generated class, so the bare
+     * form is what the rest of the compiler needs; the qualifier only says which module to take it
+     * from, which is exactly what an import says.
+     */
+    private static Ast.Module bindQualifiedBehaviors(Ast.Module m, Map<String, Ast.Module> registry) {
+        Map<String, String> qualifiers = new HashMap<>();
+        for (Ast.Import imp : m.imports()) {
+            if (imp.alias() != null) {
+                qualifiers.put(imp.alias(), imp.module());
+            }
+        }
+        Map<String, Set<String>> taken = new LinkedHashMap<>();   // module → names it already brings
+        for (Ast.Import imp : m.imports()) {
+            taken.computeIfAbsent(imp.module(), k -> new LinkedHashSet<>()).addAll(imp.names());
+        }
+        Map<String, Set<String>> added = new LinkedHashMap<>();
+        Map<String, SourcePos> at = new LinkedHashMap<>();
+        List<Ast.BehaviorDef> behaviors = new ArrayList<>();
+        boolean rewrote = false;
+        for (Ast.BehaviorDef b : m.behaviors()) {
+            switch (b) {
+                case Ast.PipeBehavior pipe -> {
+                    List<String> stages = new ArrayList<>();
+                    for (String stage : pipe.stages()) {
+                        stages.add(bind(stage, qualifiers, registry, m, pipe.pos(), taken, added, at));
+                    }
+                    rewrote |= !stages.equals(pipe.stages());
+                    behaviors.add(new Ast.PipeBehavior(pipe.name(), stages, pipe.declaredOut(), pipe.pos()));
                 }
-                if (srcSigs == null) {
-                    // The declaring module may itself import the behaviors its definitions compose
-                    // (an import chain deeper than one hop), so seed its own imported signatures
-                    // when computing its signatures — recursively, up the import graph. Cycles are
-                    // already rejected by detectCycles, so this terminates.
-                    srcSigs = PipelineSigs.signatures(src, visibleDefs(src, registry),
-                            importedBehaviorSigs(src, registry));
-                }
-                Sig sig = srcSigs.get(name);
-                if (sig != null) {
-                    result.put(name, sig);
+                case Ast.SpecBehavior spec -> {
+                    List<String> requires = new ArrayList<>();
+                    for (String req : spec.requires()) {
+                        requires.add(bind(req, qualifiers, registry, m, spec.pos(), taken, added, at));
+                    }
+                    rewrote |= !requires.equals(spec.requires());
+                    behaviors.add(new Ast.SpecBehavior(spec.name(), spec.params(), spec.ret(),
+                            spec.constructs(), requires, spec.pos()));
                 }
             }
         }
-        return result;
+        if (!rewrote) {
+            return m;
+        }
+        List<Ast.Import> imports = new ArrayList<>(m.imports());
+        for (Map.Entry<String, Set<String>> e : added.entrySet()) {
+            imports.add(new Ast.Import(e.getKey(), null, List.copyOf(e.getValue()), at.get(e.getKey())));
+        }
+        return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), imports, m.defs(),
+                behaviors, m.fns(), m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
+    }
+
+    /** One written behavior name: the bare form it binds to, collecting the import it needs. */
+    private static String bind(String written, Map<String, String> qualifiers,
+                               Map<String, Ast.Module> registry, Ast.Module m, SourcePos pos,
+                               Map<String, Set<String>> taken, Map<String, Set<String>> added,
+                               Map<String, SourcePos> at) {
+        int dot = written.lastIndexOf('.');
+        if (dot < 0) {
+            return written;
+        }
+        String qualifier = written.substring(0, dot);
+        String target = qualifiers.getOrDefault(qualifier, qualifier);
+        if (!registry.containsKey(target) || target.equals(m.name())) {
+            return written;   // a standard-library qualifier, or this module itself
+        }
+        String bare = written.substring(dot + 1);
+        if (!taken.getOrDefault(target, Set.of()).contains(bare)) {
+            added.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
+            at.putIfAbsent(target, pos);
+        }
+        return bare;
+    }
+
+    /** A behavior of another module named here, and where. */
+    private record BehaviorRef(String module, String name, SourcePos pos) {}
+
+    /** Every behavior of another module that {@code m} names. A qualified reference has already
+     * become an import by here ({@link #bindQualifiedBehaviors}), so the imports are the whole list. */
+    private static List<BehaviorRef> behaviorRefs(Ast.Module m, Map<String, Ast.Module> registry) {
+        List<BehaviorRef> refs = new ArrayList<>();
+        for (Ast.Import imp : m.imports()) {
+            if (registry.containsKey(imp.module())) {
+                for (String name : imp.names()) {
+                    refs.add(new BehaviorRef(imp.module(), name, imp.pos()));
+                }
+            }
+        }
+        return refs;
+    }
+
+    /**
+     * The same bare behavior name arrived from two modules. Unlike a type, a behavior name is also a
+     * member name in the generated class — an injected behavior is a field, and a stage that is one
+     * becomes a field here too — so the two cannot both be reached, qualified or not.
+     */
+    private static CompileException behaviorCollision(BehaviorRef ref, String earlier) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.import.behaviordup").title("check.module.title")
+                        .at(ref.pos()).args(ref.name(), earlier, ref.module())
+                        .hint("check.import.behaviordup.hint", ref.name()).build(),
+                "behavior `" + ref.name() + "` is named from both `" + earlier + "` and `"
+                        + ref.module() + "`; one behavior name is one injected field, so this module"
+                        + " cannot take both");
     }
 
     private static Set<String> behaviorNames(Ast.Module m) {
@@ -679,16 +797,9 @@ public final class Compiler {
      * it as an inferred requirement, so the consuming module injects and binds it (spec 14.3). */
     private static Set<String> importedInjectedBehaviors(Ast.Module m, Map<String, Ast.Module> registry) {
         Set<String> result = new HashSet<>();
-        for (Ast.Import imp : m.imports()) {
-            Ast.Module src = registry.get(imp.module());
-            if (src == null) {
-                continue;
-            }
-            Set<String> injected = injectedNames(src);
-            for (String name : imp.names()) {
-                if (injected.contains(name)) {
-                    result.add(name);
-                }
+        for (BehaviorRef ref : behaviorRefs(m, registry)) {
+            if (injectedNames(registry.get(ref.module())).contains(ref.name())) {
+                result.add(ref.name());
             }
         }
         return result;

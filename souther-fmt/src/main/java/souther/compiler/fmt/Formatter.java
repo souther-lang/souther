@@ -358,9 +358,26 @@ public final class Formatter {
     }
 
     private Doc nameList(SyntaxNode clause) {
+        // a `requires` entry may name its behavior through a module, so the dots of one name are kept
+        // and only a comma starts the next
         List<Doc> names = new ArrayList<>();
-        for (SyntaxToken t : idents(clause)) {
-            names.add(text(t.text()));
+        StringBuilder current = new StringBuilder();
+        for (SyntaxElement e : meaningful(clause)) {
+            if (!(e instanceof SyntaxToken t)) {
+                continue;
+            }
+            switch (t.kind()) {
+                case IDENT -> current.append(t.text());
+                case DOT -> current.append('.');
+                case COMMA -> {
+                    names.add(text(current.toString()));
+                    current.setLength(0);
+                }
+                default -> { }   // the `constructs` / `requires` keyword
+            }
+        }
+        if (current.length() > 0) {
+            names.add(text(current.toString()));
         }
         return Doc.join(text(", "), names);
     }
