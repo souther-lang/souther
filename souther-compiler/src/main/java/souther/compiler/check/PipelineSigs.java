@@ -143,8 +143,21 @@ public final class PipelineSigs {
         Type mainline = first.out();
         Set<String> retired = new LinkedHashSet<>();
         for (int i = 1; i < stages.size(); i++) {
-            mainline = route(mainline, stageSig(stages.get(i), sigs, symbols, pipe.pos()),
-                    retired, symbols, pipe.pos());
+            Sig g = stageSig(stages.get(i), sigs, symbols, pipe.pos());
+            // Every stage after the first takes exactly one input (spec 14.1). `checkStagesAreSingleInput`
+            // says so too and is the diagnostic the author usually sees, but signatures are built before
+            // it runs and are also built for an imported module that was never checked here — so the
+            // arity is confirmed rather than assumed, or `route` would index an empty input list.
+            if (g.ins().size() != 1) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.pipe.multiinput").title("check.pipe.title")
+                                .at(pipe.pos()).args(stages.get(i), g.ins().size(), pipe.name()).build(),
+                        "`" + stages.get(i) + "` takes " + g.ins().size() + " inputs, so it cannot follow"
+                                + " `>->` in `" + pipe.name() + "`. Every stage after the first takes one"
+                                + " input: call it inline or open the branches with `match` instead"
+                                + " (spec 14.1). Only the first stage may take several.");
+            }
+            mainline = route(mainline, g, retired, symbols, pipe.pos());
         }
         Type out = withRetired(mainline, retired);
         // an optional declared output must match the inferred one exactly (spec 14.5): neither a
