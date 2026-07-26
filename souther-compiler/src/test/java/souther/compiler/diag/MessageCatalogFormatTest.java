@@ -2,14 +2,18 @@ package souther.compiler.diag;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -75,5 +79,46 @@ class MessageCatalogFormatTest {
             highest = Math.max(highest, Integer.parseInt(m.group(1)));
         }
         return highest + 1;
+    }
+
+    @Test
+    void noEnglishKeyIsDefinedTwice() throws IOException {
+        assertEquals(List.of(), duplicateKeys("/souther/compiler/diag/messages.properties"));
+    }
+
+    @Test
+    void noJapaneseKeyIsDefinedTwice() throws IOException {
+        assertEquals(List.of(), duplicateKeys("/souther/compiler/diag/messages_ja.properties"));
+    }
+
+    /**
+     * The keys this catalog defines more than once. A second definition silently wins, so the first
+     * one is dead and whichever diagnostics meant it render someone else's text — the same kind of
+     * defect as the one above, and just as invisible for the same reason.
+     *
+     * <p>Read line by line rather than through {@link Properties}, which keeps only the last value
+     * and so cannot see the collision at all. The catalog uses no line continuations, so a line
+     * carrying an {@code =} outside a comment is a definition.
+     */
+    private static List<String> duplicateKeys(String resource) throws IOException {
+        Set<String> seen = new LinkedHashSet<>();
+        Set<String> duplicated = new TreeSet<>();
+        try (InputStream in = MessageCatalogFormatTest.class.getResourceAsStream(resource);
+                BufferedReader lines =
+                        new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = lines.readLine()) != null) {
+                String trimmed = line.strip();
+                int eq = trimmed.indexOf('=');
+                if (trimmed.isEmpty() || trimmed.startsWith("#") || eq < 0) {
+                    continue;
+                }
+                String key = trimmed.substring(0, eq).strip();
+                if (!seen.add(key)) {
+                    duplicated.add(key);
+                }
+            }
+        }
+        return List.copyOf(duplicated);
     }
 }

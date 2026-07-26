@@ -333,7 +333,7 @@ public final class HelperTyping {
     static void rejectPartialHelperInInvariant(Ast.Expr e, String data, Set<String> partial) {
         if (e instanceof Ast.Call call && partial.contains(call.fn())) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.invariant.partial").title("check.invariant.title")
+                    Diagnostic.of(null, "check.invariant.partial").title("check.invariant.invalid.title")
                             .at(call.pos(), call.fn().length()).args(data, call.fn()).build(),
                     "the invariant of `" + data + "` calls the `partial` helper `" + call.fn()
                             + "`, which may not terminate; an invariant is checked at construction time"
@@ -349,7 +349,7 @@ public final class HelperTyping {
     static void rejectConstructionInInvariant(Ast.Expr e, String data) {
         if (e instanceof Ast.NewData nd) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.invariant.construct").title("check.invariant.title")
+                    Diagnostic.of(null, "check.invariant.construct").title("check.invariant.invalid.title")
                             .at(nd.pos(), nd.typeName().length()).args(data, nd.typeName()).build(),
                     "the invariant of `" + data + "` constructs `" + nd.typeName()
                             + "`, but an invariant may not construct a data — it observes the value being"
