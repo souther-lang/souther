@@ -120,6 +120,58 @@ public sealed interface Type
      * {@code A | B}, {@code (A, B)}, {@code T?}. Used by diagnostics; unlike the record {@code toString}
      * it reads the way the source is written. */
     static String show(Type t) {
+        return show(t, java.util.Set.<String>of());
+    }
+
+    /**
+     * Renders {@code t} for a message that also shows {@code against}. Where one name stands for two
+     * types — {@code Mid} of one module beside {@code Mid} of another — both are written with their
+     * module, so a mismatch does not read as {@code Mid} against {@code Mid}.
+     */
+    static String show(Type t, Type against) {
+        java.util.Map<String, TypeName> here = new java.util.HashMap<>();
+        collectNames(t, here);
+        java.util.Map<String, TypeName> there = new java.util.HashMap<>();
+        collectNames(against, there);
+        java.util.Set<String> ambiguous = new java.util.HashSet<>();
+        for (java.util.Map.Entry<String, TypeName> e : here.entrySet()) {
+            TypeName other = there.get(e.getKey());
+            if (other != null && !other.equals(e.getValue())) {
+                ambiguous.add(e.getKey());
+            }
+        }
+        return show(t, ambiguous);
+    }
+
+    /** Every name {@code t} mentions, by the simple name it would be written under. A simple name
+     * that covers two different types in one type is already ambiguous within it, and is recorded
+     * under whichever came first — the pair rendering only has to tell the two sides apart. */
+    private static void collectNames(Type t, java.util.Map<String, TypeName> out) {
+        switch (t) {
+            case Ref r -> out.putIfAbsent(r.name().name(), r.name());
+            case Union u -> u.members().forEach(m -> out.putIfAbsent(m.name(), m));
+            case ListOf l -> collectNames(l.element(), out);
+            case SetOf s -> collectNames(s.element(), out);
+            case OptionOf o -> collectNames(o.element(), out);
+            case MapOf m -> {
+                collectNames(m.key(), out);
+                collectNames(m.value(), out);
+            }
+            case TupleOf tu -> tu.elements().forEach(e -> collectNames(e, out));
+            case FnOf f -> {
+                f.params().forEach(p -> collectNames(p, out));
+                collectNames(f.result(), out);
+            }
+            default -> { }
+        }
+    }
+
+    /** {@code name}, written with its module when the simple name is one of {@code qualify}. */
+    private static String showName(TypeName name, java.util.Set<String> qualify) {
+        return qualify.contains(name.name()) ? name.qualified() : name.name();
+    }
+
+    private static String show(Type t, java.util.Set<String> qualify) {
         return switch (t) {
             case Prim p -> switch (p) {
                 case INT -> "Int";
@@ -130,20 +182,21 @@ public sealed interface Type
                 case DATETIME -> "DateTime";
                 case RAW -> "Raw";
             };
-            case Ref r -> r.name().name();
+            case Ref r -> showName(r.name(), qualify);
             // the name carries the `'` it was written with (`'a`), so it is not added twice
             case Var v -> v.name().startsWith("'") ? v.name() : "'" + v.name();
             case Nothing _ -> "_";
-            case ListOf l -> "List<" + show(l.element()) + ">";
-            case SetOf s -> "Set<" + show(s.element()) + ">";
-            case OptionOf o -> show(o.element()) + "?";
-            case MapOf m -> "Map<" + show(m.key()) + ", " + show(m.value()) + ">";
-            case Union u -> u.members().stream().map(TypeName::name)
+            case ListOf l -> "List<" + show(l.element(), qualify) + ">";
+            case SetOf s -> "Set<" + show(s.element(), qualify) + ">";
+            case OptionOf o -> show(o.element(), qualify) + "?";
+            case MapOf m -> "Map<" + show(m.key(), qualify) + ", " + show(m.value(), qualify) + ">";
+            case Union u -> u.members().stream().map(n -> showName(n, qualify))
                     .collect(java.util.stream.Collectors.joining(" | "));
-            case TupleOf tu -> "(" + tu.elements().stream().map(Type::show)
-                    .collect(java.util.stream.Collectors.joining(", ")) + ")";
-            case FnOf f -> "(" + f.params().stream().map(Type::show)
-                    .collect(java.util.stream.Collectors.joining(", ")) + ") -> " + show(f.result());
+            case TupleOf tu -> tu.elements().stream().map(e -> show(e, qualify))
+                    .collect(java.util.stream.Collectors.joining(", ", "(", ")"));
+            case FnOf f -> f.params().stream().map(p -> show(p, qualify))
+                    .collect(java.util.stream.Collectors.joining(", ", "(", ")"))
+                    + " -> " + show(f.result(), qualify);
         };
     }
 

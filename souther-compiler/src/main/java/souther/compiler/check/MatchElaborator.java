@@ -284,7 +284,7 @@ public final class MatchElaborator {
         throw CompileException.of(
                 Diagnostic.of(null, "check.match.branchtypes").title("check.match.title")
                         .at(c.pos()).args(Type.show(branchType), Type.show(bt))
-                        .diff(Type.show(bt), Type.show(branchType)).build(),
+                        .diff(Type.show(bt, branchType), Type.show(branchType, bt)).build(),
                 "match branches disagree: " + branchType + " vs " + bt);
     }
 
