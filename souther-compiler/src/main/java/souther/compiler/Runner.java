@@ -14,12 +14,13 @@ import net.unit8.raoh.ResourceBundleMessageResolver;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
-import net.unit8.raoh.decode.ObjectDecoders;
+import net.unit8.raoh.json.JsonDecoders;
 import net.unit8.raoh.encode.Encoder;
 import net.unit8.raoh.encode.ObjectEncoders;
 
 import souther.runtime.Sets;
 
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
@@ -158,7 +159,7 @@ public final class Runner {
         Sig sig = sigs.get(spec.name());
         List<Type> ins = sig.ins();
 
-        Object[] rawArgs = splitInput(spec.name(), ins.size(), inputJson);
+        JsonNode[] rawArgs = splitInput(spec.name(), ins.size(), inputJson);
         MemoryClassLoader loader = new MemoryClassLoader(classes, Runner.class.getClassLoader());
         Object[] args = new Object[ins.size()];
         for (int i = 0; i < ins.size(); i++) {
@@ -286,33 +287,37 @@ public final class Runner {
 
     // --- input --------------------------------------------------------------------------------
 
-    private static Object[] splitInput(String name, int arity, String inputJson) {
+    private static JsonNode[] splitInput(String name, int arity, String inputJson) {
         if (arity == 0) {
-            return new Object[0];
+            return new JsonNode[0];
         }
         if (inputJson == null) {
             throw usage("run.input.missing", "`" + name + "` takes " + arity + " input"
                     + (arity == 1 ? "" : "s") + " — pass --input", name, arity);
         }
-        Object tree = parseJson(inputJson);
+        JsonNode tree = parseJson(inputJson);
         if (arity == 1) {
-            return new Object[] {tree};
+            return new JsonNode[] {tree};
         }
-        if (!(tree instanceof List<?> list)) {
+        if (!tree.isArray()) {
             throw fail("run.input.notarray", "`" + name + "` takes " + arity
                     + " inputs — --input must be a JSON array of that length", name, arity);
         }
-        if (list.size() != arity) {
+        if (tree.size() != arity) {
             throw fail("run.input.count", "`" + name + "` takes " + arity + " inputs, but --input has "
-                    + list.size(), name, arity, list.size());
+                    + tree.size(), name, arity, tree.size());
         }
-        return list.toArray();
+        JsonNode[] args = new JsonNode[arity];
+        for (int i = 0; i < arity; i++) {
+            args[i] = tree.get(i);
+        }
+        return args;
     }
 
     // --- decode / encode ----------------------------------------------------------------------
 
-    private static Object decode(MemoryClassLoader loader, String pkg, Type type, Object raw, int index) {
-        Decoder<Object, ?> decoder = decoderFor(loader, pkg, type, index);
+    private static Object decode(MemoryClassLoader loader, String pkg, Type type, JsonNode raw, int index) {
+        Decoder<JsonNode, ?> decoder = decoderFor(loader, pkg, type, index);
         Result<?> result;
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
@@ -340,21 +345,27 @@ public final class Runner {
     }
 
     /**
-     * The decoder for one input type. A collection is decoded the way a data's collection field is
-     * (spec 10.2): a {@code List} through its element decoder, a {@code Set} as a list deduplicated
-     * into a set, a {@code Map} as a JSON object over its value decoder. A map keyed by a newtype
-     * (ADR-0040) is left out — its keys are remapped through the key type's own invariant check,
-     * which the generated per-data decoder does and this one does not.
+     * The decoder for one input type, over the JSON source. {@code --input} is JSON, so the decoders
+     * have to be the ones the boundary reads JSON with: a temporal arrives as an ISO string and is
+     * parsed, not handed over as a {@code java.time} value. Reading JSON with the neutral-source
+     * decoders is what made a {@code Date} input impossible — anywhere, as a parameter or inside a
+     * data (issue #119).
+     *
+     * <p>A data delegates to its generated {@code jsonDecoder()}, so a nested shape, an invariant and
+     * a sum's discriminator are all read exactly as they are at the boundary. What is composed here
+     * is only what has no class of its own: the primitives and the collections. A map keyed by a
+     * newtype or a temporal (ADR-0040) is still left out — the generated per-data decoder remaps
+     * those keys and this one does not.
      */
-    private static Decoder<Object, ?> decoderFor(MemoryClassLoader loader, String pkg, Type type, int index) {
+    private static Decoder<JsonNode, ?> decoderFor(MemoryClassLoader loader, String pkg, Type type, int index) {
         if (type instanceof Type.Prim prim) {
             return leafDecoder(prim, index);
         }
         if (type instanceof Type.Ref ref) {
             try {
                 Class<?> c = loader.loadClass(pkg + "." + ref.name());
-                @SuppressWarnings("unchecked")   // the generated class's decoder() erases at the reflection boundary
-                Decoder<Object, ?> decoder = (Decoder<Object, ?>) c.getMethod("decoder").invoke(null);
+                @SuppressWarnings("unchecked")   // the generated class's factory erases at the reflection boundary
+                Decoder<JsonNode, ?> decoder = (Decoder<JsonNode, ?>) c.getMethod("jsonDecoder").invoke(null);
                 return decoder;
             } catch (ReflectiveOperationException e) {
                 throw fail("run.decode.nodecoder",
@@ -362,14 +373,14 @@ public final class Runner {
             }
         }
         if (type instanceof Type.ListOf list) {
-            return ObjectDecoders.list(decoderFor(loader, pkg, list.element(), index));
+            return JsonDecoders.list(decoderFor(loader, pkg, list.element(), index));
         }
         if (type instanceof Type.SetOf set) {
-            return ObjectDecoders.list(decoderFor(loader, pkg, set.element(), index))
+            return JsonDecoders.list(decoderFor(loader, pkg, set.element(), index))
                     .map(elements -> Sets.fromList(new java.util.ArrayList<Object>(elements)));
         }
         if (type instanceof Type.MapOf map && map.key() == Type.STRING) {
-            return ObjectDecoders.map(decoderFor(loader, pkg, map.value(), index));
+            return JsonDecoders.map(decoderFor(loader, pkg, map.value(), index));
         }
         throw fail("run.decode.unsupported",
                 "input #" + (index + 1) + " has type `" + Type.show(type)
@@ -377,14 +388,17 @@ public final class Runner {
                         + " collection of those).", index + 1, Type.show(type));
     }
 
-    private static Decoder<Object, ?> leafDecoder(Type.Prim prim, int index) {
+    /** A primitive over the JSON source. {@code JsonDecoders} has no temporal factory — in JSON a
+     *  temporal is a string that is then parsed — so a date reads as {@code string().date()}, the
+     *  same two steps the generated JSON decoder takes. */
+    private static Decoder<JsonNode, ?> leafDecoder(Type.Prim prim, int index) {
         return switch (prim) {
-            case STRING -> ObjectDecoders.string();
-            case INT -> ObjectDecoders.long_();
-            case BOOL -> ObjectDecoders.bool();
-            case DECIMAL -> ObjectDecoders.decimal();
-            case DATE -> ObjectDecoders.date();
-            case DATETIME -> ObjectDecoders.dateTime();
+            case STRING -> JsonDecoders.string();
+            case INT -> JsonDecoders.long_();
+            case BOOL -> JsonDecoders.bool();
+            case DECIMAL -> JsonDecoders.decimal();
+            case DATE -> JsonDecoders.string().date();
+            case DATETIME -> JsonDecoders.string().dateTime();
             case RAW -> throw fail("run.decode.raw", "input #" + (index + 1)
                     + " has the reserved Raw type, which `run` cannot decode.", index + 1);
         };
@@ -501,9 +515,9 @@ public final class Runner {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    private static Object parseJson(String input) {
+    private static JsonNode parseJson(String input) {
         try {
-            return JSON.readValue(input, Object.class);
+            return JSON.readTree(input);
         } catch (Exception e) {
             throw fail("run.input.badjson", "--input is not valid JSON: " + e.getMessage(),
                     e.getMessage());
