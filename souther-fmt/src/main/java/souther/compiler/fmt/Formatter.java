@@ -32,12 +32,18 @@ public final class Formatter {
     private static final int INDENT = 4;
     private static final int WIDTH = 100;
 
-    /** The comments already written, by their offset in the source. A comment is reachable two ways
-     * once members nest — from the parent's child list and from the front of the member's own subtree
-     * — and it must be written once. The key is the offset rather than the token: the tree is
-     * green/red, so reading `children()` twice hands back equal tokens that are not the same object.
-     * One instance formats one file, so this lives as long as that. */
+    /** The comments already written, keyed by where they are in the source. A comment is reachable
+     * two ways once members nest — from the parent's child list and from the front of the member's
+     * own subtree — and it must be written once. The offset identifies a comment without depending on
+     * how the tree hands nodes back. One instance formats one file, so this lives as long as that. */
     private final java.util.Set<Integer> written = new java.util.HashSet<>();
+
+    /** {@link #commentsBefore} per parent, computed once. It is asked for every member of a parent,
+     * and answering means walking that parent's children, so without this a construct with n members
+     * walks them n times. One instance formats one file, so the cache lives exactly as long as the
+     * tree it describes. */
+    private final Map<SyntaxNode, Map<SyntaxNode, List<SyntaxToken>>> commentsByParent =
+            new IdentityHashMap<>();
 
     private Formatter() {
     }
@@ -745,6 +751,10 @@ public final class Formatter {
     /** Each of {@code parent}'s child nodes against the comment lines written above it — the comments
      * that sit in the parent's own child list rather than on the member. */
     private Map<SyntaxNode, List<SyntaxToken>> commentsBefore(SyntaxNode parent) {
+        return commentsByParent.computeIfAbsent(parent, Formatter::scanCommentsBefore);
+    }
+
+    private static Map<SyntaxNode, List<SyntaxToken>> scanCommentsBefore(SyntaxNode parent) {
         Map<SyntaxNode, List<SyntaxToken>> out = new IdentityHashMap<>();
         List<SyntaxToken> pending = new ArrayList<>();
         for (SyntaxElement e : parent.children()) {
