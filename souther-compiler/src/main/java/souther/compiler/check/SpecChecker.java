@@ -206,7 +206,7 @@ public final class SpecChecker {
             throw CompileException.of(
                     Diagnostic.of(null, "check.behavior.return").title("check.type.mismatch.title")
                             .at(body.pos()).args(spec.name(), Type.show(output), Type.show(rt))
-                            .diff(Type.show(rt), Type.show(output)).build(),
+                            .diff(Type.show(rt, output), Type.show(output, rt)).build(),
                     "behavior `" + spec.name() + "` returns " + output + " but its `let` body is " + rt);
         }
 

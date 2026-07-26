@@ -232,7 +232,7 @@ public final class TypeOps {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.generic.arg").title("check.type.mismatch.title")
                                     .at(pos).args(what, Type.show(bound), Type.show(arg))
-                                    .diff(Type.show(arg), Type.show(bound)).build(),
+                                    .diff(Type.show(arg, bound), Type.show(bound, arg)).build(),
                             what + ": expected " + bound + " but got " + arg);
                 }
             }
@@ -263,7 +263,7 @@ public final class TypeOps {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.generic.arg").title("check.type.mismatch.title")
                                     .at(pos).args(what, Type.show(param), Type.show(arg))
-                                    .diff(Type.show(arg), Type.show(param)).build(),
+                                    .diff(Type.show(arg, param), Type.show(param, arg)).build(),
                             what + ": expected " + param + " but got " + arg);
                 }
             }

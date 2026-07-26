@@ -247,7 +247,7 @@ public final class PipelineSigs {
                 throw CompileException.of(
                         Diagnostic.of("E1701", "e1701.msg")
                                 .at(pos)
-                                .diff(Type.show(mainline), Type.show(in))
+                                .diff(Type.show(mainline, in), Type.show(in, mainline))
                                 .hint("e1701.hint")
                                 .build(),
                         "Cannot compose behaviors: no output case of the left behavior is accepted by "
@@ -260,7 +260,7 @@ public final class PipelineSigs {
             throw CompileException.of(
                     Diagnostic.of("E1701", "e1701.msg")
                             .at(pos)
-                            .diff(Type.show(mainline), Type.show(in))
+                            .diff(Type.show(mainline, in), Type.show(in, mainline))
                             .hint("e1701.hint")
                             .build(),
                     "Cannot compose behaviors. Left output: " + mainline + ", right input: " + in);

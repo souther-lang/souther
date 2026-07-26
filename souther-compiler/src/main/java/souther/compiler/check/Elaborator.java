@@ -440,7 +440,7 @@ public final class Elaborator {
         throw CompileException.of(
                 Diagnostic.of(null, "check.let.annotation").title("check.type.mismatch.title")
                         .at(li.pos()).args(li.name(), Type.show(declared), Type.show(valueType))
-                        .diff(Type.show(valueType), Type.show(declared)).build(),
+                        .diff(Type.show(valueType, declared), Type.show(declared, valueType)).build(),
                 "the binding `" + li.name() + "` declares " + Type.show(declared)
                         + " but its value is " + Type.show(valueType));
     }
@@ -648,7 +648,7 @@ public final class Elaborator {
                             .title("check.type.mismatch.title")
                             .at(e.pos(), width(e))
                             .args(what)
-                            .diff(Type.show(actual), Type.show(expected))
+                            .diff(Type.show(actual, expected), Type.show(expected, actual))
                             .hint("check.type.mismatch.hint")
                             .build(),
                     what + " must be " + expected + " but is " + actual);

@@ -123,10 +123,10 @@ public final class BinaryElaborator {
                                     .title("check.concat.title")
                                     .at(bin.pos(), 2)
                                     .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
-                                            "check.operand", Type.show(lt))
+                                            "check.operand", Type.show(lt, rt))
                                     .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())),
-                                            "check.operand", Type.show(rt))
-                                    .args(Type.show(lt), Type.show(rt))
+                                            "check.operand", Type.show(rt, lt))
+                                    .args(Type.show(lt, rt), Type.show(rt, lt))
                                     .build(),
                             "`++` needs two lists or two strings, got " + lt + " and " + rt);
                 }
@@ -163,10 +163,10 @@ public final class BinaryElaborator {
                                     .title("check.compare.title")
                                     .at(bin.pos(), 2)
                                     .secondary(Region.ofWidth(bin.left().pos(), Elaborator.width(bin.left())),
-                                            "check.operand", Type.show(lt))
+                                            "check.operand", Type.show(lt, rt))
                                     .secondary(Region.ofWidth(bin.right().pos(), Elaborator.width(bin.right())),
-                                            "check.operand", Type.show(rt))
-                                    .args(Type.show(lt), Type.show(rt))
+                                            "check.operand", Type.show(rt, lt))
+                                    .args(Type.show(lt, rt), Type.show(rt, lt))
                                     .build(),
                             "cannot compare " + lt + " with " + rt);
                 }

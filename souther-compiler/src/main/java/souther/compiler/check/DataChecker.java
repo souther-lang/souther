@@ -458,7 +458,7 @@ public final class DataChecker {
                         Diagnostic.of(null, "check.field.type").title("check.type.mismatch.title")
                                 .at(init.pos(), init.name().length())
                                 .args(init.name(), Type.show(ft), Type.show(vt))
-                                .diff(Type.show(vt), Type.show(ft)).build(),
+                                .diff(Type.show(vt, ft), Type.show(ft, vt)).build(),
                         "field `" + init.name() + "` expects " + ft + " but got " + vt);
             }
         }
@@ -488,7 +488,7 @@ public final class DataChecker {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.spread.provides").title("check.type.mismatch.title")
                                 .at(pos).args(f.getKey(), Type.show(pv), typeName, Type.show(f.getValue()))
-                                .diff(Type.show(pv), Type.show(f.getValue())).build(),
+                                .diff(Type.show(pv, f.getValue()), Type.show(f.getValue(), pv)).build(),
                         "spread provides `" + f.getKey() + "` as " + pv + " but `" + typeName + "` needs "
                                 + f.getValue());
             }
