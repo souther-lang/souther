@@ -582,13 +582,29 @@ public final class Formatter {
         String typeName = firstIdent(n);
         List<Doc> members = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
+            Doc member;
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
-                members.add(concat(text("..."), text(identPath(c))));   // `...c` or `...c.address`
+                member = concat(text("..."), text(identPath(c)));   // `...c` or `...c.address`
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 var value = firstExprChildOpt(c);
-                members.add(value.map(v -> concat(text(firstIdent(c)), text(" = "), expr(v)))
-                        .orElse(text(firstIdent(c))));   // shorthand `field`
+                member = value.map(v -> concat(text(firstIdent(c)), text(" = "), expr(v)))
+                        .orElse(text(firstIdent(c)));   // shorthand `field`
+            } else {
+                continue;
             }
+            // A member's leading comments come before it, each on its own line. The HARDLINE forces
+            // the enclosing group to break, which is what a literal with a comment in it wants
+            // anyway: a `//` on a line the group had collapsed would swallow the rest of it.
+            List<String> comments = leading(c).comments();
+            if (!comments.isEmpty()) {
+                List<Doc> parts = new ArrayList<>();
+                for (String comment : comments) {
+                    parts.add(concat(text(comment), HARDLINE));   // in order: two lines stay two lines
+                }
+                parts.add(member);
+                member = concat(parts);
+            }
+            members.add(member);
         }
         if (members.isEmpty()) {
             return concat(text(typeName), text(" {}"));
