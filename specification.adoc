@@ -2453,6 +2453,23 @@ write `exposing ( 注文を確定する : 確定注文 | 在庫不足 )`
 
 A `+>->+` composition exposed with `+exposing+` requires an output signature (<<declared-composition-output>>). Its absence is this error. Writing a signature in `+exposing+` for a non-composition behavior is also E1605, since the type is fixed at the definition.
 
+[#e1606]
+=== A behavior's output union includes an imported case
+
+[,text]
+----
+error E1606:
+The output union of `引当して出荷する` includes `在庫不足`, a case declared in
+another module.
+A case class carries the unions it belongs to, decided when its own module is
+generated, so an imported case cannot join a union declared here; consume
+`在庫不足` at the boundary, or re-express it as a case of this module.
+----
+
+A behavior's output union is generated as a sealed interface its leaf cases implement (<<jvm-anonymous-union>>), and a case class receives that interface when *its own* module is generated. A union declared here cannot take a case from an imported module: the class the other module emitted would have to implement an interface this one declares. This is not the JVM's same-package rule for `+permits+` — that rule is enforced by javac when it declares a sealed type in source, not when one is read from the classpath — but the ordering of separate module generation (ADR-0057).
+
+The move is to translate: match the imported behavior's result and return a case of this module. A module boundary is where another context's vocabulary is restated in this one's.
+
 [#e1607]
 === requires does not name an injection target
 
