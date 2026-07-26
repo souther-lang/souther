@@ -250,7 +250,7 @@ import List ( map, filter, fold )
 import String ( trim, split )
 ----
 
-This corresponds to Elm's `+import List exposing (map)+`. Qualified access (`+List.map+`) always works without importing, so `+import+` only elides the qualifier. Importing the same bare name from two modules is ambiguous — writing both `+import String ( length )+` and `+import List ( length )+` in one module leaves `+length+` undetermined. In that case, import one and qualify the other call (`+String.length(...)+`). As with the wildcard prohibition, no name is delivered implicitly.
+This corresponds to Elm's `+import List exposing (map)+`. Qualified access (`+List.map+`) always works without importing, so `+import+` only elides the qualifier. Importing the same bare name from two modules is ambiguous — writing both `+import String ( length )+` and `+import List ( length )+` in one module leaves `+length+` undetermined. In that case, import one and qualify the other call (`+String.length(...)+`). A *type* has no qualified form, so two modules exposing the same type name (`+金額+` in each of two bounded contexts) cannot both be imported into one module and cannot be told apart there; the module imports the one it means, and reaches the other through a module that gives it a different name. As with the wildcard prohibition, no name is delivered implicitly.
 
 [#reserved-words]
 == Reserved words
