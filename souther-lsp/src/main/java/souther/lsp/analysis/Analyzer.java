@@ -74,7 +74,7 @@ public final class Analyzer {
             // on save and a failing one (E1805) surfaces as an editor diagnostic.
             Compiler.compile(text, "Main");
         } catch (CompileException e) {
-            out.add(fromCompile(lines, e));
+            out.addAll(fromCompile(lines, e));
         } catch (RuntimeException | StackOverflowError e) {
             out.add(internalError(lines, e));
         }
@@ -882,13 +882,19 @@ public final class Analyzer {
         return range(lines, token.start(), token.end());
     }
 
-    private LspDiagnostic fromCompile(LineIndex lines, CompileException e) {
-        Diagnostic d = e.diagnostic();
-        if (d != null) {
-            return fromDiagnostic(lines, d);
+    /** Every diagnostic the compile error carries, each as its own editor marker — a compile stops at
+     * the first error, but a pass that finds several at once (each failing {@code example} row) is
+     * squiggled row by row rather than collapsed onto the first. */
+    private List<LspDiagnostic> fromCompile(LineIndex lines, CompileException e) {
+        if (e.diagnostic() != null) {
+            List<LspDiagnostic> out = new ArrayList<>();
+            for (Diagnostic d : e.diagnostics()) {
+                out.add(fromDiagnostic(lines, d));
+            }
+            return out;
         }
-        return new LspDiagnostic(rangeOf(lines, null), LspDiagnostic.ERROR, null,
-                cleanMessage(e.getMessage()));
+        return List.of(new LspDiagnostic(rangeOf(lines, null), LspDiagnostic.ERROR, null,
+                cleanMessage(e.getMessage())));
     }
 
     /** An LSP diagnostic from a structured {@link Diagnostic}: its range from the region, its code

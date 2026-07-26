@@ -1,5 +1,7 @@
 package souther.compiler.diag;
 
+import java.util.List;
+
 /**
  * A compile error with a source position. Carries an error code (e.g. {@code E1101})
  * when one applies (spec section 22), otherwise a bare message for lex/parse errors.
@@ -9,6 +11,11 @@ package souther.compiler.diag;
  * renderer can take {@link #diagnostic()} and produce the Elm-style snippet or JSON. A site that has
  * not been moved onto a catalog key throws with a literal message, wrapped as a
  * {@link Diagnostic#literal literal} diagnostic.
+ *
+ * <p>Most phases stop at the first error, so the exception carries one diagnostic. A phase that finds
+ * several independent errors at once — every failing {@code example} row — throws them all through
+ * {@link #diagnostics()}, and the CLI and the annotation processor print each. {@link #diagnostic()}
+ * is then the first: the one a single-diagnostic caller reads.
  */
 public class CompileException extends RuntimeException {
 
@@ -16,7 +23,7 @@ public class CompileException extends RuntimeException {
      *  say which one — otherwise there is nothing to quote the line from. */
     private static final int NO_SOURCE = -1;
 
-    private final transient Diagnostic diagnostic;
+    private final transient List<Diagnostic> diagnostics;
     private final int sourceIndex;
 
     public CompileException(SourcePos pos, String message) {
@@ -29,12 +36,12 @@ public class CompileException extends RuntimeException {
 
     /** Throws with a fully structured diagnostic (a migrated site). */
     public CompileException(Diagnostic diagnostic, String legacyMessage) {
-        this(diagnostic, legacyMessage, NO_SOURCE);
+        this(List.of(diagnostic), legacyMessage, NO_SOURCE);
     }
 
-    private CompileException(Diagnostic diagnostic, String legacyMessage, int sourceIndex) {
+    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, int sourceIndex) {
         super(legacyMessage);
-        this.diagnostic = diagnostic;
+        this.diagnostics = diagnostics;
         this.sourceIndex = sourceIndex;
     }
 
@@ -48,17 +55,39 @@ public class CompileException extends RuntimeException {
                 format(diagnostic.pos(), diagnostic.code(), legacyBody));
     }
 
+    /**
+     * A throw site that found several errors in one pass and reports each; {@code diagnostics} must
+     * not be empty. The first drives {@link #pos()}, {@link #code()} and the one-line
+     * {@code legacyBody} prefix; a renderer walks {@link #diagnostics()} and prints them all.
+     */
+    public static CompileException ofAll(List<Diagnostic> diagnostics, String legacyBody) {
+        Diagnostic first = diagnostics.get(0);
+        return new CompileException(List.copyOf(diagnostics),
+                format(first.pos(), first.code(), legacyBody), NO_SOURCE);
+    }
+
     public SourcePos pos() {
-        return diagnostic == null ? null : diagnostic.pos();
+        Diagnostic d = diagnostic();
+        return d == null ? null : d.pos();
     }
 
     public String code() {
-        return diagnostic == null ? null : diagnostic.code();
+        Diagnostic d = diagnostic();
+        return d == null ? null : d.code();
     }
 
-    /** The structured diagnostic behind this error, for a renderer. */
+    /** The structured diagnostic behind this error, for a renderer; the first when the error carries
+     * several. */
     public Diagnostic diagnostic() {
-        return diagnostic;
+        List<Diagnostic> all = diagnostics();
+        return all.isEmpty() ? null : all.get(0);
+    }
+
+    /** Every diagnostic this error carries, in the order they were found — one for most phases,
+     * several when a pass reports each of its independent failures. Empty when the structured form
+     * did not survive (the field is transient, so a deserialized error has only its message). */
+    public List<Diagnostic> diagnostics() {
+        return diagnostics == null ? List.of() : diagnostics;
     }
 
     /**
@@ -80,7 +109,7 @@ public class CompileException extends RuntimeException {
         if (sourceIndex != NO_SOURCE || index < 0) {
             return this;
         }
-        CompileException tagged = new CompileException(diagnostic, getMessage(), index);
+        CompileException tagged = new CompileException(diagnostics, getMessage(), index);
         tagged.setStackTrace(getStackTrace());
         return tagged;
     }
