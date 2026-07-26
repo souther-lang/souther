@@ -185,7 +185,9 @@ let indexBy (key: ('a) -> 'k, xs: List<'a>) =
 let sort (xs: List<'a>) : List<'a> = intrinsic "list.sort"
 
 // `range(from, to)` is the consecutive integers from `from` to `to`, both ends included (Elm's
-// `List.range`); `from` above `to` gives the empty list. It is the one way to get a list that is not
+// `List.range`); `from` above `to` gives the empty list, and a span longer than a list can hold
+// aborts before the walk starts rather than filling memory until it dies. It is the one way to get a
+// list that is not
 // written out or read from outside, so a walk over positions — the levels of a bay, the digits of a
 // code — has something to walk. Like `reverse` and `sort` it is a primitive: building it from `fold`
 // would need a list to fold over in the first place.

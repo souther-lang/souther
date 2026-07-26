@@ -45,7 +45,8 @@ let concat (xs: List<String>) : String = intrinsic "string.concat"
 
 // `reverse` / `repeat` / `lines`, the rest of Elm's String module that Souther's types allow.
 // `reverse` walks code points, not UTF-16 units, so a character outside the basic plane survives it.
-// `repeat(n, s)` joins `n` copies (nothing for `n` of 0 or less). `lines` breaks on newlines and
+// `repeat(n, s)` joins `n` copies (nothing for `n` of 0 or less; a count no string could hold aborts
+// rather than quietly giving fewer, as an Int overflow does). `lines` breaks on newlines and
 // accepts both `\n` and `\r\n` (Elm `String.lines`); empty pieces are kept, so a trailing newline
 // leaves an empty last line.
 let reverse (s: String) : String = intrinsic "string.reverse"

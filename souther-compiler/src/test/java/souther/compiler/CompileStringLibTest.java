@@ -269,6 +269,52 @@ class CompileStringLibTest {
         assertEquals("12345", m.get("wide"), "a string already that wide is left alone");
     }
 
+    /** A count or width no JVM string could hold aborts rather than quietly producing something
+     *  shorter than was asked for — the treatment an Int overflow gets (spec 18.2). */
+    @Test
+    void aRepeatCountOrPadWidthOutOfRangeAborts() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import String ( repeat, padLeft )
+
+                data In = { n: Int }
+                data Out = { wide: String }
+
+                behavior grow : (i: In) -> Out constructs Out
+                behavior pad : (i: In) -> Out constructs Out
+
+                let grow (i) = Out { wide = repeat(i.n, "x") }
+                let pad (i) = Out { wide = padLeft(i.n, "0", "1") }
+                """), getClass().getClassLoader());
+
+        Object grow = loader.loadClass("demo.Grow" + "$Impl").getConstructor().newInstance();
+        Object pad = loader.loadClass("demo.Pad" + "$Impl").getConstructor().newInstance();
+        Object tooMany = Codecs.decoded(loader, "demo.In", java.util.Map.of("n", 3_000_000_000L));
+
+        assertThrows(souther.runtime.ConstraintViolation.class, () -> Codecs.apply(grow, tooMany));
+        assertThrows(souther.runtime.ConstraintViolation.class, () -> Codecs.apply(pad, tooMany));
+
+        // An empty string repeats to nothing whatever the count, so there is nothing to abort over.
+        BytesClassLoader empty = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import String ( repeat )
+
+                data In = { n: Int }
+                data Out = { wide: String }
+
+                behavior grow : (i: In) -> Out constructs Out
+
+                let grow (i) = Out { wide = repeat(i.n, "") }
+                """), getClass().getClassLoader());
+        Object growEmpty = empty.loadClass("demo.Grow" + "$Impl").getConstructor().newInstance();
+        java.util.Map<?, ?> out = (java.util.Map<?, ?>) Codecs.encode(empty, "demo.Out",
+                Codecs.apply(growEmpty, Codecs.decoded(empty, "demo.In",
+                        java.util.Map.of("n", 3_000_000_000L))));
+        assertEquals("", out.get("wide"));
+    }
+
     /** {@code fromDecimal} renders in plain notation and keeps the scale the value carries;
      *  {@code toDecimal} parses back, answering {@code Decimal | NotANumber} as {@code toInt} does. */
     @Test

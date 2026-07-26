@@ -60,10 +60,19 @@ public final class Lists {
 
     /** The consecutive integers from {@code from} to {@code to}, both ends included (Elm
      *  {@code List.range}); {@code from} above {@code to} gives the empty list. A primitive rather
-     *  than a fold, because a fold needs a list to walk and this is what produces one. */
+     *  than a fold, because a fold needs a list to walk and this is what produces one.
+     *
+     *  <p>A span longer than a list can hold aborts up front rather than filling memory until it
+     *  dies — an out-of-range bound is a model bug, not a business result, so it gets the treatment
+     *  {@link IntMath} gives an overflow. The width is computed before the walk because
+     *  {@code to - from} itself can overflow. */
     public static List<Long> range(long from, long to) {
         if (from > to) {
             return PersistentVector.empty();
+        }
+        long width = to - from + 1;
+        if (width <= 0 || width > Integer.MAX_VALUE) {
+            throw new ConstraintViolation("List.range is out of range: " + from + " to " + to);
         }
         PersistentVector<Long> out = PersistentVector.empty();
         for (long i = from; ; i++) {

@@ -118,12 +118,17 @@ public final class Strings {
     }
 
     /** {@code n} copies of {@code s} joined (Elm {@code String.repeat}); {@code n} of 0 or less gives
-     *  the empty string. */
+     *  the empty string. A count no JVM string could hold aborts rather than quietly producing fewer
+     *  copies than were asked for — an out-of-range count is a model bug, not a business result, and
+     *  gets the same treatment {@link IntMath} gives an overflow. */
     public static String repeat(String s, long n) {
-        if (n <= 0) {
+        if (n <= 0 || s.isEmpty()) {
             return "";
         }
-        return s.repeat((int) Math.min(n, Integer.MAX_VALUE));
+        if (n > Integer.MAX_VALUE) {
+            throw new ConstraintViolation("String.repeat count out of range: " + n);
+        }
+        return s.repeat((int) n);
     }
 
     /** Breaks {@code s} into lines (Elm {@code String.lines}): {@code \r\n} is normalised to
@@ -149,11 +154,15 @@ public final class Strings {
     }
 
     /** The filler that brings {@code s} up to {@code n} characters, in whole copies of {@code pad}
-     *  (so a multi-character {@code pad} can overshoot the width). Empty when nothing is needed. */
+     *  (so a multi-character {@code pad} can overshoot the width). Empty when nothing is needed, and
+     *  an abort when the width is one no JVM string could reach — as {@link #repeat} does. */
     private static String padding(String s, long n, String pad) {
         long missing = n - s.length();
         if (missing <= 0 || pad.isEmpty()) {
             return "";
+        }
+        if (missing > Integer.MAX_VALUE) {
+            throw new ConstraintViolation("String.pad width out of range: " + n);
         }
         StringBuilder out = new StringBuilder();
         while (out.length() < missing) {

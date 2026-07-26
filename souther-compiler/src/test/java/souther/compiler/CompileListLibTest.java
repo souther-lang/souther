@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** The List standard library beyond map/filter/all/any (spec 18.4): the further Elm combinators
  *  derived from {@code fold}, plus the native {@code sort} primitive and String ordering. */
@@ -460,6 +461,28 @@ class CompileListLibTest {
         assertEquals(List.of(7L), m.get("single"), "both ends are included, so one value is one element");
         assertEquals(List.of(), m.get("backwards"), "a start above the end gives nothing");
         assertEquals(List.of(0L, 2L, 4L), m.get("doubled"));
+    }
+
+    /** A span longer than a list can hold aborts before the walk starts, rather than filling memory
+     *  until it dies — the treatment an Int overflow gets (spec 18.2). */
+    @Test
+    void aRangeWiderThanAListCanHoldAborts() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( range, length )
+
+                data In = { to: Int }
+                data Out = { n: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { n = length(range(1, i.to)) }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object tooWide = Codecs.decoded(loader, "demo.In", Map.of("to", 3_000_000_000L));
+        assertThrows(souther.runtime.ConstraintViolation.class, () -> Codecs.apply(behavior, tooWide));
     }
 
     /** {@code concatMap} maps to a list and joins in one pass; {@code foldr} walks from the end.
