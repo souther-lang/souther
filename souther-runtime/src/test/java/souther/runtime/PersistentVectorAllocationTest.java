@@ -1,5 +1,6 @@
 package souther.runtime;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.lang.management.ManagementFactory;
@@ -37,6 +38,9 @@ import org.junit.jupiter.api.Test;
  * them off) references are 8 bytes instead of 4 and the same code costs 73 B/element, which is what
  * the budget below has to leave room for.
  *
+ * <p>The measured figure is not printed — the assertion message carries it when it matters, and the
+ * table above plus ADR-0060 record it when it does not.
+ *
  * <p>Re-run: {@code mvn -pl souther-runtime test -Dtest=PersistentVectorAllocationTest}
  */
 class PersistentVectorAllocationTest {
@@ -65,12 +69,11 @@ class PersistentVectorAllocationTest {
         long after = bean.getCurrentThreadAllocatedBytes();
 
         long perElement = (after - before) / ELEMENTS;
-        System.out.println("PersistentVector.append: " + perElement + " bytes/element");
         assertTrue(perElement > 0, "allocation accounting reported nothing; measurement is broken");
         assertTrue(perElement < MAX_BYTES_PER_ELEMENT,
                 "append allocated " + perElement + " bytes/element, budget is "
-                        + MAX_BYTES_PER_ELEMENT);
-        assertTrue(built.size() == ELEMENTS, "the built vector was optimized away");
+                        + MAX_BYTES_PER_ELEMENT + " (see ADR-0060 for the measured figures)");
+        assertEquals(ELEMENTS, built.size());
     }
 
     private static PersistentVector<Object> grow() {

@@ -10,8 +10,10 @@ import static org.junit.jupiter.api.Assertions.fail;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
 /** {@link PersistentVector} against an {@link ArrayList} oracle, across sizes that span several trie
@@ -208,39 +210,42 @@ class PersistentVectorTest {
     void concurrentAppendsOffOneVectorAllSucceed() throws Exception {
         int threads = 8;
         int each = 50;
-        for (int n : new int[] {0, 1, 5, 31, 32, 33, 1025}) {
-            PersistentVector<Integer> shared = versions(n).get(n);
-            CountDownLatch start = new CountDownLatch(1);
-            List<CompletableFuture<PersistentVector<Integer>>> futures = new ArrayList<>();
-            for (int t = 0; t < threads; t++) {
-                int tag = -(t + 1);
-                futures.add(CompletableFuture.supplyAsync(() -> {
-                    try {
+        // A pool of its own, not the common pool: its parallelism is one less than the core count
+        // and it is shared with everything else running, so on a small or busy machine the appends
+        // would run in batches and the race this test is here to lose would not happen.
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            for (int n : new int[] {0, 1, 5, 31, 32, 33, 1025}) {
+                PersistentVector<Integer> shared = versions(n).get(n);
+                CountDownLatch start = new CountDownLatch(1);
+                List<Future<PersistentVector<Integer>>> futures = new ArrayList<>();
+                for (int t = 0; t < threads; t++) {
+                    int tag = -(t + 1);
+                    futures.add(pool.submit(() -> {
                         start.await();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw new IllegalStateException(e);
-                    }
-                    PersistentVector<Integer> mine = shared;
-                    for (int k = 0; k < each; k++) {
-                        mine = mine.append(tag);
-                    }
-                    return mine;
-                }));
-            }
-            start.countDown();
+                        PersistentVector<Integer> mine = shared;
+                        for (int k = 0; k < each; k++) {
+                            mine = mine.append(tag);
+                        }
+                        return mine;
+                    }));
+                }
+                start.countDown();
 
-            for (int t = 0; t < threads; t++) {
-                PersistentVector<Integer> r = futures.get(t).get();
-                assertEquals(n + each, r.size(), "thread " + t + " size at n=" + n);
-                for (int i = 0; i < n; i++) {
-                    assertEquals(i, r.get(i), "thread " + t + " prefix at n=" + n);
+                for (int t = 0; t < threads; t++) {
+                    PersistentVector<Integer> r = futures.get(t).get();
+                    assertEquals(n + each, r.size(), "thread " + t + " size at n=" + n);
+                    for (int i = 0; i < n; i++) {
+                        assertEquals(i, r.get(i), "thread " + t + " prefix at n=" + n);
+                    }
+                    for (int i = n; i < n + each; i++) {
+                        assertEquals(-(t + 1), r.get(i), "thread " + t + " own elements at n=" + n);
+                    }
                 }
-                for (int i = n; i < n + each; i++) {
-                    assertEquals(-(t + 1), r.get(i), "thread " + t + " own elements at n=" + n);
-                }
+                assertEquals(n, shared.size(), "the shared base changed at n=" + n);
             }
-            assertEquals(n, shared.size(), "the shared base changed at n=" + n);
+        } finally {
+            pool.shutdownNow();
         }
     }
 

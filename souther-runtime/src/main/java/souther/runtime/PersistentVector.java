@@ -37,13 +37,22 @@ import java.util.function.Consumer;
  * and those were all written before it was constructed. A second append from that same version
  * loses the claim and copies instead, so branching keeps working.
  *
- * <p>The claim is confined to one thread rather than made atomic, so every slot a version can read
- * was written by the thread that froze that version, before the freeze. The JLS 17.5 guarantee for
- * objects reachable from a final field therefore still covers the whole tail, exactly as it did when
- * every append allocated a fresh one — a vector handed to another thread reads correctly even if it
- * was published through a data race. An append from a non-owning thread copies once and owns the
- * copy, which costs nothing on the fold path (single-threaded) and keeps the hot path free of any
- * atomic instruction.
+ * <p><b>Why the claim is confined to one thread rather than made atomic.</b> Final-field reachability
+ * (JLS 17.5) is not enough on its own here: it covers writes performed <em>before</em> the freeze of
+ * the object being read through, and a shared array outlives many freezes. Suppose two threads could
+ * extend one array — T1 writes {@code a[0]} and freezes {@code V1}, T2 obtains {@code V1}, writes
+ * {@code a[1]} and freezes {@code V2}. A reader of {@code V2} needs {@code a[0]}, but T1's write is
+ * ordered before T2's freeze only if {@code V1} reached T2 with a happens-before edge. Publish it
+ * through a race and there is none, and the guarantee is formally lost — invisibly, since no test
+ * would show it.
+ *
+ * <p>One owner per array removes that case rather than betting against it. Every slot a version can
+ * read was then written by the very thread that froze that version, so program order puts each write
+ * before that freeze and JLS 17.5 covers the whole array, exactly as when every append allocated a
+ * fresh one. The same guarantee runs in the read direction: a non-owner reads the prefix it copies
+ * through the previous version's freeze, performed by the owner after writing it. An append from a
+ * non-owning thread therefore copies once and owns the copy, which costs nothing on the fold path
+ * (single-threaded) and keeps the hot path free of any atomic instruction.
  */
 public final class PersistentVector<E> extends AbstractList<E> implements RandomAccess {
 
@@ -60,7 +69,12 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
      * lives here; see the class javadoc for why it is a rule and not a lock.
      */
     private static final class Tail {
-        /** Final so the JLS 17.5 reachable-from-a-final-field guarantee reaches the elements. */
+        /**
+         * Final so JLS 17.5 reaches the elements through it — necessary but not sufficient on its
+         * own. What makes the guarantee hold for a shared array is {@link #owner}: one writer means
+         * every element a version can read was written by the thread that froze it. See the class
+         * javadoc; changing either half without the other breaks the argument.
+         */
         private final Object[] a;
         /**
          * {@code Thread.threadId()} of the only thread that may extend {@link #a}; 0 = nobody.
