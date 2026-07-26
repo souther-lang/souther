@@ -9,7 +9,6 @@ import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Type;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
@@ -443,12 +442,6 @@ final class BodyGen {
             pushInt(code, tg.index());
             code.aaload();
             castFromObject(code, tg.type());
-        }
-
-        /** Whether {@code t} still carries the empty-collection bottom {@link Type#NOTHING} — an
-         * unresolved element/key/value type that must not reach codegen (it has no JVM form). */
-        private static boolean mentionsNothing(Type t) {
-            return Type.mentions(t, x -> x instanceof Type.Nothing);
         }
 
         /** Binds the bytecode that follows to {@code e}'s source line, for the {@code LineNumberTable}

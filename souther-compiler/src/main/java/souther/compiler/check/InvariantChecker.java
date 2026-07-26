@@ -371,8 +371,8 @@ final class InvariantChecker {
 
     private Type typeExpr(Ast.Expr e, Map<String, Type> types) {
         return switch (e) {
-            case Ast.IntLit ignored -> Type.INT;
-            case Ast.DecimalLit ignored -> Type.DECIMAL;
+            case Ast.IntLit _ -> Type.INT;
+            case Ast.DecimalLit _ -> Type.DECIMAL;
             case Ast.Var v -> types.get(v.name());
             case Ast.FieldAccess fa -> {
                 Type owner = typeExpr(fa.target(), types);

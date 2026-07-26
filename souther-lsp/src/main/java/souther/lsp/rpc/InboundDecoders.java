@@ -7,7 +7,6 @@ import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
 import tools.jackson.databind.JsonNode;
 
-import java.util.List;
 import java.util.Optional;
 
 import static net.unit8.raoh.json.JsonDecoders.combine;

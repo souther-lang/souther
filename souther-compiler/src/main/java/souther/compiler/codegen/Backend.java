@@ -636,16 +636,6 @@ public final class Backend {
         });
     }
 
-    /**
-     * The single reference class a behavior's input or output success type maps to, for a generic
-     * {@code Behavior<In, Out>} signature: the {@code <名>Result} interface for an anonymous union, the
-     * named data/sum for a single case, the boxed class for a primitive. Returns {@code null} for a
-     * list/option/map, which has no single reference class to name here.
-     */
-    private ClassDesc refTypeOrNull(Type t, String behaviorName) {
-        return ctx.refTypeOrNull(t, behaviorName);
-    }
-
     private Type successType(Ast.RetType ret) {
         return ctx.successType(ret);
     }

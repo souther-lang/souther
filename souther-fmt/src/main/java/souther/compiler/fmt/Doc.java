@@ -69,7 +69,7 @@ public sealed interface Doc {
         while (!todo.isEmpty()) {
             Item it = todo.pop();
             switch (it.doc) {
-                case Nil ignored -> { }
+                case Nil _ -> { }
                 case Text t -> {
                     sb.append(t.s());
                     col += t.s().length();
@@ -95,7 +95,7 @@ public sealed interface Doc {
                         col = it.indent;
                     }
                 }
-                case Hard ignored -> {
+                case Hard _ -> {
                     sb.append('\n').append(" ".repeat(it.indent));
                     col = it.indent;
                 }
@@ -123,7 +123,7 @@ public sealed interface Doc {
                 return true;
             }
             switch (it.doc) {
-                case Nil ignored -> { }
+                case Nil _ -> { }
                 case Text t -> {
                     remaining -= t.s().length();
                     if (remaining < 0) {
@@ -148,7 +148,7 @@ public sealed interface Doc {
                         return true;   // a break within reach means it fits
                     }
                 }
-                case Hard ignored -> {
+                case Hard _ -> {
                     // a hardline cannot be laid out flat: inside the group under test (FLAT) it forces
                     // a break; in an already-broken outer context it just ends the measured line.
                     return it.mode != Mode.FLAT;

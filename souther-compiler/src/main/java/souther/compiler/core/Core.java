@@ -1,6 +1,5 @@
 package souther.compiler.core;
 
-import souther.compiler.check.Elaborator;
 import souther.compiler.check.Type;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;

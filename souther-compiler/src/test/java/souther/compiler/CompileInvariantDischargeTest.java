@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Severity;
 
 import org.junit.jupiter.api.Test;

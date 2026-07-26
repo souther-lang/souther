@@ -528,11 +528,11 @@ public interface Ast {
      */
     public static void forEachChild(Expr e, java.util.function.Consumer<Expr> f) {
         switch (e) {
-            case IntLit x -> { }
-            case DecimalLit x -> { }
-            case StringLit x -> { }
-            case BoolLit x -> { }
-            case Var x -> { }
+            case IntLit _ -> { }
+            case DecimalLit _ -> { }
+            case StringLit _ -> { }
+            case BoolLit _ -> { }
+            case Var _ -> { }
             case Neg n -> f.accept(n.operand());
             case FieldAccess fa -> f.accept(fa.target());
             case Binary b -> {
