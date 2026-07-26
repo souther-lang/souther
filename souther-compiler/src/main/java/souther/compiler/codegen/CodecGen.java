@@ -20,6 +20,7 @@ import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -96,17 +97,52 @@ final class CodecGen {
                 MethodTypeDesc.of(CD_Set, CD_List));          // instantiatedMethodType: (List) -> Set
     }
 
+    /**
+     * Pushes the decoder a map key is read with. A key always arrives as a {@code String} — a JSON
+     * object's keys are strings, and the neutral map's are too — so the temporal key is the
+     * string-then-parse form for every source, not the direct temporal factory a field value uses.
+     */
+    private void emitKeyDecoder(CodeBuilder code, Ast.DecRef key) {
+        switch (key) {
+            case Ast.DataDecRef d -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
+            case Ast.PrimDecRef p -> {
+                // Only a temporal is parsed here: a String key never reaches this method (it needs no
+                // remapping at all), and no other primitive is a boundary key.
+                String parse = switch (p.kind()) {
+                    case DATE -> "date";
+                    case DATETIME -> "dateTime";
+                    case STRING, INT, BOOL, DECIMAL ->
+                            throw new CompileException(key.pos(), "not a map key decoder: " + p.kind());
+                };
+                code.invokestatic(CD_ObjectDecoders, "string", MTD_leafString);
+                code.invokevirtual(CD_StringDecoder, parse, MTD_leafTemporal);
+            }
+            default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
+        }
+    }
+
+    /** Whether a map's keys need remapping at all: a plain {@code String} key is already what the
+     *  decoded object carries. */
+    private static boolean needsRekey(Ast.DecRef key) {
+        return !(key instanceof Ast.PrimDecRef p && p.kind() == Ast.PrimKind.STRING);
+    }
+
     /** The name of the generated per-$Dec helper that remaps a decoded {@code Map<String, V>}'s keys
-     *  into the String-backed newtype {@code keyType}, invariant-checked. */
-    private static String rekeyMethod(String keyType) {
-        return "__rekey$" + keyType;
+     *  into the key type, invariant-checked. A temporal key is named with a second {@code $} so it
+     *  cannot collide with a data whose name is {@code Date}. */
+    private static String rekeyMethod(Ast.DecRef key) {
+        return switch (key) {
+            case Ast.DataDecRef d -> "__rekey$" + d.typeName();
+            case Ast.PrimDecRef p -> "__rekey$$" + p.kind();
+            default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
+        };
     }
 
     /** {@code invokedynamic} producing a {@code BiFunction<Map, Path, Result>} over the current $Dec
      *  class's {@code __rekey$<keyType>}, for {@code Decoder.flatMapWithPath} in a newtype-keyed map. */
-    private static DynamicCallSiteDesc rekeyCallSite(ClassDesc cdDec, String keyType) {
+    private static DynamicCallSiteDesc rekeyCallSite(ClassDesc cdDec, Ast.DecRef key) {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, cdDec, rekeyMethod(keyType), MTD_rekey);
+                DirectMethodHandleDesc.Kind.STATIC, cdDec, rekeyMethod(key), MTD_rekey);
         return DynamicCallSiteDesc.of(
                 BSM_METAFACTORY, "apply",
                 MethodTypeDesc.of(CD_BiFunction),                        // no captures: () -> BiFunction
@@ -117,15 +153,35 @@ final class CodecGen {
 
     /** {@code invokedynamic} producing a {@code Function<K, String>} over the key newtype's bare
      *  {@code value()} accessor, for {@code Maps.mapKeys} when encoding a newtype-keyed map. */
-    private DynamicCallSiteDesc keyValueCallSite(String keyType) {
-        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.VIRTUAL, cd(keyType), "value", MTD_value);
-        return DynamicCallSiteDesc.of(
-                BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_Function),                          // no captures: () -> Function
-                MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
-                impl,                                                    // implMethod: K.value() -> String
-                MethodTypeDesc.of(CD_String, cd(keyType)));              // instantiatedMethodType: (K) -> String
+    private DynamicCallSiteDesc keyValueCallSite(Ast.EncElem key) {
+        return switch (key) {
+            case Ast.DataEnc d -> {
+                DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                        DirectMethodHandleDesc.Kind.VIRTUAL, cd(d.typeName()), "value", MTD_value);
+                yield DynamicCallSiteDesc.of(
+                        BSM_METAFACTORY, "apply",
+                        MethodTypeDesc.of(CD_Function),                  // no captures: () -> Function
+                        MethodTypeDesc.of(CD_Object, CD_Object),         // samMethodType: (Object) -> Object
+                        impl,                                            // implMethod: K.value() -> String
+                        MethodTypeDesc.of(CD_String, cd(d.typeName()))); // instantiatedMethodType: (K) -> String
+            }
+            // a temporal renders as its ISO form, which is its `toString` — the same rendering an
+            // IsoTextRaw field gets
+            case Ast.PrimEnc _ -> DynamicCallSiteDesc.of(
+                    BSM_METAFACTORY, "apply",
+                    MethodTypeDesc.of(CD_Function),
+                    MethodTypeDesc.of(CD_Object, CD_Object),
+                    MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.STATIC, CD_String,
+                            "valueOf", MethodTypeDesc.of(CD_String, CD_Object)),
+                    MethodTypeDesc.of(CD_String, CD_Object));
+            default -> throw new CompileException(key.pos(), "not a map key encoder: " + key);
+        };
+    }
+
+    /** Whether a map's keys are rendered before the String-keyed encoder sees them: a {@code String}
+     *  key is already what it wants. */
+    private static boolean needsKeyRender(Ast.EncElem key) {
+        return !(key instanceof Ast.PrimEnc p && p.kind() == Ast.PrimKind.STRING);
     }
 
     /** Invokes a type's static {@code decoder()}/{@code encoder()} factory, as an interface
@@ -413,12 +469,12 @@ final class CodecGen {
                             emitNewtypeDecode(code, gen, cdName, nt, fields, src, invariants);
                 }
             });
-            // One key-remap helper per String-backed newtype used as a map key anywhere in this
-            // decoder; the decode body's flatMapWithPath call sites reference them.
-            Set<String> keyTypes = new LinkedHashSet<>();
+            // One key-remap helper per key type used as a map key anywhere in this decoder; the
+            // decode body's flatMapWithPath call sites reference them.
+            Map<String, Ast.DecRef> keyTypes = new LinkedHashMap<>();
             collectKeyedMapTypes(dec, keyTypes);
-            for (String keyType : keyTypes) {
-                emitRekeyHelper(cb, keyType);
+            for (Ast.DecRef key : keyTypes.values()) {
+                emitRekeyHelper(cb, key);
             }
             emitPatternFields(cb, invariants);
             if (invariants.hasUnmapped()) {
@@ -462,7 +518,7 @@ final class CodecGen {
     }
 
     /** Collects the String-backed newtypes used as map keys anywhere in a derived decoder. */
-    private void collectKeyedMapTypes(Ast.DecoderDef dec, Set<String> out) {
+    private void collectKeyedMapTypes(Ast.DecoderDef dec, Map<String, Ast.DecRef> out) {
         switch (dec) {
             case Ast.ObjectDecoder obj -> {
                 for (Ast.Bind bind : obj.binds()) {
@@ -474,11 +530,11 @@ final class CodecGen {
         }
     }
 
-    private void collectKeyedMapTypes(Ast.DecRef ref, Set<String> out) {
+    private void collectKeyedMapTypes(Ast.DecRef ref, Map<String, Ast.DecRef> out) {
         switch (ref) {
             case Ast.MapDecRef mp -> {
-                if (mp.keyType() != null) {
-                    out.add(mp.keyType());
+                if (needsRekey(mp.key())) {
+                    out.putIfAbsent(rekeyMethod(mp.key()), mp.key());
                 }
                 collectKeyedMapTypes(mp.value(), out);
             }
@@ -497,11 +553,11 @@ final class CodecGen {
      * (spec 15) and a failure lands at the key's path; on success it returns a {@code Map<K, V>} in
      * iteration order. Materialised as a {@code BiFunction} for {@code Decoder.flatMapWithPath}.
      */
-    private void emitRekeyHelper(ClassBuilder cb, String keyType) {
-        cb.withMethodBody(rekeyMethod(keyType), MTD_rekey, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
+    private void emitRekeyHelper(ClassBuilder cb, Ast.DecRef key) {
+        cb.withMethodBody(rekeyMethod(key), MTD_rekey, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
                 code -> {
             // locals: src=0, path=1, keyDec=2, out=3, issues=4, it=5, entry=6, key=7, kr=8
-            invokeCodec(code, keyType, "decoder", MTD_Rdecoder);
+            emitKeyDecoder(code, key);
             code.astore(2);                                              // keyDec = K.decoder()
             code.new_(CD_LinkedHashMap);
             code.dup();
@@ -775,8 +831,7 @@ final class CodecGen {
             case Ast.ListDecRef l -> Type.list(bindType(l.element()));
             case Ast.SetDecRef s -> Type.set(bindType(s.element()));
             case Ast.OptionDecRef o -> Type.option(bindType(o.element()));
-            case Ast.MapDecRef mp -> Type.map(
-                    mp.keyType() == null ? Type.STRING : Type.ref(mp.keyType()), bindType(mp.value()));
+            case Ast.MapDecRef mp -> Type.map(bindType(mp.key()), bindType(mp.value()));
         };
     }
 
@@ -814,9 +869,10 @@ final class CodecGen {
             case Ast.MapDecRef mp -> {
                 emitDecoderObject(code, mp.value(), src);
                 code.invokestatic(srcListOwner(src), "map", MTD_mapDec);   // Decoder<I, Map<String,V>>
-                if (mp.keyType() != null) {
-                    // Remap the String keys into the key newtype, invariant-checked.
-                    code.invokedynamic(rekeyCallSite(decoderClass, mp.keyType()));   // BiFunction<Map,Path,Result>
+                if (needsRekey(mp.key())) {
+                    // Remap the String keys into the key type: a newtype's own decoder runs its
+                    // invariant, a temporal's parses the ISO form.
+                    code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));   // BiFunction<Map,Path,Result>
                     code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
                 }
             }
@@ -1116,9 +1172,9 @@ final class CodecGen {
                 pushElemEncoder(code, me.elem());
                 code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);   // Encoder<Map<String,V>,Object>
                 gen.expr(me.source());                                          // Map<K,V>
-                if (me.keyType() != null) {
-                    // Render the newtype keys bare before the String-keyed map encoder.
-                    code.invokedynamic(keyValueCallSite(me.keyType()));         // Function<K,String>
+                if (needsKeyRender(me.key())) {
+                    // Render the keys bare before the String-keyed map encoder.
+                    code.invokedynamic(keyValueCallSite(me.key()));             // Function<K,String>
                     code.invokestatic(CD_Maps, "mapKeys", MTD_mapKeys);         // Map<String,V>
                 }
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
@@ -1195,8 +1251,8 @@ final class CodecGen {
             case Ast.MapElemEnc m -> {
                 pushElemEncoder(code, m.value());
                 code.invokestatic(CD_MapEncoders, "mapOf", MTD_Rencode_list);
-                if (m.keyType() != null) {
-                    code.invokedynamic(keyValueCallSite(m.keyType()));      // Function<K, String>
+                if (needsKeyRender(m.key())) {
+                    code.invokedynamic(keyValueCallSite(m.key()));          // Function<K, String>
                     code.invokedynamic(mapKeysCallSite());                  // Function<Map<K,V>, Map<String,V>>
                     code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
                 }

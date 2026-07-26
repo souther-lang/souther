@@ -151,7 +151,7 @@ public final class Deriver {
             return new Ast.OptionDecRef(decRef(oo.element(), d, field, pos), pos);
         }
         if (t instanceof Type.MapOf mo) {
-            return new Ast.MapDecRef(decRef(mo.value(), d, field, pos), mapKeyType(mo), pos);
+            return new Ast.MapDecRef(decRef(mo.value(), d, field, pos), mapKeyDec(mo, d, field, pos), pos);
         }
         throw noCodec(t, d, field, pos);
     }
@@ -227,16 +227,36 @@ public final class Deriver {
             return new Ast.OptionRaw(access, inner, elemVar, pos);
         }
         if (t instanceof Type.MapOf mo) {
-            return new Ast.MapEnc(access, encElem(mo.value(), d, field, pos), mapKeyType(mo), pos);
+            return new Ast.MapEnc(access, encElem(mo.value(), d, field, pos), mapKeyEnc(mo, d, field, pos), pos);
         }
         throw noCodec(t, d, field, pos);
     }
 
-    /** The newtype a map's keys carry at the boundary, or {@code null} for a plain {@code String} key.
-     * A String-backed newtype key ({@code Map<商品ID, V>}) is constructed on decode and rendered bare
-     * on encode; a {@code String} key passes through. */
-    private static String mapKeyType(Type.MapOf mo) {
-        return mo.key() instanceof Type.Ref r ? r.name() : null;
+    /**
+     * How a map's keys cross the boundary. A JSON object's keys are strings, so a key is decoded from
+     * and encoded to a bare string: a {@code String} key passes through, a String-backed newtype
+     * ({@code Map<商品ID, V>}) is constructed on decode (its invariant enforced) and rendered bare on
+     * encode, and a temporal key is parsed from and written as its ISO form — the same representation
+     * a {@code Date} field already has. Any other key type is rejected before here (ADR-0040).
+     */
+    private static Ast.DecRef mapKeyDec(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
+        if (mo.key() instanceof Type.Ref r) {
+            return new Ast.DataDecRef(r.name(), pos);
+        }
+        if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
+            return new Ast.PrimDecRef(primKind(mo.key()), pos);
+        }
+        throw noCodec(mo.key(), d, field, pos);
+    }
+
+    private static Ast.EncElem mapKeyEnc(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
+        if (mo.key() instanceof Type.Ref r) {
+            return new Ast.DataEnc(r.name(), pos);
+        }
+        if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
+            return new Ast.PrimEnc(primKind(mo.key()), pos);
+        }
+        throw noCodec(mo.key(), d, field, pos);
     }
 
     /** The encoder for one element of a collection. A collection may hold a collection
@@ -256,7 +276,7 @@ public final class Deriver {
             return new Ast.SetElemEnc(encElem(so.element(), d, field, pos), pos);
         }
         if (t instanceof Type.MapOf mo) {
-            return new Ast.MapElemEnc(encElem(mo.value(), d, field, pos), mapKeyType(mo), pos);
+            return new Ast.MapElemEnc(encElem(mo.value(), d, field, pos), mapKeyEnc(mo, d, field, pos), pos);
         }
         throw noCodec(t, d, field, pos);
     }
