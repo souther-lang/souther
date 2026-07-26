@@ -90,7 +90,7 @@ public final class Main {
                 System.out.println("wrote " + file);
             }
         } catch (CompileException e) {
-            reportCompileError(e, sources.size() == 1 ? sources.get(0) : null, render);
+            reportCompileError(e, sourceOf(sources, e), render);
             System.exit(1);
         } catch (IOException e) {
             System.err.println("io error: " + e.getMessage());
@@ -192,6 +192,20 @@ public final class Main {
             reportCompileError(e, firstSource(args), render);
             System.exit(1);
         }
+    }
+
+    /**
+     * The file whose line the error should quote: the only source of a single-file compile, or — when
+     * several were linked — the one the compiler was working on, which it tags the error with. Null
+     * when a multi-file error names no source, so the snippet is left out rather than quoting a line
+     * from the wrong file.
+     */
+    static Path sourceOf(List<Path> sources, CompileException e) {
+        if (sources.size() == 1) {
+            return sources.get(0);
+        }
+        int index = e.sourceIndex();
+        return index >= 0 && index < sources.size() ? sources.get(index) : null;
     }
 
     /** Renders a compile error: an Elm-style snippet (or JSON) in the chosen locale, or the legacy
