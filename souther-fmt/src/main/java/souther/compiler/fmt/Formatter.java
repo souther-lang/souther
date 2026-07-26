@@ -601,6 +601,12 @@ public final class Formatter {
     private Doc block(SyntaxNode n) {
         List<Doc> lines = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
+            // A statement inside a block carries its leading comments the same way a top-level item
+            // does. Walking only the child nodes dropped them, so a comment explaining a step was
+            // lost on the first format.
+            for (String comment : leading(c).comments()) {
+                lines.add(concat(HARDLINE, text(comment)));
+            }
             Doc d = switch (c.kind()) {
                 case LET_STMT -> concat(text("let "), text(firstIdent(c)), writtenType(c),
                         text(" = "), expr(onlyExpr(c)));
