@@ -148,6 +148,12 @@ public final class CallElaborator {
                 // declaration cannot name, so this stays a built-in like Int.divide
                 yield Type.union(new java.util.LinkedHashSet<>(List.of("Int", "NotANumber")));
             }
+            case "String.toDecimal" -> {
+                arity(call, 1);
+                ca.require(0, Type.STRING, "argument of String.toDecimal");
+                // the sibling of toInt, and here for the same reason: a primitive-headed union
+                yield Type.union(new java.util.LinkedHashSet<>(List.of("Decimal", "NotANumber")));
+            }
             case "List.length" -> {
                 arity(call, 1);
                 Type t = ca.type(0);
@@ -282,6 +288,17 @@ public final class CallElaborator {
                 requireRoundingMode(args.get(1));
                 ca.untyped(1);   // a built-in identifier, not an expression
                 yield Type.INT;
+            }
+            case "Decimal.round" -> {
+                // Rounding to a scale names its mode for the same reason `toInt` does, and stays in
+                // the compiler for the same reason: the mode is a bare built-in identifier, which a
+                // core declaration's parameter type cannot name (spec 18.3).
+                arity(call, 3);
+                ca.require(0, Type.DECIMAL, "argument 1 of round");
+                ca.require(1, Type.INT, "scale of round");
+                requireRoundingMode(args.get(2));
+                ca.untyped(2);   // a built-in identifier, not an expression
+                yield Type.DECIMAL;
             }
             case "Int.divide", "Decimal.divide" -> {
                 if (args.size() == 4) {

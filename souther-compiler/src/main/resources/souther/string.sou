@@ -16,6 +16,14 @@ let contains (sub: String, s: String) : Bool = intrinsic "string.contains"
 let startsWith (prefix: String, s: String) : Bool = intrinsic "string.startsWith"
 let endsWith (suffix: String, s: String) : Bool = intrinsic "string.endsWith"
 
+// `isEmpty` says "this text is blank" (Elm `String.isEmpty`), the sibling of `List.isEmpty` /
+// `Map.isEmpty` / `Set.isEmpty`. It reads `length`, so it is an ordinary helper rather than a
+// primitive. Use it in a predicate — `filter(piece -> not(String.isEmpty(piece)))` — rather than in a
+// newtype invariant: a derived decoder recognises `String.length(value) >= 1` and reports a violation
+// as `too_short` with its bound, while the helper's inlined form leaves it the generic
+// `invariant_violation` (§codec-constraints).
+let isEmpty (s: String) = String.length(s) == 0
+
 // Whole-string regex match (Java Pattern flavour, anchored), for format-constrained values in an
 // invariant — `invariant String.matches("[0-9]{3}-[0-9]{4}", value)`. The pattern must be a string
 // literal, so a malformed regex is a compile error and the whole thing reads as a plain Bool.
@@ -34,6 +42,34 @@ let fromInt (n: Int) : String = intrinsic "string.fromInt"
 
 // `concat` joins a `List<String>` with no separator (Elm `String.concat`); it is `join("", xs)`.
 let concat (xs: List<String>) : String = intrinsic "string.concat"
+
+// `reverse` / `repeat` / `lines`, the rest of Elm's String module that Souther's types allow.
+// `reverse` walks code points, not UTF-16 units, so a character outside the basic plane survives it.
+// `repeat(n, s)` joins `n` copies (nothing for `n` of 0 or less). `lines` breaks on newlines and
+// accepts both `\n` and `\r\n` (Elm `String.lines`); empty pieces are kept, so a trailing newline
+// leaves an empty last line.
+let reverse (s: String) : String = intrinsic "string.reverse"
+let repeat (n: Int, s: String) : String = intrinsic "string.repeat"
+let lines (s: String) : List<String> = intrinsic "string.lines"
+
+// `padLeft(n, pad, s)` / `padRight` widen `s` to `n` characters with copies of `pad`, and leave a
+// string already that long alone (Elm's `String.padLeft`, whose padding is a `Char`; here it is a
+// length-1 string, as everywhere else Souther stands in for `Char`). A `pad` that is not one
+// character is a compile-time-unchecked mistake the way an odd separator is — the result is simply
+// wider than `n`. This is what builds a fixed-width identifier: a bay number becomes `"03"` with
+// `padLeft(2, "0", fromInt(bay))`, so a code whose shape a newtype invariant states can be produced
+// in the domain and not only checked there.
+let padLeft (n: Int, pad: String, s: String) : String = intrinsic "string.padLeft"
+let padRight (n: Int, pad: String, s: String) : String = intrinsic "string.padRight"
+
+// `fromDecimal` renders a `Decimal` in plain notation, never in exponent form, keeping the scale the
+// value carries — `1000.00m` is `"1000.00"`, not `"1000"` or `"1.0E+3"`. Scale is incidental to the
+// number (spec §primitives) but not to how it is written, so a caller that wants a fixed number of
+// places sets it first with `Decimal.round(d, scale, mode)` and names the rounding there. Grouping
+// separators and a currency symbol are presentation and stay outside the domain. The parse in the
+// other direction, `toDecimal`, returns `Decimal | NotANumber` and is a compiler built-in for the
+// same reason `toInt` is.
+let fromDecimal (d: Decimal) : String = intrinsic "string.fromDecimal"
 
 // Character access without a `Char` type: a character is a length-1 `String`. `toChars` is Elm's
 // `String.toList` (each element a one-character string), so `List.fold` can walk the characters;

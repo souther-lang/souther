@@ -54,19 +54,21 @@ public final class Prelude {
             Map.entry("souther.option", "Option"));
 
     /** The checker built-ins, by qualified name — the primitives that have no prelude source because
-     *  they are overloaded (length/get) or need bespoke codegen (get/find/sortBy). The Int/Decimal
-     *  {@code divide}/{@code remainder} stay here too: they return a primitive-headed union
-     *  ({@code Int | DivisionByZero}) a core declaration cannot yet express, so their branch codegen
-     *  stays in the compiler. The rest of Int/Decimal (add/subtract/multiply/compare/modBy) is now
-     *  declared in {@code souther.int}/{@code souther.decimal}. {@code fold} is not among them: it is
-     *  an ordinary recursive helper in {@code souther.list} ({@code foldFrom}) that takes its step as
-     *  a closure. They are reached qualified like everything else (spec §stdlib). */
+     *  they are overloaded (length/get) or need bespoke codegen (get/find/sortBy). Two other groups
+     *  stay here too, each because a core declaration cannot yet write their signature: the ones
+     *  returning a primitive-headed union ({@code Int | DivisionByZero}, {@code Decimal | NotANumber})
+     *  and the ones taking a rounding mode, which is a bare built-in identifier and not a value a
+     *  parameter type can name ({@code Decimal.toInt}/{@code round}). The rest of Int/Decimal
+     *  (add/subtract/multiply/compare/modBy) is now declared in {@code souther.int}/{@code
+     *  souther.decimal}. {@code fold} is not among them: it is an ordinary recursive helper in
+     *  {@code souther.list} ({@code foldFrom}) that takes its step as a closure. They are reached
+     *  qualified like everything else (spec §stdlib). */
     private static final Set<String> BUILTINS = Set.of(
             "List.length", "List.get", "List.max", "List.min", "List.find", "List.sortBy",
-            "String.length", "String.toInt",
+            "String.length", "String.toInt", "String.toDecimal",
             "Map.get", "Map.empty", "Set.empty",
             "Option.map",
-            "Int.remainder", "Int.divide", "Decimal.divide", "Decimal.toInt");
+            "Int.remainder", "Int.divide", "Decimal.divide", "Decimal.toInt", "Decimal.round");
 
     /** Every qualifier a call may carry: the four prelude modules plus the arithmetic built-in
      *  namespaces {@code Int}/{@code Decimal} (spec §stdlib). */
@@ -158,17 +160,37 @@ public final class Prelude {
                 BARE_TO_QUALIFIED.putIfAbsent(fn.name(), qualified);
             }
         }
-        // Explicit bare→qualified hints: the checker built-ins that have no prelude source, plus the
-        // dual-namespace arithmetic names whose auto-derived single hint (Int, loaded first) would hide
-        // the Decimal alternative.
+        // Explicit bare→qualified hints. Two kinds need one: the checker built-ins, which have no
+        // prelude source to derive from, and every name more than one module defines — the derived
+        // hint takes whichever module RESOURCES loads first (bool, string, map, list, set, …), which
+        // is an accident of that order rather than the answer a reader wants.
         BARE_TO_QUALIFIED.put("length", "List.length` or `String.length");
-        BARE_TO_QUALIFIED.put("toInt", "String.toInt");
+        BARE_TO_QUALIFIED.put("toInt", "String.toInt` or `Decimal.toInt");
+        BARE_TO_QUALIFIED.put("toDecimal", "String.toDecimal");
+        BARE_TO_QUALIFIED.put("fromInt", "String.fromInt` or `Decimal.fromInt");
+        BARE_TO_QUALIFIED.put("fromDecimal", "String.fromDecimal");
+        BARE_TO_QUALIFIED.put("round", "Decimal.round");
         BARE_TO_QUALIFIED.put("get", "List.get` or `Map.get");
-        BARE_TO_QUALIFIED.put("map", "List.map`, `Map.map`, or `Option.map");
+        BARE_TO_QUALIFIED.put("map", "List.map`, `Map.map`, `Set.map`, or `Option.map");
+        BARE_TO_QUALIFIED.put("filter", "List.filter`, `Map.filter`, or `Set.filter");
+        BARE_TO_QUALIFIED.put("partition", "List.partition` or `Set.partition");
         BARE_TO_QUALIFIED.put("empty", "Map.empty` or `Set.empty");
-        BARE_TO_QUALIFIED.put("fold", "List.fold");
-        BARE_TO_QUALIFIED.put("max", "List.max");
-        BARE_TO_QUALIFIED.put("min", "List.min");
+        BARE_TO_QUALIFIED.put("fold", "List.fold`, `Map.fold`, or `Set.fold");
+        BARE_TO_QUALIFIED.put("isEmpty", "List.isEmpty`, `String.isEmpty`, `Map.isEmpty`, or `Set.isEmpty");
+        BARE_TO_QUALIFIED.put("size", "Map.size` or `Set.size");
+        BARE_TO_QUALIFIED.put("contains", "String.contains` or `Set.contains");
+        BARE_TO_QUALIFIED.put("reverse", "List.reverse` or `String.reverse");
+        BARE_TO_QUALIFIED.put("concat", "List.concat` or `String.concat");
+        BARE_TO_QUALIFIED.put("toList", "Map.toList` or `Set.toList");
+        BARE_TO_QUALIFIED.put("fromList", "Map.fromList` or `Set.fromList");
+        BARE_TO_QUALIFIED.put("singleton", "Map.singleton` or `Set.singleton");
+        BARE_TO_QUALIFIED.put("union", "Map.union` or `Set.union");
+        BARE_TO_QUALIFIED.put("intersect", "Map.intersect` or `Set.intersect");
+        BARE_TO_QUALIFIED.put("difference", "Map.difference` or `Set.difference");
+        BARE_TO_QUALIFIED.put("max", "List.max`, `Int.max`, or `Decimal.max");
+        BARE_TO_QUALIFIED.put("min", "List.min`, `Int.min`, or `Decimal.min");
+        BARE_TO_QUALIFIED.put("abs", "Int.abs` or `Decimal.abs");
+        BARE_TO_QUALIFIED.put("clamp", "Int.clamp` or `Decimal.clamp");
         BARE_TO_QUALIFIED.put("find", "List.find");
         BARE_TO_QUALIFIED.put("sortBy", "List.sortBy");
         BARE_TO_QUALIFIED.put("compare", "Int.compare` or `Decimal.compare");

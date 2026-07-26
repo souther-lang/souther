@@ -17,13 +17,12 @@
 //     `data 募集人数 = Int invariant value >= 2 && value <= 1023` になる。
 //   - 共通項目は `...依頼ベース` の spread で持たせる。
 module example.joboffer
-import String ( length )
 
 // === 依頼ベースの値 ===
 data 依頼タイトル = String
-    invariant length(value) >= 1 && length(value) <= 99
+    invariant String.length(value) >= 1 && String.length(value) <= 99
 data 依頼詳細 = String
-    invariant length(value) >= 1 && length(value) <= 999
+    invariant String.length(value) >= 1 && String.length(value) <= 999
 
 // === 予算 ===
 // 上限額 / 下限額 は同じ「金額」でも役割が違うので別の newtype にする。上限だけ 99,999,999 で
@@ -249,9 +248,11 @@ let 応募期限 (依頼: 依頼): Date =
         | タスク依頼 { 応募期限 }       -> 応募期限
         | コンペ依頼 { 応募期限 }       -> 応募期限
 
+// 残り日数は符号つきで、期限を過ぎていれば負になる。超過日数はその距離なので Int.abs を通す。
+// `0 - 残り` と書けば同じ値にはなるが、引き算のつもりで読めてしまう。
 let 応募期限を検査する (依頼, 今日) = {
     let 残り = Date.daysBetween(今日, 応募期限(依頼))
-    require 残り >= 0 else 期限切れ { 超過日数 = 0 - 残り }
+    require 残り >= 0 else 期限切れ { 超過日数 = Int.abs(残り) }
     require 残り <= 14 else 期限が先すぎる { 残り日数 = 残り }
     掲載可
 }

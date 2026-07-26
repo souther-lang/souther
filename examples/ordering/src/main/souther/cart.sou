@@ -24,7 +24,7 @@ import List ( map, filter, fold, all, any, length )
 // Sku's invariant needs String.length; `length` imported bare above is List.length, so this one
 // stays qualified (a bare name may not resolve to two libraries at once).
 data Sku = String
-    invariant String.length(value) > 0
+    invariant String.length(value) >= 1
 
 data LineItem =
     { sku: Sku

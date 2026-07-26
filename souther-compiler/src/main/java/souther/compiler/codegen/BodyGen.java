@@ -773,6 +773,11 @@ final class BodyGen {
                     genExpr(call.args().get(0));
                     code.invokestatic(CD_Strings, "toInt", MethodTypeDesc.of(CD_Object, CD_String));
                 }
+                case "String.toDecimal" -> {
+                    // the sibling of toInt: a boxed BigDecimal or NotANumber.INSTANCE, carried as Object
+                    genExpr(call.args().get(0));
+                    code.invokestatic(CD_Strings, "toDecimal", MethodTypeDesc.of(CD_Object, CD_String));
+                }
                 case "List.length" -> {
                     genExpr(call.args().get(0));
                     code.invokeinterface(CD_List, "size", MTD_size);
@@ -835,6 +840,7 @@ final class BodyGen {
                 }
                 case "Int.remainder" -> intDivide(call, false);
                 case "Decimal.toInt" -> decimalToInt(call);
+                case "Decimal.round" -> decimalRound(call);
                 default -> {
                     Var fv = env.get(call.fn());
                     if (fv != null && fv.type() instanceof Type.FnOf fnType) {
@@ -969,6 +975,19 @@ final class BodyGen {
             code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
             code.invokestatic(CD_DecimalMath, "toInt",
                     MethodTypeDesc.of(ConstantDescs.CD_long, CD_BigDecimal, CD_RoundingMode));
+        }
+
+        /** {@code round(d, scale, mode)}: `d` at the given number of decimal places, the mode written
+         * at the call as `toInt`'s and `divide`'s are. Unlike `toInt` the result stays a Decimal, so
+         * this is a plain {@code BigDecimal.setScale} and needs no kernel. */
+        private void decimalRound(Core.Call call) {
+            genExpr(call.args().get(0));
+            genExpr(call.args().get(1));   // scale (Int, a long)
+            code.l2i();
+            String mode = ((Core.Var) call.args().get(2)).name();
+            code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
+            code.invokevirtual(CD_BigDecimal, "setScale",
+                    MethodTypeDesc.of(CD_BigDecimal, ConstantDescs.CD_int, CD_RoundingMode));
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on

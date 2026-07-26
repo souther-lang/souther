@@ -58,6 +58,22 @@ public final class Lists {
         return out;
     }
 
+    /** The consecutive integers from {@code from} to {@code to}, both ends included (Elm
+     *  {@code List.range}); {@code from} above {@code to} gives the empty list. A primitive rather
+     *  than a fold, because a fold needs a list to walk and this is what produces one. */
+    public static List<Long> range(long from, long to) {
+        if (from > to) {
+            return PersistentVector.empty();
+        }
+        PersistentVector<Long> out = PersistentVector.empty();
+        for (long i = from; ; i++) {
+            out = out.append(i);
+            if (i == to) {
+                return out;
+            }
+        }
+    }
+
     /** Sorts by the elements' natural order (Elm {@code List.sort}). The element type is a
      *  {@link Comparable} — {@code String} and the {@code Int}/{@code Decimal} carriers all are —
      *  and the input is left untouched. */

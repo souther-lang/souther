@@ -20,3 +20,18 @@ let compare (a: Int, b: Int) : Int = intrinsic "int.compare"
 // plain Int and reads cleanly in an invariant (`invariant Int.modBy(12, value) == 0`). Use
 // `remainder` when a zero divisor must be a business case instead of an abort.
 let modBy (divisor: Int, n: Int) : Int = intrinsic "int.modBy"
+
+// Elm's `Basics` arithmetic, written as ordinary helpers because `<` and `-` already say it all.
+// `abs` negates with the `-` operator, so the one value with no positive counterpart (the smallest
+// Int) aborts on overflow rather than silently staying negative — the same treatment the rest of
+// this module gives an overflow. It is what turns a signed difference into a distance:
+// `Int.abs(Date.daysBetween(a, b))` says "how far apart" without the caller choosing an argument
+// order to dodge the sign.
+//
+// `min` / `max` are the two-value form the comparison operators imply; `List.min` / `List.max` are
+// the list form and answer an optional, since a list may be empty. `clamp(lo, hi, n)` holds a value
+// inside a range (Elm's `clamp low high number`), the subject last as the pipe convention wants.
+let abs (n: Int) = if n < 0 then 0 - n else n
+let min (a: Int, b: Int) = if a < b then a else b
+let max (a: Int, b: Int) = if a > b then a else b
+let clamp (lo: Int, hi: Int, n: Int) = if n < lo then lo else if n > hi then hi else n

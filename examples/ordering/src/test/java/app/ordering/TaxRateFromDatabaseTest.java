@@ -106,6 +106,18 @@ class TaxRateFromDatabaseTest {
                 () -> taxFor.apply(cart(315L), category("StandardRate")));
     }
 
+    /** The rate a row carries is written for the invoice inside the domain, not reassembled at the
+     *  boundary: 0.100 from the NUMERIC column becomes the string "10%". */
+    @Test
+    void theRateIsWrittenAsAPercentage() {
+        assertEquals("10%", taxFor.apply(cart(315L), category("StandardRate")).rateLabel());
+
+        // A rate the column states to three places still reads as whole percent — the rounding in
+        // rateLabel decides how many places are shown, not the scale the row happened to carry.
+        setRate("StandardRate", "0.080");
+        assertEquals("8%", taxFor.apply(cart(315L), category("StandardRate")).rateLabel());
+    }
+
     @Test
     void theDecimalRateStillRoundTripsThroughTheCodec() {
         TaxRate rate = taxFor.apply(cart(315L), category("StandardRate")).rate();

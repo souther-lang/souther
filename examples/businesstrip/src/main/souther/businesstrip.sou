@@ -5,10 +5,9 @@
 // コンパイル: java -cp souther-compiler/target/classes \
 //              souther.compiler.Main compile examples/businesstrip/src/main/souther/businesstrip.sou -d /tmp/out
 module example.businesstrip
-import String ( length )
 
 data 従業員ID = String
-    invariant length(value) > 0
+    invariant String.length(value) >= 1
 
 data 金額 = Int
     invariant value >= 0
@@ -89,11 +88,20 @@ data 承認完了
 data 追加承認必要 = { 残り: Int }
 data 決裁権限不足
 
-// 必要承認段数：金額の閾値と理由の件数で1〜3段（多分岐）。List.length は理由の件数。
-let 必要段数 (要求: 承認要求): Int =
-    if 要求.金額.value >= 500000 || List.length(要求.理由リスト) >= 3 then 3
-    else if 要求.金額.value >= 100000 || List.length(要求.理由リスト) >= 1 then 2
+// 必要承認段数：金額の閾値と理由の件数はそれぞれ単独で1〜3段を決め、要求全体の段数は厳しいほうを採る。
+// その「厳しいほう」が Int.max。以前は || でつないだ入れ子の if 一本に両方の基準を入れていたので、
+// 基準が2つあることも、片方だけを変えたいときにどこを触ればよいかも読み取れなかった。
+let 金額段数 (額: 金額): Int =
+    if 額.value >= 500000 then 3
+    else if 額.value >= 100000 then 2
     else 1
+
+let 理由段数 (理由リスト: List<理由>): Int =
+    if List.length(理由リスト) >= 3 then 3
+    else if List.length(理由リスト) >= 1 then 2
+    else 1
+
+let 必要段数 (要求: 承認要求): Int = Int.max(金額段数(要求.金額), 理由段数(要求.理由リスト))
 
 // 承認判定：決裁の深さが必要段数に満たなければ権限不足。満たしていれば、承認済み段数が
 // 必要段数に達しているかで 承認完了 / 追加承認必要 に分かれる。決裁の深さ は上司連鎖の再帰。

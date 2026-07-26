@@ -58,4 +58,54 @@ class CompileSetLibTest {
         assertEquals(Set.of("a", "c"), Set.copyOf((List<?>) m.get("diffList")));
         assertEquals(true, m.get("emptyFlag"));
     }
+
+    /** The higher-order operations go out through {@code toList} and back through {@code fromList},
+     *  so {@code List.fold} stays the one loop. {@code map} may shrink the set: two elements that
+     *  land on the same image collapse. */
+    @Test
+    void mapFilterFoldAndPartitionOverASet() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import Set ( fromList, toList, map, filter, fold, partition, size )
+
+                data In = { xs: List<String> }
+                data Out = {
+                    upper: List<String>
+                    , kept: List<String>
+                    , joined: String
+                    , yes: List<String>
+                    , no: List<String>
+                    , collapsed: Int
+                }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = {
+                    let s = fromList(i.xs)
+                    let (a, b) = partition(x -> String.startsWith("a", x), s)
+                    Out {
+                        upper = toList(map(x -> String.uppercase(x), s)),
+                        kept = toList(filter(x -> String.length(x) == 2, s)),
+                        joined = fold((acc, x) -> acc ++ x, "", Set.map(x -> "-", s)),
+                        yes = toList(a),
+                        no = toList(b),
+                        collapsed = size(Set.map(x -> String.substring(0, 1, x), s))
+                    }
+                }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("xs", List.of("ab", "ac", "bd")));
+        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out",
+                Codecs.apply(behavior, in));
+
+        assertEquals(Set.of("AB", "AC", "BD"), Set.copyOf((List<?>) m.get("upper")));
+        assertEquals(Set.of("ab", "ac", "bd"), Set.copyOf((List<?>) m.get("kept")));
+        // `map` onto one image collapses the whole set to a single element, so the fold sees one "-".
+        assertEquals("-", m.get("joined"));
+        assertEquals(Set.of("ab", "ac"), Set.copyOf((List<?>) m.get("yes")));
+        assertEquals(Set.of("bd"), Set.copyOf((List<?>) m.get("no")));
+        assertEquals(2L, m.get("collapsed"), "ab and ac share the first letter, so {a, b} is left");
+    }
 }

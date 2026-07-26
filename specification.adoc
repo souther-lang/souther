@@ -1844,11 +1844,12 @@ let trim (s: String) : String = intrinsic "string.trim"
 
 An intrinsic MUST declare its return type (it cannot be inferred from `+intrinsic+`). A call is type-checked against the declared signature — that is, `+trim+` is "a built-in function whose signature is placed in core", and this declaration, not a hardcoded compiler table, decides its arguments and return value — and the backend emits the bytecode for `+key+`. It is neither inlined nor lowered. Only the reserved namespace may write it. A user cannot call the JVM directly and only calls blessed functions (<<asymmetric-interop>>).
 
-Every standard-library function is declared in a core module this way, whether its body is Souther (self-hosted, like `+List.map+` over `+foldFrom+`) or `+intrinsic "key"+` (a JVM kernel). The declaration is the single source of truth for the signature; a hardcoded compiler table is not the normal way to add one. Three narrow cases stay integrated in the compiler, each for a reason a core declaration cannot yet capture, and only these:
+Every standard-library function is declared in a core module this way, whether its body is Souther (self-hosted, like `+List.map+` over `+foldFrom+`) or `+intrinsic "key"+` (a JVM kernel). The declaration is the single source of truth for the signature; a hardcoded compiler table is not the normal way to add one. Four narrow cases stay integrated in the compiler, each for a reason a core declaration cannot yet capture, and only these:
 
 * the operators (`{plus}` `+-+` `+*+` `+/+` `+==+` `+<+` `+<=+` `+>+` `+>=+`) — they are syntax, and the arithmetic ones carry the closed-newtype rules (<<newtype>>) a plain function does not;
 * the ordered-constrained generics (`+List.sort+` / `+max+` / `+min+` / `+sortBy+` and the comparison operators) — Souther has no `+comparable+` type class, so "the element is an ordered value" is checked in the compiler rather than expressed in the signature;
-* the functions returning a primitive-headed union (`+Int.divide+` / `+Int.remainder+` / `+Decimal.divide+`, returning `+Int | DivisionByZero+`) — a core return type cannot yet name a union whose first member is a primitive.
+* the functions returning a primitive-headed union (`+Int.divide+` / `+Int.remainder+` / `+Decimal.divide+` / `+String.toInt+` / `+String.toDecimal+`, returning `+Int | DivisionByZero+` or `+Decimal | NotANumber+`) — a core return type cannot yet name a union whose first member is a primitive;
+* the functions taking a rounding mode (`+Decimal.divide+` / `+Decimal.toInt+` / `+Decimal.round+`) — the mode is a bare built-in identifier (<<stdlib-decimal>>), not a value a parameter type can name.
 
 Everything else — including `+Int+` / `+Decimal+` `+add+` / `+subtract+` / `+multiply+` / `+compare+` / `+modBy+` — is a core declaration (ADR-0053).
 
@@ -1875,9 +1876,10 @@ The right side admits only a function call or a function name; `+e |> 3+` is a c
 
 [,text]
 ----
-length  trim  lowercase  uppercase  contains  startsWith  endsWith  substring  append
+length   isEmpty  trim     lowercase  uppercase  contains  startsWith  endsWith
+substring  append  reverse  repeat     padLeft    padRight  lines
 split    join  replace    words      fromInt   concat       matches
-toChars  toCode  toInt
+toChars  toCode  toInt  fromDecimal  toDecimal
 ----
 
 `+append(a, b)+` joins two strings in their written order (Elm `+String.append+`); the `{plus}{plus}` operator is the common form, `+append(a, b)+` equals `+a {plus}{plus} b+` (<<stdlib-list>>).
@@ -1885,6 +1887,12 @@ toChars  toCode  toInt
 `+matches(pattern, s)+` is a whole-string regular-expression match (Java `+Pattern+` flavour, anchored: the *entire* string must match), returning a plain `+Bool+`. It is what states a format-constrained value as an invariant — `+data 郵便 = String invariant String.matches("[0-9]{3}-[0-9]{4}", value)+`. The `+pattern+` MUST be a string literal: it is validated at compile time (compiled once to confirm it is well-formed), so a malformed regex is a compile error rather than a runtime exception. At run time the pattern is compiled on first use and cached, not recompiled on each call. A regex backslash class is written with a doubled backslash (`+"\\d{3}"+`), since a string literal drops the backslash of an unknown escape (<<primitives>>). A pattern computed at run time is therefore not accepted (a future `+Regex+`/`+fromString+` would carry that, returning a case for an invalid pattern); the literal form is what the invariant needs. Regex living in core rather than a package is a departure from Elm (`+elm/regex+`), forced by Souther having no package layer. A pathological pattern can backtrack (a regex property shared with Elm/F#); keep invariant patterns simple.
 
 The middle row is the core of Elm's String module expressible in Souther's types (which lack `+Char+` / `+Maybe+` / `+Float+`). `+split(sep, s)+` splits by a separator into `+List<String>+`, keeping empty pieces (`+split(",", "a,,b")+` is `+["a", "", "b"]+`). `+words(s)+` splits by runs of whitespace, dropping empty pieces. `+join(sep, xs)+` joins with a separator. `+replace(target, replacement, s)+` replaces every occurrence of `+target+`. `+fromInt(n)+` makes an `+Int+` a decimal string. `+concat(xs)+` joins a `+List<String>+` with no separator (Elm `+String.concat+`, equal to `+join("", xs)+`). The primary subject string is last (<<pipe>>). Elm's `+String.map+` and the `+Char+` module are not ported: Souther has no `+Char+` type.
+
+`+isEmpty(s)+` is `+length(s) == 0+` (Elm `+String.isEmpty+`), the sibling of `+List.isEmpty+` / `+Map.isEmpty+` / `+Set.isEmpty+`. It belongs in a predicate — `+filter(piece -> not(String.isEmpty(piece)))+` — rather than in a newtype invariant: a derived decoder recognises `+String.length(value) >= 1+` and reports a violation as `+too_short+` with its bound, while the helper's inlined form leaves it the generic `+invariant_violation+` (<<decoder-error>>).
+
+`+reverse+` / `+repeat+` / `+lines+` / `+padLeft+` / `+padRight+` are the rest of Elm's String module Souther's types allow. `+reverse+` walks code points, so a character outside the basic plane survives it. `+repeat(n, s)+` joins `+n+` copies (nothing for `+n+` of 0 or less). `+lines(s)+` breaks on newlines, accepting both `+\n+` and `+\r\n+`, and keeps empty pieces — a trailing newline leaves an empty last line. `+padLeft(n, pad, s)+` / `+padRight+` widen `+s+` to `+n+` characters with copies of `+pad+` and leave a string already that long alone; `+pad+` is a length-1 string where Elm takes a `+Char+`, so a longer one can overshoot the width. Padding is what *builds* a fixed-width identifier — a bay number becomes `+"03"+` with `+padLeft(2, "0", fromInt(bay))+` — so a code whose shape a newtype invariant states can be produced in the domain and not only checked there.
+
+`+fromDecimal(d)+` renders a `+Decimal+` in plain notation, never in exponent form, keeping the scale the value carries: `+1000.00m+` is `+"1000.00"+`. Scale is incidental to the number (<<primitives>>) but not to how it is written, so a caller wanting a fixed number of places sets it first with `+Decimal.round(d, scale, mode)+` and names the rounding there. Grouping separators and a currency symbol are presentation and stay outside the domain. `+toDecimal(s)+` parses back, returning `+Decimal | NotANumber+` — the sibling of `+toInt+`, and a compiler built-in for the same reason.
 
 The bottom row gives character access without a `+Char+` type — a character is a length-1 `+String+`. `+toChars(s)+` is Elm's `+String.toList+`: the characters of `+s+`, one per Unicode code point, as single-character strings (`+toChars("a12")+` is `+["a", "1", "2"]+`), so `+List.fold+` can walk them. `+toCode(ch)+` is Elm's `+Char.toCode+` on such a character — its first code point, `+-1+` for the empty string. `+toInt(s)+` is Elm's `+String.toInt+`, returning `+Int | NotANumber+` in place of `+Maybe+`: a named case, since `+Maybe+` has no surface form (ADR-0011) — the same case-return the `+/+` operator and `+Int.divide+` draw between abort and case. `+toInt("007")+` is `+7+` (leading zeros kept, unlike a numeric parse-and-reformat); `+toInt("12x")+` is `+NotANumber+`. Because `+toInt+` returns a primitive-headed union it is a compiler built-in, not a core declaration (ADR-0053); `+toChars+` / `+toCode+` are ordinary intrinsics.
 
@@ -1896,6 +1904,7 @@ Together these make a checksum (Luhn, EAN, a mod-10 check digit) a plain `+let+`
 [,text]
 ----
 add  subtract  multiply  divide  remainder  compare  modBy
+abs  min  max  clamp
 ----
 
 `+Int+` is signed 64-bit (<<primitives>>). If an operation exceeds that range it *aborts* — it does not wrap. Overflow is a model bug, not a business result, so like an invariant violation it throws `+ConstraintViolation+` (<<algebraic-types>>, <<violation-destination>>, <<jvm-abort>>).
@@ -1904,6 +1913,8 @@ Division by zero returns `+Int | DivisionByZero+`. This is a possible input on t
 
 The four operations may also be written with the operators `{plus}` `+-+` `+*+` `+/+` (the symbol table of <<primitives>>). `+/+` is truncating division and *aborts* on division by zero (like overflow). To receive `+Int | DivisionByZero+` as a case, use the functions `+divide+` / `+remainder+` — operator = casual and aborting, function = safe with a case.
 
+`+abs+` / `+min+` / `+max+` / `+clamp+` are Elm's `+Basics+` arithmetic, ordinary core `+let+`s over `+<+` and `+-+`. `+abs(n)+` negates with the `+-+` operator, so the smallest `+Int+` — the one value with no positive counterpart — aborts on overflow like any other overflow here; it is what turns a signed difference into a distance (`+Int.abs(Date.daysBetween(a, b))+` says "how far apart" without the caller choosing an argument order to dodge the sign). `+min+` / `+max+` are the two-value form the comparison operators imply, distinct from `+List.min+` / `+List.max+`, which take a list and answer an optional because a list may be empty. `+clamp(lo, hi, n)+` holds a value inside a range (Elm's `+clamp low high number+`), the subject last as the pipe convention wants.
+
 `+modBy(divisor, n)+` is the modulo counterpart of that split: it is floored modulo (the result takes the sign of the divisor, unlike the truncating `+remainder+`, so `+Int.modBy(12, -1)+` is `+11+`), and a zero divisor *aborts* like `+/+` rather than returning a case. Its result is therefore a plain `+Int+`, which reads cleanly in an invariant — `+data 箱 = Int invariant Int.modBy(12, value) == 0+`. The divisor is the first argument (subject last, the pipe convention). Use `+remainder+` when a zero divisor must be a business case instead of an abort. (Elm's `+modBy+` / `+remainderBy+`.)
 
 [#stdlib-decimal]
@@ -1911,7 +1922,8 @@ The four operations may also be written with the operators `{plus}` `+-+` `+*+` 
 
 [,text]
 ----
-add  subtract  multiply  divide  compare  fromInt  toInt
+add  subtract  multiply  divide  compare  fromInt  toInt  round
+abs  min  max  clamp
 ----
 
 Division makes the rounding scale and mode explicit as arguments. `+Decimal.divide(a, b, 2, HALF_UP)+` rounds HALF_UP at 2 decimal places. The rounding mode is a built-in identifier, resolved as a built-in value like `+None+` (<<unit-data>>).
@@ -1924,6 +1936,10 @@ HALF_UP  HALF_EVEN  HALF_DOWN  UP  DOWN  CEILING  FLOOR
 These correspond to `+java.math.RoundingMode+`. `+Decimal.divide(a, b)+` without scale and mode cannot be written — to surface rounding as a domain decision, the same position as "scale is incidental" in <<primitives>>. Division by zero returns `+Decimal | DivisionByZero+`.
 
 `+Int+` and `+Decimal+` meet only where the conversion is written. `+Decimal.fromInt(n)+` widens an `+Int+`; it is exact, so nothing has to be stated. `+Decimal.toInt(d, mode)+` narrows back, and because that drops a fraction it names the rounding at the call, as `+divide+` does. There is no implicit widening: an arithmetic operator takes two operands of one type (<<primitives>>), so a rate applied to an amount in yen reads `+Decimal.fromInt(税抜) * 税率+` — the conversion sits where the value stops being an amount. This is F#'s position for operators (`+n * 0.1m+` does not compile; `+decimal n * 0.1m+` does). A `+Decimal+` too large for an `+Int+` aborts, as an `+Int+` overflow does (<<primitives>>).
+
+`+Decimal.round(d, scale, mode)+` sets the number of decimal places, naming the rounding at the call as `+divide+` and `+toInt+` do. Unlike `+toInt+` the result stays a `+Decimal+`, so it is how a value is prepared for `+String.fromDecimal+` (<<stdlib-string>>), which keeps whatever scale the value carries: a rate of `+0.10m+` times `+100.0m+` is `+10.000m+`, and `+round(…, 0, HALF_UP)+` is what makes it read as `+"10"+`. The subject comes first here, as it does for `+divide+` and `+toInt+`, so the mode reads last at every rounding call.
+
+`+abs+` / `+min+` / `+max+` / `+clamp+` are the same `+Basics+` arithmetic `+Int+` carries (<<stdlib-int>>), on the same reasoning: `+<+` and `+-+` are defined for `+Decimal+`, so these are ordinary core `+let+`s. `+abs+` compares against `+0.0m+`, so a value whose scale differs still answers by numeric value, as `+compare+` does. `+clamp+` answers one of the three values written, never a re-scaled copy.
 
 The four operations may also be written with the operators `{plus}` `+-+` `+*+` `+/+`. The operator `+/+` divides with a default rounding — significant digits (about 29) and HALF_UP, following F#/.NET's `+System.Decimal+` — so `+10m / 3m+` is `+3.3333…+` and does not abort. Division by zero *aborts*. To make rounding an explicit domain decision, or to receive division by zero as a case, use the function `+Decimal.divide(a, b, scale, mode)+`.
 
@@ -1970,13 +1986,19 @@ Note that `+申請者.役職 == 一般社員+` cannot be written as a condition.
 
 [,text]
 ----
-map  filter  fold  all  any  length  get  indexedMap
-reverse  member  sum  product  concat  isEmpty  sort
+map  filter  fold  foldr  all  any  length  get  indexedMap
+reverse  member  sum  product  concat  concatMap  isEmpty  sort  range
 distinct  partition  groupBy  indexBy  filterMap  max  min  find  sortBy  allUniqueBy
-take  drop
+take  drop  zip  unzip
 ----
 
 All are called through the qualifier `+List+` (<<stdlib>>). `+List.get+` returns `+Option<T>+`. `+List.map+` / `+List.filter+` / `+List.fold+` / `+List.all+` / `+List.any+` / `+List.indexedMap+` take a block (<<blocks>>). Import them as `+import List ( map, all )+` to write unqualified thereafter.
+
+`+range(from, to)+` is the consecutive integers from `+from+` to `+to+`, both ends included (Elm's `+List.range+`); `+from+` above `+to+` gives the empty list. It is the one list that is neither written out nor read from outside, so a walk over positions — the levels of a bay, the digits of a code — has something to walk. Like `+reverse+` and `+sort+` it is a primitive: building it from `+fold+` would need a list to fold over in the first place.
+
+`+concatMap(f, xs)+` maps each element to a list and joins the results in one pass (Elm's `+concatMap+`, F#'s `+collect+`); writing it as `+map+` then `+concat+` builds an intermediate `+List<List<'b>>+`, which is why the shape is otherwise hand-rolled as a fold with `{plus}{plus}` in the step. `+foldr(step, seed, xs)+` walks from the end (Elm's `+List.foldr+`), and is the left fold over the reversed list.
+
+`+zip(xs, ys)+` pairs two lists element by element and `+unzip(ps)+` takes the pairs apart again (F#'s `+List.zip+` / `+unzip+`). A length mismatch truncates to the shorter list rather than aborting, as Elm's `+map2+` does. Souther has tuples, so these two cover what Elm reaches `+map2+` for: `+zip(xs, ys) |> map(f)+` is `+map2(f, xs, ys)+`. The tuples stay inside the behavior — a tuple has no external form (<<tuple>>).
 
 [,text]
 ----
@@ -2006,14 +2028,17 @@ A `+Map+` is immutable and string-keyed (<<collections>>). The accessors read; t
 get  containsKey  keys  values                   // read
 empty  singleton  insert  remove  isEmpty  size  // build
 toList  fromList                                 // convert to / from entry tuples
-fold  map  update  upsert                        // higher-order
+fold  map  filter  update  upsert                // higher-order
+union  intersect  difference                     // key algebra
 ----
 
 `+get+` returns `+Option<V>+`. `+empty+` is the empty map: like the empty list `+[]+`, its key and value types are fixed by context (a field or return position, a written binding type, the other branch of an `+if+` / `+match+`, or the first `+insert+`), so it is a built-in taking no argument rather than a call learning a type variable. `+singleton(k, v)+` is a one-entry map; `+insert(k, v, m)+` adds an entry or overwrites the existing one; `+remove(k, m)+` drops one, leaving `+m+` unchanged when the key is absent. Because a `+Map+` is immutable, `+insert+` / `+remove+` return a new map rather than mutating. `+size+` is the entry count and `+isEmpty+` whether there are none. The map operated on is last (<<pipe>>), so `+m |> Map.insert(k, v)+` reads left to right.
 
 `+toList(m)+` is the entries as a `+List<(String, V)>+` — a list of key/value tuples in the map's iteration order — and `+fromList(entries)+` builds a map back (a later entry wins on a duplicate key). Iteration order is a deterministic, implementation-defined hash order (not insertion order): the same set of keys always yields the same order, so encoding is reproducible, but a program must not depend on which order that is. The tuple type in these signatures is allowed because a signature is not a codec boundary (<<tuple>>, ADR-0037).
 
-`+fold+` / `+map+` / `+update+` are the operations that take a step function. `+Map.fold(step, seed, m)+` is layered on `+List.fold+` over the entries (`+toList+`) rather than walking the map itself, and the entries combine in the map's deterministic hash order. Its step is `+(acc, key, value)+` (F#'s `+Map.fold+` folder is `+state key value+`, Elm's `+Dict.foldl+` is `+k v acc+`). `+map(f, m)+` keeps the keys and rewrites the values (`+(key, value) -> value+`, Elm's `+Dict.map+` / F#'s `+Map.map+`), growing a fresh map through `+fold+`. `+update(key, f, m)+` rewrites the value under one key with `+f+` and is a no-op when the key is absent. Its step is `+('a) -> 'a+`, not Elm's `+Maybe v -> Maybe v+`: `+Option+` is not surface-writable (ADR-0011), so a step cannot return one — insert a new key with `+insert+`, drop one with `+remove+`, and let `+update+` cover changing what is already there. `+upsert(key, default, f, m)+` collapses insert-if-absent / modify-if-present into one call: it applies `+f+` to a present key's value and inserts `+default+` for an absent one. Like `+update+` it keeps `+Option+` internal — the absent branch takes a plain value (`+default+`), not the `+Maybe -> Maybe+` step Elm's `+Dict.update+` needs (ADR-0011). Typical use is accumulation, e.g. counting `+upsert(k, 1, n -> n {plus} 1, m)+`.
+`+fold+` / `+map+` / `+update+` are the operations that take a step function. `+Map.fold(step, seed, m)+` is layered on `+List.fold+` over the entries (`+toList+`) rather than walking the map itself, and the entries combine in the map's deterministic hash order. Its step is `+(acc, key, value)+` (F#'s `+Map.fold+` folder is `+state key value+`, Elm's `+Dict.foldl+` is `+k v acc+`). `+map(f, m)+` keeps the keys and rewrites the values (`+(key, value) -> value+`, Elm's `+Dict.map+` / F#'s `+Map.map+`), growing a fresh map through `+fold+`. `+update(key, f, m)+` rewrites the value under one key with `+f+` and is a no-op when the key is absent. Its step is `+('a) -> 'a+`, not Elm's `+Maybe v -> Maybe v+`: `+Option+` is not surface-writable (ADR-0011), so a step cannot return one — insert a new key with `+insert+`, drop one with `+remove+`, and let `+update+` cover changing what is already there. `+upsert(key, default, f, m)+` collapses insert-if-absent / modify-if-present into one call: it applies `+f+` to a present key's value and inserts `+default+` for an absent one. Like `+update+` it keeps `+Option+` internal — the absent branch takes a plain value (`+default+`), not the `+Maybe -> Maybe+` step Elm's `+Dict.update+` needs (ADR-0011). Typical use is accumulation, e.g. counting `+upsert(k, 1, n -> n {plus} 1, m)+`. `+filter(keep, m)+` keeps the entries its `+(key, value) -> Bool+` predicate holds for (Elm's `+Dict.filter+`), growing a fresh map through `+fold+` as `+map+` does — without it a caller goes out through `+toList+`, filters as a list, and comes back through `+fromList+`, leaving the map type behind for two steps.
+
+`+union+` / `+intersect+` / `+difference+` are the key algebra, named as `+Set+`'s are (<<stdlib-set>>; Elm calls the last one `+Dict.diff+`). All three answer with entries taken from `+a+`: `+union(a, b)+` adds `+b+`'s entries under keys `+a+` does not have, so `+a+` wins a collision (Elm is left-biased too); `+intersect(a, b)+` keeps `+a+`'s entries whose key is also in `+b+`; `+difference(a, b)+` keeps `+a+`'s entries whose key is not. Values from `+b+` are never merged into `+a+`'s — combining two values under one key is a domain decision, so it is written with `+fold+` and `+upsert+` where that rule lives.
 
 [#stdlib-option]
 === Option
@@ -2039,9 +2064,12 @@ A `+Set<'a>+` is unordered with no duplicates, compared by value equality (<<col
 empty  singleton  insert  remove  contains       // build / query
 union  intersect  difference                      // algebra
 isEmpty  size  toList  fromList                   // convert
+fold  map  filter  partition                      // higher-order
 ----
 
 `+empty+` is the empty set — like `+[]+` and `+Map.empty+`, its element type is fixed by context (a field or return position, a written binding type, the other branch of an `+if+` / `+match+`, or the first `+insert+`), so it is a built-in taking no argument. `+singleton(v)+` is a one-element set; `+insert(v, s)+` adds `+v+`; `+remove(v, s)+` drops it (leaving `+s+` unchanged when absent); `+contains(v, s)+` tests membership. `+union+` / `+intersect+` / `+difference(a, b)+` are the set algebra (`+difference+` is `+a+` minus `+b+`). `+toList(s)+` lists the members in a deterministic, implementation-defined hash order (not first-seen order; the same members always list in the same order, so it is reproducible, but a program must not depend on which order that is) and `+fromList(xs)+` builds a set, dropping duplicates. The set operated on is last (<<pipe>>), so `+s |> Set.insert(x)+` reads left to right.
+
+`+fold+` / `+map+` / `+filter+` / `+partition+` are the operations that take a step function (Elm's `+Set.foldl+` / `+map+` / `+filter+` / `+partition+`). As with `+Map+`, a `+Set+` adds no loop of its own: each one goes out through `+toList+`, uses the `+List+` combinator, and comes back through `+fromList+`, so `+List.fold+` stays the single primitive. `+map+` may shrink the set — two elements that land on the same image collapse, since a set holds no duplicates (Elm behaves the same way) — and `+partition(keep, s)+` answers the pair `+(kept, rest)+`, the shape `+List.partition+` gives. `+fold+` runs over `+toList+`'s order, which is deterministic but unspecified, so a step whose result depends on that order is a mistake the compiler cannot catch: combine with something associative and commutative, as one would in Elm.
 
 A `+Set+` field decodes from a JSON array and deduplicates it (a repeated element is dropped, not an error — as in Elm's `+Set.fromList+`); it encodes back to an array in that deterministic hash order (reproducible for the same members, but not the input order).
 

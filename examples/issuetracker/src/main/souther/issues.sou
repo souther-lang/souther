@@ -5,13 +5,16 @@
 //
 // The features on show:
 //   - Set<Label> as a data field (labels): the derived codec reads a JSON array and dedups it into a
-//     Set; Set.fromList / insert / remove / intersect / toList / size drive the label operations.
+//     Set; Set.fromList / insert / remove / intersect / toList / size drive the label operations, and
+//     Set.map / Set.filter clean the raw label text without leaving the set for a list first.
 //   - Map<Label, Int> as a behavior output (countByLabel): Map.upsert counts each label across a
-//     board of issues (a String-backed newtype key is allowed as a map key), and topLabels ranks those
-//     counts — Map.toList's (label, count) entries read through a tuple-typed helper, ordered with
-//     List.sortBy / reverse and cut with List.take. groupByAssignee buckets the issues themselves
-//     rather than counting them, so its output nests: a Map<String, List<IssueId>>. Its key is the
-//     optional assignee, so List.filterMap turns the issues into the entries that have one first.
+//     board of issues (a String-backed newtype key is allowed as a map key). The same counts are read
+//     two more ways: topLabels ranks them — Map.toList's (label, count) entries ordered with
+//     List.sortBy / reverse, cut with List.take, and split with List.unzip so only the labels leave —
+//     and busyLabels keeps the entries a threshold holds for with Map.filter. groupByAssignee buckets
+//     the issues themselves rather than counting them, so its output nests: a Map<String,
+//     List<IssueId>>. Its key is the optional assignee, so List.filterMap turns the issues into the
+//     entries that have one first.
 //   - Some(Assignee(name)) destructuring: assigneeOf opens the optional assignee's newtype in one
 //     match pattern (the outermost .value elided), with a None arm for the unassigned case.
 //   - Three injected behaviors (findIssue / createIssue / storeLabels) with no `let`: the database is
@@ -20,8 +23,8 @@
 //     `example` — no database involved at compile time.
 //
 // The label text editing this example grew out of survives as the `cleaned` helper (split / trim /
-// lowercase over souther.string): openIssue takes a raw comma-separated string and turns it into the
-// label Set, reporting NoLabels when nothing survives.
+// lowercase over souther.string, then Set.map / Set.filter): openIssue takes a raw comma-separated
+// string and turns it into the label Set, reporting NoLabels when nothing survives.
 //
 // Fixture notation: a Set is written as a list (duplicates collapse on decode, as they do at the
 // boundary), a Map as its list of (key, value) pairs, and an optional as the bare value or `None`.
@@ -29,8 +32,9 @@
 // exposing is omitted, so every generated class is public — the Kotlin boundary references them by
 // name.
 module example.issuetracker
-import String ( split, trim, lowercase )
-import List ( map, filter, fold, filterMap )
+import String ( split, trim, lowercase, isEmpty )
+import Bool ( not )
+import List ( map, fold, filterMap, concatMap, unzip )
 
 data IssueId  = String
     invariant String.length(value) >= 1
@@ -68,8 +72,10 @@ behavior createIssue : (issue: Issue) -> Issue
 behavior storeLabels : (issue: Issue) -> Issue
 
 // === openIssue: raw label text -> a stored issue ===
-// The string-editing heritage: split on comma, trim + lowercase each piece, drop empties, wrap each as
-// a Label, then Set.fromList to remove duplicates. Nothing surviving means NoLabels and no write.
+// The string-editing heritage: split on comma, drop the pieces into a Set at once, then normalise and
+// clean inside it — Set.map trims and lowercases (two pieces that agree once normalised collapse),
+// Set.filter drops the blanks, and a second Set.map wraps each survivor as a Label. Nothing surviving
+// means NoLabels and no write.
 data NewIssue =
     { id: IssueId
     , title: String
@@ -81,16 +87,18 @@ data NoLabels
 behavior openIssue : (draft: NewIssue) -> Issue | NoLabels
     requires createIssue
 
-// One raw string to the cleaned, non-empty labels (still a List here; the Set comes next).
-let cleaned (text: String): List<Label> =
+// One raw string to the cleaned, non-empty labels. The whole pipeline stays in Set land: nothing here
+// needs order or repeats, and the label set is what the issue carries.
+let cleaned (text: String): Set<Label> =
     text
         |> split(",")
-        |> map(piece -> piece |> trim |> lowercase)
-        |> filter(piece -> String.length(piece) >= 1)
-        |> map(piece -> Label(piece))
+        |> Set.fromList
+        |> Set.map(piece -> piece |> trim |> lowercase)
+        |> Set.filter(piece -> not(isEmpty(piece)))
+        |> Set.map(piece -> Label(piece))
 
 let openIssue (draft, createIssue) = {
-    let labels = Set.fromList(cleaned(draft.labels))
+    let labels = cleaned(draft.labels)
     require Set.size(labels) >= 1 else NoLabels
     createIssue(Issue { id = draft.id, title = draft.title, labels = labels, assignee = draft.assignee })
 }
@@ -225,9 +233,11 @@ data LabelCounts = { counts: Map<String, Int> }
 behavior countByLabel : (board: Board) -> LabelCounts
     constructs LabelCounts
 
-// Every label occurrence on the board, as plain strings, with repeats.
+// Every label occurrence on the board, as plain strings, with repeats. One issue contributes the
+// labels it carries, and `concatMap` joins those lists as it goes — the fold with `++` in its step
+// that this used to spell out by hand.
 let labelKeys (issues: List<Issue>): List<String> =
-    fold((acc, issue) -> acc ++ map(l -> l.value, Set.toList(issue.labels)), [], issues)
+    concatMap(issue -> map(l -> l.value, Set.toList(issue.labels)), issues)
 
 // The counts themselves, shared with the ranking below. The helper's declared return type is pushed
 // into its body wherever it expands, so the empty-map seed takes its value type from
@@ -252,31 +262,29 @@ example countByLabel
 // The ranking side of the same counts. `Map.toList` hands the counts over as `(label, count)` pairs;
 // a tuple type may be written in a helper signature, and `let (a, b) = e` opens one, so the entries
 // are read without leaving the pipe. `List.sortBy` + `List.reverse` order them by count, and
-// `List.take` keeps the head of the ranking. A tie falls back to the map's iteration order, which is
-// deterministic but unspecified — the example below avoids one.
+// `List.take` keeps the head of the ranking. `List.unzip` then splits the ranked pairs into the two
+// parallel lists and only the labels are kept — the counts have done their work by then. A tie falls
+// back to the map's iteration order, which is deterministic but unspecified — the example below
+// avoids one.
 data LabelRanking = { labels: List<String> }
 
 behavior topLabels : (board: Board, n: Int) -> LabelRanking
     constructs LabelRanking
-
-let entryLabel (e: (String, Int)): String = {
-    let (label, _) = e
-    label
-}
 
 let entryCount (e: (String, Int)): Int = {
     let (_, count) = e
     count
 }
 
-let topLabels (board, n) =
-    LabelRanking { labels =
+let topLabels (board, n) = {
+    let ranked =
         Map.toList(labelCounts(board.issues))
             |> List.sortBy(e -> entryCount(e))
             |> List.reverse
             |> List.take(n)
-            |> map(entryLabel)
-    }
+    let (labels, _) = unzip(ranked)
+    LabelRanking { labels = labels }
+}
 
 example topLabels
     | "the most-used label leads the ranking" :
@@ -293,6 +301,33 @@ example topLabels
             , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
                 assignee = None } ] }, 9)
         -> LabelRanking { labels = [ "bug", "ui" ] }
+
+// === busyLabels: the labels the board leans on (Map.filter) ===
+// The same counts read a third way. Not the whole table (countByLabel) and not a ranking of fixed
+// length (topLabels), but "every label at least this many issues carry" — the shape a board asks for
+// when it wants the vocabulary that is actually in use. `Map.filter` keeps those entries in the map,
+// so the answer still carries the counts and the boundary does not have to look them up again.
+data LabelUsage = { counts: Map<String, Int> }
+
+behavior busyLabels : (board: Board, atLeast: Int) -> LabelUsage
+    constructs LabelUsage
+
+let busyLabels (board, atLeast) =
+    LabelUsage { counts = Map.filter((_, count) -> count >= atLeast, labelCounts(board.issues)) }
+
+example busyLabels
+    | "only the labels carried by at least two issues" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+                assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
+                assignee = None } ] }, 2)
+        -> LabelUsage { counts = [ ("bug", 2) ] }
+    | "a threshold nothing meets leaves an empty map" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ],
+                assignee = None } ] }, 5)
+        -> LabelUsage { counts = [] }
 
 // === groupByAssignee: the board's issues bucketed by assignee (filterMap + groupBy) ===
 // The other direction of the same board: not a count per key but the elements themselves under it.

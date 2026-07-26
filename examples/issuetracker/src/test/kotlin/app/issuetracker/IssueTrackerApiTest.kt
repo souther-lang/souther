@@ -157,6 +157,17 @@ class IssueTrackerApiTest {
             .expectBody().json("""{"labels":["bug"]}""")
     }
 
+    @Test
+    fun `only the labels the board leans on survive the threshold`() {
+        client.get().uri("/labels/busy?atLeast=2").exchange()
+            .expectStatus().isOk()
+            .expectBody().json("""{"counts":{"bug":2}}""")
+
+        client.get().uri("/labels/busy?atLeast=9").exchange()
+            .expectStatus().isOk()
+            .expectBody().json("""{"counts":{}}""")
+    }
+
     // Dropping the table reproduces a database failure, so the context is rebuilt afterwards rather than
     // handing a broken schema to later tests. The isolation rests on three facts together: H2 keeps the
     // in-memory DB to JVM exit (DB_CLOSE_DELAY=-1), so @DirtiesContext rebuilds the Spring context but not

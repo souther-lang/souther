@@ -17,12 +17,11 @@
 // exposing is omitted, so every generated class is public — the Spring/jOOQ boundary in Java uses
 // all of these types.
 module example.ordering
-import String ( length )
 import List ( map, filter, distinct )
 import example.cart ( Sku, LineItem, PricedCart )
 
 data OrderId = String
-    invariant length(value) > 0
+    invariant String.length(value) >= 1
 
 // What recordOrder persists: the priced lines (imported from cart) plus the assigned order id.
 data RecordedOrder =

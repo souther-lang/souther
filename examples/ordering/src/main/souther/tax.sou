@@ -15,10 +15,13 @@
 //     mode)` names its own).
 //   - The rate is a Decimal newtype whose range is an invariant, enforced wherever it is built —
 //     including on the way in from the database, where the rate is a NUMERIC column.
+//   - A Decimal can be written down: `String.fromDecimal(Decimal.round(…))` turns the rate into the
+//     "10%" an invoice states, so the one figure this module owes the reader is produced here rather
+//     than reassembled at the boundary.
 //   - Tax is rounded once per rate, not once per line. Rounding per line changes the total, and the
 //     `example`s below pin that difference.
 module example.tax
-import List ( map, fold )
+import List ( map, sum )
 import example.cart ( Sku, LineItem, PricedCart )
 
 // A rate is at least 0 and below 1. The `m` in `0.10m` marks a Decimal literal; Souther has no
@@ -39,10 +42,13 @@ data TaxCategory = StandardRate | ReducedRate
 behavior rateOf : (category: TaxCategory) -> TaxRate
     constructs TaxRate
 
-// The breakdown. net / tax / gross are all yen; the rate is the only Decimal that leaves.
+// The breakdown. net / tax / gross are all yen; the rate is the only Decimal that leaves, and
+// rateLabel is how it is written on an invoice — a qualified invoice states the rate per category, so
+// "10%" is a figure the domain owes the reader and not a formatting choice the boundary makes up.
 data TaxBreakdown =
     { net: Int
     , rate: TaxRate
+    , rateLabel: String
     , tax: Int
     , gross: Int
     }
@@ -51,11 +57,19 @@ behavior taxFor : (order: PricedCart, category: TaxCategory) -> TaxBreakdown
     requires rateOf
     constructs TaxBreakdown
 
+// The rate as a percentage. `Decimal.round` sets the scale — a rate of 0.10 times 100 is 10.000, and
+// nobody writes "10.000%" — and `String.fromDecimal` renders it in plain notation with that scale
+// kept, so the rounding decides how many places are shown. Which way a fraction goes is named here as
+// it is at every other rounding in this module.
+let rateLabel (rate: TaxRate): String =
+    String.fromDecimal(Decimal.round(rate.value * 100.0m, 0, HALF_UP)) ++ "%"
+
 // The rate is applied to the order's net total once, and the fraction is dropped downwards.
 let taxFor (order, category, rateOf) = {
     let rate = rateOf(category)
     let tax = Decimal.toInt(Decimal.fromInt(order.total) * rate.value, FLOOR)
-    TaxBreakdown { net = order.total, rate = rate, tax = tax, gross = order.total + tax }
+    TaxBreakdown { net = order.total, rate = rate, rateLabel = rateLabel(rate), tax = tax,
+        gross = order.total + tax }
 }
 
 fake rateOf
@@ -66,15 +80,15 @@ example taxFor
     | "the standard rate is 10%, rounded down" :
         (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105 } ],
             total = 315, highValue = false }, StandardRate)
-        -> TaxBreakdown { net = 315, rate = TaxRate(0.10m), tax = 31, gross = 346 }
+        -> TaxBreakdown { net = 315, rate = TaxRate(0.10m), rateLabel = "10%", tax = 31, gross = 346 }
     | "the reduced rate is 8%" :
         (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550 } ],
             total = 1100, highValue = false }, ReducedRate)
-        -> TaxBreakdown { net = 1100, rate = TaxRate(0.08m), tax = 88, gross = 1188 }
+        -> TaxBreakdown { net = 1100, rate = TaxRate(0.08m), rateLabel = "8%", tax = 88, gross = 1188 }
     | "half a yen is dropped, not rounded up" :
         (PricedCart { items = [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105 } ],
             total = 105, highValue = false }, StandardRate)
-        -> TaxBreakdown { net = 105, rate = TaxRate(0.10m), tax = 10, gross = 115 }
+        -> TaxBreakdown { net = 105, rate = TaxRate(0.10m), rateLabel = "10%", tax = 10, gross = 115 }
 
 // === What rounding per line would give instead ===
 // The same cart with the tax taken line by line and summed. An invoice may not be taxed this way,
@@ -91,7 +105,7 @@ let lineTax (line: LineItem, rate: TaxRate): Int =
 
 let taxRoundedPerLine (order, category, rateOf) = {
     let rate = rateOf(category)
-    PerLineTax { tax = fold((acc, x) -> acc + x, 0, map(line -> lineTax(line, rate), order.items)) }
+    PerLineTax { tax = sum(map(line -> lineTax(line, rate), order.items)) }
 }
 
 // Three lines of 105 yen: taken together 315 × 0.10 = 31.5 → 31 yen; line by line 10.5 → 10 yen

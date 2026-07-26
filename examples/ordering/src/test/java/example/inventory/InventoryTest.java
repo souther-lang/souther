@@ -38,4 +38,23 @@ class InventoryTest {
     void aWrongCheckDigitIsAScanError() {
         assertInstanceOf(ScanError.class, InspectBarcode.of().apply(barcode("9784873115659")));
     }
+
+    /** {@code baySlots} builds shelf codes rather than checking ones that came in: {@code List.range}
+     *  gives the four levels of the bay and {@code String.padLeft} widens each number to the two
+     *  digits {@code Location}'s invariant demands. */
+    @Test
+    void aBayNamesItsFourShelfCodes() {
+        BayCandidates candidates = BaySlots.of().apply("A", 3L);
+
+        assertEquals(java.util.List.of("A-03-01", "A-03-02", "A-03-03", "A-03-04"),
+                BayCandidates.encoder().encode(candidates).get("locations"));
+    }
+
+    /** A bay number the format cannot hold is rejected where the code is built — the same invariant
+     *  that rejects a malformed code arriving from outside. */
+    @Test
+    void aBayPastTheFormatIsRejectedAtConstruction() {
+        org.junit.jupiter.api.Assertions.assertThrows(souther.runtime.ConstraintViolation.class,
+                () -> BaySlots.of().apply("A", 100L));
+    }
 }
