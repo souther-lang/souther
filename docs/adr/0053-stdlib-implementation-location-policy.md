@@ -33,6 +33,7 @@ This pass moves the `Int`/`Decimal` `add`/`subtract`/`multiply`/`compare` functi
 - `Int.compare` no longer accepts two `Decimal` operands (the old shared `numericOp` was loose); it is `(Int, Int) -> Int` as declared. A minor, sound tightening.
 - The remaining compiler built-ins — the ordered-constrained `List` generics, the primitive-headed-union divisions, and the still-hardcoded `List.length`/`get`/`find`, `String.length`, `Map.get`/`empty`, `Set.empty` — are candidates for later alignment: `length`/`get`/`find` need only kind-checking derivable from a declared signature; the union-returning divisions wait on a union-signature relaxation; the ordered generics wait on (or forgo) an ordered-constraint notation. None is required now.
 - The operators stay compiler-integrated by design; the closed-newtype arithmetic (ADR-0047) depends on that.
+- A fourth compiler-integrated case was already in the tree and is now stated: **the functions taking a rounding mode** (`Decimal.divide`, `Decimal.toInt`, and `Decimal.round`, added later). The mode is a bare built-in identifier resolved like `None`, not a value a parameter type can name, so the signature cannot be written in a core declaration. This is not a new exception — `Decimal.toInt` returns a plain `Int` and was never covered by the three above — but the omission made the list read as complete when it was not.
 
 ## References
 - Specification: `[#intrinsics]`, `[#stdlib]`, `[#stdlib-int]`, `[#stdlib-decimal]`

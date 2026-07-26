@@ -23,6 +23,7 @@ import example.issuetracker.AssigneeOfResult
 import example.issuetracker.AttachLabel
 import example.issuetracker.AttachLabelResult
 import example.issuetracker.Board
+import example.issuetracker.BusyLabels
 import example.issuetracker.CountByLabel
 import example.issuetracker.DetachLabel
 import example.issuetracker.DetachLabelResult
@@ -35,6 +36,7 @@ import example.issuetracker.LabelCounts
 import example.issuetracker.LabelRanking
 import example.issuetracker.LabelRequest
 import example.issuetracker.LabelSet
+import example.issuetracker.LabelUsage
 import example.issuetracker.NewIssue
 import example.issuetracker.NoLabels
 import example.issuetracker.OpenIssue
@@ -64,6 +66,7 @@ class IssueController(
     private val sharedLabels: SharedLabels,
     private val countByLabel: CountByLabel,
     private val topLabels: TopLabels,
+    private val busyLabels: BusyLabels,
     private val boardQuery: BoardQuery,
 ) {
 
@@ -126,6 +129,11 @@ class IssueController(
     fun top(@RequestParam(defaultValue = "3") n: Long): Map<String, Any> =
         LabelRanking.encoder().encode(topLabels(boardQuery.board(), n))
 
+    /** The labels at least `atLeast` issues carry, counts and all — Map.filter over the same counts. */
+    @GetMapping("/labels/busy")
+    fun busy(@RequestParam(defaultValue = "2") atLeast: Long): Map<String, Any> =
+        LabelUsage.encoder().encode(busyLabels(boardQuery.board(), atLeast))
+
     private fun issueId(id: String): IssueId = IssueId.decoder().decodeOrFail(id)
 
     private fun labelRequest(raw: Map<String, Any>): LabelRequest =
@@ -175,3 +183,5 @@ private fun notFound(): ResponseEntity<Any> = ResponseEntity.notFound().build()
 private operator fun SharedLabels.invoke(a: Issue, b: Issue): LabelSet = apply(a, b)
 
 private operator fun TopLabels.invoke(board: Board, n: Long): LabelRanking = apply(board, n)
+
+private operator fun BusyLabels.invoke(board: Board, atLeast: Long): LabelUsage = apply(board, atLeast)

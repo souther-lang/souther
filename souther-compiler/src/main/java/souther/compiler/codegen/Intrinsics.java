@@ -175,10 +175,17 @@ final class Intrinsics {
         t.put("string.toCode", rt(CD_Strings, "toCode", order(0), ts -> Type.INT));
         t.put("string.fromInt", rt(CD_Strings, "fromInt", order(0), ts -> Type.STRING));
         t.put("string.concat", rt(CD_Strings, "concat", order(0), ts -> Type.STRING));
+        t.put("string.reverse", rt(CD_Strings, "reverse", order(0), ts -> Type.STRING));
+        t.put("string.repeat", rt(CD_Strings, "repeat", order(1, 0), ts -> Type.STRING));
+        t.put("string.lines", rt(CD_Strings, "lines", order(0), ts -> Type.list(Type.STRING)));
+        t.put("string.padLeft", rt(CD_Strings, "padLeft", order(2, 0, 1), ts -> Type.STRING));
+        t.put("string.padRight", rt(CD_Strings, "padRight", order(2, 0, 1), ts -> Type.STRING));
+        t.put("string.fromDecimal", rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
 
         // List
         t.put("list.sort", rt(CD_Lists, "sort", order(0), ts -> ts.get(0)));
         t.put("list.reverse", rt(CD_Lists, "reverse", order(0), ts -> ts.get(0)));
+        t.put("list.range", rt(CD_Lists, "range", order(0, 1), ts -> Type.list(Type.INT)));
 
         // Map — keys/values are erased to Object; the map argument stays a raw Map.
         t.put("map.containsKey", rtErased(CD_Maps, "containsKey", order(1, 0), Set.of(0), ts -> Type.BOOL));

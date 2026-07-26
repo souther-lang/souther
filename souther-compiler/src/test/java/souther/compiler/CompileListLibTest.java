@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** The List standard library beyond map/filter/all/any (spec 18.4): the further Elm combinators
  *  derived from {@code fold}, plus the native {@code sort} primitive and String ordering. */
@@ -428,6 +429,135 @@ class CompileListLibTest {
         Map<?, ?> neg = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of())));
         assertEquals(List.of(), neg.get("firstTwo"));
         assertEquals(List.of(), neg.get("rest"));
+    }
+
+    /** {@code range} is the one list that is neither written out nor read from outside, so a walk
+     *  over positions has something to walk. Both ends are included and a start above the end gives
+     *  the empty list (Elm's List.range). */
+    @Test
+    void rangeCountsBetweenBothEndsInclusive() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( range, map )
+
+                data In = { ns: List<Int> }
+                data Out = { upTo: List<Int>, single: List<Int>, backwards: List<Int>, doubled: List<Int> }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    upTo = range(1, 4),
+                    single = range(7, 7),
+                    backwards = range(3, 1),
+                    doubled = map(n -> n * 2, range(0, 2))
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Map<?, ?> m = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of())));
+
+        assertEquals(List.of(1L, 2L, 3L, 4L), m.get("upTo"));
+        assertEquals(List.of(7L), m.get("single"), "both ends are included, so one value is one element");
+        assertEquals(List.of(), m.get("backwards"), "a start above the end gives nothing");
+        assertEquals(List.of(0L, 2L, 4L), m.get("doubled"));
+    }
+
+    /** A span longer than a list can hold aborts before the walk starts, rather than filling memory
+     *  until it dies — the treatment an Int overflow gets (spec 18.2). */
+    @Test
+    void aRangeWiderThanAListCanHoldAborts() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( range, length )
+
+                data In = { to: Int }
+                data Out = { n: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { n = length(range(1, i.to)) }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object tooWide = Codecs.decoded(loader, "demo.In", Map.of("to", 3_000_000_000L));
+        assertThrows(souther.runtime.ConstraintViolation.class, () -> Codecs.apply(behavior, tooWide));
+    }
+
+    /** {@code concatMap} maps to a list and joins in one pass; {@code foldr} walks from the end.
+     *  Both are the shapes a caller otherwise hand-rolls as a fold with {@code ++} in the step. */
+    @Test
+    void concatMapAndFoldrWalkTheListWhole() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( concatMap, foldr, fold )
+
+                data In = { ns: List<Int> }
+                data Out = { spread: List<Int>, rightward: String, leftward: String }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    spread = concatMap(n -> [n, n * 10], i.ns),
+                    rightward = foldr((acc, n) -> acc ++ String.fromInt(n), "", i.ns),
+                    leftward = fold((acc, n) -> acc ++ String.fromInt(n), "", i.ns)
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Map<?, ?> m = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of(1L, 2L, 3L))));
+
+        assertEquals(List.of(1L, 10L, 2L, 20L, 3L, 30L), m.get("spread"));
+        assertEquals("321", m.get("rightward"), "foldr sees the elements from the end");
+        assertEquals("123", m.get("leftward"), "the left fold sees them from the head");
+
+        Map<?, ?> empty = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of())));
+        assertEquals(List.of(), empty.get("spread"));
+        assertEquals("", empty.get("rightward"));
+    }
+
+    /** {@code zip} pairs two lists and truncates to the shorter one (Elm's {@code map2}); {@code
+     *  unzip} takes the pairs apart again. The tuples stay inside the behavior — a tuple has no
+     *  external form — so the boundary sees the two lists and a rendering of the pairs. */
+    @Test
+    void zipPairsTwoListsAndUnzipTakesThemApart() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( zip, unzip, map )
+
+                data In = { ns: List<Int>, ss: List<String> }
+                data Out = { labels: List<String>, lefts: List<Int>, rights: List<String> }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let label (p: (Int, String)): String = {
+                    let (n, s) = p
+                    s ++ String.fromInt(n)
+                }
+
+                let run (i) = {
+                    let pairs = zip(i.ns, i.ss)
+                    let (ls, rs) = unzip(pairs)
+                    Out { labels = map(label, pairs), lefts = ls, rights = rs }
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
+        Object in = Codecs.decoded(loader, "demo.In",
+                Map.of("ns", List.of(1L, 2L, 3L), "ss", List.of("a", "b")));
+        Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
+
+        assertEquals(List.of("a1", "b2"), m.get("labels"), "the longer list is cut to the shorter one");
+        assertEquals(List.of(1L, 2L), m.get("lefts"));
+        assertEquals(List.of("a", "b"), m.get("rights"));
+
+        Object none = Codecs.decoded(loader, "demo.In", Map.of("ns", List.of(), "ss", List.of("a")));
+        Map<?, ?> empty = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, none));
+        assertEquals(List.of(), empty.get("labels"));
+        assertEquals(List.of(), empty.get("rights"), "nothing to pair leaves both sides empty");
     }
 
     private static Object decodeIn(BytesClassLoader loader, List<Long> ns) throws Exception {

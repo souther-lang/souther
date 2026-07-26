@@ -52,6 +52,21 @@ class CompileDidYouMeanTest {
         assertTrue(e.getMessage().contains("did you mean `num`?"), e.getMessage());
     }
 
+    /** A bare standard-library name is reported with the qualified form to write instead. When more
+     * than one module defines the name, every one of them is named: the hint must not depend on the
+     * order the prelude modules happen to load in. */
+    @Test
+    void aBareStdlibNameNamesEveryModuleThatDefinesIt() {
+        CompileException e = compileFail("""
+                module demo
+                data In = { xs: List<Int> }
+                data Out = { kept: List<Int> }
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = Out { kept = filter(n -> n > 0, i.xs) }
+                """);
+        assertTrue(e.getMessage().contains("`List.filter`, `Map.filter`, or `Set.filter`"), e.getMessage());
+    }
+
     @Test
     void anUnrelatedNameGetsNoHint() {
         CompileException e = compileFail("""

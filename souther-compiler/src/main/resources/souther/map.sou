@@ -50,6 +50,28 @@ let update (key: 'k, f: ('a) -> 'a, m: Map<'k, 'a>) : Map<'k, 'a> =
         | None -> m
         | Some v -> Map.insert(key, f(v), m)
 
+// `filter` keeps the entries the predicate holds for (Elm `Dict.filter`, whose predicate is
+// `key -> value -> Bool` too). It grows a fresh map through `fold`, as `map` does — the alternative
+// a caller has to write without it is `toList` out, `List.filter`, `fromList` back, which leaves the
+// map type behind for two steps and re-hashes every surviving entry.
+let filter (keep: ('k, 'a) -> Bool, m: Map<'k, 'a>) : Map<'k, 'a> =
+    Map.fold((acc, k, v) -> if keep(k, v) then Map.insert(k, v, acc) else acc, Map.empty(), m)
+
+// The key algebra, matching `Set`'s (Elm's `Dict.union` / `intersect` / `diff`, named `difference`
+// here so the two modules read alike). All three answer with entries taken from `a`: `union` adds
+// `b`'s entries under keys `a` does not have, so `a` wins a collision (Elm is left-biased too);
+// `intersect` keeps `a`'s entries whose key is also in `b`; `difference` keeps `a`'s entries whose
+// key is not. Values from `b` are never merged — combining two values under one key is a domain
+// decision, so it is written with `fold` and `upsert` where the rule lives.
+let union (a: Map<'k, 'v>, b: Map<'k, 'v>) : Map<'k, 'v> =
+    Map.fold((acc, k, v) -> if Map.containsKey(k, acc) then acc else Map.insert(k, v, acc), a, b)
+
+let intersect (a: Map<'k, 'v>, b: Map<'k, 'v>) : Map<'k, 'v> =
+    Map.filter((k, _) -> Map.containsKey(k, b), a)
+
+let difference (a: Map<'k, 'v>, b: Map<'k, 'v>) : Map<'k, 'v> =
+    Map.filter((k, _) -> Bool.not(Map.containsKey(k, b)), a)
+
 // `upsert` collapses insert-if-absent / modify-if-present into one call: apply `f` to the value at
 // `key`, or insert `default` when the key is absent. Like `update` it keeps `Option` internal
 // ([#algebraic-types]) — the absent branch takes a plain value (`default`), not the `Maybe -> Maybe`

@@ -110,4 +110,80 @@ public final class Strings {
             return NotANumber.INSTANCE;
         }
     }
+
+    /** The characters of {@code s} in the opposite order (Elm {@code String.reverse}). A surrogate
+     *  pair stays a pair, so a character outside the basic plane survives the turn. */
+    public static String reverse(String s) {
+        return new StringBuilder(s).reverse().toString();
+    }
+
+    /** {@code n} copies of {@code s} joined (Elm {@code String.repeat}); {@code n} of 0 or less gives
+     *  the empty string. A count no JVM string could hold aborts rather than quietly producing fewer
+     *  copies than were asked for — an out-of-range count is a model bug, not a business result, and
+     *  gets the same treatment {@link IntMath} gives an overflow. */
+    public static String repeat(String s, long n) {
+        if (n <= 0 || s.isEmpty()) {
+            return "";
+        }
+        if (n > Integer.MAX_VALUE) {
+            throw new ConstraintViolation("String.repeat count out of range: " + n);
+        }
+        return s.repeat((int) n);
+    }
+
+    /** Breaks {@code s} into lines (Elm {@code String.lines}): {@code \r\n} is normalised to
+     *  {@code \n} first, then the string is split on {@code \n} keeping empty pieces — so a trailing
+     *  newline leaves an empty last line, as it does in Elm. */
+    public static List<String> lines(String s) {
+        return split(s.replace("\r\n", "\n"), "\n");
+    }
+
+    /** {@code s} widened on the left to {@code n} characters with copies of {@code pad} (Elm
+     *  {@code String.padLeft}, whose padding is a {@code Char}; here a length-1 string). A string
+     *  already that long is returned unchanged, and an empty {@code pad} would never reach the width,
+     *  so it is left alone too. */
+    public static String padLeft(String s, long n, String pad) {
+        String fill = padding(s, n, pad);
+        return fill.isEmpty() ? s : fill + s;
+    }
+
+    /** {@code s} widened on the right, the mirror of {@link #padLeft}. */
+    public static String padRight(String s, long n, String pad) {
+        String fill = padding(s, n, pad);
+        return fill.isEmpty() ? s : s + fill;
+    }
+
+    /** The filler that brings {@code s} up to {@code n} characters, in whole copies of {@code pad}
+     *  (so a multi-character {@code pad} can overshoot the width). Empty when nothing is needed, and
+     *  an abort when the width is one no JVM string could reach — as {@link #repeat} does. */
+    private static String padding(String s, long n, String pad) {
+        long missing = n - s.length();
+        if (missing <= 0 || pad.isEmpty()) {
+            return "";
+        }
+        if (missing > Integer.MAX_VALUE) {
+            throw new ConstraintViolation("String.pad width out of range: " + n);
+        }
+        StringBuilder out = new StringBuilder();
+        while (out.length() < missing) {
+            out.append(pad);
+        }
+        return out.toString();
+    }
+
+    /** Renders a {@code Decimal} in plain notation, never in exponent form, keeping the scale the
+     *  value carries ({@code fromDecimal(new BigDecimal("1000.00")) == "1000.00"}). */
+    public static String fromDecimal(java.math.BigDecimal d) {
+        return d.toPlainString();
+    }
+
+    /** Parses {@code s} as a {@code Decimal}, or {@link NotANumber#INSTANCE} when it is not one — the
+     *  sibling of {@link #toInt}, returning the {@code Decimal | NotANumber} union. */
+    public static Object toDecimal(String s) {
+        try {
+            return new java.math.BigDecimal(s);
+        } catch (NumberFormatException e) {
+            return NotANumber.INSTANCE;
+        }
+    }
 }

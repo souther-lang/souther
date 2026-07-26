@@ -4,10 +4,9 @@
 // Balance(current - amount) is discharged at compile time by the require just above it (12.x
 // invariant-discharge).
 module example.account
-import String ( length )
 
 data AccountNo = String
-    invariant length(value) > 0
+    invariant String.length(value) >= 1
 
 // The withdrawal amount is non-negative.
 data Amount = Int

@@ -33,21 +33,39 @@ final class InvariantChecker {
 
     record Findings(List<CompileException> errors, List<Diagnostic> warnings) {}
 
-    /** A stdlib list combinator whose closure (argument {@code closureArg}) is handed each element of
-     * its list argument ({@code listArg}) as closure parameter {@code elementParam} — mirrors
+    /** A stdlib combinator whose closure (argument {@code closureArg}) is handed each element of its
+     * container argument ({@code listArg}) as closure parameter {@code elementParam} — mirrors
      * {@link TotalityChecker}'s table, so a construction inside a {@code List.map}/{@code fold} closure
-     * is analyzed with the element bound to the list's element type. */
+     * is analyzed with the element bound to the container's element type ({@link #elementType}). */
     private record Combinator(int closureArg, int elementParam, int listArg) {}
 
-    private static final Map<String, Combinator> COMBINATORS = Map.of(
-            "List.fold", new Combinator(0, 1, 2),
-            "List.foldFrom", new Combinator(0, 1, 2),
-            "List.map", new Combinator(0, 0, 1),
-            "List.filter", new Combinator(0, 0, 1),
-            "List.all", new Combinator(0, 0, 1),
-            "List.any", new Combinator(0, 0, 1),
-            "List.find", new Combinator(0, 0, 1),
-            "List.partition", new Combinator(0, 0, 1));
+    private static final Map<String, Combinator> COMBINATORS = Map.ofEntries(
+            Map.entry("List.fold", new Combinator(0, 1, 2)),
+            Map.entry("List.foldFrom", new Combinator(0, 1, 2)),
+            Map.entry("List.foldr", new Combinator(0, 1, 2)),
+            Map.entry("List.map", new Combinator(0, 0, 1)),
+            Map.entry("List.filter", new Combinator(0, 0, 1)),
+            Map.entry("List.all", new Combinator(0, 0, 1)),
+            Map.entry("List.any", new Combinator(0, 0, 1)),
+            Map.entry("List.find", new Combinator(0, 0, 1)),
+            Map.entry("List.partition", new Combinator(0, 0, 1)),
+            Map.entry("List.concatMap", new Combinator(0, 0, 1)),
+            Map.entry("List.filterMap", new Combinator(0, 0, 1)),
+            Map.entry("List.sortBy", new Combinator(0, 0, 1)),
+            Map.entry("List.groupBy", new Combinator(0, 0, 1)),
+            Map.entry("List.indexBy", new Combinator(0, 0, 1)),
+            Map.entry("List.allUniqueBy", new Combinator(0, 0, 1)),
+            Map.entry("List.indexedMap", new Combinator(0, 1, 1)),
+            Map.entry("Map.fold", new Combinator(0, 2, 2)),
+            Map.entry("Map.map", new Combinator(0, 1, 1)),
+            Map.entry("Map.filter", new Combinator(0, 1, 1)),
+            Map.entry("Map.update", new Combinator(1, 0, 2)),
+            Map.entry("Map.upsert", new Combinator(2, 0, 3)),
+            Map.entry("Set.fold", new Combinator(0, 1, 2)),
+            Map.entry("Set.map", new Combinator(0, 0, 1)),
+            Map.entry("Set.filter", new Combinator(0, 0, 1)),
+            Map.entry("Set.partition", new Combinator(0, 0, 1)),
+            Map.entry("Option.map", new Combinator(0, 0, 1)));
 
     private final Map<String, Ast.Def> symbols;
     private final List<CompileException> errors = new ArrayList<>();
@@ -405,8 +423,22 @@ final class InvariantChecker {
         return rt == Type.INT || rt == Type.DECIMAL ? rt : null;
     }
 
+    /** What a container hands its closure: a list's or set's element, a map's value (the key is the
+     * other closure parameter and is not the one the table credits), an option's payload. */
     private static Type elementType(Type t) {
-        return t instanceof Type.ListOf list ? list.element() : null;
+        if (t instanceof Type.ListOf list) {
+            return list.element();
+        }
+        if (t instanceof Type.SetOf set) {
+            return set.element();
+        }
+        if (t instanceof Type.MapOf map) {
+            return map.value();
+        }
+        if (t instanceof Type.OptionOf opt) {
+            return opt.element();
+        }
+        return null;
     }
 
     private boolean numericNewtype(Type t) {

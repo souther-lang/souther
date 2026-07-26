@@ -19,3 +19,30 @@ let isEmpty (s: Set<'a>) : Bool = intrinsic "set.isEmpty"
 let size (s: Set<'a>) : Int = intrinsic "set.size"
 let toList (s: Set<'a>) : List<'a> = intrinsic "set.toList"
 let fromList (xs: List<'a>) : Set<'a> = intrinsic "set.fromList"
+
+// The higher-order operations (Elm `Set.map` / `filter` / `foldl` / `partition`). Like `Map`, `Set`
+// adds no loop of its own: each one goes out through `toList`, uses the List combinator, and comes
+// back through `fromList`, so `List.fold` stays the single primitive. The round trip is what a
+// caller would otherwise write at every call site, and writing it there is what pushed set-shaped
+// work into List land — `openIssue` in the issuetracker example cleaned its labels as a list purely
+// because a set could not be mapped.
+//
+// `map` may shrink the set: two elements that land on the same image collapse, since a set holds no
+// duplicates (Elm behaves the same way). `fold` runs over `toList`'s order, which is deterministic
+// but unspecified, so a step whose result depends on the order is a mistake the compiler cannot
+// catch — combine with something associative and commutative, as one would in Elm.
+let fold (step: ('acc, 'a) -> 'acc, seed: 'acc, s: Set<'a>) : 'acc =
+    List.fold(step, seed, Set.toList(s))
+
+let map (f: ('a) -> 'b, s: Set<'a>) : Set<'b> =
+    Set.fromList(List.map(f, Set.toList(s)))
+
+let filter (keep: ('a) -> Bool, s: Set<'a>) : Set<'a> =
+    Set.fromList(List.filter(keep, Set.toList(s)))
+
+// `partition` answers the pair (kept, rest), the same shape `List.partition` gives.
+let partition (keep: ('a) -> Bool, s: Set<'a>) =
+    Set.fold((acc, x) -> {
+        let (yes, no) = acc
+        if keep(x) then (Set.insert(x, yes), no) else (yes, Set.insert(x, no))
+    }, (Set.empty(), Set.empty()), s)

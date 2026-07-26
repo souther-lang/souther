@@ -17,6 +17,7 @@ import app.issuetracker.JooqStoreLabels
 
 import example.issuetracker.AssigneeOf
 import example.issuetracker.AttachLabel
+import example.issuetracker.BusyLabels
 import example.issuetracker.CountByLabel
 import example.issuetracker.CreateIssue
 import example.issuetracker.DetachLabel
@@ -78,4 +79,7 @@ class IssueTrackerConfig {
 
     @Bean
     fun topLabels(): TopLabels = TopLabels.of()
+
+    @Bean
+    fun busyLabels(): BusyLabels = BusyLabels.of()
 }

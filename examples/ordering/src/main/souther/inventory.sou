@@ -4,9 +4,9 @@
 // against cart's PricedCart. It is kept separate from ordering so ordering stays the order lifecycle
 // and this stays the warehouse.
 //
-// Four behaviors — allocate, inspectBarcode, verifyShipment, putAway — each checked at compile time by
-// its `example`s. No hand-written Java drives them; the smoke test only runs one to prove the
-// generated types decode / apply / encode.
+// Six behaviors — allocate, inspectBarcode, verifyShipment, putAway, baySlots, checkExpiry — each
+// checked at compile time by its `example`s. No hand-written Java drives them; the smoke test only
+// runs one to prove the generated types decode / apply / encode.
 //
 // exposing is omitted, so every generated class is public — the smoke test references them by name.
 module example.inventory
@@ -160,6 +160,39 @@ example putAway
     | "a passed item is put away to a shelf" :
         (InspectionPassed { code = Barcode("9784873115658") }, Location("A-03-12"))
             -> PutAwayRecord { code = Barcode("9784873115658"), location = Location("A-03-12") }
+
+// === baySlots: where an item may go, as codes this module builds itself ===
+// Until now a Location could only be rejected, never produced: the shelf code arrived from outside and
+// the invariant above checked it. Deciding where to put something means naming a shelf, so the code
+// has to be assembled here. `String.padLeft` widens each number to the two digits the format wants —
+// bay 3 is "03" — and the Location invariant then checks the result exactly as it checks one that came
+// in over the wire, so a bay past 99 is rejected at construction rather than shipped as a bad code.
+//
+// The levels of a bay are 1 to 4 by the racking, not a list anyone stores, so `List.range` produces
+// them. That is what it is for: a walk over positions with nothing to walk over yet.
+data BayCandidates = { locations: List<Location> }
+
+behavior baySlots : (aisle: String, bay: Int) -> BayCandidates
+    constructs BayCandidates, Location
+
+let locationOf (aisle: String, bay: Int, level: Int): Location =
+    Location(aisle
+        ++ "-" ++ String.padLeft(2, "0", String.fromInt(bay))
+        ++ "-" ++ String.padLeft(2, "0", String.fromInt(level)))
+
+let baySlots (aisle, bay) =
+    BayCandidates { locations =
+        List.range(1, 4) |> List.map(level -> locationOf(aisle, bay, level)) }
+
+example baySlots
+    | "a bay offers its four levels, each a well-formed code" :
+        ("A", 3)
+            -> BayCandidates { locations =
+                [ Location("A-03-01"), Location("A-03-02"), Location("A-03-03"), Location("A-03-04") ] }
+    | "a two-digit bay needs no padding" :
+        ("B", 12)
+            -> BayCandidates { locations =
+                [ Location("B-12-01"), Location("B-12-02"), Location("B-12-03"), Location("B-12-04") ] }
 
 // === checkExpiry: a lot past its best-before date is held back ===
 // The warehouse stores dated lots. Whether a lot may ship today is a pure calendar computation —

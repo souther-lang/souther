@@ -295,20 +295,40 @@ final class TotalityChecker {
      */
     private record Combinator(int closureArg, int elementParam, int containerArg) {}
 
-    private static final Map<String, Combinator> COMBINATORS = Map.of(
-            "List.fold", new Combinator(0, 1, 2),
-            "List.foldFrom", new Combinator(0, 1, 2),
-            "List.map", new Combinator(0, 0, 1),
-            "List.filter", new Combinator(0, 0, 1),
-            "List.all", new Combinator(0, 0, 1),
-            "List.any", new Combinator(0, 0, 1),
-            "List.find", new Combinator(0, 0, 1),
-            "List.partition", new Combinator(0, 0, 1),
+    private static final Map<String, Combinator> COMBINATORS = Map.ofEntries(
+            Map.entry("List.fold", new Combinator(0, 1, 2)),
+            Map.entry("List.foldFrom", new Combinator(0, 1, 2)),
+            Map.entry("List.foldr", new Combinator(0, 1, 2)),
+            Map.entry("List.map", new Combinator(0, 0, 1)),
+            Map.entry("List.filter", new Combinator(0, 0, 1)),
+            Map.entry("List.all", new Combinator(0, 0, 1)),
+            Map.entry("List.any", new Combinator(0, 0, 1)),
+            Map.entry("List.find", new Combinator(0, 0, 1)),
+            Map.entry("List.partition", new Combinator(0, 0, 1)),
+            Map.entry("List.concatMap", new Combinator(0, 0, 1)),
+            Map.entry("List.filterMap", new Combinator(0, 0, 1)),
+            Map.entry("List.sortBy", new Combinator(0, 0, 1)),
+            Map.entry("List.groupBy", new Combinator(0, 0, 1)),
+            Map.entry("List.indexBy", new Combinator(0, 0, 1)),
+            Map.entry("List.allUniqueBy", new Combinator(0, 0, 1)),
+            // indexedMap's closure takes (index, element), so the element is its second parameter.
+            Map.entry("List.indexedMap", new Combinator(0, 1, 1)),
+            // A map hands its closure the key and the value; the value is the one that can hold a
+            // nested structure, so that is the parameter credited as a sub-term.
+            Map.entry("Map.fold", new Combinator(0, 2, 2)),
+            Map.entry("Map.map", new Combinator(0, 1, 1)),
+            Map.entry("Map.filter", new Combinator(0, 1, 1)),
+            Map.entry("Map.update", new Combinator(1, 0, 2)),
+            Map.entry("Map.upsert", new Combinator(2, 0, 3)),
+            Map.entry("Set.fold", new Combinator(0, 1, 2)),
+            Map.entry("Set.map", new Combinator(0, 0, 1)),
+            Map.entry("Set.filter", new Combinator(0, 0, 1)),
+            Map.entry("Set.partition", new Combinator(0, 0, 1)),
             // Option is a container of at most one element; its `Some` payload is a sub-term of the
             // option, so `Option.map`'s closure receives a strictly smaller part when the option is
             // (part of) a parameter — a manager chain `s.上司 |> Option.map(b -> depth(b) + 1)` walks
             // structurally, exactly as the list combinators above do (`Option.andThen` does not exist).
-            "Option.map", new Combinator(0, 0, 1));
+            Map.entry("Option.map", new Combinator(0, 0, 1)));
 
     /**
      * Walks {@code e}, threading {@code lt} (each local -&gt; the parameters it is a strictly smaller

@@ -107,6 +107,46 @@ class CompileMapLibTest {
                 "update leaves the map unchanged when the key is absent");
     }
 
+    /** {@code filter} and the key algebra ([#stdlib-map]). All three of union / intersect /
+     *  difference answer with entries taken from the left map, so a collision keeps the left value
+     *  (Elm's {@code Dict.union} is left-biased too) and nothing merges two values under one key. */
+    @Test
+    void filterAndTheKeyAlgebraOverMaps() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import Map ( filter, union, intersect, difference )
+
+                data In = { left: Map<String, Int>, right: Map<String, Int> }
+                data Out = {
+                    big: Map<String, Int>
+                    , joined: Map<String, Int>
+                    , shared: Map<String, Int>
+                    , only: Map<String, Int>
+                }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out {
+                    big = filter((k, v) -> v >= 20, i.left),
+                    joined = union(i.left, i.right),
+                    shared = intersect(i.left, i.right),
+                    only = difference(i.left, i.right)
+                }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.In",
+                Map.of("left", Map.of("a", 10L, "b", 20L), "right", Map.of("b", 99L, "c", 30L)));
+        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
+
+        assertEquals(Map.of("b", 20L), m.get("big"), "filter keeps the entries the predicate holds for");
+        assertEquals(Map.of("a", 10L, "b", 20L, "c", 30L), m.get("joined"),
+                "union adds the right map's new keys and keeps the left value for a shared key");
+        assertEquals(Map.of("b", 20L), m.get("shared"), "intersect keeps the left entries whose key is shared");
+        assertEquals(Map.of("a", 10L), m.get("only"), "difference keeps the left entries the right map lacks");
+    }
+
     /** fold / map / update over a statically-typed map that is empty at runtime: fold returns the
      *  seed, map and update return an empty map — no step runs. (A bare {@code Map.empty()} has no
      *  value type for a step to consume, so the meaningful empty case is a typed map, empty at run

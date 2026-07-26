@@ -45,14 +45,14 @@ dependency plus the `-Asouther.source` compiler arg.
 | `contact` | A sum data (sealed) + a discriminated decoder (discriminator `"type"`, tag = case name) |
 | `expense` | `List<T>` / nested newtypes / a product decode·encode round trip |
 | `cart` | List combinators `map`/`filter`/`all`/`any` (`souther.list` derives them from `fold`) + the empty list `[]`. Actually runs the behavior `quote` and checks its result cases |
-| `businesstrip` | include (field composition) + a nested newtype invariant |
+| `businesstrip` | include (field composition) + a nested newtype invariant + multi-stage approval, where the amount threshold and the reason count each decide a level on their own and `Int.max` takes the stricter of the two |
 | `joboffer` | A crowdsourcing job offer: **a sum of sums of sums** (依頼 → プロジェクト依頼 → 精算方式 → 固定精算 → 予算 → 範囲予算), with the value-less cases of an enum written as unit data. Ported from [kawasima/validation-modeling](https://github.com/kawasima/validation-modeling)'s `raoh` version, where the same model is a hand-built decoder carrying the constraints; here the constraints are the newtypes' invariants and the decoder is derived from them. It is the one example that reads a Jackson `JsonNode` through the generated `jsonDecoder()` (which is also how a date arrives as JSON text), and it runs Spring Boot for real — with no database, since both behaviors are pure |
-| `issuetracker` | A small issue tracker, and the **Kotlin** case: the boundary around the domain — REST and the H2 connection — is Spring Boot + Kotlin (below). Showcases the `Set` module (an issue's `labels` are a `Set<Label>` — the derived codec dedups a JSON array), the `Map` module (`countByLabel` builds a `Map<String, Int>` with `Map.upsert`, `groupByAssignee` buckets the issues themselves into a `Map<String, List<IssueId>>` with `List.filterMap` + `List.groupBy`, the optional assignee dropping out without a stand-in value), `Some(Assignee(name))` destructuring of an optional assignee, and three injected database behaviors whose read → transform → write sequencing is checked with `fake` + `example`. Like ordering it actually starts Boot and connects to H2 |
+| `issuetracker` | A small issue tracker, and the **Kotlin** case: the boundary around the domain — REST and the H2 connection — is Spring Boot + Kotlin (below). Showcases the `Set` module (an issue's `labels` are a `Set<Label>` — the derived codec dedups a JSON array — and `openIssue` cleans the raw label text with `Set.map` + `Set.filter` without leaving the set for a list first), the `Map` module (`countByLabel` builds a `Map<String, Int>` with `Map.upsert`; `topLabels` ranks those counts and splits the ranked pairs with `List.unzip`; `busyLabels` keeps the entries a threshold holds for with `Map.filter`; `groupByAssignee` buckets the issues themselves into a `Map<String, List<IssueId>>` with `List.filterMap` + `List.groupBy`, the optional assignee dropping out without a stand-in value), `List.concatMap` to gather every label occurrence across the board, `Some(Assignee(name))` destructuring of an optional assignee, and three injected database behaviors whose read → transform → write sequencing is checked with `fake` + `example`. Like ordering it actually starts Boot and connects to H2 |
 | `member` | Member lookup. A `required behavior findMember` (outside-world dependency) + type routing `>->`. Actually compiles the Spring MVC + jOOQ boundary code (below) |
 | `account` | Account withdrawal, "read → check → write". Binds `withdraw` (which has two injected behaviors) from **Clojure + Pedestal rather than Java**, connected to H2 inside a transaction (below). It shows that the generated types are used the same way even when the boundary language changes |
 | `ordering` | Ordering + stock reservation. Two injected behaviors joined with `>->`, and it **actually starts Spring Boot, connects to H2, and shows transaction control**: if the second stage returns the `OutOfStock` case, the first stage's INSERT is rolled back too (below). Also a pure `report` over a recorded order — a sales summary showcasing `distinct` (the old standalone `sales` example, folded in here) |
-| `tax` | Consumption tax, and the **only example that uses `Decimal`**: a fourth Souther module inside the ordering project. Amounts stay `Int` (yen has no fraction) and only the rate is a `Decimal`, so the conversion is visible exactly where a value stops being yen — `Decimal.fromInt(net) * rate.value` — and comes back with the rounding named: `Decimal.toInt(…, FLOOR)`. The rate itself is injected (`rateOf`), read by jOOQ from the schema's one `NUMERIC` column, and its range is a newtype invariant that runs where it is built — a row outside it aborts rather than entering the domain. Tax is rounded once per rate, not per line; an `example` pins the 1-yen difference the wrong way would produce |
-| `inventory` | The warehouse side. A third Souther module living inside the ordering project alongside `cart` and `ordering` (so it `import`s cart's `PricedCart`): `allocate` (read → index → aggregate check → write — read the stock rows, index them by sku with `List.indexBy`, check every line is covered with `all`, then commit), EAN-13 `inspectBarcode` (a check-digit fold with `List.indexedMap` / `List.sum`), whole-case `verifyShipment`, and `putAway` |
+| `tax` | Consumption tax, and the **only example that uses `Decimal`**: a fourth Souther module inside the ordering project. Amounts stay `Int` (yen has no fraction) and only the rate is a `Decimal`, so the conversion is visible exactly where a value stops being yen — `Decimal.fromInt(net) * rate.value` — and comes back with the rounding named: `Decimal.toInt(…, FLOOR)`. The rate is also *written down* in the domain: `String.fromDecimal(Decimal.round(…))` turns it into the `"10%"` a qualified invoice states, instead of leaving that to the boundary. The rate itself is injected (`rateOf`), read by jOOQ from the schema's one `NUMERIC` column, and its range is a newtype invariant that runs where it is built — a row outside it aborts rather than entering the domain. Tax is rounded once per rate, not per line; an `example` pins the 1-yen difference the wrong way would produce |
+| `inventory` | The warehouse side. A third Souther module living inside the ordering project alongside `cart` and `ordering` (so it `import`s cart's `PricedCart`): `allocate` (read → index → aggregate check → write — read the stock rows, index them by sku with `List.indexBy`, check every line is covered with `all`, then commit), EAN-13 `inspectBarcode` (a check-digit fold with `List.indexedMap` / `List.sum`), whole-case `verifyShipment`, `putAway`, and `baySlots` — which *builds* shelf codes rather than only checking ones that arrive, with `List.range` over the levels of a bay and `String.padLeft` widening each number to the two digits `Location`'s invariant demands |
 
 Modules that are `.sou`-only with no hand-written Java (email/contact/expense/cart/businesstrip)
 carry a single minimal `package-info.java` to trigger the processor (javac does not run annotation
@@ -192,7 +192,7 @@ behavior detachLabel : (request: LabelRequest) -> Issue | IssueNotFound  require
 
 `attachLabel` reads the issue, inserts into its label `Set` and writes it back; an unknown id passes
 `IssueNotFound` through without writing. The remaining behaviors (`assigneeOf`, `sharedLabels`,
-`countByLabel`, `topLabels`) are pure, so they need no injection, and each one has a route.
+`countByLabel`, `topLabels`, `busyLabels`) are pure, so they need no injection, and each one has a route.
 
 ### Making a javac annotation processor work in a Kotlin module
 
@@ -237,7 +237,7 @@ same way `souther-clj` was.
 | `JooqIssueStore.kt` | The three injected implementations, each **extending** the generated abstract base. A Kotlin subclass reaches the base's `protected` factories, so the unit case is built with the inherited `IssueNotFound()`; values read out of storage go through the public `decoder()`, which re-checks their invariants. SQL exceptions are not caught |
 | `web/IssueTrackerConfig.kt` | The generated-side beans: the injected implementations, `AttachLabel.bind(...)` and friends, the pure behaviors' `of()`, and a jOOQ `Settings` that turns identifier quoting off. DataSource / DSLContext / TransactionManager come from autoconfig |
 | `web/IssueController.kt` | `@RestController`. Every route is decode → one behavior → fold the output union into a status and a body. `@Transactional` on the read-modify-write routes, so a concurrent call cannot drop a label by writing back a set it read too early |
-| `web/BoardQuery.kt` | The read side. `countByLabel` / `topLabels` are pure behaviors over a whole `Board`, and a summary makes no decision the domain needs to be in on, so this is not an injected behavior: the boundary reads the rows and builds the `Board` through the derived decoder |
+| `web/BoardQuery.kt` | The read side. `countByLabel` / `topLabels` / `busyLabels` are pure behaviors over a whole `Board`, and a summary makes no decision the domain needs to be in on, so this is not an injected behavior: the boundary reads the rows and builds the `Board` through the derived decoder |
 | `web/BoundaryErrors.kt` | The two failures that are not domain outcomes: a rejected input is 400 with Raoh's issues, and a `DataAccessException` that passed through Souther is 503 |
 
 | Route | Behavior | Outcomes |
@@ -250,6 +250,7 @@ same way `souther-clj` was.
 | `GET /issues/{a}/shared-labels/{b}` | `sharedLabels` | 200 with the intersection / 404 |
 | `GET /labels/counts` | `countByLabel` | 200 with a JSON object of label → count |
 | `GET /labels/top?n=` | `topLabels` | 200 with the ranking |
+| `GET /labels/busy?atLeast=` | `busyLabels` | 200 with the labels that many issues carry, counts and all |
 
 `IssueTrackerApiTest` boots Tomcat on a random port and drives all of these over real HTTP with
 `RestTestClient`, checking the three failure kinds apart from each other: `NoLabels` is a domain
@@ -273,6 +274,7 @@ curl -X POST localhost:8080/issues \
      -H 'Content-Type: application/json' \
      -d '{"id":"i-3","title":"flaky test","labels":"Bug, bug , UI"}'  # 201, labels ["bug","ui"]
 curl localhost:8080/labels/top?n=1                                    # {"labels":["bug"]}
+curl localhost:8080/labels/busy?atLeast=2                              # {"counts":{"bug":2}}
 ```
 
 ## Clojure + Pedestal interop — account
