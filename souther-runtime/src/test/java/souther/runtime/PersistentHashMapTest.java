@@ -147,4 +147,81 @@ class PersistentHashMapTest {
         assertFalse(e.containsKey("x"));
         assertFalse(e.entrySet().iterator().hasNext());
     }
+
+    /**
+     * The bulk builder fills its nodes in place, so what it produces has to be indistinguishable
+     * from the same entries added one at a time — same contents, same size, and the same
+     * deterministic iteration order, which is what the boundary encoding depends on.
+     */
+    @Test
+    void builderProducesTheSameMapAsRepeatedAssoc() {
+        Random rnd = new Random(7);
+        for (int n : new int[] {0, 1, 2, 31, 32, 33, 1023, 1024, 1025, 10_000}) {
+            Map<Integer, Integer> oracle = new LinkedHashMap<>();
+            for (int i = 0; i < n; i++) {
+                oracle.put(rnd.nextInt(n * 2 + 1), i);   // duplicate keys, so later entries overwrite
+            }
+            PersistentHashMap<Integer, Integer> viaAssoc = PersistentHashMap.empty();
+            for (Map.Entry<Integer, Integer> e : oracle.entrySet()) {
+                viaAssoc = viaAssoc.assoc(e.getKey(), e.getValue());
+            }
+            PersistentHashMap<Integer, Integer> viaBuilder = PersistentHashMap.from(oracle);
+
+            assertEquals(oracle.size(), viaBuilder.size(), "size at n=" + n);
+            assertEquals(viaAssoc, viaBuilder, "contents at n=" + n);
+            assertEquals(oracle, viaBuilder, "oracle at n=" + n);
+            assertEquals(viaAssoc.keySet().stream().toList(), viaBuilder.keySet().stream().toList(),
+                    "iteration order at n=" + n);
+        }
+    }
+
+    /** Hash collisions take the builder down the {@code HashCollisionNode} path, which it does not
+     *  own; it has to keep building correctly there too. */
+    @Test
+    void builderHandlesCollisionsLikeRepeatedAssoc() {
+        Map<Key, Integer> oracle = new LinkedHashMap<>();
+        for (int i = 0; i < 200; i++) {
+            oracle.put(new Key(i, i % 5), i);   // 5 distinct hashes, 40 keys each
+        }
+        PersistentHashMap<Key, Integer> viaAssoc = PersistentHashMap.empty();
+        for (Map.Entry<Key, Integer> e : oracle.entrySet()) {
+            viaAssoc = viaAssoc.assoc(e.getKey(), e.getValue());
+        }
+        PersistentHashMap<Key, Integer> viaBuilder = PersistentHashMap.from(oracle);
+        assertEquals(200, viaBuilder.size());
+        assertEquals(viaAssoc, viaBuilder);
+        assertEquals(viaAssoc.keySet().stream().toList(), viaBuilder.keySet().stream().toList());
+    }
+
+    /**
+     * Once built, the map is an ordinary persistent one: the builder's trie must not stay writable.
+     * If a later {@code assoc} could still write a node in place, the map it was derived from would
+     * change under it — this is the test that fails if ownership ever leaks past {@code build}.
+     */
+    @Test
+    void aBuiltMapIsPersistentAfterwards() {
+        Map<Integer, Integer> seed = new LinkedHashMap<>();
+        for (int i = 0; i < 500; i++) {
+            seed.put(i, i);
+        }
+        PersistentHashMap<Integer, Integer> built = PersistentHashMap.from(seed);
+
+        PersistentHashMap<Integer, Integer> plusOne = built.assoc(1000, 1000);
+        PersistentHashMap<Integer, Integer> overwritten = built.assoc(7, -7);
+        PersistentHashMap<Integer, Integer> removed = built.without(3);
+
+        assertEquals(500, built.size(), "the built map changed");
+        assertEquals(7, built.get(7));
+        assertEquals(3, built.get(3));
+        assertNull(built.get(1000));
+
+        assertEquals(501, plusOne.size());
+        assertEquals(-7, overwritten.get(7));
+        assertEquals(7, plusOne.get(7));
+        assertEquals(499, removed.size());
+        assertNull(removed.get(3));
+        for (int i = 0; i < 500; i++) {
+            assertEquals(i, built.get(i), "built lost " + i);
+        }
+    }
 }
