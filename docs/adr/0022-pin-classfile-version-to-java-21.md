@@ -1,6 +1,6 @@
 # ADR-0022: Pin the generated class-file version to Java 21
 
-Status: Accepted
+Status: Accepted. The pin stands; its value moved to Java 25 in ADR-0062.
 
 ## Context
 
@@ -16,4 +16,6 @@ Deferring to the build JDK's default would make artifact versions track each dev
 
 ## References
 
+- ADR-0062 (the floor is Java 25 — the value this ADR set, moved once it turned out Raoh made
+  Java 21 unreachable)
 - Specification: `[#target-jdk]`

@@ -106,7 +106,7 @@ public final class Strings {
     public static Object toInt(String s) {
         try {
             return Long.parseLong(s);
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException _) {
             return NotANumber.INSTANCE;
         }
     }
@@ -182,7 +182,7 @@ public final class Strings {
     public static Object toDecimal(String s) {
         try {
             return new java.math.BigDecimal(s);
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException _) {
             return NotANumber.INSTANCE;
         }
     }

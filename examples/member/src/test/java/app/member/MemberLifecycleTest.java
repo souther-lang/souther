@@ -77,8 +77,8 @@ class MemberLifecycleTest {
                 "メール", Map.of("type", activated ? "アクティベート済み" : "未アクティベート", "value", "a@example.com"),
                 "表示名", "A");
         return switch (会員.decoder().decode(raw, Path.ROOT)) {
-            case Ok<会員> ok -> ok.value();
-            case Err<会員> e -> throw new AssertionError(e.issues().asList().toString());
+            case Ok<会員>(var 会員) -> 会員;
+            case Err<会員>(var issues) -> throw new AssertionError(issues.asList().toString());
         };
     }
 
@@ -94,7 +94,7 @@ class MemberLifecycleTest {
                 assertEquals("a@example.com", encoded.get("メール"));
                 assertEquals("Bob", encoded.get("表示名"));
             }
-            case Err<会員表示> err -> throw new AssertionError("should decode: " + err.issues().asList());
+            case Err<会員表示>(var issues) -> throw new AssertionError("should decode: " + issues.asList());
         }
     }
 }

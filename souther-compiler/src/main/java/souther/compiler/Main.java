@@ -221,7 +221,7 @@ public final class Main {
         }
         try {
             return new SourceContext(source.getFileName().toString(), Files.readString(source));
-        } catch (IOException ignore) {
+        } catch (IOException _) {
             return null;
         }
     }

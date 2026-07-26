@@ -79,8 +79,8 @@ public final class JooqFindMember extends FindMember {
 
         // 会員.decoder() は Decoder<Map<String,Object>, 会員>。decode は Result<会員> を返す。
         return switch (会員.decoder().decode(raw, Path.ROOT)) {
-            case Ok<会員> ok -> ok.value();               // 会員（本線）
-            case Err<会員> ignored -> 保存データ不正();     // 保存値がドメイン不変条件を破っていた
+            case Ok<会員>(var 会員) -> 会員;               // 会員（本線）
+            case Err<会員> _ -> 保存データ不正();   // 保存値がドメイン不変条件を破っていた
         };
     }
 }

@@ -73,7 +73,7 @@ class LspSurvivesADeepExpressionTest {
         Thread t = new Thread(null, () -> {
             try {
                 work.run();
-            } catch (Throwable ignored) {
+            } catch (Throwable _) {
                 // the assertions read what was produced, and a throw leaves that empty
             }
         }, "deep-expression", STACK_BYTES);

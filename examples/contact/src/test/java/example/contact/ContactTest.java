@@ -26,7 +26,7 @@ class ContactTest {
                 assertEquals("EmailContact", encoded.get("type"));
                 assertEquals("a@example.com", encoded.get("email"));
             }
-            case Err<Contact> err -> throw new AssertionError("should decode: " + err.issues().asList());
+            case Err<Contact>(var issues) -> throw new AssertionError("should decode: " + issues.asList());
         }
     }
 

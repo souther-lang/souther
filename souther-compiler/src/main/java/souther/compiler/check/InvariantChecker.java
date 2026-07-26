@@ -84,7 +84,7 @@ final class InvariantChecker {
                 d = c.seedParam(p.getKey(), p.getValue(), d);
             }
             c.walk(body, d, new HashMap<>(params));
-        } catch (RuntimeException swallowed) {
+        } catch (RuntimeException _) {
             // fail-open: the run-time invariant check remains the backstop
         }
         return new Findings(c.errors, c.warnings);

@@ -132,7 +132,7 @@ class CompileInjectedFactoryTest {
         boolean memberFactory = true;
         try {
             mk.getDeclaredMethod("Member", long.class);
-        } catch (NoSuchMethodException e) {
+        } catch (NoSuchMethodException _) {
             memberFactory = false;
         }
         assertEquals(false, memberFactory, "no factory for a pass-through (non-constructed) type");

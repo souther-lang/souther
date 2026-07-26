@@ -51,7 +51,7 @@ public final class DecimalMath {
     public static long toInt(BigDecimal d, RoundingMode mode) {
         try {
             return d.setScale(0, mode).longValueExact();
-        } catch (ArithmeticException e) {
+        } catch (ArithmeticException _) {
             throw new ConstraintViolation("Decimal does not fit in an Int: " + d.toPlainString());
         }
     }

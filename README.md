@@ -54,7 +54,7 @@ The complete runnable example is in [`examples/businesstrip/`](examples/business
 
 ## Try it
 
-Souther requires JDK 25 and Maven. The compiler uses the finalized JDK Class-File API (JDK 24+), so JDK 25 is a build-time toolchain, not a runtime floor: generated `.class` files and `souther-runtime` target Java 21, so an application consuming Souther's output runs on Java 21 and later. Because `SoutherProcessor` generates bytecode during the host build (see [`examples/README.md`](examples/README.md)), a project that runs it as an annotation processor also needs JDK 25 as its build toolchain, even though its production runtime stays on Java 21+.
+Souther requires JDK 25 and Maven, at build time and at run time alike. Generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact, so an application consuming Souther's output runs on Java 25 and later. `SoutherProcessor` generates bytecode during the host build (see [`examples/README.md`](examples/README.md)), so a project using it as an annotation processor needs JDK 25 for that too.
 
 ```sh
 # Build the runtime and compiler, and run the tests.
@@ -96,7 +96,7 @@ Map<String, byte[]> linked = Compiler.compileModules(List.of(employeeSource, tri
 
 ### Compact object headers suit the shape of a domain model
 
-A Souther model is many small immutable values — a newtype per identifier and per amount, a data per state. On JDK 25 the application running the generated code can take four bytes off every object header with `-XX:+UseCompactObjectHeaders` (JEP 519, production-ready and off by default). It is the deploying application's flag, not Souther's, and it needs no rebuild: the generated `.class` files stay at Java 21.
+A Souther model is many small immutable values — a newtype per identifier and per amount, a data per state. On JDK 25 the application running the generated code can take four bytes off every object header with `-XX:+UseCompactObjectHeaders` (JEP 519, production-ready and off by default). It is the deploying application's flag, not Souther's, and it needs no rebuild.
 
 Four bytes off a header turns into eight bytes off an allocation when it crosses the eight-byte alignment boundary, and into nothing when it does not — so the gain is uneven and worth measuring rather than assuming. Bytes actually allocated per instance, on GraalVM 25.0.3 (arm64):
 

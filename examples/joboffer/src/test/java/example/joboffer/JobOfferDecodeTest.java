@@ -38,16 +38,16 @@ class JobOfferDecodeTest {
     /** 読めたはずの body を読む。読めなければ Issues を添えて落とす。 */
     private 依頼 decoded(String body) {
         return switch (decode(body)) {
-            case Ok<依頼> ok -> ok.value();
-            case Err<依頼> err -> throw new AssertionError("should decode: " + err.issues().asList());
+            case Ok<依頼>(var 依頼) -> 依頼;
+            case Err<依頼>(var issues) -> throw new AssertionError("should decode: " + issues.asList());
         };
     }
 
     /** 読めないはずの body から、返った Issues を取り出す。 */
     private List<Issue> issuesOf(String body) {
         return switch (decode(body)) {
-            case Err<依頼> err -> err.issues().asList();
-            case Ok<依頼> ok -> throw new AssertionError("should not decode: " + ok.value());
+            case Err<依頼>(var issues) -> issues.asList();
+            case Ok<依頼>(var 依頼) -> throw new AssertionError("should not decode: " + 依頼);
         };
     }
 

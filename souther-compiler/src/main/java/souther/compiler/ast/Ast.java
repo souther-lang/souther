@@ -1,6 +1,5 @@
 package souther.compiler.ast;
 
-import souther.compiler.check.TypeName;
 import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;

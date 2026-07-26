@@ -6,7 +6,6 @@ import souther.compiler.ast.Ast;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Lowers {@code 金額(500)} — a call whose name is a newtype — to the record literal

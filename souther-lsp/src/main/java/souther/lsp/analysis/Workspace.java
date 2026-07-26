@@ -40,7 +40,7 @@ public final class Workspace {
                 if ("file".equals(parsed.getScheme())) {
                     roots.add(Path.of(parsed));
                 }
-            } catch (IllegalArgumentException e) {
+            } catch (IllegalArgumentException _) {
                 // a malformed root URI is skipped rather than failing the session
             }
         }
@@ -86,7 +86,7 @@ public final class Workspace {
     private static String readOrEmpty(Path p) {
         try {
             return Files.readString(p);
-        } catch (IOException e) {
+        } catch (IOException _) {
             return "";   // a file that cannot be read contributes nothing, but never crashes the scan
         }
     }
