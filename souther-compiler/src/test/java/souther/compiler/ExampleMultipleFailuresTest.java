@@ -102,6 +102,14 @@ class ExampleMultipleFailuresTest {
     }
 
     @Test
+    void anErrorWithNothingToReportIsRejected() {
+        // a caller that did not check whether it found anything is a bug in the caller, not an
+        // error with no diagnostic
+        assertThrows(IllegalArgumentException.class,
+                () -> CompileException.ofAll(List.of(), "nothing failed"));
+    }
+
+    @Test
     void twoMismatchesEachCarryTheirOwnValues() {
         String model = BASE + """
                 example 作る

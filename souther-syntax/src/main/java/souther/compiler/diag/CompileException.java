@@ -61,6 +61,11 @@ public class CompileException extends RuntimeException {
      * {@code legacyBody} prefix; a renderer walks {@link #diagnostics()} and prints them all.
      */
     public static CompileException ofAll(List<Diagnostic> diagnostics, String legacyBody) {
+        if (diagnostics == null || diagnostics.isEmpty()) {
+            // An error with nothing to report is a caller that failed to check whether it found
+            // anything; say so here rather than at the `get(0)` below.
+            throw new IllegalArgumentException("a compile error carries at least one diagnostic");
+        }
         Diagnostic first = diagnostics.get(0);
         return new CompileException(List.copyOf(diagnostics),
                 format(first.pos(), first.code(), legacyBody), NO_SOURCE);
