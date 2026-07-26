@@ -361,6 +361,30 @@ public final class SpecChecker {
         }
     }
 
+    /**
+     * A behavior may only construct types its own module declares. Construction is closed to the
+     * declaring module (ADR-0015): the generated {@code __construct} is package-private, so a
+     * {@code constructs} naming an imported type compiles and then fails with an
+     * {@code IllegalAccessError} when the behavior runs (issue #113). Which module declares a name is
+     * known from the import list, so the clause is answered where it is written.
+     */
+    static void rejectImportedConstructs(Ast.SpecBehavior spec, Ast.Module module) {
+        for (String constructed : spec.constructs()) {
+            for (Ast.Import imp : module.imports()) {
+                if (!imp.names().contains(constructed)) {
+                    continue;
+                }
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.constructs.imported").title("check.boundary.title")
+                                .at(spec.pos()).args(spec.name(), constructed, imp.module())
+                                .hint("check.constructs.imported.hint").build(),
+                        "`behavior " + spec.name() + "` declares `constructs " + constructed
+                                + "`, but `" + constructed + "` is declared by `" + imp.module()
+                                + "`; construction is closed to the declaring module (ADR-0015)");
+            }
+        }
+    }
+
     private static boolean refHasTuple(Ast.TypeRef ref) {
         return ref.isTuple() || (ref.arg() != null && refHasTuple(ref.arg()));
     }
