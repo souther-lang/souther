@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeOps;
@@ -137,7 +138,7 @@ public final class Prelude {
     }
 
     private static void load() {
-        Map<String, Ast.Def> noSymbols = Map.of();   // prelude signatures use only primitives / 'a
+        Symbols noSymbols = Symbols.none();   // prelude signatures use only primitives / 'a
         for (String resource : RESOURCES) {
             Ast.Module module = CstFrontend.parse(read(resource));
             String alias = MODULE_TO_ALIAS.get(module.name());

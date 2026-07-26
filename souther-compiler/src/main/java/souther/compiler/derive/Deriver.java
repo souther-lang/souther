@@ -1,5 +1,6 @@
 package souther.compiler.derive;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
@@ -31,9 +32,9 @@ public final class Deriver {
 
     /** Derives codecs using {@code symbols} for type resolution (own definitions plus any
      * imported ones, for cross-module fields — spec 4). */
-    public static Ast.Module derive(Ast.Module module, Map<String, Ast.Def> symbols) {
+    public static Ast.Module derive(Ast.Module module, Symbols symbols) {
         java.util.Set<String> caseNames = new java.util.HashSet<>();
-        for (Ast.Def def : symbols.values()) {
+        for (Ast.Def def : symbols.visible()) {
             if (def instanceof Ast.SumData s) {
                 caseNames.addAll(s.cases());
             }
@@ -51,7 +52,7 @@ public final class Deriver {
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
-    private static Ast.Data deriveData(Ast.Data d, Map<String, Ast.Def> symbols, boolean isCase) {
+    private static Ast.Data deriveData(Ast.Data d, Symbols symbols, boolean isCase) {
         Map<String, Type> fields = TypeOps.fieldTypes(d, symbols);
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
                 ? d.decoder() : Optional.of(deriveDecoder(d, fields, isCase));
@@ -139,7 +140,7 @@ public final class Deriver {
             return new Ast.PrimDecRef(primKind(t), pos);
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.DataDecRef(r.name(), pos);
+            return new Ast.DataDecRef(r.name().qualified(), pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListDecRef(decRef(lo.element(), d, field, pos), pos);
@@ -170,7 +171,7 @@ public final class Deriver {
         if (d.newtype() && !isCase) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
             Ast.Expr access = new Ast.FieldAccess(new Ast.Var("self", pos), only.getKey(), pos);
-            String inner = ((Type.Ref) only.getValue()).name();
+            String inner = ((Type.Ref) only.getValue()).name().qualified();
             return new Ast.EncoderDef("self", new Ast.EncodeRaw(inner, access, pos), pos);
         }
         List<Ast.RawEntry> entries = new ArrayList<>();
@@ -213,7 +214,7 @@ public final class Deriver {
             return primRaw(t, access, pos);
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.EncodeRaw(r.name(), access, pos);
+            return new Ast.EncodeRaw(r.name().qualified(), access, pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListEnc(access, encElem(lo.element(), d, field, pos), pos);
@@ -241,7 +242,7 @@ public final class Deriver {
      */
     private static Ast.DecRef mapKeyDec(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
         if (mo.key() instanceof Type.Ref r) {
-            return new Ast.DataDecRef(r.name(), pos);
+            return new Ast.DataDecRef(r.name().qualified(), pos);
         }
         if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
             return new Ast.PrimDecRef(primKind(mo.key()), pos);
@@ -251,7 +252,7 @@ public final class Deriver {
 
     private static Ast.EncElem mapKeyEnc(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
         if (mo.key() instanceof Type.Ref r) {
-            return new Ast.DataEnc(r.name(), pos);
+            return new Ast.DataEnc(r.name().qualified(), pos);
         }
         if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
             return new Ast.PrimEnc(primKind(mo.key()), pos);
@@ -267,7 +268,7 @@ public final class Deriver {
             return new Ast.PrimEnc(primKind(t), pos);   // every primitive has a leaf encoder
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.DataEnc(r.name(), pos);
+            return new Ast.DataEnc(r.name().qualified(), pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListElemEnc(encElem(lo.element(), d, field, pos), pos);
@@ -317,7 +318,7 @@ public final class Deriver {
 
     // --- sum derivation ---
 
-    private static Ast.SumData deriveSum(Ast.SumData s, Map<String, Ast.Def> symbols) {
+    private static Ast.SumData deriveSum(Ast.SumData s, Symbols symbols) {
         List<String> leaves = leafCases(s, symbols);
         Optional<Ast.Discriminate> decoder = s.decoder().isPresent()
                 ? s.decoder()
@@ -337,23 +338,23 @@ public final class Deriver {
      * two levels on one `"type"` key: the outer encoder wrote {@code {type: 自社負担}}, losing
      * which leaf it was, and the inner decoder then rejected that same tag.
      */
-    private static List<String> leafCases(Ast.SumData s, Map<String, Ast.Def> symbols) {
+    private static List<String> leafCases(Ast.SumData s, Symbols symbols) {
         List<String> leaves = new ArrayList<>();
         collectLeafCases(s, symbols, leaves);
         return leaves;
     }
 
-    private static void collectLeafCases(Ast.SumData s, Map<String, Ast.Def> symbols, List<String> out) {
+    private static void collectLeafCases(Ast.SumData s, Symbols symbols, List<String> out) {
         collectLeafCases(s, symbols, out, new java.util.HashSet<>());
     }
 
-    private static void collectLeafCases(Ast.SumData s, Map<String, Ast.Def> symbols, List<String> out,
+    private static void collectLeafCases(Ast.SumData s, Symbols symbols, List<String> out,
                                          java.util.Set<String> visiting) {
         if (!visiting.add(s.name())) {
             return;   // a sum that reaches itself; DataChecker reports it, this only has to terminate
         }
         for (String caseName : s.cases()) {
-            if (symbols.get(caseName) instanceof Ast.SumData nested) {
+            if (symbols.declaration(caseName) instanceof Ast.SumData nested) {
                 collectLeafCases(nested, symbols, out, visiting);
             } else if (!out.contains(caseName)) {
                 out.add(caseName);

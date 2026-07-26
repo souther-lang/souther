@@ -250,7 +250,39 @@ import List ( map, filter, fold )
 import String ( trim, split )
 ----
 
-This corresponds to Elm's `+import List exposing (map)+`. Qualified access (`+List.map+`) always works without importing, so `+import+` only elides the qualifier. Importing the same bare name from two modules is ambiguous — writing both `+import String ( length )+` and `+import List ( length )+` in one module leaves `+length+` undetermined. In that case, import one and qualify the other call (`+String.length(...)+`). A *type* has no qualified form, so two modules exposing the same type name (`+金額+` in each of two bounded contexts) cannot both be imported into one module and cannot be told apart there; the module imports the one it means, and reaches the other through a module that gives it a different name. As with the wildcard prohibition, no name is delivered implicitly.
+This corresponds to Elm's `+import List exposing (map)+`. Qualified access (`+List.map+`) always works without importing, so `+import+` only elides the qualifier. Importing the same bare name from two modules is ambiguous — writing both `+import String ( length )+` and `+import List ( length )+` in one module leaves `+length+` undetermined. In that case, import one and qualify the other call (`+String.length(...)+`). As with the wildcard prohibition, no name is delivered implicitly.
+
+[#qualified-reference]
+=== Qualified reference
+
+A type is also reachable through the module that declares it, written as the module name and the type name (ADR-0058). Like the standard library's `+List.map+`, this needs no `+import+`: the `+import+` line only lets the name be written bare.
+
+[,text]
+----
+data 明細 =
+    { 数量: example.counting.金額
+    , 価格: example.pricing.金額
+    }
+----
+
+This is what a module does when two it depends on declare the same type name — `+金額+` in each of two bounded contexts, which is normal and not the integrator's to rename. A qualified reference MAY be written in a type position (a field, a behavior's input or output, a helper's parameter) and as a `+match+` arm's case name.
+
+`+import ... as+` names a module locally, and the alias may then carry the reference. The alias holds only in the module that writes it, and it MUST be a name nothing else answers to there — not another alias, not a module of this compilation, not a standard-library qualifier.
+
+[,text]
+----
+import example.counting as Counting
+import example.pricing as Pricing ( 税率 )
+
+data 明細 =
+    { 数量: Counting.金額
+    , 価格: Pricing.金額
+    }
+----
+
+Both parts of an `+import+` are optional: `+import example.pricing as Pricing+` only renames, and `+import example.pricing+` only writes the dependency down. What a qualified reference reaches is still what the declaring module exposes — qualifying a name that module keeps to itself is a compile error, as is qualifying with a name that is no module of this compilation.
+
+A dependency is a dependency however it is written, so a cycle closed by a qualified reference is the same compile error (<<e1501>>) as one closed by an `+import+`.
 
 [#reserved-words]
 == Reserved words
@@ -2393,6 +2425,8 @@ Declare a behavior without a `let` and provide its implementation from Java.
 error E1501:
 Cyclic module dependency detected.
 ----
+
+A module depends on every module it imports and on every module it names in a qualified reference (<<qualified-reference>>), so the cycle is reported whichever of the two closes it.
 
 [#e1601]
 === Unbound dependency

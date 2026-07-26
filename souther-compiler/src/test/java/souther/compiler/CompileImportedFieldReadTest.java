@@ -95,23 +95,19 @@ class CompileImportedFieldReadTest {
                 """));
     }
 
-    /** The remaining half of the same over-reach, recorded rather than fixed: a field spread in from
-     *  another data still needs that data in scope, because the reader walks the includes through its
-     *  own symbol table and cannot see a name it did not import. Answering it needs the declaring
-     *  module's symbols, which the field-access check does not have. */
+    /** The other half of the same reach: the spread is written in `up`, so `up` is where its name
+     *  is resolved. Importing `Box` is enough to read a field spread into it — the reader no longer
+     *  needs `Common` in scope as well. */
     @Test
-    void aSpreadInFieldStillNeedsTheIncludedDataImported() {
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(SPREAD_UP, """
-                        module down
-                        import up ( Box )
+    void aFieldSpreadInFromAnotherDataNeedsOnlyTheDataItIsReadFrom() {
+        Compiler.compileModules(List.of(SPREAD_UP, """
+                module down
+                import up ( Box )
 
-                        data Out = { doubled: Int }
+                data Out = { doubled: Int }
 
-                        behavior twice : (b: Box) -> Out constructs Out
-                        let twice (b) = Out { doubled = b.n * 2 }
-                        """)));
-
-        assertTrue(e.getMessage().contains("n"), e.getMessage());
+                behavior twice : (b: Box) -> Out constructs Out
+                let twice (b) = Out { doubled = b.n * 2 }
+                """));
     }
 }

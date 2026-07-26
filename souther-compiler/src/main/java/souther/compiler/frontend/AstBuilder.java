@@ -196,13 +196,15 @@ public final class AstBuilder {
 
     private Ast.Import importDecl(SyntaxNode n) {
         String module = qualifiedNameText(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
+        String alias = n.child(SyntaxKind.IMPORT_ALIAS)
+                .map(a -> identTokens(a).get(0).text()).orElse(null);
         List<String> names = new ArrayList<>();
         n.child(SyntaxKind.NAME_LIST).ifPresent(list -> {
             for (SyntaxToken t : identTokens(list)) {
                 names.add(t.text());
             }
         });
-        return new Ast.Import(module, names, pos(n));
+        return new Ast.Import(module, alias, names, pos(n));
     }
 
     // --- data ---
@@ -433,7 +435,7 @@ public final class AstBuilder {
             }
             return new Ast.TypeRef(v, null, pos(n));   // name begins with `'` → Type.Var
         }
-        String name = firstIdentText(n);
+        String name = qualifiedNameText(n);   // `Amount`, or `example.billing.Amount` / `B.Amount`
         Optional<SyntaxNode> args = n.child(SyntaxKind.TYPE_ARGS);
         if (args.isEmpty()) {
             return new Ast.TypeRef(name, null, pos(n));
@@ -652,16 +654,30 @@ public final class AstBuilder {
         return new Ast.Match(scrutinee, cases, pos(n));
     }
 
+    /** A case name as the arm wrote it — bare, or qualified through a module or an import alias.
+     * Advances {@code at} past the name it read. */
+    private String dottedName(List<SyntaxElement> es, int[] at) {
+        StringBuilder sb = new StringBuilder(tokenText(es.get(at[0]++)));
+        while (at[0] + 1 < es.size() && isToken(es.get(at[0]), SyntaxKind.DOT)
+                && isToken(es.get(at[0] + 1), SyntaxKind.IDENT)) {
+            at[0]++;                              // .
+            sb.append('.').append(tokenText(es.get(at[0]++)));
+        }
+        return sb.toString();
+    }
+
     private Ast.Case matchCase(SyntaxNode n) {
         List<SyntaxElement> es = meaningful(n);
         SourcePos casePos = pos(n);
-        int i = 0;
+        int[] at = {0};
         List<String> caseTypes = new ArrayList<>();
-        caseTypes.add(tokenText(es.get(i++)));
-        while (i + 1 < es.size() && isToken(es.get(i), SyntaxKind.PIPE) && isToken(es.get(i + 1), SyntaxKind.IDENT)) {
-            i++;                                  // |
-            caseTypes.add(tokenText(es.get(i++)));
+        caseTypes.add(dottedName(es, at));
+        while (at[0] + 1 < es.size() && isToken(es.get(at[0]), SyntaxKind.PIPE)
+                && isToken(es.get(at[0] + 1), SyntaxKind.IDENT)) {
+            at[0]++;                              // |
+            caseTypes.add(dottedName(es, at));
         }
+        int i = at[0];
         // newtype constructor destructuring `X(inner)` / nested `X(Y(s))`: the ident chain inside the
         // parens. The last ident is the bound variable; each earlier ident names a newtype layer peeled.
         List<String> unwrapNames = new ArrayList<>();

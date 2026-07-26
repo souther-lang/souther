@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
@@ -39,7 +40,7 @@ import static souther.compiler.codegen.JvmTypes.*;
 final class CodecGen {
 
     private final CodegenContext ctx;
-    private final Map<String, Ast.Def> symbols;
+    private final Symbols symbols;
     /** The $Dec class currently being generated — the owner of the {@code __rekey} helpers a
      * newtype-keyed map decoder references. Set per {@link #generateDecoderClass}. */
     private ClassDesc decoderClass;
@@ -132,7 +133,7 @@ final class CodecGen {
      *  cannot collide with a data whose name is {@code Date}. */
     private static String rekeyMethod(Ast.DecRef key) {
         return switch (key) {
-            case Ast.DataDecRef d -> "__rekey$" + d.typeName();
+            case Ast.DataDecRef d -> "__rekey$" + d.typeName().replace('.', '$');
             case Ast.PrimDecRef p -> "__rekey$$" + p.kind();
             default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
         };
@@ -187,7 +188,7 @@ final class CodecGen {
     /** Invokes a type's static {@code decoder()}/{@code encoder()} factory, as an interface
      * method reference when the type is a sum (its factory lives on a sealed interface). */
     private void invokeCodec(CodeBuilder code, String typeName, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(typeName), method, mtd, symbols.get(typeName) instanceof Ast.SumData);
+        code.invokestatic(cd(typeName), method, mtd, symbols.declaration(typeName) instanceof Ast.SumData);
     }
 
     byte[] generateSumEncoder(Ast.SumData sum, Ast.SumEncoder enc) {
@@ -388,7 +389,7 @@ final class CodecGen {
         if (!seen.add(typeName)) {
             return true;
         }
-        Ast.Def def = symbols.get(typeName);
+        Ast.Def def = symbols.declaration(typeName);
         if (def instanceof Ast.SumData sum) {
             for (String caseName : sum.cases()) {
                 if (!jsonOk(caseName, seen)) return false;
@@ -408,7 +409,7 @@ final class CodecGen {
         if (t instanceof Type.ListOf l) return jsonOkType(l.element(), seen);
         if (t instanceof Type.SetOf s) return jsonOkType(s.element(), seen);
         if (t instanceof Type.MapOf m) return jsonOkType(m.value(), seen);
-        if (t instanceof Type.Ref r) return jsonOk(r.name(), seen);
+        if (t instanceof Type.Ref r) return jsonOk(r.name().qualified(), seen);
         return true;
     }
 
@@ -416,10 +417,10 @@ final class CodecGen {
      * whose every field is a scalar column — a primitive, a newtype, or an optional of those; no
      * nested object, list, map, or sum. */
     boolean recordCompatible(String typeName) {
-        Ast.Def def = symbols.get(typeName);
+        Ast.Def def = symbols.declaration(typeName);
         if (def instanceof Ast.SumData sum) {
             for (String caseName : sum.cases()) {
-                Ast.Def caseDef = symbols.get(caseName);
+                Ast.Def caseDef = symbols.declaration(caseName);
                 if (caseDef instanceof Ast.UnitData) continue;
                 if (!(caseDef instanceof Ast.Data d) || !isFlatObject(d)) return false;
             }
@@ -634,7 +635,7 @@ final class CodecGen {
     /** True when the type's decoder reads from a {@code Map} (object/sum), false for a bare
      * value (newtype/unit). Used to bridge nested field-value decoders with {@code nested()}. */
     boolean isMapInput(String typeName) {
-        Ast.Def def = symbols.get(typeName);
+        Ast.Def def = symbols.declaration(typeName);
         if (def instanceof Ast.SumData) {
             return true;
         }
@@ -827,7 +828,7 @@ final class CodecGen {
     private Type bindType(Ast.DecRef ref) {
         return switch (ref) {
             case Ast.PrimDecRef p -> TypeOps.primType(p.kind());
-            case Ast.DataDecRef d -> Type.ref(d.typeName());
+            case Ast.DataDecRef d -> Type.ref(symbols.resolve(d.typeName()));
             case Ast.ListDecRef l -> Type.list(bindType(l.element()));
             case Ast.SetDecRef s -> Type.set(bindType(s.element()));
             case Ast.OptionDecRef o -> Type.option(bindType(o.element()));
@@ -1105,9 +1106,9 @@ final class CodecGen {
                 BodyGen gen = new BodyGen(ctx, code, data, cdName, 2);
                 code.aload(1);
                 code.checkcast(cdName);
-                int selfSlot = gen.slot(Type.ref(data.name()));
+                int selfSlot = gen.slot(Type.ref(symbols.own(data.name())));
                 code.astore(selfSlot);
-                gen.bind(enc.selfName(), selfSlot, Type.ref(data.name()));
+                gen.bind(enc.selfName(), selfSlot, Type.ref(symbols.own(data.name())));
                 emitRawExpr(code, gen, enc.result());
                 code.areturn();
             });

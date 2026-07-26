@@ -131,8 +131,8 @@ public final class BinaryElaborator {
                 // collections (covariance), which would wrongly let `List<一般社員> == List<役職>` compare;
                 // the exemption is only the direct sum<->case scalar relationship. Unrelated types
                 // (`金額 == 数量`) have disjoint case sets and still fail.
-                Set<String> lCases = TypeOps.leafCases(lt, ctx.symbols());
-                Set<String> rCases = TypeOps.leafCases(rt, ctx.symbols());
+                Set<TypeName> lCases = TypeOps.leafCases(lt, ctx.symbols());
+                Set<TypeName> rCases = TypeOps.leafCases(rt, ctx.symbols());
                 boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()
                         && (lCases.containsAll(rCases) || rCases.containsAll(lCases));
                 if (!lt.equals(rt) && !eqCoercible(lt, rt, bin.left(), bin.right(), ctx.symbols())
@@ -168,7 +168,7 @@ public final class BinaryElaborator {
      * literal of its base (so {@code 金額 <= 金額} and {@code 金額 <= 100} pass, {@code 金額 <= 数量}
      * and {@code 金額 <= (Int variable)} do not). */
     static boolean orderedComparable(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
-                                             Map<String, Ast.Def> symbols) {
+                                             Symbols symbols) {
         Type lb = TypeOps.base(lt, symbols);
         if (!TypeOps.isOrdered(lb) || !lb.equals(TypeOps.base(rt, symbols))) {
             return false;
@@ -182,7 +182,7 @@ public final class BinaryElaborator {
     /** Whether {@code ==}/{@code /=} may pair a newtype with a bare literal of its base type (the
      * same-type and bottom cases are handled by the caller). */
     static boolean eqCoercible(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
-                                       Map<String, Ast.Def> symbols) {
+                                       Symbols symbols) {
         return TypeOps.base(lt, symbols).equals(TypeOps.base(rt, symbols))
                 && literalPairsNewtype(lt, rt, le, re, symbols);
     }
@@ -195,7 +195,7 @@ public final class BinaryElaborator {
      * the invariant analysis run on validated code and only pick the result via
      * {@link TypeOps#closedNewtypeArithResult}. */
     static boolean arithClosedNewtype(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
-                                              Map<String, Ast.Def> symbols) {
+                                              Symbols symbols) {
         Type ln = TypeOps.directNumericNewtypeBase(lt, symbols);
         Type rn = TypeOps.directNumericNewtypeBase(rt, symbols);
         if (ln == null && rn == null) {
@@ -217,7 +217,7 @@ public final class BinaryElaborator {
      * units, not modeled — spec §newtype-arithmetic) is excluded. Division is not commutative: only
      * {@code newtype / scalar} scales; {@code scalar / newtype} (`2 / 金額`) is an inverse — a
      * dimension change — so a scalar on the left is admitted for {@code *} only. */
-    static boolean scalarNewtypeArith(Type lt, Type rt, Ast.BinOp op, Map<String, Ast.Def> symbols) {
+    static boolean scalarNewtypeArith(Type lt, Type rt, Ast.BinOp op, Symbols symbols) {
         Type ln = TypeOps.directNumericNewtypeBase(lt, symbols);
         Type rn = TypeOps.directNumericNewtypeBase(rt, symbols);
         if (ln != null && rn == null && rt.equals(ln)) {
@@ -229,7 +229,7 @@ public final class BinaryElaborator {
 
     /** One side is a single-value newtype and the other is a bare literal (not itself a newtype). */
     static boolean literalPairsNewtype(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
-                                               Map<String, Ast.Def> symbols) {
+                                               Symbols symbols) {
         return (TypeOps.isSingleValueNewtype(lt, symbols) && !TypeOps.isSingleValueNewtype(rt, symbols) && isLiteralExpr(re))
                 || (TypeOps.isSingleValueNewtype(rt, symbols) && !TypeOps.isSingleValueNewtype(lt, symbols) && isLiteralExpr(le));
     }

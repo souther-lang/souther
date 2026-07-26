@@ -155,8 +155,8 @@ public final class Elaborator {
                     yield new Core.Var(v.name(), t, v.pos());
                 }
                 // a bare name that isn't a local is a unit-data value (spec 8.4)
-                if (ctx.symbols().get(v.name()) instanceof Ast.UnitData) {
-                    yield new Core.Var(v.name(), Type.ref(v.name()), v.pos());
+                if (ctx.symbols().declaration(v.name()) instanceof Ast.UnitData) {
+                    yield new Core.Var(v.name(), Type.ref(ctx.symbols().resolve(v.name())), v.pos());
                 }
                 if (v.name().equals("null")) {
                     throw new CompileException(v.pos(), "E1301",
@@ -175,7 +175,7 @@ public final class Elaborator {
             case Ast.Call call -> CallElaborator.elaborateCall(call, env, ctx, expected);
             case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Ast.NewData nd -> {
-                if (!(ctx.symbols().get(nd.typeName()) instanceof Ast.Data owner)) {
+                if (!(ctx.symbols().declaration(nd.typeName()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.construct.no").title("check.construct.title")
                                     .at(nd.pos(), nd.typeName().length()).args(nd.typeName()).build(),
@@ -184,7 +184,7 @@ public final class Elaborator {
                 List<Core.FieldInit> inits = DataChecker.checkConstruction(nd.typeName(), nd.inits(), nd.spreads(),
                         nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
                 yield new Core.NewData(nd.typeName(), inits, nd.spreads(),
-                        Type.ref(nd.typeName()), nd.pos());
+                        Type.ref(ctx.symbols().resolve(nd.typeName())), nd.pos());
             }
             case Ast.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
             case Ast.If iff -> {
@@ -201,7 +201,7 @@ public final class Elaborator {
                     yield new Core.If(cond, then, els, tt, iff.pos());
                 }
                 if (TypeOps.isDataLike(tt) && TypeOps.isDataLike(et)) {
-                    Set<String> names = new HashSet<>(TypeOps.namesOf(tt));
+                    Set<TypeName> names = new HashSet<>(TypeOps.namesOf(tt));
                     names.addAll(TypeOps.namesOf(et));
                     yield new Core.If(cond, then, els, Type.union(names), iff.pos());
                 }
@@ -264,16 +264,16 @@ public final class Elaborator {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
             }
         }
-        List<String> cases = TypeOps.sumCases(target, ctx.symbols());
+        List<TypeName> cases = TypeOps.sumCases(target, ctx.symbols());
         if (cases != null) {
             // A sum carries no fields of its own — its cases do, and which case it is is not known
             // until it is opened. Saying that is the difference between "this value has no such
             // field" and "read it in each case", which is what the author has to write.
             List<String> without = new ArrayList<>();
-            for (String c : cases) {
+            for (TypeName c : cases) {
                 if (!(ctx.symbols().get(c) instanceof Ast.Data cd)
                         || !TypeOps.hasField(cd, fa.field(), ctx.symbols())) {
-                    without.add(c);
+                    without.add(c.name());
                 }
             }
             Diagnostic.Builder d = Diagnostic.of(null, "check.access.sum")
@@ -423,7 +423,7 @@ public final class Elaborator {
     /** The type a source annotation declares on a binding ({@code let x: T = e}), or null when the
      * binding carries none. Read wherever a binding's type is needed, so the annotation and the
      * inference, the checker and the backend cannot drift apart. */
-    static Type annotatedType(Ast.LetIn li, Map<String, Ast.Def> symbols) {
+    static Type annotatedType(Ast.LetIn li, Symbols symbols) {
         return li.annotation() == null ? null : TypeOps.successType(li.annotation(), symbols);
     }
 
@@ -433,7 +433,7 @@ public final class Elaborator {
      * helper's declared return type follows.
      */
     static void checkLetAnnotation(Ast.LetIn li, Type declared, Type valueType,
-                                           Map<String, Ast.Def> symbols) {
+                                           Symbols symbols) {
         if (TypeOps.assignable(valueType, declared, symbols)) {
             return;
         }
@@ -452,7 +452,7 @@ public final class Elaborator {
      * Other declared types (a type variable in a generic prelude helper, a record, a list) are left to
      * the argument's own type, which monomorphisation and the call-site check already handle.
      */
-    static Type carriedType(Ast.LetIn li, Type valueType, Map<String, Ast.Def> symbols) {
+    static Type carriedType(Ast.LetIn li, Type valueType, Symbols symbols) {
         if (li.declaredType() instanceof Ast.RetType rt) {
             Type declared = TypeOps.resolveParamType(rt, symbols);
             if (TypeOps.isSumType(declared, symbols) && TypeOps.assignable(valueType, declared, symbols)) {
@@ -641,7 +641,7 @@ public final class Elaborator {
      * operand's type already computed — a caller that has typed {@code e} does not re-type its
      * subtree. */
     static void requireType(Ast.Expr e, Type actual, Type expected,
-                                    Map<String, Ast.Def> symbols, String what) {
+                                    Symbols symbols, String what) {
         if (!TypeOps.assignable(actual, expected, symbols)) {   // a case widens to its sum (spec 8.3)
             throw CompileException.of(
                     Diagnostic.of(null, "check.type.mismatch.msg")

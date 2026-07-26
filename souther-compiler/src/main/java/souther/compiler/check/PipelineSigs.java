@@ -25,7 +25,7 @@ public final class PipelineSigs {
     private PipelineSigs() {}
 
     /** Builds the input/output signature of every behavior, checking pipeline composition. */
-    public static Map<String, Sig> signatures(Ast.Module module, Map<String, Ast.Def> symbols) {
+    public static Map<String, Sig> signatures(Ast.Module module, Symbols symbols) {
         return signatures(module, symbols, Map.of());
     }
 
@@ -34,7 +34,7 @@ public final class PipelineSigs {
      * {@code imported} map seeds the resolvable behaviors with those imported from other modules
      * (spec 4, 14), so a stage naming an imported behavior resolves through {@link #stageSig}.
      */
-    public static Map<String, Sig> signatures(Ast.Module module, Map<String, Ast.Def> symbols,
+    public static Map<String, Sig> signatures(Ast.Module module, Symbols symbols,
                                               Map<String, Sig> imported) {
         Map<String, Sig> sigs = new HashMap<>(imported);
         for (Ast.BehaviorDef b : module.behaviors()) {
@@ -107,7 +107,7 @@ public final class PipelineSigs {
 
     /** The signature of a pipeline stage. Only behaviors compose with {@code >->}; decode/encode
      * are boundary edges, not stages (spec 14.1). */
-    public static Sig stageSig(String stage, Map<String, Sig> sigs, Map<String, Ast.Def> symbols,
+    public static Sig stageSig(String stage, Map<String, Sig> sigs, Symbols symbols,
                                SourcePos pos) {
         if (stage.endsWith(".decoder") || stage.endsWith(".encoder")) {
             throw CompileException.of(
@@ -129,13 +129,13 @@ public final class PipelineSigs {
         return s;
     }
 
-    private static Sig pipeSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs, Map<String, Ast.Def> symbols,
+    private static Sig pipeSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs, Symbols symbols,
                                Map<String, List<String>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec 14.2)
         List<String> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
         Type mainline = first.out();
-        Set<String> retired = new LinkedHashSet<>();
+        Set<TypeName> retired = new LinkedHashSet<>();
         for (int i = 1; i < stages.size(); i++) {
             Sig g = stageSig(stages.get(i), sigs, symbols, pipe.pos());
             // Every stage after the first takes exactly one input (spec 14.1). `checkStagesAreSingleInput`
@@ -157,8 +157,8 @@ public final class PipelineSigs {
         // an optional declared output must match the inferred one exactly (spec 14.5): neither a
         // missing case (too narrow) nor an extra one (too wide) is accepted.
         if (pipe.declaredOut() != null) {
-            Set<String> inferred = TypeOps.leafCases(out, symbols);
-            Set<String> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut(), symbols), symbols);
+            Set<TypeName> inferred = TypeOps.leafCases(out, symbols);
+            Set<TypeName> declared = TypeOps.leafCases(TypeOps.successType(pipe.declaredOut(), symbols), symbols);
             if (!inferred.equals(declared)) {
                 throw CompileException.of(
                         Diagnostic.of("E1604", "e1604.msg").at(pipe.pos())
@@ -175,16 +175,20 @@ public final class PipelineSigs {
     }
 
     /** Formats a set of case names as {@code A | B} (sorted, for a stable diagnostic). */
-    static String caseList(Set<String> cases) {
-        return String.join(" | ", new java.util.TreeSet<>(cases));
+    static String caseList(Set<TypeName> cases) {
+        java.util.TreeSet<String> names = new java.util.TreeSet<>();
+        for (TypeName c : cases) {
+            names.add(c.name());
+        }
+        return String.join(" | ", names);
     }
 
     /** The pipeline's output: what the last stage yields, plus everything that left the main line. */
-    private static Type withRetired(Type mainline, Set<String> retired) {
+    private static Type withRetired(Type mainline, Set<TypeName> retired) {
         if (retired.isEmpty()) {
             return mainline;
         }
-        Set<String> all = new LinkedHashSet<>(TypeOps.caseNamesOf(mainline));
+        Set<TypeName> all = new LinkedHashSet<>(TypeOps.caseNamesOf(mainline));
         if (all.isEmpty()) {
             throw new IllegalStateException("cannot merge non-data stage output with retired cases");
         }
@@ -193,9 +197,9 @@ public final class PipelineSigs {
     }
 
     /** The main-line leaf cases {@code g} accepts — the ones the backend routes into it (spec 14.2). */
-    public static List<String> mainlineCases(Type mainline, Sig g, Map<String, Ast.Def> symbols) {
-        List<String> accepted = new ArrayList<>();
-        for (String caseName : TypeOps.leafCases(mainline, symbols)) {
+    public static List<TypeName> mainlineCases(Type mainline, Sig g, Symbols symbols) {
+        List<TypeName> accepted = new ArrayList<>();
+        for (TypeName caseName : TypeOps.leafCases(mainline, symbols)) {
             if (TypeOps.assignable(Type.ref(caseName), g.in(), symbols)) {
                 accepted.add(caseName);
             }
@@ -204,7 +208,7 @@ public final class PipelineSigs {
     }
 
     /** The main line after {@code g} runs, for the backend's routing walk. */
-    public static Type stageOut(Type mainline, Sig g, Map<String, Ast.Def> symbols, SourcePos pos) {
+    public static Type stageOut(Type mainline, Sig g, Symbols symbols, SourcePos pos) {
         return route(mainline, g, new LinkedHashSet<>(), symbols, pos);
     }
 
@@ -224,15 +228,15 @@ public final class PipelineSigs {
      * saying it once left a main line (2.6), the plumbing is structural. Viewed on its own, `fg`
      * still has the merged sum `f`+`g` produce as its output.
      */
-    private static Type route(Type mainline, Sig g, Set<String> retired, Map<String, Ast.Def> symbols,
+    private static Type route(Type mainline, Sig g, Set<TypeName> retired, Symbols symbols,
                               SourcePos pos) {
         Type in = g.in();
         if (TypeOps.isDataLike(mainline)) {
-            Set<String> consumed = new LinkedHashSet<>();
-            Set<String> passed = new LinkedHashSet<>();
+            Set<TypeName> consumed = new LinkedHashSet<>();
+            Set<TypeName> passed = new LinkedHashSet<>();
             // route over the leaf cases: a named sum output splits into its members, so a stage that
             // accepts one of them consumes it while the rest retire (spec 8.3, 14.2)
-            for (String caseName : TypeOps.leafCases(mainline, symbols)) {
+            for (TypeName caseName : TypeOps.leafCases(mainline, symbols)) {
                 if (TypeOps.assignable(Type.ref(caseName), in, symbols)) {
                     consumed.add(caseName);
                 } else {

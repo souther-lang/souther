@@ -178,7 +178,7 @@ class CompileExampleTest {
                 .checked();
         var classes = souther.compiler.codegen.Backend.generate(lowered, checked);
         var sigs = souther.compiler.check.PipelineSigs.signatures(module, symbols);
-        var fails = ExampleVerifier.check(module, symbols, sigs, java.util.Map.of(), classes);
+        var fails = ExampleVerifier.check(module, symbols, sigs, classes);
         assertEquals(2, fails.size());
     }
 }

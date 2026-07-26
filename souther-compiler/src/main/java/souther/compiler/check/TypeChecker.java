@@ -49,7 +49,7 @@ public final class TypeChecker {
      * point for the CLI and the annotation processor, which stop at the first error. The recovering
      * {@link #check(Ast.Module, Map, Map, Set, Ast.Module)} collects every error for the LSP instead.
      */
-    public static Checked checkOrThrow(Ast.Module module, Map<String, Ast.Def> symbols,
+    public static Checked checkOrThrow(Ast.Module module, Symbols symbols,
                                                 Map<String, Sig> importedSigs, Set<String> importedInjected,
                                                 Ast.Module lowered) {
         List<Diagnostic> warnings = new ArrayList<>();
@@ -66,7 +66,7 @@ public final class TypeChecker {
     /** Every error found in {@code module}, recovering past each so the whole module is checked; the
      * originating exceptions in the order they were found (so the first is the one the old fail-fast
      * check would have thrown), deduped. */
-    static List<CompileException> checkCollecting(Ast.Module module, Map<String, Ast.Def> symbols,
+    static List<CompileException> checkCollecting(Ast.Module module, Symbols symbols,
                                                           Map<String, Sig> importedSigs,
                                                           Set<String> importedInjected, Ast.Module lowered,
                                                           List<Diagnostic> warnings, Elaborated elaborated) {
@@ -122,7 +122,7 @@ public final class TypeChecker {
      * helper check and the function-argument check still read the original bodies, which carry the
      * un-inlined helper calls they inspect.
      */
-    public static List<Diagnostic> check(Ast.Module module, Map<String, Ast.Def> symbols,
+    public static List<Diagnostic> check(Ast.Module module, Symbols symbols,
                              Map<String, Sig> importedSigs, Set<String> importedInjected,
                              Ast.Module lowered) {
         return checkAndElaborate(module, symbols, importedSigs, importedInjected, lowered).diagnostics();
@@ -132,7 +132,7 @@ public final class TypeChecker {
      * multi-module compile, which reports every module's errors and emits only the clean ones. */
     public record CheckResult(List<Diagnostic> diagnostics, Checked checked) {}
 
-    public static CheckResult checkAndElaborate(Ast.Module module, Map<String, Ast.Def> symbols,
+    public static CheckResult checkAndElaborate(Ast.Module module, Symbols symbols,
                                                 Map<String, Sig> importedSigs, Set<String> importedInjected,
                                                 Ast.Module lowered) {
         List<Diagnostic> out = new ArrayList<>();
@@ -153,7 +153,7 @@ public final class TypeChecker {
      * phase reads (the {@code fns} map, the {@code exposed} set, {@code reqSigs}, {@code sigs}) may
      * throw straight out — its caller treats that as fail-fast and abandons the module.
      */
-    static void checkRecovering(Ast.Module module, Map<String, Ast.Def> symbols,
+    static void checkRecovering(Ast.Module module, Symbols symbols,
                                         Map<String, Sig> importedSigs, Set<String> importedInjected,
                                         Ast.Module lowered,
                                         List<CompileException> errors, List<Diagnostic> warnings,
@@ -252,7 +252,7 @@ public final class TypeChecker {
             // an exposed name must be one of this module's own definitions. An imported name that is
             // merely visible here is not re-exported — importers reach it from its declaring module.
             if (!ownTypes.contains(e) && !allBehaviors.contains(e)) {
-                boolean imported = symbols.containsKey(e);
+                boolean imported = symbols.inScope(e);
                 String why = imported
                         ? " is imported into this module, not defined here; `exposing` lists a"
                           + " module's own definitions and does not re-export imported names"
@@ -359,8 +359,13 @@ public final class TypeChecker {
         Ast.forEachChild(e, f);
     }
 
-    /** Builds the name → definition table for a module. */
-    public static Map<String, Ast.Def> symbols(Ast.Module module) {
+    /** The symbol table of a module compiled on its own: bare names are its own definitions. */
+    public static Symbols symbols(Ast.Module module) {
+        return Symbols.of(module);
+    }
+
+    /** A module's own definitions, keyed by the name written there. */
+    public static Map<String, Ast.Def> ownDefs(Ast.Module module) {
         Map<String, Ast.Def> symbols = new HashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def.name().equals("Some") || def.name().equals("None")) {

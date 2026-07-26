@@ -23,7 +23,13 @@ public sealed interface Type
     record Var(String name) implements Type {}
 
     /** A reference to a named data type (product or sum). */
-    record Ref(String name) implements Type {}
+    record Ref(TypeName name) implements Type {
+        public Ref {
+            if (name == null) {
+                throw new IllegalArgumentException("a type reference needs a resolved name");
+            }
+        }
+    }
 
     /** A homogeneous list of {@code element}. */
     record ListOf(Type element) implements Type {}
@@ -41,7 +47,7 @@ public sealed interface Type
     record OptionOf(Type element) implements Type {}
 
     /** An anonymous union of data types (a behavior's multi-success output). */
-    record Union(java.util.Set<String> members) implements Type {}
+    record Union(java.util.Set<TypeName> members) implements Type {}
 
     /** A function type {@code (params...) -> result}. Written only on a helper {@code fn}'s
      * parameter (spec §fn-declaration); a value of this type is never stored in a data field, so it
@@ -68,7 +74,7 @@ public sealed interface Type
     /** The type of the empty-list literal {@code []}: a list whose element type is not yet fixed. */
     Type EMPTY_LIST = new ListOf(NOTHING);
 
-    static Type ref(String name) {
+    static Type ref(TypeName name) {
         return new Ref(name);
     }
 
@@ -94,7 +100,7 @@ public sealed interface Type
         return new SetOf(element);
     }
 
-    static Type union(java.util.Set<String> members) {
+    static Type union(java.util.Set<TypeName> members) {
         return new Union(members);
     }
 
@@ -124,7 +130,7 @@ public sealed interface Type
                 case DATETIME -> "DateTime";
                 case RAW -> "Raw";
             };
-            case Ref r -> r.name();
+            case Ref r -> r.name().name();
             // the name carries the `'` it was written with (`'a`), so it is not added twice
             case Var v -> v.name().startsWith("'") ? v.name() : "'" + v.name();
             case Nothing _ -> "_";
@@ -132,7 +138,8 @@ public sealed interface Type
             case SetOf s -> "Set<" + show(s.element()) + ">";
             case OptionOf o -> show(o.element()) + "?";
             case MapOf m -> "Map<" + show(m.key()) + ", " + show(m.value()) + ">";
-            case Union u -> String.join(" | ", u.members());
+            case Union u -> u.members().stream().map(TypeName::name)
+                    .collect(java.util.stream.Collectors.joining(" | "));
             case TupleOf tu -> "(" + tu.elements().stream().map(Type::show)
                     .collect(java.util.stream.Collectors.joining(", ")) + ")";
             case FnOf f -> "(" + f.params().stream().map(Type::show)

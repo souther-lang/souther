@@ -1,5 +1,6 @@
 package souther.compiler.ast;
 
+import souther.compiler.check.TypeName;
 import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
@@ -74,7 +75,13 @@ public interface Ast {
                       SourcePos pos) implements Ast {}
 
     /** {@code import <module> ( name, ... )} — an explicit, non-wildcard import (spec 4). */
-    record Import(String module, List<String> names, SourcePos pos) implements Ast {}
+    /**
+     * {@code import a.b as B ( X, Y )}. {@code names} are the names this import brings into scope
+     * bare; {@code alias} is the qualifier the module is read under here, or null. Both parts are
+     * optional: a type is reachable qualified whether or not it was imported (spec 4), so an import
+     * with neither is just the dependency written down.
+     */
+    record Import(String module, String alias, List<String> names, SourcePos pos) implements Ast {}
 
     /**
      * A behavior definition — a specification, not an implementation (spec 12, 21.1). It is either

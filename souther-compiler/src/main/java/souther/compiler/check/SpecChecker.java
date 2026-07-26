@@ -72,7 +72,7 @@ public final class SpecChecker {
      * states its type at its definition, so a signature on one is rejected.
      */
     static void checkExposedPipeOutputs(Ast.Module module, Set<String> exposed,
-            Map<String, Sig> sigs, Map<String, Ast.Def> symbols) {
+            Map<String, Sig> sigs, Symbols symbols) {
         Set<String> pipeNames = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.PipeBehavior p) {
@@ -94,7 +94,7 @@ public final class SpecChecker {
             if (!(b instanceof Ast.PipeBehavior pipe) || !exposed.contains(pipe.name())) {
                 continue;
             }
-            Set<String> inferred = TypeOps.leafCases(sigs.get(pipe.name()).out(), symbols);
+            Set<TypeName> inferred = TypeOps.leafCases(sigs.get(pipe.name()).out(), symbols);
             Ast.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(
@@ -106,7 +106,7 @@ public final class SpecChecker {
                                 + " (spec 14.5): write `exposing ( " + pipe.name() + " : "
                                 + PipelineSigs.caseList(inferred) + " )`");
             }
-            Set<String> declaredCases = TypeOps.leafCases(TypeOps.successType(declared, symbols), symbols);
+            Set<TypeName> declaredCases = TypeOps.leafCases(TypeOps.successType(declared, symbols), symbols);
             if (!inferred.equals(declaredCases)) {
                 throw CompileException.of(
                         Diagnostic.of("E1604", "e1604.msg").at(pipe.pos())
@@ -127,7 +127,7 @@ public final class SpecChecker {
      * do not bind values — they resolve as inline calls to those behaviors.
      */
     static Core checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
-                                    Map<String, Ast.Def> symbols, Set<String> allBehaviors,
+                                    Symbols symbols, Set<String> allBehaviors,
                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
                                     Map<String, Set<String>> recHelperConstructs,
@@ -335,7 +335,7 @@ public final class SpecChecker {
     /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object
      * and its keys are strings (ADR-0040). A map that stays inside the body is unrestricted — the
      * same rule, read where it applies. */
-    static void rejectNonBoundaryMapKeyIO(Ast.SpecBehavior spec, Map<String, Ast.Def> symbols) {
+    static void rejectNonBoundaryMapKeyIO(Ast.SpecBehavior spec, Symbols symbols) {
         for (Ast.Param p : spec.params()) {
             Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(p.type(), symbols), symbols);
             if (bad != null) {
@@ -404,10 +404,10 @@ public final class SpecChecker {
         return Type.mentions(t, x -> x instanceof Type.TupleOf);
     }
 
-    static void checkInjectionConstructs(Ast.SpecBehavior spec, Map<String, Ast.Def> symbols,
+    static void checkInjectionConstructs(Ast.SpecBehavior spec, Symbols symbols,
                                                  boolean exposeAll, Set<String> exposed) {
         for (String c : spec.constructs()) {
-            Ast.Def d = symbols.get(c);
+            Ast.Def d = symbols.declaration(c);
             if (d == null || d instanceof Ast.UnitData) {
                 continue;   // unknown names are caught elsewhere; a unit has a generated factory
             }

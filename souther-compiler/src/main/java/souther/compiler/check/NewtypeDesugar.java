@@ -20,7 +20,7 @@ public final class NewtypeDesugar {
     private NewtypeDesugar() {}
 
     /** Rewrites every {@code Call(newtype, [arg])} in the module's fn bodies to a {@code NewData}. */
-    public static Ast.Module rewrite(Ast.Module m, Map<String, Ast.Def> symbols) {
+    public static Ast.Module rewrite(Ast.Module m, Symbols symbols) {
         List<Ast.FnDef> fns = new ArrayList<>();
         for (Ast.FnDef fn : m.fns()) {
             Ast.Expr body = fn.body() == null ? null : go(fn.body(), symbols);
@@ -31,11 +31,11 @@ public final class NewtypeDesugar {
                 m.defs(), m.behaviors(), fns, m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
     }
 
-    private static Ast.Expr go(Ast.Expr e, Map<String, Ast.Def> symbols) {
+    private static Ast.Expr go(Ast.Expr e, Symbols symbols) {
         return switch (e) {
             case Ast.Call call -> {
                 List<Ast.Expr> args = mapExprs(call.args(), symbols);
-                if (symbols.get(call.fn()) instanceof Ast.Data nt && nt.newtype()) {
+                if (symbols.declaration(call.fn()) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.newtype.arity").title("check.arity.title")
@@ -84,7 +84,7 @@ public final class NewtypeDesugar {
         };
     }
 
-    private static List<Ast.Expr> mapExprs(List<Ast.Expr> es, Map<String, Ast.Def> symbols) {
+    private static List<Ast.Expr> mapExprs(List<Ast.Expr> es, Symbols symbols) {
         List<Ast.Expr> out = new ArrayList<>();
         for (Ast.Expr e : es) {
             out.add(go(e, symbols));

@@ -28,7 +28,7 @@ class HighValueDiagnosticTest {
         assertEquals("Int", Type.show(Type.INT));
         assertEquals("Bool", Type.show(Type.BOOL));
         assertEquals("List<Int>", Type.show(Type.list(Type.INT)));
-        assertEquals("N", Type.show(Type.ref("N")));
+        assertEquals("N", Type.show(Type.ref(new souther.compiler.check.TypeName("demo", "N"))));
         assertEquals("Int?", Type.show(Type.option(Type.INT)));
     }
 

@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
@@ -9,6 +10,7 @@ import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
 import souther.compiler.check.Type;
+import souther.compiler.check.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
@@ -42,9 +44,13 @@ final class BodyGen {
     private final CodegenContext ctx;
     /** Aliases of {@link CodegenContext#pkg}/{@link CodegenContext#symbols}, read as bare names. */
     private final String pkg;
-    private final Map<String, Ast.Def> symbols;
+    private final Symbols symbols;
 
     private ClassDesc cd(String typeName) {
+        return ctx.cd(typeName);
+    }
+
+    private ClassDesc cd(TypeName typeName) {
         return ctx.cd(typeName);
     }
 
@@ -163,9 +169,9 @@ final class BodyGen {
                     new CheckContext(symbols, data, reqSigs()), expected);
         }
 
-        private void emitFieldRead(CodeBuilder code, String ownerName, String field, Type ft) {
+        private void emitFieldRead(CodeBuilder code, TypeName ownerName, String field, Type ft) {
             ClassDesc ownerCd = cd(ownerName);
-            if (ctx.isImported(ownerName)) {
+            if (symbols.isForeign(ownerName)) {
                 code.invokevirtual(ownerCd, field, MethodTypeDesc.of(jvmType(ft)));
             } else {
                 code.getfield(ownerCd, field, jvmType(ft));
@@ -180,7 +186,7 @@ final class BodyGen {
                     && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype()) {
                 Type inner = fieldTypes(d).get("value");
                 if (inner != null) {
-                    emitFieldRead(code, d.name(), "value", inner);
+                    emitFieldRead(code, ref.name(), "value", inner);
                     return unwrapNewtypeValue(inner);
                 }
             }
@@ -333,7 +339,7 @@ final class BodyGen {
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.NewData nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
-                    Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
+                    Map<String, Type> flds = fieldTypes((Ast.Data) symbols.declaration(nd.typeName()));
                     emitFieldValues(flds, nd.inits(), nd.spreads());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
@@ -500,7 +506,7 @@ final class BodyGen {
                     Var var = env.get(v.name());
                     if (var != null) {
                         load(code, var.slot(), var.type());
-                    } else if (symbols.get(v.name()) instanceof Ast.UnitData) {
+                    } else if (symbols.declaration(v.name()) instanceof Ast.UnitData) {
                         ClassDesc cdU = cd(v.name());
                         code.new_(cdU);
                         code.dup();
@@ -518,8 +524,7 @@ final class BodyGen {
                 }
                 case Core.FieldAccess fa -> {
                     Type targetType = genExpr(fa.target());
-                    Ast.Data owner = (Ast.Data) symbols.get(((Type.Ref) targetType).name());
-                    emitFieldRead(code, owner.name(), fa.field(), fa.type());
+                    emitFieldRead(code, ((Type.Ref) targetType).name(), fa.field(), fa.type());
                 }
                 case Core.If iff -> {
                     genExpr(iff.cond());
@@ -669,7 +674,7 @@ final class BodyGen {
         }
 
         private void newData(Core.NewData nd) {
-            Ast.Data owner = (Ast.Data) symbols.get(nd.typeName());
+            Ast.Data owner = (Ast.Data) symbols.declaration(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
             if (DataChecker.isInvariantBearing(nd.typeName(), symbols)) {
@@ -703,11 +708,11 @@ final class BodyGen {
          * invariant-bearing newtype goes through {@code __construct}/{@code orThrow} (aborts on
          * violation, which a behavior's guard is meant to have discharged); a plain newtype is stashed
          * and built with {@code new}/{@code <init>}. */
-        private Type wrapNewtypeValue(String ntName, Type base) {
+        private Type wrapNewtypeValue(TypeName ntName, Type base) {
             Ast.Data owner = (Ast.Data) symbols.get(ntName);
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(ntName);
-            if (DataChecker.isInvariantBearing(ntName, symbols)) {
+            if (DataChecker.isInvariantBearing(ntName.name(), symbols)) {
                 finishInvariantConstruct(cdType, flds);
             } else {
                 int s = slot(base);
@@ -727,7 +732,7 @@ final class BodyGen {
 
         void spreadField(String spreadVar, String field) {
             Var v = env.get(spreadVar);
-            String srcName = ((Type.Ref) v.type()).name();
+            TypeName srcName = ((Type.Ref) v.type()).name();
             Ast.Data src = (Ast.Data) symbols.get(srcName);
             load(code, v.slot(), v.type());
             emitFieldRead(code, srcName, field, fieldTypes(src).get(field));

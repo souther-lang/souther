@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import java.util.Set;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
 
@@ -21,6 +22,14 @@ import java.util.Optional;
 public final class CallElaborator {
 
     private CallElaborator() {}
+
+    /** The members of a primitive-headed union — {@code Int | DivisionByZero} — the output of a
+     * partial built-in. The head is a primitive case, and the error case is declared by the runtime
+     * rather than by a module (see {@link TypeName#RUNTIME}). */
+    private static Set<TypeName> primitiveHeaded(Type head, String errorCase) {
+        return new java.util.LinkedHashSet<>(
+                List.of(TypeName.primitive(Type.show(head)), TypeName.runtime(errorCase)));
+    }
 
     static Core elaborateCall(Ast.Call call, Map<String, Type> env, CheckContext ctx,
                                       Type expected) {
@@ -148,13 +157,13 @@ public final class CallElaborator {
                 ca.require(0, Type.STRING, "argument of String.toInt");
                 // a non-numeric string produces the NotANumber case; a primitive-headed union a core
                 // declaration cannot name, so this stays a built-in like Int.divide
-                yield Type.union(new java.util.LinkedHashSet<>(List.of("Int", "NotANumber")));
+                yield Type.union(primitiveHeaded(Type.INT, "NotANumber"));
             }
             case "String.toDecimal" -> {
                 arity(call, 1);
                 ca.require(0, Type.STRING, "argument of String.toDecimal");
                 // the sibling of toInt, and here for the same reason: a primitive-headed union
-                yield Type.union(new java.util.LinkedHashSet<>(List.of("Decimal", "NotANumber")));
+                yield Type.union(primitiveHeaded(Type.DECIMAL, "NotANumber"));
             }
             case "List.length" -> {
                 arity(call, 1);
@@ -280,7 +289,7 @@ public final class CallElaborator {
                 ca.require(0, Type.INT, "argument 1 of remainder");
                 ca.require(1, Type.INT, "argument 2 of remainder");
                 // partial: a zero divisor produces the DivisionByZero case (spec 18.2)
-                yield Type.union(new java.util.LinkedHashSet<>(List.of("Int", "DivisionByZero")));
+                yield Type.union(primitiveHeaded(Type.INT, "DivisionByZero"));
             }
             case "Decimal.toInt" -> {
                 // The narrowing states its rounding, as `divide` does: dropping a fraction is a
@@ -311,12 +320,12 @@ public final class CallElaborator {
                     ca.require(2, Type.INT, "scale of divide");
                     requireRoundingMode(args.get(3));
                     ca.untyped(3);   // a built-in identifier, not an expression
-                    yield Type.union(new java.util.LinkedHashSet<>(List.of("Decimal", "DivisionByZero")));
+                    yield Type.union(primitiveHeaded(Type.DECIMAL, "DivisionByZero"));
                 }
                 arity(call, 2);
                 ca.require(0, Type.INT, "argument 1 of divide");
                 ca.require(1, Type.INT, "argument 2 of divide");
-                yield Type.union(new java.util.LinkedHashSet<>(List.of("Int", "DivisionByZero")));
+                yield Type.union(primitiveHeaded(Type.INT, "DivisionByZero"));
             }
             default -> {
                 // a function-typed value in scope (a helper's function parameter) applied to

@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.check.TypeName;
+import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.Diagnostic;
@@ -109,12 +111,12 @@ public final class Compiler {
         Ast.Module lowered = Lower.run(module);
         // the module no longer changes, so its symbol table is built once and shared by the check,
         // the constant verification, and the example run
-        Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
+        Symbols symbols = TypeChecker.symbols(module);
         TypeChecker.Checked checked = TypeChecker.checkOrThrow(module, symbols, Map.of(), Set.of(), lowered);
         warningsOut.addAll(checked.warnings());
         Map<String, byte[]> out = Backend.generate(lowered, checked);
         verifyConstConstructions(module, symbols, out);
-        ExampleVerifier.verify(module, symbols, PipelineSigs.signatures(module, symbols), Map.of(), out);
+        ExampleVerifier.verify(module, symbols, PipelineSigs.signatures(module, symbols), out);
         return out;
     }
 
@@ -144,7 +146,7 @@ public final class Compiler {
      * (ADR-0032). A check that cannot be loaded or run here — e.g. a lambda-bearing invariant whose
      * runtime class is absent from this classpath — is left to the run-time check.
      */
-    private static void verifyConstConstructions(Ast.Module module, Map<String, Ast.Def> symbols,
+    private static void verifyConstConstructions(Ast.Module module, Symbols symbols,
                                                  Map<String, byte[]> classes) {
         List<DataChecker.ConstCheck> checks = DataChecker.constNewtypeChecks(module, symbols);
         if (checks.isEmpty()) {
@@ -298,14 +300,14 @@ public final class Compiler {
         // `derived` is final from here, so what each module resolves against is resolved once, in the
         // pass that first needs it, and read again by the example pass. Resolving it up front instead
         // would move an unresolvable import ahead of an earlier module's type error in the report.
-        Map<String, Map<String, Ast.Def>> visible = new LinkedHashMap<>();
+        Map<String, Symbols> visible = new LinkedHashMap<>();
         Map<String, Map<String, Sig>> imported = new LinkedHashMap<>();
         // pass 2: type-check and generate against the derived (codec-bearing) defs
         Map<String, byte[]> out = new LinkedHashMap<>();
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
             try {
-                Map<String, Ast.Def> symbols = visibleDefs(m, derived);
+                Symbols symbols = visibleDefs(m, derived);
                 Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
                 visible.put(original.name(), symbols);
                 imported.put(original.name(), importedSigs);
@@ -326,7 +328,7 @@ public final class Compiler {
         List<Integer> exampleSources = new ArrayList<>();
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
-            Map<String, Ast.Def> symbols = visible.get(original.name());
+            Symbols symbols = visible.get(original.name());
             int index = sourceIndex(sourceOfModule, original.name());
             Map<String, Sig> sigs;
             try {
@@ -340,7 +342,7 @@ public final class Compiler {
             // widely-imported data says how far it reaches in one compile rather than one module per
             // round (issue #114). A module whose own compile failed never gets here, so what is
             // collected is only ever a stale or wrong example, never a knock-on of a broken type.
-            for (Diagnostic d : ExampleVerifier.check(m, symbols, sigs, importedPackages(m), out)) {
+            for (Diagnostic d : ExampleVerifier.check(m, symbols, sigs, out)) {
                 exampleFailures.add(d);
                 // a merged `examples for` file's rows are positioned in that file, not this one
                 exampleSources.add(mergedExamples.contains(original.name()) ? -1 : index);
@@ -444,7 +446,7 @@ public final class Compiler {
                 derived.put(original.name(), d);   // visible to its own newtype constructors during desugar
                 Ast.Module m = NewtypeDesugar.rewrite(d, visibleDefs(d, derived));
                 derived.put(original.name(), m);
-                Map<String, Ast.Def> symbols = visibleDefs(m, derived);
+                Symbols symbols = visibleDefs(m, derived);
                 Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
                 Set<String> importedInjected = importedInjectedBehaviors(m, derived);
                 m = injectRecursivePrelude(m);
@@ -464,7 +466,7 @@ public final class Compiler {
                 verifyConstConstructions(m, symbols, out);
                 Map<String, Sig> sigs =
                         PipelineSigs.signatures(m, symbols, importedBehaviorSigs(m, derived));
-                ready.put(original.name(), new VerifyContext(m, symbols, sigs, importedPackages(m)));
+                ready.put(original.name(), new VerifyContext(m, symbols, sigs));
             } catch (CompileException e) {
                 result.get(idByName.get(original.name())).add(e.diagnostic());
                 failed.add(original.name());
@@ -509,8 +511,7 @@ public final class Compiler {
     }
 
     /** The resolution context a module's examples evaluate against, retained from its compile pass. */
-    private record VerifyContext(Ast.Module module, Map<String, Ast.Def> symbols,
-                                 Map<String, Sig> sigs, Map<String, String> importedPackages) {}
+    private record VerifyContext(Ast.Module module, Symbols symbols, Map<String, Sig> sigs) {}
 
     /** Evaluates {@code examples} against {@code ctx}'s module (its defs and bytecode), using
      * {@code fakes} for any {@code requires} dependencies; returns one diagnostic per failing row. */
@@ -519,7 +520,7 @@ public final class Compiler {
         Ast.Module m = ctx.module();
         Ast.Module toCheck = new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                 m.defs(), m.behaviors(), m.fns(), examples, fakes, m.exampleFileTarget(), m.pos());
-        return ExampleVerifier.check(toCheck, ctx.symbols(), ctx.sigs(), ctx.importedPackages(), classes);
+        return ExampleVerifier.check(toCheck, ctx.symbols(), ctx.sigs(), classes);
     }
 
     private static List<Ast.Fake> mergedFakes(List<Ast.Fake> own, List<Ast.Fake> attached) {
@@ -708,13 +709,19 @@ public final class Compiler {
         return injected;
     }
 
-    /** Own definitions plus imported ones, validated against the source module's {@code exposing}. */
-    private static Map<String, Ast.Def> visibleDefs(Ast.Module m, Map<String, Ast.Module> registry) {
-        Map<String, Ast.Def> defs = new HashMap<>(TypeChecker.symbols(m));
-        Set<String> own = Set.copyOf(defs.keySet());
+    /** What each bare name means in {@code m} — its own definitions plus the imported ones — paired
+     * with the registry a qualified reference resolves against. Each import is validated against the
+     * source module's {@code exposing}. */
+    private static Symbols visibleDefs(Ast.Module m, Map<String, Ast.Module> registry) {
+        Map<String, TypeName> scope = new HashMap<>();
+        for (String name : TypeChecker.ownDefs(m).keySet()) {
+            scope.put(name, new TypeName(m.name(), name));
+        }
+        Set<String> own = Set.copyOf(scope.keySet());
         // Which import brought each name in, so a second one naming it is reported against that
         // import rather than against a local definition the module may not have (issue #101).
         Map<String, Ast.Import> from = new HashMap<>();
+        Map<String, String> aliases = new HashMap<>();
         for (Ast.Import imp : m.imports()) {
             Ast.Module src = registry.get(imp.module());
             if (src == null) {
@@ -723,7 +730,11 @@ public final class Compiler {
                                 .at(imp.pos()).args(imp.module()).build(),
                         "unknown module `" + imp.module() + "`");
             }
-            Map<String, Ast.Def> srcDefs = TypeChecker.symbols(src);
+            if (imp.alias() != null) {
+                checkAlias(imp, aliases, registry);
+                aliases.put(imp.alias(), imp.module());
+            }
+            Map<String, Ast.Def> srcDefs = TypeChecker.ownDefs(src);
             Set<String> exposed = exposedBaseNames(src);
             for (String name : imp.names()) {
                 if (!exposed.contains(name)) {
@@ -744,20 +755,40 @@ public final class Compiler {
                                     .at(imp.pos()).args(name, imp.module()).build(),
                             "`" + name + "` is not defined in `" + imp.module() + "`");
                 }
-                if (defs.put(name, d) != null) {
+                if (scope.put(name, new TypeName(imp.module(), name)) != null) {
                     throw importCollision(name, imp, own.contains(name) ? null : from.get(name));
                 }
                 from.put(name, imp);
             }
         }
-        return defs;
+        return Symbols.of(m, registry, scope, aliases);
+    }
+
+    /**
+     * An alias must be a qualifier nothing else already is: another alias, a module in this
+     * compilation, or a standard-library qualifier ({@code List}, {@code String}). Left to win
+     * silently it would take over what {@code List.map} or {@code billing.Amount} means in this
+     * module, which is the opposite of what naming a module locally is for.
+     */
+    private static void checkAlias(Ast.Import imp, Map<String, String> aliases,
+                                   Map<String, Ast.Module> registry) {
+        String taken = aliases.containsKey(imp.alias()) ? aliases.get(imp.alias())
+                : registry.containsKey(imp.alias()) ? imp.alias()
+                : Prelude.isQualifier(imp.alias()) ? "souther" : null;
+        if (taken != null) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.import.aliastaken").title("check.module.title")
+                            .at(imp.pos()).args(imp.alias(), taken)
+                            .hint("check.import.aliastaken.hint").build(),
+                    "the alias `" + imp.alias() + "` is already how `" + taken + "` is named here");
+        }
     }
 
     /**
      * The name arrived twice. {@code earlier} is the import that already brought it in, or null when
-     * the module defines it itself. The local case has a way out inside the module: rename the local
-     * definition or drop it. The import-vs-import case has none — there is no import alias — so the
-     * message names both modules and leaves the choice of which one to keep to the module.
+     * the module defines it itself. Either way the way out is inside the module: keep at most one of
+     * them bare and name the other through its module (spec §qualified-reference), so the message names
+     * both modules and leaves the choice of which one to import to the module.
      */
     private static CompileException importCollision(String name, Ast.Import imp, Ast.Import earlier) {
         if (earlier == null) {
@@ -772,8 +803,9 @@ public final class Compiler {
                 .secondary(Region.point(earlier.pos()), "check.import.duplicate.first", name,
                         earlier.module());
         return CompileException.of(
-                b.hint(earlier.module().equals(imp.module())
-                        ? "check.import.duplicate.same.hint" : "check.import.duplicate.hint").build(),
+                (earlier.module().equals(imp.module())
+                        ? b.hint("check.import.duplicate.same.hint")
+                        : b.hint("check.import.duplicate.hint", name, imp.module())).build(),
                 "`" + name + "` is imported from both `" + earlier.module() + "` and `"
                         + imp.module() + "`; one name cannot stand for two types");
     }
@@ -801,31 +833,118 @@ public final class Compiler {
 
     private static void detectCycles(List<Ast.Module> modules, Map<String, Ast.Module> byName,
                                      Map<String, Integer> sourceOfModule) {
+        Map<String, List<Dependency>> deps = new LinkedHashMap<>();
+        for (Ast.Module m : modules) {
+            deps.put(m.name(), dependencies(m, byName.keySet()));
+        }
         Set<String> done = new HashSet<>();
         Set<String> stack = new HashSet<>();
         for (Ast.Module m : modules) {
-            visit(m.name(), byName, done, stack, sourceOfModule);
+            visit(m.name(), byName, deps, done, stack, sourceOfModule);
+        }
+    }
+
+    /** One module reaching another, and where it does so. */
+    private record Dependency(String module, SourcePos pos) {}
+
+    /**
+     * Every module {@code m} depends on: the ones it imports, plus the ones it names in a qualified
+     * type reference. A qualified reference needs no {@code import} (spec 4), so reading only the
+     * import lines would let a dependency cycle through unseen — and a cycle is rejected whichever
+     * way it is written.
+     */
+    private static List<Dependency> dependencies(Ast.Module m, Set<String> modules) {
+        List<Dependency> deps = new ArrayList<>();
+        Map<String, String> qualifiers = new HashMap<>();
+        for (Ast.Import imp : m.imports()) {
+            deps.add(new Dependency(imp.module(), imp.pos()));
+            if (imp.alias() != null) {
+                qualifiers.put(imp.alias(), imp.module());
+            }
+        }
+        for (Ast.TypeRef ref : typeRefs(m)) {
+            int dot = ref.name().lastIndexOf('.');
+            if (dot < 0) {
+                continue;
+            }
+            String qualifier = ref.name().substring(0, dot);
+            String target = qualifiers.getOrDefault(qualifier, qualifier);
+            if (modules.contains(target) && !target.equals(m.name())) {
+                deps.add(new Dependency(target, ref.pos()));
+            }
+        }
+        return deps;
+    }
+
+    /** Every type written in {@code m}: its data's fields, and its behaviors' and fns' signatures. */
+    private static List<Ast.TypeRef> typeRefs(Ast.Module m) {
+        List<Ast.TypeRef> refs = new ArrayList<>();
+        for (Ast.Def def : m.defs()) {
+            if (def instanceof Ast.Data d) {
+                for (Ast.Field f : d.fields()) {
+                    collectTypeRefs(f.type(), refs);
+                }
+            }
+        }
+        for (Ast.BehaviorDef b : m.behaviors()) {
+            if (b instanceof Ast.SpecBehavior spec) {
+                for (Ast.Param p : spec.params()) {
+                    collectRetType(p.type(), refs);
+                }
+                collectRetType(spec.ret(), refs);
+            } else if (b instanceof Ast.PipeBehavior pipe) {
+                collectRetType(pipe.declaredOut(), refs);
+            }
+        }
+        for (Ast.FnDef fn : m.fns()) {
+            for (Ast.FnParam p : fn.params()) {
+                if (p.type() instanceof Ast.RetType rt) {
+                    collectRetType(rt, refs);
+                } else if (p.type() instanceof Ast.FnType ft) {
+                    ft.params().forEach(pt -> collectRetType(pt, refs));
+                    collectRetType(ft.result(), refs);
+                }
+            }
+            collectRetType(fn.declaredReturn(), refs);
+        }
+        return refs;
+    }
+
+    private static void collectRetType(Ast.RetType ret, List<Ast.TypeRef> refs) {
+        if (ret != null) {
+            ret.cases().forEach(c -> collectTypeRefs(c, refs));
+        }
+    }
+
+    private static void collectTypeRefs(Ast.TypeRef ref, List<Ast.TypeRef> refs) {
+        if (ref == null) {
+            return;
+        }
+        if (ref.name() != null) {
+            refs.add(ref);
+        }
+        collectTypeRefs(ref.arg(), refs);
+        if (ref.tupleElems() != null) {
+            ref.tupleElems().forEach(e -> collectTypeRefs(e, refs));
         }
     }
 
     private static void visit(String name, Map<String, Ast.Module> byName,
+                              Map<String, List<Dependency>> deps,
                               Set<String> done, Set<String> stack,
                               Map<String, Integer> sourceOfModule) {
         if (done.contains(name)) {
             return;
         }
         stack.add(name);
-        Ast.Module m = byName.get(name);
-        if (m != null) {
-            for (Ast.Import imp : m.imports()) {
-                if (stack.contains(imp.module())) {
-                    // the `import` that closes the cycle is written in `m`, so that is the file to quote
-                    throw new CompileException(imp.pos(), "E1501", "Cyclic module dependency detected.")
-                            .inSource(sourceIndex(sourceOfModule, name));
-                }
-                if (byName.containsKey(imp.module())) {
-                    visit(imp.module(), byName, done, stack, sourceOfModule);
-                }
+        for (Dependency dep : deps.getOrDefault(name, List.of())) {
+            if (stack.contains(dep.module())) {
+                // the reference that closes the cycle is written in `name`, so that is the file to quote
+                throw new CompileException(dep.pos(), "E1501", "Cyclic module dependency detected.")
+                        .inSource(sourceIndex(sourceOfModule, name));
+            }
+            if (byName.containsKey(dep.module())) {
+                visit(dep.module(), byName, deps, done, stack, sourceOfModule);
             }
         }
         stack.remove(name);

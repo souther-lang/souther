@@ -221,14 +221,20 @@ public final class Formatter {
     }
 
     private Doc importDecl(SyntaxNode n) {
-        Doc module = qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
+        Doc d = concat(text("import "), qualifiedName(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow()));
+        Optional<SyntaxNode> alias = n.child(SyntaxKind.IMPORT_ALIAS);
+        if (alias.isPresent()) {
+            d = concat(d, text(" as "), text(idents(alias.get()).get(0).text()));
+        }
+        Optional<SyntaxNode> list = n.child(SyntaxKind.NAME_LIST);
+        if (list.isEmpty()) {
+            return d;   // an import that only renames the module, or only names the dependency
+        }
         List<Doc> names = new ArrayList<>();
-        n.child(SyntaxKind.NAME_LIST).ifPresent(list -> {
-            for (SyntaxToken t : idents(list)) {
-                names.add(text(t.text()));
-            }
-        });
-        return concat(text("import "), module, text(" ( "), Doc.join(text(", "), names), text(" )"));
+        for (SyntaxToken t : idents(list.get())) {
+            names.add(text(t.text()));
+        }
+        return concat(d, text(" ( "), Doc.join(text(", "), names), text(" )"));
     }
 
     // --- data ---
@@ -449,10 +455,10 @@ public final class Formatter {
         if (typevar.isPresent()) {
             return text(typevar.get().text());
         }
-        String name = firstIdent(n);
+        Doc name = qualifiedName(n);   // a type may be named through its module or an import alias
         var args = n.child(SyntaxKind.TYPE_ARGS);
         if (args.isEmpty()) {
-            return text(name);
+            return name;
         }
         List<Doc> typeArgs = new ArrayList<>();
         for (SyntaxNode c : args.get().childNodes()) {
@@ -460,7 +466,7 @@ public final class Formatter {
                 typeArgs.add(typeRef(c));
             }
         }
-        return concat(text(name), text("<"), Doc.join(text(", "), typeArgs), text(">"));
+        return concat(name, text("<"), Doc.join(text(", "), typeArgs), text(">"));
     }
 
     private static boolean isTypeNode(SyntaxKind k) {
@@ -593,7 +599,10 @@ public final class Formatter {
                     afterArrow = true;
                     continue;
                 }
-                if (pattern.length() > 0 && t.kind() != SyntaxKind.COMMA) {
+                // a qualified case name is one name: no space around its dots
+                boolean joined = pattern.length() > 0
+                        && (t.kind() == SyntaxKind.DOT || pattern.charAt(pattern.length() - 1) == '.');
+                if (pattern.length() > 0 && t.kind() != SyntaxKind.COMMA && !joined) {
                     pattern.append(' ');
                 }
                 pattern.append(t.text());

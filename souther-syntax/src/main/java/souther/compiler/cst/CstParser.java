@@ -145,19 +145,29 @@ public final class CstParser {
         start(SyntaxKind.IMPORT_DECL);
         bump();   // import
         qualifiedName();
-        start(SyntaxKind.NAME_LIST);
-        expect(SyntaxKind.LPAREN);
-        if (!at(SyntaxKind.RPAREN)) {
+        if (at(SyntaxKind.AS_KW)) {
+            start(SyntaxKind.IMPORT_ALIAS);
+            bump();   // as
             expect(SyntaxKind.IDENT);
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RPAREN)) {
-                    break;
-                }
-                expect(SyntaxKind.IDENT);
-            }
+            finish();
         }
-        expect(SyntaxKind.RPAREN);
-        finish();   // NAME_LIST
+        // The name list is what an import adds to the bare names in scope; an import that only
+        // renames the module (`import a.b as B`) or only names the dependency has none.
+        if (at(SyntaxKind.LPAREN)) {
+            start(SyntaxKind.NAME_LIST);
+            bump();   // (
+            if (!at(SyntaxKind.RPAREN)) {
+                expect(SyntaxKind.IDENT);
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RPAREN)) {
+                        break;
+                    }
+                    expect(SyntaxKind.IDENT);
+                }
+            }
+            expect(SyntaxKind.RPAREN);
+            finish();   // NAME_LIST
+        }
         finish();   // IMPORT_DECL
     }
 
@@ -576,6 +586,12 @@ public final class CstParser {
             bump();
         } else {
             expect(SyntaxKind.IDENT);
+            // a type may be named through its module (`example.billing.Amount`) or an import alias
+            // (`B.Amount`), so the head is a dotted name like a module's own
+            while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
+                bump();   // .
+                bump();   // ident
+            }
             if (at(SyntaxKind.LT)) {
                 typeArgs();
             }
@@ -943,11 +959,13 @@ public final class CstParser {
     private void matchCase() {
         start(SyntaxKind.MATCH_CASE);
         expect(SyntaxKind.IDENT);
+        caseNameTail();
         while (at(SyntaxKind.PIPE) && nth(1) == SyntaxKind.IDENT) {
             // an or-pattern alternative; a `|` that begins the next case is followed by the arrow
             // path instead. Only consume `|` here when another case name follows.
             bump();   // |
             bump();   // ident
+            caseNameTail();
         }
         // newtype constructor destructuring `X(inner)`, nestable `X(Y(s))` — the inverse of
         // construction `X(v)`. It opens the case's newtype value; the inner `Y(...)` opens another.
@@ -985,6 +1003,16 @@ public final class CstParser {
         expect(SyntaxKind.ARROW);
         expr();
         finish();
+    }
+
+    /** The rest of a dotted case name: an arm may name a case through its module or an import alias
+     * ({@code | probe.b.Amount v ->}), the same way a type position may. A binding after the name is a
+     * bare identifier, so no dot follows it and the two do not run together. */
+    private void caseNameTail() {
+        while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
+            bump();   // .
+            bump();   // ident
+        }
     }
 
     /** {@code ( IDENT [casePattern] )} — a newtype-destructuring sub-pattern, nestable for a
