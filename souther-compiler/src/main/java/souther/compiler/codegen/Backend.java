@@ -151,11 +151,13 @@ public final class Backend {
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
         Map<String, List<String>> behaviorResults = b.behaviorResultInterfaces(module, importedSigs);
-        // A generated result union is a sealed interface, so all its permitted case classes must be
-        // in this module's package (JVM: an unnamed-module sealed type permits only same-package
-        // subclasses). A `>->` whose departed case comes from an imported behavior would need that
-        // upstream case to join this union, which it cannot. Reject it with a clear message rather
-        // than emit permits pointing at a case class that is never generated here (E1606).
+        // A case class carries the result unions it belongs to as interfaces it implements, and that
+        // list is settled when its own module is generated. A union declared here whose cases include
+        // an imported one would need that case class to implement this interface, which this module
+        // cannot give it: emitted anyway, the union permits only the local cases, the imported value
+        // is not a member of it, and a Java caller's exhaustive switch compiles and then throws
+        // ClassCastException. Adding it from here would make a module's bytecode depend on which
+        // modules import it — the mirror of what ADR-0024 refuses. Reject it instead (E1606, ADR-0057).
         for (Map.Entry<String, List<String>> e : behaviorResults.entrySet()) {
             for (String caseName : e.getValue()) {
                 if (localTypes.contains(caseName)) {
@@ -170,9 +172,10 @@ public final class Backend {
                                 .at(owner != null ? owner.pos() : module.pos())
                                 .args(bname, caseName).hint("e1606.hint").build(),
                         "the output union of `" + bname + "` includes `" + caseName
-                                + "`, a case declared in another module; a generated result union can"
-                                + " only permit cases from its own module — consume it at the boundary,"
-                                + " or re-express it as a local case");
+                                + "`, a case declared in another module; a case class carries the unions"
+                                + " it belongs to from its own module's generation, so this one cannot"
+                                + " join — consume it at the boundary, or re-express it as a case of"
+                                + " this module");
             }
         }
         behaviorResults.forEach((resultName, cases) -> {
