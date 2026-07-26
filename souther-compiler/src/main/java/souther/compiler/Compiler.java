@@ -236,21 +236,19 @@ public final class Compiler {
             Ast.Module m = derived.get(original.name());
             derived.put(original.name(), NewtypeDesugar.rewrite(m, visibleDefs(m, derived)));
         }
-        // `derived` is final from here, so each module's visible defs and imported signatures are
-        // resolved once and read by both the generation pass and the example pass
+        // `derived` is final from here, so what each module resolves against is resolved once, in the
+        // pass that first needs it, and read again by the example pass. Resolving it up front instead
+        // would move an unresolvable import ahead of an earlier module's type error in the report.
         Map<String, Map<String, Ast.Def>> visible = new LinkedHashMap<>();
         Map<String, Map<String, Sig>> imported = new LinkedHashMap<>();
-        for (Ast.Module original : parsed) {
-            Ast.Module m = derived.get(original.name());
-            visible.put(original.name(), visibleDefs(m, derived));
-            imported.put(original.name(), importedBehaviorSigs(m, derived));
-        }
         // pass 2: type-check and generate against the derived (codec-bearing) defs
         Map<String, byte[]> out = new LinkedHashMap<>();
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
-            Map<String, Ast.Def> symbols = visible.get(original.name());
-            Map<String, Sig> importedSigs = imported.get(original.name());
+            Map<String, Ast.Def> symbols = visibleDefs(m, derived);
+            Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
+            visible.put(original.name(), symbols);
+            imported.put(original.name(), importedSigs);
             Set<String> importedInjected = importedInjectedBehaviors(m, derived);
             m = injectRecursivePrelude(m);
             Ast.Module lowered = Lower.run(m);
