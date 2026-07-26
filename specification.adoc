@@ -659,6 +659,8 @@ data 一般社員
 
 Unit data appear frequently as sum cases (such as `+一般社員+` in `+data 役職 = 管理職 | 一般社員+`).
 
+A unit data MUST NOT carry an `+invariant+`: it has no field for one to observe and no value it could reject (<<invariant-declaration>>). Writing one is a compile error rather than a clause with no effect. A data written with an empty body (`+data T = { }+`) is a product with no fields, not a unit, and its `+invariant+` is checked as any other product's is.
+
 A unit data value is constructed by *writing the name directly* (as a zero-argument constructor becomes a value in functional languages). An empty record such as `+T {}+` is not used.
 
 [,text]

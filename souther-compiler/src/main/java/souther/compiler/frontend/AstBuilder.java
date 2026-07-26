@@ -244,6 +244,16 @@ public final class AstBuilder {
             return new Ast.Data(name, true, List.of(), fields, invariant,
                     Optional.empty(), Optional.empty(), pos);
         }
+        // No body of any kind: a unit data, which has no fields for an invariant to observe (spec
+        // §unit-data). The parser takes an `invariant` clause after any data, so this is where a
+        // clause that has nothing to constrain is refused — reaching `Ast.UnitData`, which has no
+        // slot for one, would silently drop it and with it any error inside it.
+        for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.invariant.onunit").title("check.invariant.title")
+                            .at(pos(clause)).args(name).build(),
+                    "unit data `" + name + "` cannot carry an invariant");
+        }
         return new Ast.UnitData(name, pos);
     }
 

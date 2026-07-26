@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A unit data is constructed by writing its name bare — the functional-language idiom for a
@@ -56,5 +57,54 @@ class CompileUnitValueTest {
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E1002", e.code());
+    }
+
+    /** A unit has no fields, so an invariant on it has nothing to observe and nothing it could
+     *  reject (spec §unit-data). It has to be refused where it is written: `Ast.UnitData` has no
+     *  slot for one, so anything not caught here is dropped without a word. */
+    @Test
+    void aUnitDataCannotCarryAnInvariant() {
+        String src = """
+                module demo
+                data Mark
+                    invariant false
+                data Out = { s: String }
+                behavior k : (n: Int) -> Out | Mark constructs Out, Mark
+                let k (n) = if n > 0 then Out { s = "x" } else Mark
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("invariant"), e.getMessage());
+        assertEquals(3, e.pos().line(), "must point at the clause, not the data");
+    }
+
+    /** The clause is refused before it is elaborated, so this would otherwise be accepted with an
+     *  unbound name inside it — which is how the silent drop showed up. */
+    @Test
+    void aUnitDataInvariantIsRefusedEvenWhenItsExpressionIsNonsense() {
+        String src = """
+                module demo
+                data Mark
+                    invariant nonexistent > 0
+                data Out = { s: String }
+                behavior k : (n: Int) -> Out constructs Out
+                let k (n) = Out { s = "x" }
+                """;
+        assertThrows(CompileException.class, () -> Compiler.compile(src));
+    }
+
+    /** The sibling shape still behaves: a data written with an empty body is a product with no
+     *  fields, not a unit, and its invariant goes through the ordinary path. */
+    @Test
+    void anEmptyProductBodyStillTypeChecksItsInvariant() {
+        String src = """
+                module demo
+                data Mark = {}
+                    invariant nonexistent > 0
+                data Out = { s: String }
+                behavior k : (n: Int) -> Out constructs Out
+                let k (n) = Out { s = "x" }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("nonexistent"), e.getMessage());
     }
 }
