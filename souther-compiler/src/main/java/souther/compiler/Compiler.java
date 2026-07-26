@@ -80,12 +80,13 @@ public final class Compiler {
         module = NewtypeDesugar.rewrite(module, TypeChecker.symbols(module));
         module = Compiler.injectRecursivePrelude(module);
         Ast.Module lowered = Lower.run(module);
-        TypeChecker.Checked checked =
-                TypeChecker.checkOrThrow(module, TypeChecker.symbols(module), Map.of(), lowered);
+        // the module no longer changes, so its symbol table is built once and shared by the check,
+        // the constant verification, and the example run
+        Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
+        TypeChecker.Checked checked = TypeChecker.checkOrThrow(module, symbols, Map.of(), lowered);
         warningsOut.addAll(checked.warnings());
         Map<String, byte[]> out = Backend.generate(lowered, checked);
-        verifyConstConstructions(module, TypeChecker.symbols(module), out);
-        Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
+        verifyConstConstructions(module, symbols, out);
         ExampleVerifier.verify(module, symbols, PipelineSigs.signatures(module, symbols), Map.of(), out);
         return out;
     }
@@ -235,12 +236,21 @@ public final class Compiler {
             Ast.Module m = derived.get(original.name());
             derived.put(original.name(), NewtypeDesugar.rewrite(m, visibleDefs(m, derived)));
         }
+        // `derived` is final from here, so each module's visible defs and imported signatures are
+        // resolved once and read by both the generation pass and the example pass
+        Map<String, Map<String, Ast.Def>> visible = new LinkedHashMap<>();
+        Map<String, Map<String, Sig>> imported = new LinkedHashMap<>();
+        for (Ast.Module original : parsed) {
+            Ast.Module m = derived.get(original.name());
+            visible.put(original.name(), visibleDefs(m, derived));
+            imported.put(original.name(), importedBehaviorSigs(m, derived));
+        }
         // pass 2: type-check and generate against the derived (codec-bearing) defs
         Map<String, byte[]> out = new LinkedHashMap<>();
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
-            Map<String, Ast.Def> symbols = visibleDefs(m, derived);
-            Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
+            Map<String, Ast.Def> symbols = visible.get(original.name());
+            Map<String, Sig> importedSigs = imported.get(original.name());
             Set<String> importedInjected = importedInjectedBehaviors(m, derived);
             m = injectRecursivePrelude(m);
             Ast.Module lowered = Lower.run(m);
@@ -253,10 +263,10 @@ public final class Compiler {
         // cross-module references
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
-            Map<String, Ast.Def> symbols = visibleDefs(m, derived);
+            Map<String, Ast.Def> symbols = visible.get(original.name());
             verifyConstConstructions(m, symbols, out);
             Map<String, Sig> sigs =
-                    PipelineSigs.signatures(m, symbols, importedBehaviorSigs(m, derived));
+                    PipelineSigs.signatures(m, symbols, imported.get(original.name()));
             ExampleVerifier.verify(m, symbols, sigs, importedPackages(m), out);
         }
         return out;
