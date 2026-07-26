@@ -210,7 +210,8 @@ example dispatchWindow
 // string a `Date` field already carries — so this reaches the outside as `{"2026-07-25": 2}` and
 // needs no stringly stand-in for the day.
 //
-// The count is folded with `Map.upsert`, which starts a day at zero the first time it is seen. The
+// The count is folded with `Map.upsert`, whose absent branch inserts the value given rather than
+// applying the step to it — so a day first seen is inserted as 1, not stepped up from 0. The
 // busiest-day readout then reads the map two more ways: `Map.values` for the peak and `Map.keys`
 // put in order by `List.sort`, a `Date` being ordered like any primitive.
 data Shipment =
@@ -231,7 +232,7 @@ let planCalendar (shipments) = {
     // The seed is the empty-map bottom, and nothing around this `let` says what it is a map of, so
     // the accumulator is annotated here. That is what a local type annotation is for: the fold's
     // step would pin the types at the call, but the binding is read before the step is.
-    let perDay: Map<Date, Int> = fold((acc, s) -> Map.upsert(s.dispatchOn, 0, n -> n + 1, acc),
+    let perDay: Map<Date, Int> = fold((acc, s) -> Map.upsert(s.dispatchOn, 1, n -> n + 1, acc),
                                       Map.empty(), shipments)
     ShipmentCalendar {
         perDay = perDay,

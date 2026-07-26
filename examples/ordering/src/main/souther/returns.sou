@@ -3,11 +3,18 @@
 // second diamond, and neither costs anything at the call — a module is resolved once for the whole
 // compile, so `Amount` reaching here through billing is the same `Amount` billing states.
 //
-// What the depth does cost is naming. This module wants a word for money and does not declare one:
-// `Amount` is billing's, imported. Declaring a second `Amount` here would make the two impossible to
-// integrate — a third module could not import both, and there is no alias to tell them apart — so the
-// question "who owns this word" is settled once, upstream, and everyone downstream imports the
-// answer. That is the whole reason a shared vocabulary module exists.
+// What the depth costs is knowing which module may build what. Construction is closed to the module
+// that declares a type (ADR-0015): billing's `Amount` can be read here and cannot be constructed
+// here, however many modules import it. So this module reads the invoiced amount as an `Amount` and
+// states what it produces as a `Refund` of its own — a type returns declares, and therefore may
+// build. Writing `constructs Amount` instead compiles and then fails at run time inside the example:
+//
+//     aborted: class example.returns.PlanRefund$Impl tried to access method
+//     'souther.runtime.Result example.billing.Amount.__construct(java.math.BigDecimal)'
+//
+// Naming is the other half of the same question. `Amount` is billing's word, imported rather than
+// re-declared: two modules exposing the same name cannot both be imported by a third, and there is no
+// alias to tell them apart. Which context owns a word is settled once, upstream.
 //
 // The features on show:
 //   - `Set` as the working collection: what came back, what was expected back, and what is still
@@ -15,13 +22,14 @@
 //     relate. A list would need a scan per question.
 //   - `Map.intersect` and `Map.difference` reconciling two keyed readings of the same shipment.
 //   - `List.member` / `reverse` / `take` for the recent-returns readout.
-//   - A return window measured with `Date.daysBetween`, and a refund that is an `Amount` — never a
-//     negative one, so an over-refund is its own case rather than a sign.
+//   - A return window measured with `Date.daysBetween`, and a refund that is never negative, so an
+//     over-refund would be a different event rather than a sign.
 module example.returns exposing (
     Rma,
     ReturnRequest,
     ReturnedLine,
     Reconciliation,
+    Refund,
     Accepted,
     OutsideWindow,
     NotShipped,
@@ -39,6 +47,12 @@ import List ( map, fold, filter, length, member, reverse, take )
 // this module says about it.
 data Rma = String
     invariant String.matches("RMA-[0-9]{8}", value)
+
+// What this module produces. It is not billing's `Amount` — that one is billing's to build — but it
+// is the same idea stated by the context that owes the figure. A refund is never negative; an
+// over-refund would be a charge, which is a different event and not this one.
+data Refund = Decimal
+    invariant value >= 0.0m
 
 // === requestReturn: is this return one we accept? ===
 // Two questions, and they are different failures. A sku that was never on the shipment is not a
@@ -157,16 +171,17 @@ example reconcile
 data RefundPlan =
     { rma: Rma
     , invoiceNo: InvoiceNo
-    , refund: Amount
-    , restockingFee: Amount
+    , refund: Refund
+    , restockingFee: Refund
+    , withinInvoiced: Bool
     , repeatReturn: Bool
     , recentRmas: List<Rma>
     }
 
 behavior planRefund : (accepted: Accepted, reconciliation: Reconciliation, unitPrices: Map<Sku, Int>,
-                       invoiceNo: InvoiceNo, restockingRate: Decimal, history: List<Rma>,
-                       previousSkus: List<Sku>) -> RefundPlan
-    constructs RefundPlan, Amount
+                       invoiceNo: InvoiceNo, invoicedGross: Amount, restockingRate: Decimal,
+                       history: List<Rma>, previousSkus: List<Sku>) -> RefundPlan
+    constructs RefundPlan, Refund
 
 let lineValue (sku: Sku, quantity: Int, unitPrices: Map<Sku, Int>): Int = {
     let price = Map.get(sku, unitPrices) |> Option.withDefault(0)
@@ -177,16 +192,19 @@ let agreedValue (reconciliation: Reconciliation, unitPrices: Map<Sku, Int>): Int
     Map.fold((acc, sku, quantity) -> acc + lineValue(sku, quantity, unitPrices), 0,
              reconciliation.agreed)
 
-let planRefund (accepted, reconciliation, unitPrices, invoiceNo, restockingRate, history,
-                previousSkus) = {
+let planRefund (accepted, reconciliation, unitPrices, invoiceNo, invoicedGross, restockingRate,
+                history, previousSkus) = {
     let gross = Decimal.fromInt(agreedValue(reconciliation, unitPrices))
     let fee = Decimal.multiply(gross, restockingRate)
     let net = Decimal.max(0.0m, Decimal.subtract(gross, fee))
     RefundPlan {
         rma = accepted.rma,
         invoiceNo = invoiceNo,
-        refund = Amount(net),
-        restockingFee = Amount(Decimal.min(fee, gross)),
+        refund = Refund(net),
+        restockingFee = Refund(Decimal.min(fee, gross)),
+        // billing's Amount, read and compared. Reading across a module is what imports are for;
+        // building across one is what ADR-0015 closes.
+        withinInvoiced = Decimal.compare(net, invoicedGross.value) <= 0,
         repeatReturn = Set.fold((acc, sku) -> acc || member(sku, previousSkus), false, accepted.skus),
         recentRmas = take(3, reverse(history))
     }
@@ -197,26 +215,27 @@ example planRefund
         (Accepted { rma = Rma("RMA-00000001"), skus = [ Sku("apple") ], daysSinceDispatch = 7 }
         , Reconciliation { agreed = [ (Sku("apple"), 2) ], declaredOnly = [], receivedOnly = [],
                            inDispute = 0 }
-        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000042"), 0.1m
+        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000042"), Amount(346.0m), 0.1m
         , [ Rma("RMA-00000001") ], [ Sku("tv") ])
             -> RefundPlan { rma = Rma("RMA-00000001"), invoiceNo = InvoiceNo("INV-2026-000042"),
-                            refund = Amount(270.0m), restockingFee = Amount(30.0m),
-                            repeatReturn = false, recentRmas = [ Rma("RMA-00000001") ] }
+                            refund = Refund(270.0m), restockingFee = Refund(30.0m),
+                            withinInvoiced = true, repeatReturn = false,
+                            recentRmas = [ Rma("RMA-00000001") ] }
     | "a sku this customer has returned before is flagged for a human" :
         (Accepted { rma = Rma("RMA-00000002"), skus = [ Sku("apple") ], daysSinceDispatch = 3 }
         , Reconciliation { agreed = [ (Sku("apple"), 1) ], declaredOnly = [], receivedOnly = [],
                            inDispute = 0 }
-        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000043"), 0.0m
+        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000043"), Amount(150.0m), 0.0m
         , [ Rma("RMA-00000001"), Rma("RMA-00000002") ], [ Sku("apple") ])
             -> RefundPlan { rma = Rma("RMA-00000002"), invoiceNo = InvoiceNo("INV-2026-000043"),
-                            refund = Amount(150.0m), restockingFee = Amount(0.0m),
-                            repeatReturn = true,
+                            refund = Refund(150.0m), restockingFee = Refund(0.0m),
+                            withinInvoiced = true, repeatReturn = true,
                             recentRmas = [ Rma("RMA-00000002"), Rma("RMA-00000001") ] }
     | "nothing agreed is a refund of nothing, not a charge" :
         (Accepted { rma = Rma("RMA-00000003"), skus = [ Sku("apple") ], daysSinceDispatch = 1 }
         , Reconciliation { agreed = [], declaredOnly = [ (Sku("apple"), 1) ], receivedOnly = [],
                            inDispute = 1 }
-        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000044"), 0.1m, [], [])
+        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000044"), Amount(165.0m), 0.1m, [], [])
             -> RefundPlan { rma = Rma("RMA-00000003"), invoiceNo = InvoiceNo("INV-2026-000044"),
-                            refund = Amount(0.0m), restockingFee = Amount(0.0m),
-                            repeatReturn = false, recentRmas = [] }
+                            refund = Refund(0.0m), restockingFee = Refund(0.0m),
+                            withinInvoiced = true, repeatReturn = false, recentRmas = [] }
