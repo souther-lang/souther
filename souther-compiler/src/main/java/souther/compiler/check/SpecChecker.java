@@ -362,11 +362,22 @@ public final class SpecChecker {
     }
 
     /**
-     * A behavior may only construct types its own module declares. Construction is closed to the
-     * declaring module (ADR-0015): the generated {@code __construct} is package-private, so a
-     * {@code constructs} naming an imported type compiles and then fails with an
-     * {@code IllegalAccessError} when the behavior runs (issue #113). Which module declares a name is
-     * known from the import list, so the clause is answered where it is written.
+     * A behavior may only construct types its own module declares.
+     *
+     * <p>What is decided is that construction goes through declared paths only (ADR-0002): a value of
+     * {@code T} comes from {@code T}'s decoder, from a behavior whose construction set includes it, or
+     * from generated code. That much is the language's guarantee and holds wherever the behavior is.
+     *
+     * <p>That those paths must be in {@code T}'s own module is <em>not</em> a decided rule — no ADR
+     * states it. It is where the compiler has arrived: the generated {@code __construct} is
+     * package-private, so a {@code constructs} naming an imported type compiled and then failed with
+     * an {@code IllegalAccessError} when the behavior ran. Rejecting the declaration turns that into
+     * a compile error (issue #113) and is right either way, because a declaration the runtime cannot
+     * honour should not compile. Whether it should be honoured instead — by emitting a construction
+     * path the declaring module opens — is open (issue #121).
+     *
+     * <p>Which module declares a name is known from the import list, so the clause is answered where
+     * it is written.
      */
     static void rejectImportedConstructs(Ast.SpecBehavior spec, Ast.Module module) {
         for (String constructed : spec.constructs()) {
@@ -380,7 +391,7 @@ public final class SpecChecker {
                                 .hint("check.constructs.imported.hint").build(),
                         "`behavior " + spec.name() + "` declares `constructs " + constructed
                                 + "`, but `" + constructed + "` is declared by `" + imp.module()
-                                + "`; construction is closed to the declaring module (ADR-0015)");
+                                + "`; a behavior constructs only what its own module declares");
             }
         }
     }

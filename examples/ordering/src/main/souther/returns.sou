@@ -3,11 +3,11 @@
 // second diamond, and neither costs anything at the call — a module is resolved once for the whole
 // compile, so `Amount` reaching here through billing is the same `Amount` billing states.
 //
-// What the depth costs is knowing which module may build what. Construction is closed to the module
-// that declares a type (ADR-0015): billing's `Amount` can be read here and cannot be constructed
-// here, however many modules import it. So this module reads the invoiced amount as an `Amount` and
-// states what it produces as a `Refund` of its own — a type returns declares, and therefore may
-// build. Writing `constructs Amount` instead compiles and then fails at run time inside the example:
+// What the depth costs is knowing which module may build what. A behavior constructs only what its
+// own module declares, so billing's `Amount` can be read here and cannot be built here, however many
+// modules import it. This module therefore reads the invoiced amount as an `Amount` and states what
+// it produces as a `Refund` of its own — a type returns declares, and therefore may build. Writing
+// `constructs Amount` instead used to compile and then fail at run time inside the example:
 //
 //     aborted: class example.returns.PlanRefund$Impl tried to access method
 //     'souther.runtime.Result example.billing.Amount.__construct(java.math.BigDecimal)'
