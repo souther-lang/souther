@@ -739,12 +739,27 @@ public final class Compiler {
         if (dot < 0) {
             return written;
         }
-        String qualifier = written.substring(0, dot);
-        String target = qualifiers.getOrDefault(qualifier, qualifier);
-        if (!registry.containsKey(target) || target.equals(m.name())) {
-            return written;   // a standard-library qualifier, or this module itself
-        }
         String bare = written.substring(dot + 1);
+        // `X.decoder` / `X.encoder` name a codec, not a behavior of a module called X — a stage that
+        // writes one gets its own answer (spec 14.1), which reading it as an import would hide, and
+        // would hide the more so where a module happens to be named like the type.
+        if (bare.equals("decoder") || bare.equals("encoder")) {
+            return written;
+        }
+        String qualifier = written.substring(0, dot);
+        if (Prelude.isQualifier(qualifier)) {
+            return written;   // a standard-library qualifier: the stage names a function, not a behavior
+        }
+        String target = qualifiers.getOrDefault(qualifier, qualifier);
+        if (target.equals(m.name())) {
+            return bare;      // this module, named through itself
+        }
+        if (!registry.containsKey(target)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.qualified.unknownmodule").title("check.module.title")
+                            .at(pos).args(qualifier, bare).build(),
+                    "no module named `" + qualifier + "`");
+        }
         if (!taken.getOrDefault(target, Set.of()).contains(bare)) {
             added.computeIfAbsent(target, k -> new LinkedHashSet<>()).add(bare);
             at.putIfAbsent(target, pos);

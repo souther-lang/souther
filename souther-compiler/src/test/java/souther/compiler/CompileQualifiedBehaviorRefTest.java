@@ -141,6 +141,42 @@ class CompileQualifiedBehaviorRefTest {
         assertTrue(e.getMessage().contains("twice"), e.getMessage());
     }
 
+    @Test
+    void aQualifierThatNamesNoModuleIsReported() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(UP, """
+                        module d exposing ( Out, flow : Out )
+                        data In = { n: Int }
+                        data Out = { n: Int }
+                        behavior plus : (i: In) -> Out constructs Out
+                        let plus (i) = Out { n = i.n + 1 }
+                        behavior flow = absent.twice >-> plus
+                        """)));
+
+        assertTrue(e.getMessage().contains("absent"), e.getMessage());
+        assertTrue(e.getMessage().contains("no module"), e.getMessage());
+    }
+
+    /** {@code X.decoder} names a codec, not a behavior of a module called X — even where a module is
+     * named like the type, so reading the stage as an import would take the answer away. */
+    @Test
+    void aCodecStageKeepsItsOwnAnswerEvenWhereAModuleIsNamedLikeTheType() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module In exposing ( Thing )
+                        data Thing = { n: Int }
+                        """, """
+                        module d exposing ( Out, flow : Out )
+                        data In = { n: Int }
+                        data Out = { n: Int }
+                        behavior plus : (i: In) -> Out constructs Out
+                        let plus (i) = Out { n = i.n + 1 }
+                        behavior flow = In.decoder >-> plus
+                        """)));
+
+        assertTrue(e.getMessage().contains("boundary"), e.getMessage());
+    }
+
     /** A dependency counts however it is written, for a behavior as for a type. Neither module names
      * the other's *types*, so the cycle is closed by the stages alone. */
     @Test
