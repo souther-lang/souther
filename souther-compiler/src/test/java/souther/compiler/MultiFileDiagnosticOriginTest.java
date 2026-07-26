@@ -96,6 +96,33 @@ class MultiFileDiagnosticOriginTest {
     }
 
     @Test
+    void aConstantInvariantViolationNamesTheModuleEvenWithAnAttachedExampleFile() {
+        // a regex invariant is not discharged by the checker, so the constant is rejected by the
+        // compile-time evaluation that runs alongside the examples — the pass this test pins down
+        String target = """
+                module t
+                import String ( matches )
+                data メール = String
+                    invariant matches("[^@]+@[^@]+", value)
+                data Out = { v: メール }
+                behavior f : (n: Int) -> Out
+                    constructs Out, メール
+                let f (n) = Out { v = メール("not-an-email") }
+                """;
+        String examples = """
+                examples for t
+                example f
+                    | "one" : (1) -> Out { v = メール("a@b") }
+                """;
+
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(target, examples)));
+
+        assertEquals(0, e.sourceIndex(),
+                "the rejected construction is written in the module, not in the example file");
+    }
+
+    @Test
     void aFailingExampleInAMergedModuleNamesNoSource() {
         String target = """
                 module t

@@ -61,8 +61,13 @@ public class CompileException extends RuntimeException {
         return diagnostic;
     }
 
-    /** Which of the sources a multi-module compile was handed this error came from, or {@code -1}
-     *  when it carries no origin (a single-source compile, where the caller knows). */
+    /**
+     * Which of the sources a multi-module compile was handed this error came from, or {@code -1} when
+     * it names none. Untagged covers a single-source compile — where the caller knows the file — and
+     * an error a linked compile cannot pin on one source, such as a failing example the compiler
+     * merged in from an {@code examples for} file. A caller reads {@code -1} as "quote no line",
+     * never as "the first source".
+     */
     public int sourceIndex() {
         return sourceIndex;
     }

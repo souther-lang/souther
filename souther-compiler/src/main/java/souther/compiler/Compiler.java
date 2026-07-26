@@ -324,14 +324,20 @@ public final class Compiler {
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
             Map<String, Ast.Def> symbols = visible.get(original.name());
+            int index = sourceIndex(sourceOfModule, original.name());
+            Map<String, Sig> sigs;
             try {
+                // both read the module's own defs and helper bodies, so their positions are this file's
                 verifyConstConstructions(m, symbols, out);
-                Map<String, Sig> sigs =
-                        PipelineSigs.signatures(m, symbols, imported.get(original.name()));
+                sigs = PipelineSigs.signatures(m, symbols, imported.get(original.name()));
+            } catch (CompileException e) {
+                throw e.inSource(index);
+            }
+            try {
                 ExampleVerifier.verify(m, symbols, sigs, importedPackages(m), out);
             } catch (CompileException e) {
-                throw e.inSource(mergedExamples.contains(original.name())
-                        ? -1 : sourceIndex(sourceOfModule, original.name()));
+                // a merged `examples for` file's rows are positioned in that file, not this one
+                throw e.inSource(mergedExamples.contains(original.name()) ? -1 : index);
             }
         }
         return out;
