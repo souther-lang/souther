@@ -1,5 +1,6 @@
 package souther.compiler.core;
 
+import souther.compiler.check.Elaborator;
 import souther.compiler.check.Type;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
@@ -18,7 +19,7 @@ import java.util.List;
  *
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
  * checker is the only producer of Core — it builds the tree as it types a body
- * ({@code TypeChecker.elaborate}) — so the backend reads those decisions instead of inferring the
+ * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of inferring the
  * same types a second time. The one node with no type is the rounding mode of {@code divide}, a
  * built-in identifier the emitter reads by name rather than as a value (spec 18.3).
  *

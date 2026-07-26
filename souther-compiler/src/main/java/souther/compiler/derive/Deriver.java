@@ -6,6 +6,7 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -51,7 +52,7 @@ public final class Deriver {
     }
 
     private static Ast.Data deriveData(Ast.Data d, Map<String, Ast.Def> symbols, boolean isCase) {
-        Map<String, Type> fields = TypeChecker.fieldTypes(d, symbols);
+        Map<String, Type> fields = TypeOps.fieldTypes(d, symbols);
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
                 ? d.decoder() : Optional.of(deriveDecoder(d, fields, isCase));
         Optional<Ast.EncoderDef> encoder = d.encoder().isPresent()

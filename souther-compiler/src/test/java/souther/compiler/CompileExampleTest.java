@@ -176,7 +176,7 @@ class CompileExampleTest {
         var checked = souther.compiler.check.TypeChecker
                 .checkAndElaborate(module, symbols, java.util.Map.of(), lowered).checked();
         var classes = souther.compiler.codegen.Backend.generate(lowered, checked);
-        var sigs = souther.compiler.check.TypeChecker.signatures(module, symbols);
+        var sigs = souther.compiler.check.PipelineSigs.signatures(module, symbols);
         var fails = ExampleVerifier.check(module, symbols, sigs, java.util.Map.of(), classes);
         assertEquals(2, fails.size());
     }

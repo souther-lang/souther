@@ -121,6 +121,7 @@ final class Descriptors {
     static final MethodTypeDesc MTD_ArrayList_add = MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     static final MethodTypeDesc MTD_List_copyOf = MethodTypeDesc.of(CD_List, CD_Collection);
     static final MethodTypeDesc MTD_Lists_concat = MethodTypeDesc.of(CD_List, CD_List, CD_List);
+    static final MethodTypeDesc MTD_Lists_append = MethodTypeDesc.of(CD_List, CD_List, CD_Object);
     static final MethodTypeDesc MTD_Lists_sort = MethodTypeDesc.of(CD_List, CD_List);
     static final MethodTypeDesc MTD_Strings_split = MethodTypeDesc.of(CD_List, CD_String, CD_String);
     static final MethodTypeDesc MTD_Strings_join = MethodTypeDesc.of(CD_String, CD_List, CD_String);

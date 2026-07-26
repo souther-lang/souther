@@ -97,12 +97,10 @@ public final class HelperInliner {
         }
         work.addAll(reachable);
         while (!work.isEmpty()) {
-            Ast.FnDef def = helpers.get(work.poll());
-            if (def == null) {
+            Set<String> calls = callsOf.get(work.poll());
+            if (calls == null) {
                 continue;
             }
-            Set<String> calls = new HashSet<>();
-            collectHelperCalls(def.body(), calls);
             for (String c : calls) {
                 if (reachable.add(c)) {
                     work.add(c);
@@ -608,6 +606,11 @@ public final class HelperInliner {
         // `foldFrom` is a recursive prelude helper, and it must be left standing (lowered to a method,
         // not inlined) exactly as a module-own recursive helper is, or the inliner would expand its
         // self-call forever.
+        for (Map.Entry<String, Ast.FnDef> e : helpers.entrySet()) {
+            Set<String> called = new HashSet<>();
+            collectHelperCalls(e.getValue().body(), called);
+            callsOf.put(e.getKey(), called);
+        }
         for (String name : helpers.keySet()) {
             if (reaches(name, name, new HashSet<>())) {
                 recursive.add(name);
@@ -615,15 +618,18 @@ public final class HelperInliner {
         }
     }
 
+    /** Which helpers each helper's body calls. Built once, before the cycle search: {@link #reaches}
+     * walks this graph from every helper, so scanning a body per edge scanned the shipped prelude —
+     * a few hundred call sites — once per path through it rather than once. */
+    private final Map<String, Set<String>> callsOf = new HashMap<>();
+
     /** Whether {@code target} is reachable from {@code from} through helper-call edges. Prelude
      * helpers never call a module's own helpers, so a cycle stays within the module's own helpers. */
     private boolean reaches(String from, String target, Set<String> seen) {
-        Ast.FnDef h = helpers.get(from);
-        if (h == null) {
+        Set<String> called = callsOf.get(from);
+        if (called == null) {
             return false;
         }
-        Set<String> called = new HashSet<>();
-        collectHelperCalls(h.body(), called);
         for (String c : called) {
             if (c.equals(target)) {
                 return true;

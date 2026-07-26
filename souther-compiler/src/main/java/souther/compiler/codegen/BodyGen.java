@@ -3,9 +3,14 @@ package souther.compiler.codegen;
 import souther.compiler.diag.CompileException;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.CheckContext;
+import souther.compiler.check.Elaborator;
+import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
+import souther.compiler.check.ReqSig;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
 import java.lang.classfile.ClassFile;
@@ -109,10 +114,10 @@ final class BodyGen {
         }
 
         /** A {@code ReqSig} view of the injected behaviors in scope, for re-typing a closure body. */
-        private Map<String, TypeChecker.ReqSig> reqSigs() {
-            Map<String, TypeChecker.ReqSig> sigs = new HashMap<>();
+        private Map<String, ReqSig> reqSigs() {
+            Map<String, ReqSig> sigs = new HashMap<>();
             for (String n : reqNames) {
-                sigs.put(n, new TypeChecker.ReqSig(reqParams.get(n), reqSuccess.get(n)));
+                sigs.put(n, new ReqSig(reqParams.get(n), reqSuccess.get(n)));
             }
             return sigs;
         }
@@ -155,8 +160,8 @@ final class BodyGen {
          * emitter in the shape it emits from. {@code expected} is the type the position wants, as the
          * checker pushes a field's declared type into its initialiser. */
         Core elaborate(Ast.Expr e, Type expected) {
-            return TypeChecker.elaborate(Lower.desugarExpr(e), typesEnvWithHelpers(), data, symbols,
-                    reqSigs(), expected);
+            return Elaborator.elaborate(Lower.desugarExpr(e), typesEnvWithHelpers(),
+                    new CheckContext(symbols, data, reqSigs()), expected);
         }
 
         private void emitFieldRead(CodeBuilder code, String ownerName, String field, Type ft) {
@@ -327,7 +332,7 @@ final class BodyGen {
                 case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
                 case Core.Call call when tcoName != null && call.fn().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
-                case Core.NewData nd when TypeChecker.isInvariantBearing(nd.typeName(), symbols) -> {
+                case Core.NewData nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
                     Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
                     emitFieldValues(flds, nd.inits(), nd.spreads());
@@ -674,7 +679,7 @@ final class BodyGen {
             Ast.Data owner = (Ast.Data) symbols.get(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
-            if (TypeChecker.isInvariantBearing(nd.typeName(), symbols)) {
+            if (DataChecker.isInvariantBearing(nd.typeName(), symbols)) {
                 // In value position (a match arm, a non-tail let, a call argument, ...) the checked
                 // construction goes through __construct just as it does in tail (see emitTail): the
                 // invariant runs and orThrow either yields the value or aborts with a
@@ -709,7 +714,7 @@ final class BodyGen {
             Ast.Data owner = (Ast.Data) symbols.get(ntName);
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(ntName);
-            if (TypeChecker.isInvariantBearing(ntName, symbols)) {
+            if (DataChecker.isInvariantBearing(ntName, symbols)) {
                 finishInvariantConstruct(cdType, flds);
             } else {
                 int s = slot(base);
@@ -1066,13 +1071,21 @@ final class BodyGen {
                 }
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
-                    genExpr(bin.right());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
                     // sides are String here, so emit `a.concat(b)` rather than the list join.
                     if (lt == Type.STRING) {
+                        genExpr(bin.right());
                         code.invokevirtual(CD_String, "concat",
                                 MethodTypeDesc.of(CD_String, CD_String));
+                    } else if (bin.right() instanceof Core.ListLit lit && lit.elements().size() == 1) {
+                        // `acc ++ [x]` is how every fold-derived combinator grows its list
+                        // (souther.list's map/filter), so it runs once per element. Push the element
+                        // itself: building a one-element list for `concat` to immediately take apart
+                        // costs an ArrayList, a copyOf, and an iterator on the hot path.
+                        box(code, genExpr(lit.elements().get(0)));
+                        code.invokestatic(CD_Lists, "append", MTD_Lists_append);
                     } else {
+                        genExpr(bin.right());
                         code.invokestatic(CD_Lists, "concat", MTD_Lists_concat);
                     }
                 }
@@ -1178,7 +1191,7 @@ final class BodyGen {
                 }
                 List<Type> params = new ArrayList<>();
                 for (Ast.FnParam p : h.params()) {
-                    params.add(TypeChecker.resolveParamType(p.type(), symbols));
+                    params.add(TypeOps.resolveParamType(p.type(), symbols));
                 }
                 t.put(name, Type.fn(params, successType(h.declaredReturn())));
             });

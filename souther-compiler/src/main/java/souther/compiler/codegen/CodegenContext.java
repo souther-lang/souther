@@ -2,12 +2,13 @@ package souther.compiler.codegen;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
-import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 
 import java.lang.classfile.ClassFile;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -148,12 +149,21 @@ final class CodegenContext {
         return (exposeAll || exposed.contains(name)) ? ClassFile.ACC_PUBLIC : 0;
     }
 
+    // The same handful of names is turned into a descriptor again at every emission site, and
+    // ClassDesc.of re-validates the name on each call, so each map keeps what it has already built.
+    // They live on the context, so they are per module generated and never outlive it.
+    private final Map<String, ClassDesc> typeDescs = new HashMap<>();
+    private final Map<String, ClassDesc> behaviorDescs = new HashMap<>();
+    private final Map<String, ClassDesc> behaviorImplDescs = new HashMap<>();
+
     ClassDesc cd(String typeName) {
-        return ClassDesc.of(typePackage.getOrDefault(typeName, pkg) + "." + typeName);
+        return typeDescs.computeIfAbsent(typeName,
+                n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + n));
     }
 
     ClassDesc cdBehavior(String name) {
-        return ClassDesc.of(typePackage.getOrDefault(name, pkg) + "." + behaviorClass(name));
+        return behaviorDescs.computeIfAbsent(name,
+                n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorClass(n)));
     }
 
     /** The implementation class behind a fn/pipe behavior's public interface: {@code <名>$Impl}.
@@ -161,7 +171,8 @@ final class CodegenContext {
      * holds the fields, constructor and {@code apply}, and is what a pipeline instantiates. Injected
      * behaviors have no {@code $Impl} (their abstract base is the named class). */
     ClassDesc cdBehaviorImpl(String name) {
-        return ClassDesc.of(typePackage.getOrDefault(name, pkg) + "." + behaviorImplClass(name));
+        return behaviorImplDescs.computeIfAbsent(name,
+                n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorImplClass(n)));
     }
 
     /**
@@ -247,15 +258,15 @@ final class CodegenContext {
     }
 
     Map<String, Type> fieldTypes(Ast.Data data) {
-        return TypeChecker.fieldTypes(data, symbols);
+        return TypeOps.fieldTypes(data, symbols);
     }
 
     Type resolveType(Ast.TypeRef ref) {
-        return TypeChecker.resolveType(ref, symbols);
+        return TypeOps.resolveType(ref, symbols);
     }
 
     Type successType(Ast.RetType ret) {
-        return TypeChecker.successType(ret, symbols);
+        return TypeOps.successType(ret, symbols);
     }
 
     /** Whether {@code name} is an imported type or behavior (declared in another module, spec 4). */

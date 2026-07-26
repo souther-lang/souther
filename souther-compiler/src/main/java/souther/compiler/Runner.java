@@ -1,6 +1,8 @@
 package souther.compiler;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.PipelineSigs;
+import souther.compiler.check.Sig;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.frontend.CstFrontend;
@@ -104,10 +106,10 @@ public final class Runner {
         Map<String, byte[]> classes = Compiler.compile(source, moduleName);
         Ast.Module module = CstFrontend.parse(source, moduleName);
         Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
-        Map<String, TypeChecker.Sig> sigs = TypeChecker.signatures(module, symbols);
+        Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols);
 
         Ast.BehaviorDef spec = resolveBehavior(module, behaviorName);
-        TypeChecker.Sig sig = sigs.get(spec.name());
+        Sig sig = sigs.get(spec.name());
         List<Type> ins = sig.ins();
 
         Object[] rawArgs = splitInput(spec.name(), ins.size(), inputJson);
@@ -127,7 +129,7 @@ public final class Runner {
     private static Ast.BehaviorDef resolveBehavior(Ast.Module module, String requested) {
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Ast.FnDef::name).collect(Collectors.toSet());
-        Map<String, List<String>> pipeStages = TypeChecker.pipelineStages(module);
+        Map<String, List<String>> pipeStages = PipelineSigs.pipelineStages(module);
         Map<String, Ast.BehaviorDef> runnable = new java.util.LinkedHashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec
@@ -171,7 +173,7 @@ public final class Runner {
                 specs.put(spec.name(), spec);
             }
         }
-        for (String stage : TypeChecker.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
+        for (String stage : PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
             if (!implemented.contains(stage)) {
                 return "`" + pipe.name() + "` is a pipeline whose stage `" + stage
                         + "` has no implementation (it is injected from Java), which `run` cannot supply.";
@@ -190,7 +192,7 @@ public final class Runner {
         String available = runnable.isEmpty() ? "none" : String.join(", ", runnable);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Ast.FnDef::name).collect(Collectors.toSet());
-        Map<String, List<String>> pipeStages = TypeChecker.pipelineStages(module);
+        Map<String, List<String>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
                 continue;

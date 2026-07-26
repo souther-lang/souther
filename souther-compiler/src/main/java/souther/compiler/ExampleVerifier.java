@@ -1,8 +1,11 @@
 package souther.compiler;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Sig;
 import souther.compiler.check.Type;
+import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Messages;
@@ -43,7 +46,7 @@ public final class ExampleVerifier {
      * {@code importedPackages} maps an imported type's bare name to its declaring module, so a
      * fixture of an imported type decodes against that module's package (a cross-module example). */
     public static List<Diagnostic> check(Ast.Module module, Map<String, Ast.Def> symbols,
-                                         Map<String, TypeChecker.Sig> sigs,
+                                         Map<String, Sig> sigs,
                                          Map<String, String> importedPackages, Map<String, byte[]> classes) {
         if (module.examples().isEmpty()) {
             return List.of();
@@ -65,7 +68,7 @@ public final class ExampleVerifier {
 
     /** Runs {@link #check} and, if any example failed, fails the build with an aggregated error. */
     public static void verify(Ast.Module module, Map<String, Ast.Def> symbols,
-                              Map<String, TypeChecker.Sig> sigs,
+                              Map<String, Sig> sigs,
                               Map<String, String> importedPackages, Map<String, byte[]> classes) {
         List<Diagnostic> failures = check(module, symbols, sigs, importedPackages, classes);
         if (failures.isEmpty()) {
@@ -108,12 +111,12 @@ public final class ExampleVerifier {
 
     private final Ast.Module module;
     private final Map<String, Ast.Def> symbols;
-    private final Map<String, TypeChecker.Sig> sigs;
+    private final Map<String, Sig> sigs;
     private final Map<String, String> importedPackages;
     private final MemoryClassLoader loader;
 
     private ExampleVerifier(Ast.Module module, Map<String, Ast.Def> symbols,
-                            Map<String, TypeChecker.Sig> sigs,
+                            Map<String, Sig> sigs,
                             Map<String, String> importedPackages, MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
@@ -131,7 +134,7 @@ public final class ExampleVerifier {
             out.add(notRunnable(ex));
             return;
         }
-        TypeChecker.Sig sig = sigs.get(target);
+        Sig sig = sigs.get(target);
         Set<String> outCases = outCases(sig.out());
         for (Ast.ExampleRow row : ex.rows()) {
             checkRow(target, spec, sig, outCases, row, out);
@@ -199,7 +202,7 @@ public final class ExampleVerifier {
 
     // --- one row ------------------------------------------------------------------------------
 
-    private void checkRow(String target, Ast.SpecBehavior spec, TypeChecker.Sig sig,
+    private void checkRow(String target, Ast.SpecBehavior spec, Sig sig,
                           Set<String> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
@@ -274,7 +277,7 @@ public final class ExampleVerifier {
                     + "` is not an injected behavior of this module"));
             return null;
         }
-        Type outType = TypeChecker.successType(dep.ret(), symbols);
+        Type outType = TypeOps.successType(dep.ret(), symbols);
         // a value fake given inline on the row: `with dep = value`
         for (Ast.With w : row.withs()) {
             if (w.dep().equals(depName)) {
@@ -312,7 +315,7 @@ public final class ExampleVerifier {
     private Object tableProxy(Ast.Fake fk, Ast.SpecBehavior dep, Type outType, List<Diagnostic> out) {
         List<Type> paramTypes = new ArrayList<>();
         for (Ast.Param p : dep.params()) {
-            paramTypes.add(TypeChecker.successType(p.type(), symbols));
+            paramTypes.add(TypeOps.successType(p.type(), symbols));
         }
         List<Object[]> entries = new ArrayList<>();   // {keyTuple, value}
         boolean[] hasDefault = {false};
@@ -739,7 +742,7 @@ public final class ExampleVerifier {
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
                 throw new FixtureException("`" + c.fn() + "` takes one written string");
             }
-            return TypeChecker.parseTemporal(c.fn(), lit.value(), c.pos());
+            return CallElaborator.parseTemporal(c.fn(), lit.value(), c.pos());
         }
         if (!isNewtype(c.fn())) {
             throw new FixtureException("`" + c.fn() + "` is not a newtype; a fixture cannot call it");
@@ -752,7 +755,7 @@ public final class ExampleVerifier {
         String base = newtypeBase(c.fn());
         if (("Date".equals(base) || "DateTime".equals(base))
                 && c.args().get(0) instanceof Ast.StringLit lit) {
-            return TypeChecker.parseTemporal(base, lit.value(), c.pos());
+            return CallElaborator.parseTemporal(base, lit.value(), c.pos());
         }
         return raw(c.args().get(0));
     }

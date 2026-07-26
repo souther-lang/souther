@@ -2,7 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
-import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
@@ -100,7 +100,7 @@ final class ValueClassGen {
         // is verified at compile time through it — 金額(-5) is a compile error, not a runtime abort
         // (ADR-0032) — and the derived decoder passes it to Raoh's `refine` for an invariant no
         // constraint states exactly (issue #83).
-        if (data.newtype() && !TypeChecker.effectiveInvariants(data, symbols).isEmpty()) {
+        if (data.newtype() && !TypeOps.effectiveInvariants(data, symbols).isEmpty()) {
             emitCtfeCheck(data, fields, out);
         }
     }
@@ -118,7 +118,7 @@ final class ValueClassGen {
                             gen.bind(f.getKey(), slot, f.getValue());
                             slot += width(f.getValue());
                         }
-                        for (Ast.Expr inv : TypeChecker.effectiveInvariants(data, symbols)) {
+                        for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
                             gen.expr(inv);                 // the same boolean __construct checks
                             Label ok = code.newLabel();
                             code.ifne(ok);
@@ -348,7 +348,7 @@ final class ValueClassGen {
                         slot += width(f.getValue());
                     }
 
-                    for (Ast.Expr inv : TypeChecker.effectiveInvariants(data, symbols)) {
+                    for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
                         gen.expr(inv);
                         Label ok = code.newLabel();
                         code.ifne(ok);

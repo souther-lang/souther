@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
-import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 import souther.compiler.frontend.CstFrontend;
 
 import java.io.IOException;
@@ -148,9 +148,9 @@ public final class Prelude {
                 if (fn.isIntrinsic()) {
                     List<Type> params = new ArrayList<>();
                     for (Ast.FnParam p : fn.params()) {
-                        params.add(TypeChecker.resolveParamType(p.type(), noSymbols));
+                        params.add(TypeOps.resolveParamType(p.type(), noSymbols));
                     }
-                    Type result = TypeChecker.successType(fn.declaredReturn(), noSymbols);
+                    Type result = TypeOps.successType(fn.declaredReturn(), noSymbols);
                     INTRINSICS.put(qualified, new IntrinsicSig(fn.name(), params, result, fn.intrinsicKey()));
                 } else {
                     HELPERS.put(qualified, fn);
