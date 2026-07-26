@@ -2459,12 +2459,12 @@ A `+>->+` composition exposed with `+exposing+` requires an output signature (<<
 [,text]
 ----
 error E1607:
-`behavior 出荷する` declares `requires 引き当てる`, but `引き当てる` carries
-an implementation, so it is not an injection target.
-Compose `引き当てる` with `>->`, or remove its `let` so it becomes an injection target.
+`behavior 出荷する` declares `requires 引き当てる`, but `引き当てる` has an
+implementation of its own, so it is not an injection target.
+Remove `引き当てる` from `requires` and compose it with `>->`.
 ----
 
-`+requires+` names a behavior with no `+let+`, declared here or imported (<<requires>>). A name carrying an implementation is E1607, and so is a name that is no behavior in scope — reported at the clause, where it was written.
+`+requires+` names a behavior with no implementation of its own, declared here or imported (<<requires>>). A `+let+`-implemented behavior is E1607, and so is a `+>->+` composition — which is its own implementation and takes no `+let+` — and so is a name that is no behavior in scope. All three are reported at the clause, where the name was written.
 
 [#e1305]
 === An injected behavior constructs an uncreatable data

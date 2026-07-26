@@ -21,10 +21,11 @@ public final class SpecChecker {
     private SpecChecker() {}
 
     /**
-     * A {@code requires} names injection targets (spec 12.6, 13.2): a behavior with no {@code let},
-     * here or in a module this one imports. Reported where the clause is written, so a behavior that
-     * carries an implementation and one that was never declared are told apart — the body check sees
-     * only a call it cannot type and reports both as an arbitrary JVM call (E1401, issue #96).
+     * A {@code requires} names injection targets (spec 12.6, 13.2): a behavior with no implementation
+     * of its own — no {@code let}, and not a {@code >->} composition — here or in a module this one
+     * imports. Reported where the clause is written, so a behavior that has an implementation and one
+     * that was never declared are told apart — the body check sees only a call it cannot type and
+     * reports both as an arbitrary JVM call (E1401, issue #96).
      */
     static void checkRequiresAreInjectionTargets(Ast.Module module, Map<String, ReqSig> reqSigs,
                                                  Set<String> importedBehaviors) {
@@ -46,8 +47,8 @@ public final class SpecChecker {
                                     .at(spec.pos()).args(spec.name(), req)
                                     .hint("e1607.implemented.hint").build(),
                             "`behavior " + spec.name() + "` declares `requires " + req + "`, but `"
-                                    + req + "` carries an implementation, so it is not an injection"
-                                    + " target — compose it with `>->` instead (spec 13.2)");
+                                    + req + "` has an implementation of its own, so it is not an"
+                                    + " injection target — compose it with `>->` instead (spec 13.2)");
                 }
                 throw CompileException.of(
                         Diagnostic.of("E1607", "e1607.unknown").title("e1607.title")

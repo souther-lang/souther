@@ -1,12 +1,16 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.SourceContext;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -36,6 +40,37 @@ class CompileRequiresClauseTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E1607", e.code(), e.getMessage());
         assertTrue(e.getMessage().contains("helper"), e.getMessage());
+    }
+
+    @Test
+    void requiresNamingACompositionIsReportedWithoutAdvisingToRemoveALet() {
+        // a `>->` composition is its own implementation and has no `let` to remove, so the advice has
+        // to be the one that holds for every implementation: take the name out of `requires`
+        String src = """
+                module demo
+                data A = { x: Int }
+                data R = { z: Int }
+
+                behavior one : (a: A) -> A
+                    constructs A
+                let one (a) = A { x = a.x }
+
+                behavior two : (a: A) -> R
+                    constructs R
+                let two (a) = R { z = a.x }
+
+                behavior chain = one >-> two
+
+                behavior use : (a: A) -> R
+                    requires chain
+                let use (a, chain) = chain(a)
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("E1607", e.code(), e.getMessage());
+        String hint = new HumanRenderer(false).render(e.diagnostic(),
+                new SourceContext("demo.sou", src), Locale.ENGLISH);
+        assertTrue(hint.contains("Remove `chain` from `requires`"), hint);
+        assertFalse(hint.contains("`let`"), "a composition has no `let` to remove: " + hint);
     }
 
     @Test
