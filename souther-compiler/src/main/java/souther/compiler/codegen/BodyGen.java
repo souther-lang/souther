@@ -241,6 +241,13 @@ final class BodyGen {
                     }
                     code.return_();
                 });
+                if (valueNames.isEmpty() && injectedNames.isEmpty()) {
+                    // Captures are this class's only fields, so capturing nothing makes it stateless
+                    // and one instance per lambda site is enough. Two sites never share one, and
+                    // Souther has no function equality, so this is unobservable. Package-private:
+                    // every use site is in the module's own package.
+                    emitSharedInstance(cb, cd, 0, null);
+                }
                 cb.withMethodBody("apply", MTD_Fn_apply, ClassFile.ACC_PUBLIC, code -> {
                     BodyGen g = new BodyGen(ctx, code, null, cd, 2);   // slot 0 = this, slot 1 = the Object[] args
                     if (!injectedNames.isEmpty()) {
@@ -507,10 +514,9 @@ final class BodyGen {
                     if (var != null) {
                         load(code, var.slot(), var.type());
                     } else if (symbols.declaration(v.name()) instanceof Ast.UnitData) {
-                        ClassDesc cdU = cd(v.name());
-                        code.new_(cdU);
-                        code.dup();
-                        code.invokespecial(cdU, "<init>", MTD_void);
+                        // A unit data name in an expression constructs it (spec §unit-data), and a
+                        // unit type has exactly one value.
+                        loadSharedInstance(code, cd(v.name()));
                     } else {
                         throw new CompileException(v.pos(), "unbound identifier `" + v.name() + "`");
                     }
@@ -1271,6 +1277,13 @@ final class BodyGen {
             ClassDesc cd = ClassDesc.of(className);
             ctx.addSynth(className, generateLambdaClass(cd, params, body, paramTypes, resultType,
                     valueNames, valueTypes, injectedNames, reqSuccess, reqParams));
+
+            // `free` is partitioned into the two lists above, so this is the same condition
+            // generateLambdaClass interned on — it must stay the same one.
+            if (free.isEmpty()) {
+                loadSharedInstance(code, cd);
+                return;
+            }
 
             code.new_(cd);
             code.dup();

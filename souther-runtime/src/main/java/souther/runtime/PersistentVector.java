@@ -25,9 +25,25 @@ import java.util.function.Consumer;
  * <p>Values are never null (a Souther collection models absence with {@code Option}, not a null
  * element), which callers such as {@link Lists} rely on.
  *
- * <p>Bulk construction ({@link #from}, and {@link Lists#sort}/{@code sortBy}) is O(n) here through
- * repeated {@code append}; a transient (edit-token) builder would cut its constant factor and is a
- * later optimization, not needed for the asymptotics.
+ * <p>Bulk construction ({@link #from}, and {@link Lists#sort}/{@code sortBy}) fills one 32-slot tail
+ * per block through the package-private {@link Builder}, which owns every node it touches.
+ *
+ * <p><b>The claimed tail.</b> A version's tail array is 32 wide with only the first
+ * {@code cnt - tailoff()} slots in use, and successive appends write into the <em>same</em> array
+ * rather than copying it — which is what keeps {@code append}'s constant factor at O(1) instead of
+ * the O(32) an exactly-sized, re-copied tail costs (ADR-0060). A {@link Tail} hands out slot
+ * {@code j} to whoever moves {@code claimed} from {@code j} to {@code j + 1}, so <b>each slot is
+ * written at most once, ever</b>: a version holding {@code m} elements reads only {@code [0, m)},
+ * and those were all written before it was constructed. A second append from that same version
+ * loses the claim and copies instead, so branching keeps working.
+ *
+ * <p>The claim is confined to one thread rather than made atomic, so every slot a version can read
+ * was written by the thread that froze that version, before the freeze. The JLS 17.5 guarantee for
+ * objects reachable from a final field therefore still covers the whole tail, exactly as it did when
+ * every append allocated a fresh one — a vector handed to another thread reads correctly even if it
+ * was published through a data race. An append from a non-owning thread copies once and owns the
+ * copy, which costs nothing on the fold path (single-threaded) and keeps the hot path free of any
+ * atomic instruction.
  */
 public final class PersistentVector<E> extends AbstractList<E> implements RandomAccess {
 
@@ -38,7 +54,67 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
     /** Internal trie nodes are always {@code WIDTH} wide (nulls for absent children); a leaf that
      *  came from a full tail is a {@code WIDTH}-wide element array. */
     private static final Object[] EMPTY_NODE = new Object[WIDTH];
-    private static final Object[] EMPTY_TAIL = new Object[0];
+
+    /**
+     * A tail array plus the claim that decides who may still extend it. The whole ownership rule
+     * lives here; see the class javadoc for why it is a rule and not a lock.
+     */
+    private static final class Tail {
+        /** Final so the JLS 17.5 reachable-from-a-final-field guarantee reaches the elements. */
+        private final Object[] a;
+        /**
+         * {@code Thread.threadId()} of the only thread that may extend {@link #a}; 0 = nobody.
+         *
+         * <p>This rests on thread ids not being reused. {@code Thread.threadId()} (Java 19+) is
+         * documented as unique for the JVM's lifetime, unlike the deprecated {@code getId()} it
+         * replaced. If one were ever reused, a new thread inheriting a dead thread's id would pass
+         * the owner test on a tail it did not build and could re-claim a written slot, which is
+         * silent corruption — so the guarantee is load-bearing, not incidental.
+         */
+        private final long owner;
+        /** Slots handed out so far. Written only by {@link #owner}, and only upward. */
+        private int claimed;
+
+        private Tail(Object[] a, long owner, int claimed) {
+            this.a = a;
+            this.owner = owner;
+            this.claimed = claimed;
+        }
+
+        /**
+         * Takes slot {@code used} for the caller, who may then write it.
+         *
+         * <p>Each test rejects a different way of not being the one extender: {@code owner} rejects
+         * a sealed tail and another thread's; {@code claimed} rejects a version that has already
+         * been extended, so a branch copies rather than overwriting its sibling's element; and
+         * {@code a.length} is the bound the caller's store needs, which is why it stays here even
+         * though every owned array is {@code WIDTH} wide today.
+         */
+        boolean tryClaim(int used) {
+            if (owner != Thread.currentThread().threadId() || claimed != used || used >= a.length) {
+                return false;
+            }
+            claimed = used + 1;
+            return true;
+        }
+
+        /** Holds the first {@code used} elements of this tail, then {@code val}, in a fresh
+         *  {@code WIDTH}-wide array the calling thread owns. The losing side of a claim. */
+        Tail extendedCopy(int used, Object val) {
+            Object[] fresh = new Object[WIDTH];
+            System.arraycopy(a, 0, fresh, 0, used);
+            fresh[used] = val;
+            return new Tail(fresh, Thread.currentThread().threadId(), used + 1);
+        }
+
+        /** A tail nobody may extend. {@code claimed == a.length} leaves no slot to claim: the shared
+         *  empty tail, a {@link Builder} handover at its exact length, a full tail becoming a leaf. */
+        static Tail sealed(Object[] a) {
+            return new Tail(a, 0L, a.length);
+        }
+    }
+
+    private static final Tail EMPTY_TAIL = Tail.sealed(new Object[0]);
 
     public static final PersistentVector<?> EMPTY =
             new PersistentVector<>(0, BITS, EMPTY_NODE, EMPTY_TAIL);
@@ -46,13 +122,16 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
     private final int cnt;
     private final int shift;
     private final Object[] root;
-    private final Object[] tail;
+    private final Tail tail;
 
-    private PersistentVector(int cnt, int shift, Object[] root, Object[] tail) {
+    private PersistentVector(int cnt, int shift, Object[] root, Tail tail) {
         this.cnt = cnt;
         this.shift = shift;
         this.root = root;
         this.tail = tail;
+        // Every slot this version reads has been claimed, and no claim runs past the array.
+        assert cnt - tailoff() <= tail.claimed && tail.claimed <= tail.a.length
+                : "tail claim out of step with cnt=" + cnt;
     }
 
     @SuppressWarnings("unchecked")
@@ -95,12 +174,18 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         return ((cnt - 1) >>> BITS) << BITS;
     }
 
+    /**
+     * The leaf array holding element {@code i}. For an index in the tail the array returned may be
+     * <em>longer</em> than the logical leaf, its later slots belonging to longer versions that share
+     * it, so every caller must bound its read by {@code cnt} and never by the array's length. That
+     * is the invariant a change here is most likely to break.
+     */
     private Object[] arrayFor(int i) {
         if (i < 0 || i >= cnt) {
             throw new IndexOutOfBoundsException("Index " + i + " out of bounds for length " + cnt);
         }
         if (i >= tailoff()) {
-            return tail;
+            return tail.a;
         }
         Object[] node = root;
         for (int level = shift; level > 0; level -= BITS) {
@@ -118,25 +203,35 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
     /** This vector with {@code val} appended (Clojure {@code conj}); O(1) amortized, sharing the
      *  unchanged structure with {@code this}. */
     public PersistentVector<E> append(E val) {
-        // Room left in the tail: copy the tail (at most WIDTH long) and add the element.
-        if (cnt - tailoff() < WIDTH) {
-            Object[] newTail = new Object[tail.length + 1];
-            System.arraycopy(tail, 0, newTail, 0, tail.length);
-            newTail[tail.length] = val;
-            return new PersistentVector<>(cnt + 1, shift, root, newTail);
+        int used = cnt - tailoff();
+        if (used == WIDTH) {
+            return appendSpilling(val);
         }
-        // Tail is full: push it into the trie as a leaf, start a fresh one-element tail.
+        // Claim the slot, then write it: no existing version reads it, and whoever lost the claim
+        // never touches it, so the write is visible to nothing but the vector returned here.
+        if (tail.tryClaim(used)) {
+            tail.a[used] = val;
+            return new PersistentVector<>(cnt + 1, shift, root, tail);
+        }
+        return new PersistentVector<>(cnt + 1, shift, root, tail.extendedCopy(used, val));
+    }
+
+    /** The tail is full: push it into the trie as a leaf and start a fresh one-element tail. Split
+     *  out so {@link #append}'s claim path stays small enough for the JIT to inline. */
+    private PersistentVector<E> appendSpilling(E val) {
+        assert tail.a.length == WIDTH : "a full tail must be a WIDTH-wide leaf";
+        Object[] leaf = tail.a;
         Object[] newRoot;
         int newShift = shift;
         if ((cnt >>> BITS) > (1 << shift)) {   // the trie is full: add a level above the root
             newRoot = new Object[WIDTH];
             newRoot[0] = root;
-            newRoot[1] = newPath(shift, tail);
+            newRoot[1] = newPath(shift, leaf);
             newShift += BITS;
         } else {
-            newRoot = pushTail(shift, root, tail);
+            newRoot = pushTail(shift, root, leaf);
         }
-        return new PersistentVector<>(cnt + 1, newShift, newRoot, new Object[]{val});
+        return new PersistentVector<>(cnt + 1, newShift, newRoot, EMPTY_TAIL.extendedCopy(0, val));
     }
 
     /** Copies the spine down to where the full tail becomes a new leaf, sharing every untouched
@@ -173,7 +268,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         return new Iterator<>() {
             private int i = 0;
             private int base = 0;
-            private Object[] leaf = cnt > 0 ? arrayFor(0) : EMPTY_TAIL;
+            private Object[] leaf = cnt > 0 ? arrayFor(0) : EMPTY_TAIL.a;
 
             @Override
             public boolean hasNext() {
@@ -278,8 +373,10 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
             if (cnt == 0) {
                 return empty();
             }
+            // Sealed and at its exact length: a decoded or sorted list is long-lived and should not
+            // carry a 32-wide array for appends that will never come (ADR-0060).
             Object[] finalTail = tailLen == WIDTH ? tail : Arrays.copyOf(tail, tailLen);
-            return new PersistentVector<>(cnt, shift, root, finalTail);
+            return new PersistentVector<>(cnt, shift, root, Tail.sealed(finalTail));
         }
 
         /** Pushes the now-full tail into the trie, mirroring {@link #append}'s spill but mutating the

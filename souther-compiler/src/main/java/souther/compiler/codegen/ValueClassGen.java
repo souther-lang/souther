@@ -187,6 +187,12 @@ final class ValueClassGen {
             }
             emitDefaultCtor(cb);
             emitValueEquality(cb, cdU, Map.of());   // all units of a type are the same value
+            // A unit has no fields, no invariant and so no `__construct` (spec §unit-data), so the
+            // type has exactly one value. The field is public because another module's generated
+            // code loads it, and on an exposed unit that puts the value within reach of hand-written
+            // Java too — which costs nothing a unit was protecting: it carries no invariant, and
+            // construction is governed by `constructs` rather than by visibility (ADR-0059).
+            emitSharedInstance(cb, cdU);
             // a unit is a field-less data: its codec reads/writes nothing but the tag the sum adds
             // A unit ignores its input, so it decodes from every source. Generate all three so
             // unit cases of a JSON/record sum have a matching decoder to dispatch to.
