@@ -51,7 +51,12 @@ public final class DataChecker {
     }
 
     public static boolean isInvariantBearing(String typeName, Symbols symbols) {
-        return symbols.declaration(typeName) instanceof Ast.Data d && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
+        return isInvariantBearing(symbols.resolve(typeName), symbols);
+    }
+
+    public static boolean isInvariantBearing(TypeName typeName, Symbols symbols) {
+        return typeName != null && symbols.get(typeName) instanceof Ast.Data d
+                && !TypeOps.effectiveInvariants(d, symbols).isEmpty();
     }
 
     /**

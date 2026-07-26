@@ -83,8 +83,8 @@ public final class MatchElaborator {
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
             for (String written : c.caseTypes()) {
-                TypeName caseName = caseOrBuiltin(written, ctx.symbols());
-                if (!cases.contains(caseName)) {
+                TypeName caseName = ctx.symbols().resolveCase(written);
+                if (caseName == null || !cases.contains(caseName)) {
                     throw notCase(written, what, c, m, cases, ctx.symbols());
                 }
                 if (!covered.add(caseName)) {
@@ -185,29 +185,19 @@ public final class MatchElaborator {
     /** The type a match case binds. A primitive-named case (e.g. {@code Int} in {@code Int |
      * DivisionByZero}) binds that primitive; a data-named case binds its data type. */
     public static Type caseBindType(String caseName, Symbols symbols) {
-        return switch (caseName) {
-            case "Int" -> Type.INT;
-            case "String" -> Type.STRING;
-            case "Bool" -> Type.BOOL;
-            case "Decimal" -> Type.DECIMAL;
-            case "Date" -> Type.DATE;
-            case "DateTime" -> Type.DATETIME;
-            default -> Type.ref(caseOrBuiltin(caseName, symbols));
-        };
-    }
-
-    /** The canonical name of a written case. A case of a primitive-headed union names a primitive
-     * ({@code Int | DivisionByZero}); otherwise it is a data case of this module or an imported one;
-     * failing both, one of the built-in error cases, which the runtime declares rather than a module. */
-    static TypeName caseOrBuiltin(String caseName, Symbols symbols) {
         switch (caseName) {
-            case "Int", "String", "Bool", "Decimal", "Date", "DateTime", "Raw" -> {
-                return TypeName.primitive(caseName);
-            }
+            case "Int" -> { return Type.INT; }
+            case "String" -> { return Type.STRING; }
+            case "Bool" -> { return Type.BOOL; }
+            case "Decimal" -> { return Type.DECIMAL; }
+            case "Date" -> { return Type.DATE; }
+            case "DateTime" -> { return Type.DATETIME; }
             default -> { }
         }
-        TypeName resolved = symbols.resolve(caseName);
-        return resolved != null ? resolved : TypeName.runtime(caseName);
+        TypeName resolved = symbols.resolveCase(caseName);
+        // an arm the match check already accepted resolves; anything else binds nothing readable, and
+        // the caller (an analysis running beside the check) leaves the binding untyped
+        return resolved == null ? null : Type.ref(resolved);
     }
 
     /** A constructor-destructuring pattern {@code X(Y(s))} opens one newtype per layer: {@code X}

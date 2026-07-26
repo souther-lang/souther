@@ -116,7 +116,10 @@ final class InvariantChecker {
                 for (Ast.Case c : m.cases()) {
                     Map<String, Type> t2 = new HashMap<>(types);
                     if (c.binding() != null && c.caseTypes().size() == 1) {
-                        t2.put(c.binding(), Type.ref(symbols.resolve(c.caseTypes().get(0))));
+                        Type bound = MatchElaborator.caseBindType(c.caseTypes().get(0), symbols);
+                        if (bound != null) {
+                            t2.put(c.binding(), bound);
+                        }
                     }
                     walk(c.body(), d, t2);
                 }

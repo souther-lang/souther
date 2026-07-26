@@ -712,7 +712,7 @@ final class BodyGen {
             Ast.Data owner = (Ast.Data) symbols.get(ntName);
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(ntName);
-            if (DataChecker.isInvariantBearing(ntName.name(), symbols)) {
+            if (DataChecker.isInvariantBearing(ntName, symbols)) {
                 finishInvariantConstruct(cdType, flds);
             } else {
                 int s = slot(base);

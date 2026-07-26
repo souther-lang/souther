@@ -108,6 +108,21 @@ public final class Symbols {
         return name == null ? null : get(name);
     }
 
+    /**
+     * What a written case name denotes. Beside the data cases a module declares or imports, an arm may
+     * name a case of a primitive-headed union: the primitive itself ({@code Int} in {@code Int |
+     * DivisionByZero}), or one of the error cases the runtime declares rather than any module. Null
+     * when it is none of those.
+     */
+    public TypeName resolveCase(String written) {
+        return switch (written) {
+            case "Int", "String", "Bool", "Decimal", "Date", "DateTime", "Raw" ->
+                    TypeName.primitive(written);
+            case "DivisionByZero", "NotANumber" -> TypeName.runtime(written);
+            default -> resolve(written);
+        };
+    }
+
     /** Whether {@code name} is declared in another module (spec 4). */
     public boolean isForeign(TypeName name) {
         return !name.module().equals(module);

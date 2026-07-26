@@ -224,8 +224,10 @@ public final class ExampleVerifier {
         }
         // validate the expected arm/value against the output cases before running
         String expectedArm = expectedArm(row.expected());
+        TypeName named = expectedArm == null ? null : symbols.resolveCase(expectedArm);
+        // a name nothing here denotes is not an arm of the target either, and says so the same way
         if (expectedArm != null && !outCases.isEmpty()
-                && !outCases.contains(symbols.resolve(expectedArm))) {
+                && (named == null || !outCases.contains(named))) {
             List<String> names = new ArrayList<>();
             for (TypeName c : outCases) {
                 names.add(c.name());
@@ -564,7 +566,10 @@ public final class ExampleVerifier {
      * case, so its output decodes against that case, not the declared sum (which has no decoder). */
     private Type fixtureType(Ast.Expr e, Type declared) {
         String arm = expectedArm(e);
-        return arm != null ? Type.ref(symbols.resolve(arm)) : declared;
+        TypeName named = arm == null ? null : symbols.resolveCase(arm);
+        // a fixture naming nothing this target can produce is reported by the arm check; decoding it
+        // against the declared type is what turns it into that diagnostic rather than a crash
+        return named != null ? Type.ref(named) : declared;
     }
 
     /** The written expectation, rendered as it was written: a bare arm stays the arm name, anything
