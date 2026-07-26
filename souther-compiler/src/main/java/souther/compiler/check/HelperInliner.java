@@ -283,10 +283,77 @@ public final class HelperInliner {
         return false;
     }
 
+    /**
+     * The parameters a call's callee declares, as the caller wrote the name: a helper's own, or —
+     * for the {@code List.fold} sugar — {@code foldFrom}'s without the index the sugar supplies.
+     * Null when the name is not a helper (a builtin, an injected behavior, or unknown).
+     */
+    private List<Ast.FnParam> declaredParams(Ast.Call call) {
+        if (call.fn().equals("List.fold") && call.args().size() == 3) {
+            Ast.FnDef foldFrom = helpers.get("List.foldFrom");
+            return foldFrom == null ? null : foldFrom.params().subList(0, 3);
+        }
+        Ast.FnDef helper = helpers.get(call.fn());
+        return helper == null ? null : helper.params();
+    }
+
+    /**
+     * Rejects a lambda written on a parameter that takes a value. The standard library takes its
+     * function first and its collection last (spec §pipe), so the arguments given the other way round
+     * are the common first mistake — and left alone the lambda travels on as an ordinary value, to be
+     * reported deep in the expansion as a block that escaped, against a rule about first-class
+     * functions the caller has not met yet. Reported here, at the call, the parameter it landed on and
+     * the one that takes the function are both still in hand, so the order can be named.
+     *
+     * <p>Checked against the name as written, before {@code List.fold} desugars to {@code foldFrom}:
+     * the report names the caller's own call, not what the sugar expands to. A block with no
+     * parameters is a braced block, not a lambda, and is left to the checker.
+     */
+    private void checkFunctionArgumentPlacement(Ast.Call call) {
+        List<Ast.FnParam> params = declaredParams(call);
+        if (params == null || params.size() != call.args().size()) {
+            return;   // not a helper, or an arity mismatch reported with the call itself
+        }
+        int fnParam = -1;
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i).type() instanceof Ast.FnType) {
+                fnParam = i;
+                break;
+            }
+        }
+        for (int i = 0; i < params.size(); i++) {
+            Ast.ParamType declared = params.get(i).type();
+            if (declared == null || declared instanceof Ast.FnType
+                    || !(call.args().get(i) instanceof Ast.Block lambda) || lambda.params().isEmpty()) {
+                continue;
+            }
+            String param = params.get(i).name();
+            if (fnParam < 0) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.fn.argnotfn").title("check.fn.title")
+                                .at(lambda.pos()).args(call.fn(), i + 1, param).build(),
+                        "argument " + (i + 1) + " of `" + call.fn() + "` is `" + param
+                                + "`, which does not take a function");
+            }
+            String shape = params.stream().map(Ast.FnParam::name)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.fn.argorder").title("check.fn.title")
+                            .at(lambda.pos())
+                            .args(call.fn(), i + 1, param, fnParam + 1, params.get(fnParam).name(), shape)
+                            .hint("check.fn.argorder.hint").build(),
+                    "argument " + (i + 1) + " of `" + call.fn() + "` is `" + param
+                            + "`, which does not take a function: the function goes to argument "
+                            + (fnParam + 1) + " (`" + params.get(fnParam).name() + "`). Write `"
+                            + call.fn() + "(" + shape + ")`.");
+        }
+    }
+
     /** Rewrites every helper call in {@code e} to its inlined body. */
     public Ast.Expr inline(Ast.Expr e) {
         return switch (e) {
             case Ast.Call rawCall -> {
+                checkFunctionArgumentPlacement(rawCall);
                 Ast.Call call = desugarNamedBlock(desugarFold(rawCall));
                 List<Ast.Expr> args = new ArrayList<>();
                 for (Ast.Expr a : call.args()) {
@@ -351,11 +418,24 @@ public final class HelperInliner {
                             scopedLambdas.put(f, new Ast.FnDef(f, lparams, null, null, lambda.body(), lambda.pos()));
                             lambdaOrigins.put(f, new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
                         } else {
-                            throw CompileException.of(
-                                    Diagnostic.of(null, "check.fn.mustbenamed").title("check.fn.title")
-                                            .at(arg.pos()).args(p.name(), helper.name()).build(),
-                                    "the function passed to `" + p.name() + "` of `let " + helper.name()
-                                            + "` must be a named function or a lambda");
+                            // Neither a name nor a lambda: a value written where the function goes —
+                            // the argument-order mistake made with a named helper rather than a
+                            // lambda. Named against the call as written, with the declared order.
+                            List<Ast.FnParam> written = declaredParams(rawCall);
+                            String shape = written == null ? null : written.stream()
+                                    .map(Ast.FnParam::name)
+                                    .collect(java.util.stream.Collectors.joining(", "));
+                            Diagnostic.Builder d = Diagnostic.of(null, "check.fn.argnotvalue")
+                                    .title("check.fn.title").at(arg.pos())
+                                    .args(rawCall.fn(), i + 1, p.name(), shape);
+                            if (shape != null) {
+                                d.hint("check.fn.argnotvalue.hint");
+                            }
+                            throw CompileException.of(d.build(),
+                                    "argument " + (i + 1) + " of `" + rawCall.fn() + "` is `" + p.name()
+                                            + "`, which takes a function: pass a named function or a lambda"
+                                            + (shape == null ? ""
+                                                    : ". Write `" + rawCall.fn() + "(" + shape + ")`."));
                         }
                     } else {
                         String f = "$" + k + "_" + p.name();

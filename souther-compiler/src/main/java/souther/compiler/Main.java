@@ -186,7 +186,7 @@ public final class Main {
         try {
             System.out.println(Runner.runCli(args));
         } catch (Runner.RunException e) {
-            System.err.println(e.getMessage());
+            System.err.println(e.localized(Messages.resolveLocale(render.lang)));
             System.exit(e.exitCode);
         } catch (CompileException e) {
             reportCompileError(e, firstSource(args), render);
