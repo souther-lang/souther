@@ -44,6 +44,7 @@ public enum SyntaxKind {
     EXPOSING_CLAUSE,
     EXPOSED_ENTRY,
     IMPORT_DECL,
+    IMPORT_ALIAS,       // `as B` on an import: the qualifier this module reads the module under
     NAME_LIST,          // parenthesised comma list of names (import/exposing bodies)
     QUALIFIED_NAME,     // dotted module or member name
 

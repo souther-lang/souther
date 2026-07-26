@@ -1,11 +1,13 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Type;
+import souther.compiler.check.TypeName;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
@@ -45,7 +47,7 @@ public final class Backend {
     /** Aliases of {@link CodegenContext#pkg}/{@link CodegenContext#symbols}, read as bare names by
      * the code still living here. */
     private final String pkg;
-    private final Map<String, Ast.Def> symbols;
+    private final Symbols symbols;
 
     private final CodecGen codec;
     private final ValueClassGen value;
@@ -88,7 +90,7 @@ public final class Backend {
      * composition here inherits as requirements to inject and bind (spec 13.2, 14.3);
      * {@code checked} carries the type checker's elaborated bodies, which is what the emitter reads
      * instead of inferring types again (issue #81). */
-    public static Map<String, byte[]> generate(Ast.Module module, Map<String, Ast.Def> symbols,
+    public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> importedSigs,
                                                Set<String> importedInjected,
@@ -222,7 +224,7 @@ public final class Backend {
                 // pass-through output (会員) by shape alone.
                 List<String> unitCases = new ArrayList<>();
                 for (Ast.TypeRef t : spec.ret().cases()) {
-                    if (b.symbols.get(t.name()) instanceof Ast.UnitData) {
+                    if (b.symbols.declaration(t.name()) instanceof Ast.UnitData) {
                         unitCases.add(t.name());
                     }
                 }
@@ -232,7 +234,7 @@ public final class Backend {
                     for (String tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.get(tn) instanceof Ast.Data data && seenConstruct.add(tn)) {
+                        if (b.symbols.declaration(tn) instanceof Ast.Data data && seenConstruct.add(tn)) {
                             dataConstructs.add(data);
                         }
                     }
@@ -616,7 +618,10 @@ public final class Backend {
             if (sig == null || !(sig.out() instanceof Type.Union)) {
                 continue;
             }
-            List<String> cases = new ArrayList<>(TypeOps.leafCases(sig.out(), symbols));
+            List<String> cases = new ArrayList<>();
+            for (TypeName c : TypeOps.leafCases(sig.out(), symbols)) {
+                cases.add(c.name());
+            }
             Collections.sort(cases);
             results.put(CodegenContext.behaviorResultClass(bd.name()), cases);
         }
@@ -662,6 +667,10 @@ public final class Backend {
 
 
     private ClassDesc caseClass(String typeName) {
+        return ctx.caseClass(typeName);
+    }
+
+    private ClassDesc caseClass(TypeName typeName) {
         return ctx.caseClass(typeName);
     }
 
@@ -813,9 +822,9 @@ public final class Backend {
                         // than offering it to the stages after this one (spec 14.2). Branching to
                         // the end is what makes a retired case unreachable without tagging it — the
                         // same case type may legitimately reappear on the main line downstream.
-                        List<String> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
+                        List<TypeName> accepted = PipelineSigs.mainlineCases(mainline, g, symbols);
                         Label doApply = code.newLabel();
-                        for (String caseName : accepted) {
+                        for (TypeName caseName : accepted) {
                             code.aload(1);
                             code.instanceOf(caseClass(caseName));
                             code.ifne(doApply);

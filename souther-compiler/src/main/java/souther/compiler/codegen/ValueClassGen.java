@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeOps;
@@ -32,7 +33,7 @@ final class ValueClassGen {
 
     private final CodegenContext ctx;
     private final String pkg;
-    private final Map<String, Ast.Def> symbols;
+    private final Symbols symbols;
     private final CodecGen codec;
 
     ValueClassGen(CodegenContext ctx, CodecGen codec) {

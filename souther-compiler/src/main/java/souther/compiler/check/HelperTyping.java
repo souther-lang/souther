@@ -33,7 +33,7 @@ public final class HelperTyping {
      * {@code requires} checks are the caller's (the helper is inlined there), so they are not
      * repeated here.
      */
-    static void checkHelpers(HelperInliner inliner, Map<String, Ast.Def> symbols,
+    static void checkHelpers(HelperInliner inliner, Symbols symbols,
                                      Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
                                      Ast.Module module, Map<String, Ast.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
@@ -141,7 +141,7 @@ public final class HelperTyping {
      * behavior; a helper fn from its own annotations, leaving an un-annotated parameter (itself still
      * being inferred) out, so an argument that refers to one simply won't type. Built once per module.
      */
-    private static List<CallScope> inferenceScopes(Ast.Module module, Map<String, Ast.Def> symbols) {
+    private static List<CallScope> inferenceScopes(Ast.Module module, Symbols symbols) {
         Map<String, Ast.SpecBehavior> specs = new HashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior s) {
@@ -177,7 +177,7 @@ public final class HelperTyping {
      * completes the env and runs the standalone body check.
      */
     private static Map<Integer, Type> inferHelperParams(Ast.FnDef h, List<Integer> inferred,
-            List<CallScope> scopes, HelperInliner inliner, Map<String, Ast.Def> symbols,
+            List<CallScope> scopes, HelperInliner inliner, Symbols symbols,
             Map<String, ReqSig> reqSigs) {
         Map<Integer, Type> unified = new HashMap<>();
         Map<Integer, Ast.Expr> untypeable = new HashMap<>();
@@ -248,7 +248,7 @@ public final class HelperTyping {
      * a lambda parameter simply won't type — the parameter then falls back to requiring an annotation.
      */
     private static void collectHelperCalls(Ast.Expr e, Map<String, Type> env, String target,
-            Map<String, Ast.Def> symbols, Map<String, ReqSig> reqs, HelperInliner inliner,
+            Symbols symbols, Map<String, ReqSig> reqs, HelperInliner inliner,
             java.util.function.BiConsumer<Ast.Call, Map<String, Type>> onCall) {
         if (e instanceof Ast.Call call) {
             if (call.fn().equals(target)) {
@@ -280,7 +280,7 @@ public final class HelperTyping {
     }
 
     /** The wider of two types when one is assignable to the other, else null (an irreconcilable pair). */
-    private static Type widerType(Type a, Type b, Map<String, Ast.Def> symbols) {
+    private static Type widerType(Type a, Type b, Symbols symbols) {
         if (TypeOps.assignable(a, b, symbols)) {
             return b;
         }
@@ -296,7 +296,7 @@ public final class HelperTyping {
      * the type can't be inferred through the cycle. Registered in a body's environment so a self- or
      * mutual call type-checks (spec 13.1).
      */
-    static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Map<String, Ast.Def> symbols) {
+    static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
         Map<String, Type> sigs = new HashMap<>();
         for (String name : inliner.recursiveHelpers()) {
             Ast.FnDef h = inliner.helper(name);
@@ -384,7 +384,7 @@ public final class HelperTyping {
      * argument's type cannot be determined in the available scope (a value bound further out), it is
      * skipped and the ordinary inlined check still applies.
      */
-    static void checkFunctionArgs(Ast.Expr e, Map<String, Type> env, Map<String, Ast.Def> symbols,
+    static void checkFunctionArgs(Ast.Expr e, Map<String, Type> env, Symbols symbols,
                                           Map<String, ReqSig> reqs, HelperInliner inliner) {
         if (e instanceof Ast.Call call) {
             checkHelperCallFnArgs(call, env, symbols, reqs, inliner);
@@ -392,7 +392,7 @@ public final class HelperTyping {
         TypeChecker.forEachChild(e, sub -> checkFunctionArgs(sub, env, symbols, reqs, inliner));
     }
 
-    private static void checkHelperCallFnArgs(Ast.Call call, Map<String, Type> env, Map<String, Ast.Def> symbols,
+    private static void checkHelperCallFnArgs(Ast.Call call, Map<String, Type> env, Symbols symbols,
                                               Map<String, ReqSig> reqs, HelperInliner inliner) {
         Ast.FnDef h = inliner.helper(call.fn());
         if (h == null || call.args().size() != h.params().size()) {
@@ -474,7 +474,7 @@ public final class HelperTyping {
     }
 
     private static void checkFunctionArg(Ast.FnDef h, String paramName, Type.FnOf want, Ast.Expr arg,
-                                         Map<String, Type> env, Map<String, Ast.Def> symbols,
+                                         Map<String, Type> env, Symbols symbols,
                                          Map<String, ReqSig> reqs, HelperInliner inliner,
                                          Map<String, Type> bind) {
         if (arg instanceof Ast.Block lambda) {
@@ -533,7 +533,7 @@ public final class HelperTyping {
      */
     static Map<String, Set<String>> recursiveHelperConstructs(
             Set<String> recursive, Map<String, Ast.Expr> loweredBodies,
-            HelperInliner inliner, Map<String, Ast.Def> symbols) {
+            HelperInliner inliner, Symbols symbols) {
         Map<String, Set<String>> own = new HashMap<>();
         Map<String, Set<String>> calls = new HashMap<>();
         for (String h : recursive) {

@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
@@ -152,7 +153,7 @@ public final class Runner {
 
         Map<String, byte[]> classes = Compiler.compile(source, moduleName);
         Ast.Module module = CstFrontend.parse(source, moduleName);
-        Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
+        Symbols symbols = TypeChecker.symbols(module);
         Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols);
 
         Ast.BehaviorDef spec = resolveBehavior(module, behaviorName);
@@ -363,13 +364,14 @@ public final class Runner {
         }
         if (type instanceof Type.Ref ref) {
             try {
-                Class<?> c = loader.loadClass(pkg + "." + ref.name());
+                Class<?> c = loader.loadClass(ref.name().qualified());
                 @SuppressWarnings("unchecked")   // the generated class's factory erases at the reflection boundary
                 Decoder<JsonNode, ?> decoder = (Decoder<JsonNode, ?>) c.getMethod("jsonDecoder").invoke(null);
                 return decoder;
             } catch (ReflectiveOperationException e) {
                 throw fail("run.decode.nodecoder",
-                        "cannot obtain a decoder for `" + ref.name() + "`: " + e, ref.name(), e.toString());
+                        "cannot obtain a decoder for `" + ref.name().name() + "`: " + e,
+                        ref.name().name(), e.toString());
             }
         }
         if (type instanceof Type.ListOf list) {

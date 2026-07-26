@@ -8,6 +8,7 @@ import souther.compiler.diag.SourcePos;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,7 +26,7 @@ public final class TypeOps {
     private TypeOps() {}
 
     /** Resolves a helper parameter's written type: an ordinary type or a function type. */
-    public static Type resolveParamType(Ast.ParamType t, Map<String, Ast.Def> symbols) {
+    public static Type resolveParamType(Ast.ParamType t, Symbols symbols) {
         return switch (t) {
             case Ast.RetType rt -> successType(rt, symbols);
             case Ast.FnType ft -> {
@@ -39,7 +40,7 @@ public final class TypeOps {
     }
 
     /** The output type of a behavior return: a single case, or a union of two or more cases. */
-    public static Type successType(Ast.RetType ret, Map<String, Ast.Def> symbols) {
+    public static Type successType(Ast.RetType ret, Symbols symbols) {
         List<Type> members = new ArrayList<>();
         for (Ast.TypeRef t : ret.cases()) {
             members.add(resolveType(t, symbols));
@@ -47,7 +48,7 @@ public final class TypeOps {
         if (members.size() == 1) {
             return members.get(0);
         }
-        Set<String> names = new HashSet<>();
+        Set<TypeName> names = new HashSet<>();
         for (Type m : members) {
             if (!(m instanceof Type.Ref r)) {
                 throw CompileException.of(
@@ -61,7 +62,7 @@ public final class TypeOps {
     }
 
     /** Builds a Ref (one name) or Union (two or more) from a set of case names. */
-    static Type caseSetType(Set<String> names) {
+    static Type caseSetType(Set<TypeName> names) {
         if (names.size() == 1) {
             return Type.ref(names.iterator().next());
         }
@@ -72,7 +73,7 @@ public final class TypeOps {
         return t instanceof Type.Ref || t instanceof Type.Union;
     }
 
-    public static Set<String> namesOf(Type t) {
+    public static Set<TypeName> namesOf(Type t) {
         if (t instanceof Type.Ref r) {
             return Set.of(r.name());
         }
@@ -84,9 +85,9 @@ public final class TypeOps {
 
     /** Case names of a stage output, treating a {@code Raw} encoder output as the case {@code "Raw"}
      * so it can be unioned with propagated error cases (spec 14.1, 24). */
-    static Set<String> caseNamesOf(Type t) {
+    static Set<TypeName> caseNamesOf(Type t) {
         if (t == Type.RAW) {
-            return Set.of("Raw");
+            return Set.of(TypeName.primitive("Raw"));
         }
         return namesOf(t);
     }
@@ -102,23 +103,24 @@ public final class TypeOps {
     /** The sum type that {@code t}'s case belongs to, or null when {@code t} is not a case of a named
      * sum. A {@code fold} whose seed is a case ({@code PricedCart}) and whose step grows and matches the
      * accumulator at the sum ({@code PricedCart | NotFound}) is typed at that sum, not the seed case. */
-    public static Type enclosingSum(Type t, Map<String, Ast.Def> symbols) {
+    public static Type enclosingSum(Type t, Symbols symbols) {
         if (!(t instanceof Type.Ref ref) || symbols.get(ref.name()) instanceof Ast.SumData) {
             return null;
         }
-        // A case may belong to more than one sum; pick by name so the choice is deterministic across
-        // runs rather than dependent on the symbol map's iteration order.
+        // A sum and its cases are declared together, so only that module can hold the sum this case
+        // belongs to. A case may belong to more than one; pick by name so the choice is deterministic
+        // across runs rather than dependent on the symbol map's iteration order.
         String chosen = null;
-        for (Ast.Def d : symbols.values()) {
-            if (d instanceof Ast.SumData sum && sum.cases().contains(ref.name())
+        for (Ast.Def d : symbols.declaredIn(ref.name().module()).values()) {
+            if (d instanceof Ast.SumData sum && sum.cases().contains(ref.name().name())
                     && (chosen == null || sum.name().compareTo(chosen) < 0)) {
                 chosen = sum.name();
             }
         }
-        return chosen == null ? null : Type.ref(chosen);
+        return chosen == null ? null : Type.ref(ref.name().sibling(chosen));
     }
 
-    public static boolean isSumType(Type t, Map<String, Ast.Def> symbols) {
+    public static boolean isSumType(Type t, Symbols symbols) {
         return t instanceof Type.Union
                 || (t instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.SumData);
     }
@@ -126,25 +128,25 @@ public final class TypeOps {
     /** The cases of {@code t} when it is a sum — a declared {@code data S = A | B} or the union a
      * branch widened to — with a case that is itself a sum folded to its own cases. Null when
      * {@code t} is not a sum at all. */
-    static List<String> sumCases(Type t, Map<String, Ast.Def> symbols) {
+    static List<TypeName> sumCases(Type t, Symbols symbols) {
         return sumCases(t, symbols, new HashSet<>());
     }
 
-    private static List<String> sumCases(Type t, Map<String, Ast.Def> symbols, Set<String> visiting) {
-        List<String> names;
+    private static List<TypeName> sumCases(Type t, Symbols symbols, Set<TypeName> visiting) {
+        List<TypeName> names;
         if (t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum) {
             if (!visiting.add(ref.name())) {
                 return List.of();   // a sum reaching itself; DataChecker reports it, this must terminate
             }
-            names = sum.cases();
+            names = caseNames(ref.name(), sum);
         } else if (t instanceof Type.Union union) {
             names = List.copyOf(union.members());
         } else {
             return null;
         }
-        List<String> leaves = new ArrayList<>();
-        for (String name : names) {
-            List<String> nested = symbols.get(name) instanceof Ast.SumData
+        List<TypeName> leaves = new ArrayList<>();
+        for (TypeName name : names) {
+            List<TypeName> nested = symbols.get(name) instanceof Ast.SumData
                     ? sumCases(Type.ref(name), symbols, visiting) : null;
             if (nested == null) {
                 leaves.add(name);
@@ -155,10 +157,21 @@ public final class TypeOps {
         return leaves;
     }
 
+    /** A sum's cases, canonical. A case is declared in the same module as the sum that lists it — the
+     * generated sum is a sealed interface, which only its own package can implement — so the sum's
+     * module is the case's. */
+    public static List<TypeName> caseNames(TypeName sumName, Ast.SumData sum) {
+        List<TypeName> names = new ArrayList<>();
+        for (String c : sum.cases()) {
+            names.add(sumName.sibling(c));
+        }
+        return names;
+    }
+
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
      * covariant, and a data-like type widens to the set of leaf cases it can be — so a list of
      * a sum's cases is assignable to a list of the sum (spec 8.3, 12.2). */
-    public static boolean assignable(Type from, Type to, Map<String, Ast.Def> symbols) {
+    public static boolean assignable(Type from, Type to, Symbols symbols) {
         if (from.equals(to)) {
             return true;
         }
@@ -190,8 +203,8 @@ public final class TypeOps {
             }
             return true;
         }
-        Set<String> fa = leafCases(from, symbols);
-        Set<String> ta = leafCases(to, symbols);
+        Set<TypeName> fa = leafCases(from, symbols);
+        Set<TypeName> ta = leafCases(to, symbols);
         return !fa.isEmpty() && !ta.isEmpty() && ta.containsAll(fa);
     }
 
@@ -204,7 +217,7 @@ public final class TypeOps {
      * {@code 'a} from the map so {@link #substitute} can resolve the {@code List<'a>} result.
      */
     public static void unify(Type param, Type arg, Map<String, Type> bindings,
-                             Map<String, Ast.Def> symbols, SourcePos pos, String what) {
+                             Symbols symbols, SourcePos pos, String what) {
         switch (param) {
             case Type.Var v -> {
                 Type bound = bindings.get(v.name());
@@ -284,20 +297,20 @@ public final class TypeOps {
     }
 
     /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
-    public static Set<String> leafCases(Type t, Map<String, Ast.Def> symbols) {
-        Set<String> out = new HashSet<>();
+    public static Set<TypeName> leafCases(Type t, Symbols symbols) {
+        Set<TypeName> out = new LinkedHashSet<>();
         collectLeafCases(t, symbols, out, new HashSet<>());
         return out;
     }
 
-    private static void collectLeafCases(Type t, Map<String, Ast.Def> symbols, Set<String> out,
-                                         Set<String> visiting) {
-        for (String name : namesOf(t)) {
+    private static void collectLeafCases(Type t, Symbols symbols, Set<TypeName> out,
+                                         Set<TypeName> visiting) {
+        for (TypeName name : namesOf(t)) {
             if (symbols.get(name) instanceof Ast.SumData s) {
                 if (!visiting.add(name)) {
                     continue;   // a sum reaching itself; DataChecker reports it, this must terminate
                 }
-                for (String caseName : s.cases()) {
+                for (TypeName caseName : caseNames(name, s)) {
                     collectLeafCases(Type.ref(caseName), symbols, out, visiting);
                 }
             } else {
@@ -307,10 +320,11 @@ public final class TypeOps {
     }
 
     /** Effective field name → type (included data flattened first, then own fields). */
-    public static Map<String, Type> fieldTypes(Ast.Data data, Map<String, Ast.Def> symbols) {
+    public static Map<String, Type> fieldTypes(Ast.Data data, Symbols symbols) {
+        String home = symbols.moduleOf(data);
         Map<String, Type> types = new LinkedHashMap<>();
         for (String inc : data.includes()) {
-            if (!(symbols.get(inc) instanceof Ast.Data id)) {
+            if (!(symbols.get(symbols.resolveIn(home, inc)) instanceof Ast.Data id)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.spread.notproduct").title("check.construct.title")
                                 .at(data.pos()).args(inc).build(),
@@ -327,7 +341,7 @@ public final class TypeOps {
             }
         }
         for (Ast.Field f : data.fields()) {
-            if (types.put(f.name(), resolveType(f.type(), symbols)) != null) {
+            if (types.put(f.name(), resolveTypeIn(home, f.type(), symbols)) != null) {
                 throw CompileException.of(
                         Diagnostic.of("E1004", "e1004.dup").at(f.pos())
                                 .args(f.name(), data.name()).build(),
@@ -344,14 +358,15 @@ public final class TypeOps {
      * declaring module's position (issue #110). The duplicate-field checks {@link #fieldTypes} makes
      * belong to the declaring module's own check, which has already run.
      */
-    public static Type fieldType(Ast.Data data, String field, Map<String, Ast.Def> symbols) {
+    public static Type fieldType(Ast.Data data, String field, Symbols symbols) {
+        String home = symbols.moduleOf(data);
         for (Ast.Field f : data.fields()) {
             if (f.name().equals(field)) {
-                return resolveType(f.type(), symbols);
+                return resolveTypeIn(home, f.type(), symbols);
             }
         }
         for (String inc : data.includes()) {
-            if (symbols.get(inc) instanceof Ast.Data included) {
+            if (symbols.get(symbols.resolveIn(home, inc)) instanceof Ast.Data included) {
                 Type t = fieldType(included, field, symbols);
                 if (t != null) {
                     return t;
@@ -362,14 +377,15 @@ public final class TypeOps {
     }
 
     /** Whether a data has a field of that name, without resolving any type. */
-    public static boolean hasField(Ast.Data data, String field, Map<String, Ast.Def> symbols) {
+    public static boolean hasField(Ast.Data data, String field, Symbols symbols) {
         for (Ast.Field f : data.fields()) {
             if (f.name().equals(field)) {
                 return true;
             }
         }
         for (String inc : data.includes()) {
-            if (symbols.get(inc) instanceof Ast.Data included && hasField(included, field, symbols)) {
+            if (symbols.get(symbols.resolveIn(symbols.moduleOf(data), inc)) instanceof Ast.Data included
+                    && hasField(included, field, symbols)) {
                 return true;
             }
         }
@@ -377,10 +393,10 @@ public final class TypeOps {
     }
 
     /** All invariants that apply to a data: included data's invariants first, then its own. */
-    public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Map<String, Ast.Def> symbols) {
+    public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Symbols symbols) {
         List<Ast.Expr> invs = new ArrayList<>();
         for (String inc : data.includes()) {
-            if (symbols.get(inc) instanceof Ast.Data id) {
+            if (symbols.get(symbols.resolveIn(symbols.moduleOf(data), inc)) instanceof Ast.Data id) {
                 invs.addAll(effectiveInvariants(id, symbols));
             }
         }
@@ -390,7 +406,7 @@ public final class TypeOps {
 
     /** The type a newtype wraps ({@code data X = Y} gives {@code Y}), or null when {@code name} is not
      * a newtype — the implicit inner field is {@code value}. */
-    static Type newtypeInner(String name, Map<String, Ast.Def> symbols) {
+    static Type newtypeInner(TypeName name, Symbols symbols) {
         if (symbols.get(name) instanceof Ast.Data d && d.newtype()) {
             return fieldTypes(d, symbols).get("value");
         }
@@ -399,7 +415,7 @@ public final class TypeOps {
 
     /** Whether {@code name} is a newtype over {@code String} ({@code data X = String}) — the only key
      *  type a {@code Map} admits besides {@code String} itself (ADR-0040). */
-    static boolean isStringNewtype(String name, Map<String, Ast.Def> symbols) {
+    static boolean isStringNewtype(TypeName name, Symbols symbols) {
         return symbols.get(name) instanceof Ast.Data d && d.newtype()
                 && d.fields().size() == 1 && "String".equals(d.fields().get(0).type().name());
     }
@@ -412,7 +428,7 @@ public final class TypeOps {
      * position. A key type variable is admitted for the {@code core} signatures, which monomorphise
      * to one of those.
      */
-    public static boolean isBoundaryMapKey(Type key, Map<String, Ast.Def> symbols) {
+    public static boolean isBoundaryMapKey(Type key, Symbols symbols) {
         return key == Type.STRING || key == Type.DATE || key == Type.DATETIME
                 || key instanceof Type.Var
                 || (key instanceof Type.Ref r && isStringNewtype(r.name(), symbols));
@@ -420,7 +436,7 @@ public final class TypeOps {
 
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
      * every one can — what a data field or a behavior's input/output is checked against. */
-    public static Type nonBoundaryMapKey(Type t, Map<String, Ast.Def> symbols) {
+    public static Type nonBoundaryMapKey(Type t, Symbols symbols) {
         if (t instanceof Type.MapOf m && !isBoundaryMapKey(m.key(), symbols)) {
             return m.key();
         }
@@ -435,7 +451,7 @@ public final class TypeOps {
         };
     }
 
-    static boolean isSingleValueNewtype(Type t, Map<String, Ast.Def> symbols) {
+    static boolean isSingleValueNewtype(Type t, Symbols symbols) {
         return t instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype();
     }
@@ -451,14 +467,14 @@ public final class TypeOps {
      * one — it is ordered by the value it wraps (ADR-0047), which is what both the comparison
      * operators and the sort family read. The generated wrapper carries that ordering as
      * {@link Comparable}, so the runtime's natural-order compare reaches it. */
-    public static boolean isOrderedValue(Type t, Map<String, Ast.Def> symbols) {
+    public static boolean isOrderedValue(Type t, Symbols symbols) {
         return isOrdered(base(t, symbols));
     }
 
     /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —
      * the base of its {@code value} type, recursively (so {@code 管理職 = レベル = Int} bases to Int).
      * A newtype's value is what its comparison and equality read. */
-    static Type base(Type t, Map<String, Ast.Def> symbols) {
+    static Type base(Type t, Symbols symbols) {
         if (isSingleValueNewtype(t, symbols)) {
             Type inner = fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
             if (inner != null) {
@@ -470,7 +486,7 @@ public final class TypeOps {
 
     /** The Int or Decimal that a single-value newtype directly wraps (one level), or {@code null}
      * (a non-newtype, or a newtype over a non-numeric or over another newtype). */
-    static Type directNumericNewtypeBase(Type t, Map<String, Ast.Def> symbols) {
+    static Type directNumericNewtypeBase(Type t, Symbols symbols) {
         if (isSingleValueNewtype(t, symbols)) {
             Type inner = fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
             if (inner == Type.INT || inner == Type.DECIMAL) {
@@ -484,7 +500,7 @@ public final class TypeOps {
      * yields — whichever operand is such a newtype — or {@code null} if neither is. Callers that have
      * already passed the type checker's admissibility gate (codegen, the invariant analysis) use this
      * to pick the result without re-deriving the rule. */
-    public static Type closedNewtypeArithResult(Type lt, Type rt, Map<String, Ast.Def> symbols) {
+    public static Type closedNewtypeArithResult(Type lt, Type rt, Symbols symbols) {
         if (directNumericNewtypeBase(lt, symbols) != null) {
             return lt;
         }
@@ -516,11 +532,18 @@ public final class TypeOps {
         };
     }
 
-    public static Type resolveType(Ast.TypeRef ref, Map<String, Ast.Def> symbols) {
+    public static Type resolveType(Ast.TypeRef ref, Symbols symbols) {
+        return resolveTypeIn(symbols.module(), ref, symbols);
+    }
+
+    /** Resolves a type written inside {@code inModule} — which is the module being compiled for
+     * everything it declares itself, and the declaring module for a type read out of an imported
+     * data (spec 4). */
+    public static Type resolveTypeIn(String inModule, Ast.TypeRef ref, Symbols symbols) {
         if (ref.isTuple()) {
             List<Type> elems = new ArrayList<>();
             for (Ast.TypeRef e : ref.tupleElems()) {
-                elems.add(resolveType(e, symbols));
+                elems.add(resolveTypeIn(inModule, e, symbols));
             }
             return Type.tuple(elems);   // (A, B, ...) — a helper/stdlib signature only (ADR-0036)
         }
@@ -539,7 +562,7 @@ public final class TypeOps {
                                     .at(ref.pos(), 4).build(),
                             "List needs a type argument, e.g. List<Int>");
                 }
-                yield Type.list(resolveType(ref.arg(), symbols));
+                yield Type.list(resolveTypeIn(inModule, ref.arg(), symbols));
             }
             case "Set" -> {
                 if (ref.arg() == null) {
@@ -548,7 +571,7 @@ public final class TypeOps {
                                     .at(ref.pos(), 3).build(),
                             "Set needs a type argument, e.g. Set<String>");
                 }
-                yield Type.set(resolveType(ref.arg(), symbols));
+                yield Type.set(resolveTypeIn(inModule, ref.arg(), symbols));
             }
             case "Option" -> {
                 if (ref.arg() == null) {
@@ -557,7 +580,7 @@ public final class TypeOps {
                                     .at(ref.pos(), 6).build(),
                             "Option needs a type argument");
                 }
-                yield Type.option(resolveType(ref.arg(), symbols));
+                yield Type.option(resolveTypeIn(inModule, ref.arg(), symbols));
             }
             case "Map" -> {
                 if (ref.arg() == null) {
@@ -571,25 +594,60 @@ public final class TypeOps {
                 // What a key must satisfy is the boundary — see #isBoundaryMapKey, checked where a
                 // type is a data field or a behavior's input/output.
                 Type key = ref.tupleElems() == null
-                        ? Type.STRING : resolveType(ref.tupleElems().get(0), symbols);
-                yield Type.map(key, resolveType(ref.arg(), symbols));
+                        ? Type.STRING : resolveTypeIn(inModule, ref.tupleElems().get(0), symbols);
+                yield Type.map(key, resolveTypeIn(inModule, ref.arg(), symbols));
             }
             default -> {
                 if (ref.name().startsWith("'")) {
                     yield Type.var(ref.name());   // a type variable, admitted only in the core
                 }
-                if (symbols.containsKey(ref.name())) {
-                    yield Type.ref(ref.name());
+                TypeName resolved = symbols.resolveIn(inModule, ref.name());
+                if (resolved != null) {
+                    yield Type.ref(resolved);
                 }
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.unknown.type.msg")
-                                .title("check.unknown.title")
-                                .at(ref.pos(), ref.name().length())
-                                .args(ref.name())
-                                .suggestion(Suggest.candidate(ref.name(), symbols.keySet()))
-                                .build(),
-                        "unknown type `" + ref.name() + "`" + Suggest.hint(ref.name(), symbols.keySet()));
+                throw unknownType(ref, symbols);
             }
         };
+    }
+
+    /**
+     * A written type name nothing here denotes. A qualified name says which of three things went
+     * wrong, since the qualifier narrows it: the qualifier names no module, the module declares no
+     * such type, or it declares it and does not expose it.
+     */
+    private static CompileException unknownType(Ast.TypeRef ref, Symbols symbols) {
+        String written = ref.name();
+        int dot = written.lastIndexOf('.');
+        if (dot >= 0) {
+            String qualifier = written.substring(0, dot);
+            String name = written.substring(dot + 1);
+            String module = symbols.moduleOfQualifier(qualifier);
+            if (module == null) {
+                return CompileException.of(
+                        Diagnostic.of(null, "check.qualified.unknownmodule").title("check.module.title")
+                                .at(ref.pos(), written.length()).args(qualifier, name)
+                                .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
+                                .build(),
+                        "no module named `" + qualifier + "`");
+            }
+            String key = symbols.contains(new TypeName(module, name))
+                    ? "check.qualified.notexposed" : "check.qualified.notdefined";
+            return CompileException.of(
+                    Diagnostic.of(null, key).title("check.module.title")
+                            .at(ref.pos(), written.length()).args(name, module)
+                            .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
+                            .build(),
+                    "`" + name + "` is not " + (key.endsWith("notexposed") ? "exposed by" : "defined in")
+                            + " `" + module + "`");
+        }
+        Set<String> known = symbols.namesInScope();
+        return CompileException.of(
+                Diagnostic.of(null, "check.unknown.type.msg")
+                        .title("check.unknown.title")
+                        .at(ref.pos(), written.length())
+                        .args(written)
+                        .suggestion(Suggest.candidate(written, known))
+                        .build(),
+                "unknown type `" + written + "`" + Suggest.hint(written, known));
     }
 }

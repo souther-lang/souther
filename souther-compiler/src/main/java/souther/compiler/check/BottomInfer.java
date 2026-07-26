@@ -114,7 +114,7 @@ public final class BottomInfer {
      * report the mismatch rather than this throwing early. Shared by the checker's call typing and the
      * backend's fold materialisation so both pin the same accumulator type (issue #70). */
     public static void pinResultTypeVars(Type result, Type expected, Map<String, Type> bind,
-                                         Map<String, Ast.Def> symbols, SourcePos pos, String what) {
+                                         Symbols symbols, SourcePos pos, String what) {
         if (expected == null) {
             return;
         }
@@ -207,7 +207,7 @@ public final class BottomInfer {
             return a;
         }
         if (TypeOps.isDataLike(a) && TypeOps.isDataLike(b)) {
-            Set<String> names = new HashSet<>(TypeOps.namesOf(a));
+            Set<TypeName> names = new HashSet<>(TypeOps.namesOf(a));
             names.addAll(TypeOps.namesOf(b));
             return Type.union(names);
         }

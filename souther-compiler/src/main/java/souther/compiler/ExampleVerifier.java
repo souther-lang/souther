@@ -1,8 +1,10 @@
 package souther.compiler;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Type;
+import souther.compiler.check.TypeName;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
@@ -44,16 +46,15 @@ public final class ExampleVerifier {
 
     /** Evaluates every example in {@code module}; returns one diagnostic per failing example row
      * (empty when all pass). Does not throw for a failed example — the caller aggregates.
-     * {@code importedPackages} maps an imported type's bare name to its declaring module, so a
-     * fixture of an imported type decodes against that module's package (a cross-module example). */
-    public static List<Diagnostic> check(Ast.Module module, Map<String, Ast.Def> symbols,
-                                         Map<String, Sig> sigs,
-                                         Map<String, String> importedPackages, Map<String, byte[]> classes) {
+     * A fixture of an imported type decodes against its declaring module's package, which its
+     * {@link TypeName} names (a cross-module example). */
+    public static List<Diagnostic> check(Ast.Module module, Symbols symbols,
+                                         Map<String, Sig> sigs, Map<String, byte[]> classes) {
         if (module.examples().isEmpty()) {
             return List.of();
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, ExampleVerifier.class.getClassLoader());
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, importedPackages, loader);
+        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, loader);
         List<Diagnostic> failures = new ArrayList<>();
         for (Ast.Example ex : module.examples()) {
             try {
@@ -68,10 +69,9 @@ public final class ExampleVerifier {
     }
 
     /** Runs {@link #check} and, if any example failed, fails the build with an aggregated error. */
-    public static void verify(Ast.Module module, Map<String, Ast.Def> symbols,
-                              Map<String, Sig> sigs,
-                              Map<String, String> importedPackages, Map<String, byte[]> classes) {
-        List<Diagnostic> failures = check(module, symbols, sigs, importedPackages, classes);
+    public static void verify(Ast.Module module, Symbols symbols,
+                              Map<String, Sig> sigs, Map<String, byte[]> classes) {
+        List<Diagnostic> failures = check(module, symbols, sigs, classes);
         if (failures.isEmpty()) {
             return;
         }
@@ -114,18 +114,15 @@ public final class ExampleVerifier {
     }
 
     private final Ast.Module module;
-    private final Map<String, Ast.Def> symbols;
+    private final Symbols symbols;
     private final Map<String, Sig> sigs;
-    private final Map<String, String> importedPackages;
     private final MemoryClassLoader loader;
 
-    private ExampleVerifier(Ast.Module module, Map<String, Ast.Def> symbols,
-                            Map<String, Sig> sigs,
-                            Map<String, String> importedPackages, MemoryClassLoader loader) {
+    private ExampleVerifier(Ast.Module module, Symbols symbols,
+                            Map<String, Sig> sigs, MemoryClassLoader loader) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
-        this.importedPackages = importedPackages;
         this.loader = loader;
     }
 
@@ -139,7 +136,7 @@ public final class ExampleVerifier {
             return;
         }
         Sig sig = sigs.get(target);
-        Set<String> outCases = outCases(sig.out());
+        Set<TypeName> outCases = outCases(sig.out());
         for (Ast.ExampleRow row : ex.rows()) {
             checkRow(target, spec, sig, outCases, row, out);
         }
@@ -207,7 +204,7 @@ public final class ExampleVerifier {
     // --- one row ------------------------------------------------------------------------------
 
     private void checkRow(String target, Ast.SpecBehavior spec, Sig sig,
-                          Set<String> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
+                          Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of("E1903", "check.example.arity").title("check.example.title")
@@ -227,10 +224,17 @@ public final class ExampleVerifier {
         }
         // validate the expected arm/value against the output cases before running
         String expectedArm = expectedArm(row.expected());
-        if (expectedArm != null && !outCases.isEmpty() && !outCases.contains(expectedArm)) {
+        TypeName named = expectedArm == null ? null : symbols.resolveCase(expectedArm);
+        // a name nothing here denotes is not an arm of the target either, and says so the same way
+        if (expectedArm != null && !outCases.isEmpty()
+                && (named == null || !outCases.contains(named))) {
+            List<String> names = new ArrayList<>();
+            for (TypeName c : outCases) {
+                names.add(c.name());
+            }
             out.add(Diagnostic.of("E1904", "check.example.arm").title("check.example.title")
                     .at(row.pos()).args(expectedArm, target)
-                    .hint("check.example.arm.hint", String.join(", ", outCases)).build());
+                    .hint("check.example.arm.hint", String.join(", ", names)).build());
             return;
         }
         Object[] fakes = resolveFakes(spec, row, out);
@@ -522,10 +526,10 @@ public final class ExampleVerifier {
     private Object buildExpected(Ast.Expr expected, Type outType) {
         try {
             if (expected instanceof Ast.NewData nd) {
-                return decode(Type.ref(nd.typeName()), raw(expected));
+                return decode(Type.ref(symbols.resolve(nd.typeName())), raw(expected));
             }
             if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
-                return decode(Type.ref(c.fn()), raw(expected));
+                return decode(Type.ref(symbols.resolve(c.fn())), raw(expected));
             }
             // A collection output has no case name to decode against, so the behavior's declared
             // output type is what says which of `List`/`Set`/`Map` the written list means and what
@@ -562,7 +566,10 @@ public final class ExampleVerifier {
      * case, so its output decodes against that case, not the declared sum (which has no decoder). */
     private Type fixtureType(Ast.Expr e, Type declared) {
         String arm = expectedArm(e);
-        return arm != null ? Type.ref(arm) : declared;
+        TypeName named = arm == null ? null : symbols.resolveCase(arm);
+        // a fixture naming nothing this target can produce is reported by the arm check; decoding it
+        // against the declared type is what turns it into that diagnostic rather than a crash
+        return named != null ? Type.ref(named) : declared;
     }
 
     /** The written expectation, rendered as it was written: a bare arm stays the arm name, anything
@@ -659,8 +666,8 @@ public final class ExampleVerifier {
     /** {@code result} through its class's derived {@code encoder()}, or null when it has none. */
     private Object encodedOrNull(Object result, String name) {
         try {
-            String pkg = importedPackages.getOrDefault(name, module.name());
-            Class<?> c = loader.loadClass(pkg + "." + name);
+            TypeName type = symbols.resolve(name);
+            Class<?> c = loader.loadClass(type != null ? type.qualified() : module.name() + "." + name);
             Object encoder = staticCodec(c, "encoder");
             return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
                     .invoke(encoder, result);
@@ -736,7 +743,7 @@ public final class ExampleVerifier {
         return dot < 0 ? n : n.substring(dot + 1);
     }
 
-    private Set<String> outCases(Type out) {
+    private Set<TypeName> outCases(Type out) {
         if (out instanceof Type.Union u) {
             return u.members();
         }
@@ -789,7 +796,7 @@ public final class ExampleVerifier {
         if (name.equals("None")) {
             return null;
         }
-        if (symbols.get(name) instanceof Ast.UnitData) {
+        if (symbols.declaration(name) instanceof Ast.UnitData) {
             Map<String, Object> unit = new LinkedHashMap<>();
             tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
             return unit;
@@ -895,7 +902,7 @@ public final class ExampleVerifier {
      * fail on the tag it cannot match, which is the honest outcome.
      */
     private void tagged(String caseName, Map<String, Object> map) {
-        for (Ast.Def def : symbols.values()) {
+        for (Ast.Def def : symbols.visible()) {
             if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
                 continue;
             }
@@ -911,7 +918,7 @@ public final class ExampleVerifier {
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
     private Map<String, Ast.TypeRef> fieldTypes(String typeName) {
         Map<String, Ast.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.get(typeName) instanceof Ast.Data d) {
+        if (symbols.declaration(typeName) instanceof Ast.Data d) {
             for (String inc : d.includes()) {
                 out.putAll(fieldTypes(inc));
             }
@@ -961,12 +968,12 @@ public final class ExampleVerifier {
     }
 
     private boolean isNewtype(String name) {
-        return symbols.get(name) instanceof Ast.Data d && d.newtype();
+        return symbols.declaration(name) instanceof Ast.Data d && d.newtype();
     }
 
     /** The type a newtype wraps ({@code Date} for {@code data 貸出日 = Date}), or null. */
     private String newtypeBase(String name) {
-        return symbols.get(name) instanceof Ast.Data d && d.newtype() && d.fields().size() == 1
+        return symbols.declaration(name) instanceof Ast.Data d && d.newtype() && d.fields().size() == 1
                 ? d.fields().get(0).type().name()
                 : null;
     }
@@ -1063,12 +1070,11 @@ public final class ExampleVerifier {
         }
         if (type instanceof Type.Ref ref) {
             // An imported type's decoder lives in its declaring module's package, not this one's.
-            String pkg = importedPackages.getOrDefault(ref.name(), module.name());
             try {
-                Class<?> c = loader.loadClass(pkg + "." + ref.name());
+                Class<?> c = loader.loadClass(ref.name().qualified());
                 return (Decoder<Object, ?>) staticCodec(c, "decoder");
             } catch (ReflectiveOperationException e) {
-                throw new FixtureException("no decoder for `" + ref.name() + "`");
+                throw new FixtureException("no decoder for `" + ref.name().name() + "`");
             }
         }
         // A collection is decoded the way a data's collection field is, built from the same pieces the

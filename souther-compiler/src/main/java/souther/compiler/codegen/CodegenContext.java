@@ -1,7 +1,9 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
+import souther.compiler.check.TypeName;
 import souther.compiler.check.TypeOps;
 
 import java.lang.classfile.ClassFile;
@@ -26,7 +28,7 @@ import static souther.compiler.codegen.Descriptors.*;
 final class CodegenContext {
 
     final String pkg;
-    final Map<String, Ast.Def> symbols;
+    final Symbols symbols;
     final Map<String, List<String>> caseToSums;
     final Map<String, String> typePackage;
     /** True when the module has no {@code exposing} clause: everything stays public. */
@@ -132,7 +134,7 @@ final class CodegenContext {
         return r != null ? r.descriptorString() : null;
     }
 
-    CodegenContext(String pkg, Map<String, Ast.Def> symbols, Map<String, List<String>> caseToSums,
+    CodegenContext(String pkg, Symbols symbols, Map<String, List<String>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
                    Map<String, Ast.FnDef> recursiveHelpers) {
         this.pkg = pkg;
@@ -156,9 +158,23 @@ final class CodegenContext {
     private final Map<String, ClassDesc> behaviorDescs = new HashMap<>();
     private final Map<String, ClassDesc> behaviorImplDescs = new HashMap<>();
 
+    /** The class of a type, from the module that declares it — nothing to look up, since a
+     * {@link TypeName} already says where it lives. */
+    ClassDesc cd(TypeName name) {
+        return typeDescs.computeIfAbsent(name.qualified(), ClassDesc::of);
+    }
+
+    /**
+     * The class of a name as the source (or a derived codec) wrote it. It is resolved the same way
+     * the checker resolved it, so an imported type lands in its own package. A name nothing declares
+     * is one this backend made up — a generated {@code $Enc}/{@code Result} class — and belongs to
+     * the module being generated.
+     */
     ClassDesc cd(String typeName) {
-        return typeDescs.computeIfAbsent(typeName,
-                n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + n));
+        return typeDescs.computeIfAbsent(typeName, n -> {
+            TypeName resolved = symbols.resolve(n);
+            return ClassDesc.of(resolved != null ? resolved.qualified() : pkg + "." + n);
+        });
     }
 
     ClassDesc cdBehavior(String name) {
@@ -208,14 +224,20 @@ final class CodegenContext {
         return behaviorClass(name) + "Result";
     }
 
-    /** The JVM class for an output case: the built-in {@code DivisionByZero}, otherwise the
-     * generated data class in this module. An invariant violation is no longer a case — it aborts
-     * (spec 7.3, 9.4) — so there is no 制約違反 case here. */
-    ClassDesc caseClass(String typeName) {
-        return switch (typeName) {
+    /** The JVM class of an output case. The built-in {@code DivisionByZero}/{@code NotANumber} need
+     * no special case: their {@link TypeName} names {@code souther.runtime}, which is where they are.
+     * An invariant violation is no longer a case — it aborts (spec 7.3, 9.4) — so there is no
+     * 制約違反 case here. */
+    ClassDesc caseClass(TypeName typeName) {
+        return cd(typeName);
+    }
+
+    /** The JVM class of a case as an arm wrote it. */
+    ClassDesc caseClass(String written) {
+        return switch (written) {
             case "DivisionByZero" -> CD_DivisionByZero;
             case "NotANumber" -> CD_NotANumber;
-            default -> cd(typeName);
+            default -> cd(written);
         };
     }
 
