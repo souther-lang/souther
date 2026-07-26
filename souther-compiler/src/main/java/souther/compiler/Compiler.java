@@ -109,7 +109,7 @@ public final class Compiler {
         // the module no longer changes, so its symbol table is built once and shared by the check,
         // the constant verification, and the example run
         Map<String, Ast.Def> symbols = TypeChecker.symbols(module);
-        TypeChecker.Checked checked = TypeChecker.checkOrThrow(module, symbols, Map.of(), lowered);
+        TypeChecker.Checked checked = TypeChecker.checkOrThrow(module, symbols, Map.of(), Set.of(), lowered);
         warningsOut.addAll(checked.warnings());
         Map<String, byte[]> out = Backend.generate(lowered, checked);
         verifyConstConstructions(module, symbols, out);
@@ -311,7 +311,7 @@ public final class Compiler {
                 Set<String> importedInjected = importedInjectedBehaviors(m, derived);
                 m = injectRecursivePrelude(m);
                 Ast.Module lowered = Lower.run(m);
-                TypeChecker.Checked checked = TypeChecker.checkOrThrow(m, symbols, importedSigs, lowered);
+                TypeChecker.Checked checked = TypeChecker.checkOrThrow(m, symbols, importedSigs, importedInjected, lowered);
                 warningsOut.addAll(checked.warnings());
                 out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs,
                         importedInjected, checked));
@@ -440,7 +440,7 @@ public final class Compiler {
                 m = injectRecursivePrelude(m);
                 Ast.Module lowered = Lower.run(m);
                 TypeChecker.CheckResult result0 =
-                        TypeChecker.checkAndElaborate(m, symbols, importedSigs, lowered);
+                        TypeChecker.checkAndElaborate(m, symbols, importedSigs, importedInjected, lowered);
                 List<Diagnostic> typeErrors = result0.diagnostics();
                 if (!typeErrors.isEmpty()) {
                     // a type-invalid module must not reach codegen; report every error and skip it,
@@ -646,7 +646,10 @@ public final class Compiler {
                     srcSigs = PipelineSigs.signatures(src, visibleDefs(src, registry),
                             importedBehaviorSigs(src, registry));
                 }
-                result.put(name, srcSigs.get(name));
+                Sig sig = srcSigs.get(name);
+                if (sig != null) {
+                    result.put(name, sig);
+                }
             }
         }
         return result;

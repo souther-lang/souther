@@ -423,8 +423,9 @@ public final class Backend {
                                         List<Type> paramTypes, Type retType) {
         ClassDesc cdR = cdBehavior(name);
         // Injected-vs-unary is orthogonal to composition: 0/1 input stays the unary Behavior<In,Out>
-        // (a >-> stage); 2+ inputs is a standalone abstract class with a typed apply(A,B,...), the same
-        // param-count branch a fn behavior takes in generateBehaviorInterface.
+        // (so it can follow an arrow); 2+ inputs is a standalone abstract class with a typed
+        // apply(A,B,...) — a first stage but never a later one — the same param-count branch a fn
+        // behavior takes in generateBehaviorInterface.
         boolean single = paramTypes.size() <= 1;
         return build(cdR, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT | ClassFile.ACC_SUPER);
@@ -840,7 +841,9 @@ public final class Backend {
      *
      * <p>Only this stage may take several inputs (spec 14.1). A multi-input behavior does not
      * implement {@code Behavior} — that interface takes one value — so it is called on its own
-     * class rather than through the interface.
+     * class rather than through the interface. An injected one is that class: the pipeline holds it
+     * in the field it was bound to, and its {@code apply} is typed rather than erased (issue #57),
+     * so the arguments are cast from the erased {@code apply(Object,…)} this body lives on.
      */
     private void applyFirstStage(CodeBuilder code, ClassDesc cdP, String stage, int arity,
                                  Set<String> requiredNames, Map<String, List<String>> behaviorDeps) {
@@ -849,12 +852,34 @@ public final class Backend {
             return;
         }
         pushStage(code, cdP, stage, requiredNames, behaviorDeps);
+        if (ctx.isMultiArgRequired(stage)) {
+            MethodTypeDesc desc = ctx.requiredApplyDesc(stage);
+            for (int i = 0; i < arity; i++) {
+                code.aload(i + 1);
+                ClassDesc param = desc.parameterType(i);
+                if (!param.equals(CD_Object)) {
+                    code.checkcast(param);
+                }
+            }
+            code.invokevirtual(cdBehavior(stage), "apply", desc);
+            code.astore(1);
+            return;
+        }
+        if (arity == 0 && requiredNames.contains(stage)) {
+            // A `() -> R` injection target is generated as the unary Behavior, whose apply takes a
+            // value its implementation ignores — the same call a body makes for a zero-input
+            // dependency. It has no $Impl to call the erased apply on.
+            code.aconst_null();
+            code.invokeinterface(CD_Behavior, "apply", MTD_apply);
+            code.astore(1);
+            return;
+        }
         for (int i = 0; i < arity; i++) {
             code.aload(i + 1);
         }
         ClassDesc[] params = new ClassDesc[arity];
         java.util.Arrays.fill(params, CD_Object);
-        // a multi-input first stage is a fn/pipe behavior; call the erased apply on its $Impl
+        // a multi-input first stage with a `let` is a fn/pipe behavior; call the erased apply on its $Impl
         code.invokevirtual(cdBehaviorImpl(stage), "apply", MethodTypeDesc.of(CD_Object, params));
         code.astore(1);
     }

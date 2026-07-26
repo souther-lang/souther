@@ -174,7 +174,8 @@ class CompileExampleTest {
         var lowered = souther.compiler.check.Lower.run(module);
         var symbols = souther.compiler.check.TypeChecker.symbols(module);
         var checked = souther.compiler.check.TypeChecker
-                .checkAndElaborate(module, symbols, java.util.Map.of(), lowered).checked();
+                .checkAndElaborate(module, symbols, java.util.Map.of(), java.util.Set.of(), lowered)
+                .checked();
         var classes = souther.compiler.codegen.Backend.generate(lowered, checked);
         var sigs = souther.compiler.check.PipelineSigs.signatures(module, symbols);
         var fails = ExampleVerifier.check(module, symbols, sigs, java.util.Map.of(), classes);

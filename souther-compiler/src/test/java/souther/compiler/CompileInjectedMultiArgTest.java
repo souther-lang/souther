@@ -60,7 +60,8 @@ class CompileInjectedMultiArgTest {
 
     @Test
     void aTwoArgInjectedBaseIsAStandaloneAbstractClassWithTypedApply() throws Exception {
-        // 2+ inputs → standalone abstract class, no Behavior supertype (not a >-> stage), typed apply(A,B)
+        // 2+ inputs → standalone abstract class, no Behavior supertype (so it cannot follow an
+        // arrow), typed apply(A,B)
         String src = HEAD + "let use (a, b, send) = send(a, b)\n";
         Map<String, byte[]> classes = Compiler.compile(src);
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
@@ -71,6 +72,109 @@ class CompileInjectedMultiArgTest {
         Class<?> a = loader.loadClass("demo.A");
         Class<?> b = loader.loadClass("demo.B");
         assertNotNull(send.getMethod("apply", a, b), "declares a typed apply(A, B)");
+    }
+
+    @Test
+    void aTwoArgInjectedBaseWithAUnionOutputGetsItsResultInterface() throws Exception {
+        // the base's apply returns `<名>Result`, so that interface has to be generated here — a
+        // multi-input injected behavior used to be skipped, leaving the base pointing at a class
+        // that never existed (issue #96)
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data Ok = { z: Int }
+                data Rejected = { why: String }
+                behavior send : (a: A, b: B) -> Ok | Rejected
+                """;
+        Map<String, byte[]> classes = Compiler.compile(src);
+        assertTrue(classes.containsKey("demo.SendResult"),
+                "the union output's sealed interface is generated: " + classes.keySet());
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Class<?> send = loader.loadClass("demo.Send");
+        assertEquals(loader.loadClass("demo.SendResult"),
+                send.getMethod("apply", loader.loadClass("demo.A"), loader.loadClass("demo.B"))
+                        .getReturnType());
+    }
+
+    @Test
+    void aZeroArgInjectedBaseWithAUnionOutputGetsItsResultInterface() {
+        String src = """
+                module demo
+                data Ok = { z: Int }
+                data Rejected = { why: String }
+                behavior now : () -> Ok | Rejected
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.NowResult"),
+                "a zero-input injected behavior's union output needs the same interface");
+    }
+
+    @Test
+    void aTwoArgInjectedBehaviorStartsAPipelineAndRuns() throws Exception {
+        // `>->` hands a single value along, so a multi-input behavior cannot follow an arrow — but the
+        // first stage receives the pipeline's own arguments, so any number is fine there, injected or
+        // implemented (spec 14.1). The stage is read from the pipeline's injected field and called on
+        // its base class with the typed apply (issue #96).
+        String src = """
+                module demo
+
+                data A = { x: Int }
+                data B = { y: Int }
+                data R = { z: Int }
+
+                behavior send : (a: A, b: B) -> R
+                    constructs R
+
+                behavior bump : (r: R) -> R
+                    constructs R
+                let bump (r) = R { z = r.z + 1 }
+
+                behavior pipe = send >-> bump
+                """;
+        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        classes.put("demo.SendImpl", compileSubclass(classes, "demo.SendImpl", IMPL_SRC));
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+
+        Object pipe = loader.loadClass("demo.Pipe").getMethod("bind", loader.loadClass("demo.Send"))
+                .invoke(null, loader.loadClass("demo.SendImpl").getConstructor().newInstance());
+        Object a = Codecs.decoded(loader, "demo.A", Map.of("x", 2L));
+        Object b = Codecs.decoded(loader, "demo.B", Map.of("y", 40L));
+        Object r = pipe.getClass().getMethod("apply", loader.loadClass("demo.A"), loader.loadClass("demo.B"))
+                .invoke(pipe, a, b);
+
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.R", r);
+        assertEquals(43L, out.get("z"), "send(2, 40) = 42, bump +1");
+    }
+
+    @Test
+    void aZeroArgInjectedBehaviorStartsAPipelineAndRuns() throws Exception {
+        // a `() -> R` injection target is the unary Behavior, called with a value its implementation
+        // ignores (the same call a body makes for a zero-input dependency) — it has no $Impl
+        String src = """
+                module demo
+                data R = { z: Int }
+                behavior now : () -> R
+                    constructs R
+                behavior bump : (r: R) -> R
+                    constructs R
+                let bump (r) = R { z = r.z + 1 }
+                behavior pipe = now >-> bump
+                """;
+        String impl = """
+                package demo;
+                public final class NowImpl extends Now {
+                    public Object apply(Object ignored) { return R(41); }
+                }
+                """;
+        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        classes.put("demo.NowImpl", compileSubclass(classes, "demo.NowImpl", impl));
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Object pipe = loader.loadClass("demo.Pipe").getMethod("bind", loader.loadClass("demo.Now"))
+                .invoke(null, loader.loadClass("demo.NowImpl").getConstructor().newInstance());
+        Object r = pipe.getClass().getMethod("apply").invoke(pipe);
+
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.R", r);
+        assertEquals(42L, out.get("z"));
     }
 
     @Test
