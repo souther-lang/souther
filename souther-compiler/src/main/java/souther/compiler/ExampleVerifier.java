@@ -9,8 +9,10 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
+import souther.runtime.Sets;
 
 import net.unit8.raoh.Err;
+import net.unit8.raoh.Issues;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
@@ -240,15 +242,15 @@ public final class ExampleVerifier {
                     .at(row.pos()).args(fm.getMessage()).build());
             return;
         } catch (AbortException ae) {
-            out.add(mismatch(row, describeExpected(row.expected()), "aborted: " + ae.getMessage()));
+            out.add(mismatch(row, describeExpected(row.expected(), sig.out()), "aborted: " + ae.getMessage()));
             return;
         } catch (NonTerminationException nt) {
             out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
                     .at(row.pos()).args(nt.getMessage()).build());
             return;
         }
-        if (!matches(row.expected(), result)) {
-            out.add(mismatch(row, describeExpected(row.expected()), describeActual(result)));
+        if (!matches(row.expected(), result, sig.out())) {
+            out.add(mismatch(row, describeExpected(row.expected(), sig.out()), describeActual(result)));
         }
     }
 
@@ -504,17 +506,17 @@ public final class ExampleVerifier {
 
     /** Whether {@code result} matches the row's expected: a bare {@link Ast.Var} asserts only the
      * arm (the concrete case class); anything else asserts the whole value by structural equality. */
-    private boolean matches(Ast.Expr expected, Object result) {
+    private boolean matches(Ast.Expr expected, Object result, Type outType) {
         if (expected instanceof Ast.Var v) {
             return simpleName(result).equals(v.name());
         }
-        Object expectedValue = buildExpected(expected);
+        Object expectedValue = buildExpected(expected, outType);
         return expectedValue != null && expectedValue.equals(result);
     }
 
     /** The expected value built the same way as an input, so structural equality compares like with
      * like: a construction/newtype decodes through its type's decoder; a literal is its raw value. */
-    private Object buildExpected(Ast.Expr expected) {
+    private Object buildExpected(Ast.Expr expected, Type outType) {
         try {
             if (expected instanceof Ast.NewData nd) {
                 return decode(Type.ref(nd.typeName()), raw(expected));
@@ -522,10 +524,20 @@ public final class ExampleVerifier {
             if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
                 return decode(Type.ref(c.fn()), raw(expected));
             }
+            // A collection output has no case name to decode against, so the behavior's declared
+            // output type is what says which of `List`/`Set`/`Map` the written list means and what
+            // its elements are — the same decision a collection argument's declared type makes.
+            if (isCollection(outType)) {
+                return decode(outType, raw(expected));
+            }
             return raw(expected);   // a literal expected value
         } catch (FixtureException fe) {
             return null;
         }
+    }
+
+    private static boolean isCollection(Type t) {
+        return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
     }
 
     /** The arm name an expected asserts: a bare type name, or a construction's/newtype's type name. */
@@ -552,15 +564,19 @@ public final class ExampleVerifier {
 
     /** The written expectation, rendered as it was written: a bare arm stays the arm name, anything
      * else is its neutral form under that arm ({@code Out { n = 7 }}). */
-    private String describeExpected(Ast.Expr expected) {
+    private String describeExpected(Ast.Expr expected, Type outType) {
         String arm = expectedArm(expected);
         if (expected instanceof Ast.Var) {
             return arm;   // a bare arm asserts only the case, so there is no value to show
         }
+        if (isCollection(outType)) {
+            Object built = buildExpected(expected, outType);
+            return built == null ? showValue(rawOrNull(expected)) : showAny(built);
+        }
         // Render it through the same encoder the actual goes through, so the two sides are written
         // in one notation and can be read against each other; the fixture's own neutral form (which
         // still holds e.g. a LocalDate where the encoder writes its ISO text) is the fallback.
-        Object built = buildExpected(expected);
+        Object built = buildExpected(expected, outType);
         Object neutral = built == null || arm == null ? rawOrNull(expected) : encodedOrNull(built, arm);
         if (neutral == null) {
             neutral = rawOrNull(expected);
@@ -579,11 +595,41 @@ public final class ExampleVerifier {
         if (name.isEmpty()) {
             return String.valueOf(result);
         }
+        if (result instanceof Iterable<?> || result instanceof Map<?, ?>) {
+            return showAny(result);
+        }
         Object encoded = encodedOrNull(result, name);
         if (encoded != null) {
             return show(name, encoded);
         }
         return isScalar(result) ? showValue(result) : name;
+    }
+
+    /** A live value in the notation a fixture is written in, at any depth: a collection element by
+     * element, a data as its case name with fields, a scalar as written. Both sides of a collection
+     * mismatch go through this, so they can be read against each other — and neither shows the JDK
+     * class that happened to carry the collection. */
+    private String showAny(Object v) {
+        if (v == null || isScalar(v)) {
+            return showValue(v);
+        }
+        if (v instanceof Map<?, ?> m) {
+            List<String> entries = new ArrayList<>();
+            for (Map.Entry<?, ?> e : m.entrySet()) {
+                entries.add("(" + showAny(e.getKey()) + ", " + showAny(e.getValue()) + ")");
+            }
+            return entries.isEmpty() ? "[]" : "[ " + String.join(", ", entries) + " ]";
+        }
+        if (v instanceof Iterable<?> it) {
+            List<String> elements = new ArrayList<>();
+            for (Object e : it) {
+                elements.add(showAny(e));
+            }
+            return elements.isEmpty() ? "[]" : "[ " + String.join(", ", elements) + " ]";
+        }
+        String name = simpleName(v);
+        Object encoded = encodedOrNull(v, name);
+        return encoded != null ? show(name, encoded) : name;
     }
 
     /** Whether a value is a neutral scalar, so it can be shown as written rather than by class name. */
@@ -766,7 +812,9 @@ public final class ExampleVerifier {
         Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName());
         Map<String, Object> map = new LinkedHashMap<>();
         for (Ast.FieldInit fi : nd.inits()) {
-            Object v = shaped(raw(fi.value()), declared.get(fi.name()));
+            Ast.TypeRef declaredType = declared.get(fi.name());
+            Object v = shaped(raw(fi.value()),
+                    declaredType == null ? null : TypeOps.resolveType(declaredType, symbols));
             // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads
             // it as absent (spec 8, absent -> None), the same neutral form as omitting the field.
             if (v == null) {
@@ -819,33 +867,40 @@ public final class ExampleVerifier {
         return out;
     }
 
-    /** Gives a fixture value the neutral shape its declared type decodes from. A {@code Map} field is
+    /** Gives a fixture value the neutral shape its declared type decodes from. A {@code Map} is
      * written as a list of {@code (key, value)} pairs — Elm's {@code Dict.fromList}, and the same
-     * list literal a {@code Set} field takes — while the decoder wants a map, so the pairs are
-     * collected here. Everything else passes through; a {@code List} field written as a list stays
-     * one, since the declared type, not the literal, decides. */
-    private Object shaped(Object v, Ast.TypeRef type) {
+     * list literal a {@code Set} takes — while the decoder wants a map, so the pairs are collected
+     * here. Everything else passes through; a {@code List} written as a list stays one, since the
+     * declared type, not the literal, decides. Read on the checked type, so it applies wherever a
+     * value is decoded: a field of a record fixture, and a behavior's argument or output. */
+    private Object shaped(Object v, Type type) {
         if (type == null || v == null) {
             return v;
         }
-        if ("Map".equals(type.name()) && v instanceof List<?> entries) {
-            Ast.TypeRef value = type.arg();
+        if (type instanceof Type.MapOf map && v instanceof List<?> entries) {
             Map<Object, Object> m = new LinkedHashMap<>();
             for (Object entry : entries) {
                 if (!(entry instanceof List<?> pair) || pair.size() != 2) {
                     throw new FixtureException("a `Map` fixture is a list of (key, value) pairs,"
                             + " e.g. [ (\"apple\", 3) ]");
                 }
-                m.put(pair.get(0), shaped(pair.get(1), value));
+                m.put(pair.get(0), shaped(pair.get(1), map.value()));
             }
             return m;
         }
-        if (("List".equals(type.name()) || "Set".equals(type.name())) && v instanceof List<?> elements) {
-            List<Object> out = new ArrayList<>(elements.size());
-            for (Object e : elements) {
-                out.add(shaped(e, type.arg()));
+        if (v instanceof List<?> elements) {
+            Type element = switch (type) {
+                case Type.ListOf l -> l.element();
+                case Type.SetOf s -> s.element();
+                default -> null;
+            };
+            if (element != null) {
+                List<Object> out = new ArrayList<>(elements.size());
+                for (Object e : elements) {
+                    out.add(shaped(e, element));
+                }
+                return out;
             }
-            return out;
         }
         return v;
     }
@@ -895,7 +950,8 @@ public final class ExampleVerifier {
 
     // --- decode a raw value into the parameter/expected type ----------------------------------
 
-    private Object decode(Type type, Object raw) {
+    private Object decode(Type type, Object rawValue) {
+        Object raw = shaped(rawValue, type);
         Decoder<Object, ?> decoder = decoderFor(type);
         Result<?> result;
         try {
@@ -910,8 +966,14 @@ public final class ExampleVerifier {
         if (result instanceof Ok<?> ok) {
             return ok.value();
         }
+        // Name where each failure landed. A decoder reports at a path, and a fixture that breaks the
+        // same rule twice — two keys of a newtype-keyed map, two elements of a list — otherwise reads
+        // as one message repeated, with nothing to say which value it is about.
         String detail = ((Err<?>) result).issues().asList().stream()
-                .map(net.unit8.raoh.Issue::message)
+                .map(issue -> {
+                    String at = String.join(".", issue.path().segments());
+                    return at.isEmpty() ? issue.message() : at + ": " + issue.message();
+                })
                 .collect(java.util.stream.Collectors.joining("; "));
         throw new FixtureException(detail);
     }
@@ -954,7 +1016,46 @@ public final class ExampleVerifier {
                 throw new FixtureException("no decoder for `" + ref.name() + "`");
             }
         }
+        // A collection is decoded the way a data's collection field is, built from the same pieces the
+        // derived decoder is (spec 10.2): a list over its element decoder, a set as a list
+        // deduplicated, a map over its value decoder with the keys remapped through the key type.
+        // Without this a collection could only reach an example inside a data, so a behavior taking
+        // one had to be given a wrapper that exists for no other reason (issue #97).
+        if (type instanceof Type.ListOf list) {
+            return ObjectDecoders.list(decoderFor(list.element()));
+        }
+        if (type instanceof Type.SetOf set) {
+            return ObjectDecoders.list(decoderFor(set.element()))
+                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
+        }
+        if (type instanceof Type.MapOf map) {
+            Decoder<Object, ?> values = ObjectDecoders.map(decoderFor(map.value()));
+            return map.key() instanceof Type.Ref key ? rekeyed(values, key) : values;
+        }
         throw new FixtureException("`" + Type.show(type) + "` is not supported as an example value yet");
+    }
+
+    /**
+     * A map whose keys are a newtype ({@code Map<商品ID, Int>}, ADR-0040): the values decode first, as
+     * the derived decoder does, then each key is built through its own type — so the key's invariant
+     * runs and a fixture that breaks it is reported instead of reaching the behavior as a bare string.
+     * Every key is tried and its failures merged, as the derived decoder's rekey helper does, so a
+     * fixture with two bad keys names both rather than stopping at the first.
+     */
+    private Decoder<Object, ?> rekeyed(Decoder<Object, ?> values, Type.Ref key) {
+        Decoder<Object, ?> keyDecoder = decoderFor(key);
+        return values.flatMapWithPath((decoded, path) -> {
+            Map<Object, Object> out = new LinkedHashMap<>();
+            Issues issues = Issues.EMPTY;
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) decoded).entrySet()) {
+                Result<?> k = keyDecoder.decode(entry.getKey(), path.append(String.valueOf(entry.getKey())));
+                switch (k) {
+                    case Ok<?> ok -> out.put(ok.value(), entry.getValue());
+                    case Err<?> err -> issues = issues.merge(err.issues());
+                }
+            }
+            return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
+        });
     }
 
     // --- invoke the behavior ------------------------------------------------------------------
