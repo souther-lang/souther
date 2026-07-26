@@ -4,40 +4,53 @@ import souther.compiler.diag.CompileException;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A behavior may not declare {@code constructs} for a type another module declares. Construction is
- * closed to the declaring module (ADR-0015), so the generated {@code __construct} is package-private
- * and the call fails with an {@code IllegalAccessError} at run time. The declaration is decidable
- * where it is written — the type's declaring module against the behavior's own — so it is rejected
- * there (issue #113).
+ * A behavior constructs what its {@code constructs} names, wherever that type was declared
+ * (ADR-0002). A type another module exposes may be built here, through the same checked entry every
+ * construction takes — so the invariant runs, and what the declaration says is what happens.
+ *
+ * <p>A type a module keeps to itself stays unbuildable: its entry is not opened, and a value of it
+ * can only be read.
  */
 class CompileConstructsImportedTest {
 
     private static final String UP = """
             module up exposing ( Amount )
             data Amount = Int
+                invariant value >= 0
             """;
 
     @Test
-    void constructingAnImportedTypeIsRejected() {
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(UP, """
-                        module down
-                        import up ( Amount )
+    void anExposedTypeOfAnotherModuleMayBeConstructedHere() {
+        Compiler.compileModules(List.of(UP, """
+                module down
+                import up ( Amount )
 
-                        data Plan = { total: Amount }
+                data Plan = { total: Amount }
 
-                        behavior makePlan : (n: Int) -> Plan
-                            constructs Plan, Amount
-                        let makePlan (n) = Plan { total = Amount(n) }
-                        """)));
+                behavior makePlan : (n: Int) -> Plan
+                    constructs Plan, Amount
+                let makePlan (n) = Plan { total = Amount(n) }
+                """));
+    }
 
-        assertTrue(e.getMessage().contains("Amount"), e.getMessage());
-        assertTrue(e.getMessage().contains("up"), "it names the module that declares it: " + e.getMessage());
+    @Test
+    void anInjectedBehaviorMayConstructOneToo() {
+        Compiler.compileModules(List.of(UP, """
+                module down exposing ( Plan, readPlan )
+                import up ( Amount )
+
+                data Plan = { total: Amount }
+
+                behavior readPlan : (n: Int) -> Plan
+                    constructs Plan, Amount
+                """));
     }
 
     @Test
@@ -57,7 +70,6 @@ class CompileConstructsImportedTest {
 
     @Test
     void anImportedTypeMayStillBeReadAndPassedThrough() {
-        // reading across a module is what importing is for; only building across one is closed
         Compiler.compileModules(List.of(UP, """
                 module down
                 import up ( Amount )
@@ -70,20 +82,62 @@ class CompileConstructsImportedTest {
                 """));
     }
 
+    /** The construction runs, and the invariant runs with it — at home or away. */
     @Test
-    void anInjectedBehaviorCannotConstructAnImportedTypeEither() {
-        // the injected case has its own rule about exposure (E1305); this one is about ownership
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(UP, """
-                        module down
+    void theInvariantRunsOnAConstructionDeclaredInAnotherModule() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(
+                Compiler.compileModules(List.of(UP, """
+                        module down exposing ( Req, mint )
                         import up ( Amount )
 
-                        data Plan = { total: Amount }
+                        data Req = { n: Int }
 
-                        behavior readPlan : (n: Int) -> Plan
-                            constructs Plan, Amount
+                        behavior mint : (r: Req) -> Amount constructs Amount
+                        let mint (r) = Amount(r.n)
+                        """)), getClass().getClassLoader());
+
+        Object impl = loader.loadClass("down.Mint$Impl").getDeclaredConstructor().newInstance();
+        Object ok = Codecs.apply(impl, Codecs.decoded(loader, "down.Req", Map.of("n", 5L)));
+        assertEquals(5L, ok.getClass().getMethod("value").invoke(ok));
+
+        Object bad = Codecs.decoded(loader, "down.Req", Map.of("n", -3L));
+        souther.runtime.ConstraintViolation aborted = assertThrows(
+                souther.runtime.ConstraintViolation.class, () -> Codecs.apply(impl, bad));
+        assertTrue(aborted.getMessage().contains("Amount"), aborted.getMessage());
+    }
+
+    /** A type its module keeps to itself has no entry to build with. A value of it still arrives —
+     * through a field of a data that module does expose — and reading it is all this module can do. */
+    @Test
+    void aTypeItsModuleKeepsToItselfCannotBeBuiltHere() {
+        String hidden = """
+                module hid exposing ( Invoice )
+                data Amount = Int
+                    invariant value >= 0
+                data Invoice = { total: Amount }
+                """;
+
+        Compiler.compileModules(List.of(hidden, """
+                module down
+                data Out = { n: Int }
+
+                behavior read : (i: hid.Invoice) -> Out constructs Out
+                let read (i) = Out { n = i.total.value }
+                """));
+
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(hidden, """
+                        module down
+                        data Out = { n: Int }
+
+                        behavior double : (i: hid.Invoice) -> Out constructs Out
+                        let double (i) = {
+                            let doubled = i.total + i.total
+                            Out { n = doubled.value }
+                        }
                         """)));
 
         assertTrue(e.getMessage().contains("Amount"), e.getMessage());
+        assertTrue(e.getMessage().contains("expose"), e.getMessage());
     }
 }

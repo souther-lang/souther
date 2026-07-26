@@ -677,7 +677,10 @@ final class BodyGen {
             Ast.Data owner = (Ast.Data) symbols.declaration(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
-            if (DataChecker.isInvariantBearing(nd.typeName(), symbols)) {
+            TypeName built = symbols.resolve(nd.typeName());
+            // A type of another module is built through its checked entry: `new` reaches a constructor
+            // that is not public, and the checked entry is the declared path either way.
+            if (DataChecker.isInvariantBearing(built, symbols) || symbols.isForeign(built)) {
                 // In value position (a match arm, a non-tail let, a call argument, ...) the checked
                 // construction goes through __construct just as it does in tail (see emitTail): the
                 // invariant runs and orThrow either yields the value or aborts with a
@@ -712,7 +715,7 @@ final class BodyGen {
             Ast.Data owner = (Ast.Data) symbols.get(ntName);
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(ntName);
-            if (DataChecker.isInvariantBearing(ntName, symbols)) {
+            if (DataChecker.isInvariantBearing(ntName, symbols) || symbols.isForeign(ntName)) {
                 finishInvariantConstruct(cdType, flds);
             } else {
                 int s = slot(base);

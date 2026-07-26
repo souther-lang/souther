@@ -28,10 +28,12 @@ What F# programmers write by convention for exactly this reason — `type X = pr
 constructor returning a `Result` — is what Souther makes the only way. The guarantee is the same one;
 what changes is that it is not opt-in.
 
-Note what this decision does *not* say: nothing here restricts construction to the module that
-declares the type. A behavior in any module that declares `constructs T` is a declared path by this
-ADR. The compiler currently rejects that when `T` is imported, for a reason that lives in codegen
-rather than here (issue #121).
+Nothing here restricts construction to the module that declares the type: a behavior in any module
+that declares `constructs T` is a declared path. The compiler used to reject that when `T` was
+imported, because the generated entry was package-private — a codegen choice that had become a second
+rule nobody decided (issue #121). It is gone. A type its module exposes is built through the same
+checked entry wherever the `constructs` is written, and a type a module keeps to itself is not
+reachable to be built.
 
 ## Consequences
 

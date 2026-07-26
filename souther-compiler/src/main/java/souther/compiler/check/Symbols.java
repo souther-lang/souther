@@ -279,6 +279,11 @@ public final class Symbols {
         return defs;
     }
 
+    /** Whether the module that declares {@code name} exposes it — its own names always count. */
+    public boolean isExposed(TypeName name) {
+        return exposes(name.module(), name.name());
+    }
+
     /** Whether {@code moduleName} exposes {@code name} (dropping any {@code .decoder} member). */
     private boolean exposes(String moduleName, String name) {
         if (moduleName.equals(module)) {

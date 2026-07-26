@@ -408,8 +408,11 @@ final class ValueClassGen {
 
     private void emitConstructMethod(ClassBuilder cb, ClassDesc cdName, Ast.Data data,
                                      Map<String, Type> fields) {
+        // Public for an exposed type: a behavior of another module may declare `constructs T`
+        // (ADR-0002 never restricted that to T's own module), and this is the path it takes — the one
+        // that runs the invariant. A type this module keeps to itself keeps its entry package-private.
         cb.withMethodBody("__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)),
-                ClassFile.ACC_STATIC, code -> {
+                ClassFile.ACC_STATIC | ctx.pub(data.name()), code -> {
                     BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
                     int slot = 0;
                     for (Map.Entry<String, Type> f : fields.entrySet()) {
