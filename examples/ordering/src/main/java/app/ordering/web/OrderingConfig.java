@@ -10,6 +10,7 @@ import example.cart.Quote;
 import example.ordering.Place;
 import example.ordering.RecordOrder;
 import example.ordering.ReserveStock;
+import example.shipping.PlanPicks;
 import example.tax.RateOf;
 import example.tax.TaxFor;
 
@@ -78,6 +79,16 @@ public class OrderingConfig {
     @Bean
     public Place place(RecordOrder recordOrder, ReserveStock reserveStock) {
         return Place.bind(recordOrder, reserveStock);
+    }
+
+    /**
+     * shipping's pick planning. Pure, like quote — it reads a shelf map the boundary hands it rather
+     * than a warehouse, so nothing is injected. It is the deepest module in this project (shipping ->
+     * inventory -> cart) and needs no more wiring than the shallowest.
+     */
+    @Bean
+    public PlanPicks planPicks() {
+        return PlanPicks.of();
     }
 
     /** tax's injected rate lookup: the one NUMERIC column in the schema (example.tax). */
