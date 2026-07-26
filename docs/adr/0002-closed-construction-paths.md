@@ -10,6 +10,29 @@ The spec DSL states, via parse-don't-validate, that "a validated email address i
 
 A value of `data T` can be produced only by: `T`'s derived decoder, the implementation (Souther `let` or injected Java) of a behavior whose construction set includes T, or compiler-generated code. The authority to construct is held by the *behavior*, not by its implementation. That set is written with `constructs` on the behavior; on an let-backed behavior it may be omitted and inferred from the visible body, while an injected behavior must declare it (no body to infer from, and it drives factory generation — ADR-0006, `[#java-base-class]`).
 
+## Why this is not a per-type choice
+
+The ML family makes opacity a decision the author writes per type. Elm's `exposing` distinguishes the
+type from its constructors — `module Dict exposing ( Dict, ... )` hides them, `module Maybe exposing
+( Maybe(..), ... )` shows them. F# and OCaml put the same choice in a separate signature (`.fsi` /
+`.mli`), where a discriminated union or record "must expose either all or none of their fields and
+constructors". In all three, a module may choose to hand out a raw constructor.
+
+Souther does not offer that choice, and the reason is the invariant. None of those languages attaches
+one to a type, so exposing a constructor there costs nothing but encapsulation. Here a constructor is
+the one place an invariant is checked, so a type that hands one out is a type whose invariant is
+advisory — and "a validated email address is guaranteed to be validated by its type" stops holding
+for the whole language, not just for that type.
+
+What F# programmers write by convention for exactly this reason — `type X = private ...` with a smart
+constructor returning a `Result` — is what Souther makes the only way. The guarantee is the same one;
+what changes is that it is not opt-in.
+
+Note what this decision does *not* say: nothing here restricts construction to the module that
+declares the type. A behavior in any module that declares `constructs T` is a declared path by this
+ADR. The compiler currently rejects that when `T` is imported, for a reason that lives in codegen
+rather than here (issue #121).
+
 ## Consequences
 
 Permission is always on the behavior's declaration. A helper `let` (one with no corresponding behavior) may also construct data, but it does not declare `constructs` itself — its construction set is inferred transitively and must be contained in the `constructs` of the behavior that calls it (otherwise E1002). Blocks work the same way, constructing under the enclosing behavior's authority. So refactoring an anonymous block out into a named helper `let` never changes whether a construction is allowed.
@@ -21,3 +44,5 @@ The guarantee is "no *unvalidated* value can be built," not "no value can be bui
 ## References
 
 - Specification: `[#closed-construction]`, `[#constructs]`, `[#java-base-class]`
+- Prior art: Elm `exposing (Dict)` vs `exposing (Maybe(..))` (elm/core), F# signature files and
+  `type X = private ...`, OCaml `.mli` abstract types
