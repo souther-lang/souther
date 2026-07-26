@@ -30,7 +30,9 @@ data LineItem =
     { sku: Sku
     , quantity: Int
     , unitPrice: Int
+    , weightGrams: Int
     }
+    invariant weightGrams >= 0
 
 data Cart =
     { open: Bool
@@ -74,18 +76,18 @@ let subtotal (xs: List<LineItem>) = fold((acc, x) -> acc + x, 0, map(lineAmount,
 example quote
     | "all lines valid -> a priced cart" :
         (Cart { open = true, items =
-            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 }
-            , LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 } ] })
+            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 }
+            , LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ] })
         -> PricedCart { items =
-            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 }
-            , LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 } ]
+            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 }
+            , LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ]
             , total = 200300, highValue = true }
     | "a closed cart -> empty" :
         (Cart { open = false, items =
-            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ] })
+            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ] })
         -> EmptyCart
     | "a zero-quantity line -> invalid" :
         (Cart { open = true, items =
-            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 }
-            , LineItem { sku = Sku("tv"), quantity = 0, unitPrice = 200000 } ] })
+            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 }
+            , LineItem { sku = Sku("tv"), quantity = 0, unitPrice = 200000, weightGrams = 120 } ] })
         -> InvalidQuantity { invalidCount = 1 }

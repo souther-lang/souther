@@ -91,15 +91,15 @@ fake rateOf
 
 example taxFor
     | "the standard rate is 10%, rounded down" :
-        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105 } ],
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105, weightGrams = 120 } ],
             total = 315, highValue = false }, StandardRate)
         -> TaxBreakdown { net = 315, rate = TaxRate(0.10m), rateLabel = "10%", tax = 31, gross = 346 }
     | "the reduced rate is 8%" :
-        (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550 } ],
+        (PricedCart { items = [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ],
             total = 1100, highValue = false }, ReducedRate)
         -> TaxBreakdown { net = 1100, rate = TaxRate(0.08m), rateLabel = "8%", tax = 88, gross = 1188 }
     | "half a yen is dropped, not rounded up" :
-        (PricedCart { items = [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105 } ],
+        (PricedCart { items = [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105, weightGrams = 120 } ],
             total = 105, highValue = false }, StandardRate)
         -> TaxBreakdown { net = 105, rate = TaxRate(0.10m), rateLabel = "10%", tax = 10, gross = 115 }
 
@@ -126,8 +126,8 @@ let taxRoundedPerLine (order, category, rateOf) = {
 example taxRoundedPerLine
     | "rounding per line loses a yen" :
         (PricedCart { items =
-            [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105 }
-            , LineItem { sku = Sku("note"), quantity = 1, unitPrice = 105 }
-            , LineItem { sku = Sku("clip"), quantity = 1, unitPrice = 105 } ],
+            [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 105, weightGrams = 120 }
+            , LineItem { sku = Sku("note"), quantity = 1, unitPrice = 105, weightGrams = 120 }
+            , LineItem { sku = Sku("clip"), quantity = 1, unitPrice = 105, weightGrams = 120 } ],
             total = 315, highValue = false }, StandardRate)
         -> PerLineTax { tax = 30 }

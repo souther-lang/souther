@@ -84,7 +84,7 @@ let allocate (order, readStock, commitStock) = {
 }
 
 fake readStock
-    | (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ], total = 300, highValue = false })
+    | (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300, highValue = false })
         -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = 5 } ] }
     | _ -> StockSnapshot { rows = [ StockLine { sku = Sku("apple"), quantity = 1 } ] }
 
@@ -93,10 +93,10 @@ fake commitStock
 
 example allocate
     | "every line within stock is allocated" :
-        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ], total = 300, highValue = false })
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300, highValue = false })
             -> Allocated { total = 300 }
     | "one line over stock fails the whole allocation" :
-        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 999, unitPrice = 150 } ], total = 149850, highValue = true })
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 999, unitPrice = 150, weightGrams = 120 } ], total = 149850, highValue = true })
             -> InsufficientStock
 
 // === inspectBarcode: barcode read verification ===

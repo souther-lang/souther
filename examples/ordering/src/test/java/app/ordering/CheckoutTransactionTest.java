@@ -82,7 +82,7 @@ class CheckoutTransactionTest {
     }
 
     private static String line(String sku, int quantity, int unitPrice) {
-        return "{\"sku\":\"" + sku + "\",\"quantity\":" + quantity + ",\"unitPrice\":" + unitPrice + "}";
+        return "{\"sku\":\"" + sku + "\",\"quantity\":" + quantity + ",\"unitPrice\":" + unitPrice + ",\"weightGrams\":120}";
     }
 
     private static String cart(boolean open, String... lines) {

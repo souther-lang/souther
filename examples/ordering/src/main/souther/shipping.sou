@@ -88,8 +88,8 @@ let planPicks (order, shelf) = {
 example planPicks
     | "the walk comes out in shelf order, not order-line order" :
         (PricedCart { items =
-            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 }
-            , LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ]
+            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 }
+            , LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ]
             , total = 200300, highValue = true }
         , [ (Sku("tv"), Location("C-01-01")), (Sku("apple"), Location("A-03-12")) ])
             -> PickList { lines =
@@ -97,15 +97,15 @@ example planPicks
                 , PickLine { sku = Sku("tv"), quantity = 1, location = Location("C-01-01") } ] }
     | "a line whose sku has no shelf is not walked to" :
         (PricedCart { items =
-            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 }
-            , LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ]
+            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 }
+            , LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ]
             , total = 200300, highValue = true }
         , [ (Sku("apple"), Location("A-03-12")) ])
             -> PickList { lines =
                 [ PickLine { sku = Sku("apple"), quantity = 2, location = Location("A-03-12") } ] }
     | "no line has a shelf, so there is no walk" :
         (PricedCart { items =
-            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 } ]
+            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ]
             , total = 200000, highValue = true }
         , [ (Sku("apple"), Location("A-03-12")) ])
             -> NothingToShip

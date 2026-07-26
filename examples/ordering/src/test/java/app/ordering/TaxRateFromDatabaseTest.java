@@ -70,7 +70,7 @@ class TaxRateFromDatabaseTest {
 
     private PricedCart cart(long total) {
         return ok(PricedCart.decoder().decode(Map.of(
-                "items", List.of(Map.of("sku", "apple", "quantity", 3L, "unitPrice", 105L)),
+                "items", List.of(Map.of("sku", "apple", "quantity", 3L, "unitPrice", 105L, "weightGrams", 120L)),
                 "total", total,
                 "highValue", false), Path.ROOT));
     }

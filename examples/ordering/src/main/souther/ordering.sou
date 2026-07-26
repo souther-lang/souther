@@ -76,21 +76,21 @@ let place (order, recordOrder, reserveStock) = reserveStock(recordOrder(order))
 // imported type; its fixture is decoded against example.cart. The happy row threads a real order id
 // through both fakes; the `_` rows drive the OutOfStock path.
 fake recordOrder
-    | (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ], total = 300, highValue = false })
-        -> RecordedOrder { orderId = OrderId("order-1"), items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ], total = 300 }
+    | (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300, highValue = false })
+        -> RecordedOrder { orderId = OrderId("order-1"), items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300 }
     | _ -> RecordedOrder { orderId = OrderId("order-oos"), items = [], total = 0 }
 
 fake reserveStock
-    | (RecordedOrder { orderId = OrderId("order-1"), items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ], total = 300 })
+    | (RecordedOrder { orderId = OrderId("order-1"), items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300 })
         -> ConfirmedOrder { orderId = OrderId("order-1"), total = 300 }
     | _ -> OutOfStock
 
 example place
     | "records then reserves within one pipeline" :
-        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 } ], total = 300, highValue = false })
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 } ], total = 300, highValue = false })
         -> ConfirmedOrder { orderId = OrderId("order-1"), total = 300 }
     | "reservation reports out of stock" :
-        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 999, unitPrice = 150 } ], total = 149850, highValue = true })
+        (PricedCart { items = [ LineItem { sku = Sku("apple"), quantity = 999, unitPrice = 150, weightGrams = 120 } ], total = 149850, highValue = true })
         -> OutOfStock
 
 // === report: a pure sales summary over a recorded order ===
@@ -125,8 +125,8 @@ let report (order) =
 example report
     | "distinct skus, plus totals and the high-value line count" :
         (RecordedOrder { orderId = OrderId("order-1"), items =
-            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150 }
-            , LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 }
-            , LineItem { sku = Sku("apple"), quantity = 1, unitPrice = 150 } ]
+            [ LineItem { sku = Sku("apple"), quantity = 2, unitPrice = 150, weightGrams = 120 }
+            , LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 }
+            , LineItem { sku = Sku("apple"), quantity = 1, unitPrice = 150, weightGrams = 120 } ]
             , total = 200450 })
         -> SalesReport { total = 200450, distinctSkus = [ "apple", "tv" ], lineCount = 3, highValueLines = 1 }

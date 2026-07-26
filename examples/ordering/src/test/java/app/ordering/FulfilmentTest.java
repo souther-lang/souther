@@ -49,8 +49,8 @@ class FulfilmentTest {
         // tv is sent first but sits in aisle C; apple sits in aisle A, so the walk starts there.
         HttpResponse<String> res = post("""
                 {"cart": {"open": true, "items": [
-                    {"sku": "tv", "quantity": 1, "unitPrice": 200000},
-                    {"sku": "apple", "quantity": 2, "unitPrice": 150}]},
+                    {"sku": "tv", "quantity": 1, "unitPrice": 200000, "weightGrams": 120},
+                    {"sku": "apple", "quantity": 2, "unitPrice": 150, "weightGrams": 120}]},
                  "shelf": {"tv": "C-01-01", "apple": "A-03-12"}}
                 """);
 
@@ -66,7 +66,7 @@ class FulfilmentTest {
         // and the order is not kept.
         HttpResponse<String> res = post("""
                 {"cart": {"open": true, "items": [
-                    {"sku": "apple", "quantity": 2, "unitPrice": 150}]},
+                    {"sku": "apple", "quantity": 2, "unitPrice": 150, "weightGrams": 120}]},
                  "shelf": {"tv": "C-01-01"}}
                 """);
 
@@ -81,7 +81,7 @@ class FulfilmentTest {
         // request is rejected before anything is placed.
         HttpResponse<String> res = post("""
                 {"cart": {"open": true, "items": [
-                    {"sku": "apple", "quantity": 2, "unitPrice": 150}]},
+                    {"sku": "apple", "quantity": 2, "unitPrice": 150, "weightGrams": 120}]},
                  "shelf": {"apple": "A-3-12"}}
                 """);
 
@@ -94,7 +94,7 @@ class FulfilmentTest {
     void POST_returns409_whenTheOrderCannotBeReserved() throws Exception {
         HttpResponse<String> res = post("""
                 {"cart": {"open": true, "items": [
-                    {"sku": "tv", "quantity": 5, "unitPrice": 200000}]},
+                    {"sku": "tv", "quantity": 5, "unitPrice": 200000, "weightGrams": 120}]},
                  "shelf": {"tv": "C-01-01"}}
                 """);
 

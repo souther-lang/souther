@@ -122,7 +122,7 @@ let issueInvoice (recorded, breakdown, terms, issuedOn, sequence) =
 example issueInvoice
     | "a net-30 invoice states the order's amounts and falls due in thirty days" :
         (RecordedOrder { orderId = OrderId("ORD-1"), items =
-            [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105 } ], total = 315 }
+            [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105, weightGrams = 120 } ], total = 315 }
         , TaxBreakdown { net = 315, rate = TaxRate(0.10m), rateLabel = "10%", tax = 31, gross = 346 }
         , Net30, Date("2026-07-25"), 42)
             -> Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
@@ -130,7 +130,7 @@ example issueInvoice
                          net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
     | "net-60 is two months on, which addMonths reaches without counting days" :
         (RecordedOrder { orderId = OrderId("ORD-3"), items =
-            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 } ], total = 200000 }
+            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ], total = 200000 }
         , TaxBreakdown { net = 200000, rate = TaxRate(0.10m), rateLabel = "10%", tax = 20000,
                          gross = 220000 }
         , Net60, Date("2026-07-31"), 9)
@@ -139,7 +139,7 @@ example issueInvoice
                          net = Amount(200000.0m), tax = Amount(20000.0m), gross = Amount(220000.0m) }
     | "net-15 halves the window and nothing else changes" :
         (RecordedOrder { orderId = OrderId("ORD-2"), items =
-            [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550 } ], total = 1100 }
+            [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ], total = 1100 }
         , TaxBreakdown { net = 1100, rate = TaxRate(0.08m), rateLabel = "8%", tax = 88, gross = 1188 }
         , Net15, Date("2026-07-25"), 7)
             -> Invoice { no = InvoiceNo("INV-2026-000007"), orderId = OrderId("ORD-2"),
