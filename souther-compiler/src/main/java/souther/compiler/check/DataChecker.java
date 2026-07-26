@@ -9,7 +9,6 @@ import souther.compiler.diag.SourcePos;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -145,6 +144,41 @@ public final class DataChecker {
         }
     }
 
+    /** The path back to {@code target} through sum cases, or null when it does not reach itself. A
+     * sum names the values it can be, so a case that is (or reaches) the sum itself describes nothing:
+     * it has no leaf to dispatch a codec over and no case list a {@code match} could be exhaustive
+     * against. Reported here rather than left to the walks, which would recurse until the stack ran
+     * out — codec derivation runs before this check and stops at the repeat for the same reason. */
+    private static List<String> sumCycle(String target, Map<String, Ast.Def> symbols,
+                                         LinkedHashSet<String> path) {
+        if (!(symbols.get(path.isEmpty() ? target : last(path)) instanceof Ast.SumData s)) {
+            return null;
+        }
+        for (String caseName : s.cases()) {
+            if (caseName.equals(target)) {
+                List<String> out = new ArrayList<>(path);
+                out.add(caseName);
+                return out;
+            }
+            if (symbols.get(caseName) instanceof Ast.SumData && path.add(caseName)) {
+                List<String> found = sumCycle(target, symbols, path);
+                if (found != null) {
+                    return found;
+                }
+                path.remove(caseName);
+            }
+        }
+        return null;
+    }
+
+    private static String last(LinkedHashSet<String> path) {
+        String out = null;
+        for (String s : path) {
+            out = s;
+        }
+        return out;
+    }
+
     static void checkSum(Ast.SumData sum, Map<String, Ast.Def> symbols) {
         rejectDuplicateNames(sum.cases(), "the sum `" + sum.name() + "`", sum.pos());
         for (String caseName : sum.cases()) {
@@ -154,6 +188,15 @@ public final class DataChecker {
                                 .at(sum.pos()).args(caseName, sum.name()).build(),
                         "unknown case `" + caseName + "` in sum `" + sum.name() + "`");
             }
+        }
+        List<String> cycle = sumCycle(sum.name(), symbols, new LinkedHashSet<>());
+        if (cycle != null) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.sum.cycle").title("check.sum.title")
+                            .at(sum.pos()).args(sum.name(), String.join(" | ", cycle)).build(),
+                    "sum `" + sum.name() + "` contains itself through " + String.join(" | ", cycle)
+                            + "; a sum's cases are the values it can be, so one of them cannot be the"
+                            + " sum itself");
         }
         sum.decoder().ifPresent(disc -> {
             // a derived codec dispatches over the leaves, so a nested sum's cases count too (8.3, 10.3)

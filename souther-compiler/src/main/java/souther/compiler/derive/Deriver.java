@@ -324,9 +324,17 @@ public final class Deriver {
     }
 
     private static void collectLeafCases(Ast.SumData s, Map<String, Ast.Def> symbols, List<String> out) {
+        collectLeafCases(s, symbols, out, new java.util.HashSet<>());
+    }
+
+    private static void collectLeafCases(Ast.SumData s, Map<String, Ast.Def> symbols, List<String> out,
+                                         java.util.Set<String> visiting) {
+        if (!visiting.add(s.name())) {
+            return;   // a sum that reaches itself; DataChecker reports it, this only has to terminate
+        }
         for (String caseName : s.cases()) {
             if (symbols.get(caseName) instanceof Ast.SumData nested) {
-                collectLeafCases(nested, symbols, out);
+                collectLeafCases(nested, symbols, out, visiting);
             } else if (!out.contains(caseName)) {
                 out.add(caseName);
             }

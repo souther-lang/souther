@@ -127,8 +127,15 @@ public final class TypeOps {
      * branch widened to — with a case that is itself a sum folded to its own cases. Null when
      * {@code t} is not a sum at all. */
     static List<String> sumCases(Type t, Map<String, Ast.Def> symbols) {
+        return sumCases(t, symbols, new HashSet<>());
+    }
+
+    private static List<String> sumCases(Type t, Map<String, Ast.Def> symbols, Set<String> visiting) {
         List<String> names;
         if (t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum) {
+            if (!visiting.add(ref.name())) {
+                return List.of();   // a sum reaching itself; DataChecker reports it, this must terminate
+            }
             names = sum.cases();
         } else if (t instanceof Type.Union union) {
             names = List.copyOf(union.members());
@@ -138,7 +145,7 @@ public final class TypeOps {
         List<String> leaves = new ArrayList<>();
         for (String name : names) {
             List<String> nested = symbols.get(name) instanceof Ast.SumData
-                    ? sumCases(Type.ref(name), symbols) : null;
+                    ? sumCases(Type.ref(name), symbols, visiting) : null;
             if (nested == null) {
                 leaves.add(name);
             } else {
@@ -279,16 +286,24 @@ public final class TypeOps {
     /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
     public static Set<String> leafCases(Type t, Map<String, Ast.Def> symbols) {
         Set<String> out = new HashSet<>();
+        collectLeafCases(t, symbols, out, new HashSet<>());
+        return out;
+    }
+
+    private static void collectLeafCases(Type t, Map<String, Ast.Def> symbols, Set<String> out,
+                                         Set<String> visiting) {
         for (String name : namesOf(t)) {
             if (symbols.get(name) instanceof Ast.SumData s) {
+                if (!visiting.add(name)) {
+                    continue;   // a sum reaching itself; DataChecker reports it, this must terminate
+                }
                 for (String caseName : s.cases()) {
-                    out.addAll(leafCases(Type.ref(caseName), symbols));
+                    collectLeafCases(Type.ref(caseName), symbols, out, visiting);
                 }
             } else {
                 out.add(name);
             }
         }
-        return out;
     }
 
     /** Effective field name → type (included data flattened first, then own fields). */

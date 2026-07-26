@@ -4,7 +4,6 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Type;
 import souther.compiler.check.CallElaborator;
-import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -898,7 +897,16 @@ public final class ExampleVerifier {
 
     private Object decode(Type type, Object raw) {
         Decoder<Object, ?> decoder = decoderFor(type);
-        Result<?> result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
+        Result<?> result;
+        try {
+            result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
+        } catch (RuntimeException e) {
+            // The decoder is generated for the declared type and casts on the way in, so a fixture of
+            // another shape — a string where the parameter is a product, a number where it is a
+            // string-backed newtype — fails inside it rather than returning an Err. That is the
+            // fixture's problem, and it reads as one (E1903) instead of aborting the compile.
+            throw new FixtureException("a " + shapeOf(raw) + " does not fit " + Type.show(type));
+        }
         if (result instanceof Ok<?> ok) {
             return ok.value();
         }
@@ -906,6 +914,21 @@ public final class ExampleVerifier {
                 .map(net.unit8.raoh.Issue::message)
                 .collect(java.util.stream.Collectors.joining("; "));
         throw new FixtureException(detail);
+    }
+
+    /** What a fixture value looks like from the decode boundary, for the message above: the raw kinds
+     *  a fixture can produce, named as the author wrote them rather than by their JVM class. */
+    private static String shapeOf(Object raw) {
+        return switch (raw) {
+            case null -> "missing value";
+            case String _ -> "string";
+            case Long _, Integer _ -> "number";
+            case java.math.BigDecimal _ -> "decimal";
+            case Boolean _ -> "boolean";
+            case java.util.Map<?, ?> _ -> "record";
+            case java.util.List<?> _ -> "list";
+            default -> raw.getClass().getSimpleName();
+        };
     }
 
     @SuppressWarnings("unchecked")
