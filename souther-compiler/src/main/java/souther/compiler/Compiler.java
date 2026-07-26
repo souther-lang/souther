@@ -3,6 +3,7 @@ package souther.compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.check.Exposing;
 import souther.compiler.check.HelperInliner;
@@ -701,6 +702,10 @@ public final class Compiler {
     /** Own definitions plus imported ones, validated against the source module's {@code exposing}. */
     private static Map<String, Ast.Def> visibleDefs(Ast.Module m, Map<String, Ast.Module> registry) {
         Map<String, Ast.Def> defs = new HashMap<>(TypeChecker.symbols(m));
+        Set<String> own = Set.copyOf(defs.keySet());
+        // Which import brought each name in, so a second one naming it is reported against that
+        // import rather than against a local definition the module may not have (issue #101).
+        Map<String, Ast.Import> from = new HashMap<>();
         for (Ast.Import imp : m.imports()) {
             Ast.Module src = registry.get(imp.module());
             if (src == null) {
@@ -731,14 +736,37 @@ public final class Compiler {
                             "`" + name + "` is not defined in `" + imp.module() + "`");
                 }
                 if (defs.put(name, d) != null) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.import.conflict").title("check.module.title")
-                                    .at(imp.pos()).args(name).build(),
-                            "imported `" + name + "` conflicts with a local definition");
+                    throw importCollision(name, imp, own.contains(name) ? null : from.get(name));
                 }
+                from.put(name, imp);
             }
         }
         return defs;
+    }
+
+    /**
+     * The name arrived twice. {@code earlier} is the import that already brought it in, or null when
+     * the module defines it itself. The local case has a way out inside the module: rename the local
+     * definition or drop it. The import-vs-import case has none — there is no import alias — so the
+     * message names both modules and leaves the choice of which one to keep to the module.
+     */
+    private static CompileException importCollision(String name, Ast.Import imp, Ast.Import earlier) {
+        if (earlier == null) {
+            return CompileException.of(
+                    Diagnostic.of(null, "check.import.conflict").title("check.module.title")
+                            .at(imp.pos()).args(name)
+                            .hint("check.import.conflict.hint").build(),
+                    "imported `" + name + "` conflicts with a local definition");
+        }
+        Diagnostic.Builder b = Diagnostic.of(null, "check.import.duplicate").title("check.module.title")
+                .at(imp.pos()).args(name, earlier.module(), imp.module())
+                .secondary(Region.point(earlier.pos()), "check.import.duplicate.first", name,
+                        earlier.module());
+        return CompileException.of(
+                b.hint(earlier.module().equals(imp.module())
+                        ? "check.import.duplicate.same.hint" : "check.import.duplicate.hint").build(),
+                "`" + name + "` is imported from both `" + earlier.module() + "` and `"
+                        + imp.module() + "`; one name cannot stand for two types");
     }
 
     /** Maps each imported type name to its declaring module, for cross-package class references. */
