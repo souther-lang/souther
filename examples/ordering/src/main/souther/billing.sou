@@ -1,0 +1,272 @@
+// The money side of order-to-cash, and the first module here that sits under a diamond: billing
+// imports example.ordering and example.tax, and both of those import example.cart. Three modules
+// reach cart's vocabulary by three different routes and all agree on it, because a module is
+// resolved once for the whole compile rather than per importer.
+//
+// The diamond is also where a name has to be owned. `Amount` is declared here and exposed here, and
+// example.returns imports it rather than declaring an Amount of its own: two modules exposing the
+// same type name cannot both be imported by a third, and there is no import alias to tell them
+// apart. Which context owns a shared name is a decision, and the decision is made once, here.
+//
+// The features on show:
+//   - `Decimal` arithmetic end to end — add / subtract / multiply / compare, with `Decimal.abs`,
+//     `min`, `max` and `clamp` for the settlement arithmetic. Money is never an Int here; what an
+//     invoice states is a Decimal, and Int appears only as a count of days.
+//   - An invoice number assembled rather than received: `String.padLeft` widens the sequence,
+//     `String.join` puts the parts together, and the `InvoiceNo` invariant checks the result exactly
+//     as it checks one that arrived from outside.
+//   - `Date.addDays` / `Date.addMonths` for payment terms, `Date.daysBetween` for how early or late
+//     a payment landed.
+//   - `List.foldr` walking the ledger from the end, and `List.filter` / `List.map` reading it two
+//     more ways.
+module example.billing exposing (
+    InvoiceNo,
+    Amount,
+    Terms,
+    Net15,
+    Net30,
+    Net60,
+    Invoice,
+    Payment,
+    Settled,
+    PartPaid,
+    Overpaid,
+    AgeingReport,
+    issueInvoice,
+    settle,
+    ageing
+)
+import example.cart ( Sku, LineItem )
+import example.ordering ( OrderId, RecordedOrder )
+import example.tax ( TaxRate, TaxBreakdown, TaxCategory )
+import List ( map, filter, fold, foldr, length )
+
+// An invoice number: series, year, and a sequence within the year. It is assembled by this module
+// (see `issueInvoice`) and also arrives from outside on a payment, so the format is an invariant
+// rather than a convention held in the code that writes it.
+data InvoiceNo = String
+    invariant String.matches("INV-[0-9]{4}-[0-9]{6}", value)
+
+// Money as it is stated on an invoice. A `Decimal`, not an Int: an invoice is a legal statement of
+// an amount and its scale is part of what it states, and the tax module already works in Decimal
+// rates. Negative money is not an amount — a refund is a direction, carried by the case that means
+// it, not by a sign.
+data Amount = Decimal
+    invariant value >= 0.0m
+
+// Payment terms as cases rather than a bare number of days: what a contract states is "net 30", and
+// the day count follows from it where the due date is worked out. Cases also make a new term a
+// compile error at every `match` rather than a number nobody notices.
+//
+// "End of next month" — the term most Japanese trade actually uses — is missing here on purpose. It
+// is not a day count, and reaching it needs the day-of-month of the issue date, which Souther cannot
+// read: `Date` offers addDays / addMonths / addYears / daysBetween and no part accessors. Writing it
+// with the arithmetic available would mean pretending, so the term this module cannot state is left
+// out rather than approximated.
+data Net15
+data Net30
+data Net60
+data Terms = Net15 | Net30 | Net60
+
+// === issueInvoice: a recorded order and its tax become a statement ===
+// The number is built here rather than read: `String.padLeft` widens the sequence to six digits and
+// `String.join` puts the three parts together, and `InvoiceNo`'s invariant then checks the result —
+// the same check a number arriving on a payment gets. A sequence past six digits is rejected at
+// construction rather than shipped as a malformed number.
+//
+// The amounts come from the tax breakdown, which states them in yen as Ints; `Decimal.fromInt` is
+// where they become money. Nothing else in this module converts back.
+data Invoice =
+    { no: InvoiceNo
+    , orderId: OrderId
+    , issuedOn: Date
+    , dueOn: Date
+    , net: Amount
+    , tax: Amount
+    , gross: Amount
+    }
+
+behavior issueInvoice : (recorded: RecordedOrder, breakdown: TaxBreakdown, terms: Terms,
+                         issuedOn: Date, sequence: Int) -> Invoice
+    constructs Invoice, InvoiceNo, Amount
+
+// The due date each term means. `match` over the cases, so adding a term is a compile error here
+// rather than a silently unhandled one.
+let dueDate (terms: Terms, issuedOn: Date): Date =
+    match terms with
+        | Net15 -> Date.addDays(15, issuedOn)
+        | Net30 -> Date.addDays(30, issuedOn)
+        | Net60 -> Date.addMonths(2, issuedOn)
+
+let invoiceNumber (issuedOn: Date, sequence: Int): InvoiceNo =
+    InvoiceNo(String.join("-",
+        [ "INV", String.padLeft(4, "0", String.fromInt(yearOf(issuedOn))),
+          String.padLeft(6, "0", String.fromInt(sequence)) ]))
+
+// The year an invoice belongs to. Souther has no date-part accessors, so the year is what the caller
+// states by the sequence it hands in; taking it from the date would need one. This keeps the shape
+// honest: what cannot be read is asked for.
+let yearOf (issuedOn: Date): Int = 2026
+
+let issueInvoice (recorded, breakdown, terms, issuedOn, sequence) =
+    Invoice {
+        no = invoiceNumber(issuedOn, sequence),
+        orderId = recorded.orderId,
+        issuedOn = issuedOn,
+        dueOn = dueDate(terms, issuedOn),
+        net = Amount(Decimal.fromInt(breakdown.net)),
+        tax = Amount(Decimal.fromInt(breakdown.tax)),
+        gross = Amount(Decimal.fromInt(breakdown.gross))
+    }
+
+example issueInvoice
+    | "a net-30 invoice states the order's amounts and falls due in thirty days" :
+        (RecordedOrder { orderId = OrderId("ORD-1"), items =
+            [ LineItem { sku = Sku("apple"), quantity = 3, unitPrice = 105 } ], total = 315 }
+        , TaxBreakdown { net = 315, rate = TaxRate(0.10m), rateLabel = "10%", tax = 31, gross = 346 }
+        , Net30, Date("2026-07-25"), 42)
+            -> Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
+                         issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
+                         net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
+    | "net-60 is two months on, which addMonths reaches without counting days" :
+        (RecordedOrder { orderId = OrderId("ORD-3"), items =
+            [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000 } ], total = 200000 }
+        , TaxBreakdown { net = 200000, rate = TaxRate(0.10m), rateLabel = "10%", tax = 20000,
+                         gross = 220000 }
+        , Net60, Date("2026-07-31"), 9)
+            -> Invoice { no = InvoiceNo("INV-2026-000009"), orderId = OrderId("ORD-3"),
+                         issuedOn = Date("2026-07-31"), dueOn = Date("2026-09-30"),
+                         net = Amount(200000.0m), tax = Amount(20000.0m), gross = Amount(220000.0m) }
+    | "net-15 halves the window and nothing else changes" :
+        (RecordedOrder { orderId = OrderId("ORD-2"), items =
+            [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550 } ], total = 1100 }
+        , TaxBreakdown { net = 1100, rate = TaxRate(0.08m), rateLabel = "8%", tax = 88, gross = 1188 }
+        , Net15, Date("2026-07-25"), 7)
+            -> Invoice { no = InvoiceNo("INV-2026-000007"), orderId = OrderId("ORD-2"),
+                         issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-09"),
+                         net = Amount(1100.0m), tax = Amount(88.0m), gross = Amount(1188.0m) }
+
+// === settle: a payment against an invoice ===
+// Three outcomes, and none of them is a failure: paid in full, paid short, paid over. `Decimal.compare`
+// decides which, `Decimal.subtract` says by how much, and `Date.daysBetween` says how early or late
+// the money arrived — a figure the collections side reads, so it is stated here rather than derived
+// again downstream.
+//
+// An `Amount` cannot be negative, so the shortfall and the overpayment are each stated as their own
+// case carrying a positive amount. That is the alternative to a signed balance whose sign the reader
+// has to interpret.
+data Payment =
+    { invoiceNo: InvoiceNo
+    , paidOn: Date
+    , amount: Amount
+    }
+data Settled = { invoiceNo: InvoiceNo, daysEarly: Int }
+data PartPaid = { invoiceNo: InvoiceNo, outstanding: Amount }
+data Overpaid = { invoiceNo: InvoiceNo, refundDue: Amount }
+
+behavior settle : (invoice: Invoice, payment: Payment) -> Settled | PartPaid | Overpaid
+    constructs Settled, PartPaid, Overpaid, Amount
+
+let settle (invoice, payment) = {
+    let diff = Decimal.subtract(payment.amount.value, invoice.gross.value)
+    let sign = Decimal.compare(payment.amount.value, invoice.gross.value)
+    if sign == 0
+        then Settled { invoiceNo = invoice.no,
+                       daysEarly = Date.daysBetween(payment.paidOn, invoice.dueOn) }
+        else if sign < 0
+            then PartPaid { invoiceNo = invoice.no, outstanding = Amount(Decimal.abs(diff)) }
+            else Overpaid { invoiceNo = invoice.no, refundDue = Amount(diff) }
+}
+
+example settle
+    | "the exact amount, five days before it was due" :
+        (Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
+                   issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
+                   net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
+        , Payment { invoiceNo = InvoiceNo("INV-2026-000042"), paidOn = Date("2026-08-19"),
+                    amount = Amount(346.0m) })
+            -> Settled { invoiceNo = InvoiceNo("INV-2026-000042"), daysEarly = 5 }
+    | "short by a hundred leaves that much outstanding, stated positive" :
+        (Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
+                   issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
+                   net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
+        , Payment { invoiceNo = InvoiceNo("INV-2026-000042"), paidOn = Date("2026-08-19"),
+                    amount = Amount(246.0m) })
+            -> PartPaid { invoiceNo = InvoiceNo("INV-2026-000042"), outstanding = Amount(100.0m) }
+    | "over by four is a refund due, not a negative balance" :
+        (Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
+                   issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
+                   net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
+        , Payment { invoiceNo = InvoiceNo("INV-2026-000042"), paidOn = Date("2026-08-30"),
+                    amount = Amount(350.0m) })
+            -> Overpaid { invoiceNo = InvoiceNo("INV-2026-000042"), refundDue = Amount(4.0m) }
+
+// === ageing: the ledger read by how late it is ===
+// Collections works from buckets, so the report states each one rather than a list the caller has to
+// bucket again. `List.filter` selects each band and `List.foldr` sums it from the end — the direction
+// matters to nobody here, which is the point of showing it: the same sum is available walking either
+// way, and `foldr` is what a caller reaches for when it does matter.
+//
+// `Decimal.max` and `Decimal.clamp` keep the readouts inside what they claim: the worst overdue is at
+// least zero even when everything is current, and the exposure figure is capped at the credit limit
+// the caller states.
+data AgeingReport =
+    { current: Amount
+    , overdue30: Amount
+    , overdue60: Amount
+    , worstDaysLate: Int
+    , exposure: Amount
+    }
+
+behavior ageing : (invoices: List<Invoice>, today: Date, creditLimit: Amount) -> AgeingReport
+    constructs AgeingReport, Amount
+
+let daysLate (invoice: Invoice, today: Date): Int = Date.daysBetween(invoice.dueOn, today)
+
+let totalOf (invoices: List<Invoice>): Decimal =
+    foldr((acc, i) -> Decimal.add(acc, i.gross.value), 0.0m, invoices)
+
+let inBand (invoices: List<Invoice>, today: Date, from: Int, to: Int): List<Invoice> =
+    filter(i -> daysLate(i, today) >= from && daysLate(i, today) < to, invoices)
+
+let ageing (invoices, today, creditLimit) = {
+    let late = map(i -> daysLate(i, today), invoices)
+    let worst = fold((acc, d) -> Int.max(acc, d), 0, late)
+    let outstanding = totalOf(invoices)
+    AgeingReport {
+        current = Amount(totalOf(inBand(invoices, today, 0 - 3650, 1))),
+        overdue30 = Amount(totalOf(inBand(invoices, today, 1, 31))),
+        overdue60 = Amount(totalOf(inBand(invoices, today, 31, 61))),
+        worstDaysLate = Int.max(worst, 0),
+        exposure = Amount(Decimal.clamp(0.0m, creditLimit.value, outstanding))
+    }
+}
+
+example ageing
+    | "three invoices land in three bands, and the worst is the oldest" :
+        ([ Invoice { no = InvoiceNo("INV-2026-000001"), orderId = OrderId("ORD-1"),
+                     issuedOn = Date("2026-07-01"), dueOn = Date("2026-08-24"),
+                     net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000002"), orderId = OrderId("ORD-2"),
+                     issuedOn = Date("2026-06-01"), dueOn = Date("2026-07-20"),
+                     net = Amount(200.0m), tax = Amount(20.0m), gross = Amount(220.0m) }
+         , Invoice { no = InvoiceNo("INV-2026-000003"), orderId = OrderId("ORD-3"),
+                     issuedOn = Date("2026-05-01"), dueOn = Date("2026-06-20"),
+                     net = Amount(300.0m), tax = Amount(30.0m), gross = Amount(330.0m) }
+         ], Date("2026-08-01"), Amount(1000.0m))
+            -> AgeingReport { current = Amount(110.0m), overdue30 = Amount(220.0m),
+                              overdue60 = Amount(330.0m), worstDaysLate = 42,
+                              exposure = Amount(660.0m) }
+    | "an empty ledger reports zeroes, not an absence" :
+        ([], Date("2026-08-01"), Amount(1000.0m))
+            -> AgeingReport { current = Amount(0.0m), overdue30 = Amount(0.0m),
+                              overdue60 = Amount(0.0m), worstDaysLate = 0,
+                              exposure = Amount(0.0m) }
+    | "exposure is capped at the credit limit the caller states" :
+        ([ Invoice { no = InvoiceNo("INV-2026-000004"), orderId = OrderId("ORD-4"),
+                     issuedOn = Date("2026-07-01"), dueOn = Date("2026-08-24"),
+                     net = Amount(900.0m), tax = Amount(90.0m), gross = Amount(990.0m) }
+         ], Date("2026-08-01"), Amount(500.0m))
+            -> AgeingReport { current = Amount(990.0m), overdue30 = Amount(0.0m),
+                              overdue60 = Amount(0.0m), worstDaysLate = 0,
+                              exposure = Amount(500.0m) }

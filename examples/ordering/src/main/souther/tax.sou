@@ -20,7 +20,20 @@
 //     than reassembled at the boundary.
 //   - Tax is rounded once per rate, not once per line. Rounding per line changes the total, and the
 //     `example`s below pin that difference.
-module example.tax
+// example.billing imports this module, so it writes an `exposing` list. What is on it is settled by
+// three readers at once: billing (the breakdown and the category), the jOOQ binding in app.ordering
+// (which names TaxRate, TaxCategory, TaxBreakdown, RateOf and TaxFor across a package boundary), and
+// the injected `rateOf`, whose `constructs TaxRate` needs that type exposed or E1305 rejects it.
+// What no one outside reads — PerLineTax and the comparison behavior beside it — stays this module's.
+module example.tax exposing (
+    TaxRate,
+    TaxCategory,
+    StandardRate,
+    ReducedRate,
+    TaxBreakdown,
+    rateOf,
+    taxFor
+)
 import List ( map, sum )
 import example.cart ( Sku, LineItem, PricedCart )
 

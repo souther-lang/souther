@@ -16,7 +16,19 @@
 //
 // exposing is omitted, so every generated class is public — the Spring/jOOQ boundary in Java uses
 // all of these types.
-module example.ordering
+// example.billing imports this module, so it writes an `exposing` list. The Spring/jOOQ boundary in
+// app.ordering names most of these across a package boundary, and both injected behaviors need what
+// they `constructs` exposed (E1305). `report` and its SalesReport stay this module's own: nothing
+// outside reads them, and an `example` reaches an unexposed type inside its own module.
+module example.ordering exposing (
+    OrderId,
+    RecordedOrder,
+    ConfirmedOrder,
+    OutOfStock,
+    recordOrder,
+    reserveStock,
+    place
+)
 import List ( map, filter, distinct )
 import example.cart ( Sku, LineItem, PricedCart )
 
