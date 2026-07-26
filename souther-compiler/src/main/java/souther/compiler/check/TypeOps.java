@@ -365,6 +365,37 @@ public final class TypeOps {
                 && d.fields().size() == 1 && "String".equals(d.fields().get(0).type().name());
     }
 
+    /**
+     * Whether {@code key} can key a {@code Map} that crosses the boundary. A map's external form is a
+     * JSON object, whose keys are strings, so the key type must render as and parse from a bare
+     * string: {@code String}, a String-backed newtype (ADR-0040), or a temporal — a {@code Date}
+     * field already travels as its ISO form, so an ISO key is the same representation in key
+     * position. A key type variable is admitted for the {@code core} signatures, which monomorphise
+     * to one of those.
+     */
+    public static boolean isBoundaryMapKey(Type key, Map<String, Ast.Def> symbols) {
+        return key == Type.STRING || key == Type.DATE || key == Type.DATETIME
+                || key instanceof Type.Var
+                || (key instanceof Type.Ref r && isStringNewtype(r.name(), symbols));
+    }
+
+    /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
+     * every one can — what a data field or a behavior's input/output is checked against. */
+    public static Type nonBoundaryMapKey(Type t, Map<String, Ast.Def> symbols) {
+        if (t instanceof Type.MapOf m && !isBoundaryMapKey(m.key(), symbols)) {
+            return m.key();
+        }
+        return switch (t) {
+            case Type.ListOf l -> nonBoundaryMapKey(l.element(), symbols);
+            case Type.SetOf s -> nonBoundaryMapKey(s.element(), symbols);
+            case Type.OptionOf o -> nonBoundaryMapKey(o.element(), symbols);
+            case Type.MapOf m -> nonBoundaryMapKey(m.value(), symbols);
+            case Type.TupleOf tu -> tu.elements().stream()
+                    .map(e -> nonBoundaryMapKey(e, symbols)).filter(k -> k != null).findFirst().orElse(null);
+            default -> null;
+        };
+    }
+
     static boolean isSingleValueNewtype(Type t, Map<String, Ast.Def> symbols) {
         return t instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype();
@@ -496,16 +527,12 @@ public final class TypeOps {
                                     .at(ref.pos(), 3).build(),
                             "Map needs a value type, e.g. Map<String, Int>");
                 }
+                // The key is not restricted here: a map that stays inside a behavior body renders
+                // nothing, so it may be keyed by any value (`List.groupBy` already builds such maps).
+                // What a key must satisfy is the boundary — see #isBoundaryMapKey, checked where a
+                // type is a data field or a behavior's input/output.
                 Type key = ref.tupleElems() == null
                         ? Type.STRING : resolveType(ref.tupleElems().get(0), symbols);
-                if (!(key == Type.STRING || key instanceof Type.Var
-                        || (key instanceof Type.Ref r && isStringNewtype(r.name(), symbols)))) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.map.key").title("check.boundary.title")
-                                    .at(ref.pos(), 3).args(Type.show(key)).build(),
-                            "a Map key must be String or a String-backed newtype (`data X = String`), got "
-                                    + key + " (ADR-0040)");
-                }
                 yield Type.map(key, resolveType(ref.arg(), symbols));
             }
             default -> {

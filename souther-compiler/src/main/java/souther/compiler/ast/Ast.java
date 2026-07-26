@@ -274,10 +274,11 @@ public interface Ast {
     /** An optional field decoder: absent/null becomes {@code None}, present decodes {@code element}. */
     record OptionDecRef(DecRef element, SourcePos pos) implements DecRef {}
 
-    /** A {@code Map<K, T>} decoder: each object value is decoded with {@code value}. {@code keyType}
-     * is {@code null} for a plain {@code String} key, or the String-backed newtype the keys are
-     * constructed into at the boundary. */
-    record MapDecRef(DecRef value, String keyType, SourcePos pos) implements DecRef {}
+    /** A {@code Map<K, T>} decoder: each object value is decoded with {@code value}, and each of the
+     * object's string keys with {@code key} — a {@code PrimDecRef} of {@code STRING} (the key passes
+     * through), of {@code DATE}/{@code DATETIME} (parsed from its ISO form), or a {@code DataDecRef}
+     * naming the String-backed newtype the keys are constructed into. */
+    record MapDecRef(DecRef value, DecRef key, SourcePos pos) implements DecRef {}
 
     /** A primitive field decoder kind. */
     enum PrimKind { STRING, INT, BOOL, DECIMAL, DATE, DATETIME }
@@ -303,10 +304,11 @@ public interface Ast {
             permits TextRaw, IntRaw, BoolRaw, DecimalRaw, IsoTextRaw, ObjectRaw, EncodeRaw, ListEnc,
                     SetEnc, OptionRaw, MapEnc {}
 
-    /** Encodes a {@code Map<K, T>} to a {@code Raw.Object}, each value via {@code elem}. {@code keyType}
-     * is {@code null} for a plain {@code String} key, or the String-backed newtype whose keys are
-     * rendered bare at the boundary. */
-    record MapEnc(Expr source, EncElem elem, String keyType, SourcePos pos) implements RawExpr {}
+    /** Encodes a {@code Map<K, T>} to a {@code Raw.Object}, each value via {@code elem} and each key
+     * to its bare string via {@code key} — a {@code PrimEnc} of {@code STRING} (already a string),
+     * of {@code DATE}/{@code DATETIME} (its ISO form), or a {@code DataEnc} naming the String-backed
+     * newtype whose wrapped value is rendered. */
+    record MapEnc(Expr source, EncElem elem, EncElem key, SourcePos pos) implements RawExpr {}
 
     /** Encodes an optional field: {@code None} becomes {@code Raw.Null}, {@code Some(v)} encodes
      * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elemVar}. */
@@ -351,10 +353,9 @@ public interface Ast {
      * does for a field. */
     record SetElemEnc(EncElem elem, SourcePos pos) implements EncElem {}
 
-    /** A {@code Map<K, V>} element, each value encoded by {@code value}. {@code keyType} carries the
-     * String-backed newtype whose keys render bare, or {@code null} for a plain {@code String} key,
+    /** A {@code Map<K, V>} element, each value encoded by {@code value} and each key by {@code key},
      * as {@link MapEnc} does for a field. */
-    record MapElemEnc(EncElem value, String keyType, SourcePos pos) implements EncElem {}
+    record MapElemEnc(EncElem value, EncElem key, SourcePos pos) implements EncElem {}
 
     record RawEntry(String key, RawExpr value, SourcePos pos) implements Ast {}
 

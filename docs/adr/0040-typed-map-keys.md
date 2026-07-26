@@ -1,8 +1,10 @@
 # ADR-0040: A Map key may be a String-backed newtype, not only String
 
-Status: Accepted. The in-language type and operations are implemented, and so is the boundary codec:
-a newtype-keyed map may be a data field or behavior I/O, decoding each string key into the key
-newtype (invariant-checked) and encoding it back bare.
+Status: Accepted. Amended — the restriction is a boundary rule, not a rule about every map, and a
+temporal key crosses too (see "Where the restriction applies"). The in-language type and operations
+are implemented, and so is the boundary codec: a keyed map may be a data field or behavior I/O,
+decoding each string key into the key type (a newtype invariant-checked, a temporal parsed from its
+ISO form) and encoding it back bare.
 
 ## Context
 
@@ -37,6 +39,28 @@ over `String`, or (inside `core` only) a key type variable `'k` that monomorphis
   object. The runtime carries no Raoh dependency (ADR-0004): the key-remap runs in a small helper the
   decoder class generates, and the encode-side stringify is a pure key rewrite in souther-runtime.
 
+## Where the restriction applies
+
+The decision above says "a `Map` key is `String` or a String-backed newtype", and the check ran at
+type resolution — so it saw every *written* type and nothing else. `List.groupBy` and `List.indexBy`
+build a map keyed by whatever the projection returns, so the compiler produced `Map<Date, V>` values
+of a type it refused to let anyone write, and refused even a local annotation naming what `groupBy`
+had just returned (issue #100).
+
+That was not unsound — every escape route out of a body is a written type — but the rule as stated was
+not the rule enforced. The reason for the restriction is representational, and representation is a
+boundary concern: **the key check belongs at the boundary**. A data field and a behavior's input and
+output are checked, at any depth; a map that stays inside a body may be keyed by any value.
+
+The boundary set also admits `Date` and `DateTime`. What a key must satisfy is "renderable as, and
+parseable from, a bare string", and a temporal already crosses that way — a `Date` field travels as
+its ISO 8601 form, so `Map<Date, 金額>` is a JSON object whose keys are the same strings that field
+would carry. Daily aggregation, which had no expressible form, is `{"2026-01-01": 300}`.
+
+An `Int`-backed newtype key stays out. It meets the letter of "parseable from a string" but not the
+spirit: the same value is a JSON number in a field and would be a string in a key, so the type's
+external form would depend on where it appears.
+
 ## Consequences
 
 `Map<商品ID, 在庫>` and `Map<従業員ID, 権限>` are distinct types, and the key of a lookup is checked
@@ -46,10 +70,11 @@ body, and such a map now crosses the boundary too: a behavior can receive or ret
 directly, and a key that violates the newtype's invariant is a decode failure at that key's path,
 not a silently accepted string.
 
-The key stays String-backed on purpose: admitting an arbitrary value key would need an entry-array
-representation (a JSON object cannot key by a non-string), which changes the boundary format. A
-String-backed newtype keeps the `Map` a plain JSON object — the minimal, representation-preserving
-step (the option chosen over a value-key design).
+A boundary key stays string-rendered on purpose: admitting an arbitrary value key would need an
+entry-array representation (a JSON object cannot key by a non-string), which changes the boundary
+format. A String-backed newtype and a temporal both keep the `Map` a plain JSON object — the minimal,
+representation-preserving step (the option chosen over a value-key design). Inside a body no format
+is at stake, so nothing is restricted there.
 
 ## References
 

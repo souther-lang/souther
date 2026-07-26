@@ -312,6 +312,20 @@ public final class DataChecker {
                                 + "`): a tuple has no external representation, so it cannot cross a"
                                 + " decoder/encoder boundary (ADR-0036). Use a named data.");
             }
+            // A field is written to and read from the outside, so a map it holds is a JSON object and
+            // its keys are strings. Inside a body the same map may be keyed by anything (ADR-0040).
+            Type badKey = TypeOps.nonBoundaryMapKey(e.getValue(), ctx.symbols());
+            if (badKey != null) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.map.key.field").title("check.boundary.title")
+                                .at(ctx.data().pos())
+                                .args(ctx.data().name() + "." + e.getKey(), Type.show(badKey))
+                                .hint("check.map.key.field.hint").build(),
+                        "a Map crossing the boundary at `" + ctx.data().name() + "." + e.getKey()
+                                + "` must be keyed by String, a String-backed newtype (`data X ="
+                                + " String`), Date or DateTime, got " + Type.show(badKey)
+                                + " (ADR-0040)");
+            }
         }
 
         ctx.data().invariant().ifPresent(expr -> {
@@ -379,8 +393,7 @@ public final class DataChecker {
             case Ast.ListDecRef l -> Type.list(decRefType(l.element(), symbols));
             case Ast.OptionDecRef o -> Type.option(decRefType(o.element(), symbols));
             case Ast.MapDecRef mp -> Type.map(
-                    mp.keyType() == null ? Type.STRING : Type.ref(mp.keyType()),
-                    decRefType(mp.value(), symbols));
+                    decRefType(mp.key(), symbols), decRefType(mp.value(), symbols));
         };
     }
 

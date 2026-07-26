@@ -332,6 +332,35 @@ public final class SpecChecker {
         }
     }
 
+    /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object
+     * and its keys are strings (ADR-0040). A map that stays inside the body is unrestricted — the
+     * same rule, read where it applies. */
+    static void rejectNonBoundaryMapKeyIO(Ast.SpecBehavior spec, Map<String, Ast.Def> symbols) {
+        for (Ast.Param p : spec.params()) {
+            Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(p.type(), symbols), symbols);
+            if (bad != null) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.map.key.param").title("check.boundary.title")
+                                .at(p.pos(), p.name().length()).args(p.name(), Type.show(bad))
+                                .hint("check.map.key.param.hint").build(),
+                        "parameter `" + p.name() + "` carries a Map keyed by " + Type.show(bad)
+                                + "; a Map crossing the boundary must be keyed by String, a"
+                                + " String-backed newtype (`data X = String`), Date or DateTime"
+                                + " (ADR-0040)");
+            }
+        }
+        Type bad = TypeOps.nonBoundaryMapKey(TypeOps.successType(spec.ret(), symbols), symbols);
+        if (bad != null) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.map.key.output").title("check.boundary.title")
+                            .at(spec.pos()).args(spec.name(), Type.show(bad))
+                            .hint("check.map.key.output.hint").build(),
+                    "behavior `" + spec.name() + "` outputs a Map keyed by " + Type.show(bad)
+                            + "; a Map crossing the boundary must be keyed by String, a String-backed"
+                            + " newtype (`data X = String`), Date or DateTime (ADR-0040)");
+        }
+    }
+
     private static boolean refHasTuple(Ast.TypeRef ref) {
         return ref.isTuple() || (ref.arg() != null && refHasTuple(ref.arg()));
     }
