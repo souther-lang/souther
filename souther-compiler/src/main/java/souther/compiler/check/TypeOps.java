@@ -371,11 +371,18 @@ public final class TypeOps {
     }
 
     /** The ordered primitives: the ones the JVM carries as {@link Comparable}, so {@code <}/{@code >}
-     * and {@code sort} work on them (spec §primitives, §stdlib-list). A newtype over one of these is
-     * a wrapper object, not itself Comparable, so it does not count. */
+     * and {@code sort} work on them (spec §primitives, §stdlib-list). */
     static boolean isOrdered(Type t) {
         return t == Type.INT || t == Type.STRING || t == Type.DECIMAL
                 || t == Type.DATE || t == Type.DATETIME;
+    }
+
+    /** Whether a value of {@code t} is ordered: an ordered primitive, or a single-value newtype over
+     * one — it is ordered by the value it wraps (ADR-0047), which is what both the comparison
+     * operators and the sort family read. The generated wrapper carries that ordering as
+     * {@link Comparable}, so the runtime's natural-order compare reaches it. */
+    public static boolean isOrderedValue(Type t, Map<String, Ast.Def> symbols) {
+        return isOrdered(base(t, symbols));
     }
 
     /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —

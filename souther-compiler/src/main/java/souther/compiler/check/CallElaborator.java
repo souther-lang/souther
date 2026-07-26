@@ -120,15 +120,17 @@ public final class CallElaborator {
             }
             Type result = TypeOps.substitute(intrinsic.result(), bindings);
             // `sort` carries no `comparable` constraint in its `List<'a>` signature (Souther has no
-            // type classes), so guard here: only the ordered primitives sort. A data or a newtype
-            // carries as a non-Comparable object, which would throw at runtime — reject it now. The
-            // empty-list literal (element `Nothing`) is fine: it sorts to itself, so let it through.
+            // type classes), so guard here: an ordered value sorts — an ordered primitive, or a
+            // newtype over one, which carries its ordering as Comparable. A product data does not,
+            // and would throw at runtime, so reject it now. The empty-list literal (element
+            // `Nothing`) is fine: it sorts to itself, so let it through.
             if (intrinsic.key().equals("list.sort") && result instanceof Type.ListOf lo
-                    && !(lo.element() instanceof Type.Nothing) && !TypeOps.isOrdered(lo.element())) {
+                    && !(lo.element() instanceof Type.Nothing)
+                    && !TypeOps.isOrderedValue(lo.element(), ctx.symbols())) {
                 throw needsOrdered(call.pos(), "sort", lo.element(),
-                        "sort needs a list of ordered values (Int, String, Decimal, Date, or DateTime),"
-                                + " but the element is " + lo.element()
-                                + " — sort its ordered field instead (e.g. map to `.value` first)");
+                        "sort needs a list of ordered values (Int, String, Decimal, Date, DateTime, or"
+                                + " a newtype over one of these), but the element is " + lo.element()
+                                + " — sort its ordered field instead (e.g. map to it first)");
             }
             if (intrinsic.key().equals("string.matches")) {
                 validateRegexPattern(args.get(0));
@@ -171,13 +173,14 @@ public final class CallElaborator {
                             "argument of " + call.fn() + " must be a List but is " + t);
                 }
                 // Like `sort`, max/min compare by natural order, so the element must be an ordered
-                // primitive (Souther has no type classes); a data / newtype element is not Comparable.
-                // The empty-list literal (element `Nothing`) is fine — its result is `None`.
-                if (!BottomInfer.isBottom(lo.element()) && !TypeOps.isOrdered(lo.element())) {
+                // value (Souther has no type classes); a product data is not Comparable. The
+                // empty-list literal (element `Nothing`) is fine — its result is `None`.
+                if (!BottomInfer.isBottom(lo.element())
+                        && !TypeOps.isOrderedValue(lo.element(), ctx.symbols())) {
                     throw needsOrdered(call.pos(), call.fn(), lo.element(),
                             call.fn() + " needs a list of ordered values (Int, String, Decimal, Date,"
-                                    + " or DateTime), but the element is " + lo.element()
-                                    + " — compare its ordered field instead");
+                                    + " DateTime, or a newtype over one of these), but the element is "
+                                    + lo.element() + " — compare its ordered field instead");
                 }
                 yield Type.option(lo.element());
             }
@@ -217,13 +220,13 @@ public final class CallElaborator {
                             "List.sortBy expects a List, got " + t);
                 }
                 Type keyT = ca.block(0, call.fn(), List.of(lo.element()));
-                if (!BottomInfer.isBottom(keyT) && !TypeOps.isOrdered(keyT)) {
+                if (!BottomInfer.isBottom(keyT) && !TypeOps.isOrderedValue(keyT, ctx.symbols())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.ordered.key").title("check.type.mismatch.title")
                                     .at(call.pos()).args("List.sortBy", Type.show(keyT))
                                     .hint("check.ordered.hint").build(),
-                            "List.sortBy's key must be an ordered value (Int, String, Decimal, Date, or"
-                                    + " DateTime), but returns " + keyT);
+                            "List.sortBy's key must be an ordered value (Int, String, Decimal, Date,"
+                                    + " DateTime, or a newtype over one of these), but returns " + keyT);
                 }
                 yield Type.list(lo.element());
             }

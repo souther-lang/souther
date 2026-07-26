@@ -1,7 +1,8 @@
 # ADR-0047: A single-value newtype is compared by the value it wraps
 
-Status: Accepted. Amended — arithmetic, deferred at the time of this decision, was added later
-(see the "Arithmetic" paragraph below and spec §newtype-arithmetic / §invariant-discharge).
+Status: Accepted. Amended twice — arithmetic, deferred at the time of this decision, was added later
+(see the "Arithmetic" paragraph below and spec §newtype-arithmetic / §invariant-discharge), and the
+sort family was brought onto the same reading (see "Sorting").
 
 ## Context
 
@@ -60,6 +61,20 @@ domain sense. **Arithmetic was added subsequently**, resolving those questions:
 See spec §newtype-arithmetic. The re-wrap/invariant question is answered by the invariant-discharge
 check, and the operator question by "dimension-preserving only".
 
+## Sorting
+
+`List.sort` / `max` / `min` / `sortBy` kept the older reading — only the five primitives are ordered —
+so `金額 > 基準` was accepted while `sortBy((r) -> r.金額, 請求)` was rejected as a key with no
+ordering. The same value is orderable in a comparison and not orderable as a sort key, which is not a
+distinction anyone can act on. **The sort family now reads ordering the same way the operators do**:
+the element (or the key) is ordered when its base is.
+
+The runtime compares by natural order, so the wrapper has to carry the ordering rather than have it
+opened at each call site: a single-value newtype over an ordered type is generated as
+`Comparable<itself>`, comparing the value it wraps. The alternative — rewriting each call to pass an
+unwrapping function — needs a key-taking variant of `max` / `min` that does not exist, and leaves the
+type unordered for a Java caller that wants a `TreeMap` key.
+
 ## Consequences
 
 - `m.額.value <= 100` becomes `m.額 <= 100`, and `m.額 <= m.予算` (two amounts) now type-checks. The
@@ -68,6 +83,9 @@ check, and the operator question by "dimension-preserving only".
   literal compares against a newtype in both.
 - `金額` and `数量` remain uncomparable to each other and to a raw `Int` variable, so the nominal
   distinction that motivates newtypes is intact.
+- Sorting reads the same definition of ordered, so `sortBy((r) -> r.金額, 請求)` orders by a typed key
+  without projecting to `.value` — which for a `List<金額>` also meant re-wrapping afterwards, running
+  the invariant on every element again.
 - Arithmetic was subsequently added on the same wrapped-value footing — closed `+`/`-` and scalar
   `*`/`/`, re-wrapping and re-checking the invariant. The re-wrap/invariant question this decision
   deferred is resolved by the invariant-discharge check (spec §invariant-discharge); a product of two

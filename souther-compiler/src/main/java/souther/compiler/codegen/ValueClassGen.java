@@ -6,6 +6,7 @@ import souther.compiler.check.TypeOps;
 
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
+import java.lang.classfile.ClassSignature;
 import java.lang.classfile.Label;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.Signature;
@@ -54,15 +55,25 @@ final class ValueClassGen {
 
         out.put(pkg + "." + data.name(), build(cdName, cb -> {
             cb.withFlags(pub(data.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
-            ClassDesc[] ifaces = caseInterfaces(data.name());
-            if (ifaces.length > 0) {
+            List<ClassDesc> ifaces = new ArrayList<>(List.of(caseInterfaces(data.name())));
+            boolean ordered = isOrderedNewtype(data, fields);
+            if (ordered) {
+                ifaces.add(CD_Comparable);
+            }
+            if (!ifaces.isEmpty()) {
                 cb.withInterfaceSymbols(ifaces);
+            }
+            if (ordered) {
+                cb.with(SignatureAttribute.of(ClassSignature.parseFrom(classSignature(cdName, ifaces))));
             }
             for (Map.Entry<String, Type> f : fields.entrySet()) {
                 emitField(cb, f.getKey(), f.getValue());
             }
             emitCtor(cb, cdName, fields);
             emitValueEquality(cb, cdName, fields);
+            if (ordered) {
+                emitCompareTo(cb, cdName, fields.entrySet().iterator().next());
+            }
             emitConstructMethod(cb, cdName, data, fields);
             // An exposed data gets public read accessors so its fields are readable across the
             // module (package) boundary and from Java (spec 8.5, 19.2). The ctor stays non-public.
@@ -278,6 +289,63 @@ final class ValueClassGen {
      * may take, whose bare {@code value()} the boundary encoder renders. */
     private static boolean isStringBackedNewtype(Ast.Data data, Map<String, Type> fields) {
         return data.newtype() && fields.size() == 1 && fields.values().iterator().next() == Type.STRING;
+    }
+
+    /** A single-value newtype over an ordered type — ordered by the value it wraps (ADR-0047), which
+     * the class carries as {@link Comparable} so {@code sort} / {@code max} / {@code min} compare it
+     * by natural order, and a Java reader can put it in a {@code TreeSet}. */
+    private boolean isOrderedNewtype(Ast.Data data, Map<String, Type> fields) {
+        return data.newtype() && fields.size() == 1
+                && TypeOps.isOrderedValue(fields.values().iterator().next(), symbols);
+    }
+
+    /** {@code Object} plus each interface, with {@code Comparable} bound to the class itself, so a
+     * Java reader sees {@code Comparable<金額>} rather than the raw form. */
+    private static String classSignature(ClassDesc cdName, List<ClassDesc> ifaces) {
+        StringBuilder sig = new StringBuilder(ConstantDescs.CD_Object.descriptorString());
+        for (ClassDesc iface : ifaces) {
+            if (iface.equals(CD_Comparable)) {
+                String raw = CD_Comparable.descriptorString();
+                sig.append(raw, 0, raw.length() - 1)      // drop the ';' to insert the type argument
+                        .append('<').append(cdName.descriptorString()).append(">;");
+            } else {
+                sig.append(iface.descriptorString());
+            }
+        }
+        return sig.toString();
+    }
+
+    /**
+     * Emits {@code compareTo}: an {@code Int} newtype compares its {@code long} carrier, any other
+     * ordered value is itself {@link Comparable} — a {@code String} / {@code BigDecimal} /
+     * {@code LocalDate} / {@code LocalDateTime}, or a newtype over one, which carries its own
+     * {@code compareTo}. The erased {@code compareTo(Object)} bridge is what the runtime's
+     * natural-order compare calls.
+     */
+    private void emitCompareTo(ClassBuilder cb, ClassDesc cdName, Map.Entry<String, Type> value) {
+        ClassDesc fd = jvmType(value.getValue());
+        cb.withMethodBody("compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, cdName),
+                ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
+                    code.aload(0);
+                    code.getfield(cdName, value.getKey(), fd);
+                    code.aload(1);
+                    code.getfield(cdName, value.getKey(), fd);
+                    if (value.getValue() == Type.INT) {
+                        code.lcmp();   // -1 / 0 / 1, which is compareTo's contract
+                    } else {
+                        code.invokeinterface(CD_Comparable, "compareTo", MTD_compareTo_Object);
+                    }
+                    code.ireturn();
+                });
+        cb.withMethodBody("compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object),
+                ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL
+                        | ClassFile.ACC_BRIDGE | ClassFile.ACC_SYNTHETIC, code -> {
+                    code.aload(0);
+                    code.aload(1);
+                    code.checkcast(cdName);
+                    code.invokevirtual(cdName, "compareTo", MethodTypeDesc.of(ConstantDescs.CD_int, cdName));
+                    code.ireturn();
+                });
     }
 
     private void emitAccessors(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
