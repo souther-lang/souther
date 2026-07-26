@@ -291,8 +291,16 @@ public final class AstBuilder {
                         constructs.add(t.text());
                     }
                 } else if (clause.kind() == SyntaxKind.REQUIRES_CLAUSE) {
-                    for (SyntaxToken t : identTokens(clause)) {
-                        requires.add(t.text());
+                    // a required behavior may be named through its module, so the idents of one
+                    // name are joined and a comma starts the next
+                    List<SyntaxElement> es = meaningful(clause);
+                    int[] at = {1};                       // past the `requires` keyword
+                    while (at[0] < es.size()) {
+                        if (isToken(es.get(at[0]), SyntaxKind.COMMA)) {
+                            at[0]++;
+                            continue;
+                        }
+                        requires.add(dottedName(es, at));
                     }
                 }
             }

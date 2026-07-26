@@ -321,14 +321,21 @@ public final class CstParser {
     /** A {@code constructs}/{@code requires} clause: the keyword then a bare comma list of names,
      * tolerating a trailing comma (which has no closing bracket to bound it). */
     private void nameClause(SyntaxKind kind) {
+        boolean dotted = kind == SyntaxKind.REQUIRES_CLAUSE;
         start(kind);
         bump();   // constructs / requires
         expect(SyntaxKind.IDENT);
+        if (dotted) {
+            caseNameTail();
+        }
         while (eat(SyntaxKind.COMMA)) {
             if (!at(SyntaxKind.IDENT)) {
                 break;   // a trailing comma is consumed and ends the list
             }
             bump();   // ident
+            if (dotted) {
+                caseNameTail();
+            }
         }
         finish();
     }
@@ -348,7 +355,7 @@ public final class CstParser {
     private void stage() {
         start(SyntaxKind.STAGE);
         expect(SyntaxKind.IDENT);
-        if (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
+        while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
             bump();   // .
             bump();   // ident
         }
