@@ -2092,13 +2092,23 @@ not
 
 [,text]
 ----
-addDays  addMonths  addYears  daysBetween
+addDays  addMonths  addYears  daysBetween  year  month  day
 ----
 
 [#temporal-literal]
 A date is written `+Date("2026-07-25")+` and a date-time `+DateTime("2026-07-25T09:00")+`. The argument MUST be a written string: the compiler parses it where it stands, so a malformed date fails the build rather than a run, and an `+example+` fixture — which holds only written values (<<example-evaluable>>) — can carry a date at all. A computed date comes from the boundary or from the arithmetic below, not from this form.
 
 `+Date+` is a local calendar date (<<primitives>>). Calendar arithmetic is pure and belongs in the domain, not behind an injected behavior (<<injected-behavior>>) — only reading the *current* date needs the outside world. `+addDays(n, d)+` / `+addMonths(n, d)+` / `+addYears(n, d)+` shift `+d+` by `+n+` units (`+n+` may be negative), following `+java.time.LocalDate+`, which clamps the end of a month (`+addMonths(1, 2026-01-31)+` is `+2026-02-28+`). `+daysBetween(from, to)+` is the whole days from `+from+` to `+to+`, negative when `+to+` precedes `+from+`. The date operated on is last (<<pipe>>), so `+d |> Date.addDays(3)+` reads left to right.
+
+`+year(d)+` / `+month(d)+` / `+day(d)+` read a date's parts as `+Int+`s — the month 1 to 12, the day 1 to 31. Elm and .NET both answer `+Int+` for the year and the day; `+month+` follows .NET rather than Elm's twelve-case `+Month+` type, because `+elm/time+` has no month arithmetic while `+addMonths+` here counts in months, and a named month would have to be converted back to add one. There is no `+dayOfWeek+`: neither language answers that with a bare number, so it needs a named seven-case type.
+
+A month boundary follows from `+day+` and belongs in the domain, as it does in Elm and .NET, neither of which ships one:
+
+[,text]
+----
+let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
+let endOfMonth (d: Date): Date = Date.addDays(0 - 1, Date.addMonths(1, monthStart(d)))
+----
 
 [#stdlib-datetime]
 === DateTime

@@ -25,7 +25,7 @@ module example.billing exposing (
     Terms,
     Net15,
     Net30,
-    Net60,
+    EndOfNextMonth,
     Invoice,
     Payment,
     Settled,
@@ -58,15 +58,14 @@ data Amount = Decimal
 // the day count follows from it where the due date is worked out. Cases also make a new term a
 // compile error at every `match` rather than a number nobody notices.
 //
-// "End of next month" — the term most Japanese trade actually uses — is missing here on purpose. It
-// is not a day count, and reaching it needs the day-of-month of the issue date, which Souther cannot
-// read: `Date` offers addDays / addMonths / addYears / daysBetween and no part accessors. Writing it
-// with the arithmetic available would mean pretending, so the term this module cannot state is left
-// out rather than approximated.
+// "End of next month" — the term most Japanese trade actually uses — is a case here rather than a
+// day count, because it is not one: which day it lands on depends on the month. It became writable
+// when `Date.day` arrived (issue #111); before that the month boundary was out of reach and the
+// helper that suggests itself compiles and returns the wrong date.
 data Net15
 data Net30
-data Net60
-data Terms = Net15 | Net30 | Net60
+data EndOfNextMonth
+data Terms = Net15 | Net30 | EndOfNextMonth
 
 // === issueInvoice: a recorded order and its tax become a statement ===
 // The number is built here rather than read: `String.padLeft` widens the sequence to six digits and
@@ -96,7 +95,13 @@ let dueDate (terms: Terms, issuedOn: Date): Date =
     match terms with
         | Net15 -> Date.addDays(15, issuedOn)
         | Net30 -> Date.addDays(30, issuedOn)
-        | Net60 -> Date.addMonths(2, issuedOn)
+        | EndOfNextMonth -> endOfMonth(Date.addMonths(1, monthStart(issuedOn)))
+
+// The first of a date's own month, by stepping back the days already elapsed in it, and the last day
+// of that month, by stepping back one from the first of the next. Neither Elm nor .NET ships these;
+// with `Date.day` they are two lines, and they are the domain's to write.
+let monthStart (d: Date): Date = Date.addDays(1 - Date.day(d), d)
+let endOfMonth (d: Date): Date = Date.addDays(0 - 1, Date.addMonths(1, monthStart(d)))
 
 let invoiceNumber (issuedOn: Date, sequence: Int): InvoiceNo =
     InvoiceNo(String.join("-",
@@ -128,15 +133,23 @@ example issueInvoice
             -> Invoice { no = InvoiceNo("INV-2026-000042"), orderId = OrderId("ORD-1"),
                          issuedOn = Date("2026-07-25"), dueOn = Date("2026-08-24"),
                          net = Amount(315.0m), tax = Amount(31.0m), gross = Amount(346.0m) }
-    | "net-60 is two months on, which addMonths reaches without counting days" :
+    | "end of next month, from a 31-day month into a 31-day month" :
         (RecordedOrder { orderId = OrderId("ORD-3"), items =
             [ LineItem { sku = Sku("tv"), quantity = 1, unitPrice = 200000, weightGrams = 120 } ], total = 200000 }
         , TaxBreakdown { net = 200000, rate = TaxRate(0.10m), rateLabel = "10%", tax = 20000,
                          gross = 220000 }
-        , Net60, Date("2026-07-31"), 9)
+        , EndOfNextMonth, Date("2026-07-31"), 9)
             -> Invoice { no = InvoiceNo("INV-2026-000009"), orderId = OrderId("ORD-3"),
-                         issuedOn = Date("2026-07-31"), dueOn = Date("2026-09-30"),
+                         issuedOn = Date("2026-07-31"), dueOn = Date("2026-08-31"),
                          net = Amount(200000.0m), tax = Amount(20000.0m), gross = Amount(220000.0m) }
+    | "end of next month lands on the short month it lands on, not a day count" :
+        (RecordedOrder { orderId = OrderId("ORD-4"), items =
+            [ LineItem { sku = Sku("pen"), quantity = 1, unitPrice = 100, weightGrams = 10 } ], total = 100 }
+        , TaxBreakdown { net = 100, rate = TaxRate(0.10m), rateLabel = "10%", tax = 10, gross = 110 }
+        , EndOfNextMonth, Date("2026-01-15"), 11)
+            -> Invoice { no = InvoiceNo("INV-2026-000011"), orderId = OrderId("ORD-4"),
+                         issuedOn = Date("2026-01-15"), dueOn = Date("2026-02-28"),
+                         net = Amount(100.0m), tax = Amount(10.0m), gross = Amount(110.0m) }
     | "net-15 halves the window and nothing else changes" :
         (RecordedOrder { orderId = OrderId("ORD-2"), items =
             [ LineItem { sku = Sku("rice"), quantity = 2, unitPrice = 550, weightGrams = 120 } ], total = 1100 }
