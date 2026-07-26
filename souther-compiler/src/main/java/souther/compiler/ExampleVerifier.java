@@ -810,7 +810,24 @@ public final class ExampleVerifier {
                 && c.args().get(0) instanceof Ast.StringLit lit) {
             return CallElaborator.parseTemporal(base, lit.value(), c.pos());
         }
-        return raw(c.args().get(0));
+        return adjacentlyTagged(c.fn(), raw(c.args().get(0)));
+    }
+
+    /**
+     * A newtype case of a sum decodes from the adjacent form its sum's decoder reads — the inner value
+     * under {@code value}, next to the discriminator (spec 10.3) — while a fixture names the case the
+     * way the domain constructs it, {@code アクティベート済み(メールアドレス("a@example.com"))}. Wrap it
+     * here, as {@link #record} does for a product case and {@link #unitInput} for a unit one; a newtype
+     * that is nobody's case is its bare inner value, unchanged.
+     */
+    private Object adjacentlyTagged(String caseName, Object inner) {
+        Map<String, Object> tagged = new LinkedHashMap<>();
+        tagged(caseName, tagged);
+        if (tagged.isEmpty()) {
+            return inner;   // not a case of any sum: the newtype's own form is its inner value
+        }
+        tagged.put("value", inner);
+        return tagged;
     }
 
     private Object record(Ast.NewData nd) {
