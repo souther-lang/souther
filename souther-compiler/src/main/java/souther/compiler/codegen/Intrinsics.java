@@ -222,6 +222,9 @@ final class Intrinsics {
         t.put("date.addMonths", jdk(CD_LocalDate, "plusMonths", mtd(CD_LocalDate, lng), order(1, 0), Type.DATE));
         t.put("date.addYears", jdk(CD_LocalDate, "plusYears", mtd(CD_LocalDate, lng), order(1, 0), Type.DATE));
         t.put("date.daysBetween", rt(CD_Temporals, "daysBetween", order(0, 1), ts -> Type.INT));
+        t.put("date.year", rt(CD_Temporals, "year", order(0), ts -> Type.INT));
+        t.put("date.month", rt(CD_Temporals, "month", order(0), ts -> Type.INT));
+        t.put("date.day", rt(CD_Temporals, "day", order(0), ts -> Type.INT));
         t.put("datetime.addMinutes",
                 jdk(CD_LocalDateTime, "plusMinutes", mtd(CD_LocalDateTime, lng), order(1, 0), Type.DATETIME));
         t.put("datetime.addHours",
