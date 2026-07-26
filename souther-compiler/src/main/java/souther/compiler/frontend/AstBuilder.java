@@ -250,7 +250,7 @@ public final class AstBuilder {
         // slot for one, would silently drop it and with it any error inside it.
         for (SyntaxNode clause : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.invariant.onunit").title("check.invariant.title")
+                    Diagnostic.of(null, "check.invariant.onunit").title("check.invariant.invalid.title")
                             .at(pos(clause)).args(name).build(),
                     "unit data `" + name + "` cannot carry an invariant");
         }
