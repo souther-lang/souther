@@ -331,39 +331,11 @@ public final class TypeChecker {
                 exposed, PipelineSigs.signatures(module, symbols, importedSigs), symbols));
     }
 
-    /** Applies {@code f} to every direct subexpression of {@code e}. */
+    /** Applies {@code f} to every direct subexpression of {@code e}. Delegates to the one
+     * exhaustive walk on the AST: written out here again, a node kind added later would fall
+     * into a default and be skipped silently by every pass that recurses through this. */
     static void forEachChild(Ast.Expr e, java.util.function.Consumer<Ast.Expr> f) {
-        switch (e) {
-            case Ast.NewData nd -> nd.inits().forEach(i -> f.accept(i.value()));
-            case Ast.FieldAccess fa -> f.accept(fa.target());
-            case Ast.Call call -> call.args().forEach(f);
-            case Ast.Binary bin -> {
-                f.accept(bin.left());
-                f.accept(bin.right());
-            }
-            case Ast.Match m -> {
-                f.accept(m.scrutinee());
-                m.cases().forEach(c -> f.accept(c.body()));
-            }
-            case Ast.If iff -> {
-                f.accept(iff.cond());
-                f.accept(iff.then());
-                f.accept(iff.els());
-            }
-            case Ast.ListLit lit -> lit.elements().forEach(f);
-            case Ast.ListComp comp -> {
-                f.accept(comp.element());
-                comp.guards().forEach(f);
-            }
-            case Ast.LetIn li -> {
-                f.accept(li.value());
-                f.accept(li.body());
-            }
-            case Ast.Block b -> f.accept(b.body());   // a lambda / block body
-            case Ast.Tuple tup -> tup.elements().forEach(f);
-            case Ast.TupleGet tg -> f.accept(tg.tuple());
-            default -> { }
-        }
+        Ast.forEachChild(e, f);
     }
 
     /** Builds the name → definition table for a module. */

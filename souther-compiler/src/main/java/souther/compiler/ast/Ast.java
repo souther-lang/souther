@@ -526,7 +526,7 @@ public interface Ast {
      * recursion here rather than hand-copying every node type; being exhaustive over {@code Expr}, a
      * new node kind forces every such walk to acknowledge it.
      */
-    static void forEachChild(Expr e, java.util.function.Consumer<Expr> f) {
+    public static void forEachChild(Expr e, java.util.function.Consumer<Expr> f) {
         switch (e) {
             case IntLit x -> { }
             case DecimalLit x -> { }
