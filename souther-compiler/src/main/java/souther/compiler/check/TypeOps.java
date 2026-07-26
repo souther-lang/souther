@@ -337,6 +337,45 @@ public final class TypeOps {
         return types;
     }
 
+    /**
+     * The resolved type of one field, or null when the data has no such field. Reading a field is not
+     * a reason to resolve the data's other fields: a module that imports a data to read one `Int` out
+     * of it would otherwise need every sibling field's type in scope, and the failure would carry the
+     * declaring module's position (issue #110). The duplicate-field checks {@link #fieldTypes} makes
+     * belong to the declaring module's own check, which has already run.
+     */
+    public static Type fieldType(Ast.Data data, String field, Map<String, Ast.Def> symbols) {
+        for (Ast.Field f : data.fields()) {
+            if (f.name().equals(field)) {
+                return resolveType(f.type(), symbols);
+            }
+        }
+        for (String inc : data.includes()) {
+            if (symbols.get(inc) instanceof Ast.Data included) {
+                Type t = fieldType(included, field, symbols);
+                if (t != null) {
+                    return t;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Whether a data has a field of that name, without resolving any type. */
+    public static boolean hasField(Ast.Data data, String field, Map<String, Ast.Def> symbols) {
+        for (Ast.Field f : data.fields()) {
+            if (f.name().equals(field)) {
+                return true;
+            }
+        }
+        for (String inc : data.includes()) {
+            if (symbols.get(inc) instanceof Ast.Data included && hasField(included, field, symbols)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** All invariants that apply to a data: included data's invariants first, then its own. */
     public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Map<String, Ast.Def> symbols) {
         List<Ast.Expr> invs = new ArrayList<>();

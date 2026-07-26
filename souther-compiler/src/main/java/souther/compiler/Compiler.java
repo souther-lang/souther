@@ -322,6 +322,8 @@ public final class Compiler {
         }
         // every module's classes are now present, so CTFE and example evaluation can resolve
         // cross-module references
+        List<Diagnostic> exampleFailures = new ArrayList<>();
+        List<Integer> exampleSources = new ArrayList<>();
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
             Map<String, Ast.Def> symbols = visible.get(original.name());
@@ -334,12 +336,19 @@ public final class Compiler {
             } catch (CompileException e) {
                 throw e.inSource(index);
             }
-            try {
-                ExampleVerifier.verify(m, symbols, sigs, importedPackages(m), out);
-            } catch (CompileException e) {
+            // Every module's examples are evaluated before any failure is thrown, so a change to a
+            // widely-imported data says how far it reaches in one compile rather than one module per
+            // round (issue #114). A module whose own compile failed never gets here, so what is
+            // collected is only ever a stale or wrong example, never a knock-on of a broken type.
+            for (Diagnostic d : ExampleVerifier.check(m, symbols, sigs, importedPackages(m), out)) {
+                exampleFailures.add(d);
                 // a merged `examples for` file's rows are positioned in that file, not this one
-                throw e.inSource(mergedExamples.contains(original.name()) ? -1 : index);
+                exampleSources.add(mergedExamples.contains(original.name()) ? -1 : index);
             }
+        }
+        if (!exampleFailures.isEmpty()) {
+            throw CompileException.ofAllInSources(exampleFailures, exampleSources,
+                    ExampleVerifier.legacySummary(exampleFailures));
         }
         return out;
     }

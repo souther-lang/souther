@@ -197,13 +197,13 @@ let planRefund (accepted, reconciliation, unitPrices, invoiceNo, invoicedGross, 
     let gross = Decimal.fromInt(agreedValue(reconciliation, unitPrices))
     let fee = Decimal.multiply(gross, restockingRate)
     let net = Decimal.max(0.0m, Decimal.subtract(gross, fee))
-    // `withinInvoiced` reads billing's Amount and compares against it. Reading across a module is
-    // what importing is for; building across one is what ADR-0015 closes.
     RefundPlan {
         rma = accepted.rma,
         invoiceNo = invoiceNo,
         refund = Refund(net),
         restockingFee = Refund(Decimal.min(fee, gross)),
+        // reads billing's Amount and compares against it. Reading across a module is what
+        // importing is for; building across one is what ADR-0015 closes.
         withinInvoiced = Decimal.compare(net, invoicedGross.value) <= 0,
         repeatReturn = Set.fold((acc, sku) -> acc || member(sku, previousSkus), false, accepted.skus),
         recentRmas = take(3, reverse(history))

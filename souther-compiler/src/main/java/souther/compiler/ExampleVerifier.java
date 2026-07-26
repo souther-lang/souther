@@ -86,6 +86,15 @@ public final class ExampleVerifier {
                 failures.size() + " examples do not hold; " + legacyOf(first));
     }
 
+    /** The one-line form for a set of failures gathered across modules: the count, then the first
+     * one's reason, matching what a single module's aggregate says. */
+    public static String legacySummary(List<Diagnostic> failures) {
+        Diagnostic first = failures.get(0);
+        return failures.size() == 1
+                ? legacyOf(first)
+                : failures.size() + " examples do not hold; " + legacyOf(first);
+    }
+
     /** A one-line message for a failing example, used where only the legacy string is shown (the LSP
      * surfaces this rather than the rendered catalog message). */
     private static String legacyOf(Diagnostic d) {
@@ -837,9 +846,7 @@ public final class ExampleVerifier {
         Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName());
         Map<String, Object> map = new LinkedHashMap<>();
         for (Ast.FieldInit fi : nd.inits()) {
-            Ast.TypeRef declaredType = declared.get(fi.name());
-            Object v = shaped(raw(fi.value()),
-                    declaredType == null ? null : TypeOps.resolveType(declaredType, symbols));
+            Object v = shaped(raw(fi.value()), shapeOf(declared.get(fi.name())));
             // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads
             // it as absent (spec 8, absent -> None), the same neutral form as omitting the field.
             if (v == null) {
@@ -849,6 +856,29 @@ public final class ExampleVerifier {
         }
         tagged(nd.typeName(), map);
         return map;
+    }
+
+    /**
+     * The declared type of a field, used only to shape the written value (a map's entry pairs, a
+     * set's list). It is best-effort on purpose: the {@code TypeRef} comes from the module that
+     * declares the data, which may name a type this module never imported — building a
+     * {@code TaxBreakdown} fixture does not require its {@code rate}'s type to be in scope here. That
+     * resolution failing is not the author's problem and, worse, carries the *declaring* file's
+     * position, which rendered against this file pointed at an unrelated line (issue #110).
+     *
+     * <p>An unshaped value still reaches the decoder, which accepts it or reports at the fixture's own
+     * row. A type this module genuinely may not name is caught where it is written, by
+     * {@code newtypeInner}.
+     */
+    private Type shapeOf(Ast.TypeRef declaredType) {
+        if (declaredType == null) {
+            return null;
+        }
+        try {
+            return TypeOps.resolveType(declaredType, symbols);
+        } catch (CompileException e) {
+            return null;
+        }
     }
 
     /**

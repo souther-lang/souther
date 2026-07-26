@@ -259,7 +259,7 @@ public final class Elaborator {
         Core targetCore = elaborate(fa.target(), env, ctx);
         Type target = targetCore.type();
         if (target instanceof Type.Ref ref && ctx.symbols().get(ref.name()) instanceof Ast.Data owner) {
-            Type ft = TypeOps.fieldTypes(owner, ctx.symbols()).get(fa.field());
+            Type ft = TypeOps.fieldType(owner, fa.field(), ctx.symbols());
             if (ft != null) {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());
             }
@@ -272,7 +272,7 @@ public final class Elaborator {
             List<String> without = new ArrayList<>();
             for (String c : cases) {
                 if (!(ctx.symbols().get(c) instanceof Ast.Data cd)
-                        || !TypeOps.fieldTypes(cd, ctx.symbols()).containsKey(fa.field())) {
+                        || !TypeOps.hasField(cd, fa.field(), ctx.symbols())) {
                     without.add(c);
                 }
             }

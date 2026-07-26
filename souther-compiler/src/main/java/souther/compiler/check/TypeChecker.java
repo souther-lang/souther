@@ -215,6 +215,7 @@ public final class TypeChecker {
                 SpecChecker.rejectAnonymousUnionParams(spec);
                 SpecChecker.rejectTupleIO(spec);
                 SpecChecker.rejectNonBoundaryMapKeyIO(spec, symbols);
+                SpecChecker.rejectImportedConstructs(spec, module);
                 List<String> outputCases = new ArrayList<>();
                 for (Ast.TypeRef t : spec.ret().cases()) {
                     outputCases.add(t.name());

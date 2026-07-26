@@ -24,7 +24,9 @@ public class CompileException extends RuntimeException {
     private static final int NO_SOURCE = -1;
 
     private final transient List<Diagnostic> diagnostics;
-    private final int sourceIndex;
+    /** One entry per diagnostic: which source it came from, or {@link #NO_SOURCE}. A compile that
+     *  reports several modules at once has a diagnostic per module, and each quotes its own file. */
+    private final transient List<Integer> sources;
 
     public CompileException(SourcePos pos, String message) {
         this(pos, null, message);
@@ -40,9 +42,13 @@ public class CompileException extends RuntimeException {
     }
 
     private CompileException(List<Diagnostic> diagnostics, String legacyMessage, int sourceIndex) {
+        this(diagnostics, legacyMessage, java.util.Collections.nCopies(diagnostics.size(), sourceIndex));
+    }
+
+    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, List<Integer> sources) {
         super(legacyMessage);
         this.diagnostics = diagnostics;
-        this.sourceIndex = sourceIndex;
+        this.sources = sources;
     }
 
     /**
@@ -69,6 +75,24 @@ public class CompileException extends RuntimeException {
         Diagnostic first = diagnostics.get(0);
         return new CompileException(List.copyOf(diagnostics),
                 format(first.pos(), first.code(), legacyBody), NO_SOURCE);
+    }
+
+    /**
+     * Several errors found across several sources, each tagged with the source it came from —
+     * a multi-module compile reporting every module's failing examples rather than the first
+     * module's. {@code sources} has one entry per diagnostic.
+     */
+    public static CompileException ofAllInSources(List<Diagnostic> diagnostics, List<Integer> sources,
+                                                  String legacyBody) {
+        if (diagnostics == null || diagnostics.isEmpty()) {
+            throw new IllegalArgumentException("a compile error carries at least one diagnostic");
+        }
+        if (sources.size() != diagnostics.size()) {
+            throw new IllegalArgumentException("one source per diagnostic");
+        }
+        Diagnostic first = diagnostics.get(0);
+        return new CompileException(List.copyOf(diagnostics),
+                format(first.pos(), first.code(), legacyBody), List.copyOf(sources));
     }
 
     public SourcePos pos() {
@@ -103,7 +127,13 @@ public class CompileException extends RuntimeException {
      * never as "the first source".
      */
     public int sourceIndex() {
-        return sourceIndex;
+        return sources.isEmpty() ? NO_SOURCE : sources.get(0);
+    }
+
+    /** Which source the {@code i}-th of {@link #diagnostics()} came from, or {@code -1} when it names
+     *  none. A renderer walking the list quotes each diagnostic's own file. */
+    public int sourceIndexOf(int i) {
+        return sources == null || i >= sources.size() ? NO_SOURCE : sources.get(i);
     }
 
     /**
@@ -111,10 +141,11 @@ public class CompileException extends RuntimeException {
      * an inner phase that already named its source keeps it, so a surrounding loop may tag freely.
      */
     public CompileException inSource(int index) {
-        if (sourceIndex != NO_SOURCE || index < 0) {
-            return this;
+        if (index < 0 || sources.stream().allMatch(src -> src != NO_SOURCE)) {
+            return this;   // already named, or nothing to name it with
         }
-        CompileException tagged = new CompileException(diagnostics, getMessage(), index);
+        List<Integer> filled = sources.stream().map(src -> src == NO_SOURCE ? index : src).toList();
+        CompileException tagged = new CompileException(diagnostics, getMessage(), filled);
         tagged.setStackTrace(getStackTrace());
         return tagged;
     }
