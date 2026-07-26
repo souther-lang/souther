@@ -81,6 +81,11 @@
                                     <artifactId>souther-compiler</artifactId>
                                     <version>${souther.version}</version>
                                 </path>
+                                <path>
+                                    <groupId>org.souther-lang</groupId>
+                                    <artifactId>souther-runtime</artifactId>
+                                    <version>${souther.version}</version>
+                                </path>
                             </annotationProcessorPaths>
                             <compilerArgs>
                                 <arg>-Asouther.source=${project.basedir}/src/main/souther</arg>
