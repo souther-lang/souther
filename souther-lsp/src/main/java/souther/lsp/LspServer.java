@@ -62,10 +62,31 @@ public final class LspServer {
             if (methodNode == null || methodNode.isNull()) {
                 continue;   // a response to a server-initiated request; nothing to do
             }
-            if (dispatch(methodNode.asString(), m.get("id"), m.get("params"))) {
+            boolean stop;
+            try {
+                stop = dispatch(methodNode.asString(), m.get("id"), m.get("params"));
+            } catch (RuntimeException | StackOverflowError e) {
+                // One request the server cannot answer must cost that request, not the session. The
+                // analysis layer catches what it can so it can publish a marker instead, but that is
+                // a promise made inside it; this is the one that holds whatever it does. A request
+                // gets an error reply so the client stops waiting; a notification has no reply to
+                // send, so it is simply dropped and the loop reads on.
+                failed(m.get("id"), e);
+                continue;
+            }
+            if (stop) {
                 return;     // exit
             }
         }
+    }
+
+    /** Replies to a request the server could not answer. A notification (no id) has no reply. */
+    private void failed(JsonNode id, Throwable cause) {
+        if (id == null || id.isNull()) {
+            return;
+        }
+        respondError(id, -32603,   // JSON-RPC InternalError
+                "the request could not be completed (" + cause.getClass().getSimpleName() + ")");
     }
 
     /** Returns true when the server should stop (on {@code exit}). */

@@ -67,6 +67,32 @@ public final class Compiler {
 
     private static Map<String, byte[]> compile(String source, String defaultModuleName,
                                                List<Diagnostic> warningsOut) {
+        try {
+            return compiling(source, defaultModuleName, warningsOut);
+        } catch (StackOverflowError e) {
+            throw tooDeep();
+        }
+    }
+
+    /**
+     * A source whose expressions nest deeper than the compiler can walk. Every phase descends an
+     * expression by recursion — parsing, inlining, checking, emitting — so past some depth the stack
+     * runs out. That is not a {@code CompileException}, so left alone it passes through the recovery
+     * boundary and reaches the author as a stack trace, and takes the language server's dispatch
+     * loop with it. It is reported like any other thing the compiler cannot accept.
+     *
+     * <p>The depth is not a written limit, so no position is claimed: the failure belongs to the
+     * source as a whole, and the author's move is the same wherever it landed — name the parts.
+     */
+    private static CompileException tooDeep() {
+        return CompileException.of(
+                Diagnostic.of(null, "check.expr.toodeep").title("check.boundary.title").build(),
+                "an expression in this source nests too deeply for the compiler to walk;"
+                        + " name its parts with `let` to flatten it");
+    }
+
+    private static Map<String, byte[]> compiling(String source, String defaultModuleName,
+                                                 List<Diagnostic> warningsOut) {
         Ast.Module raw = CstFrontend.parse(source, defaultModuleName);
         if (raw.exampleFileTarget() != null) {
             throw CompileException.of(
@@ -191,6 +217,14 @@ public final class Compiler {
     }
 
     private static Map<String, byte[]> compileModules(List<String> sources, List<Diagnostic> warningsOut) {
+        try {
+            return linking(sources, warningsOut);
+        } catch (StackOverflowError e) {
+            throw tooDeep();
+        }
+    }
+
+    private static Map<String, byte[]> linking(List<String> sources, List<Diagnostic> warningsOut) {
         List<Ast.Module> allParsed = new ArrayList<>();
         for (String s : sources) {
             // A module linked by imports must be named; `null` forbids omitting the header here.

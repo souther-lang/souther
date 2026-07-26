@@ -50,10 +50,13 @@ public final class Analyzer {
         LineIndex lines = new LineIndex(text);
         List<LspDiagnostic> out = new ArrayList<>();
 
-        CstParser.Result parsed = CstParser.parse(text);
-        for (CstError e : parsed.errors()) {
-            out.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
-                    LspDiagnostic.ERROR, null, e.legacyMessage()));
+        try {
+            for (CstError e : CstParser.parse(text).errors()) {
+                out.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
+                        LspDiagnostic.ERROR, null, e.legacyMessage()));
+            }
+        } catch (RuntimeException | StackOverflowError e) {
+            return List.of(internalError(lines, e));   // the parse itself did not finish
         }
         if (!out.isEmpty()) {
             return out;   // don't chase semantics through a broken parse
@@ -72,10 +75,22 @@ public final class Analyzer {
             Compiler.compile(text, "Main");
         } catch (CompileException e) {
             out.add(fromCompile(lines, e));
-        } catch (RuntimeException e) {
-            // analysis must never crash the server; a non-diagnostic failure yields no marker
+        } catch (RuntimeException | StackOverflowError e) {
+            out.add(internalError(lines, e));
         }
         return out;
+    }
+
+    /**
+     * A marker for the compiler answering with something that is not a diagnostic. Analysis must not
+     * take the session with it, but staying silent is its own failure: the author is left looking at
+     * a file the editor calls clean. {@code StackOverflowError} is included deliberately — it is an
+     * {@code Error}, not a {@code RuntimeException}, and a deeply nested expression raises it.
+     */
+    private LspDiagnostic internalError(LineIndex lines, Throwable t) {
+        return new LspDiagnostic(range(lines, 0, 1), LspDiagnostic.ERROR, null,
+                "the compiler could not finish reading this file ("
+                        + t.getClass().getSimpleName() + ")");
     }
 
     /**
@@ -94,12 +109,18 @@ public final class Analyzer {
             String text = graph.text(uri);
             LineIndex lines = new LineIndex(text);
             List<LspDiagnostic> syntax = new ArrayList<>();
-            for (CstError e : CstParser.parse(text).errors()) {
-                syntax.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
-                        LspDiagnostic.ERROR, null, e.legacyMessage()));
+            boolean readable = true;
+            try {
+                for (CstError e : CstParser.parse(text).errors()) {
+                    syntax.add(new LspDiagnostic(range(lines, e.offset(), e.offset() + e.width()),
+                            LspDiagnostic.ERROR, null, e.legacyMessage()));
+                }
+            } catch (RuntimeException | StackOverflowError e) {
+                syntax.add(internalError(lines, e));   // the parse itself did not finish
+                readable = false;
             }
             out.put(uri, syntax);
-            if (syntax.isEmpty()) {
+            if (readable && syntax.isEmpty()) {
                 compileSet.put(uri, text);   // a syntactically broken file cannot join the compile
             } else {
                 String name = Compiler.moduleNameFromHeader(text);
@@ -112,8 +133,13 @@ public final class Analyzer {
         Map<String, List<Diagnostic>> byUri;
         try {
             byUri = Compiler.diagnoseModules(compileSet, brokenModules);
-        } catch (RuntimeException e) {
-            return out;   // analysis must never crash the server
+        } catch (RuntimeException | StackOverflowError e) {
+            // Which file broke the walk is not known here, so every file that entered the compile is
+            // marked. Silence would leave the whole workspace looking clean.
+            for (String uri : compileSet.keySet()) {
+                out.get(uri).add(internalError(new LineIndex(graph.text(uri)), e));
+            }
+            return out;
         }
         for (Map.Entry<String, List<Diagnostic>> e : byUri.entrySet()) {
             List<LspDiagnostic> list = out.get(e.getKey());
@@ -164,8 +190,8 @@ public final class Analyzer {
             return null;
         } catch (CompileException e) {
             return e.diagnostic();
-        } catch (RuntimeException e) {
-            return null;   // analysis must never crash the server
+        } catch (RuntimeException | StackOverflowError e) {
+            return null;   // no suggestion to recover; the diagnostics pass reports the failure
         }
     }
 
@@ -382,7 +408,7 @@ public final class Analyzer {
                     byLabel.putIfAbsent(name, new CompletionItem(name, CompletionItem.FUNCTION));
                 }
             }
-        } catch (RuntimeException ignore) {
+        } catch (RuntimeException | StackOverflowError ignore) {
             // a file that does not parse cleanly exposes no imports; the rest of the list still stands
         }
         SyntaxNode enclosing = enclosingDef(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
@@ -549,7 +575,7 @@ public final class Analyzer {
                     return imp.module();
                 }
             }
-        } catch (RuntimeException e) {
+        } catch (RuntimeException | StackOverflowError e) {
             // a file that does not parse cleanly resolves no imports; go-to-def simply misses
         }
         return null;
