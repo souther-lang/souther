@@ -153,9 +153,13 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
          *
          * <p>{@code owned} says the caller is a {@link Builder} and every node under it is one the
          * builder created, so a slot may be written in place instead of the node being cloned; the
-         * node is then returned unchanged and the parent has nothing to rewrite either. Only the
-         * leaf, whose array changes length, still allocates. An ordinary persistent put passes
-         * {@code false} and clones every node on the path, as it must.
+         * node is then returned unchanged and the parent has nothing to rewrite either. What is left
+         * to allocate is only what changes an array's length or a bitmap: adding a key to a node, and
+         * splitting an inline pair into a sub-node when two keys collide at that level. Overwriting
+         * an existing key's value allocates nothing at all.
+         *
+         * <p>An ordinary persistent put passes {@code false} and clones every node on the path, as it
+         * must.
          */
         Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned);
 
@@ -356,8 +360,8 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             return new BitmapIndexedNode(dataMap, nodeMap, c);
         }
 
-        /** The array grows and {@code dataMap} gains a bit, so this one allocates even when owned;
-         *  it is the leaf of the insert, once per entry. */
+        /** The array grows and {@code dataMap} gains a bit, so this one allocates even when owned —
+         *  once per key the builder actually adds, and not at all when it overwrites one. */
         private BitmapIndexedNode copyAndInsertValue(int bitpos, Object key, Object val) {
             int idx = 2 * dataIndex(bitpos);
             Object[] c = new Object[contents.length + 2];
