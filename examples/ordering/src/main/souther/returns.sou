@@ -1,0 +1,222 @@
+// The last leg of order-to-cash, and the deepest module here: returns imports example.billing and
+// example.shipping, each of which already sits a hop or two above cart. Three levels of import and a
+// second diamond, and neither costs anything at the call — a module is resolved once for the whole
+// compile, so `Amount` reaching here through billing is the same `Amount` billing states.
+//
+// What the depth does cost is naming. This module wants a word for money and does not declare one:
+// `Amount` is billing's, imported. Declaring a second `Amount` here would make the two impossible to
+// integrate — a third module could not import both, and there is no alias to tell them apart — so the
+// question "who owns this word" is settled once, upstream, and everyone downstream imports the
+// answer. That is the whole reason a shared vocabulary module exists.
+//
+// The features on show:
+//   - `Set` as the working collection: what came back, what was expected back, and what is still
+//     outstanding are three sets, and `difference` / `intersect` / `union` / `contains` say how they
+//     relate. A list would need a scan per question.
+//   - `Map.intersect` and `Map.difference` reconciling two keyed readings of the same shipment.
+//   - `List.member` / `reverse` / `take` for the recent-returns readout.
+//   - A return window measured with `Date.daysBetween`, and a refund that is an `Amount` — never a
+//     negative one, so an over-refund is its own case rather than a sign.
+module example.returns exposing (
+    Rma,
+    ReturnRequest,
+    ReturnedLine,
+    Reconciliation,
+    Accepted,
+    OutsideWindow,
+    NotShipped,
+    RefundPlan,
+    requestReturn,
+    reconcile,
+    planRefund
+)
+import example.cart ( Sku )
+import example.billing ( Amount, InvoiceNo )
+import example.shipping ( PickLine, ShipmentId )
+import List ( map, fold, filter, length, member, reverse, take )
+
+// A return authorisation number. It arrives from the customer service system, so its format is all
+// this module says about it.
+data Rma = String
+    invariant String.matches("RMA-[0-9]{8}", value)
+
+// === requestReturn: is this return one we accept? ===
+// Two questions, and they are different failures. A sku that was never on the shipment is not a
+// return at all — nothing went out, so nothing comes back. A sku that did go out but went out too
+// long ago is a return we decline, which is a different conversation with the customer.
+//
+// The shipment's skus are a `Set`, so "was this shipped" is one `Set.contains` rather than a scan,
+// and the requested skus are a Set too, so "which of these were never shipped" is one
+// `Set.difference`. Both questions are asked of the same two sets from different sides.
+data ReturnedLine =
+    { sku: Sku
+    , quantity: Int
+    }
+data ReturnRequest =
+    { rma: Rma
+    , shipmentId: ShipmentId
+    , invoiceNo: InvoiceNo
+    , lines: List<ReturnedLine>
+    , requestedOn: Date
+    }
+
+data Accepted =
+    { rma: Rma
+    , skus: Set<Sku>
+    , daysSinceDispatch: Int
+    }
+data OutsideWindow = { rma: Rma, daysSinceDispatch: Int, windowDays: Int }
+data NotShipped = { rma: Rma, unknown: Set<Sku> }
+
+behavior requestReturn : (request: ReturnRequest, shipped: Set<Sku>, dispatchedOn: Date,
+                          windowDays: Int) -> Accepted | OutsideWindow | NotShipped
+    constructs Accepted, OutsideWindow, NotShipped
+
+let requestedSkus (request: ReturnRequest): Set<Sku> =
+    Set.fromList(map(.sku, request.lines))
+
+let requestReturn (request, shipped, dispatchedOn, windowDays) = {
+    let asked = requestedSkus(request)
+    let neverShipped = Set.difference(asked, shipped)
+    require Set.isEmpty(neverShipped) else NotShipped { rma = request.rma, unknown = neverShipped }
+    let age = Date.daysBetween(dispatchedOn, request.requestedOn)
+    require age <= windowDays
+        else OutsideWindow { rma = request.rma, daysSinceDispatch = age, windowDays = windowDays }
+    Accepted { rma = request.rma, skus = Set.intersect(asked, shipped), daysSinceDispatch = age }
+}
+
+example requestReturn
+    | "everything asked for was shipped, and within the window" :
+        (ReturnRequest { rma = Rma("RMA-00000001"), shipmentId = ShipmentId("SH-000001"),
+                         invoiceNo = InvoiceNo("INV-2026-000042"), lines =
+            [ ReturnedLine { sku = Sku("apple"), quantity = 1 } ], requestedOn = Date("2026-08-01") }
+        , [ Sku("apple"), Sku("tv") ], Date("2026-07-25"), 14)
+            -> Accepted { rma = Rma("RMA-00000001"), skus = [ Sku("apple") ], daysSinceDispatch = 7 }
+    | "a sku that never went out is not a return" :
+        (ReturnRequest { rma = Rma("RMA-00000002"), shipmentId = ShipmentId("SH-000001"),
+                         invoiceNo = InvoiceNo("INV-2026-000042"), lines =
+            [ ReturnedLine { sku = Sku("apple"), quantity = 1 }
+            , ReturnedLine { sku = Sku("rice"), quantity = 2 } ], requestedOn = Date("2026-08-01") }
+        , [ Sku("apple"), Sku("tv") ], Date("2026-07-25"), 14)
+            -> NotShipped { rma = Rma("RMA-00000002"), unknown = [ Sku("rice") ] }
+    | "shipped, but asked for a month later" :
+        (ReturnRequest { rma = Rma("RMA-00000003"), shipmentId = ShipmentId("SH-000001"),
+                         invoiceNo = InvoiceNo("INV-2026-000042"), lines =
+            [ ReturnedLine { sku = Sku("apple"), quantity = 1 } ], requestedOn = Date("2026-08-25") }
+        , [ Sku("apple"), Sku("tv") ], Date("2026-07-25"), 14)
+            -> OutsideWindow { rma = Rma("RMA-00000003"), daysSinceDispatch = 31, windowDays = 14 }
+
+// === reconcile: what went out against what came back ===
+// The warehouse counts what physically arrived; the request says what was declared. The two are
+// keyed the same way, so the comparison is `Map` arithmetic rather than a nested walk:
+// `Map.intersect` keeps the skus both readings mention, and `Map.difference` each side's surplus.
+// What is left in each direction is the discrepancy the credit note has to explain.
+data Reconciliation =
+    { agreed: Map<Sku, Int>
+    , declaredOnly: Map<Sku, Int>
+    , receivedOnly: Map<Sku, Int>
+    , inDispute: Int
+    }
+
+behavior reconcile : (declared: Map<Sku, Int>, received: Map<Sku, Int>) -> Reconciliation
+    constructs Reconciliation
+
+let reconcile (declared, received) = {
+    let agreed = Map.intersect(declared, received)
+    let declaredOnly = Map.difference(declared, received)
+    let receivedOnly = Map.difference(received, declared)
+    Reconciliation {
+        agreed = agreed,
+        declaredOnly = declaredOnly,
+        receivedOnly = receivedOnly,
+        inDispute = Map.size(declaredOnly) + Map.size(receivedOnly)
+    }
+}
+
+example reconcile
+    | "one sku agrees, one was declared and never arrived, one arrived unannounced" :
+        ([ (Sku("apple"), 2), (Sku("rice"), 1) ], [ (Sku("apple"), 2), (Sku("tv"), 1) ])
+            -> Reconciliation { agreed = [ (Sku("apple"), 2) ],
+                                declaredOnly = [ (Sku("rice"), 1) ],
+                                receivedOnly = [ (Sku("tv"), 1) ],
+                                inDispute = 2 }
+    | "both readings agree, so nothing is in dispute" :
+        ([ (Sku("apple"), 2) ], [ (Sku("apple"), 2) ])
+            -> Reconciliation { agreed = [ (Sku("apple"), 2) ], declaredOnly = [],
+                                receivedOnly = [], inDispute = 0 }
+
+// === planRefund: what goes back to the customer ===
+// The refund is the agreed lines at the price they were invoiced at, and it is an `Amount` — billing's
+// Amount, imported, not a second one declared here. Restocking is taken off it, and the result is
+// clamped at zero rather than allowed to go negative: an Amount cannot be negative, and a refund that
+// would be is a refund of nothing, not a charge.
+//
+// The recent-returns readout walks the history backwards with `List.reverse` and cuts it with
+// `List.take`, and `List.member` answers whether this customer has returned this sku before — the
+// question that decides whether a human looks at the case.
+data RefundPlan =
+    { rma: Rma
+    , invoiceNo: InvoiceNo
+    , refund: Amount
+    , restockingFee: Amount
+    , repeatReturn: Bool
+    , recentRmas: List<Rma>
+    }
+
+behavior planRefund : (accepted: Accepted, reconciliation: Reconciliation, unitPrices: Map<Sku, Int>,
+                       invoiceNo: InvoiceNo, restockingRate: Decimal, history: List<Rma>,
+                       previousSkus: List<Sku>) -> RefundPlan
+    constructs RefundPlan, Amount
+
+let lineValue (sku: Sku, quantity: Int, unitPrices: Map<Sku, Int>): Int = {
+    let price = Map.get(sku, unitPrices) |> Option.withDefault(0)
+    price * quantity
+}
+
+let agreedValue (reconciliation: Reconciliation, unitPrices: Map<Sku, Int>): Int =
+    Map.fold((acc, sku, quantity) -> acc + lineValue(sku, quantity, unitPrices), 0,
+             reconciliation.agreed)
+
+let planRefund (accepted, reconciliation, unitPrices, invoiceNo, restockingRate, history,
+                previousSkus) = {
+    let gross = Decimal.fromInt(agreedValue(reconciliation, unitPrices))
+    let fee = Decimal.multiply(gross, restockingRate)
+    let net = Decimal.max(0.0m, Decimal.subtract(gross, fee))
+    RefundPlan {
+        rma = accepted.rma,
+        invoiceNo = invoiceNo,
+        refund = Amount(net),
+        restockingFee = Amount(Decimal.min(fee, gross)),
+        repeatReturn = Set.fold((acc, sku) -> acc || member(sku, previousSkus), false, accepted.skus),
+        recentRmas = take(3, reverse(history))
+    }
+}
+
+example planRefund
+    | "the agreed lines at their invoiced price, less a one-tenth restocking fee" :
+        (Accepted { rma = Rma("RMA-00000001"), skus = [ Sku("apple") ], daysSinceDispatch = 7 }
+        , Reconciliation { agreed = [ (Sku("apple"), 2) ], declaredOnly = [], receivedOnly = [],
+                           inDispute = 0 }
+        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000042"), 0.1m
+        , [ Rma("RMA-00000001") ], [ Sku("tv") ])
+            -> RefundPlan { rma = Rma("RMA-00000001"), invoiceNo = InvoiceNo("INV-2026-000042"),
+                            refund = Amount(270.0m), restockingFee = Amount(30.0m),
+                            repeatReturn = false, recentRmas = [ Rma("RMA-00000001") ] }
+    | "a sku this customer has returned before is flagged for a human" :
+        (Accepted { rma = Rma("RMA-00000002"), skus = [ Sku("apple") ], daysSinceDispatch = 3 }
+        , Reconciliation { agreed = [ (Sku("apple"), 1) ], declaredOnly = [], receivedOnly = [],
+                           inDispute = 0 }
+        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000043"), 0.0m
+        , [ Rma("RMA-00000001"), Rma("RMA-00000002") ], [ Sku("apple") ])
+            -> RefundPlan { rma = Rma("RMA-00000002"), invoiceNo = InvoiceNo("INV-2026-000043"),
+                            refund = Amount(150.0m), restockingFee = Amount(0.0m),
+                            repeatReturn = true,
+                            recentRmas = [ Rma("RMA-00000002"), Rma("RMA-00000001") ] }
+    | "nothing agreed is a refund of nothing, not a charge" :
+        (Accepted { rma = Rma("RMA-00000003"), skus = [ Sku("apple") ], daysSinceDispatch = 1 }
+        , Reconciliation { agreed = [], declaredOnly = [ (Sku("apple"), 1) ], receivedOnly = [],
+                           inDispute = 1 }
+        , [ (Sku("apple"), 150) ], InvoiceNo("INV-2026-000044"), 0.1m, [], [])
+            -> RefundPlan { rma = Rma("RMA-00000003"), invoiceNo = InvoiceNo("INV-2026-000044"),
+                            refund = Amount(0.0m), restockingFee = Amount(0.0m),
+                            repeatReturn = false, recentRmas = [] }
