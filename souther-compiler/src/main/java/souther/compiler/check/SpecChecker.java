@@ -4,15 +4,9 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.Localizable;
-import souther.compiler.diag.Region;
-import souther.compiler.diag.SourcePos;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -374,41 +368,15 @@ public final class SpecChecker {
     }
 
     private static void collectRequiredCalls(Ast.Expr e, Set<String> requiredNames, List<String> out) {
-        switch (e) {
-            case Ast.Call call -> {
-                if (requiredNames.contains(call.fn()) && !out.contains(call.fn())) {
-                    out.add(call.fn());
-                }
-                call.args().forEach(a -> collectRequiredCalls(a, requiredNames, out));
-            }
-            case Ast.NewData nd -> nd.inits().forEach(i -> collectRequiredCalls(i.value(), requiredNames, out));
-            case Ast.FieldAccess fa -> collectRequiredCalls(fa.target(), requiredNames, out);
-            case Ast.Binary bin -> {
-                collectRequiredCalls(bin.left(), requiredNames, out);
-                collectRequiredCalls(bin.right(), requiredNames, out);
-            }
-            case Ast.Match m -> {
-                collectRequiredCalls(m.scrutinee(), requiredNames, out);
-                m.cases().forEach(c -> collectRequiredCalls(c.body(), requiredNames, out));
-            }
-            case Ast.If iff -> {
-                collectRequiredCalls(iff.cond(), requiredNames, out);
-                collectRequiredCalls(iff.then(), requiredNames, out);
-                collectRequiredCalls(iff.els(), requiredNames, out);
-            }
-            case Ast.ListLit lit -> lit.elements().forEach(el -> collectRequiredCalls(el, requiredNames, out));
-            case Ast.ListComp comp -> {
-                collectRequiredCalls(comp.element(), requiredNames, out);
-                comp.guards().forEach(g -> collectRequiredCalls(g, requiredNames, out));
-            }
-            case Ast.LetIn li -> {
-                collectRequiredCalls(li.value(), requiredNames, out);
-                collectRequiredCalls(li.body(), requiredNames, out);
-            }
-            // a block's requirements float out to the behavior that passes it (spec 12.5, 29)
-            case Ast.Block block -> collectRequiredCalls(block.body(), requiredNames, out);
-            default -> { }
+        if (e instanceof Ast.Call call && requiredNames.contains(call.fn())
+                && !out.contains(call.fn())) {
+            out.add(call.fn());
         }
+        // Every subexpression, through the one exhaustive walk — a call to an injected behavior may
+        // sit anywhere. Listing the node kinds here instead left `-dep(x)` and `(dep(x), y)` out of
+        // the set, and a block's requirements still float out to the behavior that passes it
+        // (spec 12.5, 29) because a Block's body is one of its children.
+        Ast.forEachChild(e, c -> collectRequiredCalls(c, requiredNames, out));
     }
 
     /**
