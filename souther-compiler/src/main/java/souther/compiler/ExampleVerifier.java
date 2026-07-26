@@ -86,6 +86,15 @@ public final class ExampleVerifier {
                 failures.size() + " examples do not hold; " + legacyOf(first));
     }
 
+    /** The one-line form for a set of failures gathered across modules: the count, then the first
+     * one's reason, matching what a single module's aggregate says. */
+    public static String legacySummary(List<Diagnostic> failures) {
+        Diagnostic first = failures.get(0);
+        return failures.size() == 1
+                ? legacyOf(first)
+                : failures.size() + " examples do not hold; " + legacyOf(first);
+    }
+
     /** A one-line message for a failing example, used where only the legacy string is shown (the LSP
      * surfaces this rather than the rendered catalog message). */
     private static String legacyOf(Diagnostic d) {

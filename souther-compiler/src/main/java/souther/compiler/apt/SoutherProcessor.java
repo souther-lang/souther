@@ -104,24 +104,27 @@ public final class SoutherProcessor extends AbstractProcessor {
         if (e.diagnostic() == null) {
             return List.of("souther: " + e.getMessage());   // not yet structured
         }
-        Source origin = originOf(e, sources);
-        SourceContext src = origin == null ? null
-                : new SourceContext(origin.path().getFileName().toString(), origin.text());
         Locale locale = Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
         HumanRenderer renderer = new HumanRenderer(false);
         List<String> reported = new ArrayList<>();
-        for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
-            reported.add(renderer.render(d, src, locale));
+        List<souther.compiler.diag.Diagnostic> ds = e.diagnostics();
+        for (int i = 0; i < ds.size(); i++) {
+            // Each diagnostic quotes its own file; a compile reporting several modules at once has
+            // one per module.
+            Source origin = originOf(e, sources, i);
+            SourceContext src = origin == null ? null
+                    : new SourceContext(origin.path().getFileName().toString(), origin.text());
+            reported.add(renderer.render(ds.get(i), src, locale));
         }
         return reported;
     }
 
     /** The source the error came from, or null when it names none (so no line is quoted). */
-    private static Source originOf(CompileException e, List<Source> sources) {
+    private static Source originOf(CompileException e, List<Source> sources, int i) {
         if (sources.size() == 1) {
             return sources.get(0);
         }
-        int index = e.sourceIndex();
+        int index = e.sourceIndexOf(i);
         return index >= 0 && index < sources.size() ? sources.get(index) : null;
     }
 

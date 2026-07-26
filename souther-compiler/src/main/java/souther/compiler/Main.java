@@ -90,7 +90,7 @@ public final class Main {
                 System.out.println("wrote " + file);
             }
         } catch (CompileException e) {
-            reportCompileError(e, sourceOf(sources, e), render);
+            reportCompileError(e, sources, render);
             System.exit(1);
         } catch (IOException e) {
             System.err.println("io error: " + e.getMessage());
@@ -189,7 +189,7 @@ public final class Main {
             System.err.println(e.localized(Messages.resolveLocale(render.lang)));
             System.exit(e.exitCode);
         } catch (CompileException e) {
-            reportCompileError(e, firstSource(args), render);
+            reportCompileError(e, firstSource(args) == null ? List.of() : List.of(firstSource(args)), render);
             System.exit(1);
         }
     }
@@ -201,34 +201,47 @@ public final class Main {
      * from the wrong file.
      */
     static Path sourceOf(List<Path> sources, CompileException e) {
+        return sourceOf(sources, e, 0);
+    }
+
+    /** The file the {@code i}-th diagnostic should quote. */
+    static Path sourceOf(List<Path> sources, CompileException e, int i) {
         if (sources.size() == 1) {
             return sources.get(0);
         }
-        int index = e.sourceIndex();
+        int index = e.sourceIndexOf(i);
         return index >= 0 && index < sources.size() ? sources.get(index) : null;
+    }
+
+    /** A file as a snippet source, or null when it cannot be read — a snippet-less rendering is the
+     *  honest fallback. */
+    private static SourceContext read(Path source) {
+        if (source == null) {
+            return null;
+        }
+        try {
+            return new SourceContext(source.getFileName().toString(), Files.readString(source));
+        } catch (IOException ignore) {
+            return null;
+        }
     }
 
     /** Renders a compile error: an Elm-style snippet (or JSON) in the chosen locale, or the legacy
      * one-line form when the error is not yet structured. An error that carries several diagnostics
      * — every failing {@code example} row — prints each, so none of the reasons is lost. */
-    private static void reportCompileError(CompileException e, Path source, RenderOptions render) {
+    private static void reportCompileError(CompileException e, List<Path> sources, RenderOptions render) {
         if (e.diagnostic() == null) {
             System.err.println(e.getMessage());
             return;
         }
-        SourceContext src = null;
-        if (source != null) {
-            try {
-                src = new SourceContext(source.getFileName().toString(), Files.readString(source));
-            } catch (IOException ignore) {
-                // Fall back to a snippet-less rendering.
-            }
-        }
         Locale locale = Messages.resolveLocale(render.lang);
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
-        for (Diagnostic d : e.diagnostics()) {
-            System.err.println(renderer.render(d, src, locale));
+        List<Diagnostic> ds = e.diagnostics();
+        for (int i = 0; i < ds.size(); i++) {
+            // Each diagnostic quotes its own file: a compile that reports several modules at once has
+            // one per module, and they do not share a source.
+            System.err.println(renderer.render(ds.get(i), read(sourceOf(sources, e, i)), locale));
         }
     }
 
