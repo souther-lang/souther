@@ -291,7 +291,15 @@ behavior 通知する : (注文: 確定注文) -> 通知済み constructs 通知
     requires messaging.メールを送る
 ----
 
-Unlike a type, a behavior's name is also a member name in what is generated: an injected behavior is a field of the implementing class, and its name is that field's name (<<jvm-behavior>>). So one module cannot reach two behaviors of the same name, whether written bare or qualified — qualifying them does not separate the fields. Naming both is a compile error; the module translates one into a behavior of its own, or the name is changed upstream.
+Unlike a type, a behavior's name is also a member name in what is generated: an injected behavior is a field of the implementing class, and its name is that field's name (<<jvm-behavior>>). So one module cannot reach two behaviors of the same name, whether written bare or qualified — qualifying them does not separate the fields. Naming both is a compile error.
+
+Two same-named types meet in one module because both values exist there; two same-named behaviors meet because the module chose to call both, which is the module not having named what it is doing. A module that genuinely depends on two of them — the same operation offered by two providers, say — declares two behaviors of its own, under names that tell them apart. Each is an injection target (<<injected-behavior>>), and which upstream behavior goes into each is the Java side's to decide.
+
+[,text]
+----
+behavior 一次倉庫から引き当てる : (明細: 明細) -> 引当済み | 在庫不足
+behavior 二次倉庫から引き当てる : (明細: 明細) -> 引当済み | 在庫不足
+----
 
 A dependency is a dependency however it is written, so a cycle closed by a qualified reference is the same compile error (<<e1501>>) as one closed by an `+import+`.
 
