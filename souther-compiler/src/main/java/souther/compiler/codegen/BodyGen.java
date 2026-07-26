@@ -1071,13 +1071,21 @@ final class BodyGen {
                 }
                 case CONCAT -> {
                     Type lt = genExpr(bin.left());
-                    genExpr(bin.right());
                     // `++` over two strings is Elm's appendable on String; the checker guarantees both
                     // sides are String here, so emit `a.concat(b)` rather than the list join.
                     if (lt == Type.STRING) {
+                        genExpr(bin.right());
                         code.invokevirtual(CD_String, "concat",
                                 MethodTypeDesc.of(CD_String, CD_String));
+                    } else if (bin.right() instanceof Core.ListLit lit && lit.elements().size() == 1) {
+                        // `acc ++ [x]` is how every fold-derived combinator grows its list
+                        // (souther.list's map/filter), so it runs once per element. Push the element
+                        // itself: building a one-element list for `concat` to immediately take apart
+                        // costs an ArrayList, a copyOf, and an iterator on the hot path.
+                        box(code, genExpr(lit.elements().get(0)));
+                        code.invokestatic(CD_Lists, "append", MTD_Lists_append);
                     } else {
+                        genExpr(bin.right());
                         code.invokestatic(CD_Lists, "concat", MTD_Lists_concat);
                     }
                 }
