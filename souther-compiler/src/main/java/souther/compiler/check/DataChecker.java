@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
@@ -142,6 +143,17 @@ public final class DataChecker {
                         "`" + n + "` is listed more than once in " + where);
             }
         }
+    }
+
+    /** Where to point at a field the data declares — the field's own name — or at the data header for
+     * one that arrived through a {@code ...} spread, which is written in the data it came from. */
+    private static Region fieldRegion(Ast.Data data, String field) {
+        for (Ast.Field f : data.fields()) {
+            if (f.name().equals(field)) {
+                return Region.ofWidth(f.pos(), field.length());
+            }
+        }
+        return Region.point(data.pos());
     }
 
     /** The path back to {@code target} through sum cases, or null when it does not reach itself. A
@@ -307,7 +319,8 @@ public final class DataChecker {
             if (SpecChecker.containsTuple(e.getValue())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.field.tuple").title("check.boundary.title")
-                                .at(ctx.data().pos()).args(ctx.data().name(), e.getKey()).build(),
+                                .at(fieldRegion(ctx.data(), e.getKey()))
+                                .args(ctx.data().name(), e.getKey()).build(),
                         "a tuple cannot be a data field (`" + ctx.data().name() + "." + e.getKey()
                                 + "`): a tuple has no external representation, so it cannot cross a"
                                 + " decoder/encoder boundary (ADR-0036). Use a named data.");
@@ -318,7 +331,7 @@ public final class DataChecker {
             if (badKey != null) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.map.key.field").title("check.boundary.title")
-                                .at(ctx.data().pos())
+                                .at(fieldRegion(ctx.data(), e.getKey()))
                                 .args(ctx.data().name() + "." + e.getKey(), Type.show(badKey))
                                 .hint("check.map.key.field.hint").build(),
                         "a Map crossing the boundary at `" + ctx.data().name() + "." + e.getKey()

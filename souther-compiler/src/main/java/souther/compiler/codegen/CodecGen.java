@@ -106,9 +106,16 @@ final class CodecGen {
         switch (key) {
             case Ast.DataDecRef d -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
             case Ast.PrimDecRef p -> {
+                // Only a temporal is parsed here: a String key never reaches this method (it needs no
+                // remapping at all), and no other primitive is a boundary key.
+                String parse = switch (p.kind()) {
+                    case DATE -> "date";
+                    case DATETIME -> "dateTime";
+                    case STRING, INT, BOOL, DECIMAL ->
+                            throw new CompileException(key.pos(), "not a map key decoder: " + p.kind());
+                };
                 code.invokestatic(CD_ObjectDecoders, "string", MTD_leafString);
-                code.invokevirtual(CD_StringDecoder,
-                        p.kind() == Ast.PrimKind.DATE ? "date" : "dateTime", MTD_leafTemporal);
+                code.invokevirtual(CD_StringDecoder, parse, MTD_leafTemporal);
             }
             default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
         }
