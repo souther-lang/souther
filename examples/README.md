@@ -37,6 +37,10 @@ The whole Maven wiring is just this (set once for all modules in `examples/pom.x
 end up in the artifact jar. With Gradle you use the same processor via an `annotationProcessor`
 dependency plus the `-Asouther.source` compiler arg.
 
+A compile error is reported the way the CLI reports it — the title, the position, the offending line
+with a caret, and the hint. `-Asouther.lang=en` picks the language of the message; without it the
+processor follows `SOUTHER_LANG` and then the JVM's default locale, as `souther --lang` does.
+
 ## Modules
 
 | Module | What it shows |

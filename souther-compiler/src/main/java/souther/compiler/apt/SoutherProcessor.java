@@ -1,6 +1,9 @@
 package souther.compiler.apt;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.Messages;
+import souther.compiler.diag.SourceContext;
 import souther.compiler.Compiler;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -17,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -32,6 +36,11 @@ import java.util.stream.Stream;
  * {@code annotationProcessorPaths}, Gradle {@code annotationProcessor}, or plain
  * {@code javac -processorpath}). With no {@code souther.source} option it is a no-op, so it is
  * harmless to have on any classpath.
+ *
+ * <p>A compile error is rendered as the CLI renders it and handed to the {@code Messager}, so the
+ * build log carries the snippet and the hint rather than an exception's detail string.
+ * {@code -Asouther.lang=<tag>} chooses the language, defaulting the same way {@code souther --lang}
+ * does.
  */
 @SupportedAnnotationTypes("*")
 public final class SoutherProcessor extends AbstractProcessor {
@@ -45,7 +54,7 @@ public final class SoutherProcessor extends AbstractProcessor {
 
     @Override
     public Set<String> getSupportedOptions() {
-        return Set.of("souther.source");
+        return Set.of("souther.source", "souther.lang");
     }
 
     @Override
@@ -58,14 +67,16 @@ public final class SoutherProcessor extends AbstractProcessor {
             return false;   // not configured: no-op
         }
         done = true;
+        List<Source> sources = List.of();
         try {
-            List<String> sources = readSources(Path.of(configured));
+            sources = readSources(Path.of(configured));
             if (sources.isEmpty()) {
                 return false;
             }
-            Map<String, byte[]> classes = sources.size() == 1
-                    ? Compiler.compile(sources.get(0))
-                    : Compiler.compileModules(sources);
+            List<String> texts = sources.stream().map(Source::text).toList();
+            Map<String, byte[]> classes = texts.size() == 1
+                    ? Compiler.compile(texts.get(0))
+                    : Compiler.compileModules(texts);
             Filer filer = processingEnv.getFiler();
             for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
                 JavaFileObject file = filer.createClassFile(entry.getKey());
@@ -74,25 +85,54 @@ public final class SoutherProcessor extends AbstractProcessor {
                 }
             }
         } catch (CompileException e) {
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "souther: " + e.getMessage());
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, render(e, sources));
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "souther: io error: " + e.getMessage());
         }
         return false;
     }
 
+    /**
+     * The compile error as the CLI would print it: an Elm-style snippet in the chosen locale, with
+     * no color since this goes to a build log. The snippet comes from the source the compiler names
+     * — the only one, or the module it was working on when a module set is linked.
+     */
+    private String render(CompileException e, List<Source> sources) {
+        souther.compiler.diag.Diagnostic d = e.diagnostic();
+        if (d == null) {
+            return "souther: " + e.getMessage();   // not yet structured
+        }
+        Source origin = originOf(e, sources);
+        SourceContext src = origin == null ? null
+                : new SourceContext(origin.path().getFileName().toString(), origin.text());
+        Locale locale = Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
+        return new HumanRenderer(false).render(d, src, locale);
+    }
+
+    /** The source the error came from, or null when it names none (so no line is quoted). */
+    private static Source originOf(CompileException e, List<Source> sources) {
+        if (sources.size() == 1) {
+            return sources.get(0);
+        }
+        int index = e.sourceIndex();
+        return index >= 0 && index < sources.size() ? sources.get(index) : null;
+    }
+
     /** Reads a single {@code .sou} file, or every {@code .sou} under a directory (path-sorted). */
-    private static List<String> readSources(Path path) throws IOException {
+    private static List<Source> readSources(Path path) throws IOException {
         if (Files.isDirectory(path)) {
             try (Stream<Path> walk = Files.walk(path)) {
                 List<Path> files = walk.filter(p -> p.toString().endsWith(".sou")).sorted().toList();
-                List<String> sources = new ArrayList<>();
+                List<Source> sources = new ArrayList<>();
                 for (Path file : files) {
-                    sources.add(Files.readString(file));
+                    sources.add(new Source(file, Files.readString(file)));
                 }
                 return sources;
             }
         }
-        return List.of(Files.readString(path));
+        return List.of(new Source(path, Files.readString(path)));
     }
+
+    /** A {@code .sou} file and its text. The path is kept so a diagnostic can quote the line. */
+    private record Source(Path path, String text) {}
 }

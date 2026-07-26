@@ -226,11 +226,25 @@ public final class Compiler {
 
     private static Map<String, byte[]> linking(List<String> sources, List<Diagnostic> warningsOut) {
         List<Ast.Module> allParsed = new ArrayList<>();
-        for (String s : sources) {
+        // Which source each module was read from, so an error can be traced back to a file.
+        Map<String, Integer> sourceOfModule = new LinkedHashMap<>();
+        // Modules an `examples for` file was merged into. Their examples come from another source, so
+        // an example failure names no file rather than quoting this one's line at that one's position.
+        Set<String> mergedExamples = new LinkedHashSet<>();
+        for (int i = 0; i < sources.size(); i++) {
             // A module linked by imports must be named; `null` forbids omitting the header here.
-            Ast.Module raw = CstFrontend.parse(s, null);
-            rejectReservedNamespace(raw);
-            allParsed.add(Exposing.rewrite(raw));
+            try {
+                Ast.Module raw = CstFrontend.parse(sources.get(i), null);
+                rejectReservedNamespace(raw);
+                Ast.Module rewritten = Exposing.rewrite(raw);
+                allParsed.add(rewritten);
+                if (rewritten.exampleFileTarget() == null) {
+                    // an `examples for X` file carries X's name; the module itself is the other source
+                    sourceOfModule.put(rewritten.name(), i);
+                }
+            } catch (CompileException e) {
+                throw e.inSource(i);
+            }
         }
         // An `examples for <module>` file contributes only examples: merge each into its target
         // module. It is never a module of its own, so it never enters `byName`.
@@ -241,6 +255,7 @@ public final class Compiler {
             if (m.exampleFileTarget() != null) {
                 attached.computeIfAbsent(m.exampleFileTarget(), k -> new ArrayList<>()).addAll(m.examples());
                 attachedFakes.computeIfAbsent(m.exampleFileTarget(), k -> new ArrayList<>()).addAll(m.fakes());
+                mergedExamples.add(m.exampleFileTarget());
             } else {
                 parsed.add(m);
             }
@@ -253,22 +268,31 @@ public final class Compiler {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.module.duplicate").title("check.module.title")
                                 .at(m.pos()).args(m.name()).build(),
-                        "duplicate module `" + m.name() + "`");
+                        "duplicate module `" + m.name() + "`")
+                        .inSource(sourceIndex(sourceOfModule, m.name()));
             }
         }
-        detectCycles(parsed, byName);
+        detectCycles(parsed, byName, sourceOfModule);
 
         // pass 1: derive each module's codecs, resolving imported types against the original defs
         Map<String, Ast.Module> derived = new LinkedHashMap<>();
         for (Ast.Module m : parsed) {
-            Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
-            derived.put(m.name(), HelperInliner.forModule(d).withInlinedInvariants(d));
+            try {
+                Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
+                derived.put(m.name(), HelperInliner.forModule(d).withInlinedInvariants(d));
+            } catch (CompileException e) {
+                throw e.inSource(sourceIndex(sourceOfModule, m.name()));
+            }
         }
         // pass 1.5: lower `金額(x)` newtype constructors to NewData (needs every module's defs, so
         // an imported newtype name resolves) before check and codegen see them
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
-            derived.put(original.name(), NewtypeDesugar.rewrite(m, visibleDefs(m, derived)));
+            try {
+                derived.put(original.name(), NewtypeDesugar.rewrite(m, visibleDefs(m, derived)));
+            } catch (CompileException e) {
+                throw e.inSource(sourceIndex(sourceOfModule, original.name()));
+            }
         }
         // `derived` is final from here, so what each module resolves against is resolved once, in the
         // pass that first needs it, and read again by the example pass. Resolving it up front instead
@@ -279,29 +303,45 @@ public final class Compiler {
         Map<String, byte[]> out = new LinkedHashMap<>();
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
-            Map<String, Ast.Def> symbols = visibleDefs(m, derived);
-            Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
-            visible.put(original.name(), symbols);
-            imported.put(original.name(), importedSigs);
-            Set<String> importedInjected = importedInjectedBehaviors(m, derived);
-            m = injectRecursivePrelude(m);
-            Ast.Module lowered = Lower.run(m);
-            TypeChecker.Checked checked = TypeChecker.checkOrThrow(m, symbols, importedSigs, lowered);
-            warningsOut.addAll(checked.warnings());
-            out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs,
-                    importedInjected, checked));
+            try {
+                Map<String, Ast.Def> symbols = visibleDefs(m, derived);
+                Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
+                visible.put(original.name(), symbols);
+                imported.put(original.name(), importedSigs);
+                Set<String> importedInjected = importedInjectedBehaviors(m, derived);
+                m = injectRecursivePrelude(m);
+                Ast.Module lowered = Lower.run(m);
+                TypeChecker.Checked checked = TypeChecker.checkOrThrow(m, symbols, importedSigs, lowered);
+                warningsOut.addAll(checked.warnings());
+                out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs,
+                        importedInjected, checked));
+            } catch (CompileException e) {
+                throw e.inSource(sourceIndex(sourceOfModule, original.name()));
+            }
         }
         // every module's classes are now present, so CTFE and example evaluation can resolve
         // cross-module references
         for (Ast.Module original : parsed) {
             Ast.Module m = derived.get(original.name());
             Map<String, Ast.Def> symbols = visible.get(original.name());
-            verifyConstConstructions(m, symbols, out);
-            Map<String, Sig> sigs =
-                    PipelineSigs.signatures(m, symbols, imported.get(original.name()));
-            ExampleVerifier.verify(m, symbols, sigs, importedPackages(m), out);
+            try {
+                verifyConstConstructions(m, symbols, out);
+                Map<String, Sig> sigs =
+                        PipelineSigs.signatures(m, symbols, imported.get(original.name()));
+                ExampleVerifier.verify(m, symbols, sigs, importedPackages(m), out);
+            } catch (CompileException e) {
+                throw e.inSource(mergedExamples.contains(original.name())
+                        ? -1 : sourceIndex(sourceOfModule, original.name()));
+            }
         }
         return out;
+    }
+
+    /** The source a module was read from, or {@code -1} when it cannot be named — an unknown module,
+     *  or one whose positions come from more than one file. */
+    private static int sourceIndex(Map<String, Integer> sourceOfModule, String moduleName) {
+        Integer index = sourceOfModule.get(moduleName);
+        return index == null ? -1 : index;
     }
 
     /**
@@ -713,16 +753,18 @@ public final class Compiler {
         return names;
     }
 
-    private static void detectCycles(List<Ast.Module> modules, Map<String, Ast.Module> byName) {
+    private static void detectCycles(List<Ast.Module> modules, Map<String, Ast.Module> byName,
+                                     Map<String, Integer> sourceOfModule) {
         Set<String> done = new HashSet<>();
         Set<String> stack = new HashSet<>();
         for (Ast.Module m : modules) {
-            visit(m.name(), byName, done, stack);
+            visit(m.name(), byName, done, stack, sourceOfModule);
         }
     }
 
     private static void visit(String name, Map<String, Ast.Module> byName,
-                              Set<String> done, Set<String> stack) {
+                              Set<String> done, Set<String> stack,
+                              Map<String, Integer> sourceOfModule) {
         if (done.contains(name)) {
             return;
         }
@@ -731,10 +773,12 @@ public final class Compiler {
         if (m != null) {
             for (Ast.Import imp : m.imports()) {
                 if (stack.contains(imp.module())) {
-                    throw new CompileException(imp.pos(), "E1501", "Cyclic module dependency detected.");
+                    // the `import` that closes the cycle is written in `m`, so that is the file to quote
+                    throw new CompileException(imp.pos(), "E1501", "Cyclic module dependency detected.")
+                            .inSource(sourceIndex(sourceOfModule, name));
                 }
                 if (byName.containsKey(imp.module())) {
-                    visit(imp.module(), byName, done, stack);
+                    visit(imp.module(), byName, done, stack, sourceOfModule);
                 }
             }
         }

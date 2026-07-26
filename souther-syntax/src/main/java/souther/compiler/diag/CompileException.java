@@ -12,7 +12,12 @@ package souther.compiler.diag;
  */
 public class CompileException extends RuntimeException {
 
+    /** A position is a line and a column, so a compile that was handed several sources also has to
+     *  say which one — otherwise there is nothing to quote the line from. */
+    private static final int NO_SOURCE = -1;
+
     private final transient Diagnostic diagnostic;
+    private final int sourceIndex;
 
     public CompileException(SourcePos pos, String message) {
         this(pos, null, message);
@@ -24,8 +29,13 @@ public class CompileException extends RuntimeException {
 
     /** Throws with a fully structured diagnostic (a migrated site). */
     public CompileException(Diagnostic diagnostic, String legacyMessage) {
+        this(diagnostic, legacyMessage, NO_SOURCE);
+    }
+
+    private CompileException(Diagnostic diagnostic, String legacyMessage, int sourceIndex) {
         super(legacyMessage);
         this.diagnostic = diagnostic;
+        this.sourceIndex = sourceIndex;
     }
 
     /**
@@ -49,6 +59,25 @@ public class CompileException extends RuntimeException {
     /** The structured diagnostic behind this error, for a renderer. */
     public Diagnostic diagnostic() {
         return diagnostic;
+    }
+
+    /** Which of the sources a multi-module compile was handed this error came from, or {@code -1}
+     *  when it carries no origin (a single-source compile, where the caller knows). */
+    public int sourceIndex() {
+        return sourceIndex;
+    }
+
+    /**
+     * The same error, tagged with the source being compiled when it was thrown. The first tag wins:
+     * an inner phase that already named its source keeps it, so a surrounding loop may tag freely.
+     */
+    public CompileException inSource(int index) {
+        if (sourceIndex != NO_SOURCE || index < 0) {
+            return this;
+        }
+        CompileException tagged = new CompileException(diagnostic, getMessage(), index);
+        tagged.setStackTrace(getStackTrace());
+        return tagged;
     }
 
     private static String format(SourcePos pos, String code, String message) {
