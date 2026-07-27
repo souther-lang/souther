@@ -142,7 +142,7 @@ public final class ModuleMetadata {
                 AnnotationElement.ofInt("compat", Backend.BOUNDARY_VERSION),
                 AnnotationElement.ofString("compiler", compilerVersion()),
                 AnnotationElement.ofString("name", module.name()),
-                strings("exposing", module.exposing()),
+                AnnotationElement.ofString("header", slices.header()),
                 strings("imports", slices.imports()),
                 strings("types", types),
                 strings("behaviors", behaviors),
@@ -181,11 +181,21 @@ public final class ModuleMetadata {
         return texts;
     }
 
-    /** One set does for both visited and reached: a helper is added the first time it is seen, and
-     * nothing is ever taken out, so a second sighting stops the walk by itself. */
+    /**
+     * A helper is reached by being called and by being named — handing one to a combinator, as in
+     * {@code all(positive, items)}, needs it just as much as calling it does.
+     *
+     * <p>One set does for both visited and reached: a helper is added the first time it is seen, and
+     * nothing is ever taken out, so a second sighting stops the walk by itself.
+     */
     private static void reach(Ast.Expr e, Map<String, Ast.FnDef> own, Set<String> reached) {
-        if (e instanceof Ast.Call call && own.containsKey(call.fn()) && reached.add(call.fn())) {
-            Ast.Expr body = own.get(call.fn()).body();
+        String named = switch (e) {
+            case Ast.Call call -> call.fn();
+            case Ast.Var var -> var.name();
+            default -> null;
+        };
+        if (named != null && own.containsKey(named) && reached.add(named)) {
+            Ast.Expr body = own.get(named).body();
             if (body != null) {   // an `intrinsic` helper is a name with nothing to walk into
                 reach(body, own, reached);
             }
