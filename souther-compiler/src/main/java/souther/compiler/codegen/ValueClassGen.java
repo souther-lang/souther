@@ -152,6 +152,14 @@ final class ValueClassGen {
         }
         out.put(pkg + "." + sum.name(), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
+            // A sum may itself be a case of another sum (spec 8.3), and then it carries that sum's
+            // interface as a product or unit case does. Only the direct link is recorded, which is
+            // all that is needed: interface inheritance carries it the rest of the way, so a leaf of
+            // this sum is a value of the outer one without being named there.
+            ClassDesc[] ifaces = caseInterfaces(sum.name());
+            if (ifaces.length > 0) {
+                cb.withInterfaceSymbols(ifaces);
+            }
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
             sum.decoder().ifPresent(disc -> {
                 codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"), CodecGen.decoderSig(cdX, true));
