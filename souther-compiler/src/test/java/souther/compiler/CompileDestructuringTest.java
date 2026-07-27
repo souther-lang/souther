@@ -253,6 +253,46 @@ class CompileDestructuringTest {
     }
 
     @Test
+    void aPatternMayNameItsNewtypeThroughItsModule() {
+        // a type is reachable through the module that declares it, in a pattern as anywhere else;
+        // the name written and the type resolved are compared as types, not as the text of a name
+        Compiler.compileModules(java.util.List.of("""
+                module probe.a exposing ( Tags )
+                data Tags = List<String>
+                """, """
+                module probe.c
+                import List ( length )
+                import probe.a ( Tags )
+
+                behavior f : (t: Tags) -> Int
+                let f (t) = {
+                    let probe.a.Tags(xs) = t
+                    length(xs)
+                }
+                """));
+    }
+
+    @Test
+    void aPatternNamingAnotherModulesNewtypeTheValueIsNotIsStillRejected() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(java.util.List.of("""
+                        module probe.a exposing ( Tags, Labels )
+                        data Tags = List<String>
+                        data Labels = List<String>
+                        """, """
+                        module probe.c
+                        import probe.a ( Tags )
+
+                        behavior f : (t: Tags) -> Int
+                        let f (t) = {
+                            let probe.a.Labels(xs) = t
+                            1
+                        }
+                        """)));
+        assertEquals("check.open.mismatch", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
     void aRefutablePatternIsRejectedInALambdaParameterToo() {
         // the same judgement, wherever the pattern is written
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""

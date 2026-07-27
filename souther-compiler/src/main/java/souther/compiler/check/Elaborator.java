@@ -439,13 +439,16 @@ public final class Elaborator {
                             + opened + "(...)`; a value that may or may not have a shape is opened"
                             + " with `match`");
         }
-        String actual = valueType instanceof Type.Ref r ? r.name().name() : Type.show(valueType);
-        if (!opened.equals(actual)) {
+        // compared as types, not as the text of a name: a type is reachable through the module that
+        // declares it, so `probe.a.Tags` and an imported bare `Tags` are the one type
+        if (!(valueType instanceof Type.Ref r) || !r.name().equals(layer)) {
+            String shown = layer.name();
+            String actual = Type.show(valueType);
             throw CompileException.of(
                     Diagnostic.of(null, "check.open.mismatch").title("check.open.title")
-                            .at(li.pos()).args(opened, actual)
-                            .diff(actual, opened).build(),
-                    "this pattern opens `" + opened + "`, but the value is `" + actual + "`");
+                            .at(li.pos()).args(shown, actual)
+                            .diff(actual, shown).build(),
+                    "this pattern opens `" + shown + "`, but the value is `" + actual + "`");
         }
     }
 
