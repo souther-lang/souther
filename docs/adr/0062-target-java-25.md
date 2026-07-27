@@ -11,7 +11,7 @@ Every derived decoder and encoder names Raoh types in its method descriptors, so
 `data` class requires Raoh on the classpath. `net.unit8.raoh:raoh:0.6.0` is class-file version 69 —
 Java 25. A generated program therefore did not run on Java 21 and never had:
 
-```
+```text
 $ java21 -cp out:souther-runtime Pure          # touch a generated Amount
 NoClassDefFoundError: net/unit8/raoh/decode/Decoder
 # and with raoh on the classpath:
