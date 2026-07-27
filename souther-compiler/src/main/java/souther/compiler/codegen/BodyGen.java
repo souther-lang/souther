@@ -169,13 +169,14 @@ final class BodyGen {
                     new CheckContext(symbols, data, reqSigs()), expected);
         }
 
+        /**
+         * Reads a field onto the stack through the data's accessor. A data is a record, so its backing
+         * field is private and the accessor is the read — for a data of this module as much as for an
+         * imported one, whose field is out of reach across the module = package boundary anyway
+         * (spec 8.5, 19.2).
+         */
         private void emitFieldRead(CodeBuilder code, TypeName ownerName, String field, Type ft) {
-            ClassDesc ownerCd = cd(ownerName);
-            if (symbols.isForeign(ownerName)) {
-                code.invokevirtual(ownerCd, field, MethodTypeDesc.of(jvmType(ft)));
-            } else {
-                code.getfield(ownerCd, field, jvmType(ft));
-            }
+            code.invokevirtual(cd(ownerName), field, MethodTypeDesc.of(jvmType(ft)));
         }
 
         /** Opens a single-value newtype on the stack to its underlying value (recursively, so a

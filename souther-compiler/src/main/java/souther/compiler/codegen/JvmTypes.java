@@ -1,10 +1,12 @@
 package souther.compiler.codegen;
 
 import souther.compiler.check.Type;
+import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
+import java.lang.classfile.TypeAnnotation;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
@@ -91,9 +93,14 @@ final class JvmTypes {
 
     /** Emits a package-private default constructor that chains to {@code Object.<init>}. */
     static void emitDefaultCtor(ClassBuilder cb) {
+        emitDefaultCtor(cb, CD_Object);
+    }
+
+    /** Emits a package-private default constructor that chains to {@code superCd}'s. */
+    static void emitDefaultCtor(ClassBuilder cb, ClassDesc superCd) {
         cb.withMethodBody("<init>", MTD_void, 0, code -> {
             code.aload(0);
-            code.invokespecial(CD_Object, "<init>", MTD_void);
+            code.invokespecial(superCd, "<init>", MTD_void);
             code.return_();
         });
     }
@@ -193,6 +200,50 @@ final class JvmTypes {
             descs.add(jvmType(t, ctx));
         }
         return descs.toArray(new ClassDesc[0]);
+    }
+
+    /**
+     * {@code @NonNull} for every reference position of {@code type} at {@code target}: the type itself
+     * and, for a container, each type argument down to the innermost element ({@code List<Map<K,V>>}
+     * annotates four positions). A type argument is always a reference — an {@code Int} element is a
+     * {@code Long} — so only a primitive at the root has no position at all, and that root returns an
+     * empty list.
+     *
+     * <p>{@code @NullMarked} on the class says the same thing once, and a Kotlin reader acts on it for
+     * every member except a record component's accessor, which it types from the component and so
+     * reaches without applying the marking. Those accessors carry this instead (spec §jvm-nullness).
+     */
+    static List<TypeAnnotation> nonNullPositions(Type type, TypeAnnotation.TargetInfo target) {
+        List<TypeAnnotation> out = new ArrayList<>();
+        if (type != Type.INT && type != Type.BOOL) {
+            collectNonNull(type, List.of(), target, out);
+        }
+        return out;
+    }
+
+    private static void collectNonNull(Type type, List<TypeAnnotation.TypePathComponent> path,
+                                       TypeAnnotation.TargetInfo target, List<TypeAnnotation> out) {
+        out.add(TypeAnnotation.of(target, path, Annotation.of(CD_NonNull)));
+        switch (type) {
+            case Type.ListOf l -> collectNonNull(l.element(), typeArgument(path, 0), target, out);
+            case Type.SetOf s -> collectNonNull(s.element(), typeArgument(path, 0), target, out);
+            case Type.OptionOf o -> collectNonNull(o.element(), typeArgument(path, 0), target, out);
+            case Type.MapOf m -> {
+                collectNonNull(m.key(), typeArgument(path, 0), target, out);
+                collectNonNull(m.value(), typeArgument(path, 1), target, out);
+            }
+            default -> {
+            }
+        }
+    }
+
+    /** {@code path} extended to reach the {@code index}-th type argument of the type it names. */
+    private static List<TypeAnnotation.TypePathComponent> typeArgument(
+            List<TypeAnnotation.TypePathComponent> path, int index) {
+        List<TypeAnnotation.TypePathComponent> deeper = new ArrayList<>(path);
+        deeper.add(TypeAnnotation.TypePathComponent.of(
+                TypeAnnotation.TypePathComponent.Kind.TYPE_ARGUMENT, index));
+        return List.copyOf(deeper);
     }
 
     /**
