@@ -32,7 +32,7 @@ public final class CstFrontend {
         if (!result.errors().isEmpty()) {
             throw firstError(source, result.errors().get(0));
         }
-        return AstBuilder.build(result.root(), source, defaultModuleName);
+        return ImplicitUnits.expand(AstBuilder.build(result.root(), source, defaultModuleName));
     }
 
     /** As {@link #parse(String, String)} with the default module name {@code Main}. */
@@ -57,7 +57,8 @@ public final class CstFrontend {
         if (!result.errors().isEmpty()) {
             throw firstError(source, result.errors().get(0));
         }
-        Ast.Module module = AstBuilder.build(result.root(), source, defaultModuleName);
+        Ast.Module module = ImplicitUnits.expand(
+                AstBuilder.build(result.root(), source, defaultModuleName));
         String header = "module " + module.name();   // a source with no header is named for its file
         List<String> imports = new ArrayList<>();
         Map<String, String> defs = new LinkedHashMap<>();
@@ -72,6 +73,11 @@ public final class CstFrontend {
                 case FN_DEF -> fns.put(AstBuilder.firstIdentText(n), n.text().strip());
                 default -> { /* examples and fakes are not declarations to publish */ }
             }
+        }
+        // a unit only named (spec 8.4) has no slice of its own; what it declares is its name, so
+        // that is what an importing project reads back
+        for (Ast.Def def : module.defs()) {
+            defs.computeIfAbsent(def.name(), name -> "data " + name);
         }
         return new Parsed(module, new Slices(header, imports, defs, behaviors, fns));
     }
