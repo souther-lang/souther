@@ -50,11 +50,11 @@ The example introduces Souther's central ideas:
 - A `behavior` declares its input and possible business outcomes; `constructs` grants it authority to construct those values.
 - `require ... else ...` is a business branch. `Rejected` is an ordinary domain value, not an exception.
 
-The complete runnable example is in [`examples/businesstrip/`](examples/businesstrip/).
+The complete runnable example is [`businesstrip`](https://github.com/souther-lang/examples/tree/main/businesstrip), in the [examples repository](https://github.com/souther-lang/examples).
 
 ## Try it
 
-Souther requires JDK 25 and Maven, at build time and at run time alike. Generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact, so an application consuming Souther's output runs on Java 25 and later. `SoutherProcessor` generates bytecode during the host build (see [`examples/README.md`](examples/README.md)), so a project using it as an annotation processor needs JDK 25 for that too.
+Souther requires JDK 25 and Maven, at build time and at run time alike. Generated `.class` files and `souther-runtime` are pinned to the Java 25 class-file version, and `raoh` — which every derived decoder and encoder calls — is a Java 25 artifact, so an application consuming Souther's output runs on Java 25 and later. `SoutherProcessor` generates bytecode during the host build (see the [examples repository](https://github.com/souther-lang/examples)), so a project using it as an annotation processor needs JDK 25 for that too.
 
 ```sh
 # Build the runtime and compiler, and run the tests.
@@ -63,7 +63,7 @@ mvn install
 # Compile a .sou file to .class files.
 java -cp souther-compiler/target/classes:souther-runtime/target/classes \
      souther.compiler.Main \
-     compile examples/businesstrip/src/main/souther/businesstrip.sou -d /tmp/out
+     compile hello.sou -d /tmp/out
 ```
 
 To try a behavior without writing any Java, `souther run` compiles a `.sou` in memory and drives one behavior: it decodes the `--input` JSON through the behavior's derived decoders, applies it, and prints the result through its derived encoder. A single file run on its own may omit the `module` header — it is named after the file (ADR-0043).
@@ -85,7 +85,7 @@ mvn -pl souther-cli -am -DskipTests install
 
 The same `souther` binary also compiles to `.class` files (`souther compile hello.sou -d out`). It runs on any Unix shell; on Windows, use it as a plain jar (`java -jar souther-cli/target/souther.jar …`).
 
-To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. [`examples/README.md`](examples/README.md) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
+To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. The [examples repository](https://github.com/souther-lang/examples) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
 
 The Java API compiles a source string containing either one module or several linked modules:
 
@@ -160,7 +160,7 @@ Not yet implemented: incremental compilation, static invariant proofs, handwritt
 
 - [Language specification (Japanese)](specification.adoc): the normative syntax and semantics
 - [ADRs](docs/adr/README.md): design decisions, alternatives, and prior art
-- [Examples](examples/README.md): Maven / Gradle integration, decoders / encoders, and Java / Kotlin / Clojure boundary interop (Spring Boot, jOOQ, Pedestal)
+- [Examples](https://github.com/souther-lang/examples): Maven / Gradle integration, decoders / encoders, and Java / Kotlin / Clojure boundary interop (Spring Boot, jOOQ, Pedestal). They live in their own repository because the boundary code moves on Spring / jOOQ / Kotlin's schedule rather than the compiler's; their build tracks `develop` here
 
 The repository has two Maven modules:
 

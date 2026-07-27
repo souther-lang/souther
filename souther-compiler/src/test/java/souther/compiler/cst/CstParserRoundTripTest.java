@@ -17,14 +17,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The parser's lossless invariant: the red tree's text reproduces the source, and every real
- * example parses with no syntax errors. This is the corpus the CST→AST lowering and the formatter
- * are built against.
+ * The parser's lossless invariant: the red tree's text reproduces the source, and every real source
+ * parses with no syntax errors. This is the corpus the CST→AST lowering and the formatter are built
+ * against.
  */
 class CstParserRoundTripTest {
 
     static Stream<Path> exampleSources() throws IOException {
-        List<Path> roots = List.of(Path.of("..", "examples"),
+        List<Path> roots = List.of(
                 Path.of("src", "main", "resources", "souther"));   // the bundled prelude — the hardest corpus
         List<Path> sources = new ArrayList<>();
         for (Path root : roots) {

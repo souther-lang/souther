@@ -19,8 +19,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * The lossless invariant of the trivia-preserving lexer: concatenating every token's text (trivia,
  * comments, and error tokens included) reproduces the source exactly. This is the property the
- * formatter and incremental reparse rest on, so it is exercised over the real example corpus and a
- * set of tricky literals.
+ * formatter and incremental reparse rest on, so it is exercised over the bundled prelude and a set
+ * of tricky literals.
  */
 class CstLexerRoundTripTest {
 
@@ -54,19 +54,16 @@ class CstLexerRoundTripTest {
         assertEquals(source, relex(source));
     }
 
-    static Stream<Path> exampleSources() throws IOException {
-        Path examples = Path.of("..", "examples");
-        if (!Files.isDirectory(examples)) {
-            return Stream.empty();
-        }
-        try (Stream<Path> walk = Files.walk(examples)) {
+    static Stream<Path> preludeSources() throws IOException {
+        Path prelude = Path.of("src", "main", "resources", "souther");
+        try (Stream<Path> walk = Files.walk(prelude)) {
             return walk.filter(p -> p.toString().endsWith(".sou")).toList().stream();
         }
     }
 
     @ParameterizedTest
-    @MethodSource("exampleSources")
-    void relexingReproducesEveryExample(Path source) {
+    @MethodSource("preludeSources")
+    void relexingReproducesEveryPreludeSource(Path source) {
         String text;
         try {
             text = Files.readString(source, StandardCharsets.UTF_8);
