@@ -184,6 +184,80 @@ class CrossProjectImportTest {
         assertTrue(e.getMessage().contains("shared.money"), e.getMessage());
     }
 
+    /** A library's `let` bodies are not published, so an import only they needed is not part of what
+     * an importing project reads. Requiring it on the path would make a consumer carry a dependency
+     * nothing it can see mentions. */
+    @Test
+    void anImportOnlyAnUnpublishedLetNeededIsNotRequiredOnThePath() {
+        Map<String, byte[]> both = Compiler.compileModules(List.of("""
+                module shared.audit exposing ( Trail )
+                data Trail = String
+                """, """
+                module shared.billing exposing ( Invoice )
+                import shared.audit ( Trail )
+                data Invoice = { total: Int }
+                let describe (t: Trail) = t
+                """));
+        ModulePath billingOnly = name -> name.startsWith("shared.billing") ? both.get(name) : null;
+
+        Compiler.compileModules(List.of("""
+                module app.ledger
+                import shared.billing ( Invoice )
+                data Entry = { of: Invoice }
+                behavior record : (i: Invoice) -> Entry constructs Entry
+                let record (i) = Entry { of = i }
+                """), billingOnly);
+    }
+
+    /** A spread names a type without writing it as a field's type, so an import a published
+     * declaration needs is not always one a field mentions. It is still needed on the path. */
+    @Test
+    void anImportOnlySpreadIntoAPublishedDataIsStillRequired() {
+        Map<String, byte[]> both = Compiler.compileModules(List.of("""
+                module shared.base exposing ( Common )
+                data Common = { id: String }
+                """, """
+                module shared.billing exposing ( Invoice )
+                import shared.base ( Common )
+                data Invoice = { ...Common, total: Int }
+                """));
+        ModulePath billingOnly = name -> name.startsWith("shared.billing") ? both.get(name) : null;
+
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module app.ledger
+                        import shared.billing ( Invoice )
+                        data Entry = { of: Invoice }
+                        """), billingOnly));
+
+        assertTrue(e.getMessage().contains("shared.billing"), e.getMessage());
+        assertTrue(e.getMessage().contains("shared.base"), e.getMessage());
+    }
+
+    /** An import that brings in no name is used through its alias alone. The alias is what the
+     * declarations write, so that is what says the import is needed. */
+    @Test
+    void anImportUsedOnlyThroughItsAliasIsStillRequired() {
+        Map<String, byte[]> both = Compiler.compileModules(List.of("""
+                module shared.audit exposing ( Trail )
+                data Trail = String
+                """, """
+                module shared.billing exposing ( Invoice )
+                import shared.audit as A
+                data Invoice = { trail: A.Trail }
+                """));
+        ModulePath billingOnly = name -> name.startsWith("shared.billing") ? both.get(name) : null;
+
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module app.ledger
+                        import shared.billing ( Invoice )
+                        data Entry = { of: Invoice }
+                        """), billingOnly));
+
+        assertTrue(e.getMessage().contains("shared.audit"), e.getMessage());
+    }
+
     /** A module compiled here that is also on the path is refused: which one an import means would
      * be settled by nothing the author wrote. */
     @Test
