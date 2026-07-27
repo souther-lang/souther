@@ -487,7 +487,8 @@ public final class DataChecker {
             }
             // push the field's declared type into the value expression, so a field initialised from a
             // fold over an empty-collection seed has its result pinned by the field type (issue #70)
-            Core value = Elaborator.elaborate(init.value(), env, ctx, ft);
+            Core value = Elaborator.liftIntoOption(
+                    Elaborator.elaborate(init.value(), env, ctx, ft), ft, ctx.symbols());
             elaborated.add(new Core.FieldInit(init.name(), value, init.pos()));
             Type vt = value.type();
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {   // a case value widens to its sum-typed field (spec 8.3)

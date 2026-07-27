@@ -165,7 +165,13 @@ public final class Elaborator {
                     throw new CompileException(v.pos(), "E1301",
                             "`null` is not part of the language. Use an optional field with `?`.");
                 }
-                optionIsRead(v.name(), v.pos());
+                // `None` where a `?` field is being given a value: the empty optional (spec 7.3).
+                // Only the field's own type puts it here — nothing else expects an optional, because
+                // nothing else can say `T?` (ADR-0011) — so this stays a construction rule.
+                if (v.name().equals("None") && expected instanceof Type.OptionOf) {
+                    yield new Core.OptionNone(expected, v.pos());
+                }
+                optionCaseWritten(v.name(), v.pos());
                 throw CompileException.of(
                         Diagnostic.of(null, "check.unknown.name.msg")
                                 .title("check.unknown.title")
@@ -193,8 +199,12 @@ public final class Elaborator {
             case Ast.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
             case Ast.If iff -> {
                 Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
-                Core then = elaborate(iff.then(), env, ctx, expected);
-                Core els = elaborate(iff.els(), env, ctx, expected);
+                // Each branch is lifted before the join, so a field taking `T?` can be given a value
+                // on one side and `None` on the other and still have one type (spec 7.3).
+                Core then = liftIntoOption(elaborate(iff.then(), env, ctx, expected), expected,
+                        ctx.symbols());
+                Core els = liftIntoOption(elaborate(iff.els(), env, ctx, expected), expected,
+                        ctx.symbols());
                 Type tt = then.type();
                 Type et = els.type();
                 Type joined = TypeOps.join(tt, et);
@@ -686,25 +696,54 @@ public final class Elaborator {
     }
 
     /**
-     * Rejects {@code Some} / {@code None} written in an expression (E1303). An optional reaches a
-     * model already made — a {@code ?} field, {@code Map.get}, {@code List.find} — and is passed on
-     * or matched; nothing in the language builds one, and neither does a Java binding, so the
-     * unknown-name and arbitrary-call reports both send the reader the wrong way (issue #166).
-     * Patterns do not come through here: {@code | Some v} is matched, not evaluated.
+     * Wraps a value being given to a {@code ?} field, so {@code Out { note = n }} puts {@code n}
+     * where an optional is asked for (spec 7.3). Construction is the one place this happens: an
+     * expected optional only ever arrives from a field's own type, because nowhere else in a model
+     * can {@code T?} be written (ADR-0011) — a lambda handed to a stdlib combinator is typed with no
+     * expected type at all ({@code HelperTyping}), so a step for {@code List.filterMap} still has to
+     * answer an optional of its own. That keeps this a rule about building a data rather than a
+     * coercion applied wherever two shapes nearly line up.
+     *
+     * <p>A value that is already the optional — read from another field, or {@code None} — is
+     * returned untouched, and so is one whose type has nothing to do with the field, which the
+     * caller then reports as the mismatch it is.
      */
-    static void optionIsRead(String name, SourcePos pos) {
-        if (!name.equals("Some") && !name.equals("None")) {
+    static Core liftIntoOption(Core value, Type expected, Symbols symbols) {
+        if (!(expected instanceof Type.OptionOf opt)
+                || TypeOps.assignable(value.type(), expected, symbols)
+                || !TypeOps.assignable(value.type(), opt.element(), symbols)) {
+            return value;
+        }
+        return new Core.OptionSome(value, expected, value.pos());
+    }
+
+    /**
+     * Rejects {@code Some} / {@code None} written where no {@code ?} field is being given a value
+     * (E1303). Giving a field its value is the one place an optional is made — the wrap is implicit
+     * and {@code None} is the empty one (spec 7.3) — and everywhere else an optional is read and
+     * passed on. Neither an unknown-name report nor an arbitrary-call report says that, and the
+     * latter sent the reader off to write a Java binding, which makes no optional either (issue
+     * #166). Patterns do not come through here: {@code | Some v} is matched, not evaluated.
+     */
+    static void optionCaseWritten(String name, SourcePos pos) {
+        boolean some = name.equals("Some");
+        if (!some && !name.equals("None")) {
             return;
         }
         throw CompileException.of(
-                Diagnostic.of("E1303", "e1303.msg").title("e1303.title")
-                        .at(pos, name.length()).args(name).hint("e1303.hint").build(),
-                "`" + name + "` is a built-in Option case: a model reads an optional (a `?` field,"
-                        + " `Map.get`, `List.find`) and passes it on, and never builds one. Where the"
-                        + " model owns the absence, make it a case of its own sum. Absence of that"
-                        + " kind does not reach `List.filterMap`, whose step has to answer an"
-                        + " optional: use `List.concatMap` over a step answering a list of nought or"
-                        + " one.");
+                Diagnostic.of("E1303", some ? "e1303.some" : "e1303.none").title("e1303.title")
+                        .at(pos, name.length())
+                        .hint(some ? "e1303.some.hint" : "e1303.none.hint").build(),
+                some
+                        ? "`Some(...)` is not a call: a value written into a `?` field is wrapped for"
+                                + " you, and that is the only place an optional is made. Where a `?`"
+                                + " field is being given a value, write the value on its own;"
+                                + " elsewhere an optional is only read, never made."
+                        : "`None` is the empty value of a `?` field, and nothing here is asking for"
+                                + " one. Where the model owns the absence, make it a case of its own"
+                                + " sum. Absence of that kind does not reach `List.filterMap`, whose"
+                                + " step has to answer an optional: use `List.concatMap` over a step"
+                                + " answering a list of nought or one.");
     }
 
     /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source

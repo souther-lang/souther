@@ -67,6 +67,14 @@ public sealed interface Core {
 
     record ListLit(List<Core> elements, Type type, SourcePos pos) implements Core {}
 
+    /** A value given to a {@code ?} field, wrapped (spec 7.3). Construction of a data is the one
+     * place an optional is made, so this node has no surface form: {@code Some(...)} is not a call
+     * anyone can write, and the type it produces is never named (ADR-0011). */
+    record OptionSome(Core value, Type type, SourcePos pos) implements Core {}
+
+    /** {@code None} given to a {@code ?} field: the empty optional. */
+    record OptionNone(Type type, SourcePos pos) implements Core {}
+
     /** A tuple {@code (e1, e2, ...)} (ADR-0036); the backend emits it as an {@code Object[]}. */
     record Tuple(List<Core> elements, Type type, SourcePos pos) implements Core {}
 

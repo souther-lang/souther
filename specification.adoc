@@ -2562,19 +2562,18 @@ Exceptions are not supported. Return a failure case in the output sum.
 ----
 
 [#e1303]
-=== Building an optional
+=== Writing an option case
 
 [,text]
 ----
 error E1303:
-`Some` is a built-in Option case. A model reads an optional — a `?` field, `Map.get`,
-`List.find` — and passes it on; it never builds one.
+`None` is the empty value of a `?` field, and nothing here is asking for one.
 Hint: Where the model owns the absence, make it a case of its own sum. Absence of that
 kind does not reach `List.filterMap`, whose step has to answer an optional: use
 `List.concatMap` over a step answering a list of nought or one.
 ----
 
-Reported where `+Some+` or `+None+` is written in an expression. A pattern is unaffected: `+| Some v+` matches an optional the model was given (<<optional>>, ADR-0011).
+Reported where `+Some+` or `+None+` is written outside the one place an optional is made — a `+?+` field being given a value, where a plain value is wrapped and `+None+` is the empty one (<<optional>>). `+Some(...)+` is never a call, since the wrap there is implicit. A pattern is unaffected: `+| Some v+` matches an optional the model was given (ADR-0011).
 
 [#e1401]
 === Arbitrary Java calls
