@@ -8,6 +8,7 @@ import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 
 import java.math.BigDecimal;
@@ -233,7 +234,7 @@ public final class AstBuilder {
             if (includes.isEmpty() && fields.isEmpty()) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.data.emptybody").title("check.data.invalid.title")
-                                .at(pos(product.get())).args(name)
+                                .at(bodyRegion(product.get())).args(name)
                                 .hint("check.data.emptybody.hint", name).build(),
                         "data `" + name + "` has an empty body");
             }
@@ -1154,6 +1155,14 @@ public final class AstBuilder {
 
     private SourcePos posOf(SyntaxToken t) {
         return lines.posOf(t.start());
+    }
+
+    /** The whole `{ ... }` of a body, so an error about the body underlines both braces. */
+    private Region bodyRegion(SyntaxNode body) {
+        SourcePos open = pos(body);
+        return body.token(SyntaxKind.RBRACE)
+                .map(close -> new Region(open, lines.posOf(close.end())))
+                .orElseGet(() -> Region.point(open));
     }
 
     // --- literal decoding ---

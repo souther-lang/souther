@@ -1,10 +1,13 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.SourceContext;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -107,6 +110,28 @@ class CompileUnitValueTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertTrue(e.getMessage().contains("empty body"), e.getMessage());
         assertEquals(2, e.pos().line(), "must point at the body");
+        assertEquals(13, e.pos().column(), "must start at the opening brace");
+        String out = new HumanRenderer(false)
+                .render(e.diagnostic(), new SourceContext("demo.sou", src), Locale.ENGLISH);
+        assertTrue(out.contains("^^"), out);   // the whole `{}`, not just the opening brace
+    }
+
+    /** A body written open is still underlined from its opening brace: the region spans to the
+     *  closing brace wherever it sits, and the renderer draws one caret across lines. */
+    @Test
+    void anEmptyBodySpanningLinesIsUnderlinedFromItsBrace() {
+        String src = """
+                module demo
+                data Mark = {
+                }
+                data Out = { s: String }
+                behavior k : (n: Int) -> Out constructs Out
+                let k (n) = Out { s = "x" }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("empty body"), e.getMessage());
+        assertEquals(2, e.pos().line(), "must point at the opening brace");
+        assertEquals(1, e.diagnostic().region().caretWidth(), "a multi-line region draws one caret");
     }
 
     /** A spread body is a body: what it includes decides the fields, and an empty one cannot be
