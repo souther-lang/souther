@@ -26,6 +26,12 @@ public final class DataChecker {
 
     private DataChecker() {}
 
+    /** The no-argument methods of {@code Object}: a field of one of these names would generate an
+     * accessor that collides with a method the class already has, so none can be a field name. This is
+     * the same list the JLS keeps a record component off. */
+    private static final Set<String> OBJECT_METHOD_NAMES = Set.of(
+            "clone", "finalize", "getClass", "hashCode", "notify", "notifyAll", "toString", "wait");
+
     /** A constant newtype construction to verify after codegen: its wrapped constant and its site.
      * {@code type} says which module declared it — the check runs that module's generated class, not
      * one named after the module the construction is written in. {@code typeName} is what was
@@ -340,6 +346,19 @@ public final class DataChecker {
         }
 
         for (Map.Entry<String, Type> e : fields.entrySet()) {
+            // A field is read through an accessor of the same name, and a data is a record over its
+            // fields (spec 19.2). A no-argument method of Object is therefore taken: `toString` would
+            // emit a second `toString()` and the class would not load, and the rest cannot be a record
+            // component either. Reported here rather than left to codegen, as a duplicate name is.
+            if (OBJECT_METHOD_NAMES.contains(e.getKey())) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.field.objectname").title("check.reserved.title")
+                                .at(fieldRegion(ctx.data(), e.getKey()))
+                                .args(ctx.data().name(), e.getKey()).build(),
+                        "`" + e.getKey() + "` cannot be a field of `" + ctx.data().name() + "`: the"
+                                + " generated class reads its fields through accessors of the same name,"
+                                + " and `" + e.getKey() + "()` is already a method every JVM value has");
+            }
             if (SpecChecker.containsTuple(e.getValue())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.field.tuple").title("check.boundary.title")
