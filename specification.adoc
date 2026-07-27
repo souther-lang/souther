@@ -1273,7 +1273,7 @@ A block and a helper `+let+` are the same in constructing data. A block construc
 [#binding-patterns]
 === Binding patterns
 
-Where a name is bound — a block's `+let+`, a helper's parameter, a lambda's parameter — a *pattern* may be written instead, opening the value where it is named. The patterns admitted here are the ones every value of the type satisfies: a name, a tuple, a newtype opened by its constructor, a record's fields (ADR-0064).
+Where a name is bound — a block's `+let+`, a behavior implementation's parameter, a helper's parameter, a lambda's parameter — a *pattern* may be written instead, opening the value where it is named. The patterns admitted here are the ones every value of the type satisfies: a name, a tuple, a newtype opened by its constructor, a record's fields (ADR-0064).
 
 [,text]
 ----
@@ -1284,6 +1284,9 @@ let (k, v) = 対                    // open a tuple (<<tuple>>)
 
 let 個数 (タグ集合(ts)) = Set.size(ts)             // a helper's parameter
 
+behavior 総数 : (集合: タグ集合) -> Int
+let 総数 (タグ集合(ts)) = Set.size(ts)             // a behavior implementation's parameter
+
 List.map((タグ集合(ts)) -> Set.size(ts), 集合たち)   // a lambda's parameter
 ----
 
@@ -1292,6 +1295,8 @@ A pattern that some values of the type do not satisfy — a sum's case, `+Some+`
 Outside `+match+` the name a constructor pattern writes is also checked against the value's own type: `+let タグ集合(ts) = ラベル集合+` is refused. In a `+match+` the arm's name is one of the scrutinee's cases and exhaustiveness has already settled it; a binding names a type on its own authority.
 
 A helper's parameter written as a constructor pattern needs no type beside it — `+let 個数 (タグ集合(ts))+` already says the parameter is a `+タグ集合+`. A tuple or record pattern names no type, so a helper whose parameter type cannot be inferred from its call sites still annotates it (`+let 二倍 ({ 数量 }: 明細)+`).
+
+On a behavior's implementation the pattern is not a type either way: the parameter types come from the behavior (<<fn-declaration>>), and a pattern only opens the input the behavior has already typed. The name the pattern writes is checked against that input, so `+behavior 総数 : (集合: タグ集合) -> Int+` implemented as `+let 総数 (ラベル集合(ts))+` is refused. A `+requires+` parameter names an injected behavior, so it takes a name, not a pattern.
 
 A lambda's `+(a, b) -> ...+` is its parameter list, not a tuple pattern (ADR-0036); a single tuple parameter is `+((a, b)) -> ...+`.
 

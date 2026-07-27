@@ -397,6 +397,7 @@ public final class AstBuilder {
             // only repeat what the pattern already named
             SourcePos at = pos(pat);
             type = new Ast.RetType(List.of(new Ast.TypeRef(qualifiedNameText(pat), null, at)), at);
+            return new Ast.FnParam(name, type, true, pos(p));
         }
         return new Ast.FnParam(name, type, pos(p));
     }

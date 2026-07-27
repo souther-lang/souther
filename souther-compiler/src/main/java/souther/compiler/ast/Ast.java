@@ -120,9 +120,9 @@ public interface Ast {
 
     /**
      * {@code fn name (a1, ...) = body} — a behavior's implementation (spec 13.1). If a same-named
-     * {@link SpecBehavior} exists, the parameter types come from it and {@code params} carry only
-     * names ({@link FnParam#type()} is null); otherwise it is a helper {@code fn} that writes its
-     * own parameter types.
+     * {@link SpecBehavior} exists, the parameter types come from it and the author writes none
+     * ({@link FnParam#type()} is null, or read off a pattern; {@link FnParam#typeFromPattern()});
+     * otherwise it is a helper {@code fn} that writes its own parameter types.
      *
      * <p>{@code body} is a single expression. The surface forms {@code let} and {@code require} are
      * desugared by the parser into {@link LetIn} and {@link If} (spec 16.4), so every later stage
@@ -153,8 +153,15 @@ public interface Ast {
 
     /** A {@code fn} parameter: a name, and a type only when the {@code fn} is a helper (spec 13.1).
      * A helper's parameter type may be a function type {@link FnType}; a behavior fn's parameter
-     * carries no type ({@code type} is null). */
-    record FnParam(String name, ParamType type, SourcePos pos) implements Ast {}
+     * carries no type ({@code type} is null). {@code typeFromPattern} marks a type read off a
+     * constructor pattern in parameter position rather than written beside the name — a behavior's
+     * implementation may write the pattern, and its type still comes from the behavior. */
+    record FnParam(String name, ParamType type, boolean typeFromPattern, SourcePos pos) implements Ast {
+        /** A parameter whose type, if any, the author wrote (the common case). */
+        public FnParam(String name, ParamType type, SourcePos pos) {
+            this(name, type, false, pos);
+        }
+    }
 
     /** The written type of a helper {@code fn} parameter: an ordinary type ({@link RetType}) or a
      * function type {@link FnType}. Function types appear only in {@code fn} parameter position

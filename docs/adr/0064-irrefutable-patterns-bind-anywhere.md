@@ -16,7 +16,7 @@ Both languages Souther grounds its surface in already draw the line there. Elm a
 
 ## Decision
 
-**An irrefutable pattern — a name, a tuple, a newtype opened by its constructor, a record's fields — may be written wherever a name is bound: a block's `let`, a helper's parameter, a lambda's parameter. A refutable one — a sum's case, `Some` — stays in `match`.**
+**An irrefutable pattern — a name, a tuple, a newtype opened by its constructor, a record's fields — may be written wherever a name is bound: a block's `let`, a behavior implementation's parameter, a helper's parameter, a lambda's parameter. A refutable one — a sum's case, `Some` — stays in `match`.**
 
 ```
 let タグ集合(ts) = 集合
@@ -38,7 +38,7 @@ A lambda's parameter list and a tuple keep ADR-0036's reading: `(a, b) -> e` is 
 
 - The rule replaces three unrelated ones. Where a value is bound, what it is made of can be opened; where a value might be one of several things, `match` says which.
 - ADR-0036's consequence that "to open a tuple inside a lambda you take one parameter and `let (a, b) = p` in the body" no longer holds — `((a, b)) -> e` opens it in the parameter.
-- A helper's parameter written as a constructor pattern needs no type annotation beside it: the pattern already names the type.
+- A helper's parameter written as a constructor pattern needs no type annotation beside it: the pattern already names the type. On a behavior's implementation the same pattern is not an annotation at all — the parameter types come from the behavior, and the name the pattern writes is held against the input the behavior declared.
 - The lowering is the one `match` already does — a fresh binder plus the reads the pattern stands for. No Core node, no type-checker rule beyond the two judgements above, no codegen. The parser gains a pattern grammar, which it did not have: every pattern-ish form used to be hand-rolled inside the node that needed it.
 - Recognising a parameter list by the arrow after its `)` makes a parenthesised value written immediately before an arrow ambiguous with it. That happens in one place, an example row's `with` value, where the arrow belongs to the row; the row wins. The narrower lookahead had the same hole for an all-identifier value and lost it silently.
 - `.value` is still the single-layer accessor. This ADR gives it somewhere else to be written, not a replacement.

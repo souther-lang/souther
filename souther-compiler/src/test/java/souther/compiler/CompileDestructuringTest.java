@@ -161,6 +161,83 @@ class CompileDestructuringTest {
     }
 
     @Test
+    void aBehaviorImplementationsParameterOpensANewtype() throws Exception {
+        // the behavior gives the parameter its type, and the pattern opens it in the same place
+        BytesClassLoader loader = load("""
+                module demo
+                import List ( length )
+                data Tags = List<String>
+
+                behavior countTags : (t: Tags) -> Int
+                let countTags (Tags(xs)) = length(xs)
+                """);
+
+        assertEquals(2L, apply(loader, "CountTags",
+                Codecs.decoded(loader, "demo.Tags", List.of("a", "b"))));
+    }
+
+    @Test
+    void aBehaviorImplementationsParameterOpensARecordsFields() throws Exception {
+        BytesClassLoader loader = load("""
+                module demo
+                data Line = { sku: String, qty: Int }
+                data Out = { v: Int }
+
+                behavior twice : (l: Line) -> Out constructs Out
+                let twice ({ qty }) = Out { v = qty * 2 }
+                """);
+
+        assertEquals(java.util.Map.of("v", 6L), Codecs.encode(loader, "demo.Out",
+                apply(loader, "Twice", Codecs.decoded(loader, "demo.Line",
+                        java.util.Map.of("sku", "s-1", "qty", 3L)))));
+    }
+
+    @Test
+    void aBehaviorImplementationsPatternLeavesTheRequiresParametersAlone() {
+        // the pattern takes a fresh name for itself; the `requires` still arrive as the trailing
+        // parameters, under the names the behavior declared
+        Compiler.compile("""
+                module demo
+                import List ( length )
+                data Tags = List<String>
+
+                behavior size : (t: Tags) -> Int
+
+                behavior countTags : (t: Tags) -> Int requires size
+                let countTags (Tags(xs), size) = size(Tags(xs)) + length(xs)
+                """);
+    }
+
+    @Test
+    void aBehaviorImplementationsPatternIsHeldAgainstTheDeclaredInput() {
+        // the pattern names a type the input is not; the behavior's signature is what it answers to
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                import List ( length )
+                data Tags = List<String>
+                data Labels = List<String>
+
+                behavior countTags : (t: Tags) -> Int
+                let countTags (Labels(xs)) = length(xs)
+                """));
+        assertEquals("check.open.mismatch", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void aBehaviorImplementationStillMayNotWriteAParameterType() {
+        // a pattern is not an annotation: what the behavior already says stays unwritten
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                import List ( length )
+                data Tags = List<String>
+
+                behavior countTags : (t: Tags) -> Int
+                let countTags (t: Tags) = length(t.value)
+                """));
+        assertEquals("check.impl.noannotate", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
     void aHelperParameterOpensANewtype() throws Exception {
         // the pattern names the type, so the parameter needs no annotation beside it
         BytesClassLoader loader = load("""

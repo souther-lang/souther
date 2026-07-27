@@ -153,7 +153,9 @@ public final class SpecChecker {
                             + " (spec 13.1)");
         }
         for (Ast.FnParam p : fn.params()) {
-            if (p.type() != null) {
+            // a pattern in parameter position names a type, but it is not an annotation: it opens
+            // the input the behavior already typed
+            if (p.type() != null && !p.typeFromPattern()) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.impl.noannotate").title("check.impl.title")
                                 .at(p.pos()).args(fn.name(), spec.name(), p.name()).build(),
