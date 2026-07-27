@@ -104,7 +104,9 @@ public final class Compiler {
                     "an `examples for " + raw.exampleFileTarget() + "` file has no target module to attach to");
         }
         rejectReservedNamespace(raw);
-        Ast.Module module = Deriver.derive(Exposing.rewrite(raw));
+        Ast.Module exposed = Exposing.rewrite(raw);
+        rejectUserImports(exposed);
+        Ast.Module module = Deriver.derive(exposed);
         module = HelperInliner.forModule(module).withInlinedInvariants(module);
         module = NewtypeDesugar.rewrite(module, TypeChecker.symbols(module));
         module = Compiler.injectRecursivePrelude(module);
@@ -181,6 +183,25 @@ public final class Compiler {
             return boolean.class;
         }
         return v.getClass();   // String, BigDecimal
+    }
+
+    /**
+     * Rejects any import left after {@link Exposing#rewrite} — the standard-library lines are gone by
+     * then, so what remains names another module, and this path compiles one module alone. Without
+     * this the import is dropped and the failure surfaces later as a naming error on the first use of
+     * the imported type, which points at the wrong line and says the wrong thing.
+     */
+    private static void rejectUserImports(Ast.Module m) {
+        if (!m.imports().isEmpty()) {
+            throw unknownModule(m.imports().get(0));
+        }
+    }
+
+    private static CompileException unknownModule(Ast.Import imp) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.import.unknownmodule").title("check.module.title")
+                        .at(imp.pos()).args(imp.module()).build(),
+                "unknown module `" + imp.module() + "`");
     }
 
     /** The namespace the compiler ships (souther.string/list/map/bool); a user module may not
@@ -852,10 +873,7 @@ public final class Compiler {
         for (Ast.Import imp : m.imports()) {
             Ast.Module src = registry.get(imp.module());
             if (src == null) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.import.unknownmodule").title("check.module.title")
-                                .at(imp.pos()).args(imp.module()).build(),
-                        "unknown module `" + imp.module() + "`");
+                throw unknownModule(imp);
             }
             if (imp.alias() != null) {
                 checkAlias(imp, aliases, registry);
