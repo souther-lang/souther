@@ -105,9 +105,25 @@ class CompileRecordShapeTest {
     }
 
     /**
+     * The {@code Record} component repeats it, at the same positions: a reflective reader goes through
+     * {@code RecordComponent#getAnnotatedType}, which reads the component rather than the accessor.
+     */
+    @Test
+    void theRecordComponentRepeatsIt() {
+        ClassModel member = ClassFile.of().parse(Compiler.compile(SRC).get("demo.Member"));
+
+        assertEquals(List.of("[]"), componentNonNullPaths(member, "id"));
+        assertEquals(List.of("[]", "[TYPE_ARGUMENT(0)]"), componentNonNullPaths(member, "tags"));
+        assertEquals(List.of(), componentNonNullPaths(member, "age"),
+                "a long component has no nullness to state either");
+    }
+
+    /**
      * A field is read through an accessor of its own name, so a no-argument method of {@code Object} is
      * a name no field can take: a field called {@code toString} would emit a second {@code toString()}
-     * and the class would not load at all. Refused where the field is written.
+     * and the class would not load at all. {@code equals} is not one of them — {@code equals()} and
+     * {@code equals(Object)} are different methods, and javac accepts it as a component name too.
+     * Refused where the field is written.
      */
     @Test
     void aFieldNamedAfterAnObjectMethodIsRejected() {
@@ -117,6 +133,20 @@ class CompileRecordShapeTest {
                 """));
 
         assertEquals("check.field.objectname", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void aFieldNamedEqualsIsFine() throws Exception {
+        Class<?> odd = new BytesClassLoader(Compiler.compile("""
+                module demo
+                exposing ( Odd )
+                data Odd = { equals: String }
+                """), getClass().getClassLoader()).loadClass("demo.Odd");
+
+        assertTrue(odd.isRecord(), "the class loads and is a record");
+        assertEquals(String.class, odd.getMethod("equals").getReturnType(),
+                "`equals()` is the accessor and `equals(Object)` is value equality");
+        assertEquals(boolean.class, odd.getMethod("equals", Object.class).getReturnType());
     }
 
     @Test
@@ -162,11 +192,28 @@ class CompileRecordShapeTest {
         MethodModel method = model.methods().stream()
                 .filter(m -> m.methodName().stringValue().equals(accessor))
                 .findFirst().orElseThrow();
-        return method.findAttribute(Attributes.runtimeVisibleTypeAnnotations())
+        return nonNullPaths(method, TypeAnnotation.TargetType.METHOD_RETURN);
+    }
+
+    /** The same, on the named {@code Record} component. */
+    private static List<String> componentNonNullPaths(ClassModel model, String component) {
+        return nonNullPaths(model.findAttribute(Attributes.record()).orElseThrow()
+                        .components().stream()
+                        .filter(c -> c.name().stringValue().equals(component))
+                        .findFirst().orElseThrow(),
+                TypeAnnotation.TargetType.FIELD);
+    }
+
+    /** Reads {@code element}'s runtime-visible {@code @NonNull}s at {@code target} as type paths. The
+     *  annotation is read off the class file rather than through reflection: JSpecify is `provided`, so
+     *  a reflective read would drop what it cannot load and pass while saying nothing. */
+    private static List<String> nonNullPaths(java.lang.classfile.AttributedElement element,
+                                             TypeAnnotation.TargetType target) {
+        return element.findAttribute(Attributes.runtimeVisibleTypeAnnotations())
                 .map(RuntimeVisibleTypeAnnotationsAttribute::annotations).orElse(List.of())
                 .stream()
                 .filter(a -> a.annotation().classSymbol().displayName().equals("NonNull"))
-                .filter(a -> a.targetInfo().targetType() == TypeAnnotation.TargetType.METHOD_RETURN)
+                .filter(a -> a.targetInfo().targetType() == target)
                 .map(a -> a.targetPath().stream()
                         .map(p -> p.typePathKind() + "(" + p.typeArgumentIndex() + ")")
                         .toList().toString())
