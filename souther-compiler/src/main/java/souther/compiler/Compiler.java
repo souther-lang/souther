@@ -156,7 +156,8 @@ public final class Compiler {
         for (DataChecker.ConstCheck c : checks) {
             boolean holds;
             try {
-                Class<?> ctfe = Class.forName(module.name() + "." + c.typeName() + "$Ctfe", true, loader);
+                Class<?> ctfe = Class.forName(
+                        c.type().module() + "." + c.type().name() + "$Ctfe", true, loader);
                 holds = (boolean) ctfe.getMethod("check", paramClass(c.value())).invoke(null, c.value());
             } catch (ReflectiveOperationException | LinkageError _) {
                 continue;   // cannot evaluate at compile time; the run-time check still applies
