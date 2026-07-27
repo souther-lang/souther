@@ -1769,6 +1769,13 @@ if condition then expression1 else expression2
 
 `+if+` is an expression. If both branch types agree, its type is that type; if they are different data, it is a sum of both (`+if c then 提出済み{...} else 事前承認待ち{...}+` is `+提出済み | 事前承認待ち+`). A mismatch between primitives is a compile error.
 
+The widening reaches inside a collection as well, since a collection is element-covariant (<<collections>>): branches giving lists of different cases give a list of both, the same direction `{plus}{plus}` takes on its elements (<<stdlib-list>>). It descends `+List+`, `+Set+`, `+Map+`, `+Option+` and tuples, so an empty collection on one branch still takes its type from the other at any depth. `+match+` arms merge by this rule too.
+
+[,text]
+----
+if 合計 >= 100000 then [高額出張 { 基準金額 = 基準額 }] else [先方費用負担]   // List<高額出張 | 先方費用負担>
+----
+
 [#match]
 === match
 

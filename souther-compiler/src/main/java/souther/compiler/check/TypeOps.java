@@ -208,6 +208,63 @@ public final class TypeOps {
         return !fa.isEmpty() && !ta.isEmpty() && ta.containsAll(fa);
     }
 
+    /** The type two joined positions ({@code if} branches, {@code match} arms) agree on, or
+     * {@code null} when they agree on none and the caller reports the disagreement.
+     *
+     * <p>It descends the covariant constructors {@link #assignable} descends, so the widening a leaf
+     * gets applies under one too: two data-like types widen to the union of their cases, and a list
+     * of one case joins a list of another as a list of both — the same direction {@code ++} takes
+     * on its elements (spec 12.2, 16.2). An empty collection's bottom takes on the other side's
+     * type, at the top or at any depth, so a bare {@code Set.empty()} accumulator joins the
+     * {@code Set<Int>} the other arm grows and a {@code (Set.empty(), [])} joins position by
+     * position. */
+    public static Type join(Type a, Type b) {
+        if (a.equals(b)) {
+            return a;
+        }
+        if (BottomInfer.isBottom(a)) {
+            return b;
+        }
+        if (BottomInfer.isBottom(b)) {
+            return a;
+        }
+        if (a instanceof Type.ListOf la && b instanceof Type.ListOf lb) {
+            Type e = join(la.element(), lb.element());
+            return e == null ? null : Type.list(e);
+        }
+        if (a instanceof Type.SetOf sa && b instanceof Type.SetOf sb) {
+            Type e = join(sa.element(), sb.element());
+            return e == null ? null : Type.set(e);
+        }
+        if (a instanceof Type.OptionOf oa && b instanceof Type.OptionOf ob) {
+            Type e = join(oa.element(), ob.element());
+            return e == null ? null : Type.option(e);
+        }
+        if (a instanceof Type.MapOf ma && b instanceof Type.MapOf mb) {
+            Type k = join(ma.key(), mb.key());
+            Type v = join(ma.value(), mb.value());
+            return k == null || v == null ? null : Type.map(k, v);
+        }
+        if (a instanceof Type.TupleOf ta && b instanceof Type.TupleOf tb
+                && ta.elements().size() == tb.elements().size()) {
+            List<Type> elements = new ArrayList<>();
+            for (int i = 0; i < ta.elements().size(); i++) {
+                Type e = join(ta.elements().get(i), tb.elements().get(i));
+                if (e == null) {
+                    return null;
+                }
+                elements.add(e);
+            }
+            return Type.tuple(elements);
+        }
+        if (isDataLike(a) && isDataLike(b)) {
+            Set<TypeName> names = new HashSet<>(namesOf(a));
+            names.addAll(namesOf(b));
+            return caseSetType(names);
+        }
+        return null;
+    }
+
     /**
      * Matches an intrinsic's declared parameter type against an actual argument type, binding any
      * type variables it carries (spec §intrinsics). A variable binds on first sight and every later

@@ -193,17 +193,9 @@ public final class Elaborator {
                 Core els = elaborate(iff.els(), env, ctx, expected);
                 Type tt = then.type();
                 Type et = els.type();
-                Type empty = BottomInfer.absorbBottom(tt, et);   // one case may be `[]`, or a tuple of them (ADR-0028)
-                if (empty != null) {
-                    yield new Core.If(cond, then, els, empty, iff.pos());
-                }
-                if (tt.equals(et)) {
-                    yield new Core.If(cond, then, els, tt, iff.pos());
-                }
-                if (TypeOps.isDataLike(tt) && TypeOps.isDataLike(et)) {
-                    Set<TypeName> names = new HashSet<>(TypeOps.namesOf(tt));
-                    names.addAll(TypeOps.namesOf(et));
-                    yield new Core.If(cond, then, els, Type.union(names), iff.pos());
+                Type joined = TypeOps.join(tt, et);
+                if (joined != null) {
+                    yield new Core.If(cond, then, els, joined, iff.pos());
                 }
                 throw CompileException.of(
                         Diagnostic.of(null, "check.if.msg")

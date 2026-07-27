@@ -268,18 +268,10 @@ public final class MatchElaborator {
         if (branchType == null) {
             return bt;
         }
-        if (branchType.equals(bt)) {
-            return branchType;
-        }
-        Type empty = BottomInfer.absorbBottom(branchType, bt);   // one case may be an empty collection (ADR-0028)
-        if (empty != null) {
-            return empty;
-        }
-        // cases yielding different data types widen to their union, as `if` branches do (spec 16.2)
-        if (TypeOps.isDataLike(branchType) && TypeOps.isDataLike(bt)) {
-            Set<TypeName> names = new HashSet<>(TypeOps.namesOf(branchType));
-            names.addAll(TypeOps.namesOf(bt));
-            return Type.union(names);
+        // arms yielding different data types widen to their union, as `if` branches do (spec 16.2)
+        Type joined = TypeOps.join(branchType, bt);
+        if (joined != null) {
+            return joined;
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.match.branchtypes").title("check.match.title")
