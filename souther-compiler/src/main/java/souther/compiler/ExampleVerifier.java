@@ -50,10 +50,18 @@ public final class ExampleVerifier {
      * {@link TypeName} names (a cross-module example). */
     public static List<Diagnostic> check(Ast.Module module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes) {
+        return check(module, symbols, sigs, classes, ExampleVerifier.class.getClassLoader());
+    }
+
+    /** As {@link #check(Ast.Module, Symbols, Map, Map)}, resolving classes this compile did not
+     * generate under {@code parent} — where an example calls into a module that was compiled by
+     * another project, that is the loader its classes come from. */
+    public static List<Diagnostic> check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
+                                         Map<String, byte[]> classes, ClassLoader parent) {
         if (module.examples().isEmpty()) {
             return List.of();
         }
-        MemoryClassLoader loader = new MemoryClassLoader(classes, ExampleVerifier.class.getClassLoader());
+        MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, loader);
         List<Diagnostic> failures = new ArrayList<>();
         for (Ast.Example ex : module.examples()) {

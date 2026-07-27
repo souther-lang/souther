@@ -17,13 +17,17 @@ import souther.compiler.check.Sig;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.codegen.Backend;
 import souther.compiler.meta.ModuleMetadata;
+import souther.compiler.meta.ModulePath;
+import souther.compiler.meta.PublishedModule;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.derive.Deriver;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -123,7 +127,7 @@ public final class Compiler {
         // the declarations go on the classes before anything loads them, so what a jar carries is
         // the same bytes this compile checked
         ModuleMetadata.stamp(out, raw, parsed.slices(), sigs, injectedNames(raw));
-        verifyConstConstructions(module, symbols, out);
+        verifyConstConstructions(module, symbols, out, Compiler.class.getClassLoader());
         ExampleVerifier.verify(module, symbols, sigs, out);
         return out;
     }
@@ -155,12 +159,12 @@ public final class Compiler {
      * runtime class is absent from this classpath — is left to the run-time check.
      */
     private static void verifyConstConstructions(Ast.Module module, Symbols symbols,
-                                                 Map<String, byte[]> classes) {
+                                                 Map<String, byte[]> classes, ClassLoader parent) {
         List<DataChecker.ConstCheck> checks = DataChecker.constNewtypeChecks(module, symbols);
         if (checks.isEmpty()) {
             return;
         }
-        MemoryClassLoader loader = new MemoryClassLoader(classes, Compiler.class.getClassLoader());
+        MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         for (DataChecker.ConstCheck c : checks) {
             boolean holds;
             try {
@@ -237,25 +241,43 @@ public final class Compiler {
 
     /** Compiles a set of modules together, resolving explicit imports and rejecting cycles. */
     public static Map<String, byte[]> compileModules(List<String> sources) {
-        return compileModules(sources, new ArrayList<>());
+        return compileModules(sources, ModulePath.EMPTY);
+    }
+
+    /**
+     * As {@link #compileModules(List)}, but an import naming no module among {@code sources} is
+     * resolved against {@code path} — the compiled modules of the projects this one depends on. A
+     * module found there is read for its declarations and nothing else: its classes are already
+     * built, and this compile neither re-emits them nor re-runs its examples.
+     */
+    public static Map<String, byte[]> compileModules(List<String> sources, ModulePath path) {
+        return compileModules(sources, path, new ArrayList<>());
     }
 
     /** Links a module set like {@link #compileModules(List)} and returns the classes with any
      * invariant-discharge warnings from every module. */
     public static Compiled compileModulesWithWarnings(List<String> sources) {
-        List<Diagnostic> warnings = new ArrayList<>();
-        return new Compiled(compileModules(sources, warnings), warnings);
+        return compileModulesWithWarnings(sources, ModulePath.EMPTY);
     }
 
-    private static Map<String, byte[]> compileModules(List<String> sources, List<Diagnostic> warningsOut) {
+    /** As {@link #compileModulesWithWarnings(List)}, resolving against {@code path} as
+     * {@link #compileModules(List, ModulePath)} does. */
+    public static Compiled compileModulesWithWarnings(List<String> sources, ModulePath path) {
+        List<Diagnostic> warnings = new ArrayList<>();
+        return new Compiled(compileModules(sources, path, warnings), warnings);
+    }
+
+    private static Map<String, byte[]> compileModules(List<String> sources, ModulePath path,
+                                                      List<Diagnostic> warningsOut) {
         try {
-            return linking(sources, warningsOut);
+            return linking(sources, path, warningsOut);
         } catch (StackOverflowError _) {
             throw tooDeep();
         }
     }
 
-    private static Map<String, byte[]> linking(List<String> sources, List<Diagnostic> warningsOut) {
+    private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
+                                               List<Diagnostic> warningsOut) {
         List<Ast.Module> allParsed = new ArrayList<>();
         // Which source each module was read from, so an error can be traced back to a file.
         Map<String, Integer> sourceOfModule = new LinkedHashMap<>();
@@ -307,6 +329,17 @@ public final class Compiler {
                         .inSource(sourceIndex(sourceOfModule, m.name()));
             }
         }
+        // A module these sources import but do not contain is looked for among the projects this one
+        // depends on. From here it is a module like any other, except that it is not in `parsed`:
+        // nothing generates it, runs its examples or reports its warnings — its jar already did.
+        Map<String, Set<String>> injectedElsewhere = new LinkedHashMap<>();
+        for (Ast.Module m : parsed) {
+            if (PublishedModule.read(m.name(), path.declarations()) != null) {
+                throw shadowsPath(m.name()).inSource(sourceIndex(sourceOfModule, m.name()));
+            }
+        }
+        List<Ast.Module> fromPath = readFromPath(parsed, byName, path, injectedElsewhere);
+
         // A qualified behavior reference needs no import line (spec §qualified-reference); this is
         // where not writing one becomes the same thing as writing it, so everything downstream — the
         // imported signatures, the injected set, the class each name comes from — reads one shape.
@@ -316,14 +349,21 @@ public final class Compiler {
         }
         parsed = bound;
         byName.clear();
+        for (Ast.Module m : fromPath) {
+            byName.put(m.name(), m);
+        }
         for (Ast.Module m : parsed) {
             byName.put(m.name(), m);
         }
         detectCycles(parsed, byName, sourceOfModule);
 
-        // pass 1: derive each module's codecs, resolving imported types against the original defs
+        // pass 1: derive each module's codecs, resolving imported types against the original defs.
+        // A module off the path is derived the same way, so what an import resolves against here is
+        // what it would have resolved against where it was compiled.
+        List<Ast.Module> toDerive = new ArrayList<>(fromPath);
+        toDerive.addAll(parsed);
         Map<String, Ast.Module> derived = new LinkedHashMap<>();
-        for (Ast.Module m : parsed) {
+        for (Ast.Module m : toDerive) {
             try {
                 Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
                 derived.put(m.name(), HelperInliner.forModule(d).withInlinedInvariants(d));
@@ -333,7 +373,7 @@ public final class Compiler {
         }
         // pass 1.5: lower `金額(x)` newtype constructors to NewData (needs every module's defs, so
         // an imported newtype name resolves) before check and codegen see them
-        for (Ast.Module original : parsed) {
+        for (Ast.Module original : toDerive) {
             Ast.Module m = derived.get(original.name());
             try {
                 derived.put(original.name(), NewtypeDesugar.rewrite(m, visibleDefs(m, derived)));
@@ -355,7 +395,7 @@ public final class Compiler {
                 Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
                 visible.put(original.name(), symbols);
                 imported.put(original.name(), importedSigs);
-                Set<String> importedInjected = importedInjectedBehaviors(m, derived);
+                Set<String> importedInjected = importedInjectedBehaviors(m, derived, injectedElsewhere);
                 m = injectRecursivePrelude(m);
                 Ast.Module lowered = Lower.run(m);
                 TypeChecker.Checked checked = TypeChecker.checkOrThrow(m, symbols, importedSigs, importedInjected, lowered);
@@ -367,7 +407,9 @@ public final class Compiler {
             }
         }
         // every module's classes are now present, so CTFE and example evaluation can resolve
-        // cross-module references
+        // cross-module references — including into a dependency, whose classes come off the same
+        // path its declarations were read from
+        ClassLoader fromDependencies = path.loader(Compiler.class.getClassLoader());
         List<Diagnostic> exampleFailures = new ArrayList<>();
         List<Integer> exampleSources = new ArrayList<>();
         for (Ast.Module original : parsed) {
@@ -384,7 +426,7 @@ public final class Compiler {
                         () -> "nothing was read for module " + original.name() + " to publish");
                 ModuleMetadata.stamp(out, written.module(), written.slices(), sigs,
                         injectedNames(written.module()));
-                verifyConstConstructions(m, symbols, out);
+                verifyConstConstructions(m, symbols, out, fromDependencies);
             } catch (CompileException e) {
                 throw e.inSource(index);
             }
@@ -392,7 +434,7 @@ public final class Compiler {
             // widely-imported data says how far it reaches in one compile rather than one module per
             // round (issue #114). A module whose own compile failed never gets here, so what is
             // collected is only ever a stale or wrong example, never a knock-on of a broken type.
-            for (Diagnostic d : ExampleVerifier.check(m, symbols, sigs, out)) {
+            for (Diagnostic d : ExampleVerifier.check(m, symbols, sigs, out, fromDependencies)) {
                 exampleFailures.add(d);
                 // a merged `examples for` file's rows are positioned in that file, not this one
                 exampleSources.add(mergedExamples.contains(original.name()) ? -1 : index);
@@ -403,6 +445,114 @@ public final class Compiler {
                     ExampleVerifier.legacySummary(exampleFailures));
         }
         return out;
+    }
+
+    /**
+     * The modules {@code parsed} reaches that are not among {@code parsed} themselves, read from
+     * {@code path} and added to {@code byName}. A name that is not a compiled Souther module there
+     * is left out, so an import of something genuinely absent is still reported as unknown where it
+     * is written rather than here.
+     *
+     * <p>A module read this way brings its own reaches with it, so a dependency of a dependency
+     * arrives too. Which of its behaviors are injection targets is collected into
+     * {@code injectedOut}: no {@code let} is published, so that cannot be read off the module here
+     * the way it is read off a source.
+     */
+    private static List<Ast.Module> readFromPath(List<Ast.Module> parsed,
+                                                 Map<String, Ast.Module> byName, ModulePath path,
+                                                 Map<String, Set<String>> injectedOut) {
+        PublishedModule.Classes classes = path.declarations();
+        List<Ast.Module> found = new ArrayList<>();
+        // What is waiting to be read, and — for one a module off the path needs — which module needs
+        // it, so an incomplete path is reported as that rather than as an import nobody wrote.
+        Deque<String> pending = new ArrayDeque<>();
+        Map<String, String> neededBy = new LinkedHashMap<>();
+        parsed.forEach(m -> pending.addAll(reaches(m)));
+        Set<String> tried = new HashSet<>();
+        while (!pending.isEmpty()) {
+            String name = pending.poll();
+            if (byName.containsKey(name) || !tried.add(name)) {
+                continue;
+            }
+            PublishedModule published = PublishedModule.read(name, classes);
+            if (published == null) {
+                if (neededBy.containsKey(name) && !Prelude.isQualifier(name)) {
+                    throw pathIncomplete(name, neededBy.get(name));
+                }
+                continue;   // written in a source being compiled: still that import's own error
+            }
+            rejectReservedNamespace(published.module());
+            Ast.Module m = Exposing.rewrite(published.module());
+            found.add(m);
+            byName.put(name, m);
+            injectedOut.put(name, published.injectedBehaviors());
+            for (String reach : reaches(m)) {
+                neededBy.putIfAbsent(reach, name);
+                pending.add(reach);
+            }
+        }
+        return found;
+    }
+
+    /**
+     * A module on the path names another that is not there. The import is written in a module this
+     * project does not have, so quoting it would point at a line of a file nobody here can open: what
+     * is wrong is the path, and the message says which two modules it is between.
+     */
+    private static CompileException pathIncomplete(String missing, String needer) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.module.pathincomplete").title("check.module.title")
+                        .args(missing, needer).hint("check.module.pathincomplete.hint", missing).build(),
+                "module `" + needer + "` needs `" + missing + "`, which is not on the path either");
+    }
+
+    /**
+     * A module being compiled here has the name of one already on the path. Which one an import means
+     * would be decided by nothing the author wrote, and the two would be different types under one
+     * name — the same reason two sources may not share a name.
+     */
+    private static CompileException shadowsPath(String name) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.module.shadowspath").title("check.module.title")
+                        .args(name).hint("check.module.shadowspath.hint", name).build(),
+                "module `" + name + "` is compiled here and is also on the path");
+    }
+
+    /**
+     * Every module name {@code m} names: the ones it imports, the qualifier of every type it writes
+     * with one, and the qualifier of every behavior it names that way — a {@code >->} stage or a
+     * {@code requires}. Neither kind of qualified reference needs an import line, so reading only the
+     * import lines would leave a module it reaches unread. This runs before the qualified behavior
+     * references are rewritten to imports, because that rewrite is what needs the module read.
+     */
+    private static Set<String> reaches(Ast.Module m) {
+        Set<String> names = new LinkedHashSet<>();
+        Map<String, String> aliases = new HashMap<>();
+        for (Ast.Import imp : m.imports()) {
+            names.add(imp.module());
+            if (imp.alias() != null) {
+                aliases.put(imp.alias(), imp.module());
+            }
+        }
+        List<String> written = new ArrayList<>();
+        for (Ast.TypeRef ref : typeRefs(m)) {
+            written.add(ref.name());
+        }
+        for (Ast.BehaviorDef b : m.behaviors()) {
+            switch (b) {
+                case Ast.PipeBehavior pipe -> written.addAll(pipe.stages());
+                case Ast.SpecBehavior spec -> written.addAll(spec.requires());
+            }
+        }
+        for (String name : written) {
+            int dot = name.lastIndexOf('.');
+            if (dot > 0) {
+                String qualifier = name.substring(0, dot);
+                names.add(aliases.getOrDefault(qualifier, qualifier));
+            }
+        }
+        names.remove(m.name());
+        return names;
     }
 
     /** The source a module was read from, or {@code -1} when it cannot be named — an unknown module,
@@ -435,6 +585,20 @@ public final class Compiler {
      */
     public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById,
                                                                 Set<String> brokenModuleNames) {
+        return diagnoseModules(sourcesById, brokenModuleNames, ModulePath.EMPTY);
+    }
+
+    /**
+     * As {@link #diagnoseModules(Map, Set)}, resolving an import that names no module among
+     * {@code sourcesById} against {@code path}, the way a build does. Without this an editor reports
+     * an unknown module for an import the build resolves, which is the wrong answer twice over.
+     *
+     * <p>A path that is itself wrong — a module missing behind a module — is not reported here. The
+     * editor's job is the source in front of the author, and a broken path is the build's to say.
+     */
+    public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById,
+                                                                Set<String> brokenModuleNames,
+                                                                ModulePath path) {
         Map<String, List<Diagnostic>> result = new LinkedHashMap<>();
         for (String id : sourcesById.keySet()) {
             result.put(id, new ArrayList<>());
@@ -478,11 +642,27 @@ public final class Compiler {
             idByName.put(m.name(), e.getKey());
         }
 
+        // A module the workspace imports but does not contain is read from the path, so an import the
+        // build resolves is not reported here as unknown. A path that cannot be read leaves the
+        // workspace as it was: the author is editing a source, not a dependency.
+        Map<String, Set<String>> injectedElsewhere = new LinkedHashMap<>();
+        List<Ast.Module> fromPath;
+        try {
+            fromPath = readFromPath(new ArrayList<>(byName.values()), byName, path, injectedElsewhere);
+        } catch (CompileException _) {
+            fromPath = List.of();
+        }
+
         List<Ast.Module> order = dependencyOrder(byName, idByName, result);
 
         // Compile each module (no example evaluation yet). Retain the derived module and its resolution
         // context so examples can be evaluated afterwards, once every module's bytecode is present.
         Map<String, Ast.Module> derived = new LinkedHashMap<>();
+        for (Ast.Module m : fromPath) {
+            Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
+            d = HelperInliner.forModule(d).withInlinedInvariants(d);
+            derived.put(m.name(), NewtypeDesugar.rewrite(d, visibleDefs(d, derived)));
+        }
         Map<String, byte[]> out = new LinkedHashMap<>();
         Map<String, VerifyContext> ready = new LinkedHashMap<>();
         for (Ast.Module original : order) {
@@ -498,7 +678,7 @@ public final class Compiler {
                 derived.put(original.name(), m);
                 Symbols symbols = visibleDefs(m, derived);
                 Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
-                Set<String> importedInjected = importedInjectedBehaviors(m, derived);
+                Set<String> importedInjected = importedInjectedBehaviors(m, derived, injectedElsewhere);
                 m = injectRecursivePrelude(m);
                 Ast.Module lowered = Lower.run(m);
                 TypeChecker.CheckResult result0 =
@@ -513,7 +693,7 @@ public final class Compiler {
                 }
                 out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs,
                         importedInjected, result0.checked()));
-                verifyConstConstructions(m, symbols, out);
+                verifyConstConstructions(m, symbols, out, Compiler.class.getClassLoader());
                 Map<String, Sig> sigs =
                         PipelineSigs.signatures(m, symbols, importedBehaviorSigs(m, derived));
                 ready.put(original.name(), new VerifyContext(m, symbols, sigs));
@@ -848,10 +1028,16 @@ public final class Compiler {
     /** The behaviors {@code m} imports that are injection targets in their declaring module (a
      * SpecBehavior with no fn — spec 13.2). A composition here that names one as a stage inherits
      * it as an inferred requirement, so the consuming module injects and binds it (spec 14.3). */
-    private static Set<String> importedInjectedBehaviors(Ast.Module m, Map<String, Ast.Module> registry) {
+    private static Set<String> importedInjectedBehaviors(Ast.Module m, Map<String, Ast.Module> registry,
+                                                         Map<String, Set<String>> injectedElsewhere) {
         Set<String> result = new HashSet<>();
         for (BehaviorRef ref : behaviorRefs(m, registry)) {
-            if (injectedNames(registry.get(ref.module())).contains(ref.name())) {
+            // A module off the path published which of its behaviors are injection targets, because
+            // the fn that decides is not published with it.
+            Set<String> injected = injectedElsewhere.containsKey(ref.module())
+                    ? injectedElsewhere.get(ref.module())
+                    : injectedNames(registry.get(ref.module()));
+            if (injected.contains(ref.name())) {
                 result.add(ref.name());
             }
         }

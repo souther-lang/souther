@@ -58,27 +58,34 @@ public final class CstFrontend {
             throw firstError(source, result.errors().get(0));
         }
         Ast.Module module = AstBuilder.build(result.root(), source, defaultModuleName);
+        String header = "module " + module.name();   // a source with no header is named for its file
         List<String> imports = new ArrayList<>();
         Map<String, String> defs = new LinkedHashMap<>();
         Map<String, String> behaviors = new LinkedHashMap<>();
         Map<String, String> fns = new LinkedHashMap<>();
         for (SyntaxNode n : result.root().childNodes()) {
             switch (n.kind()) {
+                case MODULE_HEADER -> header = n.text().strip();
                 case IMPORT_DECL -> imports.add(n.text().strip());
                 case DATA_DEF -> defs.put(AstBuilder.firstIdentText(n), n.text().strip());
                 case BEHAVIOR_DEF -> behaviors.put(AstBuilder.firstIdentText(n), n.text().strip());
                 case FN_DEF -> fns.put(AstBuilder.firstIdentText(n), n.text().strip());
-                default -> { /* the header, examples and fakes are not declarations to publish */ }
+                default -> { /* examples and fakes are not declarations to publish */ }
             }
         }
-        return new Parsed(module, new Slices(imports, defs, behaviors, fns));
+        return new Parsed(module, new Slices(header, imports, defs, behaviors, fns));
     }
 
     /** A parsed module together with the source of each declaration in it. */
     public record Parsed(Ast.Module module, Slices slices) {}
 
-    /** The source a module's declarations were written as, by the name each declares. */
-    public record Slices(List<String> imports, Map<String, String> defs,
+    /**
+     * The source a module's declarations were written as, by the name each declares. {@code header}
+     * is the {@code module … exposing ( … )} line as written, which is more than the exposed names:
+     * a composition's declared output is written there too, and reassembling the clause from the
+     * names alone would lose it.
+     */
+    public record Slices(String header, List<String> imports, Map<String, String> defs,
                          Map<String, String> behaviors, Map<String, String> fns) {}
 
     private static CompileException firstError(String source, CstError e) {

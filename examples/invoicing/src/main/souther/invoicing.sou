@@ -1,0 +1,29 @@
+// shared.money は別プロジェクトのもので、この src/main/souther には無い。import は
+// classpath 上の jar から解決される。
+module example.invoicing exposing (
+    Invoice,
+    Line,
+    issue
+)
+import shared.money ( Amount, Currency )
+
+data Line =
+    { description: String
+    , amount: Amount
+    }
+
+data Invoice =
+    { currency: Currency
+    , line: Line
+    }
+
+behavior issue : (l: Line, c: Currency) -> Invoice
+    constructs Invoice
+let issue (l, c) = Invoice { currency = c, line = l }
+
+example issue
+    | "一行の請求書を起こす" :
+        (Line { description = "consulting", amount = Amount(1200) }, Currency("JPY"))
+        -> Invoice
+            { currency = Currency("JPY")
+            , line = Line { description = "consulting", amount = Amount(1200) } }

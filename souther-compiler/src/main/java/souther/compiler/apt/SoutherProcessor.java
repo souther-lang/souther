@@ -5,6 +5,7 @@ import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.Compiler;
+import souther.compiler.meta.ModulePath;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
@@ -14,7 +15,9 @@ import javax.lang.model.SourceVersion;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -74,9 +77,17 @@ public final class SoutherProcessor extends AbstractProcessor {
                 return false;
             }
             List<String> texts = sources.stream().map(Source::text).toList();
-            Map<String, byte[]> classes = texts.size() == 1
+            // A module these sources import but do not contain is looked for on the compile
+            // classpath — which is what depending on another project's jar already puts there, so
+            // there is nothing to configure.
+            ModulePath path = compileClassPath();
+            // One source with no `module` header is a self-contained module and can import nothing;
+            // one that names itself is a module set of one, and may import a module off the path.
+            boolean selfContained =
+                    texts.size() == 1 && Compiler.moduleNameFromHeader(texts.get(0)) == null;
+            Map<String, byte[]> classes = selfContained
                     ? Compiler.compile(texts.get(0))
-                    : Compiler.compileModules(texts);
+                    : Compiler.compileModules(texts, path);
             Filer filer = processingEnv.getFiler();
             for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
                 JavaFileObject file = filer.createClassFile(entry.getKey());
@@ -126,6 +137,27 @@ public final class SoutherProcessor extends AbstractProcessor {
         }
         int index = e.sourceIndexOf(i);
         return index >= 0 && index < sources.size() ? sources.get(index) : null;
+    }
+
+    /**
+     * The classes of the projects this compilation depends on, read through the {@link Filer}: javac
+     * has already resolved the compile classpath, so nothing here has to be told where the jars are.
+     * A class the classpath does not have reads as absent, which is how an import of a module that is
+     * genuinely not there stays an unknown-module error where it is written.
+     */
+    private ModulePath compileClassPath() {
+        Filer filer = processingEnv.getFiler();
+        return binaryName -> {
+            int lastDot = binaryName.lastIndexOf('.');
+            String pkg = lastDot < 0 ? "" : binaryName.substring(0, lastDot);
+            String simple = binaryName.substring(lastDot + 1) + ".class";
+            try (InputStream in = filer.getResource(StandardLocation.CLASS_PATH, pkg, simple)
+                    .openInputStream()) {
+                return in.readAllBytes();
+            } catch (IOException | IllegalArgumentException | UnsupportedOperationException _) {
+                return null;
+            }
+        };
     }
 
     /** Reads a single {@code .sou} file, or every {@code .sou} under a directory (path-sorted). */

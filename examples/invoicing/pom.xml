@@ -1,0 +1,25 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>example.souther</groupId>
+        <artifactId>souther-examples</artifactId>
+        <version>1.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>invoicing</artifactId>
+
+    <description>
+        別プロジェクトが公開した Souther モジュールを import する側。src/main/souther には
+        自分の .sou しか無く、shared.money は sharedmoney の jar から解決される。設定は
+        依存を1つ足すだけで、アノテーションプロセッサに渡す追加のオプションは無い。
+    </description>
+
+    <dependencies>
+        <dependency><groupId>org.souther-lang</groupId><artifactId>souther-runtime</artifactId></dependency>
+        <dependency><groupId>net.unit8.raoh</groupId><artifactId>raoh</artifactId></dependency>
+        <dependency>
+            <groupId>example.souther</groupId>
+            <artifactId>sharedmoney</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
+    </dependencies>
+</project>

@@ -83,7 +83,7 @@ class ModuleMetadataTest {
         Annotation module = annotation(classes, "shared.money.$Module", "SoutherModule");
         assertEquals("shared.money", string(module, "name"));
         assertEquals(souther.compiler.codegen.Backend.BOUNDARY_VERSION, integer(module, "compat"));
-        assertEquals(List.of("Amount", "charge"), strings(module, "exposing"));
+        assertEquals("module shared.money exposing ( Amount, charge )", string(module, "header"));
         assertEquals(List.of("Amount", "Receipt", "Declined"), strings(module, "types"));
         assertEquals(List.of("charge"), strings(module, "behaviors"));
         assertEquals(List.of("import String ( length )"), strings(module, "imports"));

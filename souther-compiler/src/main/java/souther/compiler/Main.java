@@ -10,6 +10,7 @@ import souther.compiler.diag.JsonRenderer;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.fmt.Formatter;
+import souther.compiler.meta.ModulePath;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -33,9 +34,11 @@ public final class Main {
     private static final String USAGE = """
             usage: souther <command> [args]
             commands:
-              compile <file.sou>... -d <outdir>                    compile to .class files
+              compile <file.sou>... -d <outdir> [-cp <path>]      compile to .class files
               run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
               fmt <file.sou>... [-w] [--check]                     format source (stdout, or -w in place)
+            options (compile):
+              -cp, --class-path <path>  where to find modules another project compiled
             options (compile/run):
               --format human|json      how to render a compile error (default: human)
               --lang <tag>             message locale, e.g. ja or en (default: system, then ja)
@@ -65,18 +68,33 @@ public final class Main {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
         List<Path> sources = new ArrayList<>();
+        List<Path> classPath = new ArrayList<>();
         Path outDir = Path.of(".");
         for (int i = 0; i < args.length; i++) {
-            if (args[i].equals("-d")) {
-                if (++i >= args.length) {
-                    System.err.println("`-d` needs an output directory");
-                    System.err.println(USAGE);
-                    System.exit(2);
-                    return;
+            switch (args[i]) {
+                case "-d" -> {
+                    if (++i >= args.length) {
+                        System.err.println("`-d` needs an output directory");
+                        System.err.println(USAGE);
+                        System.exit(2);
+                        return;
+                    }
+                    outDir = Path.of(args[i]);
                 }
-                outDir = Path.of(args[i]);
-            } else {
-                sources.add(Path.of(args[i]));
+                case "-cp", "--class-path" -> {
+                    if (++i >= args.length) {
+                        System.err.println("`" + args[i - 1] + "` needs a class path");
+                        System.err.println(USAGE);
+                        System.exit(2);
+                        return;
+                    }
+                    for (String entry : args[i].split(java.io.File.pathSeparator)) {
+                        if (!entry.isBlank()) {
+                            classPath.add(Path.of(entry));
+                        }
+                    }
+                }
+                default -> sources.add(Path.of(args[i]));
             }
         }
         if (sources.isEmpty()) {
@@ -86,7 +104,7 @@ public final class Main {
             return;
         }
         try {
-            for (Path file : compileToDir(sources, outDir)) {
+            for (Path file : compileToDir(sources, outDir, classPath)) {
                 System.out.println("wrote " + file);
             }
         } catch (CompileException e) {
@@ -305,15 +323,27 @@ public final class Main {
      * written, in order.
      */
     public static List<Path> compileToDir(List<Path> sources, Path outDir) throws IOException {
+        return compileToDir(sources, outDir, List.of());
+    }
+
+    /**
+     * As {@link #compileToDir(List, Path)}, resolving an import that names no module among
+     * {@code sources} against the compiled modules on {@code classPath} — the directories and jars
+     * of the projects this one depends on.
+     */
+    public static List<Path> compileToDir(List<Path> sources, Path outDir, List<Path> classPath)
+            throws IOException {
         List<String> texts = new ArrayList<>();
         for (Path source : sources) {
             texts.add(Files.readString(source));
         }
+        ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY : ModulePath.ofClassPath(classPath);
         // A single header-less file is named after the file (F#/Elm; ADR-0043); a multi-file build
-        // links by imports, so each must declare its own module header.
-        Compiler.Compiled compiled = texts.size() == 1
+        // links by imports, so each must declare its own module header. One file that imports another
+        // project's module is a module set of one, not a self-contained module.
+        Compiler.Compiled compiled = texts.size() == 1 && classPath.isEmpty()
                 ? Compiler.compileWithWarnings(texts.get(0), Runner.moduleName(sources.get(0)))
-                : Compiler.compileModulesWithWarnings(texts);
+                : Compiler.compileModulesWithWarnings(texts, path);
         for (Diagnostic w : compiled.warnings()) {
             System.err.println("warning: " + DiagnosticRenderer.body(w, Locale.ENGLISH));
         }

@@ -37,6 +37,17 @@ The whole Maven wiring is just this (set once for all modules in `examples/pom.x
 end up in the artifact jar. With Gradle you use the same processor via an `annotationProcessor`
 dependency plus the `-Asouther.source` compiler arg.
 
+Importing a module another project compiled needs nothing beyond the dependency itself. `sharedmoney`
+publishes `shared.money`; `invoicing` depends on that jar, has only its own `.sou` under
+`src/main/souther`, and writes `import shared.money ( Amount )`. The processor reads what the module
+declared off the classes on the compile classpath, which is what depending on a jar already puts
+there, and `invoicing`'s output holds no `shared/money` class — the dependency's classes are its own
+build's.
+
+Both of those projects carry a `package-info.java` they would rather not need: an annotation
+processor runs as part of compiling Java, and javac does nothing at all when a project has no Java
+source. A project written only in Souther has to write one file in another language to be built.
+
 A compile error is reported the way the CLI reports it — the title, the position, the offending line
 with a caret, and the hint. `-Asouther.lang=en` picks the language of the message; without it the
 processor follows `SOUTHER_LANG` and then the JVM's default locale, as `souther --lang` does.

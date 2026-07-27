@@ -254,6 +254,33 @@ import String ( trim, split )
 
 This corresponds to Elm's `+import List exposing (map)+`. Qualified access (`+List.map+`) always works without importing, so `+import+` only elides the qualifier. Importing the same bare name from two modules is ambiguous — writing both `+import String ( length )+` and `+import List ( length )+` in one module leaves `+length+` undetermined. In that case, import one and qualify the other call (`+String.length(...)+`). As with the wildcard prohibition, no name is delivered implicitly.
 
+[#published-modules]
+=== Importing a module another project compiled
+
+A module MAY be imported from the compiled output of another project, with no `+.sou+` of it in this
+one (ADR-0063). A compiled module carries what it declares — its `+data+` definitions, its behavior
+signatures, its `+exposing+` line and the imports it was written under — on the classes it generated,
+as the source that declared it. An `+import+` naming no module among the sources being compiled is
+resolved against the compiled modules on the class path.
+
+Nothing is declared beyond the dependency itself: under the annotation processor the class path is
+the compile classpath, and the CLI takes `+-cp+` / `+--class-path+`.
+
+[,text]
+----
+souther compile app/order.sou -d out-app -cp out-lib
+----
+
+What crosses that boundary is what crosses a boundary within one compilation: `+exposing+` is the
+gate, an imported case may not join a union declared here (<<e1606>>), and a `+let+` may not call an
+imported behavior. A module read this way is not generated again — its classes and its examples
+belong to the build that produced them.
+
+A compiled module records the version of what an importing module reaches. A module whose version is
+not this compiler's is refused, naming the compiler that built it, rather than read and
+misunderstood. A module compiled here SHALL NOT also be on the class path, and a module on the class
+path that needs one absent from it is reported against the path.
+
 [#qualified-reference]
 === Qualified reference
 

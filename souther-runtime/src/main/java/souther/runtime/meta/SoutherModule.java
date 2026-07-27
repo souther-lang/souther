@@ -31,8 +31,9 @@ public @interface SoutherModule {
     /** The module name, as written in its {@code module} header. */
     String name();
 
-    /** The {@code exposing} list as written, members included ({@code Amount.decoder}). */
-    String[] exposing() default {};
+    /** The {@code module … exposing ( … )} line as written. It carries more than the exposed names —
+     * a composition declares its output there — so it travels as written rather than as a list. */
+    String header();
 
     /** The module's {@code import} lines, verbatim, standard-library ones included: the definitions
      * are carried as they were written, so the names in them resolve in the scope they were written
