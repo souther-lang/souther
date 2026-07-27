@@ -1398,23 +1398,42 @@ public final class CstParser {
         return nth(1) != SyntaxKind.RPAREN && parenRunFollowedByArrow();
     }
 
-    /** Whether the parenthesised run at the cursor closes on a {@code )} that {@code ->} follows. */
+    /**
+     * Whether the parenthesised run at the cursor closes on a {@code )} that {@code ->} follows.
+     *
+     * <p>Walks the tokens from the cursor with one moving index rather than asking for the nth
+     * meaningful token each step: {@link #mi} counts from {@code pos} every time, which would make a
+     * run of length L cost L steps per token and the nest of runs in {@code ((((1))))} cost the cube
+     * of its depth. The lookahead runs at every level of the nest, so that is what it costs.
+     */
     private boolean parenRunFollowedByArrow() {
         int depth = 0;
-        for (int i = 0; ; i++) {
-            SyntaxKind k = nth(i);
+        for (int i = mi(0); i < tokens.size(); i++) {
+            SyntaxKind k = tokens.get(i).kind();
+            if (k.isTrivia()) {
+                continue;
+            }
             if (k == SyntaxKind.EOF) {
                 return false;
             }
             if (k == SyntaxKind.LPAREN) {
                 depth++;
-            } else if (k == SyntaxKind.RPAREN) {
-                depth--;
-                if (depth == 0) {
-                    return nth(i + 1) == SyntaxKind.ARROW;
-                }
+            } else if (k == SyntaxKind.RPAREN && --depth == 0) {
+                return kindAfter(i) == SyntaxKind.ARROW;
             }
         }
+        return false;
+    }
+
+    /** The kind of the first meaningful token after the one at {@code index}. */
+    private SyntaxKind kindAfter(int index) {
+        for (int i = index + 1; i < tokens.size(); i++) {
+            SyntaxKind k = tokens.get(i).kind();
+            if (!k.isTrivia()) {
+                return k;
+            }
+        }
+        return SyntaxKind.EOF;
     }
 
     private void error(String messageKey, String legacyMessage, Object... args) {
