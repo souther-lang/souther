@@ -37,11 +37,11 @@ Each construct of the spec DSL maps to Souther as follows.
 |===
 | Spec DSL | Souther
 
-| `+data 金額 = 整数 // 0以上+` | `+data 金額 = Int  invariant value >= 0+` (newtype; <<newtype>>)
+| `+data 金額 = 整数 // 0以上+` | `+data Amount = Int  invariant value >= 0+` (newtype; <<newtype>>)
 
 | `+data X = A OR B+` (A, B are named data) | `+data X = A \| B+` (sum; cases are existing named data)
 
-| `+data 立替 = 単位型+` | `+data 立替+` (data with no fields)
+| `+data 立替 = 単位型+` | `+data Reimbursement+` (data with no fields; a case named in a sum or a behavior output needs no declaration, <<unit-data>>)
 
 | `+data X = A AND b+` (A is a record, b is an added item) | `+data X = { ...A, b: B }+` (field composition)
 
@@ -49,7 +49,7 @@ Each construct of the spec DSL maps to Souther as follows.
 
 | `+behavior f = In -> Out+` (Out has multiple success states) | `+behavior f : (...) -> Out1 \| Out2+` (bare sum)
 
-| `+behavior f = In -> Out OR 失敗+` | `+behavior f : (...) -> Out \| 失敗+` (a failure is just data; departure from the mainline is decided by composition)
+| `+behavior f = In -> Out OR 失敗+` | `+behavior f : (...) -> Out \| Rejected+` (a failure is just data; departure from the mainline is decided by composition)
 
 | `+f >-> g+` | `+f >-> g+`
 
@@ -650,24 +650,24 @@ The spec DSL's `+OR+` maps to a sum. *A case MAY reference an already-defined na
 [,text]
 ----
 // spec DSL: data 出張申請 = 申請準備中 OR 提出済み OR 事前承認待ち OR 事前承認済み
-data 出張申請 =
-    申請準備中
-  | 提出済み
-  | 事前承認待ち
-  | 事前承認済み
+data BusinessTrip =
+    Drafting
+  | Submitted
+  | AwaitingPreapproval
+  | Preapproved
 ----
 
 Nested sums MAY be written directly.
 
 [,text]
 ----
-data 費用負担区分 = 自社負担 | 先方負担
-data 自社負担     = 立替 | 仮払い | 会社カード
+data CostBearer = OwnCompany | Counterparty
+data OwnCompany = Reimbursement | Advance | CorporateCard
 ----
 
-A case is always a reference to a separately declared named data. An inline record MUST NOT be written in a case position. The spec DSL is the same: a case is always declared separately (for `+data 役職 = 管理職 OR 一般社員+`, `+data 管理職 = レベル+` / `+data 一般社員 = 単位型+`).
+A case names a data; an inline record MUST NOT be written in a case position. A case that carries fields is declared separately, as the spec DSL declares it (for `+data 役職 = 管理職 OR 一般社員+`, `+data Manager = { level: Level }+`). A case declared nowhere carries no fields, and the case list is its declaration (<<unit-data>>).
 
-*A case value is a value of its sum.* As in functional languages, a value of a case type (e.g. `+提出済み+`) may be used transparently wherever its sum type (`+出張申請+`) is expected — field assignment, argument, or return value. Only the upward direction (case→sum) is allowed; the downward direction (sum→specific case) requires `+match+`. A nested sum (`+data 自社負担 = 立替 | 仮払い+` being a case of `+費用負担区分+`) is decided the same way, folding to the leaf case.
+*A case value is a value of its sum.* As in functional languages, a value of a case type (e.g. `+Submitted+`) may be used transparently wherever its sum type (`+BusinessTrip+`) is expected — field assignment, argument, or return value. Only the upward direction (case→sum) is allowed; the downward direction (sum→specific case) requires `+match+`. A nested sum (`+data OwnCompany = Reimbursement | Advance+` being a case of `+CostBearer+`) is decided the same way, folding to the leaf case.
 
 [#unit-data]
 === Unit data
@@ -677,14 +677,31 @@ A data with no fields is declared with no body. It corresponds to the spec DSL's
 [,text]
 ----
 // spec DSL: data 立替 = 単位型
-data 立替
-data 仮払い
-data 会社カード
-data 先方負担
-data 一般社員
+data Reimbursement
+data Advance
+data CorporateCard
+data Counterparty
+data Staff
 ----
 
-Unit data appear frequently as sum cases (such as `+一般社員+` in `+data 役職 = 管理職 | 一般社員+`).
+Unit data appear frequently as sum cases (such as `+Staff+` in `+data Role = Manager | Staff+`).
+
+A unit written where a module *introduces* a type needs no declaration of its own: the name alone declares it. Three positions introduce a type — a sum's case list (<<sum-data>>), a behavior's output (<<behavior-io>>), and the output declared for a `+>->+` composition, written either on the composition or in `+exposing+` (<<declared-composition-output>>).
+
+[,text]
+----
+data CostBearer = OwnCompany | Counterparty
+data OwnCompany = Reimbursement | Advance | CorporateCard
+// Reimbursement, Advance, CorporateCard and Counterparty are units; nothing else declares them
+
+behavior quote : (c: Cart) -> PricedCart | EmptyCart     // EmptyCart is a unit
+----
+
+Everywhere else a type is *referred to*, and a name nothing declares is unknown there and reported: a parameter type, a field's type, `+constructs+`, `+requires+`, a `+match+` arm, a codec variant, a `+let+`'s declared return type.
+
+Whether a name is declared is answered within the module — its own declarations and the names its `+import+` lines list. A qualified name (`+inventory.InsufficientStock+`) names another module's declaration, so it is a reference wherever it is written. A sum's case is module-local in any event (<<e1606>>).
+
+The explicit declaration stays available, and is how a case that carries a comment of its own is written.
 
 A unit data MUST NOT carry an `+invariant+`: it has no field for one to observe and no value it could reject (<<invariant-declaration>>). Writing one is a compile error rather than a clause with no effect. A data written with an empty body (`+data T = { }+`) is a product with no fields, not a unit, and its `+invariant+` is checked as any other product's is.
 
@@ -693,10 +710,10 @@ A unit data value is constructed by *writing the name directly* (as a zero-argum
 [,text]
 ----
 // construct a unit in an implementation (let). Requires the behavior's constructs (§2.1, §12.3)
-[先方費用負担 | 費用負担が先方]     // 先方費用負担 is a unit, constructed by name alone
+[CounterpartyBorne | bearer == Counterparty]     // CounterpartyBorne is a unit, constructed by name alone
 ----
 
-This is a guard comprehension (<<stdlib-list>>): it yields one `+先方費用負担+` if the condition holds, an empty list otherwise.
+This is a guard comprehension (<<stdlib-list>>): it yields one `+CounterpartyBorne+` if the condition holds, an empty list otherwise.
 
 A bare identifier in an expression resolves as: a variable if a bound local exists; otherwise a built-in value (such as `+None+`; <<algebraic-types>>); otherwise the construction of a unit data of the same name; otherwise undefined. Souther does not distinguish identifiers syntactically by case (so that Japanese business vocabulary can be used as identifiers), so this resolution is done in the symbol table.
 
