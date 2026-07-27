@@ -408,6 +408,7 @@ public final class CallElaborator {
                 // a required behavior called inline (spec 12.2, 13): type it as its success case
                 ReqSig callee = ctx.reqs().get(call.fn());
                 if (callee == null) {
+                    Elaborator.optionIsRead(call.fn(), call.pos());
                     String qualified = Prelude.qualifiedFor(call.fn());
                     if (qualified != null) {
                         throw CompileException.of(

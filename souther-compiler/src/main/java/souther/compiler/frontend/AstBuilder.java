@@ -465,10 +465,12 @@ public final class AstBuilder {
      */
     private Ast.TypeRef optional(List<Ast.TypeRef> cases, SourcePos pos) {
         if (!isReservedNamespace(moduleName)) {
-            throw error(pos, "parse.optional.core",
+            throw errorWithHint(pos, "parse.optional.core", "parse.optional.core.hint",
                     "an optional type `T?` may be written only on a data field, or in the core (the"
                             + " reserved `souther` namespace); a user model never names an optional"
-                            + " elsewhere (ADR-0011)");
+                            + " elsewhere (ADR-0011). On the result of a helper, leave the type off and"
+                            + " the optional is inferred; where the model owns the absence, answer a"
+                            + " list of nought or one and use `List.concatMap`");
         }
         if (cases.size() > 1) {
             throw error(pos, "parse.optional.sum",
@@ -1198,6 +1200,15 @@ public final class AstBuilder {
     private CompileException error(SourcePos pos, String messageKey, String legacyMessage, Object... args) {
         return CompileException.of(
                 Diagnostic.of(null, messageKey).title("parse.title").at(pos).args(args).build(),
+                legacyMessage);
+    }
+
+    /** As {@link #error}, with a hint under it naming the way out. */
+    private CompileException errorWithHint(SourcePos pos, String messageKey, String hintKey,
+                                           String legacyMessage, Object... args) {
+        return CompileException.of(
+                Diagnostic.of(null, messageKey).title("parse.title").at(pos).args(args)
+                        .hint(hintKey).build(),
                 legacyMessage);
     }
 

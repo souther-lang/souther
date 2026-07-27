@@ -1,12 +1,16 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.SourceContext;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -201,5 +205,57 @@ class CompileOptionMatchTest {
                 """;
         CompileException b = assertThrows(CompileException.class, () -> Compiler.compile(noneSrc));
         assertTrue(b.getMessage().contains("None"), b.getMessage());
+    }
+
+    @Test
+    void someCannotBeBuilt() {
+        // An optional is read, never built: `Some(x)` is not a call the model can write. It used to
+        // land on E1401 and advise a Java binding, which is the wrong way out (issue #166).
+        String src = """
+                module demo
+                data Id = String
+                data Trip = { id: Id }
+                behavior f : (t: Trip) -> Trip
+                let f (t) = Some(t.id)
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("E1303", e.code(), e.getMessage());
+        String out = new HumanRenderer(false).render(e.diagnostic(),
+                new SourceContext("demo.sou", src), Locale.ENGLISH);
+        assertTrue(out.contains("Some"), out);
+        assertFalse(out.contains("Java"), "a Java binding does not build an optional either: " + out);
+    }
+
+    @Test
+    void noneCannotBeWritten() {
+        String src = """
+                module demo
+                data Id = String
+                data Trip = { id: Id }
+                behavior f : (t: Trip) -> Trip
+                let f (t) = None
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("E1303", e.code(), e.getMessage());
+        String out = new HumanRenderer(false).render(e.diagnostic(),
+                new SourceContext("demo.sou", src), Locale.ENGLISH);
+        assertTrue(out.contains("None"), out);
+    }
+
+    @Test
+    void theHintPointsAtASumOfTheModelsOwn() {
+        // Where the absence is the model's own, the way out is a case of its own sum or a 0-or-1
+        // list, not a way to name `Option`.
+        String src = """
+                module demo
+                data Id = String
+                data Trip = { id: Id }
+                behavior f : (t: Trip) -> Trip
+                let f (t) = None
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        String out = new HumanRenderer(false).render(e.diagnostic(),
+                new SourceContext("demo.sou", src), Locale.ENGLISH);
+        assertTrue(out.contains("concatMap"), out);
     }
 }
