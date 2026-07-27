@@ -163,6 +163,22 @@ class FormatterTest {
     }
 
     @Test
+    void formattingKeepsACollectionNewtypeBase() {
+        // the newtype body used to be one identifier, so the type arguments had nowhere to be
+        // written; dropping them would turn `List<String>` into a `List` with no element type
+        String source = "module demo\n"
+                + "data Tags = List<String>\n"
+                + "data Stock = Map<String, Int>\n"
+                + "data Labels = Set<String>\n";
+        String formatted = Formatter.format(source);
+        assertEquals(code(source), code(formatted), "the code token stream changed");
+        assertEquals(formatted, Formatter.format(formatted), "formatting is not idempotent");
+        assertTrue(formatted.contains("data Tags = List<String>"), formatted);
+        assertTrue(formatted.contains("data Stock = Map<String, Int>"), formatted);
+        assertTrue(CstParser.parse(formatted).errors().isEmpty(), "formatted output does not re-parse");
+    }
+
+    @Test
     void formattingKeepsALocalLetTypeAnnotation() {
         // the annotation is what pins an empty-collection value at the binding (issue #71); dropping it
         // would turn a compiling module into one that cannot infer the accumulator's type.

@@ -833,7 +833,11 @@ public final class ExampleVerifier {
                 && c.args().get(0) instanceof Ast.StringLit lit) {
             return CallElaborator.parseTemporal(base, lit.value(), c.pos());
         }
-        return adjacentlyTagged(c.fn(), raw(c.args().get(0)));
+        // the argument is shaped against what the newtype wraps, the same way a record fixture
+        // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
+        // written list stays a list for its decoder to dedupe
+        return adjacentlyTagged(c.fn(),
+                shaped(raw(c.args().get(0)), shapeOf(newtypeBaseType(c.fn()))));
     }
 
     /**
@@ -980,8 +984,15 @@ public final class ExampleVerifier {
 
     /** The type a newtype wraps ({@code Date} for {@code data 貸出日 = Date}), or null. */
     private String newtypeBase(String name) {
+        Ast.TypeRef base = newtypeBaseType(name);
+        return base == null ? null : base.name();
+    }
+
+    /** The written form of what a newtype wraps, kept whole so a generic base
+     * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
+    private Ast.TypeRef newtypeBaseType(String name) {
         return symbols.declaration(name) instanceof Ast.Data d && d.newtype() && d.fields().size() == 1
-                ? d.fields().get(0).type().name()
+                ? d.fields().get(0).type()
                 : null;
     }
 

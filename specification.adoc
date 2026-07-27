@@ -376,6 +376,7 @@ The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and 
 * `+?+` is a type postfix (`+従業員ID?+`) and desugars to `+Option<従業員ID>+` (<<optional>>).
 * `+.+` is field reference; `+...+` is spread (<<record-literal>>).
 * The type position admits: a named type, a stdlib generic type (such as `+List<T>+`), an anonymous output sum (`+A | B+`), and a postfix `+?+`. A function type `+(A) -> B+` is admitted only in a `+let+` argument position (<<fn-declaration>>).
+* A newtype's base (`+data X = Y+`) is a type position narrowed to what `+X+` can take as its own external representation: no tuple, no function type, and no `+?+` (<<newtype>>). A sum's cases are names of declared data, so a case is never generic: `+data X = List<A> | B+` is not a sum (<<sum-data>>, ADR-0013).
 
 [#external-representation]
 == External representation
@@ -475,6 +476,8 @@ Set<T>
 ----
 
 Collections are immutable. A `+List+` is ordered and may repeat; a `+Set+` is unordered with no duplicate elements, compared by value equality (<<primitives>>, ADR-0009); a `+Map+` is keyed by `+K+`, so a key carries its domain type (`+Map<商品ID, 在庫>+`; ADR-0040). Inside a behavior body `+K+` is any value type — `+List.groupBy+` keys by whatever the projection returns. A map that *crosses the boundary* — a data field, a behavior's input or output, at any depth — is a JSON object, whose keys are strings, so there `+K+` MUST be `+String+`, a String-backed newtype (`+data 商品ID = String+`), `+Date+` or `+DateTime+`. A newtype key is decoded into the key newtype (its invariant enforced, a bad key failing at that key's path) and encoded back bare; a temporal key is parsed from and written as its ISO 8601 form, the same representation a `+Date+` field has (`+{"2026-01-01": 300}+`). A `+Set+`'s external representation is a JSON array, deduplicated on decode (ADR-0039). An element may itself be a collection — `+Map<String, List<商品ID>>+` is what bucketing rows by a key produces (`+List.groupBy+`, <<stdlib-list>>) — and it crosses the boundary as the nested JSON its shape implies, decoded and encoded the same way at every depth.
+
+A collection MAY be what a newtype wraps (`+data タグ集合 = Set<タグ>+`, <<newtype>>), which names the collection itself and gives an invariant something to hold about it — that its elements are unique, that it is not empty. The newtype crosses the boundary as the collection's own representation, a JSON array or object, not as `+{"value": [...]}+`.
 
 Collections are *covariant* in their element. A case `+A+` may be used as its sum `+S+` (<<sum-data>>), so `+List<A>+` may be passed where `+List<S>+` is expected, `+Set<A>+` where `+Set<S>+` is expected, `+Map<String, A>+` where `+Map<String, S>+` is expected, and `+A?+` where `+S?+` is expected. This is sound because collections are immutable and there is no room to write a sibling case later. Covariance of mutable arrays (Java) is unsound because writes are a hole; that is the difference. This is the same position as Scala's immutable `+List+` and Kotlin's read-only `+List+`. Covariance applies only in the case→sum direction; sibling cases (`+A+` and `+B+`) are unrelated.
 
@@ -744,7 +747,7 @@ Structural intersection types (`+A & B+`, a type operator for "a value that is b
 [#newtype]
 === newtype (`+data X = Y+`)
 
-When the right-hand side is a single type name `+Y+`, `+X+` is a newtype wrapping `+Y+`. `+Y+` may be a primitive (`+String+` / `+Int+` / `+Date+`, etc.), a named data, or a sum. `+X+` is a distinct type from `+Y+` (nominally distinguished) with the same (bare) external representation as `+Y+`. The spec DSL's `+data X = Y+` (right-hand side a single name) is written directly.
+When the right-hand side is a single type rather than a `+{ ... }+` product or a `+|+` sum, `+X+` is a newtype wrapping that type `+Y+`. `+Y+` is written the way a type is written anywhere else: a primitive (`+String+` / `+Int+` / `+Date+`, etc.), a named data, a sum, or a collection (`+List<T>+` / `+Set<T>+` / `+Map<K, V>+`, <<collections>>), including a collection of any of these. `+X+` is a distinct type from `+Y+` (nominally distinguished) with the same (bare) external representation as `+Y+`. The spec DSL's `+data X = Y+` (right-hand side a single name) is written directly.
 
 [,text]
 ----
@@ -757,7 +760,13 @@ data 権限不足 = 役職
 
 // spec DSL: data 費用明細 = 費目 (費目 is a sum)
 data 費用明細 = 費目
+
+// a collection the domain has a name for, with an invariant on the collection itself
+data タグ集合 = Set<タグ>
+data 在庫 = Map<商品ID, Int>
 ----
+
+`+Y+` MUST have an external representation, since `+X+` takes it as its own: a tuple (<<tuple>>) and a function type (<<fn>>) are refused as a newtype's base, where they are written. `+Y+` MUST NOT be optional — neither `+data X = Y?+` nor `+data X = Option<Y>+` — because whether a value is present is a property of the place it is used, written there as `+f: X?+`. A `+Map+` that a newtype wraps crosses the boundary as a JSON object, so its key follows the same rule a field's does (<<collections>>).
 
 `+data X = Y+` is equivalent to having a single field `+value: Y+`. Construction applies the value to the type name, `+X(v)+` (`+金額(500)+`, `+会員ID("m-01")+`), equal to `+X { value = v }+`. Reference is `+x.value+`; an invariant refers to the inside as `+value+`. The difference from `+data X = { value: Y }+` (with braces) is *the external representation only*: `+data X = Y+` reads and writes `+Y+`'s representation bare (`+従業員ID+` is `+"e-01"+`), while `+data X = { value: Y }+` becomes an Object `+{"value": "e-01"}+`.
 
