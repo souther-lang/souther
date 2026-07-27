@@ -12,6 +12,7 @@ import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
+import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassSignature;
@@ -19,6 +20,7 @@ import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.attribute.PermittedSubclassesAttribute;
+import java.lang.classfile.attribute.RuntimeInvisibleAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
@@ -651,8 +653,35 @@ public final class Backend {
         return ctx.cd(typeName);
     }
 
-    static String behaviorClass(String name) {
+    /** The class a behavior is emitted under (spec 19.5). Anything that has to name that class from
+     * outside codegen — publishing a module's declarations onto it, say — asks here rather than
+     * repeating the rule, so the name a reader is sent to is the name that was emitted. */
+    public static String behaviorClass(String name) {
         return CodegenContext.behaviorClass(name);
+    }
+
+    /**
+     * The version of what another module reaches across the boundary into a compiled one: the
+     * {@code __construct} descriptors and visibilities, the codecs, a behavior's class and its
+     * methods, an output union's case names, and the runtime types in those signatures. It lives
+     * here because that is all this package's to decide; a change to any of it makes a previously
+     * built jar unusable and has to move this number with it. A change confined to the inside of a
+     * generated method does not touch it.
+     */
+    public static final int BOUNDARY_VERSION = 1;
+
+    /** The class a module's own declarations are published on. It carries nothing but them. */
+    public static String moduleClassName(String moduleName) {
+        return moduleName + ".$Module";
+    }
+
+    /** Emits {@link #moduleClassName}, carrying {@code declarations}. What it says is the caller's;
+     * that it is built like every other generated class — the same Java floor, the same
+     * {@code SourceFile} — is this package's. */
+    public static byte[] moduleClass(String moduleName, Annotation declarations) {
+        return Descriptors.build(ClassDesc.of(moduleClassName(moduleName)), cb -> cb
+                .withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SYNTHETIC)
+                .with(RuntimeInvisibleAnnotationsAttribute.of(declarations)));
     }
 
     private ClassDesc cdBehavior(String name) {

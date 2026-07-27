@@ -28,7 +28,11 @@ public final class CstFrontend {
     /** Parses one compilation unit, naming a header-less source {@code defaultModuleName} (a
      * {@code null} default makes the {@code module} header required). */
     public static Ast.Module parse(String source, String defaultModuleName) {
-        return parseWithSlices(source, defaultModuleName).module();
+        CstParser.Result result = CstParser.parse(source);
+        if (!result.errors().isEmpty()) {
+            throw firstError(source, result.errors().get(0));
+        }
+        return AstBuilder.build(result.root(), source, defaultModuleName);
     }
 
     /** As {@link #parse(String, String)} with the default module name {@code Main}. */
@@ -37,13 +41,14 @@ public final class CstFrontend {
     }
 
     /**
-     * The module, and the source text each of its top-level declarations was written as. The CST
-     * keeps every character, so a declaration comes back exactly as the author wrote it, comments
-     * included.
+     * The module, and the source each of its top-level declarations was written as, filed under the
+     * name that declaration declares. The CST keeps every character, so a declaration comes back as
+     * the author wrote it, comments included; only the whitespace around it is dropped.
      *
      * <p>A module publishes what it declares by carrying these into its jar; the importing project
-     * parses them back, rather than reading a second description of the same syntax. Taking both
-     * from one parse is what keeps a slice and its declaration the same thing.
+     * parses them back, rather than reading a second description of the same syntax. Each name comes
+     * from the node the same way the builder takes it, so a slice cannot end up filed under its
+     * neighbour's name.
      */
     public static Parsed parseWithSlices(String source, String defaultModuleName) {
         CstParser.Result result = CstParser.parse(source);
@@ -52,33 +57,19 @@ public final class CstFrontend {
         }
         Ast.Module module = AstBuilder.build(result.root(), source, defaultModuleName);
         List<String> imports = new ArrayList<>();
-        List<String> defs = new ArrayList<>();
-        List<String> behaviors = new ArrayList<>();
-        List<String> fns = new ArrayList<>();
+        Map<String, String> defs = new LinkedHashMap<>();
+        Map<String, String> behaviors = new LinkedHashMap<>();
+        Map<String, String> fns = new LinkedHashMap<>();
         for (SyntaxNode n : result.root().childNodes()) {
             switch (n.kind()) {
                 case IMPORT_DECL -> imports.add(n.text().strip());
-                case DATA_DEF -> defs.add(n.text().strip());
-                case BEHAVIOR_DEF -> behaviors.add(n.text().strip());
-                case FN_DEF -> fns.add(n.text().strip());
+                case DATA_DEF -> defs.put(AstBuilder.firstIdentText(n), n.text().strip());
+                case BEHAVIOR_DEF -> behaviors.put(AstBuilder.firstIdentText(n), n.text().strip());
+                case FN_DEF -> fns.put(AstBuilder.firstIdentText(n), n.text().strip());
                 default -> { /* the header, examples and fakes are not declarations to publish */ }
             }
         }
-        // The lists come out of the same walk the AST was built from, so the n-th of each pair is
-        // the same declaration; keying by name here means later passes may add or reorder without
-        // the slices drifting away from what they describe.
-        return new Parsed(module, new Slices(imports, byName(module.defs(), defs, Ast.Def::name),
-                byName(module.behaviors(), behaviors, Ast.BehaviorDef::name),
-                byName(module.fns(), fns, Ast.FnDef::name)));
-    }
-
-    private static <T> Map<String, String> byName(List<T> declared, List<String> texts,
-                                                  java.util.function.Function<T, String> name) {
-        Map<String, String> out = new LinkedHashMap<>();
-        for (int i = 0; i < declared.size() && i < texts.size(); i++) {
-            out.put(name.apply(declared.get(i)), texts.get(i));
-        }
-        return out;
+        return new Parsed(module, new Slices(imports, defs, behaviors, fns));
     }
 
     /** A parsed module together with the source of each declaration in it. */

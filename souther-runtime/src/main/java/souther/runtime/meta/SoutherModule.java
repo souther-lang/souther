@@ -20,8 +20,8 @@ import java.lang.annotation.Target;
 public @interface SoutherModule {
 
     /** The version of the boundary between a compiled module and the modules that import it. A
-     * reader refuses a module whose number is not its own: the names, descriptors and visibilities
-     * crossing that boundary are what the number stands for, and 0.x promises nothing across it. */
+     * reader refuses a module whose number is not its own; 0.x promises nothing across it. What the
+     * number stands for is decided where that boundary is emitted, not here. */
     int compat();
 
     /** The compiler that produced this module, for the diagnostic that reports a {@link #compat}
@@ -39,13 +39,15 @@ public @interface SoutherModule {
      * in. */
     String[] imports() default {};
 
-    /** The names of the data definitions of this module, each carrying its own {@link SoutherData}
-     * on the class of the same name. Every definition is listed, not only the exposed ones: an
-     * exposed type's field may name a type that is not itself exposed, and {@code exposing} remains
-     * the gate on what may be imported. */
+    /** The data definitions of this module. Each names a class of this module that carries its own
+     * {@link SoutherData}; a name listed here always has one. Every definition is listed, not only
+     * the exposed ones: an exposed type's field may name a type that is not itself exposed, and
+     * {@code exposing} remains the gate on what may be imported. */
     String[] types() default {};
 
-    /** The names of this module's behaviors, each carrying its own {@link SoutherBehavior}. */
+    /** This module's behaviors, by the name each was declared under. The class carrying a behavior's
+     * {@link SoutherBehavior} is the one that name is emitted under, which is not always the name
+     * itself (spec 19.5). */
     String[] behaviors() default {};
 
     /** The helper {@code let}s an invariant of this module calls, verbatim. An invariant is part of
