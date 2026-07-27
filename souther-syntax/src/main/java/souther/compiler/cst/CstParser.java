@@ -238,7 +238,8 @@ public final class CstParser {
 
     /** {@code data X = A | B} is a sum; {@code data X = Y} (no {@code |}) is a newtype over Y. */
     private void sumOrNewtypeBody() {
-        // one or more names separated by `|` → sum; a lone name → newtype
+        // a sum case is always a bare, undotted, ungeneric name, so `|` at the second token is an
+        // exact test for a sum; anything else opens a newtype over a written type
         if (nth(1) == SyntaxKind.PIPE) {
             start(SyntaxKind.SUM_BODY);
             expect(SyntaxKind.IDENT);
@@ -248,8 +249,29 @@ public final class CstParser {
             finish();
         } else {
             start(SyntaxKind.NEWTYPE_BODY);
-            expect(SyntaxKind.IDENT);
+            newtypeBase();
             finish();
+        }
+    }
+
+    /** The type a newtype wraps. It is written like any other type, but it must have an external
+     * representation to hand up — the newtype takes it as its own — and it must be one type rather
+     * than a choice between several. A shape the parser can see is refused where it is written,
+     * ahead of the codec derivation that would otherwise report it as a field named {@code value};
+     * what only the resolved type tells apart is left to the checker. */
+    private void newtypeBase() {
+        if (at(SyntaxKind.LPAREN)) {
+            if (atFnTypeParams()) {
+                error("parse.newtype.fntype", "a function type cannot be a newtype's base");
+            } else {
+                error("parse.newtype.tuple", "a tuple cannot be a newtype's base");
+            }
+        }
+        typeRef();
+        eat(SyntaxKind.QUESTION);   // `Y?`, kept for the AST to read as Option<Y> and the checker to refuse
+        if (at(SyntaxKind.PIPE)) {
+            error("parse.sum.case.generic",
+                    "a sum case must be a declared named data, so it cannot be a generic type");
         }
     }
 

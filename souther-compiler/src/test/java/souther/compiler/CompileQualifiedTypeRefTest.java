@@ -42,6 +42,17 @@ class CompileQualifiedTypeRefTest {
     }
 
     @Test
+    void aNewtypeWrapsAQualifiedType() {
+        // the newtype's base is written like a type anywhere else, so it reaches through a module
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(A, """
+                module probe.c exposing ( Counted )
+                data Counted = probe.a.Amount
+                """));
+
+        assertTrue(classes.containsKey("probe.c.Counted"), classes.keySet().toString());
+    }
+
+    @Test
     void anImportedNameAndAQualifiedOneNameTheSameType() {
         Compiler.compileModules(List.of(A, """
                 module probe.c

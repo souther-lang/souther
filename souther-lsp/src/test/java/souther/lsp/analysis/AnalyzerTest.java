@@ -355,6 +355,28 @@ class AnalyzerTest {
     }
 
     @Test
+    void renameEditsReachInsideACollectionNewtypeBase() {
+        // a newtype's base is a written type, so it may be a collection whose element names a data;
+        // renaming that data must reach the element inside `List<...>`
+        String a = "module a\n"
+                + "data Tag = { v: Int }\n"
+                + "data Tags = List<Tag>\n"
+                + "behavior f : (t: Tags) -> Tags\n"
+                + "let f (t) = t\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        // cursor on the `data Tag` declaration (line 1, char 5)
+        java.util.Map<String, List<Range>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+
+        java.util.Set<Integer> lines = new java.util.HashSet<>();
+        for (Range r : edits.get("file:///a.sou")) {
+            lines.add(r.start().line());
+        }
+        assertTrue(lines.contains(2), "the element inside `List<Tag>` on line 2 is renamed: " + lines);
+    }
+
+    @Test
     void renameEditsIncludeExposingAndImportBindingSites() {
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";
         String b = "module b\nimport a ( N )\nbehavior f : (n: N) -> N\nlet f (n) = n\n";

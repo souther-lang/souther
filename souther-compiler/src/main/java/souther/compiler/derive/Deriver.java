@@ -166,13 +166,14 @@ public final class Deriver {
             Ast.Expr access = new Ast.FieldAccess(new Ast.Var("self", pos), single.getKey(), pos);
             return new Ast.EncoderDef("self", primRaw(single.getValue(), access, pos), pos);
         }
-        // a newtype over a non-primitive Y encodes self.value via Y's encoder — Y's representation,
-        // not `{value: ...}` (spec 8.7)
+        // a newtype over a non-primitive Y encodes self.value as Y writes itself — Y's
+        // representation, not `{value: ...}` (spec 8.7). Y is a named data, a sum, or a collection,
+        // so this is the same choice a field of type Y makes.
         if (d.newtype() && !isCase) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
             Ast.Expr access = new Ast.FieldAccess(new Ast.Var("self", pos), only.getKey(), pos);
-            String inner = ((Type.Ref) only.getValue()).name().qualified();
-            return new Ast.EncoderDef("self", new Ast.EncodeRaw(inner, access, pos), pos);
+            return new Ast.EncoderDef("self",
+                    rawForAccess(only.getValue(), access, d, only.getKey(), pos), pos);
         }
         List<Ast.RawEntry> entries = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
@@ -247,7 +248,7 @@ public final class Deriver {
         if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
             return new Ast.PrimDecRef(primKind(mo.key()), pos);
         }
-        throw noCodec(mo.key(), d, field, pos);
+        throw badMapKey(mo.key(), d, field, pos);
     }
 
     private static Ast.EncElem mapKeyEnc(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
@@ -257,7 +258,30 @@ public final class Deriver {
         if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
             return new Ast.PrimEnc(primKind(mo.key()), pos);
         }
-        throw noCodec(mo.key(), d, field, pos);
+        throw badMapKey(mo.key(), d, field, pos);
+    }
+
+    /**
+     * A key that cannot key a JSON object. Derivation runs ahead of the checker that makes the same
+     * judgement on a data's fields, so it reports the same way rather than as a codec that gave up:
+     * the reader has to change the key type either way, and being told twice in two vocabularies
+     * helps nobody.
+     */
+    private static CompileException badMapKey(Type key, Ast.Data d, String field, SourcePos pos) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.map.key.field").title("check.boundary.title")
+                        .at(pos).args(where(d, field), Type.show(key))
+                        .hint("check.map.key.field.hint").build(),
+                "a Map crossing the boundary at `" + where(d, field) + "` must be keyed by String, a"
+                        + " String-backed newtype (`data X = String`), Date or DateTime, got "
+                        + Type.show(key));
+    }
+
+    /** How to name the place a boundary complaint belongs to. A newtype's single field is implicit —
+     * the author wrote {@code data X = Y}, never a field called {@code value} — so it is named by
+     * the type alone. */
+    private static String where(Ast.Data d, String field) {
+        return d.newtype() ? d.name() : d.name() + "." + field;
     }
 
     /** The encoder for one element of a collection. A collection may hold a collection
@@ -293,15 +317,15 @@ public final class Deriver {
         if (t instanceof Type.TupleOf) {
             return CompileException.of(
                     Diagnostic.of(null, "check.derive.tuplefield").title("check.boundary.title")
-                            .at(pos).args(d.name(), field, Type.show(t)).build(),
-                    "field `" + field + "` of `" + d.name() + "` is " + Type.show(t) + ": a tuple has"
+                            .at(pos).args(where(d, field), Type.show(t)).build(),
+                    "`" + where(d, field) + "` is " + Type.show(t) + ": a tuple has"
                             + " no external representation, so no codec can be derived (ADR-0036)."
                             + " Use a named data.");
         }
         return CompileException.of(
                 Diagnostic.of(null, "check.derive.nocodec").title("check.boundary.title")
-                        .at(pos).args(d.name(), field, Type.show(t)).build(),
-                "no codec can be derived for field `" + field + "` of `" + d.name() + "`: "
+                        .at(pos).args(where(d, field), Type.show(t)).build(),
+                "no codec can be derived for `" + where(d, field) + "`: "
                         + Type.show(t) + " has no external representation");
     }
 

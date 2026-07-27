@@ -325,6 +325,20 @@ public final class DataChecker {
                                   Map<String, Type> recursiveHelperFns) {
         Map<String, Type> fields = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
 
+        // A newtype wraps one value and takes its representation, so there is nothing for it to be
+        // when the value is absent. Whether a value is present is a property of the place it is
+        // used, written there as `f: X?`. Read on the resolved type, so a data the author happens
+        // to have named `Option` is an ordinary named data here.
+        if (ctx.data().newtype() && fields.get("value") instanceof Type.OptionOf o) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.newtype.optional").title("check.boundary.title")
+                            .at(fieldRegion(ctx.data(), "value"))
+                            .args(ctx.data().name(), Type.show(o.element()))
+                            .hint("check.newtype.optional.hint", ctx.data().name()).build(),
+                    "newtype `" + ctx.data().name() + "` cannot wrap an optional; write the `?` where"
+                            + " the value is used, on the field");
+        }
+
         for (Map.Entry<String, Type> e : fields.entrySet()) {
             if (SpecChecker.containsTuple(e.getValue())) {
                 throw CompileException.of(

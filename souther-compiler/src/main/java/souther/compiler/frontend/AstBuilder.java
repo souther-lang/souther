@@ -238,9 +238,12 @@ public final class AstBuilder {
         }
         Optional<SyntaxNode> newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
-            SyntaxToken inner = identTokens(newtype.get()).get(0);
-            Ast.TypeRef innerType = new Ast.TypeRef(inner.text(), null, posOf(inner));
-            List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, posOf(inner)));
+            SyntaxNode inner = typeChild(newtype.get());
+            Ast.TypeRef innerType = typeRef(inner);
+            if (newtype.get().token(SyntaxKind.QUESTION).isPresent()) {
+                innerType = new Ast.TypeRef("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
+            }
+            List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, pos(inner)));
             return new Ast.Data(name, true, List.of(), fields, invariant,
                     Optional.empty(), Optional.empty(), pos);
         }

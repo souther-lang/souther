@@ -276,8 +276,8 @@ public final class Formatter {
         }
         var newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
-            String inner = idents(newtype.get()).get(0).text();
-            return concat(text("data "), text(name), text(" = "), text(inner), nest(INDENT, concat(invariants)));
+            Doc inner = typeRef(typeChild(newtype.get()));
+            return concat(text("data "), text(name), text(" = "), inner, nest(INDENT, concat(invariants)));
         }
         return concat(text("data "), text(name));   // unit
     }
