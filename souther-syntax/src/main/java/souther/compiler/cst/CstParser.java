@@ -430,9 +430,16 @@ public final class CstParser {
         finish();
     }
 
+    /** A helper's parameter: a name, or a pattern that opens what the parameter receives. A plain
+     * name stays a bare token — it is what almost every parameter is, and the tree it makes is the
+     * one every reader of {@code FN_PARAM} already expects. */
     private void fnParam() {
         start(SyntaxKind.FN_PARAM);
-        expect(SyntaxKind.IDENT);
+        if (at(SyntaxKind.LPAREN) || at(SyntaxKind.LBRACE) || atCtorPattern()) {
+            pattern();
+        } else {
+            expect(SyntaxKind.IDENT);
+        }
         if (eat(SyntaxKind.COLON)) {
             paramType();
         }
@@ -529,7 +536,10 @@ public final class CstParser {
         start(SyntaxKind.WITH_BINDING);
         expect(SyntaxKind.IDENT);   // the injected dependency name
         expect(SyntaxKind.ASSIGN);
-        expr();                     // its faked value
+        boolean saved = noLambda;
+        noLambda = true;
+        expr();                     // its faked value, which the row's `->` ends
+        noLambda = saved;
         finish();
     }
 
@@ -576,21 +586,7 @@ public final class CstParser {
     /** Whether the parenthesised run at the cursor is a function type's parameter list: its closing
      * paren is followed by {@code ->}. A tuple type is written the same way without the arrow. */
     private boolean atFnTypeParams() {
-        int depth = 0;
-        for (int i = 0; ; i++) {
-            SyntaxKind k = nth(i);
-            if (k == SyntaxKind.EOF) {
-                return false;
-            }
-            if (k == SyntaxKind.LPAREN) {
-                depth++;
-            } else if (k == SyntaxKind.RPAREN) {
-                depth--;
-                if (depth == 0) {
-                    return nth(i + 1) == SyntaxKind.ARROW;
-                }
-            }
-        }
+        return parenRunFollowedByArrow();
     }
 
     private void typeRef() {
@@ -657,8 +653,8 @@ public final class CstParser {
     private void blockStatements() {
         while (true) {
             if (at(SyntaxKind.LET_KW)) {
-                if (nth(1) == SyntaxKind.LPAREN) {
-                    tupleDestructure();
+                if (atLetPattern()) {
+                    letDestructure();
                 } else {
                     letStmt();
                 }
@@ -692,22 +688,110 @@ public final class CstParser {
         finish();
     }
 
-    private void tupleDestructure() {
-        start(SyntaxKind.TUPLE_DESTRUCTURE);
-        bump();   // let
-        expect(SyntaxKind.LPAREN);
-        if (!at(SyntaxKind.RPAREN)) {
-            expect(SyntaxKind.IDENT);
-            while (eat(SyntaxKind.COMMA)) {
-                if (at(SyntaxKind.RPAREN)) {
-                    break;
-                }
-                expect(SyntaxKind.IDENT);
-            }
+    /** Whether the {@code let} at the cursor binds a pattern rather than a plain name. A local
+     * helper definition does not exist inside a block — {@code let f (x) = …} is written at the top
+     * level — so a name followed by {@code (} here opens a value, it does not take a parameter. */
+    private boolean atLetPattern() {
+        if (nth(1) == SyntaxKind.LPAREN || nth(1) == SyntaxKind.LBRACE) {
+            return true;
         }
-        expect(SyntaxKind.RPAREN);
+        if (nth(1) != SyntaxKind.IDENT) {
+            return false;
+        }
+        int n = 2;
+        while (nth(n) == SyntaxKind.DOT && nth(n + 1) == SyntaxKind.IDENT) {
+            n += 2;
+        }
+        return nth(n) == SyntaxKind.LPAREN;
+    }
+
+    private void letDestructure() {
+        start(SyntaxKind.LET_DESTRUCTURE);
+        bump();   // let
+        pattern();
         expect(SyntaxKind.ASSIGN);
         expr();
+        finish();
+    }
+
+    /**
+     * A binding pattern: what a {@code let} statement, a helper parameter or a lambda parameter
+     * binds. Only irrefutable shapes are written — a name, a tuple, a newtype opened by its
+     * constructor, a record's fields — because a binding has no other arm to fall to. Whether a
+     * written name is a newtype or a sum's case is not something the parser knows, so the shape is
+     * read here and judged once the name resolves.
+     */
+    private void pattern() {
+        if (at(SyntaxKind.LPAREN)) {
+            start(SyntaxKind.PATTERN_TUPLE);
+            bump();   // (
+            if (!at(SyntaxKind.RPAREN)) {
+                pattern();
+                while (eat(SyntaxKind.COMMA)) {
+                    if (at(SyntaxKind.RPAREN)) {
+                        break;   // trailing comma
+                    }
+                    pattern();
+                }
+            }
+            expect(SyntaxKind.RPAREN);
+            finish();
+            return;
+        }
+        if (at(SyntaxKind.LBRACE)) {
+            patternRecord();
+            return;
+        }
+        if (atCtorPattern()) {
+            start(SyntaxKind.PATTERN_CTOR);
+            expect(SyntaxKind.IDENT);
+            caseNameTail();   // a newtype may be named through its module, as in a match arm
+            expect(SyntaxKind.LPAREN);
+            pattern();
+            expect(SyntaxKind.RPAREN);
+            finish();
+            return;
+        }
+        start(SyntaxKind.PATTERN_NAME);
+        expect(SyntaxKind.IDENT);
+        finish();
+    }
+
+    /** A possibly-dotted name followed by {@code (}: the constructor form. */
+    private boolean atCtorPattern() {
+        if (!at(SyntaxKind.IDENT)) {
+            return false;
+        }
+        int n = 1;
+        while (nth(n) == SyntaxKind.DOT && nth(n + 1) == SyntaxKind.IDENT) {
+            n += 2;
+        }
+        return nth(n) == SyntaxKind.LPAREN;
+    }
+
+    private void patternRecord() {
+        start(SyntaxKind.PATTERN_RECORD);
+        expect(SyntaxKind.LBRACE);
+        if (!at(SyntaxKind.RBRACE)) {
+            patternField();
+            while (eat(SyntaxKind.COMMA)) {
+                if (at(SyntaxKind.RBRACE)) {
+                    break;   // trailing comma
+                }
+                patternField();
+            }
+        }
+        expect(SyntaxKind.RBRACE);
+        finish();
+    }
+
+    /** {@code f} binds the field under its own name; {@code f = x} renames it. */
+    private void patternField() {
+        start(SyntaxKind.PATTERN_FIELD);
+        expect(SyntaxKind.IDENT);
+        if (eat(SyntaxKind.ASSIGN)) {
+            expect(SyntaxKind.IDENT);
+        }
         finish();
     }
 
@@ -723,6 +807,10 @@ public final class CstParser {
     // --- expressions (precedence ladder; left-associative via wrap) ---
 
     private boolean noConstruct = false;
+    /** Set where an expression is followed by a `->` that belongs to the enclosing form rather than
+     * to the expression: an example row's `with` value. A parenthesised value there has exactly the
+     * shape of a lambda's parameter list, and the enclosing form has the prior claim. */
+    private boolean noLambda = false;
 
     private void expr() {
         pipeExpr();
@@ -813,16 +901,18 @@ public final class CstParser {
     private void primaryExpr() {
         SyntaxKind k = current();
         // a lambda: `x -> e`
-        if (k == SyntaxKind.IDENT && nth(1) == SyntaxKind.ARROW) {
+        if (k == SyntaxKind.IDENT && nth(1) == SyntaxKind.ARROW && !noLambda) {
             start(SyntaxKind.LAMBDA_EXPR);
+            start(SyntaxKind.PATTERN_NAME);
             bump();   // param
+            finish();
             bump();   // ->
             expr();
             finish();
             return;
         }
         // a parenthesised lambda: `(a, b) -> e`
-        if (k == SyntaxKind.LPAREN && isBlockParams()) {
+        if (k == SyntaxKind.LPAREN && !noLambda && isBlockParams()) {
             parenLambda();
             return;
         }
@@ -855,17 +945,18 @@ public final class CstParser {
         }
     }
 
-    /** {@code (x, ...) -> body} — the caller has confirmed the shape via {@link #isBlockParams}. */
+    /** {@code (p, ...) -> body} — the caller has confirmed the shape via {@link #isBlockParams}.
+     * Each parameter is a pattern, so a lambda opens what it receives where it names it. */
     private void parenLambda() {
         start(SyntaxKind.LAMBDA_EXPR);
         expect(SyntaxKind.LPAREN);
         if (!at(SyntaxKind.RPAREN)) {
-            expect(SyntaxKind.IDENT);
+            pattern();
             while (eat(SyntaxKind.COMMA)) {
                 if (at(SyntaxKind.RPAREN)) {
                     break;
                 }
-                expect(SyntaxKind.IDENT);
+                pattern();
             }
         }
         expect(SyntaxKind.RPAREN);
@@ -1296,24 +1387,34 @@ public final class CstParser {
         return tokens.get(index).text();
     }
 
-    /** Distinguishes {@code (a, b) ->} from a parenthesised expression by scanning to the {@code )}. */
+    /**
+     * Distinguishes a lambda's parameter list from a parenthesised expression: the run is a
+     * parameter list when its closing {@code )} is followed by {@code ->}. A parameter is a pattern
+     * rather than only a name, so what is between the parens is not inspected here — {@link
+     * #pattern} decides what it may be. {@code ()} is not a parameter list; a lambda takes at least
+     * one parameter.
+     */
     private boolean isBlockParams() {
-        int n = 1;
-        if (nth(n) != SyntaxKind.IDENT) {
-            return false;
-        }
-        n++;
-        while (nth(n) == SyntaxKind.COMMA) {
-            n++;
-            if (nth(n) == SyntaxKind.RPAREN) {
-                break;   // trailing comma
-            }
-            if (nth(n) != SyntaxKind.IDENT) {
+        return nth(1) != SyntaxKind.RPAREN && parenRunFollowedByArrow();
+    }
+
+    /** Whether the parenthesised run at the cursor closes on a {@code )} that {@code ->} follows. */
+    private boolean parenRunFollowedByArrow() {
+        int depth = 0;
+        for (int i = 0; ; i++) {
+            SyntaxKind k = nth(i);
+            if (k == SyntaxKind.EOF) {
                 return false;
             }
-            n++;
+            if (k == SyntaxKind.LPAREN) {
+                depth++;
+            } else if (k == SyntaxKind.RPAREN) {
+                depth--;
+                if (depth == 0) {
+                    return nth(i + 1) == SyntaxKind.ARROW;
+                }
+            }
         }
-        return nth(n) == SyntaxKind.RPAREN && nth(n + 1) == SyntaxKind.ARROW;
     }
 
     private void error(String messageKey, String legacyMessage, Object... args) {

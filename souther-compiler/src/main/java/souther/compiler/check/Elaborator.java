@@ -135,6 +135,9 @@ public final class Elaborator {
                     value = elaborate(li.value(), env, ctx);
                     bindType = carriedType(li, value.type(), ctx.symbols());
                 }
+                if (li.opens() != null) {
+                    checkOpens(li, bindType, ctx.symbols());
+                }
                 // the binding is visible only inside the body, so a sibling branch cannot see it
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(li.name(), bindType);
@@ -415,6 +418,40 @@ public final class Elaborator {
     /** The type a source annotation declares on a binding ({@code let x: T = e}), or null when the
      * binding carries none. Read wherever a binding's type is needed, so the annotation and the
      * inference, the checker and the backend cannot drift apart. */
+    /**
+     * A constructor pattern outside a {@code match} — {@code let Tags(xs) = t}, a parameter written
+     * as {@code (Tags(xs))}. Two things have to hold, and neither has anything standing behind it
+     * here: a {@code match} arm's name is one of the scrutinee's cases, which the exhaustiveness
+     * pass has already established, while a binding names a type on its own authority. So the name
+     * MUST be a newtype — a product has fields to read by name and a sum has arms, neither of which
+     * a binding opens — and the value MUST be of that very type, or the pattern claims a shape the
+     * value does not have and {@code .value} would be read off the wrong nominal type.
+     */
+    private static void checkOpens(Ast.LetIn li, Type valueType, Symbols symbols) {
+        String opened = li.opens();
+        TypeName layer = symbols.resolve(opened);
+        if (layer == null || TypeOps.newtypeInner(layer, symbols) == null) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.open.notnewtype").title("check.open.title")
+                            .at(li.pos()).args(opened)
+                            .hint("check.open.notnewtype.hint").build(),
+                    "`" + opened + "` is not a newtype, so a binding cannot open it with `"
+                            + opened + "(...)`; a value that may or may not have a shape is opened"
+                            + " with `match`");
+        }
+        // compared as types, not as the text of a name: a type is reachable through the module that
+        // declares it, so `probe.a.Tags` and an imported bare `Tags` are the one type
+        if (!(valueType instanceof Type.Ref r) || !r.name().equals(layer)) {
+            String shown = layer.name();
+            String actual = Type.show(valueType);
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.open.mismatch").title("check.open.title")
+                            .at(li.pos()).args(shown, actual)
+                            .diff(actual, shown).build(),
+                    "this pattern opens `" + shown + "`, but the value is `" + actual + "`");
+        }
+    }
+
     static Type annotatedType(Ast.LetIn li, Symbols symbols) {
         return li.annotation() == null ? null : TypeOps.successType(li.annotation(), symbols);
     }

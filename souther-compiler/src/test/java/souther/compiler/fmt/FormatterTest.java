@@ -179,6 +179,33 @@ class FormatterTest {
     }
 
     @Test
+    void formattingKeepsBindingPatterns() {
+        // a pattern is what the author wrote about the shape of a value; rewriting it as a name
+        // would drop the bindings its parts make
+        String source = "module demo\n"
+                + "import List ( length, map )\n"
+                + "data Tags = List<String>\n"
+                + "data Line = { sku: String, qty: Int }\n"
+                + "data In = { lines: List<Line> }\n"
+                + "data Out = { v: Int }\n"
+                + "let count (Tags(xs)) = length(xs)\n"
+                + "behavior run : (i: In) -> Out constructs Out\n"
+                + "let run (i) = {\n"
+                + "let { lines } = i\n"
+                + "let (a, b) = (1, 2)\n"
+                + "Out { v = a + b + length(map(({ qty }) -> qty, lines)) }\n"
+                + "}\n";
+        String formatted = Formatter.format(source);
+        assertEquals(code(source), code(formatted), "the code token stream changed");
+        assertEquals(formatted, Formatter.format(formatted), "formatting is not idempotent");
+        assertTrue(formatted.contains("let count (Tags(xs)) ="), formatted);
+        assertTrue(formatted.contains("let { lines } = i"), formatted);
+        assertTrue(formatted.contains("let (a, b) = (1, 2)"), formatted);
+        assertTrue(formatted.contains("({ qty }) -> qty"), formatted);
+        assertTrue(CstParser.parse(formatted).errors().isEmpty(), "formatted output does not re-parse");
+    }
+
+    @Test
     void formattingKeepsALocalLetTypeAnnotation() {
         // the annotation is what pins an empty-collection value at the binding (issue #71); dropping it
         // would turn a compiling module into one that cannot infer the accumulator's type.

@@ -94,6 +94,39 @@ class AnalyzerTest {
         assertEquals(1, typeAt(tokens, 1, 14), "`Int` is a type");
     }
 
+    @Test
+    void aLambdaParameterIsStillAParameterNowThatItIsAPattern() {
+        // the parameter of `x -> e` moved under a pattern node; classification reads the node an
+        // identifier sits in, so without looking past the pattern every lambda parameter in every
+        // file would highlight as an ordinary local
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata X = { a: Int }\nlet f (xs: List<Int>) = List.map(n -> n, xs)\n");
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(3, typeAt(tokens, 2, 33), "the lambda's `n` is a parameter (index 3)");
+    }
+
+    @Test
+    void aNameATuplePatternBindsIsALocal() {
+        // the same pattern node in a `let` binds locals, not parameters
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata X = { a: Int }\nlet f (p: (Int, Int)) = {\nlet (q, r) = p\nq\n}\n");
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(4, typeAt(tokens, 3, 5), "`q` is a variable (index 4)");
+        assertEquals(4, typeAt(tokens, 3, 8), "`r` is a variable (index 4)");
+    }
+
+    @Test
+    void aRecordPatternsFieldNameIsAProperty() {
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata X = { a: Int }\nlet f (x: X) = {\nlet { a = n } = x\nn\n}\n");
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(5, typeAt(tokens, 3, 6), "`a` names the field, so it is a property (index 5)");
+        assertEquals(4, typeAt(tokens, 3, 10), "`n` is the name it binds, a variable (index 4)");
+    }
+
     /** Reverses the LSP delta encoding into absolute {@code {line, char, length, type}} tokens. */
     private static List<int[]> decodeSemanticTokens(int[] data) {
         List<int[]> out = new java.util.ArrayList<>();
@@ -374,6 +407,51 @@ class AnalyzerTest {
             lines.add(r.start().line());
         }
         assertTrue(lines.contains(2), "the element inside `List<Tag>` on line 2 is renamed: " + lines);
+    }
+
+    @Test
+    void renameEditsReachTheTypeNamedByABindingPattern() {
+        // `let Tags(xs) = t` names a type; renaming the data must reach it, or the rename leaves a
+        // pattern that opens a name no longer declared
+        String a = "module a\n"
+                + "data Tags = List<String>\n"
+                + "behavior f : (t: Tags) -> Tags\n"
+                + "let f (t) = {\n"
+                + "let Tags(xs) = t\n"
+                + "t\n"
+                + "}\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        java.util.Map<String, List<Range>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+
+        java.util.Set<Integer> lines = new java.util.HashSet<>();
+        for (Range r : edits.get("file:///a.sou")) {
+            lines.add(r.start().line());
+        }
+        assertTrue(lines.contains(4), "the pattern on line 4 is renamed: " + lines);
+    }
+
+    @Test
+    void everyNameATuplePatternBindsShadowsAnOuterOne() {
+        // `let (a, b) = p` binds both names; only the first used to be seen as a binder, so a use of
+        // the second was reported as a reference to the outer symbol it shadows
+        String a = "module a\n"
+                + "let b (n: Int) = n\n"
+                + "behavior f : (i: Int) -> Int\n"
+                + "let f (i) = {\n"
+                + "let (a, b) = (1, 2)\n"
+                + "b\n"
+                + "}\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        // cursor on the top-level `let b` declaration (line 1, char 4)
+        List<Location> refs = analyzer.references("file:///a.sou", new Position(1, 4), graph, false);
+
+        for (Location l : refs) {
+            assertTrue(l.range().start().line() != 5,
+                    "line 5 uses the `b` the tuple pattern bound, not the helper: " + refs);
+        }
     }
 
     @Test

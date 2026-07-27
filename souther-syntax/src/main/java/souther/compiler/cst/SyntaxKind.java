@@ -94,8 +94,15 @@ public enum SyntaxKind {
 
     // --- nodes: statements inside a behavior body / block ---
     LET_STMT,
-    TUPLE_DESTRUCTURE,
+    LET_DESTRUCTURE,    // let <pattern> = e
     REQUIRE_STMT,
+
+    // --- nodes: binding patterns (a `let` statement, a helper or lambda parameter) ---
+    PATTERN_NAME,       // x
+    PATTERN_TUPLE,      // ( p, p, ... )
+    PATTERN_CTOR,       // Name( p )  — a newtype opened by its constructor
+    PATTERN_RECORD,     // { f, f = x }
+    PATTERN_FIELD,      // f  or  f = x
 
     // --- nodes: expressions ---
     BLOCK_EXPR,         // { stmts result } and the bare-brace block form

@@ -47,6 +47,18 @@ class CompileFakeTest {
     }
 
     @Test
+    void aParenthesisedWithValueIsNotReadAsALambda() {
+        // a `with` value ends where the row's `->` begins, so a value written in parentheses sits
+        // immediately before an arrow — the one shape a lambda also has. The row wins: `with` takes
+        // a value, and a lambda parameter list is not one.
+        String ok = CLOCK + """
+                example 受け付ける
+                  | (申請 { 額 = 1 }) with 現在時刻 = ("2026-07-20T09:00") -> 受理 { 時刻 = "2026-07-20T09:00" }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(ok));
+    }
+
+    @Test
     void valueDependencyMismatchIsE1905() {
         String bad = CLOCK + """
                 example 受け付ける

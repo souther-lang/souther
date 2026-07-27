@@ -491,11 +491,14 @@ public final class Analyzer {
     /** Node kinds where an identifier names a type. */
     private static final java.util.Set<SyntaxKind> TYPE_POSITIONS = java.util.Set.of(
             SyntaxKind.TYPE_REF, SyntaxKind.TYPE_ARGS, SyntaxKind.SUM_BODY, SyntaxKind.NEWTYPE_BODY,
-            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.REQUIRES_CLAUSE, SyntaxKind.NEW_DATA_EXPR);
+            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.REQUIRES_CLAUSE, SyntaxKind.NEW_DATA_EXPR,
+            SyntaxKind.PATTERN_CTOR);
 
-    /** Node kinds where an identifier binds a value name (a param or a {@code let}). */
+    /** Node kinds where an identifier binds a value name (a param or a {@code let}). A pattern puts
+     * each name it binds in its own node, so a tuple's second name is a binder like its first. */
     private static final java.util.Set<SyntaxKind> VALUE_BINDINGS = java.util.Set.of(
-            SyntaxKind.PARAM, SyntaxKind.FN_PARAM, SyntaxKind.LAMBDA_EXPR, SyntaxKind.LET_STMT);
+            SyntaxKind.PARAM, SyntaxKind.FN_PARAM, SyntaxKind.LAMBDA_EXPR, SyntaxKind.LET_STMT,
+            SyntaxKind.PATTERN_NAME, SyntaxKind.PATTERN_FIELD);
 
     /** Appends every occurrence of {@code name} in {@code root} that refers to the target symbol. A
      * value use inside a top-level definition that binds {@code name} locally is shadowed and skipped. */
@@ -547,7 +550,10 @@ public final class Analyzer {
         for (SyntaxElement e : def.children()) {
             if (e instanceof SyntaxNode child) {
                 if (VALUE_BINDINGS.contains(child.kind())) {
-                    SyntaxToken bound = firstIdent(child);
+                    // `{ qty = n }` binds `n`; the first name is the field it reads
+                    SyntaxToken bound = child.kind() == SyntaxKind.PATTERN_FIELD
+                            ? lastIdent(child)
+                            : firstIdent(child);
                     if (bound != null && bound.text().equals(name)) {
                         return true;
                     }
@@ -558,6 +564,18 @@ public final class Analyzer {
             }
         }
         return false;
+    }
+
+    /** The last identifier directly under {@code node} — the bound name of a {@code f = x} field
+     * pattern, where the first is the field it reads. */
+    private SyntaxToken lastIdent(SyntaxNode node) {
+        SyntaxToken last = null;
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+                last = t;
+            }
+        }
+        return last;
     }
 
     private SyntaxToken firstIdent(SyntaxNode node) {
@@ -754,12 +772,27 @@ public final class Analyzer {
     /** Pre-order walk, appending {@code {line, startChar, length, tokenType}} for each classifiable
      * token in source order. */
     private void collectTokens(SyntaxNode node, LineIndex lines, List<int[]> out) {
+        collectTokens(node, lines, out, node.kind());
+    }
+
+    /**
+     * {@code enclosing} is the nearest ancestor that is not a pattern. A pattern says what a value is
+     * made of, not what its names are for: the same {@code (a, b)} binds parameters in a lambda's
+     * head and locals in a {@code let}, so classification has to see past it.
+     */
+    private void collectTokens(SyntaxNode node, LineIndex lines, List<int[]> out,
+                               SyntaxKind enclosing) {
+        SyntaxKind outer = isPatternNode(node.kind()) ? enclosing : node.kind();
+        boolean seenIdent = false;
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxNode child) {
-                collectTokens(child, lines, out);
+                collectTokens(child, lines, out, outer);
             } else {
                 SyntaxToken token = (SyntaxToken) e;
-                int type = classify(token, node.kind());
+                int type = classify(token, node.kind(), outer, seenIdent);
+                if (token.kind() == SyntaxKind.IDENT) {
+                    seenIdent = true;
+                }
                 if (type < 0) {
                     continue;
                 }
@@ -774,7 +807,14 @@ public final class Analyzer {
     }
 
     /** The token type index for a leaf, or {@code -1} to emit nothing (punctuation, whitespace). */
-    private int classify(SyntaxToken token, SyntaxKind parent) {
+    private static boolean isPatternNode(SyntaxKind k) {
+        return k == SyntaxKind.PATTERN_NAME || k == SyntaxKind.PATTERN_TUPLE
+                || k == SyntaxKind.PATTERN_CTOR || k == SyntaxKind.PATTERN_RECORD
+                || k == SyntaxKind.PATTERN_FIELD;
+    }
+
+    private int classify(SyntaxToken token, SyntaxKind parent, SyntaxKind enclosing,
+                         boolean afterFirstIdent) {
         SyntaxKind k = token.kind();
         if (k == SyntaxKind.LINE_COMMENT) {
             return T_COMMENT;
@@ -795,15 +835,24 @@ public final class Analyzer {
             return T_OPERATOR;
         }
         if (k == SyntaxKind.IDENT) {
-            return classifyIdent(parent);
+            return classifyIdent(parent, enclosing, afterFirstIdent);
         }
         return -1;   // braces, parens, commas, colons, dots
     }
 
-    private int classifyIdent(SyntaxKind parent) {
+    private int classifyIdent(SyntaxKind parent, SyntaxKind enclosing, boolean afterFirstIdent) {
+        // a name a pattern binds is a parameter where the pattern is one, and a local otherwise
+        if (parent == SyntaxKind.PATTERN_NAME) {
+            return enclosing == SyntaxKind.LAMBDA_EXPR || enclosing == SyntaxKind.FN_PARAM
+                    || enclosing == SyntaxKind.PARAM ? T_PARAMETER : T_VARIABLE;
+        }
+        // `{ a }` and `{ a = n }`: the first name is the field read, the second the name it binds
+        if (parent == SyntaxKind.PATTERN_FIELD) {
+            return afterFirstIdent ? T_VARIABLE : T_PROPERTY;
+        }
         return switch (parent) {
             case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, REQUIRES_CLAUSE,
-                 DATA_DEF, NEW_DATA_EXPR -> T_TYPE;
+                 DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
             case BEHAVIOR_DEF, FN_DEF, STAGE, CALL_EXPR -> T_FUNCTION;
             case PARAM, FN_PARAM, LAMBDA_EXPR -> T_PARAMETER;
             case FIELD, FIELD_INIT, FIELD_ACCESS, FIELD_GETTER -> T_PROPERTY;

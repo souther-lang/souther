@@ -64,7 +64,7 @@ public final class NewtypeDesugar {
             case Ast.ListComp comp ->
                     new Ast.ListComp(go(comp.element(), symbols), mapExprs(comp.guards(), symbols), comp.pos());
             case Ast.LetIn li ->
-                    new Ast.LetIn(li.name(), go(li.value(), symbols), li.declaredType(), li.annotated(),
+                    new Ast.LetIn(li.name(), go(li.value(), symbols), li.declaredType(), li.annotated(), li.opens(),
                             go(li.body(), symbols), li.pos());
             case Ast.If iff ->
                     new Ast.If(go(iff.cond(), symbols), go(iff.then(), symbols), go(iff.els(), symbols), iff.pos());

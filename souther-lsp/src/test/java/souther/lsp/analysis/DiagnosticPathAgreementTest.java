@@ -75,6 +75,31 @@ class DiagnosticPathAgreementTest {
                         behavior f : (n: Int) -> Out
                             constructs Out
                         let f (n) = Out { v = bogus }
+                        """),
+                arguments("an optional as a newtype base", """
+                        module demo
+                        data Note = String?
+                        """),
+                arguments("a binding that opens what is not a newtype", """
+                        module demo
+                        data Line = { sku: String, qty: Int }
+                        data Out = { v: String }
+                        behavior read : (l: Line) -> Out constructs Out
+                        let read (l) = {
+                            let Line(x) = l
+                            Out { v = x }
+                        }
+                        """),
+                arguments("a binding that opens a newtype the value is not", """
+                        module demo
+                        data Tags = List<String>
+                        data Labels = List<String>
+                        data Out = { v: Int }
+                        behavior read : (t: Tags) -> Out constructs Out
+                        let read (t) = {
+                            let Labels(xs) = t
+                            Out { v = 1 }
+                        }
                         """));
     }
 

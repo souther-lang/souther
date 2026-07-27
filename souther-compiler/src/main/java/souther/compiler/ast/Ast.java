@@ -392,21 +392,31 @@ public interface Ast {
      * declared type, bound to the argument at the call site) is not: the argument's own type and
      * the call-site check already cover it.
      */
-    record LetIn(String name, Expr value, ParamType declaredType, boolean annotated, Expr body,
-                 SourcePos pos) implements Expr {
+    record LetIn(String name, Expr value, ParamType declaredType, boolean annotated, String opens,
+                 Expr body, SourcePos pos) implements Expr {
         /** An ordinary {@code let x = e}: the bound name takes {@code e}'s inferred type. */
         public LetIn(String name, Expr value, Expr body, SourcePos pos) {
-            this(name, value, null, false, body, pos);
+            this(name, value, null, false, null, body, pos);
         }
 
         /** A binding carrying an inlined helper parameter's declared type. */
         public LetIn(String name, Expr value, ParamType declaredType, Expr body, SourcePos pos) {
-            this(name, value, declaredType, false, body, pos);
+            this(name, value, declaredType, false, null, body, pos);
         }
 
         /** {@code let x: T = value} — a binding the source annotated. */
         public static LetIn annotated(String name, Expr value, RetType type, Expr body, SourcePos pos) {
-            return new LetIn(name, value, type, true, body, pos);
+            return new LetIn(name, value, type, true, null, body, pos);
+        }
+
+        /**
+         * One layer of a constructor pattern: the binding holds the whole value and {@code opens}
+         * names the newtype the pattern claims it is. A {@code match} arm gets that claim checked by
+         * the exhaustiveness pass, which knows the scrutinee's cases; a binding has no such pass
+         * behind it, so the name is carried here for the checker to hold against the value's type.
+         */
+        public static LetIn opening(String name, Expr value, String opens, Expr body, SourcePos pos) {
+            return new LetIn(name, value, null, false, opens, body, pos);
         }
 
         /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
@@ -504,7 +514,7 @@ public interface Ast {
             case Call c -> new Call(c.fn(), mapExprs(c.args(), f), c.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
             case LetIn li -> new LetIn(li.name(), f.apply(li.value()), li.declaredType(), li.annotated(),
-                    f.apply(li.body()), li.pos());
+                    li.opens(), f.apply(li.body()), li.pos());
             case Block bl -> new Block(bl.params(), f.apply(bl.body()), bl.pos());
             case ListLit l -> new ListLit(mapExprs(l.elements(), f), l.pos());
             case ListComp comp -> new ListComp(f.apply(comp.element()), mapExprs(comp.guards(), f), comp.pos());

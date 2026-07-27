@@ -53,6 +53,35 @@ class CrossProjectImportTest {
                 "the dependency's classes are its own build's; this one does not emit them again");
     }
 
+    /** A declaration travels as the source that wrote it, so anything the declaration form admits has
+     * to survive being written out and read back. A newtype's base is a written type, which since it
+     * may be a collection is no longer a single identifier. */
+    @Test
+    void aCollectionNewtypeSurvivesBeingPublishedAndReadBack() {
+        ModulePath path = published("""
+                module shared.tagging exposing ( Tags, Stock )
+                data Tags = List<String>
+                data Stock = Map<String, Int>
+                """);
+
+        Map<String, byte[]> app = Compiler.compileModules(List.of("""
+                module app.catalog exposing ( Item )
+                import List ( length )
+                import shared.tagging ( Tags )
+                data Item = { tags: Tags, count: Int }
+
+                behavior countTags : (t: Tags) -> Int
+                let countTags (t) = {
+                    let Tags(xs) = t
+                    length(xs)
+                }
+                """), path);
+
+        assertTrue(app.containsKey("app.catalog.Item"));
+        assertFalse(app.containsKey("shared.tagging.Tags"),
+                "the dependency's classes are its own build's");
+    }
+
     /** The invariant is enforced across the boundary by the code the library shipped: the consumer
      * calls `__construct`, which is where the check lives. */
     @Test
