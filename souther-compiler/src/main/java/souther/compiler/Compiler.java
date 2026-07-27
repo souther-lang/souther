@@ -585,6 +585,20 @@ public final class Compiler {
      */
     public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById,
                                                                 Set<String> brokenModuleNames) {
+        return diagnoseModules(sourcesById, brokenModuleNames, ModulePath.EMPTY);
+    }
+
+    /**
+     * As {@link #diagnoseModules(Map, Set)}, resolving an import that names no module among
+     * {@code sourcesById} against {@code path}, the way a build does. Without this an editor reports
+     * an unknown module for an import the build resolves, which is the wrong answer twice over.
+     *
+     * <p>A path that is itself wrong — a module missing behind a module — is not reported here. The
+     * editor's job is the source in front of the author, and a broken path is the build's to say.
+     */
+    public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById,
+                                                                Set<String> brokenModuleNames,
+                                                                ModulePath path) {
         Map<String, List<Diagnostic>> result = new LinkedHashMap<>();
         for (String id : sourcesById.keySet()) {
             result.put(id, new ArrayList<>());
@@ -628,11 +642,27 @@ public final class Compiler {
             idByName.put(m.name(), e.getKey());
         }
 
+        // A module the workspace imports but does not contain is read from the path, so an import the
+        // build resolves is not reported here as unknown. A path that cannot be read leaves the
+        // workspace as it was: the author is editing a source, not a dependency.
+        Map<String, Set<String>> injectedElsewhere = new LinkedHashMap<>();
+        List<Ast.Module> fromPath;
+        try {
+            fromPath = readFromPath(new ArrayList<>(byName.values()), byName, path, injectedElsewhere);
+        } catch (CompileException _) {
+            fromPath = List.of();
+        }
+
         List<Ast.Module> order = dependencyOrder(byName, idByName, result);
 
         // Compile each module (no example evaluation yet). Retain the derived module and its resolution
         // context so examples can be evaluated afterwards, once every module's bytecode is present.
         Map<String, Ast.Module> derived = new LinkedHashMap<>();
+        for (Ast.Module m : fromPath) {
+            Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
+            d = HelperInliner.forModule(d).withInlinedInvariants(d);
+            derived.put(m.name(), NewtypeDesugar.rewrite(d, visibleDefs(d, derived)));
+        }
         Map<String, byte[]> out = new LinkedHashMap<>();
         Map<String, VerifyContext> ready = new LinkedHashMap<>();
         for (Ast.Module original : order) {
@@ -648,7 +678,7 @@ public final class Compiler {
                 derived.put(original.name(), m);
                 Symbols symbols = visibleDefs(m, derived);
                 Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
-                Set<String> importedInjected = importedInjectedBehaviors(m, derived, Map.of());
+                Set<String> importedInjected = importedInjectedBehaviors(m, derived, injectedElsewhere);
                 m = injectRecursivePrelude(m);
                 Ast.Module lowered = Lower.run(m);
                 TypeChecker.CheckResult result0 =

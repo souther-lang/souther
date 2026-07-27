@@ -101,6 +101,14 @@ public final class Analyzer {
      * it — so an error in an imported module lands on that module's document, not on its importer.
      */
     public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph) {
+        return diagnostics(graph, souther.compiler.meta.ModulePath.EMPTY);
+    }
+
+    /** As {@link #diagnostics(ModuleGraph)}, resolving an import that names no module in the
+     * workspace against {@code path} — what the projects beside this one have already built — so
+     * an import the build resolves is not reported here as unknown. */
+    public Map<String, List<LspDiagnostic>> diagnostics(ModuleGraph graph,
+                                                       souther.compiler.meta.ModulePath path) {
         Map<String, List<LspDiagnostic>> out = new LinkedHashMap<>();
         Map<String, String> compileSet = new LinkedHashMap<>();   // uri -> text, syntactically clean only
         Set<String> brokenModules = new HashSet<>();   // names of files held out for their syntax errors
@@ -132,7 +140,7 @@ public final class Analyzer {
 
         Map<String, List<Diagnostic>> byUri;
         try {
-            byUri = Compiler.diagnoseModules(compileSet, brokenModules);
+            byUri = Compiler.diagnoseModules(compileSet, brokenModules, path);
         } catch (RuntimeException | StackOverflowError e) {
             // Which file broke the walk is not known here, so every file that entered the compile is
             // marked. Silence would leave the whole workspace looking clean.

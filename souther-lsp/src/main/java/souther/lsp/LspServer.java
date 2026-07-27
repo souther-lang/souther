@@ -394,7 +394,7 @@ public final class LspServer {
      * to one module can change what its importers report, so every open file is refreshed together. */
     private void publishAll() {
         ModuleGraph graph = workspace.snapshot(documents.openDocuments());
-        Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph);
+        Map<String, List<LspDiagnostic>> byUri = analyzer.diagnostics(graph, workspace.modulePath());
         for (String uri : documents.uris()) {
             publish(uri, byUri.getOrDefault(uri, List.of()));
         }
