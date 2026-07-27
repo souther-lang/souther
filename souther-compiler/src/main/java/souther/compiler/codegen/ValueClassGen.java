@@ -5,13 +5,19 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Type;
 import souther.compiler.check.TypeOps;
 
+import java.lang.classfile.Attribute;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassSignature;
+import java.lang.classfile.CodeBuilder;
 import java.lang.classfile.Label;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.Signature;
+import java.lang.classfile.TypeAnnotation;
 import java.lang.classfile.attribute.PermittedSubclassesAttribute;
+import java.lang.classfile.attribute.RecordAttribute;
+import java.lang.classfile.attribute.RecordComponentInfo;
+import java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
@@ -56,6 +62,8 @@ final class ValueClassGen {
 
         out.put(pkg + "." + data.name(), build(cdName, cb -> {
             cb.withFlags(pub(data.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withSuperclass(CD_Record);
+            cb.with(recordComponents(fields));
             List<ClassDesc> ifaces = new ArrayList<>(List.of(caseInterfaces(data.name())));
             boolean ordered = isOrderedNewtype(data, fields);
             if (ordered) {
@@ -72,17 +80,12 @@ final class ValueClassGen {
             }
             emitCtor(cb, cdName, fields);
             emitValueEquality(cb, cdName, fields);
+            emitToString(cb, cdName, data.name(), fields);
             if (ordered) {
                 emitCompareTo(cb, cdName, fields.entrySet().iterator().next());
             }
             emitConstructMethod(cb, cdName, data, fields);
-            // An exposed data gets public read accessors so its fields are readable across the
-            // module (package) boundary and from Java (spec 8.5, 19.2). The ctor stays non-public.
-            // A String-backed newtype always exposes its bare `value()`: the encoder reads it to
-            // render a newtype-keyed map's keys bare, even when the newtype itself is unexposed.
-            if (pub(data.name()) != 0 || isStringBackedNewtype(data, fields)) {
-                emitAccessors(cb, cdName, fields);
-            }
+            emitAccessors(cb, cdName, fields);
             data.decoder().ifPresent(d -> {
                 boolean mapInput = codec.isMapInput(data.name());
                 codec.emitFactory(cb, "decoder", CD_RDecoder, data, "$Dec");
@@ -189,12 +192,17 @@ final class ValueClassGen {
         ClassDesc cdEnc = cd(unit.name() + "$Enc");
         out.put(pkg + "." + unit.name(), build(cdU, cb -> {
             cb.withFlags(pub(unit.name()) | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            // a unit is a field-less data, so it is a record with no components: `case 承認済み()`
+            // deconstructs it in a Java switch as its sibling product cases do (spec 19.2)
+            cb.withSuperclass(CD_Record);
+            cb.with(recordComponents(Map.of()));
             ClassDesc[] ifaces = caseInterfaces(unit.name());
             if (ifaces.length > 0) {
                 cb.withInterfaceSymbols(ifaces);
             }
-            emitDefaultCtor(cb);
+            emitDefaultCtor(cb, CD_Record);
             emitValueEquality(cb, cdU, Map.of());   // all units of a type are the same value
+            emitToString(cb, cdU, unit.name(), Map.of());
             // A unit has no fields, no invariant and so no `__construct` (spec §unit-data), so the
             // type has exactly one value. The field is public because another module's generated
             // code loads it, and on an exposed unit that puts the value within reach of hand-written
@@ -295,17 +303,6 @@ final class ValueClassGen {
                 });
     }
 
-    /**
-     * Emits a public record-style read accessor {@code <field>()} for each field (spec 8.5, 19.2).
-     * Only called for exposed data; the constructor stays non-public, so a read never enables
-     * construction (spec 2.7).
-     */
-    /** A newtype over a single {@code String} field ({@code data X = String}) — the shape a Map key
-     * may take, whose bare {@code value()} the boundary encoder renders. */
-    private static boolean isStringBackedNewtype(Ast.Data data, Map<String, Type> fields) {
-        return data.newtype() && fields.size() == 1 && fields.values().iterator().next() == Type.STRING;
-    }
-
     /** A single-value newtype over an ordered type — ordered by the value it wraps (ADR-0047), which
      * the class carries as {@link Comparable} so {@code sort} / {@code max} / {@code min} compare it
      * by natural order, and a Java reader can put it in a {@code TreeSet}. */
@@ -314,10 +311,10 @@ final class ValueClassGen {
                 && TypeOps.isOrderedValue(fields.values().iterator().next(), symbols);
     }
 
-    /** {@code Object} plus each interface, with {@code Comparable} bound to the class itself, so a
+    /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a
      * Java reader sees {@code Comparable<金額>} rather than the raw form. */
     private static String classSignature(ClassDesc cdName, List<ClassDesc> ifaces) {
-        StringBuilder sig = new StringBuilder(ConstantDescs.CD_Object.descriptorString());
+        StringBuilder sig = new StringBuilder(CD_Record.descriptorString());
         for (ClassDesc iface : ifaces) {
             if (iface.equals(CD_Comparable)) {
                 String raw = CD_Comparable.descriptorString();
@@ -328,6 +325,45 @@ final class ValueClassGen {
             }
         }
         return sig.toString();
+    }
+
+    /**
+     * Emits {@code toString} in the form a record prints — {@code 金額[value=500]}, the type name and
+     * each component. {@code java.lang.Record} declares it abstract, so a data without one resolves to
+     * that declaration and throws {@code AbstractMethodError} when anything prints the value.
+     */
+    private void emitToString(ClassBuilder cb, ClassDesc cdName, String typeName,
+                              Map<String, Type> fields) {
+        cb.withMethodBody("toString", MTD_toString, ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, code -> {
+            code.new_(CD_StringBuilder);
+            code.dup();
+            code.invokespecial(CD_StringBuilder, "<init>", MTD_void);
+            append(code, typeName + "[");
+            boolean first = true;
+            for (Map.Entry<String, Type> f : fields.entrySet()) {
+                append(code, (first ? "" : ", ") + f.getKey() + "=");
+                first = false;
+                Type t = f.getValue();
+                code.aload(0);
+                code.getfield(cdName, f.getKey(), jvmType(t));
+                if (t == Type.INT) {
+                    code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendLong);
+                } else if (t == Type.BOOL) {
+                    code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendBoolean);
+                } else {
+                    code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendObject);
+                }
+            }
+            append(code, "]");
+            code.invokevirtual(CD_StringBuilder, "toString", MTD_toString);
+            code.areturn();
+        });
+    }
+
+    /** Appends a literal to the {@code StringBuilder} on the stack, leaving it there. */
+    private static void append(CodeBuilder code, String literal) {
+        code.loadConstant(literal);
+        code.invokevirtual(CD_StringBuilder, "append", MTD_SB_appendString);
     }
 
     /**
@@ -363,14 +399,30 @@ final class ValueClassGen {
                 });
     }
 
+    /**
+     * Emits the public record-style read accessor {@code <field>()} for each component (spec 8.5,
+     * 19.2). Every data has them, not only an exposed one: a component of the {@code Record} attribute
+     * is read through its accessor, the generated code of this module reads a field the same way, and
+     * a class the module keeps to itself is out of a Java caller's reach anyway. Reading never enables
+     * construction — the constructor stays non-public (spec 2.7).
+     *
+     * <p>The return type carries {@code @NonNull} because Kotlin types a component from the record and
+     * does not apply the class's {@code @NullMarked} there; without it every read is a platform type
+     * again (spec §jvm-nullness).
+     */
     private void emitAccessors(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             Type ft = f.getValue();
             ClassDesc fd = jvmType(ft);
             String sig = JvmTypes.genericSig(ft, ctx);
+            List<TypeAnnotation> nonNull =
+                    JvmTypes.nonNullPositions(ft, TypeAnnotation.TargetInfo.ofMethodReturn());
             cb.withMethod(f.getKey(), MethodTypeDesc.of(fd),
                     ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL, mb -> {
                         if (sig != null) mb.with(SignatureAttribute.of(MethodSignature.parseFrom("()" + sig)));
+                        if (!nonNull.isEmpty()) {
+                            mb.with(RuntimeVisibleTypeAnnotationsAttribute.of(nonNull));
+                        }
                         mb.withCode(code -> {
                             code.aload(0);
                             code.getfield(cdName, f.getKey(), fd);
@@ -387,28 +439,52 @@ final class ValueClassGen {
     }
 
     /**
-     * Emits a {@code final} backing field. A container field ({@code List}/{@code Set}/{@code Map}/
-     * {@code Option}) also gets a generic {@code Signature} so its element type survives to a Java
-     * reader; a field whose raw descriptor already names it fully gets none.
+     * The {@code Record} attribute naming each field as a component, in constructor order, so the
+     * class is a record to everything that reads class files: javac deconstructs it in a record
+     * pattern, Kotlin reads each component as a property, and {@code Class.getRecordComponents}
+     * answers (spec 19.2). Each component repeats what its accessor states — a container's generic
+     * {@code Signature}, and {@code @NonNull} — because reflection reads the component, not the
+     * accessor.
+     */
+    private RecordAttribute recordComponents(Map<String, Type> fields) {
+        List<RecordComponentInfo> components = new ArrayList<>();
+        for (Map.Entry<String, Type> f : fields.entrySet()) {
+            Type type = f.getValue();
+            String sig = JvmTypes.genericSig(type, ctx);
+            List<Attribute<?>> attrs = new ArrayList<>();
+            if (sig != null) attrs.add(SignatureAttribute.of(Signature.parseFrom(sig)));
+            List<TypeAnnotation> nonNull =
+                    JvmTypes.nonNullPositions(type, TypeAnnotation.TargetInfo.ofField());
+            if (!nonNull.isEmpty()) attrs.add(RuntimeVisibleTypeAnnotationsAttribute.of(nonNull));
+            components.add(RecordComponentInfo.of(f.getKey(), jvmType(type), attrs));
+        }
+        return RecordAttribute.of(components);
+    }
+
+    /**
+     * Emits a {@code private final} backing field, as a record's is: every read goes through the
+     * accessor, including the generated code of this module. A container field
+     * ({@code List}/{@code Set}/{@code Map}/{@code Option}) also gets a generic {@code Signature} so
+     * its element type survives to a Java reader; a field whose raw descriptor already names it fully
+     * gets none.
      */
     private void emitField(ClassBuilder cb, String name, Type type) {
         String sig = JvmTypes.genericSig(type, ctx);
         cb.withField(name, jvmType(type), fb -> {
-            fb.withFlags(ClassFile.ACC_FINAL);
+            fb.withFlags(ClassFile.ACC_PRIVATE | ClassFile.ACC_FINAL);
             if (sig != null) fb.with(SignatureAttribute.of(Signature.parseFrom(sig)));
         });
     }
 
     /**
-     * Reads a field onto the stack. A local data's field is private but same-package, so a direct
-     * {@code getfield} works; an imported data's field is private across the module = package
-     * boundary, so the read goes through the public accessor the exposed data generates (spec 8.5,
-     * 19.2).
+     * Emits the canonical constructor: the components in declaration order, package-private, so a
+     * value is built inside the module or through the invariant-checking {@code __construct} and not
+     * by a Java caller writing {@code new} (spec 8.5).
      */
     private void emitCtor(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
         cb.withMethodBody("<init>", MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)), 0, code -> {
             code.aload(0);
-            code.invokespecial(CD_Object, "<init>", MTD_void);
+            code.invokespecial(CD_Record, "<init>", MTD_void);
             int slot = 1;
             for (Map.Entry<String, Type> f : fields.entrySet()) {
                 code.aload(0);

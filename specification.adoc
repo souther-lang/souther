@@ -729,7 +729,7 @@ Because a local shadowing a built-in value is always an error, using a *built-in
 
 What is constrained is *not reading but construction*. Reading a field and constructing a new value of that data are separate authorities, so allowing cross-boundary reads leaves the guarantee that no unvalidated value can be built (<<asymmetric-interop>>) intact. There is no need to define a getter-only behavior just to pass a value out (<<behavior-composition-unit>>).
 
-On the JVM, a public read accessor is generated for the fields of an exposed data (<<jvm-product>>). Because module = package, this is required to read across the boundary. Java can read too, but that is the same exposure as the encoder already emitting all fields as JSON; what is guarded is construction. The constructor stays non-public, and to build a value Java must go through the invariant-checking decoder (<<jvm-construction-privacy>>).
+On the JVM, a public read accessor is generated for every field of a data, and a data is a record over its fields (<<jvm-product>>). Because module = package, the accessor is what reads across the boundary; on a data the module does not expose, the class is package-private, so the accessors are out of reach from outside all the same. Java can read an exposed one, but that is the same exposure as the encoder already emitting all fields as JSON; what is guarded is construction. The constructor stays non-public, and to build a value Java must go through the invariant-checking decoder (<<jvm-construction-privacy>>).
 
 [#union-intersection]
 === Union types and intersection types
@@ -2286,7 +2286,9 @@ The class-file version of the generated `+.class+` is fixed at Java 25 (major 69
 
 No generated value is ever null. Absence is `+Option+` (<<optional>>), a failure is a case of the output union (<<unmarked-sum>>), and a collection holds neither a null key nor a null value — so no accessor, factory, codec or `+apply+` hands one back.
 
-Every generated class carries JSpecify's `+@NullMarked+`, and souther-runtime carries it on its own packages, so a consumer's compiler knows that too. It matters most where a compiler acts on it: Kotlin reads the annotation off the class file and types every generated accessor as non-null, where without it the type is a platform type and a null check is neither required nor possible. The annotation is read by name, so the JSpecify jar need not be on the consumer's classpath.
+Every generated class carries JSpecify's `+@NullMarked+`, and souther-runtime carries it on its own packages, so a consumer's compiler knows that too. It matters most where a compiler acts on it: Kotlin reads the annotation off the class file and types what it names as non-null, where without it the type is a platform type and a null check is neither required nor possible. The annotation is read by name, so the JSpecify jar need not be on the consumer's classpath.
+
+A record's component accessor is the exception. Kotlin types it from the record component and reaches it without applying the class's marking, so a component read would be a platform type again while every other member of the same class is not. Each accessor therefore says `+@NonNull+` on its return type itself, at every position of it — the `+List+` and the element it holds — and the `+Record+` component repeats it, for a reader that goes through reflection rather than the accessor. A primitive return (an `+Int+` accessor returns `+long+`) states nothing, having no nullness to state.
 
 It rides on each class rather than on a `+package-info+` of the module's package. That package is where a consumer's own `+package-info.java+` sits, and a generated class of the same name would lose to that declaration — the marking would then reach only the modules that own no Java of their own.
 
@@ -2297,28 +2299,39 @@ The few places that do admit a null are annotated one by one — a `+java.util.M
 [#jvm-product]
 === Product data
 
-Generated as a final class with a private constructor. Fields taken in by a `+...+` spread are laid flatly in the generated class.
+Generated as a record: a final class extending `+java.lang.Record+` whose `+Record+` attribute names its fields as components, in declaration order, with a non-public canonical constructor. Fields taken in by a `+...+` spread are laid flatly in the generated class.
 
 [,text]
 ----
-public final class 提出済み {
+public final class 提出済み extends java.lang.Record {
     private final 従業員 申請者;      // from ...出張申請共通項目
     private final 金額 予定費用;       // from ...出張申請共通項目
     // ...
     private final LocalDateTime 提出日時;
 
-    private 提出済み(...) { ... }
+    提出済み(...) { ... }              // canonical, package-private
+
+    public 従業員 申請者() { ... }      // one accessor per component
+    public String toString() { ... }   // 提出済み[申請者=..., ...]
 }
 ----
 
-A data in `+exposing+` gets public read accessors for its fields (<<field-visibility>>), so that another module and Java can read them; because module = package, package-private cannot read across the boundary. The constructor stays non-public, so it can be read but not constructed. A non-exposed data's fields are readable only within the same module, and no accessor is generated.
+Being a record is what a reader acts on without being told anything about Souther. javac deconstructs the value in a record pattern, and does so for a case of a sum in an exhaustive `+switch+` — the same way it reads the runtime's `+Ok+` / `+Err+`, which are records too. Kotlin reads each component as a property, so `+issue.id.value+` is written instead of `+issue.id().value()+`; without the `+Record+` attribute Kotlin resolves the backing field instead and reports that it cannot be accessed, naming a field where the accessor was meant.
+
+Every data gets a public read accessor per field (<<field-visibility>>), so an exposed one is readable from another module and from Java; because module = package, package-private cannot read across the boundary. A data the module keeps to itself has accessors too — a component is read through its accessor, and the generated code of the module reads a field the same way — but its class is package-private, so nothing outside can call them. The constructor stays non-public either way, so a value can be read but not constructed.
+
+`+toString+` prints the record form, `+提出済み[申請者=..., 予定費用=...]+`. It is generated rather than inherited: `+java.lang.Record+` declares it abstract, so a class without one would throw `+AbstractMethodError+` when anything printed the value. `+equals+` / `+hashCode+` are generated over the components as well, and compare a `+Decimal+` by value rather than by scale (<<primitives>>) — a record's shape does not dictate what equality means.
+
+A field MUST NOT be named after a no-argument method of `+Object+` (`+toString+`, `+hashCode+`, `+getClass+`, `+clone+`, `+finalize+`, `+notify+`, `+notifyAll+`, `+wait+`): the accessor would collide with a method the class already has. It is a compile error where the field is written, as a record component of that name is in Java. `+equals+` is not among them — `+equals()+` and `+equals(Object)+` are different methods — and is allowed, as Java allows it as a component name.
+
+A framework that constructs records reflectively — Jackson, given a generated type as a request body — can reach the canonical constructor and build a value without passing the invariant `+__construct+` runs. Construction authority is governed by declaration rather than by visibility (ADR-0059), and the same value was already reachable through `+setAccessible+`; what is guaranteed is what a decoder admits (<<decoder>>), not what reflection cannot forge.
 
 A single-value newtype over an ordered type implements `+Comparable+` against itself, comparing the value it wraps. That is what `+sort+` / `+max+` / `+min+` / `+sortBy+` compare by, and it makes the type usable as a `+TreeMap+` key or a `+Collections.sort+` element from Java. A newtype over an unordered type (`+Bool+`) and a product data get no `+Comparable+`.
 
 [#jvm-sum]
 === Sum data
 
-Generated as a sealed interface and final implementation classes. If a case is a named data, its final class implements the sealed interface. A unit data is generated as a field-less final class (or singleton).
+Generated as a sealed interface and final implementation classes. If a case is a named data, its final record class implements the sealed interface. A unit data is generated as a record with no components, holding its one value in a shared instance — so a Java `+switch+` deconstructs it as `+case 承認済み()+` next to the product cases (<<jvm-product>>).
 
 A case may itself be a sum (<<sum-data>>), and then its interface extends the outer one. Only that one step is emitted: interface inheritance carries the rest, so a leaf is a value of every sum above it without being named in any of them. The relation has to exist because the rest of the language already reads it that way — the checker folds a nested sum to its leaves to judge a case, and the derived codec dispatches over those same leaves, so a decoder hands back a leaf where the outer sum is what was asked for.
 

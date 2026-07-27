@@ -46,8 +46,9 @@ final class Descriptors {
      * <p>The marking says that in this class a type saying nothing about null is not null — which is
      * what the generated code already is, since absence is {@code Option} and a failure is a case of
      * the output union (spec 7.3, 12). Saying it is what lets a caller's compiler know: Kotlin reads
-     * the annotation off the class file and types every generated accessor as non-null instead of
-     * falling back to a platform type, where a null check is neither required nor possible. It rides
+     * the annotation off the class file and types what it names as non-null instead of falling back to
+     * a platform type, where a null check is neither required nor possible — every member but a record
+     * component's accessor, which says it on the return type itself ({@link #CD_NonNull}). It rides
      * on each class rather than on a {@code package-info} because a module's own package is where a
      * consumer's hand-written {@code package-info.java} lives — theirs would be the declaration, and
      * the marking would reach only the modules that own no Java of their own (issue #150). It is read
@@ -93,6 +94,15 @@ final class Descriptors {
     static final ClassDesc CD_Behavior = ClassDesc.of("souther.runtime.Behavior");
     /** JSpecify's nullness annotation, referenced by name: the jar is on nobody's classpath. */
     static final ClassDesc CD_NullMarked = ClassDesc.of("org.jspecify.annotations.NullMarked");
+    /**
+     * JSpecify's per-type nullness annotation. {@code @NullMarked} on the class says the same thing
+     * for every type in it, and that is what a Kotlin reader acts on — except on a record's component
+     * accessors, which Kotlin types from the record component and reaches without applying the
+     * marking, so those say it on the return type itself (spec §jvm-nullness).
+     */
+    static final ClassDesc CD_NonNull = ClassDesc.of("org.jspecify.annotations.NonNull");
+    /** The superclass of a data / unit class: they are records (spec 19.2). */
+    static final ClassDesc CD_Record = ClassDesc.of("java.lang.Record");
     static final ClassDesc CD_Fn = ClassDesc.of("souther.runtime.Fn");
     static final MethodTypeDesc MTD_Fn_apply =
             MethodTypeDesc.of(ClassDesc.of("java.lang.Object"), ClassDesc.of("java.lang.Object").arrayType());
@@ -149,6 +159,16 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Map_put = MethodTypeDesc.of(CD_Object, CD_Object, CD_Object);
     static final MethodTypeDesc MTD_apply = MethodTypeDesc.of(CD_Object, CD_Object);
     static final MethodTypeDesc MTD_orThrow = MethodTypeDesc.of(CD_Object, CD_Result);
+    static final ClassDesc CD_StringBuilder = ClassDesc.of("java.lang.StringBuilder");
+    static final MethodTypeDesc MTD_SB_appendString =
+            MethodTypeDesc.of(CD_StringBuilder, CD_String);
+    static final MethodTypeDesc MTD_SB_appendObject =
+            MethodTypeDesc.of(CD_StringBuilder, CD_Object);
+    static final MethodTypeDesc MTD_SB_appendLong =
+            MethodTypeDesc.of(CD_StringBuilder, ConstantDescs.CD_long);
+    static final MethodTypeDesc MTD_SB_appendBoolean =
+            MethodTypeDesc.of(CD_StringBuilder, ConstantDescs.CD_boolean);
+    static final MethodTypeDesc MTD_toString = MethodTypeDesc.of(CD_String);
     static final MethodTypeDesc MTD_Long_valueOf = MethodTypeDesc.of(CD_Long, ConstantDescs.CD_long);
     static final MethodTypeDesc MTD_Boolean_valueOf =
             MethodTypeDesc.of(CD_Boolean, ConstantDescs.CD_boolean);

@@ -7,13 +7,14 @@ import java.lang.reflect.Modifier;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Spec 8.5 / 19.2: an {@code exposing} data gets a public record-style read accessor
- * {@code <field>()} per field, so its fields are readable across the module (package) boundary
- * and from Java. A non-exposed data gets none — its fields are visible only within the module.
+ * Spec 8.5 / 19.2: a data gets a public record-style read accessor {@code <field>()} per field, so an
+ * exposed one is readable across the module (package) boundary and from Java. A data the module keeps
+ * to itself has them too — a record's component is read through its accessor, and the class is out of
+ * a Java caller's reach anyway — but its class is package-private, so nothing outside can call them.
  * The constructor stays non-public either way, so a read never enables construction.
  */
 class CompileFieldAccessorTest {
@@ -44,7 +45,7 @@ class CompileFieldAccessorTest {
     }
 
     @Test
-    void nonExposedDataHasNoAccessors() {
+    void aNonExposedDataKeepsItsAccessorsBehindAPackagePrivateClass() throws Exception {
         String src = """
                 module demo
                 exposing ( Member )
@@ -54,7 +55,10 @@ class CompileFieldAccessorTest {
                 data Secret = { code: String }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
-        assertThrows(NoSuchMethodException.class,
-                () -> loader.loadClass("demo.Secret").getMethod("code"));
+        Class<?> secret = loader.loadClass("demo.Secret");
+
+        assertTrue(Modifier.isPublic(secret.getMethod("code").getModifiers()), "accessor is public");
+        assertFalse(Modifier.isPublic(secret.getModifiers()),
+                "the class is not, so nothing outside the module can call it");
     }
 }
