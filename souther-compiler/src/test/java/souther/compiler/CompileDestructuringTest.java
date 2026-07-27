@@ -293,6 +293,28 @@ class CompileDestructuringTest {
     }
 
     @Test
+    void aPatternsComplaintPointsAtThePatternNotAtWhatEnclosesIt() {
+        // the pattern is what has to change, so the caret lands on it rather than on the `let` that
+        // defines the helper or the lambda that takes the parameter
+        String src = """
+                module demo
+                data Line = { sku: String, qty: Int }
+                data Out = { v: String }
+
+                let read (Line(x)) = Out { v = x }
+
+                behavior run : (l: Line) -> Out constructs Out
+                let run (l) = read(l)
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+
+        String line = src.lines().toList().get(4);
+        assertEquals(5, e.diagnostic().pos().line(), e.getMessage());
+        assertEquals(line.indexOf("Line(") + 1, e.diagnostic().pos().column(),
+                "the caret is on the pattern: " + line);
+    }
+
+    @Test
     void aRefutablePatternIsRejectedInALambdaParameterToo() {
         // the same judgement, wherever the pattern is written
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""

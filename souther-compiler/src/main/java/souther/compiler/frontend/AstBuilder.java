@@ -371,7 +371,10 @@ public final class AstBuilder {
         for (int i = paramPatterns.size() - 1; i >= 0; i--) {
             SyntaxNode pat = paramPatterns.get(i);
             if (pat != null) {
-                body = bindPattern(pat, new Ast.Var(params.get(i).name(), pos), body, pos);
+                // positioned on the pattern: what a complaint about it has to name is the parameter
+                // the author wrote, not the definition it sits in
+                SourcePos at = pos(pat);
+                body = bindPattern(pat, new Ast.Var(params.get(i).name(), at), body, at);
             }
         }
         return new Ast.FnDef(name, params, declaredReturn, null, body, partial, pos);
@@ -649,7 +652,8 @@ public final class AstBuilder {
         Ast.Expr body = expr(lastExprChild(n));
         for (int i = pats.size() - 1; i >= 0; i--) {
             if (pats.get(i).kind() != SyntaxKind.PATTERN_NAME) {
-                body = bindPattern(pats.get(i), new Ast.Var(params.get(i), pos), body, pos);
+                SourcePos at = pos(pats.get(i));
+                body = bindPattern(pats.get(i), new Ast.Var(params.get(i), at), body, at);
             }
         }
         return new Ast.Block(params, body, pos);
@@ -880,7 +884,7 @@ public final class AstBuilder {
             case LET_DESTRUCTURE -> {
                 SyntaxNode pat = patternChild(s);
                 yield bindPattern(pat, expr(onlyExpr(s)),
-                        foldStatements(stmts, index + 1, result), pos);
+                        foldStatements(stmts, index + 1, result), pos(pat));
             }
             default -> throw error(pos, "parse.expr", "unexpected statement");
         };

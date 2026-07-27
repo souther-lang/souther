@@ -772,12 +772,27 @@ public final class Analyzer {
     /** Pre-order walk, appending {@code {line, startChar, length, tokenType}} for each classifiable
      * token in source order. */
     private void collectTokens(SyntaxNode node, LineIndex lines, List<int[]> out) {
+        collectTokens(node, lines, out, node.kind());
+    }
+
+    /**
+     * {@code enclosing} is the nearest ancestor that is not a pattern. A pattern says what a value is
+     * made of, not what its names are for: the same {@code (a, b)} binds parameters in a lambda's
+     * head and locals in a {@code let}, so classification has to see past it.
+     */
+    private void collectTokens(SyntaxNode node, LineIndex lines, List<int[]> out,
+                               SyntaxKind enclosing) {
+        SyntaxKind outer = isPatternNode(node.kind()) ? enclosing : node.kind();
+        boolean seenIdent = false;
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxNode child) {
-                collectTokens(child, lines, out);
+                collectTokens(child, lines, out, outer);
             } else {
                 SyntaxToken token = (SyntaxToken) e;
-                int type = classify(token, node.kind());
+                int type = classify(token, node.kind(), outer, seenIdent);
+                if (token.kind() == SyntaxKind.IDENT) {
+                    seenIdent = true;
+                }
                 if (type < 0) {
                     continue;
                 }
@@ -792,7 +807,14 @@ public final class Analyzer {
     }
 
     /** The token type index for a leaf, or {@code -1} to emit nothing (punctuation, whitespace). */
-    private int classify(SyntaxToken token, SyntaxKind parent) {
+    private static boolean isPatternNode(SyntaxKind k) {
+        return k == SyntaxKind.PATTERN_NAME || k == SyntaxKind.PATTERN_TUPLE
+                || k == SyntaxKind.PATTERN_CTOR || k == SyntaxKind.PATTERN_RECORD
+                || k == SyntaxKind.PATTERN_FIELD;
+    }
+
+    private int classify(SyntaxToken token, SyntaxKind parent, SyntaxKind enclosing,
+                         boolean afterFirstIdent) {
         SyntaxKind k = token.kind();
         if (k == SyntaxKind.LINE_COMMENT) {
             return T_COMMENT;
@@ -813,12 +835,21 @@ public final class Analyzer {
             return T_OPERATOR;
         }
         if (k == SyntaxKind.IDENT) {
-            return classifyIdent(parent);
+            return classifyIdent(parent, enclosing, afterFirstIdent);
         }
         return -1;   // braces, parens, commas, colons, dots
     }
 
-    private int classifyIdent(SyntaxKind parent) {
+    private int classifyIdent(SyntaxKind parent, SyntaxKind enclosing, boolean afterFirstIdent) {
+        // a name a pattern binds is a parameter where the pattern is one, and a local otherwise
+        if (parent == SyntaxKind.PATTERN_NAME) {
+            return enclosing == SyntaxKind.LAMBDA_EXPR || enclosing == SyntaxKind.FN_PARAM
+                    || enclosing == SyntaxKind.PARAM ? T_PARAMETER : T_VARIABLE;
+        }
+        // `{ a }` and `{ a = n }`: the first name is the field read, the second the name it binds
+        if (parent == SyntaxKind.PATTERN_FIELD) {
+            return afterFirstIdent ? T_VARIABLE : T_PROPERTY;
+        }
         return switch (parent) {
             case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, REQUIRES_CLAUSE,
                  DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
