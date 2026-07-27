@@ -95,6 +95,37 @@ class CompileBranchCollectionWideningTest {
                 """));
     }
 
+    /** Two cases with a field each, so a {@code Map} value and an optional field have a decoder. */
+    private static final String GRADES = """
+            module demo
+            data Fine = { code: String }
+            data Rough = { code: String }
+            data Grade = Fine | Rough
+            """;
+
+    @Test
+    void optionArmsOfDifferentCases() {
+        // an optional is written on a data field only, so the field type is what the two arms meet at
+        assertDoesNotThrow(() -> Compiler.compile(GRADES + """
+                data Held = { fine: Fine?, rough: Rough? }
+                data Picked = { grade: Grade? }
+                behavior pick : (h: Held, high: Bool) -> Picked constructs Picked
+                let pick (h, high) = Picked { grade = if high then h.fine else h.rough }
+                """));
+    }
+
+    @Test
+    void mapValueArmsOfDifferentCases() {
+        assertDoesNotThrow(() -> Compiler.compile(GRADES + """
+                data Held = { fine: Map<String, Fine>, rough: Map<String, Rough> }
+                data Picked = { byCode: Map<String, Grade> }
+                behavior pick : (h: Held, high: Bool) -> Picked constructs Picked
+                let byCode (h: Held, high: Bool): Map<String, Grade> =
+                    if high then h.fine else h.rough
+                let pick (h, high) = Picked { byCode = byCode(h, high) }
+                """));
+    }
+
     @Test
     void tupleOfCaseListsInEachArm() {
         assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly, NoAuthority") + """

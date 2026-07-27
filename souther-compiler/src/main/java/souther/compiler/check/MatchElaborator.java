@@ -268,7 +268,8 @@ public final class MatchElaborator {
         if (branchType == null) {
             return bt;
         }
-        // arms yielding different data types widen to their union, as `if` branches do (spec 16.2)
+        // arms merge by the join `if` branches use — equal types collapse, data-like ones widen to
+        // their union, and both hold under a collection or a tuple as well (spec 16.2)
         Type joined = TypeOps.join(branchType, bt);
         if (joined != null) {
             return joined;
