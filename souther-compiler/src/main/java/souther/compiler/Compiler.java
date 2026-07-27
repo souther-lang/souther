@@ -379,7 +379,9 @@ public final class Compiler {
                 // both read the module's own defs and helper bodies, so their positions are this file's
                 sigs = PipelineSigs.signatures(m, symbols, imported.get(original.name()));
                 // as in the single-module path: the declarations go on before anything loads a class
-                CstFrontend.Parsed written = asWritten.get(original.name());
+                CstFrontend.Parsed written = java.util.Objects.requireNonNull(
+                        asWritten.get(original.name()),
+                        () -> "nothing was read for module " + original.name() + " to publish");
                 ModuleMetadata.stamp(out, written.module(), written.slices(), sigs,
                         injectedNames(written.module()));
                 verifyConstConstructions(m, symbols, out);

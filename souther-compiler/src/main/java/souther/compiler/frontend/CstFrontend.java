@@ -42,8 +42,10 @@ public final class CstFrontend {
 
     /**
      * The module, and the source each of its top-level declarations was written as, filed under the
-     * name that declaration declares. The CST keeps every character, so a declaration comes back as
-     * the author wrote it, comments included; only the whitespace around it is dropped.
+     * name that declaration declares. The CST keeps every character, so a declaration comes back
+     * character for character, with the whitespace around it dropped. A comment goes with the
+     * declaration it precedes: one written after a declaration on its own line, or on the same line
+     * as its last token, belongs to whatever is declared next, since that is where the CST puts it.
      *
      * <p>A module publishes what it declares by carrying these into its jar; the importing project
      * parses them back, rather than reading a second description of the same syntax. Each name comes

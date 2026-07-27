@@ -185,7 +185,10 @@ public final class ModuleMetadata {
      * nothing is ever taken out, so a second sighting stops the walk by itself. */
     private static void reach(Ast.Expr e, Map<String, Ast.FnDef> own, Set<String> reached) {
         if (e instanceof Ast.Call call && own.containsKey(call.fn()) && reached.add(call.fn())) {
-            reach(own.get(call.fn()).body(), own, reached);
+            Ast.Expr body = own.get(call.fn()).body();
+            if (body != null) {   // an `intrinsic` helper is a name with nothing to walk into
+                reach(body, own, reached);
+            }
         }
         Ast.forEachChild(e, c -> reach(c, own, reached));
     }
