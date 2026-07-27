@@ -701,9 +701,10 @@ public final class Elaborator {
                         .at(pos, name.length()).args(name).hint("e1303.hint").build(),
                 "`" + name + "` is a built-in Option case: a model reads an optional (a `?` field,"
                         + " `Map.get`, `List.find`) and passes it on, and never builds one. Where the"
-                        + " model owns the absence, make it a case of its own sum; a step for"
-                        + " `List.filterMap` can answer a list of nought or one instead, joined with"
-                        + " `List.concatMap`.");
+                        + " model owns the absence, make it a case of its own sum. Absence of that"
+                        + " kind does not reach `List.filterMap`, whose step has to answer an"
+                        + " optional: use `List.concatMap` over a step answering a list of nought or"
+                        + " one.");
     }
 
     /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source
