@@ -1,6 +1,6 @@
 # ADR-0036: Tuples are expression-level first-class values; a module's name lists use parentheses
 
-Status: Accepted
+Status: Accepted. Its lambda-parameter consequence is superseded by ADR-0064.
 
 ## Context
 
@@ -29,7 +29,8 @@ Add tuples, expression-level and first-class, and move the module's name lists t
   returns three things cannot be silently read into two names. It is
   the only way to read a tuple; there is no `fst`/`snd`, since those are two-tuple-only and
   destructuring is general. A lambda's `(a, b) -> ...` is its parameter list (ADR-0025), not a tuple
-  pattern, so to open a tuple inside a lambda you take one parameter and `let (a, b) = p` in the body.
+  pattern; a single tuple parameter is written with its own parentheses, `((a, b)) -> ...` (ADR-0064
+  — this ADR originally said to take one parameter and open it in the body, which no longer holds).
   A tuple is not matched with `match` (it has one shape, not cases).
 - **`exposing` and `import` take parentheses**: `module X exposing (a, b)`, `exposing (f : A | B)` for
   an exposed composition's output (ADR-0024), and `import M ( a, b )`, matching Elm and leaving `{ }`

@@ -411,7 +411,8 @@ public final class Formatter {
     private Doc fnParamList(SyntaxNode n) {
         List<Doc> params = new ArrayList<>();
         for (SyntaxNode p : childNodes(n, SyntaxKind.FN_PARAM)) {
-            Doc d = text(firstIdent(p));
+            SyntaxNode pat = optionalPatternChild(p);
+            Doc d = pat == null ? text(firstIdent(p)) : pattern(pat);
             var fnType = p.child(SyntaxKind.FN_TYPE);
             if (fnType.isPresent()) {
                 d = concat(d, text(": "), fnType(fnType.get()));
@@ -629,17 +630,16 @@ public final class Formatter {
     }
 
     private Doc lambda(SyntaxNode n) {
-        List<SyntaxToken> params = idents(n);
-        Doc paramsDoc;
-        if (n.token(SyntaxKind.LPAREN).isPresent()) {
-            List<Doc> ps = new ArrayList<>();
-            for (SyntaxToken t : params) {
-                ps.add(text(t.text()));
+        List<Doc> params = new ArrayList<>();
+        for (SyntaxNode c : n.childNodes()) {
+            if (isPatternNode(c.kind())) {
+                params.add(pattern(c));
             }
-            paramsDoc = concat(text("("), Doc.join(text(", "), ps), text(")"));
-        } else {
-            paramsDoc = text(params.get(0).text());
         }
+        // `x -> e` keeps its bare parameter; anything parenthesised was written that way
+        Doc paramsDoc = n.token(SyntaxKind.LPAREN).isPresent()
+                ? concat(text("("), Doc.join(text(", "), params), text(")"))
+                : params.get(0);
         return concat(paramsDoc, text(" -> "), expr(lastExprChild(n)));
     }
 
@@ -689,7 +689,8 @@ public final class Formatter {
             Doc d = switch (c.kind()) {
                 case LET_STMT -> concat(text("let "), text(firstIdent(c)), writtenType(c),
                         text(" = "), expr(onlyExpr(c)));
-                case TUPLE_DESTRUCTURE -> tupleDestructure(c);
+                case LET_DESTRUCTURE -> concat(text("let "), pattern(patternChild(c)),
+                        text(" = "), expr(onlyExpr(c)));
                 case REQUIRE_STMT -> requireStmt(c);
                 default -> expr(c);   // the result expression
             };
@@ -698,12 +699,64 @@ public final class Formatter {
         return concat(text("{"), nest(INDENT, concat(lines)), HARDLINE, text("}"));
     }
 
-    private Doc tupleDestructure(SyntaxNode n) {
-        List<Doc> names = new ArrayList<>();
-        for (SyntaxToken t : idents(n)) {
-            names.add(text(t.text()));
+    /** A binding pattern, written back as it was: a name, a tuple, a newtype opened by its
+     * constructor, or a record's fields. */
+    private Doc pattern(SyntaxNode n) {
+        switch (n.kind()) {
+            case PATTERN_NAME -> {
+                return text(firstIdent(n));
+            }
+            case PATTERN_TUPLE -> {
+                List<Doc> elems = new ArrayList<>();
+                for (SyntaxNode c : n.childNodes()) {
+                    if (isPatternNode(c.kind())) {
+                        elems.add(pattern(c));
+                    }
+                }
+                return concat(text("("), Doc.join(text(", "), elems), text(")"));
+            }
+            case PATTERN_CTOR -> {
+                return concat(qualifiedName(n), text("("), pattern(patternChild(n)), text(")"));
+            }
+            case PATTERN_RECORD -> {
+                List<Doc> fields = new ArrayList<>();
+                for (SyntaxNode f : n.childNodes()) {
+                    if (f.kind() != SyntaxKind.PATTERN_FIELD) {
+                        continue;
+                    }
+                    List<SyntaxToken> names = idents(f);
+                    fields.add(names.size() > 1
+                            ? concat(text(names.get(0).text()), text(" = "), text(names.get(1).text()))
+                            : text(names.get(0).text()));
+                }
+                return concat(text("{ "), Doc.join(text(", "), fields), text(" }"));
+            }
+            default -> {
+                return text(firstIdent(n));
+            }
         }
-        return concat(text("let ("), Doc.join(text(", "), names), text(") = "), expr(onlyExpr(n)));
+    }
+
+    private static boolean isPatternNode(SyntaxKind k) {
+        return k == SyntaxKind.PATTERN_NAME || k == SyntaxKind.PATTERN_TUPLE
+                || k == SyntaxKind.PATTERN_CTOR || k == SyntaxKind.PATTERN_RECORD;
+    }
+
+    private SyntaxNode patternChild(SyntaxNode n) {
+        SyntaxNode c = optionalPatternChild(n);
+        if (c == null) {
+            throw new IllegalStateException("no pattern in " + n.kind());
+        }
+        return c;
+    }
+
+    private SyntaxNode optionalPatternChild(SyntaxNode n) {
+        for (SyntaxNode c : n.childNodes()) {
+            if (isPatternNode(c.kind())) {
+                return c;
+            }
+        }
+        return null;
     }
 
     private Doc requireStmt(SyntaxNode n) {

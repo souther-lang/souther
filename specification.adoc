@@ -1266,9 +1266,34 @@ A block and a `+let+` may be passed as arguments, and a `+let+` may take one as 
 
 A block may also be bound to a name with `+let+` and applied (`+let f = (x) -> ...+`, then `+f(a)+`). Like a named `+let+` (<<fn-declaration>>), as long as it does not escape — applied only, never leaving as a value — a block is expanded into its call/apply site and forms no closure. When it escapes — *returning* a function, or choosing at runtime (`+let f = if ... then (x) -> ... else ...+`) — a closure capturing free variables is generated. It is a synthesized class implementing the runtime `+Fn+`, holding the captured variables in fields. Where expandable it is expanded; only where necessary is it a closure. The *cannot place in a data field* constraint above is unchanged by closures: it is a representation constraint, separate from whether a closure exists.
 
-A bare field access `+.field+` is a getter block: it desugars to `+(x) -> x.field+`, so a field is projected point-free — `+List.map(.value, xs)+` instead of `+List.map(x -> x.value, xs)+`, and with the pipe `+xs |> List.map(.value)+`. It is single-layer (`+.value+`, not `+.a.b+`; reach through a newtype over a newtype with the destructuring pattern of <<match>>) and works for any field, so a newtype's `+.value+` and a record's `+.a+` read the same way. It is an ordinary second-class block, not a first-class getter value: it may sit in an argument or be bound with `+let+` and applied, but returning or storing it is the same `+block is not a value+` as any block. This is Elm's `+.field+` notation with Scala's `+_.field+` meaning (a lambda shorthand, not a first-class value); it never collides with the in-scope `+value+` an invariant refers to (<<invariant>>), which is a field name, not a getter.
+A bare field access `+.field+` is a getter block: it desugars to `+(x) -> x.field+`, so a field is projected point-free — `+List.map(.value, xs)+` instead of `+List.map(x -> x.value, xs)+`, and with the pipe `+xs |> List.map(.value)+`. It is single-layer (`+.value+`, not `+.a.b+`; reach through a newtype over a newtype with the constructor pattern of <<binding-patterns>> or <<match>>) and works for any field, so a newtype's `+.value+` and a record's `+.a+` read the same way. It is an ordinary second-class block, not a first-class getter value: it may sit in an argument or be bound with `+let+` and applied, but returning or storing it is the same `+block is not a value+` as any block. This is Elm's `+.field+` notation with Scala's `+_.field+` meaning (a lambda shorthand, not a first-class value); it never collides with the in-scope `+value+` an invariant refers to (<<invariant>>), which is a field name, not a getter.
 
 A block and a helper `+let+` are the same in constructing data. A block constructs under the enclosing behavior's `+constructs+`, and a hoisted helper `+let+` constructs under the `+constructs+` of the behavior that calls it (the construction set is inferred transitively and reconciled; <<constructs>>). Either way the construction authority is on the behavior and does not disappear with naming. So hoisting a constructing `+[高額出張 { 基準金額 = 基準 } | …]+` (<<stdlib-list>>) into `+let 高額出張を作る (基準) = 高額出張 { 基準金額 = 基準 }+` passes if the calling behavior declares `+constructs 高額出張+`.
+
+[#binding-patterns]
+=== Binding patterns
+
+Where a name is bound — a block's `+let+`, a helper's parameter, a lambda's parameter — a *pattern* may be written instead, opening the value where it is named. The patterns admitted here are the ones every value of the type satisfies: a name, a tuple, a newtype opened by its constructor, a record's fields (ADR-0064).
+
+[,text]
+----
+let タグ集合(ts) = 集合            // open a newtype
+let { 名称, 数量 } = 明細           // read fields under their own names
+let { 数量 = n } = 明細             // ... or under another
+let (k, v) = 対                    // open a tuple (<<tuple>>)
+
+let 個数 (タグ集合(ts)) = Set.size(ts)             // a helper's parameter
+
+List.map((タグ集合(ts)) -> Set.size(ts), 集合たち)   // a lambda's parameter
+----
+
+A pattern that some values of the type do not satisfy — a sum's case, `+Some+` — MUST NOT be written here; it belongs to `+match+` (<<match>>), which has the arm that catches what fails. A binding has one arm and nothing to fall to. Whether a name is refutable is decided by what it declares, so `+let X(v) = e+` is refused when `+X+` is not a newtype, and the report names `+match+`.
+
+Outside `+match+` the name a constructor pattern writes is also checked against the value's own type: `+let タグ集合(ts) = ラベル集合+` is refused. In a `+match+` the arm's name is one of the scrutinee's cases and exhaustiveness has already settled it; a binding names a type on its own authority.
+
+A helper's parameter written as a constructor pattern needs no type beside it — `+let 個数 (タグ集合(ts))+` already says the parameter is a `+タグ集合+`. A tuple or record pattern names no type, so a helper whose parameter type cannot be inferred from its call sites still annotates it (`+let 二倍 ({ 数量 }: 明細)+`).
+
+A lambda's `+(a, b) -> ...+` is its parameter list, not a tuple pattern (ADR-0036); a single tuple parameter is `+((a, b)) -> ...+`.
 
 [#requires]
 === Dependencies (requires)
@@ -1363,7 +1388,7 @@ let 平均 (xs) = {
 
 `+let (x, y) = t+` destructures a tuple positionally and binds. Names correspond to elements left to right. A one-element `+(e)+` is just a parenthesized expression and is not a tuple. A tuple may be held as is in a `+let+`, passed to a helper, or be an element of `+List<(a, b)>+` (a first-class value). Extraction is by destructuring only; there are no index functions such as `+fst+` / `+snd+`.
 
-A lambda argument `+(a, b) -> ...+` is multiple arguments (<<blocks>>), distinct from a tuple. To destructure a tuple inside a lambda, receive one argument and open it in the body with `+let (a, b) = p+`.
+A lambda argument `+(a, b) -> ...+` is multiple arguments (<<blocks>>), distinct from a tuple. A single tuple argument is written with its own parentheses, `+((a, b)) -> ...+` (<<binding-patterns>>, ADR-0064).
 
 [#fn]
 == let — implementation
@@ -1841,7 +1866,7 @@ match c with
     | 会員 { id, メール }         -> ...   // { f } binds f to a same-named variable
 ----
 
-A newtype case is opened with the constructor form `+X(v)+`, the inverse of construction `+X(v)+` (<<newtype>>). `+v+` binds the wrapped value. Nesting it reaches through a newtype over a newtype in one pattern — `+| アクティベート済み(メールアドレス(s)) -> s+` binds `+s+` to the base `+String+`, so `+.value.value+` is not written; the shorter `+| アクティベート済み(a) -> ...+` binds `+a+` to the one wrapped layer (`+メールアドレス+`). Each written name MUST be the newtype opened at its layer: `+アクティベート済み(ソース(s))+` is a compile error when `+アクティベート済み+` wraps `+メールアドレス+`, not `+ソース+`. This mirrors F#'s `+let (Email s) = ...+` and Elm's `+Activated (Email s)+`. The single-layer accessor `+.value+` (<<newtype>>) stays for reading one layer inline; the pattern is for reaching through several.
+A newtype case is opened with the constructor form `+X(v)+`, the inverse of construction `+X(v)+` (<<newtype>>). `+v+` binds the wrapped value. Nesting it reaches through a newtype over a newtype in one pattern — `+| アクティベート済み(メールアドレス(s)) -> s+` binds `+s+` to the base `+String+`, so `+.value.value+` is not written; the shorter `+| アクティベート済み(a) -> ...+` binds `+a+` to the one wrapped layer (`+メールアドレス+`). Each written name MUST be the newtype opened at its layer: `+アクティベート済み(ソース(s))+` is a compile error when `+アクティベート済み+` wraps `+メールアドレス+`, not `+ソース+`. This mirrors F#'s `+let (Email s) = ...+` and Elm's `+Activated (Email s)+`. The single-layer accessor `+.value+` (<<newtype>>) stays for reading one layer inline; the pattern is for reaching through several. The same form opens a newtype where a name is bound (<<binding-patterns>>); what `+match+` adds is the arm for a value that may be one of several cases.
 
 [,text]
 ----

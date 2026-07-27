@@ -491,11 +491,14 @@ public final class Analyzer {
     /** Node kinds where an identifier names a type. */
     private static final java.util.Set<SyntaxKind> TYPE_POSITIONS = java.util.Set.of(
             SyntaxKind.TYPE_REF, SyntaxKind.TYPE_ARGS, SyntaxKind.SUM_BODY, SyntaxKind.NEWTYPE_BODY,
-            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.REQUIRES_CLAUSE, SyntaxKind.NEW_DATA_EXPR);
+            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.REQUIRES_CLAUSE, SyntaxKind.NEW_DATA_EXPR,
+            SyntaxKind.PATTERN_CTOR);
 
-    /** Node kinds where an identifier binds a value name (a param or a {@code let}). */
+    /** Node kinds where an identifier binds a value name (a param or a {@code let}). A pattern puts
+     * each name it binds in its own node, so a tuple's second name is a binder like its first. */
     private static final java.util.Set<SyntaxKind> VALUE_BINDINGS = java.util.Set.of(
-            SyntaxKind.PARAM, SyntaxKind.FN_PARAM, SyntaxKind.LAMBDA_EXPR, SyntaxKind.LET_STMT);
+            SyntaxKind.PARAM, SyntaxKind.FN_PARAM, SyntaxKind.LAMBDA_EXPR, SyntaxKind.LET_STMT,
+            SyntaxKind.PATTERN_NAME, SyntaxKind.PATTERN_FIELD);
 
     /** Appends every occurrence of {@code name} in {@code root} that refers to the target symbol. A
      * value use inside a top-level definition that binds {@code name} locally is shadowed and skipped. */
@@ -547,7 +550,10 @@ public final class Analyzer {
         for (SyntaxElement e : def.children()) {
             if (e instanceof SyntaxNode child) {
                 if (VALUE_BINDINGS.contains(child.kind())) {
-                    SyntaxToken bound = firstIdent(child);
+                    // `{ qty = n }` binds `n`; the first name is the field it reads
+                    SyntaxToken bound = child.kind() == SyntaxKind.PATTERN_FIELD
+                            ? lastIdent(child)
+                            : firstIdent(child);
                     if (bound != null && bound.text().equals(name)) {
                         return true;
                     }
@@ -558,6 +564,18 @@ public final class Analyzer {
             }
         }
         return false;
+    }
+
+    /** The last identifier directly under {@code node} — the bound name of a {@code f = x} field
+     * pattern, where the first is the field it reads. */
+    private SyntaxToken lastIdent(SyntaxNode node) {
+        SyntaxToken last = null;
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+                last = t;
+            }
+        }
+        return last;
     }
 
     private SyntaxToken firstIdent(SyntaxNode node) {
@@ -803,7 +821,7 @@ public final class Analyzer {
     private int classifyIdent(SyntaxKind parent) {
         return switch (parent) {
             case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, REQUIRES_CLAUSE,
-                 DATA_DEF, NEW_DATA_EXPR -> T_TYPE;
+                 DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
             case BEHAVIOR_DEF, FN_DEF, STAGE, CALL_EXPR -> T_FUNCTION;
             case PARAM, FN_PARAM, LAMBDA_EXPR -> T_PARAMETER;
             case FIELD, FIELD_INIT, FIELD_ACCESS, FIELD_GETTER -> T_PROPERTY;

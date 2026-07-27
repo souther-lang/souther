@@ -377,6 +377,51 @@ class AnalyzerTest {
     }
 
     @Test
+    void renameEditsReachTheTypeNamedByABindingPattern() {
+        // `let Tags(xs) = t` names a type; renaming the data must reach it, or the rename leaves a
+        // pattern that opens a name no longer declared
+        String a = "module a\n"
+                + "data Tags = List<String>\n"
+                + "behavior f : (t: Tags) -> Tags\n"
+                + "let f (t) = {\n"
+                + "let Tags(xs) = t\n"
+                + "t\n"
+                + "}\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        java.util.Map<String, List<Range>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+
+        java.util.Set<Integer> lines = new java.util.HashSet<>();
+        for (Range r : edits.get("file:///a.sou")) {
+            lines.add(r.start().line());
+        }
+        assertTrue(lines.contains(4), "the pattern on line 4 is renamed: " + lines);
+    }
+
+    @Test
+    void everyNameATuplePatternBindsShadowsAnOuterOne() {
+        // `let (a, b) = p` binds both names; only the first used to be seen as a binder, so a use of
+        // the second was reported as a reference to the outer symbol it shadows
+        String a = "module a\n"
+                + "let b (n: Int) = n\n"
+                + "behavior f : (i: Int) -> Int\n"
+                + "let f (i) = {\n"
+                + "let (a, b) = (1, 2)\n"
+                + "b\n"
+                + "}\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
+
+        // cursor on the top-level `let b` declaration (line 1, char 4)
+        List<Location> refs = analyzer.references("file:///a.sou", new Position(1, 4), graph, false);
+
+        for (Location l : refs) {
+            assertTrue(l.range().start().line() != 5,
+                    "line 5 uses the `b` the tuple pattern bound, not the helper: " + refs);
+        }
+    }
+
+    @Test
     void renameEditsIncludeExposingAndImportBindingSites() {
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";
         String b = "module b\nimport a ( N )\nbehavior f : (n: N) -> N\nlet f (n) = n\n";

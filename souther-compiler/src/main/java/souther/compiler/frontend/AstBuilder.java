@@ -32,6 +32,7 @@ public final class AstBuilder {
     private int matchWholeCounter = 0;
     private int tupleCounter = 0;
     private int getterCounter = 0;
+    private int patternCounter = 0;
     private int spreadCounter = 0;
 
     private AstBuilder(String source) {
@@ -341,9 +342,13 @@ public final class AstBuilder {
         String name = firstIdentText(n);
         SourcePos pos = pos(n);
         List<Ast.FnParam> params = new ArrayList<>();
+        // parallel to params: the pattern a parameter was written as, or null where it was a name
+        List<SyntaxNode> paramPatterns = new ArrayList<>();
         n.child(SyntaxKind.FN_PARAM_LIST).ifPresent(pl -> {
             for (SyntaxNode p : childNodes(pl, SyntaxKind.FN_PARAM)) {
-                params.add(fnParam(p));
+                SyntaxNode pat = optionalPatternChild(p);
+                paramPatterns.add(pat);
+                params.add(fnParam(p, pat));
             }
         });
         Ast.RetType declaredReturn = n.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
@@ -360,11 +365,20 @@ public final class AstBuilder {
             return new Ast.FnDef(name, params, declaredReturn, key, null, partial, pos);
         }
         SyntaxNode bodyNode = onlyExpr(n);
-        return new Ast.FnDef(name, params, declaredReturn, null, expr(bodyNode), partial, pos);
+        Ast.Expr body = expr(bodyNode);
+        // a pattern parameter took a fresh name above; it opens itself at the top of the body, so
+        // the helper still takes plain names and nothing downstream sees a pattern
+        for (int i = paramPatterns.size() - 1; i >= 0; i--) {
+            SyntaxNode pat = paramPatterns.get(i);
+            if (pat != null) {
+                body = bindPattern(pat, new Ast.Var(params.get(i).name(), pos), body, pos);
+            }
+        }
+        return new Ast.FnDef(name, params, declaredReturn, null, body, partial, pos);
     }
 
-    private Ast.FnParam fnParam(SyntaxNode p) {
-        String name = firstIdentText(p);
+    private Ast.FnParam fnParam(SyntaxNode p, SyntaxNode pat) {
+        String name = pat == null ? firstIdentText(p) : "$p" + (patternCounter++);
         Ast.ParamType type = null;
         Optional<SyntaxNode> fnType = p.child(SyntaxKind.FN_TYPE);
         if (fnType.isPresent()) {
@@ -375,7 +389,22 @@ public final class AstBuilder {
                 type = retType(rt.get());
             }
         }
+        if (type == null && pat != null && pat.kind() == SyntaxKind.PATTERN_CTOR) {
+            // `let count (Tags(xs))` says the parameter is a Tags; writing `: Tags` beside it would
+            // only repeat what the pattern already named
+            SourcePos at = pos(pat);
+            type = new Ast.RetType(List.of(new Ast.TypeRef(qualifiedNameText(pat), null, at)), at);
+        }
         return new Ast.FnParam(name, type, pos(p));
+    }
+
+    private SyntaxNode optionalPatternChild(SyntaxNode n) {
+        for (SyntaxNode c : n.childNodes()) {
+            if (isPatternKind(c.kind())) {
+                return c;
+            }
+        }
+        return null;
     }
 
     private Ast.FnType fnType(SyntaxNode n) {
@@ -605,13 +634,25 @@ public final class AstBuilder {
         return new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n));
     }
 
+    /** {@code (p, ...) -> body}. A parameter that is more than a name takes a fresh one and opens
+     * itself at the top of the body, so the block keeps taking plain names and nothing downstream
+     * has to know a pattern was written. */
     private Ast.Expr lambda(SyntaxNode n) {
+        SourcePos pos = pos(n);
+        List<SyntaxNode> pats = patternChildren(n);
         List<String> params = new ArrayList<>();
-        for (SyntaxToken t : identTokens(n)) {
-            params.add(t.text());
+        for (SyntaxNode p : pats) {
+            params.add(p.kind() == SyntaxKind.PATTERN_NAME
+                    ? firstIdentText(p)
+                    : "$p" + (patternCounter++));
         }
         Ast.Expr body = expr(lastExprChild(n));
-        return new Ast.Block(params, body, pos(n));
+        for (int i = pats.size() - 1; i >= 0; i--) {
+            if (pats.get(i).kind() != SyntaxKind.PATTERN_NAME) {
+                body = bindPattern(pats.get(i), new Ast.Var(params.get(i), pos), body, pos);
+            }
+        }
+        return new Ast.Block(params, body, pos);
     }
 
     private Ast.Expr fieldGetter(SyntaxNode n) {
@@ -809,7 +850,7 @@ public final class AstBuilder {
         SyntaxNode result = null;
         for (SyntaxNode c : n.childNodes()) {
             switch (c.kind()) {
-                case LET_STMT, TUPLE_DESTRUCTURE, REQUIRE_STMT -> stmts.add(c);
+                case LET_STMT, LET_DESTRUCTURE, REQUIRE_STMT -> stmts.add(c);
                 default -> result = c;   // the trailing result expression
             }
         }
@@ -836,28 +877,82 @@ public final class AstBuilder {
                 yield new Ast.If(expr(exprs.get(0)), foldStatements(stmts, index + 1, result),
                         expr(exprs.get(1)), pos);
             }
-            case TUPLE_DESTRUCTURE -> tupleDestructure(s, foldStatements(stmts, index + 1, result));
+            case LET_DESTRUCTURE -> {
+                SyntaxNode pat = patternChild(s);
+                yield bindPattern(pat, expr(onlyExpr(s)),
+                        foldStatements(stmts, index + 1, result), pos);
+            }
             default -> throw error(pos, "parse.expr", "unexpected statement");
         };
     }
 
-    private Ast.Expr tupleDestructure(SyntaxNode s, Ast.Expr rest) {
-        List<String> names = new ArrayList<>();
-        for (SyntaxToken t : identTokens(s)) {
-            names.add(t.text());
+    /**
+     * A pattern binding {@code value}, with {@code rest} in its scope. Every shape lowers to the
+     * ordinary reads it stands for — a tuple to indexed gets, a newtype to {@code .value}, a record
+     * to field reads — so nothing past this point has to know a pattern was written. It is the same
+     * lowering a {@code match} arm does; the difference is only that here there is one arm.
+     */
+    private Ast.Expr bindPattern(SyntaxNode pat, Ast.Expr value, Ast.Expr rest, SourcePos pos) {
+        return switch (pat.kind()) {
+            case PATTERN_NAME -> new Ast.LetIn(firstIdentText(pat), value, rest, pos);
+            case PATTERN_TUPLE -> {
+                List<SyntaxNode> elems = patternChildren(pat);
+                if (elems.size() == 1) {
+                    yield bindPattern(elems.get(0), value, rest, pos);   // `(p)` is grouping
+                }
+                String whole = "$t" + (tupleCounter++);
+                Ast.Expr body = rest;
+                for (int i = elems.size() - 1; i >= 0; i--) {
+                    body = bindPattern(elems.get(i),
+                            new Ast.TupleGet(new Ast.Var(whole, pos), i, elems.size(), pos), body, pos);
+                }
+                yield new Ast.LetIn(whole, value, body, pos);
+            }
+            case PATTERN_CTOR -> {
+                String whole = "$p" + (patternCounter++);
+                Ast.Expr inner = new Ast.FieldAccess(new Ast.Var(whole, pos), "value", pos);
+                Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos);
+                yield Ast.LetIn.opening(whole, value, qualifiedNameText(pat), body, pos);
+            }
+            case PATTERN_RECORD -> {
+                String whole = "$r" + (patternCounter++);
+                Ast.Expr body = rest;
+                List<SyntaxNode> fields = childNodes(pat, SyntaxKind.PATTERN_FIELD);
+                for (int k = fields.size() - 1; k >= 0; k--) {
+                    List<SyntaxToken> names = identTokens(fields.get(k));
+                    String field = names.get(0).text();
+                    String var = names.size() > 1 ? names.get(1).text() : field;
+                    body = new Ast.LetIn(var,
+                            new Ast.FieldAccess(new Ast.Var(whole, pos), field, pos), body, pos);
+                }
+                yield new Ast.LetIn(whole, value, body, pos);
+            }
+            default -> throw error(pos, "parse.expr", "unexpected pattern");
+        };
+    }
+
+    private static boolean isPatternKind(SyntaxKind k) {
+        return k == SyntaxKind.PATTERN_NAME || k == SyntaxKind.PATTERN_TUPLE
+                || k == SyntaxKind.PATTERN_CTOR || k == SyntaxKind.PATTERN_RECORD;
+    }
+
+    private SyntaxNode patternChild(SyntaxNode n) {
+        for (SyntaxNode c : n.childNodes()) {
+            if (isPatternKind(c.kind())) {
+                return c;
+            }
         }
-        SourcePos pos = pos(s);
-        Ast.Expr value = expr(onlyExpr(s));
-        if (names.size() == 1) {
-            return new Ast.LetIn(names.get(0), value, rest, pos);   // `let (x) = e` is `let x = e`
+        throw new IllegalStateException("no pattern in " + n.kind());
+    }
+
+    private List<SyntaxNode> patternChildren(SyntaxNode n) {
+        List<SyntaxNode> out = new ArrayList<>();
+        for (SyntaxNode c : n.childNodes()) {
+            if (isPatternKind(c.kind())) {
+                out.add(c);
+            }
         }
-        String whole = "$t" + (tupleCounter++);
-        Ast.Expr body = rest;
-        for (int i = names.size() - 1; i >= 0; i--) {
-            body = new Ast.LetIn(names.get(i),
-                    new Ast.TupleGet(new Ast.Var(whole, pos), i, names.size(), pos), body, pos);
-        }
-        return new Ast.LetIn(whole, value, body, pos);
+        return out;
     }
 
     // --- CST navigation helpers ---
