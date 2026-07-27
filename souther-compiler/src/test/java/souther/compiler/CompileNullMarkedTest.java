@@ -8,6 +8,7 @@ import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -33,6 +34,10 @@ class CompileNullMarkedTest {
 
     @Test
     void everyGeneratedClassIsMarked() {
+        // the whole runtime-visible list, not just that the marking is among it: what a generated
+        // class states to a consumer's compiler is the boundary, and a second annotation arriving
+        // there is a decision to take rather than something to let through. The module's declarations
+        // ride on `$Module` as runtime-invisible for that reason.
         Map<String, byte[]> classes = Compiler.compile(SRC);
 
         assertTrue(classes.size() > 1, "there is more than one class to mark: " + classes.keySet());
@@ -45,8 +50,10 @@ class CompileNullMarkedTest {
     void noPackageInfoIsEmitted() {
         // a module's package is where a consumer's own package-info.java lives; the marking rides on
         // the classes so that declaration has nothing to collide with (issue #150)
-        assertTrue(Compiler.compile(SRC).keySet().stream().noneMatch(n -> n.endsWith(".package-info")),
-                "no package annotations are generated: " + Compiler.compile(SRC).keySet());
+        Set<String> emitted = Compiler.compile(SRC).keySet();
+
+        assertTrue(emitted.stream().noneMatch(n -> n.endsWith(".package-info")),
+                "no package annotations are generated: " + emitted);
     }
 
     @Test
