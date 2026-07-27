@@ -191,7 +191,7 @@ public interface Ast {
      */
     record Data(String name,
                 boolean newtype,
-                List<String> includes,
+                List<Include> includes,
                 List<Field> fields,
                 Optional<Expr> invariant,
                 Optional<DecoderDef> decoder,
@@ -220,6 +220,10 @@ public interface Ast {
 
     /** A field: a role name and its type. */
     record Field(String name, TypeRef type, SourcePos pos) implements Ast {}
+
+    /** A {@code ...Name} in a data body: the data whose fields are included, and where the name was
+     * written — a spread that names nothing in scope is reported there, like a field's type. */
+    record Include(String name, SourcePos pos) implements Ast {}
 
     /**
      * A named type reference, optionally with one type argument (e.g. {@code List<T>}). When

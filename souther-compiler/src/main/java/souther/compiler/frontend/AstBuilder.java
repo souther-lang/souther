@@ -217,11 +217,12 @@ public final class AstBuilder {
 
         Optional<SyntaxNode> product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
-            List<String> includes = new ArrayList<>();
+            List<Ast.Include> includes = new ArrayList<>();
             List<Ast.Field> fields = new ArrayList<>();
             for (SyntaxNode member : product.get().childNodes()) {
                 if (member.kind() == SyntaxKind.SPREAD_MEMBER) {
-                    includes.add(firstIdentText(member));
+                    SyntaxToken included = identTokens(member).get(0);
+                    includes.add(new Ast.Include(included.text(), posOf(included)));
                 } else if (member.kind() == SyntaxKind.FIELD) {
                     fields.add(field(member));
                 }

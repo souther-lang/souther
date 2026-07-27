@@ -380,19 +380,27 @@ public final class TypeOps {
     public static Map<String, Type> fieldTypes(Ast.Data data, Symbols symbols) {
         String home = symbols.moduleOf(data);
         Map<String, Type> types = new LinkedHashMap<>();
-        for (String inc : data.includes()) {
-            if (!(symbols.get(symbols.resolveIn(home, inc)) instanceof Ast.Data id)) {
+        for (Ast.Include inc : data.includes()) {
+            TypeName included = symbols.resolveIn(home, inc.name());
+            if (included == null) {
+                // Nothing here denotes the name. This is the same miss a field's type reports, so it
+                // is reported the same way, at the name in the spread (issue #154) — reaching the
+                // "not a product data" case below would say the wrong thing about a name that
+                // denotes nothing at all.
+                throw unknownType(inc.name(), inc.pos(), symbols);
+            }
+            if (!(symbols.get(included) instanceof Ast.Data id)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.spread.notproduct").title("check.construct.title")
-                                .at(data.pos()).args(inc).build(),
-                        "cannot spread `..." + inc + "` (not a product data)");
+                                .at(inc.pos(), inc.name().length()).args(inc.name()).build(),
+                        "cannot spread `..." + inc.name() + "` (not a product data)");
             }
             for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
                 if (types.put(e.getKey(), e.getValue()) != null) {
                     throw CompileException.of(
                             Diagnostic.of("E1004", "e1004.msg").at(data.pos())
-                                    .args(e.getKey(), inc, data.name()).build(),
-                            "Field `" + e.getKey() + "` from `..." + inc + "` conflicts with a field of `"
+                                    .args(e.getKey(), inc.name(), data.name()).build(),
+                            "Field `" + e.getKey() + "` from `..." + inc.name() + "` conflicts with a field of `"
                                     + data.name() + "`.");
                 }
             }
@@ -422,8 +430,9 @@ public final class TypeOps {
                 return resolveTypeIn(home, f.type(), symbols);
             }
         }
-        for (String inc : data.includes()) {
-            if (symbols.get(symbols.resolveIn(home, inc)) instanceof Ast.Data included) {
+        for (Ast.Include inc : data.includes()) {
+            Ast.Data included = spreadTarget(home, inc, symbols);
+            if (included != null) {
                 Type t = fieldType(included, field, symbols);
                 if (t != null) {
                     return t;
@@ -433,6 +442,14 @@ public final class TypeOps {
         return null;
     }
 
+    /** The product data a spread names, or null when nothing here denotes it or what it denotes is
+     * not a product. Only {@link #fieldTypes} turns those into a diagnostic, and every declared data
+     * goes through it; the readers asked about one field or one invariant answer for what they see. */
+    private static Ast.Data spreadTarget(String home, Ast.Include inc, Symbols symbols) {
+        TypeName name = symbols.resolveIn(home, inc.name());
+        return name != null && symbols.get(name) instanceof Ast.Data d ? d : null;
+    }
+
     /** Whether a data has a field of that name, without resolving any type. */
     public static boolean hasField(Ast.Data data, String field, Symbols symbols) {
         for (Ast.Field f : data.fields()) {
@@ -440,9 +457,9 @@ public final class TypeOps {
                 return true;
             }
         }
-        for (String inc : data.includes()) {
-            if (symbols.get(symbols.resolveIn(symbols.moduleOf(data), inc)) instanceof Ast.Data included
-                    && hasField(included, field, symbols)) {
+        for (Ast.Include inc : data.includes()) {
+            Ast.Data included = spreadTarget(symbols.moduleOf(data), inc, symbols);
+            if (included != null && hasField(included, field, symbols)) {
                 return true;
             }
         }
@@ -452,8 +469,9 @@ public final class TypeOps {
     /** All invariants that apply to a data: included data's invariants first, then its own. */
     public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Symbols symbols) {
         List<Ast.Expr> invs = new ArrayList<>();
-        for (String inc : data.includes()) {
-            if (symbols.get(symbols.resolveIn(symbols.moduleOf(data), inc)) instanceof Ast.Data id) {
+        for (Ast.Include inc : data.includes()) {
+            Ast.Data id = spreadTarget(symbols.moduleOf(data), inc, symbols);
+            if (id != null) {
                 invs.addAll(effectiveInvariants(id, symbols));
             }
         }
@@ -673,7 +691,10 @@ public final class TypeOps {
      * such type, or it declares it and does not expose it.
      */
     private static CompileException unknownType(Ast.TypeRef ref, Symbols symbols) {
-        String written = ref.name();
+        return unknownType(ref.name(), ref.pos(), symbols);
+    }
+
+    private static CompileException unknownType(String written, SourcePos pos, Symbols symbols) {
         int dot = written.lastIndexOf('.');
         if (dot >= 0) {
             String qualifier = written.substring(0, dot);
@@ -682,7 +703,7 @@ public final class TypeOps {
             if (module == null) {
                 return CompileException.of(
                         Diagnostic.of(null, "check.qualified.unknownmodule").title("check.module.title")
-                                .at(ref.pos(), written.length()).args(qualifier, name)
+                                .at(pos, written.length()).args(qualifier, name)
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
                                 .build(),
                         "no module named `" + qualifier + "`");
@@ -691,7 +712,7 @@ public final class TypeOps {
                     ? "check.qualified.notexposed" : "check.qualified.notdefined";
             return CompileException.of(
                     Diagnostic.of(null, key).title("check.module.title")
-                            .at(ref.pos(), written.length()).args(name, module)
+                            .at(pos, written.length()).args(name, module)
                             .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
                             .build(),
                     "`" + name + "` is not " + (key.endsWith("notexposed") ? "exposed by" : "defined in")
@@ -701,7 +722,7 @@ public final class TypeOps {
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.type.msg")
                         .title("check.unknown.title")
-                        .at(ref.pos(), written.length())
+                        .at(pos, written.length())
                         .args(written)
                         .suggestion(Suggest.candidate(written, known))
                         .build(),
