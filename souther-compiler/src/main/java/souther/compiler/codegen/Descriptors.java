@@ -1,8 +1,10 @@
 package souther.compiler.codegen;
 
+import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.ClassHierarchyResolver;
+import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
 import java.lang.classfile.attribute.SourceFileAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
@@ -35,16 +37,27 @@ final class Descriptors {
             }));
 
     /**
-     * Builds a class targeting Java 25 (spec 19.1).
+     * Builds a class targeting Java 25 (spec 19.1), carrying JSpecify's {@code @NullMarked}.
      *
      * <p>The version is pinned rather than left to {@link ClassFile#of}, which defaults to the
      * JDK running the compiler: the generated code would then track whatever JDK built it, and
      * two developers on different JDKs would emit mutually incompatible artifacts.
+     *
+     * <p>The marking says that in this class a type saying nothing about null is not null — which is
+     * what the generated code already is, since absence is {@code Option} and a failure is a case of
+     * the output union (spec 7.3, 12). Saying it is what lets a caller's compiler know: Kotlin reads
+     * the annotation off the class file and types every generated accessor as non-null instead of
+     * falling back to a platform type, where a null check is neither required nor possible. It rides
+     * on each class rather than on a {@code package-info} because a module's own package is where a
+     * consumer's hand-written {@code package-info.java} lives — theirs would be the declaration, and
+     * the marking would reach only the modules that own no Java of their own (issue #150). It is read
+     * by name, so neither this compiler nor anything downstream needs the JSpecify jar.
      */
     static byte[] build(ClassDesc cd, Consumer<ClassBuilder> handler) {
         return CF.build(cd, cb -> {
             cb.withVersion(ClassFile.JAVA_25_VERSION, 0);
             cb.with(SourceFileAttribute.of(sourceFileName(cd)));
+            cb.with(RuntimeVisibleAnnotationsAttribute.of(Annotation.of(CD_NullMarked)));
             handler.accept(cb);
         });
     }
@@ -78,7 +91,7 @@ final class Descriptors {
     static final ClassDesc CD_ResultOk = CD_Result.nested("Ok");
     static final ClassDesc CD_ResultErr = CD_Result.nested("Err");
     static final ClassDesc CD_Behavior = ClassDesc.of("souther.runtime.Behavior");
-    /** JSpecify's package annotation, referenced by name: the jar is on nobody's classpath. */
+    /** JSpecify's nullness annotation, referenced by name: the jar is on nobody's classpath. */
     static final ClassDesc CD_NullMarked = ClassDesc.of("org.jspecify.annotations.NullMarked");
     static final ClassDesc CD_Fn = ClassDesc.of("souther.runtime.Fn");
     static final MethodTypeDesc MTD_Fn_apply =

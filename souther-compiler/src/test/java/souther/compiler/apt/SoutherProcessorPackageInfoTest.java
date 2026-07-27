@@ -10,6 +10,9 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import java.io.IOException;
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
+import java.lang.constant.ClassDesc;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,19 +20,20 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The generated package annotations (the {@code package-info} carrying {@code @NullMarked}) are the
- * one generated class a hand-written source can be holding the name of: Java written in the same
- * package as the module may declare a {@code package-info.java} of its own. That is a declaration in
- * this compilation, so it wins — but the module's types then say nothing about null, which is worth
- * a word rather than a silent difference or a failed build.
+ * Java written in the same package as the module may declare a {@code package-info.java} of its own —
+ * and in a project whose only Java is that file, it does. Nothing generated is named after it, so the
+ * declaration stands and the module's types are marked all the same (issue #150).
  */
 class SoutherProcessorPackageInfoTest {
 
+    private static final ClassDesc NULL_MARKED = ClassDesc.of("org.jspecify.annotations.NullMarked");
+
     @Test
-    void aHandWrittenPackageInfoWinsAndIsWarnedAbout(@TempDir Path dir) throws IOException {
+    void aHandWrittenPackageInfoCollidesWithNothing(@TempDir Path dir) throws IOException {
         Files.writeString(dir.resolve("module.sou"), """
                 module app.order
                 data Order = { id: String }
@@ -39,11 +43,12 @@ class SoutherProcessorPackageInfoTest {
 
         List<String> warnings = compile(dir, pkg.resolve("package-info.java"));
 
-        assertTrue(warnings.stream().anyMatch(w -> w.contains("app.order.package-info")
-                        && w.contains("@NullMarked")),
-                "the skipped marking is reported: " + warnings);
-        assertTrue(Files.exists(dir.resolve("classes/app/order/Order.class")),
-                "the rest of the module is emitted as usual");
+        assertTrue(warnings.stream().noneMatch(w -> w.contains("souther:")),
+                "the processor has nothing to report: " + warnings);
+        Path order = dir.resolve("classes/app/order/Order.class");
+        assertTrue(Files.exists(order), "the module is emitted as usual");
+        assertEquals(List.of(NULL_MARKED), annotations(Files.readAllBytes(order)),
+                "and its types are marked without the package saying anything");
     }
 
     /** Runs javac with the processor over {@code source}; the build must succeed. Returns its
@@ -71,5 +76,13 @@ class SoutherProcessorPackageInfoTest {
         }
         assertTrue(ok && errors.isEmpty(), "the build carries on: " + errors);
         return warnings;
+    }
+
+    /** The annotation types the class carries as runtime-visible — what a Kotlin compiler reads. */
+    private static List<ClassDesc> annotations(byte[] bytes) {
+        return ClassFile.of().parse(bytes).findAttribute(java.lang.classfile.Attributes
+                        .runtimeVisibleAnnotations())
+                .map(RuntimeVisibleAnnotationsAttribute::annotations).orElse(List.of())
+                .stream().map(a -> a.classSymbol()).toList();
     }
 }
