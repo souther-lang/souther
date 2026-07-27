@@ -74,6 +74,30 @@ class PublishedModuleTest {
         assertTrue(amount.invariant().isPresent(), "the invariant did not come back");
     }
 
+    /** An import comes back when a declaration names what it brings in, and not otherwise: the
+     * `let` that needed the other one is not part of what was published. */
+    @Test
+    void onlyTheImportsTheDeclarationsNameComeBack() {
+        Map<String, byte[]> classes = Compiler.compileModules(List.of("""
+                module shared.money exposing ( Amount )
+                data Amount = Int
+                """, """
+                module shared.audit exposing ( Trail )
+                data Trail = String
+                """, """
+                module shared.billing exposing ( Invoice )
+                import shared.money ( Amount )
+                import shared.audit ( Trail )
+                data Invoice = { total: Amount }
+                let describe (t: Trail) = t
+                """));
+
+        PublishedModule read = readBack("shared.billing", classes);
+
+        assertEquals(List.of("shared.money"),
+                read.module().imports().stream().map(Ast.Import::module).toList());
+    }
+
     /** No `let` comes back for any behavior, so which ones are injection targets cannot be read off
      * the module; it is carried beside it. */
     @Test

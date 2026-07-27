@@ -281,6 +281,11 @@ not this compiler's is refused, naming the compiler that built it, rather than r
 misunderstood. A module compiled here SHALL NOT also be on the class path, and a module on the class
 path that needs one absent from it is reported against the path.
 
+A module on the class path needs another when what it declares names it — in a field's type, a
+spread, an invariant, a helper an invariant calls, or an exposed composition's output. A `+let+` body
+is not published, so an `+import+` only a `+let+` used is not one the importing project has to
+satisfy: a dependency's implementation-only dependencies need not be on the class path.
+
 [#qualified-reference]
 === Qualified reference
 

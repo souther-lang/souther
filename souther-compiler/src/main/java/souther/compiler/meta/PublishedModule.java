@@ -6,6 +6,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.frontend.CstFrontend;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -60,18 +62,15 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
         if (m.compat() != Backend.BOUNDARY_VERSION || m.header().isBlank()) {
             throw incompatible(m);
         }
-        StringBuilder source = new StringBuilder(m.header()).append('\n');
-        for (String line : m.imports()) {
-            source.append(line).append('\n');
-        }
+        StringBuilder declarations = new StringBuilder();
         Set<String> injected = new LinkedHashSet<>();
         for (String type : m.types()) {
-            source.append('\n').append(declaration(classes, m, type, moduleName + "." + type,
+            declarations.append('\n').append(declaration(classes, m, type, moduleName + "." + type,
                     Declarations::data)).append('\n');
         }
         for (String behavior : m.behaviors()) {
             String binaryName = moduleName + "." + Backend.behaviorClass(behavior);
-            source.append('\n')
+            declarations.append('\n')
                     .append(declaration(classes, m, behavior, binaryName,
                             Declarations::behaviorSignature))
                     .append('\n');
@@ -80,9 +79,98 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
             }
         }
         for (String helper : m.invariantHelpers()) {
-            source.append('\n').append(helper).append('\n');
+            declarations.append('\n').append(helper).append('\n');
         }
-        return new PublishedModule(CstFrontend.parse(source.toString(), null), injected);
+        StringBuilder source = new StringBuilder(m.header()).append('\n');
+        for (String line : m.imports()) {
+            source.append(line).append('\n');
+        }
+        source.append(declarations);
+        Ast.Module module = CstFrontend.parse(source.toString(), null);
+        // Which imports are needed is asked of the header and the declarations — everything that was
+        // published except the import lines themselves.
+        return new PublishedModule(
+                withNeededImports(module, m.header() + "\n" + declarations), injected);
+    }
+
+    /**
+     * {@code module} with the import lines its declarations do not need left out. A module's
+     * {@code let} bodies are not published, so an import only they used would otherwise be
+     * republished and every importing project would have to put that module on its path to read
+     * declarations that never mention it (issue #138).
+     *
+     * <p>Needed is decided on the words of the published text rather than on the parsed
+     * declarations. The text is exactly what an importing project reads, and a word is a word
+     * wherever it is written — in a field's type, a spread, an invariant, a helper an invariant
+     * calls, an exposed composition's output. A walk over the parsed forms would have to name every
+     * place a type can appear and would drop an import the day one is added; a word that is written
+     * nowhere cannot be referred to by anything.
+     */
+    private static Ast.Module withNeededImports(Ast.Module module, String declared) {
+        Set<String> written = new LinkedHashSet<>();
+        Set<String> qualifiers = new LinkedHashSet<>();
+        for (String word : words(declared)) {
+            written.add(word);
+            int dot = word.lastIndexOf('.');
+            if (dot > 0) {
+                qualifiers.add(word.substring(0, dot));
+            }
+        }
+        List<Ast.Import> needed = new ArrayList<>();
+        for (Ast.Import imp : module.imports()) {
+            if (!Collections.disjoint(written, imp.names())
+                    || qualifiers.contains(imp.module())
+                    || (imp.alias() != null && qualifiers.contains(imp.alias()))) {
+                needed.add(imp);
+            }
+        }
+        if (needed.size() == module.imports().size()) {
+            return module;
+        }
+        return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(), needed,
+                module.defs(), module.behaviors(), module.fns(), module.examples(), module.fakes(),
+                module.exampleFileTarget(), module.pos());
+    }
+
+    /**
+     * Every maximal run of name characters in {@code text}, a qualified name counting as one word.
+     * The dot joins a qualifier to what it qualifies, so it is part of a run; a dot that does not
+     * join two names is dropped from the ends, which is what makes the spread {@code ...Common}
+     * read as the name it spreads.
+     *
+     * <p>A run inside a string literal is a word here too: it costs an import that is kept, which is
+     * what was published anyway.
+     */
+    private static List<String> words(String text) {
+        List<String> words = new ArrayList<>();
+        int start = -1;
+        for (int i = 0; i <= text.length(); i++) {
+            boolean part = i < text.length()
+                    && (Character.isLetterOrDigit(text.charAt(i)) || text.charAt(i) == '_'
+                            || text.charAt(i) == '.');
+            if (part && start < 0) {
+                start = i;
+            } else if (!part && start >= 0) {
+                String word = trimDots(text.substring(start, i));
+                if (!word.isEmpty()) {
+                    words.add(word);
+                }
+                start = -1;
+            }
+        }
+        return words;
+    }
+
+    private static String trimDots(String word) {
+        int from = 0;
+        int to = word.length();
+        while (from < to && word.charAt(from) == '.') {
+            from++;
+        }
+        while (to > from && word.charAt(to - 1) == '.') {
+            to--;
+        }
+        return word.substring(from, to);
     }
 
     private static String declaration(Classes classes, SoutherModuleView m, String name,
