@@ -166,6 +166,17 @@ public sealed interface Type
         }
     }
 
+    /**
+     * {@code t} with every name written with its module. This is the form a signature takes when it
+     * is published for another project to read: nothing is known there about what the reading module
+     * imports, so no name is left to be resolved by whatever happens to be in scope.
+     */
+    static String showQualified(Type t) {
+        java.util.Map<String, TypeName> names = new java.util.HashMap<>();
+        collectNames(t, names);
+        return show(t, names.keySet());
+    }
+
     /** {@code name}, written with its module when the simple name is one of {@code qualify}. */
     private static String showName(TypeName name, java.util.Set<String> qualify) {
         return qualify.contains(name.name()) ? name.qualified() : name.name();

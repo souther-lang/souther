@@ -16,6 +16,7 @@ import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.codegen.Backend;
+import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.derive.Deriver;
 
@@ -96,7 +97,8 @@ public final class Compiler {
 
     private static Map<String, byte[]> compiling(String source, String defaultModuleName,
                                                  List<Diagnostic> warningsOut) {
-        Ast.Module raw = CstFrontend.parse(source, defaultModuleName);
+        CstFrontend.Parsed parsed = CstFrontend.parseWithSlices(source, defaultModuleName);
+        Ast.Module raw = parsed.module();
         if (raw.exampleFileTarget() != null) {
             throw CompileException.of(
                     Diagnostic.of("E1907", "check.example.notarget").title("check.example.title")
@@ -117,8 +119,12 @@ public final class Compiler {
         TypeChecker.Checked checked = TypeChecker.checkOrThrow(module, symbols, Map.of(), Set.of(), lowered);
         warningsOut.addAll(checked.warnings());
         Map<String, byte[]> out = Backend.generate(lowered, checked);
+        Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols);
+        // the declarations go on the classes before anything loads them, so what a jar carries is
+        // the same bytes this compile checked
+        ModuleMetadata.stamp(out, raw, parsed.slices(), sigs, injectedNames(raw));
         verifyConstConstructions(module, symbols, out);
-        ExampleVerifier.verify(module, symbols, PipelineSigs.signatures(module, symbols), out);
+        ExampleVerifier.verify(module, symbols, sigs, out);
         return out;
     }
 
@@ -256,16 +262,20 @@ public final class Compiler {
         // Modules an `examples for` file was merged into. Their examples come from another source, so
         // an example failure names no file rather than quoting this one's line at that one's position.
         Set<String> mergedExamples = new LinkedHashSet<>();
+        // What each module declared, as written, so its declarations can be published with it.
+        Map<String, CstFrontend.Parsed> asWritten = new LinkedHashMap<>();
         for (int i = 0; i < sources.size(); i++) {
             // A module linked by imports must be named; `null` forbids omitting the header here.
             try {
-                Ast.Module raw = CstFrontend.parse(sources.get(i), null);
+                CstFrontend.Parsed parsed = CstFrontend.parseWithSlices(sources.get(i), null);
+                Ast.Module raw = parsed.module();
                 rejectReservedNamespace(raw);
                 Ast.Module rewritten = Exposing.rewrite(raw);
                 allParsed.add(rewritten);
                 if (rewritten.exampleFileTarget() == null) {
                     // an `examples for X` file carries X's name; the module itself is the other source
                     sourceOfModule.put(rewritten.name(), i);
+                    asWritten.put(raw.name(), parsed);
                 }
             } catch (CompileException e) {
                 throw e.inSource(i);
@@ -367,8 +377,14 @@ public final class Compiler {
             Map<String, Sig> sigs;
             try {
                 // both read the module's own defs and helper bodies, so their positions are this file's
-                verifyConstConstructions(m, symbols, out);
                 sigs = PipelineSigs.signatures(m, symbols, imported.get(original.name()));
+                // as in the single-module path: the declarations go on before anything loads a class
+                CstFrontend.Parsed written = java.util.Objects.requireNonNull(
+                        asWritten.get(original.name()),
+                        () -> "nothing was read for module " + original.name() + " to publish");
+                ModuleMetadata.stamp(out, written.module(), written.slices(), sigs,
+                        injectedNames(written.module()));
+                verifyConstConstructions(m, symbols, out);
             } catch (CompileException e) {
                 throw e.inSource(index);
             }

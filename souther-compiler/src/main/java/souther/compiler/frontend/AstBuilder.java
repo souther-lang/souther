@@ -928,7 +928,10 @@ public final class AstBuilder {
         return out;
     }
 
-    private String firstIdentText(SyntaxNode n) {
+    /** The name a top-level declaration declares: the first identifier in it. This is how the
+     * builder names a {@code data}, a {@code behavior} and a {@code let}, and how the declaration's
+     * source is filed under the same name when a module publishes what it declares. */
+    static String firstIdentText(SyntaxNode n) {
         for (SyntaxElement e : n.children()) {
             if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
                 return t.text();
