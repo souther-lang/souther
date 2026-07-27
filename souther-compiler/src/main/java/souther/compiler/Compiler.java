@@ -333,6 +333,11 @@ public final class Compiler {
         // depends on. From here it is a module like any other, except that it is not in `parsed`:
         // nothing generates it, runs its examples or reports its warnings — its jar already did.
         Map<String, Set<String>> injectedElsewhere = new LinkedHashMap<>();
+        for (Ast.Module m : parsed) {
+            if (PublishedModule.read(m.name(), path.declarations()) != null) {
+                throw shadowsPath(m.name()).inSource(sourceIndex(sourceOfModule, m.name()));
+            }
+        }
         List<Ast.Module> fromPath = readFromPath(parsed, byName, path, injectedElsewhere);
 
         // A qualified behavior reference needs no import line (spec §qualified-reference); this is
@@ -458,7 +463,10 @@ public final class Compiler {
                                                  Map<String, Set<String>> injectedOut) {
         PublishedModule.Classes classes = path.declarations();
         List<Ast.Module> found = new ArrayList<>();
+        // What is waiting to be read, and — for one a module off the path needs — which module needs
+        // it, so an incomplete path is reported as that rather than as an import nobody wrote.
         Deque<String> pending = new ArrayDeque<>();
+        Map<String, String> neededBy = new LinkedHashMap<>();
         parsed.forEach(m -> pending.addAll(reaches(m)));
         Set<String> tried = new HashSet<>();
         while (!pending.isEmpty()) {
@@ -468,21 +476,55 @@ public final class Compiler {
             }
             PublishedModule published = PublishedModule.read(name, classes);
             if (published == null) {
-                continue;
+                if (neededBy.containsKey(name) && !Prelude.isQualifier(name)) {
+                    throw pathIncomplete(name, neededBy.get(name));
+                }
+                continue;   // written in a source being compiled: still that import's own error
             }
             rejectReservedNamespace(published.module());
             Ast.Module m = Exposing.rewrite(published.module());
             found.add(m);
             byName.put(name, m);
             injectedOut.put(name, published.injectedBehaviors());
-            pending.addAll(reaches(m));
+            for (String reach : reaches(m)) {
+                neededBy.putIfAbsent(reach, name);
+                pending.add(reach);
+            }
         }
         return found;
     }
 
-    /** Every module name {@code m} names: the ones it imports, and the qualifier of every type it
-     * writes with one. A qualified reference needs no import line, so reading only the import lines
-     * would leave a module it reaches unread. */
+    /**
+     * A module on the path names another that is not there. The import is written in a module this
+     * project does not have, so quoting it would point at a line of a file nobody here can open: what
+     * is wrong is the path, and the message says which two modules it is between.
+     */
+    private static CompileException pathIncomplete(String missing, String needer) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.module.pathincomplete").title("check.module.title")
+                        .args(missing, needer).hint("check.module.pathincomplete.hint", missing).build(),
+                "module `" + needer + "` needs `" + missing + "`, which is not on the path either");
+    }
+
+    /**
+     * A module being compiled here has the name of one already on the path. Which one an import means
+     * would be decided by nothing the author wrote, and the two would be different types under one
+     * name — the same reason two sources may not share a name.
+     */
+    private static CompileException shadowsPath(String name) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.module.shadowspath").title("check.module.title")
+                        .args(name).hint("check.module.shadowspath.hint", name).build(),
+                "module `" + name + "` is compiled here and is also on the path");
+    }
+
+    /**
+     * Every module name {@code m} names: the ones it imports, the qualifier of every type it writes
+     * with one, and the qualifier of every behavior it names that way — a {@code >->} stage or a
+     * {@code requires}. Neither kind of qualified reference needs an import line, so reading only the
+     * import lines would leave a module it reaches unread. This runs before the qualified behavior
+     * references are rewritten to imports, because that rewrite is what needs the module read.
+     */
     private static Set<String> reaches(Ast.Module m) {
         Set<String> names = new LinkedHashSet<>();
         Map<String, String> aliases = new HashMap<>();
@@ -492,10 +534,20 @@ public final class Compiler {
                 aliases.put(imp.alias(), imp.module());
             }
         }
+        List<String> written = new ArrayList<>();
         for (Ast.TypeRef ref : typeRefs(m)) {
-            int dot = ref.name().lastIndexOf('.');
+            written.add(ref.name());
+        }
+        for (Ast.BehaviorDef b : m.behaviors()) {
+            switch (b) {
+                case Ast.PipeBehavior pipe -> written.addAll(pipe.stages());
+                case Ast.SpecBehavior spec -> written.addAll(spec.requires());
+            }
+        }
+        for (String name : written) {
+            int dot = name.lastIndexOf('.');
             if (dot > 0) {
-                String qualifier = ref.name().substring(0, dot);
+                String qualifier = name.substring(0, dot);
                 names.add(aliases.getOrDefault(qualifier, qualifier));
             }
         }

@@ -112,6 +112,66 @@ class CrossProjectImportTest {
         assertTrue(e.getMessage().contains("unknown module"), e.getMessage());
     }
 
+    /** A qualified behavior reference needs no import line, so it can be the only place a dependency
+     * is named. The module still has to be read for the reference to bind. */
+    @Test
+    void aBehaviorNamedThroughItsModuleReadsThatModuleToo() {
+        ModulePath path = published("""
+                module shared.pricing exposing ( Cart, Priced, quote )
+                data Cart = { n: Int }
+                data Priced = { total: Int }
+                behavior quote : (c: Cart) -> Priced constructs Priced
+                let quote (c) = Priced { total = c.n }
+                """);
+
+        Compiler.compileModules(List.of("""
+                module app.checkout exposing ( Done, place, checkout : Done )
+                data Done = { total: Int }
+                behavior place : (p: shared.pricing.Priced) -> Done constructs Done
+                let place (p) = Done { total = p.total }
+                behavior checkout = shared.pricing.quote >-> place
+                """), path);
+    }
+
+    /** A module on the path needs another that is not there. The import is written in a file this
+     * project does not have, so what is reported is the path, naming both modules. */
+    @Test
+    void aDependencyOfADependencyThatIsAbsentNamesBothModules() {
+        Map<String, byte[]> both = Compiler.compileModules(List.of(LIBRARY, """
+                module shared.billing exposing ( Invoice )
+                import shared.money ( Amount )
+                data Invoice = { total: Amount }
+                """));
+        ModulePath halfThere = name -> name.startsWith("shared.billing") ? both.get(name) : null;
+
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module app.ledger
+                        import shared.billing ( Invoice )
+                        data Entry = { of: Invoice }
+                        """), halfThere));
+
+        assertTrue(e.getMessage().contains("shared.billing"), e.getMessage());
+        assertTrue(e.getMessage().contains("shared.money"), e.getMessage());
+    }
+
+    /** A module compiled here that is also on the path is refused: which one an import means would
+     * be settled by nothing the author wrote. */
+    @Test
+    void aModuleCompiledHereMayNotAlsoBeOnThePath() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module shared.money exposing ( Amount )
+                        data Amount = String
+                        """, """
+                        module app.order
+                        import shared.money ( Amount )
+                        data Order = { total: Amount }
+                        """), published(LIBRARY)));
+
+        assertTrue(e.getMessage().contains("shared.money"), e.getMessage());
+    }
+
     /** What the dependency keeps to itself stays kept: `exposing` is the gate on the far side of a
      * jar exactly as it is within one compile. */
     @Test

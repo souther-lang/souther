@@ -53,7 +53,11 @@ public record PublishedModule(Ast.Module module, Set<String> injectedBehaviors) 
             return null;
         }
         SoutherModuleView m = found.module();
-        if (m.compat() != Backend.BOUNDARY_VERSION) {
+        // A member this compiler asks for and the writer did not write reads as its default. The
+        // header is the one that cannot be defaulted — without it there is no module to parse — so a
+        // module that carries none was written by something this compiler does not agree with,
+        // whatever its number says.
+        if (m.compat() != Backend.BOUNDARY_VERSION || m.header().isBlank()) {
             throw incompatible(m);
         }
         StringBuilder source = new StringBuilder(m.header()).append('\n');
