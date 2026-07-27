@@ -15,6 +15,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * a {@code List} of a sum could not derive an encoder, {@code ==} between two data was rejected,
  * and a sum with a sum as a case was refused — so the language's own worked example was not a
  * program. Kept verbatim from the spec so drift shows up here.
+ *
+ * <p>It is also where non-ASCII identifiers stay covered. A Souther name may be written in any
+ * script and the backend has to bring it to a JVM class name, so the fixtures elsewhere being
+ * English would otherwise leave that path untested. Keep this one as it is written.
  */
 class CompileSpecChapter23Test {
 

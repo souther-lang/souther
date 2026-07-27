@@ -2253,6 +2253,8 @@ A single-value newtype over an ordered type implements `+Comparable+` against it
 
 Generated as a sealed interface and final implementation classes. If a case is a named data, its final class implements the sealed interface. A unit data is generated as a field-less final class (or singleton).
 
+A case may itself be a sum (<<sum-data>>), and then its interface extends the outer one. Only that one step is emitted: interface inheritance carries the rest, so a leaf is a value of every sum above it without being named in any of them. The relation has to exist because the rest of the language already reads it that way — the checker folds a nested sum to its leaves to judge a case, and the derived codec dispatches over those same leaves, so a decoder hands back a leaf where the outer sum is what was asked for.
+
 [#jvm-codec]
 === Decoder / Encoder
 
