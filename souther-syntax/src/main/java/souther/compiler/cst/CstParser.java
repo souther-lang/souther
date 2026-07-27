@@ -270,7 +270,8 @@ public final class CstParser {
         typeRef();
         eat(SyntaxKind.QUESTION);   // `Y?`, kept for the AST to read as Option<Y> and the checker to refuse
         if (at(SyntaxKind.PIPE)) {
-            error("parse.sum.case.generic", "a sum case is a declared named data");
+            error("parse.sum.case.generic",
+                    "a sum case must be a declared named data, so it cannot be a generic type");
         }
     }
 
