@@ -106,6 +106,43 @@ class CompileConstructsImportedTest {
         assertTrue(aborted.getMessage().contains("Amount"), aborted.getMessage());
     }
 
+    /** A constant argument is checked where it is written, whichever module declared the type: the
+     * verdict a local newtype gets at compile time is the verdict an imported one gets. The
+     * invariant here is one only the compile-time evaluation can decide — an interval invariant
+     * would be settled earlier, by the discharge analysis, and say nothing about this path. */
+    @Test
+    void aConstantViolatingAnImportedInvariantIsACompileError() {
+        String up = """
+                module up exposing ( Email )
+                import String ( contains )
+                data Email = String
+                    invariant contains("@", value)
+                """;
+
+        Compiler.compileModules(List.of(up, """
+                module down
+                import up ( Email )
+
+                data Req = { n: Int }
+
+                behavior mint : (r: Req) -> Email constructs Email
+                let mint (r) = Email("a@b.com")
+                """));
+
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(up, """
+                        module down
+                        import up ( Email )
+
+                        data Req = { n: Int }
+
+                        behavior mint : (r: Req) -> Email constructs Email
+                        let mint (r) = Email("nope")
+                        """)));
+
+        assertTrue(e.getMessage().contains("Email"), e.getMessage());
+    }
+
     /** A type its module keeps to itself has no entry to build with. A value of it still arrives —
      * through a field of a data that module does expose — and reading it is all this module can do. */
     @Test

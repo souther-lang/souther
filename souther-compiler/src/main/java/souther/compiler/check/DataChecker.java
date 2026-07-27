@@ -26,8 +26,11 @@ public final class DataChecker {
 
     private DataChecker() {}
 
-    /** A constant newtype construction to verify after codegen: its wrapped constant and its site. */
-    public record ConstCheck(String typeName, Object value, SourcePos pos) {}
+    /** A constant newtype construction to verify after codegen: its wrapped constant and its site.
+     * {@code type} says which module declared it — the check runs that module's generated class, not
+     * one named after the module the construction is written in. {@code typeName} is what was
+     * written, which is what the message quotes. */
+    public record ConstCheck(String typeName, TypeName type, Object value, SourcePos pos) {}
 
     /**
      * Every {@code 金額(constant)} in the module: a newtype construction whose argument folds to a
@@ -45,7 +48,8 @@ public final class DataChecker {
     private static void collectConstChecks(Ast.Expr e, Symbols symbols, List<ConstCheck> out) {
         if (e instanceof Ast.NewData nd && symbols.declaration(nd.typeName()) instanceof Ast.Data nt
                 && nt.newtype() && isInvariantBearing(nd.typeName(), symbols)) {
-            CallElaborator.newtypeConstantArg(nd).ifPresent(v -> out.add(new ConstCheck(nd.typeName(), v, nd.pos())));
+            CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
+                    out.add(new ConstCheck(nd.typeName(), symbols.resolve(nd.typeName()), v, nd.pos())));
         }
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
     }
