@@ -1,7 +1,5 @@
 package souther.compiler;
 
-import souther.runtime.Behavior;
-
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -122,7 +120,17 @@ class CompileSpecChapter23Test {
      */
     @Test
     void approvalRequiresTheApplicantsManager() throws Exception {
-        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
+        Map<String, byte[]> classes = new java.util.HashMap<>(Compiler.compile(MODULE));
+        classes.put("example.businesstrip.固定時刻", Subclasses.compile(classes,
+                "example.businesstrip.固定時刻", """
+                        package example.businesstrip;
+                        public final class 固定時刻 extends 現在時刻 {
+                            public java.time.LocalDateTime apply() {
+                                return java.time.LocalDateTime.parse("2026-07-15T12:00:00");
+                            }
+                        }
+                        """));
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Map<String, Object> 申請 = Map.of(
                 "申請者", Map.of("id", "e1", "役職", Map.of("type", "一般社員"), "上長ID", "boss"),
@@ -134,10 +142,10 @@ class CompileSpecChapter23Test {
                 "事前承認理由リスト", List.of(Map.of("type", "高額出張", "基準金額", 100000L)));
         Object 事前承認待ち = Codecs.decoded(loader, "example.businesstrip.事前承認待ち", 申請);
 
-        Object clock = java.lang.reflect.Proxy.newProxyInstance(loader,
-                new Class<?>[]{Behavior.class}, (p, m, a) -> java.time.LocalDateTime.parse("2026-07-15T12:00:00"));
+        Class<?> 現在時刻 = loader.loadClass("example.businesstrip.現在時刻");
+        Object clock = loader.loadClass("example.businesstrip.固定時刻").getConstructor().newInstance();
         Object 事前承認する = loader.loadClass("example.businesstrip.事前承認する" + "$Impl")
-                .getConstructor(Behavior.class).newInstance(clock);
+                .getConstructor(現在時刻).newInstance(clock);
         var apply = 事前承認する.getClass().getMethod("apply", Object.class, Object.class);
 
         Object stranger = Codecs.decoded(loader, "example.businesstrip.従業員ID", "someone");

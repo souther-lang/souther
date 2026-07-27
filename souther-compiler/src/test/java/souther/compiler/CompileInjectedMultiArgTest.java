@@ -5,11 +5,7 @@ import souther.runtime.Behavior;
 
 import org.junit.jupiter.api.Test;
 
-import javax.tools.ToolProvider;
-
-import java.io.File;
 import java.lang.reflect.Modifier;
-import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -132,7 +128,7 @@ class CompileInjectedMultiArgTest {
                 behavior pipe = send >-> bump
                 """;
         Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
-        classes.put("demo.SendImpl", compileSubclass(classes, "demo.SendImpl", IMPL_SRC));
+        classes.put("demo.SendImpl", Subclasses.compile(classes, "demo.SendImpl", IMPL_SRC));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Object pipe = loader.loadClass("demo.Pipe").getMethod("bind", loader.loadClass("demo.Send"))
@@ -147,9 +143,29 @@ class CompileInjectedMultiArgTest {
     }
 
     @Test
+    void aZeroArgInjectedBaseIsAStandaloneAbstractClassWithANoArgApply() throws Exception {
+        // a `() -> R` produces; it does not transform. The unary Behavior has an input to hand over
+        // and this has none, so it is a standalone base with `apply()` — the same branch 2+ inputs
+        // take, and the same shape a `() -> R` fn behavior's interface already had.
+        String src = """
+                module demo
+                data R = { z: Int }
+                behavior now : () -> R
+                """;
+        Map<String, byte[]> classes = Compiler.compile(src);
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Class<?> now = loader.loadClass("demo.Now");
+        assertTrue(Modifier.isAbstract(now.getModifiers()), "the injected base is abstract");
+        assertFalse(Behavior.class.isAssignableFrom(now),
+                "a producer has no input to receive, so it is not the unary Behavior");
+        assertEquals(loader.loadClass("demo.R"), now.getMethod("apply").getReturnType(),
+                "declares a typed apply()");
+    }
+
+    @Test
     void aZeroArgInjectedBehaviorStartsAPipelineAndRuns() throws Exception {
-        // a `() -> R` injection target is the unary Behavior, called with a value its implementation
-        // ignores (the same call a body makes for a zero-input dependency) — it has no $Impl
+        // only a first stage can take other than one input (spec 14.1); a producer is called on its
+        // own base class, with nothing handed to it
         String src = """
                 module demo
                 data R = { z: Int }
@@ -163,15 +179,50 @@ class CompileInjectedMultiArgTest {
         String impl = """
                 package demo;
                 public final class NowImpl extends Now {
-                    public Object apply(Object ignored) { return R(41); }
+                    public R apply() { return R(41); }
                 }
                 """;
         Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
-        classes.put("demo.NowImpl", compileSubclass(classes, "demo.NowImpl", impl));
+        classes.put("demo.NowImpl", Subclasses.compile(classes, "demo.NowImpl", impl));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
         Object pipe = loader.loadClass("demo.Pipe").getMethod("bind", loader.loadClass("demo.Now"))
                 .invoke(null, loader.loadClass("demo.NowImpl").getConstructor().newInstance());
         Object r = pipe.getClass().getMethod("apply").invoke(pipe);
+
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.R", r);
+        assertEquals(42L, out.get("z"));
+    }
+
+    @Test
+    void aBodyCallsAZeroArgInjectedDependencyWithNoArgument() throws Exception {
+        // the other call site of a producer: a body's `now()`, read from the injected field and
+        // called on the base class. Nothing is handed over, so nothing has to stand in for an input.
+        String src = """
+                module demo
+                data R = { z: Int }
+                behavior now : () -> R
+                    constructs R
+                behavior use : (r: R) -> R
+                    requires now
+                    constructs R
+                let use (r, now) = {
+                    let n = now()
+                    R { z = r.z + n.z }
+                }
+                """;
+        String impl = """
+                package demo;
+                public final class NowImpl extends Now {
+                    public R apply() { return R(40); }
+                }
+                """;
+        Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
+        classes.put("demo.NowImpl", Subclasses.compile(classes, "demo.NowImpl", impl));
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+
+        Object use = loader.loadClass("demo.Use").getMethod("bind", loader.loadClass("demo.Now"))
+                .invoke(null, loader.loadClass("demo.NowImpl").getConstructor().newInstance());
+        Object r = Codecs.apply(use, Codecs.decoded(loader, "demo.R", Map.of("z", 2L)));
 
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.R", r);
         assertEquals(42L, out.get("z"));
@@ -228,7 +279,7 @@ class CompileInjectedMultiArgTest {
                 }
                 """;
         Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
-        classes.put("demo.SendImpl", compileSubclass(classes, "demo.SendImpl", impl));
+        classes.put("demo.SendImpl", Subclasses.compile(classes, "demo.SendImpl", impl));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Object pipe = loader.loadClass("demo.Pipe").getMethod("bind", loader.loadClass("demo.Send"))
@@ -252,7 +303,7 @@ class CompileInjectedMultiArgTest {
     void aTwoArgInjectedIsBoundAndCalledWithBothArguments() throws Exception {
         String src = HEAD + "let use (a, b, send) = send(a, b)\n";
         Map<String, byte[]> classes = new HashMap<>(Compiler.compile(src));
-        classes.put("demo.SendImpl", compileSubclass(classes, "demo.SendImpl", IMPL_SRC));
+        classes.put("demo.SendImpl", Subclasses.compile(classes, "demo.SendImpl", IMPL_SRC));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Class<?> send = loader.loadClass("demo.Send");
@@ -298,7 +349,7 @@ class CompileInjectedMultiArgTest {
                 }
                 """;
         Map<String, byte[]> classes = new HashMap<>(Compiler.compile(head));
-        classes.put("demo.ScaleImpl", compileSubclass(classes, "demo.ScaleImpl", impl));
+        classes.put("demo.ScaleImpl", Subclasses.compile(classes, "demo.ScaleImpl", impl));
         BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
 
         Class<?> scale = loader.loadClass("demo.Scale");
@@ -368,26 +419,6 @@ class CompileInjectedMultiArgTest {
     }
 
     /** Compiles {@code source} against the generated classes and returns the class bytes. */
-    private static byte[] compileSubclass(Map<String, byte[]> generated, String className, String source)
-            throws Exception {
-        java.nio.file.Path classesDir = Files.createTempDirectory("souther-gen");
-        for (Map.Entry<String, byte[]> e : generated.entrySet()) {
-            java.nio.file.Path p = classesDir.resolve(e.getKey().replace('.', '/') + ".class");
-            Files.createDirectories(p.getParent());
-            Files.write(p, e.getValue());
-        }
-        java.nio.file.Path srcFile = classesDir.resolve(className.replace('.', '/') + ".java");
-        Files.writeString(srcFile, source);
-        java.nio.file.Path outDir = Files.createTempDirectory("souther-impl");
-        String cp = classesDir + File.pathSeparator + System.getProperty("java.class.path");
-        int rc = ToolProvider.getSystemJavaCompiler().run(null, null, null,
-                "-encoding", "UTF-8", "-classpath", cp, "-d", outDir.toString(), srcFile.toString());
-        if (rc != 0) {
-            throw new IllegalStateException("javac failed for " + className + " (rc=" + rc + ")");
-        }
-        return Files.readAllBytes(outDir.resolve(className.replace('.', '/') + ".class"));
-    }
-
     @Test
     void callingATwoArgInjectedWithAWronglyTypedArgIsRejected() {
         // arg 2 must be type-checked against param b: B, not ignored

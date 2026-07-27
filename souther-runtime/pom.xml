@@ -23,6 +23,16 @@
          (spec 19.1), so it inherits the parent's 25 like every other module. -->
 
     <dependencies>
+        <!-- JSpecify's nullness annotations, `provided` because nobody needs them at run time and
+             nobody needs them to read them: they are class-file annotations, and a consumer's
+             compiler (javac, kotlinc) takes their meaning from the name alone. So this stays off
+             every downstream classpath while the guarantee still reaches Kotlin, whose accessors
+             would otherwise all be platform types. -->
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

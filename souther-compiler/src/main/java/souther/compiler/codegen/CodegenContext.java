@@ -45,10 +45,11 @@ final class CodegenContext {
     private int lambdaCounter = 0;
 
     /** Per-injected-behavior input/success types, set once the module's required behaviors are known
-     * ({@link Backend#generate}). Drives the unary-vs-multi dispatch (issue #57): a required behavior
-     * with 2+ inputs is stored by its own base class and called with {@code invokevirtual}, not the
-     * unary {@code Behavior}. Both {@link Backend} and {@link Backend.Gen}/{@code BodyGen} read this,
-     * so the field type, ctor param and call descriptor cannot drift apart. */
+     * ({@link Backend#generate}). Drives the unary-vs-standalone dispatch (issue #57): a required
+     * behavior that does not take exactly one input is stored by its own base class and called with
+     * {@code invokevirtual}, not the unary {@code Behavior}. Both {@link Backend} and
+     * {@link Backend.Gen}/{@code BodyGen} read this, so the field type, ctor param and call
+     * descriptor cannot drift apart. */
     private Map<String, List<Type>> reqParams = Map.of();
     private Map<String, Type> reqSuccess = Map.of();
 
@@ -57,19 +58,22 @@ final class CodegenContext {
         this.reqSuccess = success;
     }
 
-    /** A required (injected) behavior takes 2+ inputs, so it is a standalone base, not a unary
-     * {@code Behavior} (issue #57, spec §java-base-class). */
-    boolean isMultiArgRequired(String name) {
-        return reqParams.getOrDefault(name, List.of()).size() >= 2;
+    /** A required (injected) behavior takes other than one input, so it is a standalone base rather
+     * than the unary {@code Behavior} (issue #57, spec §java-base-class). Two inputs are too many to
+     * hand along an arrow and none is too few, so both are called on their own class with a typed
+     * {@code apply}; only a single input is the transformation {@code Behavior} describes. */
+    boolean isStandaloneRequired(String name) {
+        List<Type> params = reqParams.get(name);
+        return params != null && params.size() != 1;   // absent: not a required behavior at all
     }
 
-    /** The JVM type a required behavior is stored/injected as: its own base class when multi-input,
-     * else the unary {@code Behavior} composition contract. */
+    /** The JVM type a required behavior is stored/injected as: its own base class unless it takes
+     * exactly one input, which is the unary {@code Behavior} composition contract. */
     ClassDesc requiredFieldType(String name) {
-        return isMultiArgRequired(name) ? cdBehavior(name) : CD_Behavior;
+        return isStandaloneRequired(name) ? cdBehavior(name) : CD_Behavior;
     }
 
-    /** The typed {@code apply(A,B,…)} descriptor of a multi-input required behavior's base — the same
+    /** The typed {@code apply(A,B,…)} descriptor of a standalone required behavior's base — the same
      * descriptor {@link Backend#generateRequiredBase} declared, so an {@code invokevirtual} on it links. */
     MethodTypeDesc requiredApplyDesc(String name) {
         return typedApplyDesc(name, reqParams.get(name), reqSuccess.get(name));

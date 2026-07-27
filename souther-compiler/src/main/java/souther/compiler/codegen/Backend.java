@@ -21,6 +21,7 @@ import java.lang.classfile.Label;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.attribute.PermittedSubclassesAttribute;
 import java.lang.classfile.attribute.RuntimeInvisibleAnnotationsAttribute;
+import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
@@ -188,6 +189,7 @@ public final class Backend {
             }
         });
         Map<String, byte[]> out = new LinkedHashMap<>();
+        out.put(packageInfoName(module.name()), packageInfo(module.name()));
         behaviorResults.forEach((resultName, cases) ->
                 out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, cases)));
         for (Ast.Def def : module.defs()) {
@@ -429,17 +431,16 @@ public final class Backend {
     private byte[] generateRequiredBase(String name, List<String> unitCases, List<Ast.Data> dataConstructs,
                                         List<Type> paramTypes, Type retType) {
         ClassDesc cdR = cdBehavior(name);
-        // Injected-vs-unary is orthogonal to composition: 0/1 input stays the unary Behavior<In,Out>
-        // (so it can follow an arrow); 2+ inputs is a standalone abstract class with a typed
+        // Injected-vs-unary is orthogonal to composition: one input is the unary Behavior<In,Out> (so
+        // it can follow an arrow); any other count is a standalone abstract class with a typed
         // apply(A,B,...) — a first stage but never a later one — the same param-count branch a fn
-        // behavior takes in generateBehaviorInterface.
-        boolean single = paramTypes.size() <= 1;
+        // behavior takes in generateBehaviorInterface. A `() -> R` produces rather than transforms:
+        // there is no input to hand it, so it declares `apply()` instead of taking a value it ignores.
+        boolean single = paramTypes.size() == 1;
         return build(cdR, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT | ClassFile.ACC_SUPER);
             if (single) {
-                if (!paramTypes.isEmpty()) {
-                    withBehaviorSignature(cb, paramTypes.get(0), retType, name);
-                }
+                withBehaviorSignature(cb, paramTypes.get(0), retType, name);
                 cb.withInterfaceSymbols(CD_Behavior);
             } else {
                 emitAbstractApply(cb, name, paramTypes, retType);
@@ -668,11 +669,39 @@ public final class Backend {
      * built jar unusable and has to move this number with it. A change confined to the inside of a
      * generated method does not touch it.
      */
-    public static final int BOUNDARY_VERSION = 1;
+    public static final int BOUNDARY_VERSION = 2;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {
         return moduleName + ".$Module";
+    }
+
+    /** The class a package's annotations ride on, named as javac names the one it compiles from
+     * {@code package-info.java}. A module is a package (a class is {@code module + "." + name}), so
+     * there is one per module. */
+    public static String packageInfoName(String moduleName) {
+        return moduleName + ".package-info";
+    }
+
+    /**
+     * Emits {@link #packageInfoName} carrying JSpecify's {@code @NullMarked}: in this package a type
+     * that says nothing about null is not null.
+     *
+     * <p>That is what the generated code already is. Absence is {@code Option} and a failure is a case
+     * of the output union (spec 7.3, 12), so no accessor, factory or codec hands back a null. Saying
+     * it here is what lets a caller's compiler know: Kotlin reads the annotation off this class and
+     * types every generated accessor as non-null instead of falling back to a platform type, where a
+     * null check is neither required nor possible. It is read by name, so neither this compiler nor
+     * anything downstream needs the JSpecify jar on its classpath.
+     *
+     * <p>The class is shaped as javac shapes the one it compiles from a {@code package-info.java} —
+     * an abstract synthetic interface declaring nothing — since that is the shape every tool that
+     * reads package annotations expects to find.
+     */
+    public static byte[] packageInfo(String moduleName) {
+        return Descriptors.build(ClassDesc.of(packageInfoName(moduleName)), cb -> cb
+                .withFlags(ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT | ClassFile.ACC_SYNTHETIC)
+                .with(RuntimeVisibleAnnotationsAttribute.of(Annotation.of(CD_NullMarked))));
     }
 
     /** Emits {@link #moduleClassName}, carrying {@code declarations}. What it says is the caller's;
@@ -874,11 +903,12 @@ public final class Backend {
     /**
      * Applies the first stage to the pipeline's own arguments, leaving the result in slot 1.
      *
-     * <p>Only this stage may take several inputs (spec 14.1). A multi-input behavior does not
+     * <p>Only this stage may take other than one input (spec 14.1). Such a behavior does not
      * implement {@code Behavior} — that interface takes one value — so it is called on its own
      * class rather than through the interface. An injected one is that class: the pipeline holds it
      * in the field it was bound to, and its {@code apply} is typed rather than erased (issue #57),
-     * so the arguments are cast from the erased {@code apply(Object,…)} this body lives on.
+     * so the arguments are cast from the erased {@code apply(Object,…)} this body lives on. A
+     * zero-input stage takes that same path with nothing to cast.
      */
     private void applyFirstStage(CodeBuilder code, ClassDesc cdP, String stage, int arity,
                                  Set<String> requiredNames, Map<String, List<String>> behaviorDeps) {
@@ -887,7 +917,7 @@ public final class Backend {
             return;
         }
         pushStage(code, cdP, stage, requiredNames, behaviorDeps);
-        if (ctx.isMultiArgRequired(stage)) {
+        if (ctx.isStandaloneRequired(stage)) {
             MethodTypeDesc desc = ctx.requiredApplyDesc(stage);
             for (int i = 0; i < arity; i++) {
                 code.aload(i + 1);
@@ -897,15 +927,6 @@ public final class Backend {
                 }
             }
             code.invokevirtual(cdBehavior(stage), "apply", desc);
-            code.astore(1);
-            return;
-        }
-        if (arity == 0 && requiredNames.contains(stage)) {
-            // A `() -> R` injection target is generated as the unary Behavior, whose apply takes a
-            // value its implementation ignores — the same call a body makes for a zero-input
-            // dependency. It has no $Impl to call the erased apply on.
-            code.aconst_null();
-            code.invokeinterface(CD_Behavior, "apply", MTD_apply);
             code.astore(1);
             return;
         }

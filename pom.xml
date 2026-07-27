@@ -49,6 +49,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>25</maven.compiler.release>
         <raoh.version>0.6.0</raoh.version>
+        <jspecify.version>1.0.0</jspecify.version>
         <junit.version>6.1.2</junit.version>
     </properties>
 
@@ -68,6 +69,11 @@
                 <groupId>net.unit8.raoh</groupId>
                 <artifactId>raoh-jooq</artifactId>
                 <version>${raoh.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.jspecify</groupId>
+                <artifactId>jspecify</artifactId>
+                <version>${jspecify.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.souther-lang</groupId>

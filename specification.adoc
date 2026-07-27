@@ -1430,7 +1430,7 @@ Which behaviors get a `+let+` and which are injected is not decided mechanically
 [#java-base-class]
 === Java base-class generation
 
-A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*, and for each unit data listed in `+constructs+` has a `+protected+` factory that constructs it. Whether it takes one input or several is orthogonal to injection, exactly as for a `+let+`-implemented behavior (<<jvm-behavior>>): a *single* input extends the unary `+Behavior<In, Out>+` (so it still composes with `+>->+`) and inherits its `+apply+`; *two or more* inputs make it a standalone abstract class with a typed multi-argument `+apply(A, B, …)+` and no `+Behavior+` supertype (it takes more than one argument, and `+>->+` passes a single value, so it cannot follow an arrow; it can still be a pipeline's first stage, which receives the pipeline's own arguments — <<sequential-composition>>). A Java implementation overrides that typed `+apply+` directly, so several inputs are passed as arguments rather than bundled into a record. A collection parameter keeps its `+java.util.List+` / `+Map+` / `+Set+` (or the runtime `+Option+`) type with its element type, not `+Object+`.
+A behavior subject to injection (wrote a type, no `+let+`; <<injected-behavior>>) is generated as an *abstract base class*, and for each unit data listed in `+constructs+` has a `+protected+` factory that constructs it. Whether it takes one input or several is orthogonal to injection, exactly as for a `+let+`-implemented behavior (<<jvm-behavior>>): a *single* input extends the unary `+Behavior<In, Out>+` (so it still composes with `+>->+`) and inherits its `+apply+`; *any other count* makes it a standalone abstract class with a typed `+apply(A, B, …)+` and no `+Behavior+` supertype. Two or more inputs are more than `+>->+` passes along, and a behavior taking none has nothing to receive, so neither can follow an arrow; both can still be a pipeline's first stage, which receives the pipeline's own arguments (<<sequential-composition>>). A zero-input behavior therefore declares `+apply()+` and is handed nothing — it produces rather than transforms. A Java implementation overrides that typed `+apply+` directly, so several inputs are passed as arguments rather than bundled into a record. A collection parameter keeps its `+java.util.List+` / `+Map+` / `+Set+` (or the runtime `+Option+`) type with its element type, not `+Object+`.
 
 [,text]
 ----
@@ -2218,6 +2218,15 @@ The artifacts target Java 25 or later, which is also what the compiler is built 
 
 The class-file version of the generated `+.class+` is fixed at Java 25 (major 69). It MUST NOT be left to the default of the JDK running the backend: pinning is what makes the floor a decision rather than a property of whichever JDK ran the build. souther-runtime is on the artifact side and is compiled to the same target.
 
+[#jvm-nullness]
+=== Nullness
+
+No generated value is ever null. Absence is `+Option+` (<<optional>>), a failure is a case of the output union (<<unmarked-sum>>), and a collection holds neither a null key nor a null value — so no accessor, factory, codec or `+apply+` hands one back.
+
+Each generated package carries JSpecify's `+@NullMarked+` on a `+package-info+` class emitted with it, and souther-runtime carries it on its own packages, so a consumer's compiler knows that too. It matters most where a compiler acts on it: Kotlin reads the annotation off the class file and types every generated accessor as non-null, where without it the type is a platform type and a null check is neither required nor possible. The annotation is read by name, so the JSpecify jar need not be on the consumer's classpath.
+
+The few places that do admit a null are annotated one by one — a `+java.util.Map+` implementation's `+get+`, which returns null for an absent key because that interface says so.
+
 [#jvm-product]
 === Product data
 
@@ -2263,7 +2272,7 @@ The concrete implementation is generated directly as bytecode by the ClassFile b
 [#jvm-behavior]
 === behavior
 
-A fn- or `+>->+`-implemented behavior is generated as a public interface named after the behavior (first letter capitalized), with the implementation in a `+<Behavior名>$Impl+` class. Java declares the behavior by the interface name and never names the implementation. A single-input behavior's interface extends `+Behavior<In, Out>+` (so it composes with `+>->+` and its `+apply+` is typed by inheritance); a multi-input behavior's interface is a standalone functional interface that declares the typed, multi-argument `+apply+` directly. The interface carries a static factory: `+of()+` for a behavior with an empty requirement set, or `+bind(...)+` taking one implementation per requirement.
+A fn- or `+>->+`-implemented behavior is generated as a public interface named after the behavior (first letter capitalized), with the implementation in a `+<Behavior名>$Impl+` class. Java declares the behavior by the interface name and never names the implementation. A single-input behavior's interface extends `+Behavior<In, Out>+` (so it composes with `+>->+` and its `+apply+` is typed by inheritance); an interface for any other input count is standalone and declares the typed `+apply+` directly — `+apply(A, B, …)+` for several inputs, `+apply()+` for none. The interface carries a static factory: `+of()+` for a behavior with an empty requirement set, or `+bind(...)+` taking one implementation per requirement.
 
 [,text]
 ----

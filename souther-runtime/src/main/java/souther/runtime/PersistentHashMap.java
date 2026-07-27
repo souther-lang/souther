@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.AbstractMap;
 import java.util.AbstractSet;
 import java.util.ArrayDeque;
@@ -76,7 +78,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         return h ^ (h >>> 16);
     }
 
-    private static int hashOf(Object key) {
+    private static int hashOf(@Nullable Object key) {
         return key == null ? 0 : spread(key.hashCode());
     }
 
@@ -87,13 +89,13 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
 
     @Override
     @SuppressWarnings("unchecked")
-    public V get(Object key) {
+    public @Nullable V get(@Nullable Object key) {
         Object r = root.find(key, hashOf(key), 0);
         return r == NOT_FOUND ? null : (V) r;
     }
 
     @Override
-    public boolean containsKey(Object key) {
+    public boolean containsKey(@Nullable Object key) {
         return root.find(key, hashOf(key), 0) != NOT_FOUND;
     }
 
@@ -146,7 +148,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
     }
 
     private interface Node {
-        Object find(Object key, int keyHash, int shift);
+        Object find(@Nullable Object key, int keyHash, int shift);
 
         /**
          * This node with {@code key} mapped to {@code val}.
@@ -248,7 +250,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
-        public Object find(Object key, int keyHash, int shift) {
+        public Object find(@Nullable Object key, int keyHash, int shift) {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
@@ -436,7 +438,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
-        public Object find(Object key, int keyHash, int shift) {
+        public Object find(@Nullable Object key, int keyHash, int shift) {
             if (keyHash != hash) {
                 return NOT_FOUND;
             }
@@ -526,7 +528,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
      *  Deterministic (bitmap order), O(1) amortized per entry. */
     private static final class EntryIterator implements Iterator<Map.Entry<Object, Object>> {
         private final Deque<Node> stack = new ArrayDeque<>();
-        private Node payloadNode;
+        private @Nullable Node payloadNode;
         private int payloadIndex;
 
         EntryIterator(Node root, int size) {
