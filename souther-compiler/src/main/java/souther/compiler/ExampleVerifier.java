@@ -930,8 +930,8 @@ public final class ExampleVerifier {
     private Map<String, Ast.TypeRef> fieldTypes(String typeName) {
         Map<String, Ast.TypeRef> out = new LinkedHashMap<>();
         if (symbols.declaration(typeName) instanceof Ast.Data d) {
-            for (String inc : d.includes()) {
-                out.putAll(fieldTypes(inc));
+            for (Ast.Include inc : d.includes()) {
+                out.putAll(fieldTypes(inc.name()));
             }
             for (Ast.Field f : d.fields()) {
                 out.put(f.name(), f.type());
