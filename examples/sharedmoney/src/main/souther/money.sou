@@ -1,0 +1,12 @@
+// 2つのチームが共有するドメイン型。これを持つプロジェクトと、これを import する
+// プロジェクトは別々にビルドされ、後者はこの .sou を持たない。
+module shared.money exposing (
+    Amount,
+    Currency
+)
+
+data Amount = Int
+    invariant value >= 0
+
+data Currency = String
+    invariant String.length(value) == 3

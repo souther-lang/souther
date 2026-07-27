@@ -16,6 +16,8 @@
     </description>
 
     <modules>
+        <module>sharedmoney</module>
+        <module>invoicing</module>
         <module>contact</module>
         <module>joboffer</module>
         <module>issuetracker</module>
