@@ -78,6 +78,8 @@ final class Descriptors {
     static final ClassDesc CD_ResultOk = CD_Result.nested("Ok");
     static final ClassDesc CD_ResultErr = CD_Result.nested("Err");
     static final ClassDesc CD_Behavior = ClassDesc.of("souther.runtime.Behavior");
+    /** JSpecify's package annotation, referenced by name: the jar is on nobody's classpath. */
+    static final ClassDesc CD_NullMarked = ClassDesc.of("org.jspecify.annotations.NullMarked");
     static final ClassDesc CD_Fn = ClassDesc.of("souther.runtime.Fn");
     static final MethodTypeDesc MTD_Fn_apply =
             MethodTypeDesc.of(ClassDesc.of("java.lang.Object"), ClassDesc.of("java.lang.Object").arrayType());

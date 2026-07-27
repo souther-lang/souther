@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.AbstractSet;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -82,7 +84,7 @@ public final class PersistentHashSet<E> extends AbstractSet<E> {
     }
 
     @Override
-    public boolean contains(Object value) {
+    public boolean contains(@Nullable Object value) {
         return map.containsKey(value);
     }
 

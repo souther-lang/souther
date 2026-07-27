@@ -12,4 +12,15 @@ package souther.runtime;
 @FunctionalInterface
 public interface Fn {
     Object apply(Object[] args);
+
+    /**
+     * Stands where a step function is expected that the compiler has shown is never applied — a fold
+     * over an empty list literal, whose element type is the bottom and whose step therefore cannot be
+     * materialised (it would open a value that is not there). Passing this rather than a null keeps
+     * every value the generated code hands around non-null; being applied means the reasoning that
+     * placed it was wrong, which is a compiler bug and says so.
+     */
+    Fn NEVER = args -> {
+        throw new IllegalStateException("souther: a fold step over an empty list was applied");
+    };
 }

@@ -883,7 +883,7 @@ final class BodyGen {
             for (Core arg : call.args()) {
                 if (arg.type() instanceof Type.FnOf fn) {
                     if (stepNeverRuns(fn)) {
-                        code.aconst_null();
+                        code.getstatic(CD_Fn, "NEVER", CD_Fn);
                     } else {
                         emitFunctionValue(arg, fn.params());
                     }
@@ -898,8 +898,8 @@ final class BodyGen {
         /**
          * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
          * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
-         * {@code []} yields the seed. Such a step is passed as a null {@code Fn} rather than
-         * materialised, since materialising it would unbox the bottom element (as {@code acc + x}
+         * {@code []} yields the seed. Such a step is passed as {@link souther.runtime.Fn#NEVER} rather
+         * than materialised, since materialising it would unbox the bottom element (as {@code acc + x}
          * does with {@code x}) and crash. An empty *seed* (a {@code List<Nothing>} accumulator) is a
          * reference and still materialises.
          */
@@ -1008,9 +1008,10 @@ final class BodyGen {
          * the stack cast to the success type (spec 12.2, 13). */
         private void requiredCall(Core.Call call) {
             Type success = reqSuccess.get(call.fn());
-            if (ctx.isMultiArgRequired(call.fn())) {
-                // 2+ inputs: the required behavior is its own base class, called with a typed
-                // invokevirtual apply(A,B,…); each arg is left as its declared param type (issue #57)
+            if (ctx.isStandaloneRequired(call.fn())) {
+                // other than one input: the required behavior is its own base class, called with a
+                // typed invokevirtual apply(A,B,…); each arg is left as its declared param type
+                // (issue #57). A `() -> R` produces, so the call hands it nothing.
                 MethodTypeDesc desc = ctx.requiredApplyDesc(call.fn());
                 code.aload(0);
                 code.getfield(cdName, call.fn(), ctx.cdBehavior(call.fn()));
@@ -1024,12 +1025,8 @@ final class BodyGen {
             }
             code.aload(0);
             code.getfield(cdName, call.fn(), CD_Behavior);
-            if (call.args().isEmpty()) {
-                code.aconst_null();        // `() -> R`: the implementation ignores the input
-            } else {
-                Type at = genExpr(call.args().get(0));
-                box(code, at);
-            }
+            Type at = genExpr(call.args().get(0));
+            box(code, at);
             code.invokeinterface(CD_Behavior, "apply", MTD_apply);
             stackCast(success);
         }

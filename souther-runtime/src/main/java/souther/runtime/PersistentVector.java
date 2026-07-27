@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.AbstractList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -23,7 +25,9 @@ import java.util.function.Consumer;
  * override the hot paths so iteration and equality stay O(n) rather than O(n·log n).
  *
  * <p>Values are never null (a Souther collection models absence with {@code Option}, not a null
- * element), which callers such as {@link Lists} rely on.
+ * element), which callers such as {@link Lists} rely on. The trie's own arrays are another matter and
+ * are typed {@code @Nullable Object[]}: a node is {@code WIDTH} wide with a null in every slot it has
+ * not reached yet, which is the representation, not an element.
  *
  * <p>Bulk construction ({@link #from}, and {@link Lists#sort}/{@code sortBy}) fills one 32-slot tail
  * per block through the package-private {@link Builder}, which owns every node it touches.
@@ -62,7 +66,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
 
     /** Internal trie nodes are always {@code WIDTH} wide (nulls for absent children); a leaf that
      *  came from a full tail is a {@code WIDTH}-wide element array. */
-    private static final Object[] EMPTY_NODE = new Object[WIDTH];
+    private static final @Nullable Object[] EMPTY_NODE = new @Nullable Object[WIDTH];
 
     /**
      * A tail array plus the claim that decides who may still extend it. The whole ownership rule
@@ -75,7 +79,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
          * every element a version can read was written by the thread that froze it. See the class
          * javadoc; changing either half without the other breaks the argument.
          */
-        private final Object[] a;
+        private final @Nullable Object[] a;
         /**
          * {@code Thread.threadId()} of the only thread that may extend {@link #a}; 0 = nobody.
          *
@@ -89,7 +93,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         /** Slots handed out so far. Written only by {@link #owner}, and only upward. */
         private int claimed;
 
-        private Tail(Object[] a, long owner, int claimed) {
+        private Tail(@Nullable Object[] a, long owner, int claimed) {
             this.a = a;
             this.owner = owner;
             this.claimed = claimed;
@@ -115,7 +119,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         /** Holds the first {@code used} elements of this tail, then {@code val}, in a fresh
          *  {@code WIDTH}-wide array the calling thread owns. The losing side of a claim. */
         Tail extendedCopy(int used, Object val) {
-            Object[] fresh = new Object[WIDTH];
+            @Nullable Object[] fresh = new @Nullable Object[WIDTH];
             System.arraycopy(a, 0, fresh, 0, used);
             fresh[used] = val;
             return new Tail(fresh, Thread.currentThread().threadId(), used + 1);
@@ -123,22 +127,22 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
 
         /** A tail nobody may extend. {@code claimed == a.length} leaves no slot to claim: the shared
          *  empty tail, a {@link Builder} handover at its exact length, a full tail becoming a leaf. */
-        static Tail sealed(Object[] a) {
+        static Tail sealed(@Nullable Object[] a) {
             return new Tail(a, 0L, a.length);
         }
     }
 
-    private static final Tail EMPTY_TAIL = Tail.sealed(new Object[0]);
+    private static final Tail EMPTY_TAIL = Tail.sealed(new @Nullable Object[0]);
 
     public static final PersistentVector<?> EMPTY =
             new PersistentVector<>(0, BITS, EMPTY_NODE, EMPTY_TAIL);
 
     private final int cnt;
     private final int shift;
-    private final Object[] root;
+    private final @Nullable Object[] root;
     private final Tail tail;
 
-    private PersistentVector(int cnt, int shift, Object[] root, Tail tail) {
+    private PersistentVector(int cnt, int shift, @Nullable Object[] root, Tail tail) {
         this.cnt = cnt;
         this.shift = shift;
         this.root = root;
@@ -194,16 +198,16 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
      * it, so every caller must bound its read by {@code cnt} and never by the array's length. That
      * is the invariant a change here is most likely to break.
      */
-    private Object[] arrayFor(int i) {
+    private @Nullable Object[] arrayFor(int i) {
         if (i < 0 || i >= cnt) {
             throw new IndexOutOfBoundsException("Index " + i + " out of bounds for length " + cnt);
         }
         if (i >= tailoff()) {
             return tail.a;
         }
-        Object[] node = root;
+        @Nullable Object[] node = root;
         for (int level = shift; level > 0; level -= BITS) {
-            node = (Object[]) node[(i >>> level) & MASK];
+            node = (@Nullable Object[]) node[(i >>> level) & MASK];
         }
         return node;
     }
@@ -234,11 +238,11 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
      *  out so {@link #append}'s claim path stays small enough for the JIT to inline. */
     private PersistentVector<E> appendSpilling(E val) {
         assert tail.a.length == WIDTH : "a full tail must be a WIDTH-wide leaf";
-        Object[] leaf = tail.a;
-        Object[] newRoot;
+        @Nullable Object[] leaf = tail.a;
+        @Nullable Object[] newRoot;
         int newShift = shift;
         if ((cnt >>> BITS) > (1 << shift)) {   // the trie is full: add a level above the root
-            newRoot = new Object[WIDTH];
+            newRoot = new @Nullable Object[WIDTH];
             newRoot[0] = root;
             newRoot[1] = newPath(shift, leaf);
             newShift += BITS;
@@ -250,14 +254,14 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
 
     /** Copies the spine down to where the full tail becomes a new leaf, sharing every untouched
      *  sibling. {@code cnt} here is the size before the append (i.e. including the full tail). */
-    private Object[] pushTail(int level, Object[] parent, Object[] tailNode) {
+    private @Nullable Object[] pushTail(int level, @Nullable Object[] parent, @Nullable Object[] tailNode) {
         int subidx = ((cnt - 1) >>> level) & MASK;
-        Object[] ret = parent.clone();
-        Object[] nodeToInsert;
+        @Nullable Object[] ret = parent.clone();
+        @Nullable Object[] nodeToInsert;
         if (level == BITS) {
             nodeToInsert = tailNode;
         } else {
-            Object[] child = (Object[]) parent[subidx];
+            @Nullable Object[] child = (@Nullable Object[]) parent[subidx];
             nodeToInsert = child != null
                     ? pushTail(level - BITS, child, tailNode)
                     : newPath(level - BITS, tailNode);
@@ -266,11 +270,11 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         return ret;
     }
 
-    private static Object[] newPath(int level, Object[] node) {
+    private static @Nullable Object[] newPath(int level, @Nullable Object[] node) {
         if (level == 0) {
             return node;
         }
-        Object[] ret = new Object[WIDTH];
+        @Nullable Object[] ret = new @Nullable Object[WIDTH];
         ret[0] = newPath(level - BITS, node);
         return ret;
     }
@@ -282,7 +286,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         return new Iterator<>() {
             private int i = 0;
             private int base = 0;
-            private Object[] leaf = cnt > 0 ? arrayFor(0) : EMPTY_TAIL.a;
+            private @Nullable Object[] leaf = cnt > 0 ? arrayFor(0) : EMPTY_TAIL.a;
 
             @Override
             public boolean hasNext() {
@@ -308,7 +312,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
     @SuppressWarnings("unchecked")
     public void forEach(Consumer<? super E> action) {
         for (int base = 0; base < cnt; base += WIDTH) {
-            Object[] leaf = arrayFor(base);
+            @Nullable Object[] leaf = arrayFor(base);
             int n = Math.min(WIDTH, cnt - base);
             for (int j = 0; j < n; j++) {
                 action.accept((E) leaf[j]);
@@ -320,7 +324,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
      *  iterator so a persistent-vector comparison stays O(n) — and cross-type against any other
      *  {@code List} (e.g. an {@code ArrayList} from a literal). */
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         if (o == this) {
             return true;
         }
@@ -347,7 +351,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         // The List-contract hash (AbstractList's formula), via the chunked iterator: O(n).
         int h = 1;
         for (int base = 0; base < cnt; base += WIDTH) {
-            Object[] leaf = arrayFor(base);
+            @Nullable Object[] leaf = arrayFor(base);
             int n = Math.min(WIDTH, cnt - base);
             for (int j = 0; j < n; j++) {
                 Object e = leaf[j];
@@ -368,14 +372,14 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
     static final class Builder<E> {
         private int cnt = 0;
         private int shift = BITS;
-        private Object[] root = EMPTY_NODE;   // shared and untouched until the first spill into the trie
-        private Object[] tail = new Object[WIDTH];
+        private @Nullable Object[] root = EMPTY_NODE;   // shared and untouched until the first spill into the trie
+        private @Nullable Object[] tail = new @Nullable Object[WIDTH];
         private int tailLen = 0;
 
         Builder<E> add(E val) {
             if (tailLen == WIDTH) {
                 spillTail();
-                tail = new Object[WIDTH];
+                tail = new @Nullable Object[WIDTH];
                 tailLen = 0;
             }
             tail[tailLen++] = val;
@@ -389,7 +393,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
             }
             // Sealed and at its exact length: a decoded or sorted list is long-lived and should not
             // carry a 32-wide array for appends that will never come (ADR-0060).
-            Object[] finalTail = tailLen == WIDTH ? tail : Arrays.copyOf(tail, tailLen);
+            @Nullable Object[] finalTail = tailLen == WIDTH ? tail : Arrays.copyOf(tail, tailLen);
             return new PersistentVector<>(cnt, shift, root, Tail.sealed(finalTail));
         }
 
@@ -397,26 +401,26 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
          *  builder's own nodes. {@code cnt} is the element count including the full tail here. */
         private void spillTail() {
             if ((cnt >>> BITS) > (1 << shift)) {
-                Object[] newRoot = new Object[WIDTH];
+                @Nullable Object[] newRoot = new @Nullable Object[WIDTH];
                 newRoot[0] = root;
                 newRoot[1] = newPath(shift, tail);
                 root = newRoot;
                 shift += BITS;
             } else {
                 if (root == EMPTY_NODE) {
-                    root = new Object[WIDTH];   // own the root before mutating it
+                    root = new @Nullable Object[WIDTH];   // own the root before mutating it
                 }
                 pushTailOwned(shift, root, tail);
             }
         }
 
-        private void pushTailOwned(int level, Object[] parent, Object[] tailNode) {
+        private void pushTailOwned(int level, @Nullable Object[] parent, @Nullable Object[] tailNode) {
             int subidx = ((cnt - 1) >>> level) & MASK;
             if (level == BITS) {
                 parent[subidx] = tailNode;
                 return;
             }
-            Object[] child = (Object[]) parent[subidx];
+            @Nullable Object[] child = (@Nullable Object[]) parent[subidx];
             if (child == null) {
                 parent[subidx] = newPath(level - BITS, tailNode);
             } else {

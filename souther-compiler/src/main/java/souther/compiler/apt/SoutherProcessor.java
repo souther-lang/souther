@@ -9,6 +9,7 @@ import souther.compiler.meta.ModulePath;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
+import javax.annotation.processing.FilerException;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.lang.model.SourceVersion;
@@ -90,7 +91,24 @@ public final class SoutherProcessor extends AbstractProcessor {
                     : Compiler.compileModules(texts, path);
             Filer filer = processingEnv.getFiler();
             for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
-                JavaFileObject file = filer.createClassFile(entry.getKey());
+                JavaFileObject file;
+                try {
+                    file = filer.createClassFile(entry.getKey());
+                } catch (FilerException e) {
+                    // This compilation already declares that file. The only generated class a
+                    // hand-written source can collide with is the package annotations, when Java in
+                    // the same package as the module carries a package-info.java of its own. Theirs
+                    // is the declaration; ours is skipped rather than failing the build — but the
+                    // nullness the generated types would have stated is then unstated, so say so.
+                    if (entry.getKey().endsWith(".package-info")) {
+                        processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                                "souther: `" + entry.getKey() + "` is declared by this compilation,"
+                                        + " so the generated `@NullMarked` was not written; add it"
+                                        + " there to keep the module's types non-null for Kotlin");
+                        continue;
+                    }
+                    throw e;
+                }
                 try (OutputStream out = file.openOutputStream()) {
                     out.write(entry.getValue());
                 }

@@ -370,7 +370,6 @@ public final class ExampleVerifier {
         String depName = fk.target();
         int arity = paramTypes.size();
         java.util.function.Function<Object[], Object> body = a -> {
-            // the Behavior contract passes one Object even for a 0-arg dep (a null); normalise to arity
             Object[] key = java.util.Arrays.copyOf(a, arity);
             for (Object[] e : entries) {
                 if (java.util.Arrays.equals((Object[]) e[0], key)) {
@@ -386,23 +385,23 @@ public final class ExampleVerifier {
     }
 
     /** Wraps a fake's {@code Object[] -> Object} body as the injected instance: a unary {@code Behavior}
-     * proxy for a 0/1-input dependency, or a runtime-generated subclass of the standalone base for a
-     * 2+-input one (whose typed {@code apply} the unary {@code Behavior} cannot stand in for; issue #57).
-     * Both the table and the constant {@code with} fake route through here, so neither path assumes an
-     * arity. */
+     * proxy for a single-input dependency, or a runtime-generated subclass of the standalone base for
+     * one taking any other count (whose typed {@code apply} the unary {@code Behavior} cannot stand in
+     * for; issue #57). Both the table and the constant {@code with} fake route through here, so neither
+     * path assumes an arity. */
     private Object fakeInstance(Ast.SpecBehavior dep, java.util.function.Function<Object[], Object> body,
                                 List<Diagnostic> out) {
-        if (dep.params().size() >= 2) {
-            return multiArgFakeInstance(dep, body, out);
+        if (dep.params().size() != 1) {
+            return standaloneFakeInstance(dep, body, out);
         }
         return behaviorProxy(body);
     }
 
-    /** Generates (once) and instantiates a subclass of a multi-argument injected base whose typed
+    /** Generates (once) and instantiates a subclass of a standalone injected base whose typed
      * {@code apply} packs its arguments into an {@code Object[]} and delegates to {@code body}. */
-    private Object multiArgFakeInstance(Ast.SpecBehavior dep,
-                                        java.util.function.Function<Object[], Object> body,
-                                        List<Diagnostic> out) {
+    private Object standaloneFakeInstance(Ast.SpecBehavior dep,
+                                          java.util.function.Function<Object[], Object> body,
+                                          List<Diagnostic> out) {
         try {
             String baseName = module.name() + "." + behaviorClass(dep.name());
             Class<?> base = loader.loadClass(baseName);
@@ -422,7 +421,7 @@ public final class ExampleVerifier {
         } catch (ReflectiveOperationException e) {
             out.add(Diagnostic.of("E1908", "check.fake.missing").title("check.example.title")
                     .at(dep.pos()).args(dep.name(), dep.name())
-                    .hint("check.fake.missing.hint", "the multi-argument fake could not be built: " + e)
+                    .hint("check.fake.missing.hint", "the fake's base subclass could not be built: " + e)
                     .build());
             return null;
         }

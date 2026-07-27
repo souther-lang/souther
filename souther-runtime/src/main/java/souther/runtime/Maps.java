@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -77,7 +79,7 @@ public final class Maps {
      *  null value — absence is {@code None}, not a null entry — so a single lookup distinguishes the
      *  two, no {@code containsKey} probe before {@code get}. */
     public static <V> Option<V> get(Map<?, V> map, Object key) {
-        V value = map.get(key);
+        @Nullable V value = map.get(key);   // a JDK map's `get`: absent is null, which this reads as None
         return value != null ? Option.some(value) : Option.none();
     }
 
