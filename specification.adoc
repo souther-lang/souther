@@ -711,7 +711,9 @@ Whether a name is declared is answered within the module — its own declaration
 
 The explicit declaration stays available, and is how a case that carries a comment of its own is written.
 
-A unit data MUST NOT carry an `+invariant+`: it has no field for one to observe and no value it could reject (<<invariant-declaration>>). Writing one is a compile error rather than a clause with no effect. A data written with an empty body (`+data T = { }+`) is a product with no fields, not a unit, and its `+invariant+` is checked as any other product's is.
+A unit data MUST NOT carry an `+invariant+`: it has no field for one to observe and no value it could reject (<<invariant-declaration>>). Writing one is a compile error rather than a clause with no effect.
+
+A data body MUST NOT be empty: `+data T = { }+` names a type with one value, which is what a unit data is, so it is a second spelling of one. The two are not interchangeable where it counts — an empty product is built as `+T {}+` and a unit by its name alone — so the declaration form silently decides how the value is written. Writing it is a compile error naming the unit form. A body of spreads alone (`+data T = { ...共通項目 }+`) is not empty: what it includes gives it its fields (<<field-spread>>).
 
 A unit data value is constructed by *writing the name directly* (as a zero-argument constructor becomes a value in functional languages). An empty record such as `+T {}+` is not used.
 

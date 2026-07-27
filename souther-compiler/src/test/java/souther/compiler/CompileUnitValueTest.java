@@ -1,11 +1,15 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.SourceContext;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Locale;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -92,19 +96,55 @@ class CompileUnitValueTest {
         assertThrows(CompileException.class, () -> Compiler.compile(src));
     }
 
-    /** The sibling shape still behaves: a data written with an empty body is a product with no
-     *  fields, not a unit, and its invariant goes through the ordinary path. */
+    /** An empty body names a type with one value, which is what a unit data is, so it is the second
+     *  way to write one — and the two reject each other's construction. Only the unit form remains. */
     @Test
-    void anEmptyProductBodyStillTypeChecksItsInvariant() {
+    void anEmptyProductBodyIsRefused() {
         String src = """
                 module demo
                 data Mark = {}
-                    invariant nonexistent > 0
                 data Out = { s: String }
                 behavior k : (n: Int) -> Out constructs Out
                 let k (n) = Out { s = "x" }
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(e.getMessage().contains("nonexistent"), e.getMessage());
+        assertTrue(e.getMessage().contains("empty body"), e.getMessage());
+        assertEquals(2, e.pos().line(), "must point at the body");
+        assertEquals(13, e.pos().column(), "must start at the opening brace");
+        String out = new HumanRenderer(false)
+                .render(e.diagnostic(), new SourceContext("demo.sou", src), Locale.ENGLISH);
+        assertTrue(out.contains("^^"), out);   // the whole `{}`, not just the opening brace
+    }
+
+    /** A body written open is still underlined from its opening brace: the region spans to the
+     *  closing brace wherever it sits, and the renderer draws one caret across lines. */
+    @Test
+    void anEmptyBodySpanningLinesIsUnderlinedFromItsBrace() {
+        String src = """
+                module demo
+                data Mark = {
+                }
+                data Out = { s: String }
+                behavior k : (n: Int) -> Out constructs Out
+                let k (n) = Out { s = "x" }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("empty body"), e.getMessage());
+        assertEquals(2, e.pos().line(), "must point at the opening brace");
+        assertEquals(1, e.diagnostic().region().caretWidth(), "a multi-line region draws one caret");
+    }
+
+    /** A spread body is a body: what it includes decides the fields, and an empty one cannot be
+     *  written any more, so this stays a data with fields. */
+    @Test
+    void aSpreadOnlyBodyIsStillAProduct() {
+        String src = """
+                module demo
+                data Base = { s: String }
+                data Mark = { ...Base }
+                behavior k : (n: Int) -> Mark constructs Mark
+                let k (n) = Mark { s = "x" }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
     }
 }
