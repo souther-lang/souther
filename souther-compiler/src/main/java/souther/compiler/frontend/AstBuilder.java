@@ -227,6 +227,16 @@ public final class AstBuilder {
                     fields.add(field(member));
                 }
             }
+            // `data T = { }` names a type with one value, which is what a unit data is — but it is
+            // built as `T {}` where a unit is built by name, so the two spellings mean the same
+            // thing and reject each other's construction. One way to write it (spec §unit-data).
+            if (includes.isEmpty() && fields.isEmpty()) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.data.emptybody").title("check.data.invalid.title")
+                                .at(pos(product.get())).args(name)
+                                .hint("check.data.emptybody.hint", name).build(),
+                        "data `" + name + "` has an empty body");
+            }
             return new Ast.Data(name, false, includes, fields, invariant,
                     Optional.empty(), Optional.empty(), pos);
         }
