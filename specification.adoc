@@ -2562,19 +2562,33 @@ Exceptions are not supported. Return a failure case in the output sum.
 ----
 
 [#e1303]
-=== Building an optional
+=== Writing an option case
+
+Reported where `+Some+` or `+None+` is written outside the one place an optional is made — a `+?+` field being given a value, where a plain value is wrapped and `+None+` is the empty one (<<optional>>). The two names fail for different reasons and are reported apart.
+
+`+Some(...)+` is never a call, wherever it is written, because the wrap at the field is implicit:
 
 [,text]
 ----
 error E1303:
-`Some` is a built-in Option case. A model reads an optional — a `?` field, `Map.get`,
-`List.find` — and passes it on; it never builds one.
+`Some(...)` is not a call: a value written into a `?` field is wrapped for you,
+and that is the only place an optional is made.
+Hint: Where a `?` field is being given a value, write the value on its own.
+Elsewhere an optional is only read — a `?` field, `Map.get`, `List.find` — never made.
+----
+
+`+None+` is a value, and the error is that this position is not asking for one:
+
+[,text]
+----
+error E1303:
+`None` is the empty value of a `?` field, and nothing here is asking for one.
 Hint: Where the model owns the absence, make it a case of its own sum. Absence of that
 kind does not reach `List.filterMap`, whose step has to answer an optional: use
 `List.concatMap` over a step answering a list of nought or one.
 ----
 
-Reported where `+Some+` or `+None+` is written in an expression. A pattern is unaffected: `+| Some v+` matches an optional the model was given (<<optional>>, ADR-0011).
+A pattern is unaffected by either: `+| Some v+` matches an optional the model was given (ADR-0011).
 
 [#e1401]
 === Arbitrary Java calls

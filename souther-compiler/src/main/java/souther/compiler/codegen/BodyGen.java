@@ -544,6 +544,16 @@ final class BodyGen {
                     genExpr(iff.els(), expected);
                     code.labelBinding(end);
                 }
+                case Core.OptionSome s -> {
+                    // `Option.some` takes the value as an Object, so a primitive element boxes here
+                    // the way a list element does.
+                    genExpr(s.value());
+                    JvmTypes.box(code, s.value().type());
+                    code.invokestatic(CD_Option, "some",
+                            MethodTypeDesc.of(CD_Option, ConstantDescs.CD_Object), true);
+                }
+                case Core.OptionNone _ ->
+                        code.invokestatic(CD_Option, "none", MethodTypeDesc.of(CD_Option), true);
                 case Core.ListLit lit -> listLit(lit);
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
@@ -1372,6 +1382,8 @@ final class BodyGen {
                 case Core.ListLit lit -> lit.elements().forEach(x -> collectFree(x, bound, free));
                 case Core.Tuple tup -> tup.elements().forEach(x -> collectFree(x, bound, free));
                 case Core.TupleGet tg -> collectFree(tg.tuple(), bound, free);
+                case Core.OptionSome s -> collectFree(s.value(), bound, free);
+                case Core.OptionNone _ -> { }
                 case Core.Int _ -> { }
                 case Core.Decimal _ -> { }
                 case Core.Str _ -> { }

@@ -105,7 +105,9 @@ public final class MatchElaborator {
                 }
                 checkUnwrapAsserts(c, ctx.symbols());
             }
-            Core body = Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx, expected);
+            Core body = Elaborator.liftIntoOption(
+                    Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx, expected),
+                    expected, ctx.symbols());
             arms.add(new Core.Case(c.caseTypes(), c.binding(), body, bindType, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c);
         }
@@ -166,7 +168,9 @@ public final class MatchElaborator {
                                 .at(c.pos()).args(caseType).build(),
                         "`" + caseType + "` is matched by more than one case");
             }
-            Core body = Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected);
+            Core body = Elaborator.liftIntoOption(
+                    Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
+                    expected, ctx.symbols());
             arms.add(new Core.Case(c.caseTypes(), c.binding(), body, bind, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c);
         }
