@@ -109,6 +109,23 @@
                 </plugin>
             </plugins>
         </pluginManagement>
+        <plugins>
+            <!-- Implementation-Version in every jar's manifest. A compiled Souther module records
+                 the compiler that produced it, and this is where that string comes from: Maven
+                 fills it from the project version, so the root pom stays the one place the version
+                 is written. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
     </build>
 
     <profiles>
