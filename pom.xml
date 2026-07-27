@@ -11,7 +11,7 @@
 
     <name>Souther</name>
     <description>Souther: a JVM language that turns SMDD spec models into implementation models.</description>
-    <url>https://github.com/kawasima/souther</url>
+    <url>https://github.com/souther-lang/souther</url>
 
     <licenses>
         <license>
@@ -39,9 +39,9 @@
     </modules>
 
     <scm>
-        <connection>scm:git:https://github.com/kawasima/souther.git</connection>
-        <developerConnection>scm:git:git@github.com:kawasima/souther.git</developerConnection>
-        <url>https://github.com/kawasima/souther</url>
+        <connection>scm:git:https://github.com/souther-lang/souther.git</connection>
+        <developerConnection>scm:git:git@github.com:souther-lang/souther.git</developerConnection>
+        <url>https://github.com/souther-lang/souther</url>
         <tag>HEAD</tag>
     </scm>
 
