@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Compile-time evaluation of {@code example}s: an example that holds compiles, one that
@@ -114,6 +116,104 @@ class CompileExampleTest {
         // Both rows fail; the build reports the aggregate (E1905) mentioning the extra failure.
         CompileException e = err(bad);
         assertEquals("E1905", e.diagnostic().code());
+    }
+
+    /** A behavior whose output is a sum written under its own name, so a row's expected arm is a
+     *  case of that sum rather than a member of a written case list. */
+    private static final String NAMED_SUM = """
+            module tiering
+            data Small = { n: Int }
+            data Large = { n: Int }
+            data Elsewhere = { n: Int }
+            data Tier = Small | Large
+            data Reading = { n: Int }
+
+            behavior tierOf : (r: Reading) -> Tier constructs Small, Large
+
+            let tierOf (r) = if r.n > 10 then Large { n = r.n } else Small { n = r.n }
+            """;
+
+    @Test
+    void aCaseOfANamedSumOutputIsAWritableExpectedArm() {
+        String model = NAMED_SUM + """
+                example tierOf
+                  | "over the line"  : (Reading { n = 20 }) -> Large
+                  | "under the line" : (Reading { n = 1 })  -> Small { n = 1 }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(model));
+    }
+
+    @Test
+    void theWrongCaseOfANamedSumOutputStillFailsTheExample() {
+        String bad = NAMED_SUM + """
+                example tierOf
+                  | (Reading { n = 20 }) -> Small
+                """;
+        assertEquals("E1905", err(bad).diagnostic().code());
+    }
+
+    @Test
+    void aCaseOutsideTheNamedSumIsE1904() {
+        String bad = NAMED_SUM + """
+                example tierOf
+                  | (Reading { n = 20 }) -> Elsewhere
+                """;
+        CompileException e = err(bad);
+        assertEquals("E1904", e.diagnostic().code());
+        // the hint names the cases, not the sum, since those are what a row may expect
+        String hint = String.valueOf(e.diagnostic().notes().get(0).args()[0]);
+        assertTrue(hint.contains("Small") && hint.contains("Large"), hint);
+        assertFalse(hint.contains("Tier"), hint);
+    }
+
+    @Test
+    void theSumItselfIsNotAnExpectedArm() {
+        // `Tier` names no case, so a row expecting it asserts nothing a result could be
+        String bad = NAMED_SUM + """
+                example tierOf
+                  | (Reading { n = 20 }) -> Tier
+                """;
+        assertEquals("E1904", err(bad).diagnostic().code());
+    }
+
+    @Test
+    void aLeafOfANestedNamedSumOutputIsAWritableExpectedArm() {
+        String model = """
+                module nesting
+                data Approved = { n: Int }
+                data Rejected = { n: Int }
+                data Pending = { n: Int }
+                data Decided = Approved | Rejected
+                data Outcome = Decided | Pending
+                data Reading = { n: Int }
+
+                behavior decide : (r: Reading) -> Outcome constructs Approved, Pending
+
+                let decide (r) = if r.n > 10 then Approved { n = r.n } else Pending { n = r.n }
+
+                example decide
+                  | "over the line"  : (Reading { n = 20 }) -> Approved
+                  | "under the line" : (Reading { n = 1 })  -> Pending
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(model));
+    }
+
+    @Test
+    void aUnitCaseOfANamedSumOutputIsAWritableExpectedArm() {
+        String model = """
+                module ranking
+                data Tier = Bronze | Silver
+                data Reading = { n: Int }
+
+                behavior rankOf : (r: Reading) -> Tier constructs Bronze, Silver
+
+                let rankOf (r) = if r.n > 10 then Silver else Bronze
+
+                example rankOf
+                  | "over the line"  : (Reading { n = 20 }) -> Silver
+                  | "under the line" : (Reading { n = 1 })  -> Bronze
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(model));
     }
 
     @Test
