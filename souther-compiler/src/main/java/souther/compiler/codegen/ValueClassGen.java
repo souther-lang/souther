@@ -425,36 +425,59 @@ final class ValueClassGen {
         // Public for an exposed type: a behavior of another module may declare `constructs T`
         // (ADR-0002 never restricted that to T's own module), and this is the path it takes — the one
         // that runs the invariant. A type this module keeps to itself keeps its entry package-private.
-        cb.withMethodBody("__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)),
-                ClassFile.ACC_STATIC | ctx.pub(data.name()), code -> {
-                    BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
-                    int slot = 0;
-                    for (Map.Entry<String, Type> f : fields.entrySet()) {
-                        gen.bind(f.getKey(), slot, f.getValue());
-                        slot += width(f.getValue());
-                    }
+        cb.withMethod("__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)),
+                ClassFile.ACC_STATIC | ctx.pub(data.name()), mb -> {
+                    mb.with(SignatureAttribute.of(
+                            MethodSignature.parseFrom(constructSignature(fields, cdName))));
+                    mb.withCode(code -> {
+                        BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+                        int slot = 0;
+                        for (Map.Entry<String, Type> f : fields.entrySet()) {
+                            gen.bind(f.getKey(), slot, f.getValue());
+                            slot += width(f.getValue());
+                        }
 
-                    for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
-                        gen.expr(inv);
-                        Label ok = code.newLabel();
-                        code.ifne(ok);
-                        code.loadConstant("invariant violated on " + data.name());
-                        code.invokestatic(CD_Result, "err", MTD_Result_err, true);
+                        for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
+                            gen.expr(inv);
+                            Label ok = code.newLabel();
+                            code.ifne(ok);
+                            code.loadConstant("invariant violated on " + data.name());
+                            code.invokestatic(CD_Result, "err", MTD_Result_err, true);
+                            code.areturn();
+                            code.labelBinding(ok);
+                        }
+
+                        code.new_(cdName);
+                        code.dup();
+                        int s = 0;
+                        for (Map.Entry<String, Type> f : fields.entrySet()) {
+                            load(code, s, f.getValue());
+                            s += width(f.getValue());
+                        }
+                        code.invokespecial(cdName, "<init>",
+                                MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)));
+                        code.invokestatic(CD_Result, "ok", MTD_Result_Object, true);
                         code.areturn();
-                        code.labelBinding(ok);
-                    }
-
-                    code.new_(cdName);
-                    code.dup();
-                    int s = 0;
-                    for (Map.Entry<String, Type> f : fields.entrySet()) {
-                        load(code, s, f.getValue());
-                        s += width(f.getValue());
-                    }
-                    code.invokespecial(cdName, "<init>",
-                            MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)));
-                    code.invokestatic(CD_Result, "ok", MTD_Result_Object, true);
-                    code.areturn();
+                    });
                 });
+    }
+
+    /**
+     * The generic {@code Signature} of {@code __construct}: {@code Result<T, String>}, where the
+     * failure side is the invariant message this method builds. Unlike a factory's, it is written
+     * whether or not a field is a container — the raw {@code Result} the descriptor names carries no
+     * type at all, and a Kotlin caller reads a raw type as a platform type, which is the one thing
+     * the rest of the class is marked to avoid (issue #150).
+     */
+    private String constructSignature(Map<String, Type> fields, ClassDesc cdName) {
+        StringBuilder sb = new StringBuilder("(");
+        for (Type t : fields.values()) {
+            String g = JvmTypes.genericSig(t, ctx);
+            sb.append(g != null ? g : jvmType(t).descriptorString());
+        }
+        return sb.append(")Lsouther/runtime/Result<")
+                .append(cdName.descriptorString())
+                .append(CD_String.descriptorString())
+                .append(">;").toString();
     }
 }

@@ -46,8 +46,8 @@ class CrossProjectProcessorTest {
                 """, List.of(libClasses));
 
         assertTrue(Files.exists(appClasses.resolve("app/order/Order.class")));
-        assertTrue(Files.exists(appClasses.resolve("app/order/package-info.class")),
-                "the package annotations go through the Filer with everything else");
+        assertTrue(Files.exists(appClasses.resolve("app/order/$Module.class")),
+                "the module's declarations go through the Filer with everything else");
         assertFalse(Files.exists(appClasses.resolve("shared/money/Amount.class")),
                 "the dependency's classes belong to its own build");
     }

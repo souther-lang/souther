@@ -21,7 +21,6 @@ import java.lang.classfile.Label;
 import java.lang.classfile.MethodSignature;
 import java.lang.classfile.attribute.PermittedSubclassesAttribute;
 import java.lang.classfile.attribute.RuntimeInvisibleAnnotationsAttribute;
-import java.lang.classfile.attribute.RuntimeVisibleAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
 import java.lang.constant.ConstantDescs;
@@ -189,7 +188,6 @@ public final class Backend {
             }
         });
         Map<String, byte[]> out = new LinkedHashMap<>();
-        out.put(packageInfoName(module.name()), packageInfo(module.name()));
         behaviorResults.forEach((resultName, cases) ->
                 out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, cases)));
         for (Ast.Def def : module.defs()) {
@@ -674,34 +672,6 @@ public final class Backend {
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {
         return moduleName + ".$Module";
-    }
-
-    /** The class a package's annotations ride on, named as javac names the one it compiles from
-     * {@code package-info.java}. A module is a package (a class is {@code module + "." + name}), so
-     * there is one per module. */
-    public static String packageInfoName(String moduleName) {
-        return moduleName + ".package-info";
-    }
-
-    /**
-     * Emits {@link #packageInfoName} carrying JSpecify's {@code @NullMarked}: in this package a type
-     * that says nothing about null is not null.
-     *
-     * <p>That is what the generated code already is. Absence is {@code Option} and a failure is a case
-     * of the output union (spec 7.3, 12), so no accessor, factory or codec hands back a null. Saying
-     * it here is what lets a caller's compiler know: Kotlin reads the annotation off this class and
-     * types every generated accessor as non-null instead of falling back to a platform type, where a
-     * null check is neither required nor possible. It is read by name, so neither this compiler nor
-     * anything downstream needs the JSpecify jar on its classpath.
-     *
-     * <p>The class is shaped as javac shapes the one it compiles from a {@code package-info.java} —
-     * an abstract synthetic interface declaring nothing — since that is the shape every tool that
-     * reads package annotations expects to find.
-     */
-    public static byte[] packageInfo(String moduleName) {
-        return Descriptors.build(ClassDesc.of(packageInfoName(moduleName)), cb -> cb
-                .withFlags(ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT | ClassFile.ACC_SYNTHETIC)
-                .with(RuntimeVisibleAnnotationsAttribute.of(Annotation.of(CD_NullMarked))));
     }
 
     /** Emits {@link #moduleClassName}, carrying {@code declarations}. What it says is the caller's;

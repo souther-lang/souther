@@ -2286,7 +2286,11 @@ The class-file version of the generated `+.class+` is fixed at Java 25 (major 69
 
 No generated value is ever null. Absence is `+Option+` (<<optional>>), a failure is a case of the output union (<<unmarked-sum>>), and a collection holds neither a null key nor a null value — so no accessor, factory, codec or `+apply+` hands one back.
 
-Each generated package carries JSpecify's `+@NullMarked+` on a `+package-info+` class emitted with it, and souther-runtime carries it on its own packages, so a consumer's compiler knows that too. It matters most where a compiler acts on it: Kotlin reads the annotation off the class file and types every generated accessor as non-null, where without it the type is a platform type and a null check is neither required nor possible. The annotation is read by name, so the JSpecify jar need not be on the consumer's classpath.
+Every generated class carries JSpecify's `+@NullMarked+`, and souther-runtime carries it on its own packages, so a consumer's compiler knows that too. It matters most where a compiler acts on it: Kotlin reads the annotation off the class file and types every generated accessor as non-null, where without it the type is a platform type and a null check is neither required nor possible. The annotation is read by name, so the JSpecify jar need not be on the consumer's classpath.
+
+It rides on each class rather than on a `+package-info+` of the module's package. That package is where a consumer's own `+package-info.java+` sits, and a generated class of the same name would lose to that declaration — the marking would then reach only the modules that own no Java of their own.
+
+A generated method whose descriptor names a generic type carries the `+Signature+` for it, so the type argument survives to a reader. `+__construct+` returns `+Result<T, String>+`; a raw `+Result+` would be a platform type again on the Kotlin side, where the class carrying it says everything else is not.
 
 The few places that do admit a null are annotated one by one — a `+java.util.Map+` implementation's `+get+`, which returns null for an absent key because that interface says so.
 
