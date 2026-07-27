@@ -2561,6 +2561,20 @@ error E1302:
 Exceptions are not supported. Return a failure case in the output sum.
 ----
 
+[#e1303]
+=== Building an optional
+
+[,text]
+----
+error E1303:
+`Some` is a built-in Option case. A model reads an optional — a `?` field, `Map.get`,
+`List.find` — and passes it on; it never builds one.
+Hint: Where the model owns the absence, make it a case of its own sum. A step for
+`List.filterMap` can answer a list of nought or one instead, joined with `List.concatMap`.
+----
+
+Reported where `+Some+` or `+None+` is written in an expression. A pattern is unaffected: `+| Some v+` matches an optional the model was given (<<optional>>, ADR-0011).
+
 [#e1401]
 === Arbitrary Java calls
 

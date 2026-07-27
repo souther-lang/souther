@@ -165,6 +165,7 @@ public final class Elaborator {
                     throw new CompileException(v.pos(), "E1301",
                             "`null` is not part of the language. Use an optional field with `?`.");
                 }
+                optionIsRead(v.name(), v.pos());
                 throw CompileException.of(
                         Diagnostic.of(null, "check.unknown.name.msg")
                                 .title("check.unknown.title")
@@ -682,6 +683,27 @@ public final class Elaborator {
                             .build(),
                     what + " must be " + expected + " but is " + actual);
         }
+    }
+
+    /**
+     * Rejects {@code Some} / {@code None} written in an expression (E1303). An optional reaches a
+     * model already made — a {@code ?} field, {@code Map.get}, {@code List.find} — and is passed on
+     * or matched; nothing in the language builds one, and neither does a Java binding, so the
+     * unknown-name and arbitrary-call reports both send the reader the wrong way (issue #166).
+     * Patterns do not come through here: {@code | Some v} is matched, not evaluated.
+     */
+    static void optionIsRead(String name, SourcePos pos) {
+        if (!name.equals("Some") && !name.equals("None")) {
+            return;
+        }
+        throw CompileException.of(
+                Diagnostic.of("E1303", "e1303.msg").title("e1303.title")
+                        .at(pos, name.length()).args(name).hint("e1303.hint").build(),
+                "`" + name + "` is a built-in Option case: a model reads an optional (a `?` field,"
+                        + " `Map.get`, `List.find`) and passes it on, and never builds one. Where the"
+                        + " model owns the absence, make it a case of its own sum; a step for"
+                        + " `List.filterMap` can answer a list of nought or one instead, joined with"
+                        + " `List.concatMap`.");
     }
 
     /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source

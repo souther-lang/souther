@@ -1,10 +1,13 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.SourceContext;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -107,6 +110,58 @@ class CompileFilterMapTest {
                 let run (o) = o
                 """));
         assertTrue(e.getMessage().contains("optional"), e.getMessage());
+    }
+
+    @Test
+    void theOptionalInASignatureErrorSaysWhatToWriteInstead() {
+        // The rule alone left no way forward: the model wrote the annotation because it wanted a
+        // step for filterMap, and both ways to get one are ways of not writing the type (issue #166).
+        String src = """
+                module demo
+
+                data Name = String
+                data Issue = { id: String, assignee: Name? }
+
+                behavior run : (i: Issue) -> Issue
+
+                let pick (x: Issue): Name? = x.assignee
+                let run (i) = i
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        String out = new HumanRenderer(false).render(e.diagnostic(),
+                new SourceContext("demo.sou", src), Locale.ENGLISH);
+        assertTrue(out.contains("concatMap"), out);
+    }
+
+    @Test
+    void aHelperWithAnInferredResultIsAStep() throws Exception {
+        // The step can be named: a helper leaves its result type off and the optional is inferred,
+        // so factoring the projection out of the lambda does not need `Name?` to be writable.
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( filterMap )
+
+                data Name = String
+                data Issue = { id: String, assignee: Name? }
+                data In = { issues: List<Issue> }
+                data Out = { names: List<Name> }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let assigneeOf (x: Issue) = x.assignee
+
+                let run (i) = Out { names = filterMap(assigneeOf, i.issues) }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("issues", List.of(
+                Map.of("id", "i-1", "assignee", "kawasima"),
+                Map.of("id", "i-2"),
+                Map.of("id", "i-3", "assignee", "aoyagi"))));
+        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
+
+        assertEquals(List.of("kawasima", "aoyagi"), out.get("names"));
     }
 
     @Test

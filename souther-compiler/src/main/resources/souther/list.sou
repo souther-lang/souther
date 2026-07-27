@@ -151,8 +151,13 @@ let groupBy (key: ('a) -> 'k, xs: List<'a>) =
 // with an optional, and only what is there joins the result. This is how an optional field becomes a
 // plain list — `filterMap(i -> i.assignee, issues)` — without the caller writing a sentinel value to
 // filter on afterwards. `f`'s result type is written `'b?`, an optional in a signature, which is a
-// core privilege like the type variables around it: the caller's lambda returns an optional it read
-// (a `?` field, `Map.get`, `List.find`) and never names the type (ADR-0011).
+// core privilege like the type variables around it: the caller's step returns an optional it read
+// (a `?` field, `Map.get`, `List.find`) and never names the type (ADR-0011). The step can be named
+// as well as written inline — a helper that leaves its result type off has the optional inferred.
+//
+// So `filterMap` serves the absence a model reads. Absence the model owns — a sum case with nothing
+// to give — cannot reach it, because nothing but the core builds an optional; that projection answers
+// a list of nought or one and `concatMap` joins them (issue #166).
 let filterMap (f: ('a) -> 'b?, xs: List<'a>) =
     List.fold((acc, x) ->
         match f(x) with
