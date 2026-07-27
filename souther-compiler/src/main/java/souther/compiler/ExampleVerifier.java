@@ -751,11 +751,8 @@ public final class ExampleVerifier {
     }
 
     private Set<TypeName> outCases(Type out) {
-        if (out instanceof Type.Union u) {
-            return u.members();
-        }
-        if (out instanceof Type.Ref r) {
-            return Set.of(r.name());
+        if (out instanceof Type.Union || out instanceof Type.Ref) {
+            return TypeOps.leafCases(out, symbols);
         }
         return Set.of();
     }
