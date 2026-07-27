@@ -75,7 +75,7 @@ public final class Messages {
             ResourceBundle bundle = ResourceBundle.getBundle(BUNDLE,
                     locale == null ? defaultLocale() : locale, CONTROL);
             return bundle.getString(key);
-        } catch (MissingResourceException e) {
+        } catch (MissingResourceException _) {
             return null;
         }
     }

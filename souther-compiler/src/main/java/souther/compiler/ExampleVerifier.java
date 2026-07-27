@@ -59,7 +59,7 @@ public final class ExampleVerifier {
         for (Ast.Example ex : module.examples()) {
             try {
                 v.checkExample(ex, failures);
-            } catch (LinkageError le) {
+            } catch (LinkageError _) {
                 // The runtime is not on this host's classpath (it is `provided`, like CTFE), so the
                 // generated classes cannot be loaded to evaluate here; the build-time pass, where the
                 // runtime is present, still checks this example.
@@ -478,7 +478,7 @@ public final class ExampleVerifier {
         Class<?> iface;
         try {
             iface = loader.loadClass("souther.runtime.Behavior");
-        } catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException _) {
             throw new NoClassDefFoundError("souther.runtime.Behavior");
         }
         return java.lang.reflect.Proxy.newProxyInstance(loader, new Class<?>[] {iface}, (proxy, method, a) -> {
@@ -538,7 +538,7 @@ public final class ExampleVerifier {
                 return decode(outType, raw(expected));
             }
             return raw(expected);   // a literal expected value
-        } catch (FixtureException fe) {
+        } catch (FixtureException _) {
             return null;
         }
     }
@@ -671,7 +671,7 @@ public final class ExampleVerifier {
             Object encoder = staticCodec(c, "encoder");
             return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
                     .invoke(encoder, result);
-        } catch (ReflectiveOperationException | RuntimeException e) {
+        } catch (ReflectiveOperationException | RuntimeException _) {
             return null;
         }
     }
@@ -729,7 +729,7 @@ public final class ExampleVerifier {
     private Object rawOrNull(Ast.Expr e) {
         try {
             return raw(e);
-        } catch (FixtureException fe) {
+        } catch (FixtureException _) {
             return null;
         }
     }
@@ -883,7 +883,7 @@ public final class ExampleVerifier {
         }
         try {
             return TypeOps.resolveType(declaredType, symbols);
-        } catch (CompileException e) {
+        } catch (CompileException _) {
             return null;
         }
     }
@@ -1018,7 +1018,7 @@ public final class ExampleVerifier {
         Result<?> result;
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException _) {
             // The decoder is generated for the declared type and casts on the way in, so a fixture of
             // another shape — a string where the parameter is a product, a number where it is a
             // string-backed newtype — fails inside it rather than returning an Err. That is the
@@ -1073,7 +1073,7 @@ public final class ExampleVerifier {
             try {
                 Class<?> c = loader.loadClass(ref.name().qualified());
                 return (Decoder<Object, ?>) staticCodec(c, "decoder");
-            } catch (ReflectiveOperationException e) {
+            } catch (ReflectiveOperationException _) {
                 throw new FixtureException("no decoder for `" + ref.name().name() + "`");
             }
         }
@@ -1111,8 +1111,8 @@ public final class ExampleVerifier {
             for (Map.Entry<?, ?> entry : ((Map<?, ?>) decoded).entrySet()) {
                 Result<?> k = keyDecoder.decode(entry.getKey(), path.append(String.valueOf(entry.getKey())));
                 switch (k) {
-                    case Ok<?> ok -> out.put(ok.value(), entry.getValue());
-                    case Err<?> err -> issues = issues.merge(err.issues());
+                    case Ok<?>(var decodedKey) -> out.put(decodedKey, entry.getValue());
+                    case Err<?>(var found) -> issues = issues.merge(found);
                 }
             }
             return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
@@ -1134,7 +1134,7 @@ public final class ExampleVerifier {
         try {
             long ms = Long.parseLong(override.trim());
             return ms > 0 ? ms : 2000L;
-        } catch (NumberFormatException e) {
+        } catch (NumberFormatException _) {
             return 2000L;
         }
     }
@@ -1155,7 +1155,7 @@ public final class ExampleVerifier {
         worker.start();
         try {
             return task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (java.util.concurrent.TimeoutException te) {
+        } catch (java.util.concurrent.TimeoutException _) {
             task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
             throw new NonTerminationException("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms");
         } catch (java.util.concurrent.ExecutionException ee) {
@@ -1170,7 +1170,7 @@ public final class ExampleVerifier {
                 throw ae;
             }
             throw new AbortException(cause == null ? "aborted" : String.valueOf(cause.getMessage()));
-        } catch (InterruptedException ie) {
+        } catch (InterruptedException _) {
             Thread.currentThread().interrupt();
             throw new AbortException("interrupted");
         }

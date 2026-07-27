@@ -72,7 +72,7 @@ public final class Compiler {
                                                List<Diagnostic> warningsOut) {
         try {
             return compiling(source, defaultModuleName, warningsOut);
-        } catch (StackOverflowError e) {
+        } catch (StackOverflowError _) {
             throw tooDeep();
         }
     }
@@ -158,7 +158,7 @@ public final class Compiler {
             try {
                 Class<?> ctfe = Class.forName(module.name() + "." + c.typeName() + "$Ctfe", true, loader);
                 holds = (boolean) ctfe.getMethod("check", paramClass(c.value())).invoke(null, c.value());
-            } catch (ReflectiveOperationException | LinkageError ex) {
+            } catch (ReflectiveOperationException | LinkageError _) {
                 continue;   // cannot evaluate at compile time; the run-time check still applies
             }
             if (!holds) {
@@ -222,7 +222,7 @@ public final class Compiler {
     private static Map<String, byte[]> compileModules(List<String> sources, List<Diagnostic> warningsOut) {
         try {
             return linking(sources, warningsOut);
-        } catch (StackOverflowError e) {
+        } catch (StackOverflowError _) {
             throw tooDeep();
         }
     }

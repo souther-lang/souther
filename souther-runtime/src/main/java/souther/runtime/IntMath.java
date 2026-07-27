@@ -16,7 +16,7 @@ public final class IntMath {
     public static long addExact(long a, long b) {
         try {
             return Math.addExact(a, b);
-        } catch (ArithmeticException e) {
+        } catch (ArithmeticException _) {
             throw new ConstraintViolation("Int overflow: " + a + " + " + b);
         }
     }
@@ -24,7 +24,7 @@ public final class IntMath {
     public static long subtractExact(long a, long b) {
         try {
             return Math.subtractExact(a, b);
-        } catch (ArithmeticException e) {
+        } catch (ArithmeticException _) {
             throw new ConstraintViolation("Int overflow: " + a + " - " + b);
         }
     }
@@ -32,7 +32,7 @@ public final class IntMath {
     public static long multiplyExact(long a, long b) {
         try {
             return Math.multiplyExact(a, b);
-        } catch (ArithmeticException e) {
+        } catch (ArithmeticException _) {
             throw new ConstraintViolation("Int overflow: " + a + " * " + b);
         }
     }
@@ -49,7 +49,7 @@ public final class IntMath {
         }
         try {
             return Math.divideExact(a, b);
-        } catch (ArithmeticException e) {
+        } catch (ArithmeticException _) {
             throw new ConstraintViolation("Int overflow: " + a + " / " + b);
         }
     }

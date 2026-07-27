@@ -796,31 +796,6 @@ public final class Formatter {
         return out;
     }
 
-    /** The comments left after {@code parent}'s last child node — written above the closing brace,
-     * with no member to attach to. */
-    private record Leading(List<String> comments) {}
-
-    /** The full-line comments that sit directly above a top-level item (its leading trivia). Blank
-     * lines are normalised away by {@link #blankBetween}, so only the comment text is carried. */
-    private Leading leading(SyntaxNode n) {
-        List<String> comments = new ArrayList<>();
-        for (SyntaxElement e : n.children()) {
-            if (e instanceof SyntaxToken t) {
-                if (t.kind() == SyntaxKind.WHITESPACE) {
-                    continue;
-                }
-                if (t.kind() == SyntaxKind.LINE_COMMENT) {
-                    comments.add(t.text().stripTrailing());
-                } else {
-                    break;   // the first real token
-                }
-            } else {
-                break;   // the first child node
-            }
-        }
-        return new Leading(comments);
-    }
-
     private List<String> trailingComments(SyntaxNode file) {
         List<String> out = new ArrayList<>();
         int lastNode = -1;

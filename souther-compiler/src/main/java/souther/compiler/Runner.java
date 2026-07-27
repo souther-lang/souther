@@ -322,7 +322,7 @@ public final class Runner {
         Result<?> result;
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
-        } catch (RuntimeException e) {
+        } catch (RuntimeException _) {
             // The input is not even the shape the decoder reads (an array where an object belongs),
             // which the decoder reports by throwing rather than as an issue. That is a malformed
             // --input, so it is reported as one instead of reaching the caller as a stack trace.

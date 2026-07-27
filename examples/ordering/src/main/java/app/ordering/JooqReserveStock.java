@@ -74,9 +74,9 @@ public final class JooqReserveStock extends ReserveStock {
         // Every line reserved. ConfirmedOrder holds fields, so build it through the decoder.
         Map<String, Object> raw = Map.of("orderId", orderId, "total", total);
         return switch (ConfirmedOrder.decoder().decode(raw, Path.ROOT)) {
-            case Ok<ConfirmedOrder> ok -> ok.value();
-            case Err<ConfirmedOrder> e ->
-                    throw new IllegalStateException("failed to build ConfirmedOrder: " + e.issues().asList());
+            case Ok<ConfirmedOrder>(var order) -> order;
+            case Err<ConfirmedOrder>(var issues) ->
+                    throw new IllegalStateException("failed to build ConfirmedOrder: " + issues.asList());
         };
     }
 }

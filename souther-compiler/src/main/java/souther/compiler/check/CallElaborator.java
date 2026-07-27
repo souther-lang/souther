@@ -530,7 +530,7 @@ public final class CallElaborator {
             return fn.equals("Date")
                     ? java.time.LocalDate.parse(text)
                     : java.time.LocalDateTime.parse(text);
-        } catch (java.time.format.DateTimeParseException e) {
+        } catch (java.time.format.DateTimeParseException _) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.temporal.malformed").title("check.type.mismatch.title")
                             .at(pos, fn.length()).args(fn, text).build(),

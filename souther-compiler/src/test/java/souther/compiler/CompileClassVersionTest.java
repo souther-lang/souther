@@ -7,11 +7,12 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Generated classes target Java 21 (spec 19.1).
+ * Generated classes target Java 25 (spec 19.1).
  *
  * <p>Without this the version follows whatever JDK runs the compiler, which is silent and
  * environment-dependent: building on a newer JDK produces classes the target runtime cannot
- * load, and two developers emit mutually incompatible artifacts.
+ * load, and two developers emit mutually incompatible artifacts. The pin is what makes the floor a
+ * decision rather than a property of whoever ran the build.
  */
 class CompileClassVersionTest {
 
@@ -30,8 +31,8 @@ class CompileClassVersionTest {
             let 名を取る (c) = 会員ID { value = c.email }
             """;
 
-    /** major 65 is Java 21; the JDK running this test is newer, so a default would not match. */
-    private static final int JAVA_21 = 65;
+    /** major 69 is Java 25. Pinned, so it stays put when the JDK running the build moves on. */
+    private static final int JAVA_25 = 69;
 
     private static int majorVersion(byte[] cls) {
         // u4 magic, u2 minor, u2 major
@@ -39,11 +40,11 @@ class CompileClassVersionTest {
     }
 
     @Test
-    void everyGeneratedClassTargetsJava21() {
+    void everyGeneratedClassTargetsJava25() {
         Map<String, byte[]> classes = Compiler.compile(MODULE);
         for (Map.Entry<String, byte[]> e : classes.entrySet()) {
-            assertEquals(JAVA_21, majorVersion(e.getValue()),
-                    e.getKey() + " must target Java 21, not the JDK that built it");
+            assertEquals(JAVA_25, majorVersion(e.getValue()),
+                    e.getKey() + " must target Java 25, not the JDK that built it");
         }
     }
 

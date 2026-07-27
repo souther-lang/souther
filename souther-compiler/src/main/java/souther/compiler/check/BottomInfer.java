@@ -122,7 +122,7 @@ public final class BottomInfer {
         try {
             TypeOps.unify(result, expected, probe, symbols, pos, what);
             bind.putAll(probe);
-        } catch (CompileException ignored) {
+        } catch (CompileException _) {
             // the expected type does not fit this result; leave bind untouched
         }
     }

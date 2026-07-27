@@ -190,7 +190,7 @@ public final class HelperTyping {
                     Type t;
                     try {
                         t = Elaborator.typeOf(inliner.inline(call.args().get(idx)), env, new CheckContext(symbols, null, reqSigs));
-                    } catch (CompileException ignored) {
+                    } catch (CompileException _) {
                         untypeable.putIfAbsent(idx, call.args().get(idx));
                         continue;
                     }
@@ -269,7 +269,7 @@ public final class HelperTyping {
             } else {
                 try {
                     inner.put(li.name(), Elaborator.typeOf(inliner.inline(li.value()), env, new CheckContext(symbols, null, reqs)));
-                } catch (CompileException ignored) {
+                } catch (CompileException _) {
                     // an untypeable value leaves its name unbound; a later reference just won't infer.
                 }
             }
@@ -420,7 +420,7 @@ public final class HelperTyping {
             try {
                 Type at = Elaborator.typeOf(inliner.inline(call.args().get(i)), env, new CheckContext(symbols, null, reqs));
                 TypeOps.unify(declared.get(i), at, bind, symbols, call.pos(), "argument " + (i + 1));
-            } catch (CompileException ignored) {
+            } catch (CompileException _) {
                 return;   // can't pin the types here; leave it to the inlined check
             }
         }
@@ -497,7 +497,7 @@ public final class HelperTyping {
             Type got;
             try {
                 got = Elaborator.typeOf(inliner.inline(lambda.body()), lenv, new CheckContext(symbols, null, reqs));
-            } catch (CompileException ignored) {
+            } catch (CompileException _) {
                 return;   // best-effort; the inlined check reports a genuine error with full context
             }
             if (isOpen(want.result())) {
@@ -507,7 +507,7 @@ public final class HelperTyping {
                 // this one. A failure is reported as the mismatch it is, in written types.
                 try {
                     TypeOps.unify(want.result(), got, bind, symbols, lambda.pos(), "block result");
-                } catch (CompileException mismatch) {
+                } catch (CompileException _) {
                     throw blockReturnMismatch(h, paramName, want.result(), got, lambda.pos());
                 }
                 return;

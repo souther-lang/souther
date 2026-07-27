@@ -664,10 +664,6 @@ public final class Backend {
     }
 
 
-    private ClassDesc caseClass(String typeName) {
-        return ctx.caseClass(typeName);
-    }
-
     private ClassDesc caseClass(TypeName typeName) {
         return ctx.caseClass(typeName);
     }

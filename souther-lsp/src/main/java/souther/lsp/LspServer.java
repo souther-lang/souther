@@ -55,7 +55,7 @@ public final class LspServer {
             JsonNode m;
             try {
                 m = JSON.readTree(message);
-            } catch (RuntimeException e) {
+            } catch (RuntimeException _) {
                 continue;   // a malformed frame is dropped, not fatal
             }
             JsonNode methodNode = m.get("method");

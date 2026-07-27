@@ -35,7 +35,7 @@ final class Descriptors {
             }));
 
     /**
-     * Builds a class targeting Java 21 (spec 19.1).
+     * Builds a class targeting Java 25 (spec 19.1).
      *
      * <p>The version is pinned rather than left to {@link ClassFile#of}, which defaults to the
      * JDK running the compiler: the generated code would then track whatever JDK built it, and
@@ -43,7 +43,7 @@ final class Descriptors {
      */
     static byte[] build(ClassDesc cd, Consumer<ClassBuilder> handler) {
         return CF.build(cd, cb -> {
-            cb.withVersion(ClassFile.JAVA_21_VERSION, 0);
+            cb.withVersion(ClassFile.JAVA_25_VERSION, 0);
             cb.with(SourceFileAttribute.of(sourceFileName(cd)));
             handler.accept(cb);
         });

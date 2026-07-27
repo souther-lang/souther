@@ -190,7 +190,7 @@ public final class Analyzer {
             return null;
         } catch (CompileException e) {
             return e.diagnostic();
-        } catch (RuntimeException | StackOverflowError e) {
+        } catch (RuntimeException | StackOverflowError _) {
             return null;   // no suggestion to recover; the diagnostics pass reports the failure
         }
     }
@@ -408,7 +408,7 @@ public final class Analyzer {
                     byLabel.putIfAbsent(name, new CompletionItem(name, CompletionItem.FUNCTION));
                 }
             }
-        } catch (RuntimeException | StackOverflowError ignore) {
+        } catch (RuntimeException | StackOverflowError _) {
             // a file that does not parse cleanly exposes no imports; the rest of the list still stands
         }
         SyntaxNode enclosing = enclosingDef(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
@@ -575,7 +575,7 @@ public final class Analyzer {
                     return imp.module();
                 }
             }
-        } catch (RuntimeException | StackOverflowError e) {
+        } catch (RuntimeException | StackOverflowError _) {
             // a file that does not parse cleanly resolves no imports; go-to-def simply misses
         }
         return null;
