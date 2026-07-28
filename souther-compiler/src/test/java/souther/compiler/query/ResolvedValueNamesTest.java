@@ -247,4 +247,37 @@ class ResolvedValueNamesTest {
             assertTrue(denotes(e) != null, "unanswered name in " + e);
         }
     }
+
+    /**
+     * A name in a body that denotes a type is recorded as a use of that type, so everything that
+     * asks where a type is named finds it — a rename that missed one would leave a body naming a
+     * type that no longer exists.
+     */
+    @Test
+    void aTypeNamedInABodyIsAUseOfThatType() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("a.sou", """
+                module m.a exposing ( Amount, Approved, f )
+
+                data Amount = Int
+                data Approved
+
+                behavior f : (n: Int) -> Amount | Approved
+                    constructs Amount, Approved
+                let f (n) = if n > 0 then Amount(n) else Approved
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+
+        List<souther.compiler.check.Resolve.Denotation> amount = c.db()
+                .ask(new Names.UsesOf("m.a", new souther.compiler.types.TypeName("m.a", "Amount")))
+                .value();
+        List<souther.compiler.check.Resolve.Denotation> approved = c.db()
+                .ask(new Names.UsesOf("m.a", new souther.compiler.types.TypeName("m.a", "Approved")))
+                .value();
+
+        assertTrue(amount.stream().anyMatch(d -> d.pos().line() == 8),
+                "the construction `Amount(n)` in the body: " + amount);
+        assertTrue(approved.stream().anyMatch(d -> d.pos().line() == 8),
+                "the unit value `Approved` in the body: " + approved);
+    }
 }

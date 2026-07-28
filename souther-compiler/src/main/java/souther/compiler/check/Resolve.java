@@ -565,10 +565,21 @@ public final class Resolve {
         return nothing(written, call.pos(), notCallable(written, call.pos(), bound));
     }
 
-    /** Records what a name used as a value was answered with, and hands it back. */
+    /**
+     * Records what a name used as a value was answered with, and hands it back.
+     *
+     * <p>A name that denotes a type — a unit data written as a value, a newtype applied to what it
+     * wraps — is a use of that type as much as one written in a field's type is, and is recorded as
+     * one too. Otherwise renaming the type would rewrite every other mention of it and leave these,
+     * which is a rename that stops the workspace compiling.
+     */
     private ValueName answered(String written, SourcePos pos, ValueName denotes) {
-        if (pos != null) {
-            values0.add(new ValueUse(written, denotes, pos));
+        if (pos == null) {
+            return denotes;
+        }
+        values0.add(new ValueUse(written, denotes, pos));
+        if (denotes instanceof ValueName.OfType named) {
+            denotations.add(new Denotation(written, named.type(), pos));
         }
         return denotes;
     }

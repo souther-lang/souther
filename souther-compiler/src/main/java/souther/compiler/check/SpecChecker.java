@@ -45,9 +45,12 @@ public final class SpecChecker {
                     continue;
                 }
                 String req = required.bare();
+                // at the name, as the clause that names nothing is: one clause, one place to look,
+                // whichever of the two is wrong with it
                 throw CompileException.of(
                         Diagnostic.of("E1607", "e1607.implemented").title("e1607.title")
-                                .at(spec.pos()).args(spec.name(), req)
+                                .at(required.pos(), required.written().length())
+                                .args(spec.name(), req)
                                 .hint("e1607.implemented.hint").build(),
                         "`behavior " + spec.name() + "` declares `requires " + req + "`, but `"
                                 + req + "` has an implementation of its own, so it is not an"
