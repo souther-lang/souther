@@ -343,14 +343,14 @@ public final class Names {
      * The module with every written type name resolved to the declaration it denotes. A name that
      * denotes nothing is reported here, so nothing downstream ever reads an unresolved one.
      */
-    public record Resolved(String name) implements Key<Ast.Module> {
+    public record Resolution(String name) implements Key<Resolve.Resolved> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Ast.Module> compute(Db db) {
+        public Answer<Resolve.Resolved> compute(Db db) {
             Answer<Ast.Module> available = db.ask(new Front.Available(name));
             if (!available.present()) {
                 return Answer.absent(available.reports());
@@ -363,10 +363,134 @@ public final class Names {
                 return Answer.absent(scope.reports());
             }
             try {
-                return Answer.of(Resolve.module(available.value(), scope.value()));
+                return Answer.of(Resolve.resolving(available.value(), scope.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /** The resolved module — {@link Resolution} without the record of how it got there. */
+    public record Resolved(String name) implements Key<Ast.Module> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Ast.Module> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            return resolution.present() ? Answer.of(resolution.value().module()) : Answer.absent();
+        }
+    }
+
+    /**
+     * What the name written at {@code offset} in a module's source denotes, or absent when nothing
+     * there is a name of a declared type.
+     *
+     * <p>This is what an editor is asking when the cursor is on an identifier. It reads the answers
+     * the resolve pass already gave, so a qualified reference names the module it names and not
+     * whatever this module happens to declare by the same spelling.
+     */
+    public record DenotedAt(String name, SourcePos at) implements Key<Resolve.Denotation> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Resolve.Denotation> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.absent();
+            }
+            Resolve.Denotation innermost = null;
+            for (Resolve.Denotation d : resolution.value().denotations()) {
+                if (!spans(d.pos(), d.written(), at)) {
+                    continue;
+                }
+                // A container writes its element's name inside its own span, so the shortest match
+                // is the one the cursor is actually on.
+                if (innermost == null || d.written().length() < innermost.written().length()) {
+                    innermost = d;
+                }
+            }
+            return innermost == null ? Answer.absent() : Answer.of(innermost);
+        }
+    }
+
+    /**
+     * The type the cursor is on at {@code offset}: the one a name there denotes, or — when the
+     * cursor is on a declaration's own name — that declaration.
+     *
+     * <p>One question, so an editor's go-to-definition, find-references and rename all agree about
+     * what the cursor is on. They used to each decide for themselves, by spelling.
+     */
+    public record TypeAt(String name, SourcePos at) implements Key<TypeName> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<TypeName> compute(Db db) {
+            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(name));
+            if (defs.present()) {
+                for (Ast.Def def : defs.value().values()) {
+                    if (spans(def.pos(), def.name(), at)) {
+                        return Answer.of(new TypeName(name, def.name()));
+                    }
+                }
+            }
+            Resolve.Denotation denoted = db.ask(new DenotedAt(name, at)).value();
+            return denoted == null ? Answer.absent() : Answer.of(denoted.denotes());
+        }
+    }
+
+    /** Every place a module names {@code denoted}, wherever it was declared. */
+    public record UsesOf(String name, TypeName denoted) implements Key<List<Resolve.Denotation>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<Resolve.Denotation>> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.of(List.of());
+            }
+            List<Resolve.Denotation> uses = new ArrayList<>();
+            for (Resolve.Denotation d : resolution.value().denotations()) {
+                if (denoted.equals(d.denotes())) {
+                    uses.add(d);
+                }
+            }
+            return Answer.of(List.copyOf(uses));
+        }
+    }
+
+    /** Whether the name {@code written} starting at {@code start} covers {@code at}. A name is one
+     * line's worth of text, so a position on another line is not on it. */
+    static boolean spans(SourcePos start, String written, SourcePos at) {
+        return start != null && at != null && start.line() == at.line()
+                && at.column() >= start.column()
+                && at.column() <= start.column() + written.length();
+    }
+    public record DeclaredAt(TypeName denoted) implements Key<SourcePos> {
+        @Override
+        public String module() {
+            return denoted.module();
+        }
+
+        @Override
+        public Answer<SourcePos> compute(Db db) {
+            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(denoted.module()));
+            if (!defs.present()) {
+                return Answer.absent();
+            }
+            Ast.Def def = defs.value().get(denoted.name());
+            return def == null || def.pos() == null ? Answer.absent() : Answer.of(def.pos());
         }
     }
 

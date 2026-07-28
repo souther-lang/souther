@@ -1,7 +1,10 @@
 package souther.lsp.analysis;
 
 import souther.compiler.Compiler;
+import souther.compiler.check.Resolve;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.Names;
+import souther.compiler.types.TypeName;
 import souther.compiler.ast.Ast;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstLexer;
@@ -189,6 +192,59 @@ public final class Analyzer {
     }
 
     /**
+     * The same compile, for a request that arrives with a graph and no path — navigation. A file
+     * that will not parse is left out of it, as it is for diagnostics: it cannot join a module set.
+     * The path is whichever the last diagnose used, which is current, because a diagnose runs on
+     * every change.
+     */
+    private Compilation compileOf(ModuleGraph graph) {
+        Map<String, String> clean = new LinkedHashMap<>();
+        Set<String> broken = new HashSet<>();
+        for (String uri : graph.uris()) {
+            String text = graph.text(uri);
+            boolean readable;
+            try {
+                readable = CstParser.parse(text).errors().isEmpty();
+            } catch (RuntimeException | StackOverflowError e) {
+                readable = false;
+            }
+            if (readable) {
+                clean.put(uri, text);
+            } else {
+                String name = Compiler.moduleNameFromHeader(text);
+                if (name != null) {
+                    broken.add(name);
+                }
+            }
+        }
+        return compileOf(compiledAgainst == null ? souther.compiler.meta.ModulePath.EMPTY
+                : compiledAgainst, clean, broken);
+    }
+
+    /** What the cursor is on, as the compiler answers it: the type a name at {@code pos} denotes,
+     * or the declaration whose own name is there. Null when the compiler cannot say — a file that
+     * does not compile, or a name in the value namespace, which is still matched by spelling. */
+    private TypeName typeUnderCursor(Compilation compilation, String uri, ModuleGraph graph,
+                                     Position pos) {
+        String text = graph.text(uri);
+        String module = text == null ? null : Compiler.moduleNameFromHeader(text);
+        if (module == null) {
+            return null;
+        }
+        SourcePos at = new SourcePos(pos.line() + 1, pos.character() + 1);
+        return compilation.db().ask(new Names.TypeAt(module, at)).value();
+    }
+
+    /** The range of one written name, counting only its last segment: renaming a type rewrites the
+     * {@code Amount} of {@code up.Amount}, never the {@code up}. */
+    private Range writtenRange(Resolve.Denotation denotation) {
+        int line = denotation.pos().line() - 1;
+        int start = denotation.pos().column() - 1 + denotation.written().lastIndexOf('.') + 1;
+        return new Range(new Position(line, start),
+                new Position(line, denotation.pos().column() - 1 + denotation.written().length()));
+    }
+
+    /**
      * Quick-fix code actions overlapping {@code requested}: currently, replacing a misspelled name
      * with the compiler's did-you-mean suggestion. The suggestion lives on the structured compiler
      * diagnostic — which the published {@link LspDiagnostic} drops — so this recomputes the first
@@ -258,6 +314,10 @@ public final class Analyzer {
         if (text == null) {
             return Optional.empty();
         }
+        Optional<Location> answered = declarationOf(uri, pos, graph);
+        if (answered.isPresent()) {
+            return answered;
+        }
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
         SyntaxToken ident = identAt(root, lines.offsetOf(pos.line(), pos.character()));
@@ -298,6 +358,10 @@ public final class Analyzer {
         String text = graph.text(uri);
         if (text == null) {
             return List.of();
+        }
+        List<Location> answered = usesOf(uri, pos, graph, includeDeclaration);
+        if (answered != null) {
+            return answered;
         }
         SyntaxNode root = CstParser.parse(text).root();
         SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
@@ -357,6 +421,62 @@ public final class Analyzer {
             }
         }
         return byUri;
+    }
+
+    /**
+     * Where the type under the cursor is declared, as the compiler answers it. Empty when it cannot
+     * say: the workspace does not compile, or the cursor is on a name in the value namespace, which
+     * is still matched by spelling below.
+     */
+    private Optional<Location> declarationOf(String uri, Position pos, ModuleGraph graph) {
+        Compilation compilation = compileOf(graph);
+        TypeName target = typeUnderCursor(compilation, uri, graph, pos);
+        if (target == null) {
+            return Optional.empty();
+        }
+        String targetUri = compilation.sourceIdOf(target.module());
+        String targetText = targetUri == null ? null : graph.text(targetUri);
+        if (targetText == null) {
+            return Optional.empty();
+        }
+        // Which module and which name is the compiler's answer — the part a spelling match gets
+        // wrong. Where in that file the name is written is the syntax tree's, which is what knows
+        // about characters; a module declares a name once, so there is nothing to choose between.
+        SyntaxNode def = declaringDef(CstParser.parse(targetText).root(), target.name());
+        SyntaxToken name = def == null ? null : nameToken(def);
+        return name == null ? Optional.empty()
+                : Optional.of(new Location(targetUri,
+                        tokenRange(new LineIndex(targetText), name)));
+    }
+
+    /**
+     * Every place the type under the cursor is named, as the compiler answers it, or null when it
+     * cannot say. A name resolves to one declaration wherever it is written, so a module that
+     * declares its own type of the same spelling is not swept up, and a qualified reference to
+     * another module's is.
+     */
+    private List<Location> usesOf(String uri, Position pos, ModuleGraph graph,
+                                  boolean includeDeclaration) {
+        Compilation compilation = compileOf(graph);
+        TypeName target = typeUnderCursor(compilation, uri, graph, pos);
+        if (target == null) {
+            return null;
+        }
+        List<Location> out = new ArrayList<>();
+        if (includeDeclaration) {
+            declarationOf(uri, pos, graph).ifPresent(out::add);
+        }
+        for (String module : compilation.modules()) {
+            String moduleUri = compilation.sourceIdOf(module);
+            if (moduleUri == null || graph.text(moduleUri) == null) {
+                continue;
+            }
+            for (Resolve.Denotation use
+                    : compilation.db().ask(new Names.UsesOf(module, target)).value()) {
+                out.add(new Location(moduleUri, writtenRange(use)));
+            }
+        }
+        return out;
     }
 
     /** Adds the {@code exposing ( name )} occurrence in the module that defines {@code name}, and each
