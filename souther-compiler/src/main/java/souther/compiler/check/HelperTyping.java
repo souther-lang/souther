@@ -1,9 +1,11 @@
 package souther.compiler.check;
 
+import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
@@ -15,12 +17,14 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Typing for {@code let} helpers: checking each one standalone against its declared parameter
- * types, inferring the parameters that were left unwritten from the call sites, and working out
- * what the recursive ones construct.
+ * Typing for {@code let} helpers: checking each one standalone against its parameter types, taking
+ * the parameters that were left unwritten from the helper's own body, and working out what the
+ * recursive ones construct.
  *
- * <p>A non-recursive helper is inlined into its caller, so most of its checking happens there;
- * what is here is what only makes sense about the helper on its own.
+ * <p>A helper is typed by its body and never by its callers (spec 13.1, issue #176), so what a
+ * helper means is settled by reading the helper. A non-recursive helper is inlined into its caller,
+ * so most of its checking happens there; what is here is what only makes sense about the helper on
+ * its own.
  */
 public final class HelperTyping {
 
@@ -35,11 +39,8 @@ public final class HelperTyping {
      */
     static void checkHelpers(HelperInliner inliner, Symbols symbols,
                                      Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
-                                     Ast.Module module, Map<String, Ast.Expr> loweredBodies,
+                                     Map<String, Ast.Expr> loweredBodies,
                                      TypeChecker.Elaborated elaborated) {
-        // Call sites that inference reads argument types from, built once for the whole module (each is
-        // a top-level fn body with the environment its parameters bind).
-        List<CallScope> callScopes = inferenceScopes(module, symbols);
         for (Ast.FnDef h : inliner.helpers().values()) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
             Map<String, Type> env = new HashMap<>();
@@ -57,30 +58,20 @@ public final class HelperTyping {
                                 "helper `let " + h.name() + "` must annotate parameter `" + p.name()
                                         + "` with its type (spec 13.1)");
                     }
-                    // a non-recursive helper is inline-expanded at each call site, so a value
-                    // parameter's type is inferred from how it is called (spec 13.1).
+                    // a parameter with no type beside it takes one from the body (spec 13.1).
                     inferred.add(i);
                     continue;
                 }
                 env.put(p.name(), TypeOps.resolveParamType(p.type(), symbols));
             }
             Elaborator.rejectBuiltinShadowing(h.body());
-            if (!inferred.isEmpty()) {
-                // Infer the un-annotated value parameters from the helper's call sites, monomorphic
-                // across them, then complete the env and run the same standalone check an annotated
-                // helper gets — so a mis-declared return type or a mis-passed function argument in the
-                // body is caught here, at the helper, not only where it is later inlined.
-                Map<Integer, Type> types = inferHelperParams(h, inferred, callScopes, inliner, symbols, reqSigs);
-                for (int idx : inferred) {
-                    env.put(h.params().get(idx).name(), types.get(idx));
-                }
-            }
             // A recursive helper survives to the backend as a method on `$Fns`, so it is typed on the
             // body the Lower stage produced — the same tree the backend emits — and the Core this
             // check produces is what the backend emits from (issue #81). A non-recursive helper is
             // inlined at its call sites and never emitted on its own, so its standalone check expands
             // its body here; a recursive helper hides its own parameters from helper resolution while
             // that expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
+            // Expanded once: the body an un-annotated parameter takes its type from is the same tree.
             Ast.Expr body = recursive
                     ? loweredBodies.get(h.name())
                     : inliner.inline(h.body());
@@ -90,6 +81,12 @@ public final class HelperTyping {
                 // the backend a method to emit and no elaborated body to emit it from.
                 throw new IllegalStateException(
                         "recursive helper `" + h.name() + "` has no lowered body");
+            }
+            if (!inferred.isEmpty()) {
+                // Complete the env from the body, then run the same standalone check an annotated
+                // helper gets — so a mis-declared return type or a mis-passed function argument in the
+                // body is caught here, at the helper, not only where it is later inlined.
+                typeFromBody(h, inferred, env, body, symbols, reqSigs, recursiveHelperFns);
             }
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
@@ -131,163 +128,311 @@ public final class HelperTyping {
         }
     }
 
-    /** A top-level fn body paired with the environment its parameters bind — a place inference reads
-     * a helper call's argument types from. */
-    private record CallScope(Ast.Expr body, Map<String, Type> env) {}
-
     /**
-     * The call scopes inference reads argument types from: every top-level fn body with the
-     * environment its parameters bind. A behavior-backed fn takes its parameter types from its
-     * behavior; a helper fn from its own annotations, leaving an un-annotated parameter (itself still
-     * being inferred) out, so an argument that refers to one simply won't type. Built once per module.
+     * Completes {@code env} with the type each un-annotated parameter takes from the helper's own
+     * body (spec 13.1). A parameter whose type the body leaves open is annotated: Souther has no user
+     * generics, so there is nothing to generalise an open parameter into, and the annotation is what
+     * states the type instead.
+     *
+     * <p>A parameter a later round settles can settle an earlier one — {@code f(x, y)} where
+     * {@code y}'s type follows from {@code x}'s — so the rounds run to a fixpoint. Failing that, the
+     * report names the use that named no type.
      */
-    private static List<CallScope> inferenceScopes(Ast.Module module, Symbols symbols) {
-        Map<String, Ast.SpecBehavior> specs = new HashMap<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior s) {
-                specs.put(s.name(), s);
-            }
-        }
-        List<CallScope> scopes = new ArrayList<>();
-        for (Ast.FnDef fn : module.fns()) {
-            Map<String, Type> base = new HashMap<>();
-            Ast.SpecBehavior spec = specs.get(fn.name());
-            if (spec != null) {
-                for (int i = 0; i < spec.params().size() && i < fn.params().size(); i++) {
-                    base.put(fn.params().get(i).name(), TypeOps.successType(spec.params().get(i).type(), symbols));
-                }
-            } else {
-                for (Ast.FnParam p : fn.params()) {
-                    if (p.type() != null) {
-                        base.put(p.name(), TypeOps.resolveParamType(p.type(), symbols));
-                    }
-                }
-            }
-            scopes.add(new CallScope(fn.body(), base));
-        }
-        return scopes;
-    }
-
-    /**
-     * Infers a non-recursive helper's un-annotated value parameters from its call sites and enforces
-     * that the helper is monomorphic. A parameter must be typeable at some call site (a helper with no
-     * call site, or one whose argument cannot be typed here, is asked to annotate), and its type must
-     * agree across all call sites (Int at one site and String at another is a compile error, not an
-     * inline-expanded polymorphism). Returns the inferred type of each parameter index; the caller
-     * completes the env and runs the standalone body check.
-     */
-    private static Map<Integer, Type> inferHelperParams(Ast.FnDef h, List<Integer> inferred,
-            List<CallScope> scopes, HelperInliner inliner, Symbols symbols,
-            Map<String, ReqSig> reqSigs) {
-        Map<Integer, Type> unified = new HashMap<>();
-        Map<Integer, Ast.Expr> untypeable = new HashMap<>();
-        for (CallScope scope : scopes) {
-            collectHelperCalls(scope.body(), scope.env(), h.name(), symbols, reqSigs, inliner, (call, env) -> {
-                if (call.args().size() != h.params().size()) {
-                    return;   // an arity mismatch is reported by the inliner
-                }
-                for (int idx : inferred) {
-                    Type t;
-                    try {
-                        t = Elaborator.typeOf(inliner.inline(call.args().get(idx)), env, new CheckContext(symbols, null, reqSigs));
-                    } catch (CompileException _) {
-                        untypeable.putIfAbsent(idx, call.args().get(idx));
-                        continue;
-                    }
-                    Type prev = unified.get(idx);
-                    if (prev == null) {
-                        unified.put(idx, t);
-                    } else {
-                        Type wider = widerType(prev, t, symbols);
-                        if (wider == null) {
-                            Ast.FnParam p = h.params().get(idx);
-                            throw CompileException.of(
-                                    Diagnostic.of(null, "check.helper.conflict").title("check.helper.title")
-                                            .at(p.pos(), p.name().length())
-                                            .args(h.name(), p.name(), Type.show(prev), Type.show(t)).build(),
-                                    "helper `let " + h.name() + "` parameter `" + p.name()
-                                            + "` is used at conflicting types (" + Type.show(prev) + " and "
-                                            + Type.show(t) + "); a helper is monomorphic — annotate it");
-                        }
-                        unified.put(idx, wider);
-                    }
-                }
-            });
-        }
-        for (int idx : inferred) {
-            if (unified.containsKey(idx)) {
-                continue;
-            }
+    private static void typeFromBody(Ast.FnDef h, List<Integer> open, Map<String, Type> env,
+            Ast.Expr body, Symbols symbols, Map<String, ReqSig> reqSigs,
+            Map<String, Type> recursiveHelperFns) {
+        // A parameter used as a function is one, and neither applying it nor handing it to a
+        // combinator determines its type; the inliner also needs the annotation to tell a function
+        // parameter from a value one when it expands the call (spec 13.1). The expanded body is what
+        // is read, so a parameter handed to `List.map` — applied inside the expansion rather than
+        // where it is written — is reported as the function it is.
+        for (int idx : open) {
             Ast.FnParam p = h.params().get(idx);
-            Ast.Expr sample = untypeable.get(idx);
-            boolean looksFunction = sample instanceof Ast.Block
-                    || (sample instanceof Ast.Var v
-                        && (inliner.helpers().containsKey(v.name()) || reqSigs.containsKey(v.name())));
-            if (looksFunction) {
-                // a function reached the parameter, but a function type cannot be inferred from a bare
-                // name or a lambda at the call site — the annotation is required (spec 13.1).
+            if (isApplied(body, p.name())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.helper.fnparam").title("check.helper.title")
                                 .at(p.pos(), p.name().length()).args(h.name(), p.name()).build(),
-                        "helper `let " + h.name() + "` parameter `" + p.name() + "` receives a function;"
-                                + " a function-typed parameter must be annotated with its type (spec 13.1)");
+                        "helper `let " + h.name() + "` parameter `" + p.name() + "` is used as a"
+                                + " function; a function-typed parameter must be annotated with its"
+                                + " type (spec 13.1)");
             }
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.helper.infer").title("check.helper.title")
-                            .at(p.pos(), p.name().length()).args(h.name(), p.name()).build(),
-                    "helper `let " + h.name() + "` parameter `" + p.name() + "` cannot be inferred from"
-                            + " its call sites; annotate it with its type (spec 13.1)");
         }
-        return unified;
+        BodyTyping typing = new BodyTyping(symbols, reqSigs, recursiveHelperFns);
+        Map<Integer, Ast.Var> openUses = new HashMap<>();
+        boolean progress = true;
+        while (progress) {
+            progress = false;
+            for (int idx : open) {
+                String name = h.params().get(idx).name();
+                if (env.containsKey(name)) {
+                    continue;
+                }
+                Type t = typing.typeOf(name, body, env);
+                if (t == null) {
+                    openUses.put(idx, typing.openUse());
+                } else {
+                    env.put(name, t);
+                    progress = true;
+                }
+            }
+        }
+        for (int idx : open) {
+            Ast.FnParam p = h.params().get(idx);
+            if (env.containsKey(p.name())) {
+                continue;
+            }
+            Diagnostic.Builder d = Diagnostic.of(null, "check.helper.infer").title("check.helper.title")
+                    .at(p.pos(), p.name().length()).args(h.name(), p.name());
+            if (openUses.get(idx) instanceof Ast.Var use) {
+                d.secondary(Region.ofWidth(use.pos(), Elaborator.width(use)), "check.helper.infer.use");
+            }
+            throw CompileException.of(d.build(),
+                    "helper `let " + h.name() + "` parameter `" + p.name() + "` is not determined by"
+                            + " its body; annotate it with its type (spec 13.1)");
+        }
     }
 
     /**
-     * Walks an expression for calls to {@code target}, carrying the local environment so a call
-     * argument can be typed in scope. Only {@code let} bindings extend the environment here; other
-     * binding forms descend with the enclosing scope, so an argument that refers to a match binding or
-     * a lambda parameter simply won't type — the parameter then falls back to requiring an annotation.
+     * Whether {@code name} is applied in {@code e} — the shape only a function parameter has. A
+     * binding that rebinds the name hides its body: an inner {@code let f = (x) -> ...} applied there
+     * is not this parameter. ({@link #collectCalls} answers the same question for the recursive-helper
+     * call graph, where the names are helper names rather than a local, so it does not follow scopes.)
      */
-    private static void collectHelperCalls(Ast.Expr e, Map<String, Type> env, String target,
-            Symbols symbols, Map<String, ReqSig> reqs, HelperInliner inliner,
-            java.util.function.BiConsumer<Ast.Call, Map<String, Type>> onCall) {
-        if (e instanceof Ast.Call call) {
-            if (call.fn().equals(target)) {
-                onCall.accept(call, env);
-            }
-            for (Ast.Expr a : call.args()) {
-                collectHelperCalls(a, env, target, symbols, reqs, inliner, onCall);
-            }
-            return;
+    private static boolean isApplied(Ast.Expr e, String name) {
+        if (e instanceof Ast.Call call && call.fn().equals(name)) {
+            return true;
         }
-        if (e instanceof Ast.LetIn li) {
-            collectHelperCalls(li.value(), env, target, symbols, reqs, inliner, onCall);
-            Map<String, Type> inner = new HashMap<>(env);
-            if (Elaborator.annotatedType(li, symbols) instanceof Type declared) {
-                // an annotated binding already states its type, so inference reads it rather than
-                // re-deriving one from a value that context alone can type (issue #71)
-                inner.put(li.name(), declared);
-            } else {
-                try {
-                    inner.put(li.name(), Elaborator.typeOf(inliner.inline(li.value()), env, new CheckContext(symbols, null, reqs)));
-                } catch (CompileException _) {
-                    // an untypeable value leaves its name unbound; a later reference just won't infer.
-                }
+        boolean[] found = {false};
+        forEachInScope(e, name, c -> {
+            if (!found[0]) {
+                found[0] = isApplied(c, name);
             }
-            collectHelperCalls(li.body(), inner, target, symbols, reqs, inliner, onCall);
-            return;
-        }
-        TypeChecker.forEachChild(e, c -> collectHelperCalls(c, env, target, symbols, reqs, inliner, onCall));
+        });
+        return found[0];
     }
 
-    /** The wider of two types when one is assignable to the other, else null (an irreconcilable pair). */
-    private static Type widerType(Type a, Type b, Symbols symbols) {
-        if (TypeOps.assignable(a, b, symbols)) {
-            return b;
+    /**
+     * Walks the children of {@code e} that {@code name} still means the parameter in. A binder that
+     * rebinds the name — a {@code let}, a lambda parameter, a {@code match} arm's binding — hides
+     * what it binds over, so a same-named local is not read as the parameter.
+     */
+    private static void forEachInScope(Ast.Expr e, String name, java.util.function.Consumer<Ast.Expr> f) {
+        switch (e) {
+            case Ast.LetIn li -> {
+                f.accept(li.value());
+                if (!li.name().equals(name)) {
+                    f.accept(li.body());
+                }
+            }
+            case Ast.Block b -> {
+                if (!b.params().contains(name)) {
+                    f.accept(b.body());
+                }
+            }
+            case Ast.Match m -> {
+                f.accept(m.scrutinee());
+                for (Ast.Case c : m.cases()) {
+                    if (!name.equals(c.binding())) {
+                        f.accept(c.body());
+                    }
+                }
+            }
+            default -> TypeChecker.forEachChild(e, f);
         }
-        if (TypeOps.assignable(b, a, symbols)) {
-            return a;
+    }
+
+    /**
+     * One parameter's type read out of the helper's body. The whole body is read, so a position after
+     * a use that named no type still determines it; the order the body is written decides only which
+     * of several determining positions wins.
+     *
+     * <p>It answers with a type or with nothing; it never reports a type error. A type the rest of the
+     * body disagrees with is reported by the standalone check that follows, at the position of the
+     * disagreement, so type errors keep coming from one place ({@link Elaborator}). Where nothing
+     * names a type, {@link #openUse()} is a use that named none, for the report to point at.
+     */
+    private static final class BodyTyping {
+        private final Symbols symbols;
+        private final CheckContext ctx;
+        private final Map<String, ReqSig> reqSigs;
+        private final Map<String, Type> recursiveHelperFns;
+        private Type pinned;
+        private Ast.Var openUse;
+
+        BodyTyping(Symbols symbols, Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
+            this.symbols = symbols;
+            this.ctx = new CheckContext(symbols, null, reqSigs);
+            this.reqSigs = reqSigs;
+            this.recursiveHelperFns = recursiveHelperFns;
         }
-        return null;
+
+        /** The type {@code body} gives {@code name}, or null when it gives none. */
+        Type typeOf(String name, Ast.Expr body, Map<String, Type> env) {
+            this.pinned = null;
+            this.openUse = null;
+            visit(body, env, name);
+            return pinned;
+        }
+
+        /** A use of the parameter that named no type, from the last {@link #typeOf} that found none. */
+        Ast.Var openUse() {
+            return openUse;
+        }
+
+        private void visit(Ast.Expr e, Map<String, Type> env, String name) {
+            if (pinned != null) {
+                return;
+            }
+            switch (e) {
+                case Ast.LetIn li -> {
+                    visitLet(li, env, name);
+                    return;
+                }
+                case Ast.Binary bin -> {
+                    if (bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR) {
+                        if (isParam(bin.left(), name) || isParam(bin.right(), name)) {
+                            pin(Type.BOOL);
+                        }
+                    } else if (isParam(bin.left(), name)) {
+                        pin(typed(bin.right(), env));
+                    } else if (isParam(bin.right(), name)) {
+                        pin(typed(bin.left(), env));
+                    }
+                }
+                case Ast.If iff -> {
+                    if (isParam(iff.cond(), name)) {
+                        pin(Type.BOOL);
+                    }
+                }
+                case Ast.Call call -> pinFromCall(call, name);
+                case Ast.NewData nd -> pinFromInits(nd.typeName(), nd.inits(), name);
+                case Ast.Var v when v.name().equals(name) -> {
+                    if (openUse == null) {
+                        openUse = v;   // a use of the parameter that no enclosing position typed
+                    }
+                }
+                default -> { }
+            }
+            if (pinned != null) {
+                return;
+            }
+            forEachInScope(e, name, c -> visit(c, env, name));
+        }
+
+        /**
+         * A {@code let} demands a type of its value: the one written on it, or the callee's declared
+         * parameter type, which the inliner carries onto the binding a helper call becomes. Where it
+         * demands none, the constraint passes along the binding: {@code let y = x in y * 2} types
+         * {@code x} through {@code y}, which is the shape a call to another body-typed helper inlines
+         * to. A binding of the parameter's own name shadows it, so its body is not walked for it.
+         */
+        private void visitLet(Ast.LetIn li, Map<String, Type> env, String name) {
+            Type demanded = li.declaredType() == null ? null
+                    : TypeOps.resolveParamType(li.declaredType(), symbols);
+            if (isParam(li.value(), name)) {
+                pin(demanded);
+                if (pinned != null) {
+                    return;
+                }
+                Ast.Var use = openUse;
+                visit(li.body(), env, li.name());   // the binding stands for the parameter
+                openUse = use;                      // its uses are the binding's, not the parameter's
+                if (pinned != null) {
+                    return;
+                }
+            }
+            visit(li.value(), env, name);
+            if (pinned != null || li.name().equals(name)) {
+                return;
+            }
+            Type bound = demanded != null ? demanded : carried(li, env);
+            Map<String, Type> inner = env;
+            if (bound != null) {
+                inner = new HashMap<>(env);
+                inner.put(li.name(), bound);
+            }
+            visit(li.body(), inner, name);
+        }
+
+        /** The type a binding carries into its body, or null where this scope cannot type its value. */
+        private Type carried(Ast.LetIn li, Map<String, Type> env) {
+            Type value = typed(li.value(), env);
+            return value == null ? null : Elaborator.carriedType(li, value, symbols);
+        }
+
+        /** The parameter passed where a callee declares the type of that argument. */
+        private void pinFromCall(Ast.Call call, String name) {
+            List<Type> params = calleeParams(call.fn());
+            if (params == null || params.size() != call.args().size()) {
+                return;
+            }
+            for (int i = 0; i < call.args().size(); i++) {
+                if (isParam(call.args().get(i), name)) {
+                    pin(params.get(i));
+                    return;
+                }
+            }
+        }
+
+        /** The parameter written as a field of a construction takes that field's type. */
+        private void pinFromInits(String typeName, List<Ast.FieldInit> inits, String name) {
+            if (!(symbols.declaration(typeName) instanceof Ast.Data data)) {
+                return;
+            }
+            for (Ast.FieldInit init : inits) {
+                if (isParam(init.value(), name)) {
+                    pin(TypeOps.fieldType(data, init.name(), symbols));
+                    return;
+                }
+            }
+        }
+
+        /**
+         * The parameter types {@code fn} declares, or null when nothing here declares them. A helper
+         * that annotates its parameters has already been inlined into this body, where its annotation
+         * is on the binding the call became, and a newtype's constructor {@code X(v)} has already been
+         * desugared to a construction; what is left to read is an injected behavior, a recursive
+         * helper and an intrinsic. A built-in that is neither an intrinsic nor a self-hosted helper
+         * states its parameter types only inside {@link CallElaborator}, so an argument of one is not
+         * read here — the parameter is annotated instead.
+         */
+        private List<Type> calleeParams(String fn) {
+            ReqSig req = reqSigs.get(fn);
+            if (req != null) {
+                return req.params();
+            }
+            if (recursiveHelperFns.get(fn) instanceof Type.FnOf sig) {
+                return sig.params();
+            }
+            Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(fn);
+            return intrinsic == null ? null : intrinsic.params();
+        }
+
+        private boolean isParam(Ast.Expr e, String name) {
+            return e instanceof Ast.Var v && v.name().equals(name);
+        }
+
+        /**
+         * {@code t} taken as the parameter's type, unless it is one nothing concrete follows from: a
+         * function type (which must be written), a signature's type variable, or the bottom an empty
+         * collection carries — each of those leaves the parameter as open as it was.
+         */
+        private void pin(Type t) {
+            if (t == null || t instanceof Type.FnOf || isOpen(t)
+                    || Type.mentions(t, BottomInfer::isBottom)) {
+                return;
+            }
+            pinned = t;
+        }
+
+        /** The type of a neighbouring expression, or null where this scope cannot type it. */
+        private Type typed(Ast.Expr e, Map<String, Type> env) {
+            try {
+                return Elaborator.typeOf(e, env, ctx);
+            } catch (CompileException _) {
+                return null;
+            }
+        }
     }
 
     /**
@@ -401,7 +546,7 @@ public final class HelperTyping {
         List<Type> declared = new ArrayList<>();
         boolean hasFn = false;
         for (Ast.FnParam p : h.params()) {
-            // an unannotated value parameter is inferred from its call sites (spec 13.1); it is never a
+            // an unannotated parameter takes its type from the helper's body (spec 13.1); it is never a
             // function parameter, so leave its slot null and treat it as a non-function argument here.
             Type pt = p.type() == null ? null : TypeOps.resolveParamType(p.type(), symbols);
             declared.add(pt);

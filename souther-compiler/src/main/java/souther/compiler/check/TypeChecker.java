@@ -307,9 +307,9 @@ public final class TypeChecker {
             collect(errors, () -> Elaborator.rejectAnnotatedLambdaBindings(fn.body()));
         }
         // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
-        // helper is checked standalone against its own declared parameter types (spec 13.1). Recovered
-        // so a broken helper does not hide the behavior-body errors checked below.
-        collect(errors, () -> HelperTyping.checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns, module,
+        // helper is checked standalone against its own parameter types, which its body settles
+        // (spec 13.1). Recovered so a broken helper does not hide the behavior-body errors below.
+        collect(errors, () -> HelperTyping.checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns,
                 loweredBodies, elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.

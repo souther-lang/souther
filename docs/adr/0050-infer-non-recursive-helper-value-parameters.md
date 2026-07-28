@@ -1,6 +1,6 @@
 # ADR-0050: Infer a non-recursive helper's value parameter types from its call sites
 
-Status: Accepted
+Status: Superseded by ADR-0066
 
 ## Context
 

@@ -125,16 +125,16 @@ class CompileLetAnnotationTest {
         assertEquals("parse.expected", d.messageKey());
     }
 
-    // The annotated type is the binding's type for everything downstream, including the inference that
-    // types a helper's unannotated parameter from its call sites.
+    // The annotated type is the binding's type for everything downstream: the value reaches a helper
+    // that takes a `Map<String, Int>`, which the un-annotated `fold` over `Map.empty()` would not.
     @Test
-    void anAnnotatedBindingTypesAHelperParameterAtItsCallSite() throws Exception {
+    void anAnnotatedBindingTypesTheValueItPassesOn() throws Exception {
         String src = """
                 module demo
                 import List ( fold )
                 data In = { keys: List<String> }
                 data Out = { n: Int }
-                let entries (m) = Map.size(m)
+                let entries (m: Map<String, Int>) = Map.size(m)
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = {
                     let counted: Map<String, Int> =
