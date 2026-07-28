@@ -1188,6 +1188,8 @@ behavior applyChange : (input: ChangeEmailRequest) -> Member
 
 To construct multiple data, list them: `+constructs Member, AuditRecord+`.
 
+An entry names a type the way a type is named anywhere else, so a type another module declares may be written through it (`+constructs up.Amount+`) as well as under the name an `+import+` brings in. Which spelling the clause uses and which the body uses are independent — both name one type, and that is what E1002 and E1006 compare. Naming one type twice, however spelled, is a duplicate entry.
+
 The following count as data construction: a record literal (`+型名 { ... }+`), a sum data constructor, a unit data construction, and constructing a collection containing new data as elements. Returning an existing value unchanged does not count as construction.
 
 The built-in `+Some+` / `+None+` (<<algebraic-types>>) do not count as data construction. Option is not domain data but an auxiliary type and has no invariant, so <<invariant-on-construct>> has nothing to guard. So `+constructs+` is not required to put a value in a `+?+` field (<<optional>>) — and since Option cannot be written as a type, there is no way to declare `+constructs Some+` anyway (<<algebraic-types>>).
