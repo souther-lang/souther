@@ -373,25 +373,48 @@ public final class TypeChecker {
 
     /** A module's own definitions, keyed by the name written there. */
     public static Map<String, Ast.Def> ownDefs(Ast.Module module) {
-        Map<String, Ast.Def> symbols = new HashMap<>();
+        Declared declared = declared(module);
+        if (!declared.rejected().isEmpty()) {
+            throw declared.rejected().get(0);
+        }
+        return declared.defs();
+    }
+
+    /** What a module declares, and the declarations it cannot have. */
+    public record Declared(Map<String, Ast.Def> defs, List<CompileException> rejected) {}
+
+    /**
+     * Every declaration a module may have, by name, and one error per declaration it may not.
+     *
+     * <p>A name declared twice keeps the first: the second is reported and left out, so the rest of
+     * the module still means what it means. Writing a declaration twice is what copying one looks
+     * like halfway through, and taking every name in the file away until it is finished is the
+     * opposite of useful.
+     */
+    public static Declared declared(Ast.Module module) {
+        Map<String, Ast.Def> symbols = new LinkedHashMap<>();
+        List<CompileException> rejected = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             if (def.name().equals("Some") || def.name().equals("None")) {
                 // Some/None are the built-in Option cases (ADR-0011); a user data of the same name
                 // would make a `| Some v` pattern ambiguous between Option and the user case, so the
                 // declaration is rejected here rather than allowed to collide (ADR-0035).
-                throw CompileException.of(
+                rejected.add(CompileException.of(
                         Diagnostic.of(null, "check.sum.optioncase").title("check.sum.title")
                                 .at(def.pos(), def.name().length()).args(def.name()).build(),
-                        "`" + def.name() + "` is a built-in Option case and cannot be declared as a data type");
+                        "`" + def.name() + "` is a built-in Option case and cannot be declared as a data type"));
+                continue;
             }
-            if (symbols.put(def.name(), def) != null) {
-                throw CompileException.of(
+            if (symbols.containsKey(def.name())) {
+                rejected.add(CompileException.of(
                         Diagnostic.of(null, "check.dup.data").title("check.duplicate.title")
                                 .at(def.pos()).args(def.name()).build(),
-                        "duplicate data `" + def.name() + "`");
+                        "duplicate data `" + def.name() + "`"));
+                continue;
             }
+            symbols.put(def.name(), def);
         }
-        return symbols;
+        return new Declared(symbols, List.copyOf(rejected));
     }
 
 }

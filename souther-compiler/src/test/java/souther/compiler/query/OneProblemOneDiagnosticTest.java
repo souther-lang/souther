@@ -11,6 +11,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * One problem is one diagnostic, and it lands on the file that has it.
@@ -21,15 +22,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class OneProblemOneDiagnosticTest {
 
-    private static Map<String, List<Diagnostic>> diagnose(String id, String source) {
+    private static Map<String, List<Diagnostic>> diagnose(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
-        byId.put(id, source);
+        byId.put("a.sou", source);
         return Compiler.diagnoseModules(byId, Set.of());
     }
 
     @Test
     void anImportOfAModuleThatIsNotThereIsReportedOnce() {
-        List<Diagnostic> found = diagnose("a.sou", """
+        List<Diagnostic> found = diagnose("""
                 module m.a
                 import m.nope ( X )
                 data A = { x: X }
@@ -41,7 +42,7 @@ class OneProblemOneDiagnosticTest {
 
     @Test
     void aModuleInTheReservedNamespaceIsReportedOnce() {
-        List<Diagnostic> found = diagnose("a.sou", """
+        List<Diagnostic> found = diagnose("""
                 module souther.evil
                 data A = Int
                 """).get("a.sou");
@@ -49,14 +50,39 @@ class OneProblemOneDiagnosticTest {
         assertEquals(1, found.size(), "one reserved name, one diagnostic: " + found);
     }
 
+    private static Map<String, List<Diagnostic>> diagnoseAs(String id, String source) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put(id, source);
+        return Compiler.diagnoseModules(byId, Set.of());
+    }
+
     @Test
     void aSourceThatWillNotParseSaysSo() {
-        List<Diagnostic> found = diagnose("bad.sou", """
+        List<Diagnostic> found = diagnoseAs("bad.sou", """
                 module app.bad
                 data = = =
                 """).get("bad.sou");
 
         assertEquals(1, found.size(),
                 "the parse error belongs to the source it was found in: " + found);
+    }
+
+    @Test
+    void aNameDeclaredTwiceLeavesTheOtherNamesAlone() {
+        List<Diagnostic> found = diagnose("""
+                module m.a
+
+                data A = Int
+
+                data A = String
+
+                data B = { a: A, n: Nowhere }
+                """).get("a.sou");
+
+        // The duplicate, and the name that denotes nothing. Not "unknown type A" as well: the first
+        // A is still a declaration, so B's field still means something.
+        assertEquals(2, found.size(), "the duplicate and the unknown name, and no more: " + found);
+        assertTrue(found.stream().anyMatch(d -> "check.dup.data".equals(d.messageKey())));
+        assertTrue(found.stream().anyMatch(d -> "check.unknown.type.msg".equals(d.messageKey())));
     }
 }

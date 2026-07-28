@@ -204,11 +204,15 @@ public final class Names {
             if (!m.present()) {
                 return Answer.absent();
             }
-            try {
-                return Answer.of(TypeChecker.ownDefs(m.value()));
-            } catch (CompileException e) {
-                return Answer.absent(e);
+            // A declaration the module may not have is reported and left out; the ones it may have
+            // are what it declares. So a name written twice does not take every other name in the
+            // file with it.
+            TypeChecker.Declared declared = TypeChecker.declared(m.value());
+            List<Report> reports = new ArrayList<>();
+            for (CompileException rejected : declared.rejected()) {
+                reports.addAll(Report.of(rejected));
             }
+            return Answer.of(declared.defs(), reports);
         }
     }
 
