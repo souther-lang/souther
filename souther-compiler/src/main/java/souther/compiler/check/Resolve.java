@@ -41,6 +41,8 @@ public final class Resolve {
     private final Values values;
     /** Every name this pass answered, in the order it met them. */
     private final List<Denotation> denotations = new ArrayList<>();
+    /** The same, for the names used as values. */
+    private final List<ValueUse> values0 = new ArrayList<>();
     /** Every name it could not answer, as the error it would once have thrown. */
     private final List<CompileException> unresolved = new ArrayList<>();
 
@@ -89,6 +91,13 @@ public final class Resolve {
     public record Denotation(String written, TypeName denotes, SourcePos pos) {}
 
     /**
+     * One written name in the value namespace and what it turned out to denote, where it was
+     * written. What {@link Denotation} is for a type, and collected for the same reason: an editor
+     * asking what is under the cursor is asking about the answer this traversal already gave.
+     */
+    public record ValueUse(String written, ValueName denotes, SourcePos pos) {}
+
+    /**
      * A resolved module, every name the pass answered in it, and the names it could not answer.
      *
      * <p>A name that denotes nothing does not end the pass. It denotes {@link TypeName#unresolved},
@@ -96,7 +105,7 @@ public final class Resolve {
      * resolved as if the mistake were not there — so an author is told about every unknown name at
      * once instead of one per compile, and an editor can still say what the names around it mean.
      */
-    public record Resolved(Ast.Module module, List<Denotation> denotations,
+    public record Resolved(Ast.Module module, List<Denotation> denotations, List<ValueUse> values,
                            List<CompileException> unresolved) {}
 
     /** {@code m} with every name it writes resolved against its own definitions — a module compiled
@@ -172,7 +181,7 @@ public final class Resolve {
         return new Resolved(
                 new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
                         behaviors, fns, examples, fakes, m.exampleFileTarget(), m.pos()),
-                List.copyOf(r.denotations), List.copyOf(r.unresolved));
+                List.copyOf(r.denotations), List.copyOf(r.values0), List.copyOf(r.unresolved));
     }
 
     private Ast.FnDef fn(Ast.FnDef f) {
@@ -447,8 +456,10 @@ public final class Resolve {
      */
     private Ast.Expr expr(Ast.Expr e, Bindings bound) {
         return switch (e) {
-            case Ast.Var v -> v.denoting(valueName(v.name(), v.pos(), bound));
-            case Ast.Call call -> new Ast.Call(call.fn(), calledName(call, bound),
+            case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
+                    valueName(v.name(), v.pos(), bound)));
+            case Ast.Call call -> new Ast.Call(call.fn(),
+                    answered(call.fn(), call.pos(), calledName(call, bound)),
                     exprs(call.args(), bound), call.pos());
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
@@ -552,6 +563,14 @@ public final class Resolve {
             return new ValueName.OfType(written, type);   // a newtype applied to what it wraps
         }
         return nothing(written, call.pos(), notCallable(written, call.pos(), bound));
+    }
+
+    /** Records what a name used as a value was answered with, and hands it back. */
+    private ValueName answered(String written, SourcePos pos, ValueName denotes) {
+        if (pos != null) {
+            values0.add(new ValueUse(written, denotes, pos));
+        }
+        return denotes;
     }
 
     /** Records that a name in a body denotes nothing, and gives it the name that says so. */

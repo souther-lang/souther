@@ -760,6 +760,100 @@ public final class Names {
         }
     }
 
+    /**
+     * What the name used as a value at {@code at} denotes, or absent when nothing there is one.
+     *
+     * <p>What {@link DenotedAt} answers for a type. An editor asking about a name in a body reads
+     * the answer resolution already gave, so a binding is the binding it is and not whatever else
+     * in the module happens to be spelled the same.
+     */
+    public record ValueDenotedAt(String name, SourcePos at) implements Key<Resolve.ValueUse> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Resolve.ValueUse> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.absent();
+            }
+            for (Resolve.ValueUse use : resolution.value().values()) {
+                if (spans(use.pos(), use.written(), at)) {
+                    return Answer.of(use);
+                }
+            }
+            return Answer.absent();
+        }
+    }
+
+    /** Every place a module names {@code denoted} as a value. */
+    public record ValueUsesOf(String name, ValueName denoted)
+            implements Key<List<Resolve.ValueUse>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<Resolve.ValueUse>> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.of(List.of());
+            }
+            List<Resolve.ValueUse> uses = new ArrayList<>();
+            for (Resolve.ValueUse use : resolution.value().values()) {
+                if (denoted.equals(use.denotes())) {
+                    uses.add(use);
+                }
+            }
+            return Answer.of(List.copyOf(uses));
+        }
+    }
+
+    /**
+     * Where what {@code denoted} names is written: the {@code let} or {@code behavior} that declares
+     * it, or the binding that introduced a local.
+     */
+    public record ValueDeclaredAt(ValueName denoted) implements Key<SourcePos> {
+        @Override
+        public String module() {
+            return switch (denoted) {
+                case ValueName.Helper h -> h.module();
+                case ValueName.Behavior b -> b.module();
+                case ValueName.Local _, ValueName.Stdlib _, ValueName.OfType _,
+                        ValueName.Builtin _, ValueName.Unresolved _ -> null;
+            };
+        }
+
+        @Override
+        public Answer<SourcePos> compute(Db db) {
+            if (denoted instanceof ValueName.Local local) {
+                return local.binder() == null ? Answer.absent() : Answer.of(local.binder());
+            }
+            String in = module();
+            if (in == null) {
+                return Answer.absent();   // the library and the language declare their own names
+            }
+            Ast.Module m = db.ask(new Front.Available(in)).value();
+            if (m == null) {
+                return Answer.absent();
+            }
+            for (Ast.BehaviorDef b : m.behaviors()) {
+                if (b.name().equals(denoted.name())) {
+                    return Answer.of(b.pos());
+                }
+            }
+            for (Ast.FnDef fn : m.fns()) {
+                if (fn.name().equals(denoted.name())) {
+                    return Answer.of(fn.pos());
+                }
+            }
+            return Answer.absent();
+        }
+    }
+
     /** Whether the name {@code written} starting at {@code start} covers {@code at}. A name is one
      * line's worth of text, so a position on another line is not on it. */
     static boolean spans(SourcePos start, String written, SourcePos at) {
