@@ -214,17 +214,23 @@ public final class Db {
      * generation of its own, separate from the input revision.
      */
     public List<Found> allReports() {
-        List<Found> found = new ArrayList<>();
+        Map<String, Found> found = new java.util.LinkedHashMap<>();
         for (Key<?> key : spoke) {
             Memo memo = memos.get(key);
             if (memo == null || memo.verifiedAt() != revision) {
                 continue;
             }
             for (Report report : memo.answer().reports()) {
-                found.add(new Found(key.module(), key.sourceId(), report));
+                // One problem is one diagnostic, whichever questions found it. Two of them can, and
+                // legitimately: a helper is checked on its own and again in each body it is expanded
+                // into, and both are looking at the same line. The first to say it is the one that
+                // says it, so the order is the order the work happened in.
+                found.putIfAbsent(
+                        key.module() + " " + key.sourceId() + " " + report.problem(),
+                        new Found(key.module(), key.sourceId(), report));
             }
         }
-        return found;
+        return new ArrayList<>(found.values());
     }
 
     /** What {@code key} read while it was answered, empty if it has not been asked. */

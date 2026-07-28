@@ -213,6 +213,22 @@ class IncrementalCompilationTest {
                 "`twice` says what it said, and `thrice` is not part of it");
     }
 
+    /**
+     * And a body is checked against the behavior it implements and what the module around it means,
+     * so a mistake made in another body — or its being edited at all — is none of its business.
+     */
+    @Test
+    void editingOneBodyDoesNotCheckTheBodiesBesideIt() {
+        Compilation c = orders(ORDERS);
+        Answer<?> twice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
+
+        c.update(Map.of("orders.sou", ORDERS.replace("n.value * 3", "n.value * 30")), Set.of());
+        c.answerEverything();
+
+        assertSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
+                "`twice` is checked against `behavior twice`, which says what it said");
+    }
+
     @Test
     void changingWhatAModuleDeclaresReachesTheModulesThatImportIt() {
         Compilation c = started();

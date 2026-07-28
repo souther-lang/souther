@@ -29,15 +29,16 @@ public final class TypeChecker {
 
     /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
-     * carrying the type decided for each node, plus the warnings the check raised. The backend emits
-     * from these rather than translating the AST and inferring the same types a second time.
+     * carrying the type decided for each node. The backend emits from these rather than translating
+     * the AST and inferring the same types a second time.
+     *
+     * <p>What the check found is not in here. A warning belongs to the question that raised it, which
+     * is one body, and a caller that wants them reads them from there.
      */
-    public record Checked(Map<String, Core> behaviorBodies, Map<String, Core> recursiveHelpers,
-                          List<Diagnostic> warnings) {}
+    public record Checked(Map<String, Core> behaviorBodies, Map<String, Core> recursiveHelpers) {}
 
     /** The bodies elaborated so far, filled as the check walks them. */
     static final class Elaborated {
-        final Map<String, Core> behaviors = new LinkedHashMap<>();
         final Map<String, Core> helpers = new LinkedHashMap<>();
     }
 
@@ -54,45 +55,38 @@ public final class TypeChecker {
      * @param errors what the check found wrong
      * @param abandoned the units it could not read at all, each resting on a name that denotes
      *                  nothing — reported already, and each a reason the module cannot be emitted
+     * @param stopped whether the check stopped rather than finished. A structural check builds what a
+     *                later phase reads — the {@code fns} map, the {@code exposed} set — so when one
+     *                fails there is nothing left to check the rest against, and a body checked all
+     *                the same reports being unable to see what was already reported missing.
+     * @param recursiveHelpers the recursive helper bodies it elaborated, which the backend emits as
+     *                         methods
      */
     public record Reported(List<CompileException> errors, List<Unanswerable> abandoned,
-                           Checked checked) {}
+                           boolean stopped, Map<String, Core> recursiveHelpers) {}
 
-    public static Reported checkReporting(Ast.Module module, Symbols symbols,
-                                          Map<String, Sig> importedSigs, Set<String> importedInjected,
-                                          Ast.Module lowered) {
-        List<Diagnostic> warnings = new ArrayList<>();
+    /**
+     * Everything the check has to say about a module that is not one behavior's body: its
+     * declarations, its helpers, its {@code exposing} line, its compositions. A behavior's body is
+     * asked for on its own ({@link #checkBehavior}), so what one of them says is not in here.
+     *
+     * <p>{@code reqSigs} and {@code recursiveHelperFns} are handed over rather than worked out here,
+     * because the body check reads the same two and they must be the same two.
+     */
+    public static Reported checkModule(Ast.Module module, Symbols symbols,
+                                       Map<String, Sig> importedSigs, Set<String> importedInjected,
+                                       Ast.Module lowered, Map<String, ReqSig> reqSigs,
+                                       Map<String, Type> recursiveHelperFns) {
         Elaborated elaborated = new Elaborated();
         List<Unanswerable> abandoned = new ArrayList<>();
-        List<CompileException> errors =
-                checkCollecting(module, symbols, importedSigs, importedInjected, lowered, warnings,
-                        elaborated, abandoned);
-        return new Reported(errors, List.copyOf(abandoned),
-                new Checked(elaborated.behaviors, elaborated.helpers, warnings));
-    }
-
-    /** Every error found in {@code module}, recovering past each so the whole module is checked; the
-     * originating exceptions in the order they were found (so the first is the one the old fail-fast
-     * check would have thrown), deduped. */
-    static List<CompileException> checkCollecting(Ast.Module module, Symbols symbols,
-                                                          Map<String, Sig> importedSigs,
-                                                          Set<String> importedInjected, Ast.Module lowered,
-                                                          List<Diagnostic> warnings, Elaborated elaborated) {
-        return checkCollecting(module, symbols, importedSigs, importedInjected, lowered, warnings,
-                elaborated, new ArrayList<>());
-    }
-
-    static List<CompileException> checkCollecting(Ast.Module module, Symbols symbols,
-                                                          Map<String, Sig> importedSigs,
-                                                          Set<String> importedInjected, Ast.Module lowered,
-                                                          List<Diagnostic> warnings, Elaborated elaborated,
-                                                          List<Unanswerable> abandoned) {
         List<CompileException> errors = new ArrayList<>();
+        boolean stopped = false;
         try {
-            checkRecovering(module, symbols, importedSigs, importedInjected, lowered, errors, warnings,
-                    elaborated, abandoned);
+            checkRecovering(module, symbols, importedSigs, importedInjected, lowered, errors,
+                    elaborated, abandoned, reqSigs, recursiveHelperFns);
         } catch (Unanswerable e) {
             abandoned.add(e);
+            stopped = true;
         } catch (CompileException e) {
             // A structural / prerequisite check (a duplicate name, an `exposing` violation, a module
             // cycle) is fail-fast: it can leave later phases without the state they read, so its first
@@ -101,8 +95,38 @@ public final class TypeChecker {
             // An unresolvable type no longer gets here: it denotes the error type, which absorbs, so
             // the module is checked past it and never reaches codegen.
             errors.add(e);
+            stopped = true;
         }
-        return deduped(errors);
+        return new Reported(deduped(errors), List.copyOf(abandoned), stopped, elaborated.helpers);
+    }
+
+    /**
+     * One behavior's body against the behavior it implements (spec 13.1), as the Core the backend
+     * emits. Its own question: what it reads is the behavior, its {@code let}, and what the module
+     * around it means — never another body.
+     */
+    public static Core checkBehavior(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr loweredBody,
+                                     Symbols symbols, Set<String> allBehaviors,
+                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
+                                     Map<String, Type> recursiveHelperFns,
+                                     Map<String, Map<TypeName, String>> recHelperConstructs,
+                                     List<Diagnostic> warnings) {
+        return SpecChecker.checkSpecFn(spec, fn, loweredBody, symbols, allBehaviors, reqSigs,
+                inliner, recursiveHelperFns, recHelperConstructs, warnings);
+    }
+
+    /** The signatures of a module's recursive helpers — what a self- or mutual call is typed
+     * against, and what a body that calls one reads. */
+    public static Map<String, Type> recursiveHelperSigs(HelperInliner inliner, Symbols symbols) {
+        return HelperTyping.recursiveHelperSigs(inliner, symbols);
+    }
+
+    /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
+     * constructions are attributed to the behavior that calls it (spec 12.5). */
+    public static Map<String, Map<TypeName, String>> recursiveHelperConstructs(
+            Set<String> names, Map<String, Ast.Expr> loweredBodies, HelperInliner inliner,
+            Symbols symbols) {
+        return HelperTyping.recursiveHelperConstructs(names, loweredBodies, inliner, symbols);
     }
 
     /** Runs one independent unit's check, recording its first error instead of throwing so the next
@@ -156,14 +180,15 @@ public final class TypeChecker {
     static void checkRecovering(Ast.Module module, Symbols symbols,
                                         Map<String, Sig> importedSigs, Set<String> importedInjected,
                                         Ast.Module lowered,
-                                        List<CompileException> errors, List<Diagnostic> warnings,
-                                        Elaborated elaborated, List<Unanswerable> abandoned) {
+                                        List<CompileException> errors,
+                                        Elaborated elaborated, List<Unanswerable> abandoned,
+                                        Map<String, ReqSig> reqSigs,
+                                        Map<String, Type> recursiveHelperFns) {
         Map<String, Ast.Expr> loweredBodies = new HashMap<>();
         for (Ast.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.body());
         }
         HelperInliner inliner = HelperInliner.forModule(module);
-        Map<String, Type> recursiveHelperFns = HelperTyping.recursiveHelperSigs(inliner, symbols);
         // An invariant runs on every construction and must terminate (spec §invariant-expressions).
         // A total recursive helper does terminate, so it is admissible — including the stdlib fold
         // (`List.foldFrom`) that backs the list quantifiers `List.all`/`any`/`member`/`distinct`,
@@ -273,8 +298,8 @@ public final class TypeChecker {
         // and binds it, whether it named it as a `>->` stage or as a `requires` dependency. Its
         // signature comes from the module that declared it; a local behavior of the same name wins.
         // The same map is built before the module is lowered, where a helper's parameter type is
-        // settled from a call to an injected behavior (issue #178), so it is built in one place.
-        Map<String, ReqSig> reqSigs = InjectionSigs.of(module, symbols, importedSigs, importedInjected);
+        // settled from a call to an injected behavior (issue #178), and read again by every body
+        // check. It arrives here rather than being built again because it is one question.
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec && !fns.containsKey(spec.name())) {
                 // `requires` names what an implementation calls (12.6), and an injection target has
@@ -308,25 +333,11 @@ public final class TypeChecker {
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
         collect(errors, abandoned, () -> TotalityChecker.check(inliner));
-        // What each recursive helper constructs, transitively — a recursive helper is not inlined, so
-        // its constructions are attributed to the behavior that calls it (spec 12.5).
-        Map<String, Map<TypeName, String>> recHelperConstructs =
-                HelperTyping.recursiveHelperConstructs(recursiveHelperFns.keySet(), loweredBodies, inliner, symbols);
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior spec) {
-                Ast.FnDef fn = fns.get(spec.name());
-                if (fn != null) {
-                    collect(errors, abandoned, () -> elaborated.behaviors.put(fn.name(),
-                            SpecChecker.checkSpecFn(spec, fn, loweredBodies.get(spec.name()), symbols,
-                            allBehaviors, reqSigs, inliner, recursiveHelperFns, recHelperConstructs,
-                            warnings)));
-                }
-            }
-        }
         // A fn matching a pipeline is rejected (a pipeline is already its own implementation, so it
         // cannot also have a fn body — spec 13.1). A fn matching a SpecBehavior is that behavior's
-        // implementation (checked above); any other fn is a helper (checked by checkHelpers). These
-        // terminal validations build no state, so each is recovered independently.
+        // implementation, which is checked as its own question; any other fn is a helper (checked by
+        // checkHelpers). These terminal validations build no state, so each is recovered
+        // independently.
         collect(errors, abandoned, () -> {
             for (Ast.FnDef fn : module.fns()) {
                 if (!specNames.contains(fn.name()) && allBehaviors.contains(fn.name())) {

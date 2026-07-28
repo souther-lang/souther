@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A program the compiler rejects must be rejected with a diagnostic. Anything else — an
  * IndexOutOfBounds, a ClassCast, a StackOverflow — is not a {@code CompileException}, so it escapes
- * the recovery boundary in {@code TypeChecker.checkCollecting} and reaches the author as a stack
+ * the recovery boundary in {@code TypeChecker.checkModule} and reaches the author as a stack
  * trace; in the language server, where a non-diagnostic failure is swallowed so the server survives,
  * it reaches them as no marker at all.
  *

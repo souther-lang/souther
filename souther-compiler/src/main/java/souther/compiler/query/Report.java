@@ -76,6 +76,20 @@ public record Report(Diagnostic diagnostic, String legacyMessage) {
         return reports.stream().filter(Report::isError).toList();
     }
 
+    /**
+     * What makes this the same problem as another: what is wrong, said the same way, in the same
+     * place.
+     *
+     * <p>Two questions can find one problem. A helper is checked on its own and again wherever it is
+     * expanded, and both are looking at the same line of the same helper — so the author is told
+     * twice about one mistake unless the two are recognised as one. Neither is wrong to have found
+     * it, and neither can see the other, so it is the reading of them that settles it.
+     */
+    public String problem() {
+        return diagnostic.code() + "|" + diagnostic.messageKey() + "|" + diagnostic.literalMessage()
+                + "|" + diagnostic.severity() + "|" + diagnostic.region();
+    }
+
     /** This report as an error to throw. One built from a raised exception throws that exception's
      * message again; one built any other way renders its own, in English, because that message has
      * always been English and a test that reads it should not move with the reader's locale. */
