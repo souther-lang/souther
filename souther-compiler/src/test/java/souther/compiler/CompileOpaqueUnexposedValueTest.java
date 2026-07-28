@@ -29,6 +29,69 @@ class CompileOpaqueUnexposedValueTest {
             let label (id) = id.value
             """;
 
+    /** A hidden newtype behind an exposed one, a hidden data, and collections of hidden values. */
+    private static final String KINDS = """
+            module up exposing ( Wrap, Holder )
+            data Inner = String
+            data Wrap = Inner
+            data Hidden = { n: Int }
+            data Ident = String
+            data Holder = { w: Wrap, h: Hidden, ids: List<Ident>, tags: Set<Ident>, named: Map<String, Ident> }
+            """;
+
+    private static String comparing(String body) {
+        return """
+                module down exposing ( Out, same )
+                import up ( Holder )
+                data Out = { b: Bool }
+                behavior same : (a: Holder, b: Holder) -> Out
+                    constructs Out
+                let same (a, b) = Out { b = %s }
+                """.formatted(body);
+    }
+
+    private static Object runComparing(String body) throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(
+                Compiler.compileModules(List.of(KINDS, comparing(body))), CompileOpaqueUnexposedValueTest.class.getClassLoader());
+        Object h = ((Ok<?>) Codecs.decode(loader, "up.Holder", Map.of(
+                "w", "a", "h", Map.of("n", 1L), "ids", List.of("a"),
+                "tags", List.of("a"), "named", Map.of("k", "a")))).value();
+        Object impl = loader.loadClass("down.Same$Impl").getConstructor().newInstance();
+        return impl.getClass().getMethod("apply", Object.class, Object.class).invoke(impl, h, h);
+    }
+
+    @Test
+    void comparingThroughANewtypeChainWhoseInnerIsNotExposedIsRefused() {
+        // `Wrap` is exposed and wraps `Inner`, which is not. Comparison opens a newtype to the value
+        // it wraps and keeps going, so it reaches `Inner` and names a class out of reach here.
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(KINDS, comparing("a.w == b.w"))));
+
+        assertTrue(e.getMessage().contains("Inner"), e.getMessage());
+    }
+
+    @Test
+    void orderingThroughSuchAChainIsRefusedToo() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of(KINDS, comparing("a.w < b.w"))));
+
+        assertTrue(e.getMessage().contains("Inner"), e.getMessage());
+    }
+
+    @Test
+    void comparingADataItsModuleDoesNotExposeIsAllowed() throws Exception {
+        // A data is compared by its fields, by the module that declares it — nothing is opened here,
+        // so this compares wherever the value arrives. Haskell and Elm settle it the same way.
+        assertEquals("Out[b=true]", runComparing("a.h == b.h").toString());
+    }
+
+    @Test
+    void comparingCollectionsOfSuchValuesIsAllowed() throws Exception {
+        assertEquals("Out[b=true]", runComparing("a.ids == b.ids").toString());
+        assertEquals("Out[b=true]", runComparing("a.tags == b.tags").toString());
+        assertEquals("Out[b=true]", runComparing("a.named == b.named").toString());
+    }
+
     @Test
     void suchAValueIsHeldAndHandedBackToItsOwnModule() throws Exception {
         // What the refusals above must not take away: the value arrives, sits in a field of this

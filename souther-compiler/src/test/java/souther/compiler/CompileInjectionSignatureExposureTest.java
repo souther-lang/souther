@@ -51,6 +51,22 @@ class CompileInjectionSignatureExposureTest {
     }
 
     @Test
+    void aTypeCarriedInsideACollectionIsReachedToo() {
+        // `List<Id>` puts `Id` in `apply`'s signature as surely as a bare `Id` does.
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                exposing ( Member )
+
+                data Id = String
+                data Member = { id: Id }
+
+                behavior findAll : (ids: List<Id>) -> Member
+                """));
+
+        assertTrue(e.getMessage().contains("Id"), e.getMessage());
+    }
+
+    @Test
     void aUnitCaseOfTheOutputStillNeedsNoExposure() {
         // The output is the generated union, which is public whatever exposing says, and the unit
         // case is reached through the protected factory without being named — so the rule does not

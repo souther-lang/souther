@@ -38,10 +38,15 @@ public final class BinaryElaborator {
     }
 
     /**
-     * A comparison reads what is inside its operands — the base of a single-value newtype, the
-     * fields of a data. A value whose module keeps its type to itself arrives here whole, and
-     * nothing here can open it, so the comparison is refused rather than emitted as a read of a
-     * class this module may not touch.
+     * A comparison opens a single-value newtype to the value it wraps, and keeps going until it
+     * reaches the base (ADR-0047) — so it names every class on the way down. A link whose module
+     * keeps it to itself is not one this module may name, and the comparison is refused rather than
+     * emitted as a read of a class out of reach. The link need not be the operand's own type: an
+     * exposed newtype may wrap one that is not.
+     *
+     * <p>Nothing else opens anything here. A data compares by its fields, decided by the module that
+     * declares it, and a collection compares by its elements the same way, so either compares
+     * wherever its value arrives — which is where Elm and Haskell leave it too.
      */
     private static void requireTransparentOperands(Type left, Type right, Ast.Binary bin,
                                                    Symbols symbols) {
@@ -50,15 +55,23 @@ public final class BinaryElaborator {
     }
 
     private static void refuseOpaque(Type operand, Ast.Binary bin, Symbols symbols) {
-        if (!(operand instanceof Type.Ref ref) || !symbols.isOpaque(ref.name())) {
-            return;
+        Type t = operand;
+        while (t instanceof Type.Ref ref
+                && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype()) {
+            if (symbols.isOpaque(ref.name())) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.compare.notexposed").title("check.boundary.title")
+                                .at(bin.pos()).args(ref.name().name(), ref.name().module())
+                                .hint("check.opaque.hint", ref.name().name(), ref.name().module()).build(),
+                        "comparing opens `" + ref.name().name() + "`, and `" + ref.name().module()
+                                + "` does not expose it");
+            }
+            Type inner = TypeOps.fieldType(d, "value", symbols);
+            if (inner == null) {
+                return;
+            }
+            t = inner;
         }
-        throw CompileException.of(
-                Diagnostic.of(null, "check.compare.notexposed").title("check.boundary.title")
-                        .at(bin.pos()).args(ref.name().name(), ref.name().module())
-                        .hint("check.opaque.hint", ref.name().name(), ref.name().module()).build(),
-                "comparing `" + ref.name().name() + "` opens it, and `" + ref.name().module()
-                        + "` does not expose it");
     }
 
     /** Whether either side of {@code bin} has a type the compiler could not work out. */
