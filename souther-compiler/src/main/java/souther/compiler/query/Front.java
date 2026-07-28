@@ -318,6 +318,32 @@ public final class Front {
     }
 
     /**
+     * The behavior names a module declares.
+     *
+     * <p>Read where a {@code >->} stage or a {@code requires} is resolved, which is why it asks
+     * {@link Exposed} rather than {@link Available}: binding a module's own stages is what
+     * {@link Available} does, and a module whose stage names another module's behavior would
+     * otherwise be waiting on itself. Nothing between the two changes which behaviors a module
+     * declares.
+     */
+    public record Behaviors(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Ast.Module m = db.ask(new Exposed(name)).value();
+            if (m == null) {
+                FromPath.Of path = db.ask(new FromPath()).value();
+                m = path == null ? null : path.modules().get(name);
+            }
+            return m == null ? Answer.absent() : Answer.of(Names.behaviorNames(m));
+        }
+    }
+
+    /**
      * The module a source declares, when it is the source that declares it. A second source naming
      * the same module is the one reported: the first has a claim on the name, and the message
      * belongs on the file the author would have to change.
@@ -494,9 +520,12 @@ public final class Front {
             written.add(ref.name());
         }
         for (Ast.BehaviorDef b : m.behaviors()) {
-            switch (b) {
-                case Ast.PipeBehavior pipe -> written.addAll(pipe.stages());
-                case Ast.SpecBehavior spec -> written.addAll(spec.requires());
+            List<Ast.ValueRef> named = switch (b) {
+                case Ast.PipeBehavior pipe -> pipe.stages();
+                case Ast.SpecBehavior spec -> spec.requires();
+            };
+            for (Ast.ValueRef ref : named) {
+                written.add(ref.written());
             }
         }
         for (String name : written) {

@@ -125,6 +125,92 @@ class UnresolvedNamesTest {
     }
 
     /**
+     * The same, for a name in the value namespace. A stage that names no behavior is one definition's
+     * mistake, and the definitions around it are checked as they would be without it.
+     */
+    @Test
+    void anUnknownBehaviorInAPipelineStillLetsTheOtherDefinitionsBeChecked() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, p, g )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = f >-> nosuch
+
+                behavior g : (n: Int) -> Int
+                let g (n) = "not an Int"
+                """);
+
+        assertEquals(2, found.size(),
+                "the unknown behavior, and g's own mistake: " + found);
+        assertTrue(found.stream().anyMatch(d -> "check.unknown.behavior.msg".equals(d.messageKey())),
+                "the stage that names no behavior: " + found);
+        assertTrue(found.stream().anyMatch(d -> d.diff() != null),
+                "and the type mismatch in the definition that has one: " + found);
+    }
+
+    /** A stage that names nothing is pointed at where it is written, not at the whole behavior. */
+    @Test
+    void anUnknownStageIsReportedAtTheStage() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, p )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = f >-> nosuch
+                """);
+
+        assertEquals(1, found.size(), found.toString());
+        assertEquals(6, found.get(0).region().start().line(), found.toString());
+        assertEquals(20, found.get(0).region().start().column(),
+                "the stage, not the behavior it is in: " + found);
+    }
+
+    /** A composition resting on a stage that names nothing has no meaning to emit, and neither has
+     * the module it is in. */
+    @Test
+    void aModuleWithAStageThatNamesNothingEmitsNothing() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("a.sou", """
+                module m.a exposing ( f, p )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = f >-> nosuch
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(),
+                souther.compiler.meta.ModulePath.EMPTY);
+        c.diagnostics();
+
+        assertEquals(Map.of(), c.classes(),
+                "there is no bytecode for a composition nobody could resolve");
+    }
+
+    /** The same, where the stage names a module this compilation does not have. */
+    @Test
+    void aStageInAModuleNobodyHasStillLetsTheOtherDefinitionsBeChecked() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, p, g )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = nosuch.h >-> f
+
+                behavior g : (n: Int) -> Int
+                let g (n) = "not an Int"
+                """);
+
+        assertEquals(2, found.size(),
+                "the stage nobody declares, and g's own mistake: " + found);
+        assertTrue(found.stream().anyMatch(d -> d.diff() != null),
+                "and the type mismatch in the definition that has one: " + found);
+    }
+
+    /**
      * The same as {@link #abandoningOneDefinitionStillChecksTheOthers}, with the unknown name in a
      * declaration rather than in a body. Where the name is written must not decide whether the rest
      * of the module is checked.

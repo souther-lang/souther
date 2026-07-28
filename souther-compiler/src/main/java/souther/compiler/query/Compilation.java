@@ -270,15 +270,31 @@ public final class Compilation {
         return published;
     }
 
-    /** The first error among {@code found}, as the exception the pass raised, tagged with the source
-     * it belongs to — or null when nothing there is an error. */
+    /**
+     * The first error among {@code found}, as the exception the pass raised, tagged with the source
+     * it belongs to — or null when nothing there is an error.
+     *
+     * <p>First means first in the order the sources were given, not first worked out. A question is
+     * answered when something asks it, and what asks first is an implementation detail: resolving one
+     * module's names reaches another module's, so moving a report earlier in the compiler would
+     * otherwise change which file a batch compile sends the author to. A report about no source in
+     * particular comes before all of them.
+     */
     public CompileException firstError(List<Db.Found> found) {
+        Db.Found first = null;
+        int at = Integer.MAX_VALUE;
         for (Db.Found f : found) {
-            if (f.report().isError()) {
-                return f.report().asException().inSource(indexOf(f));
+            if (!f.report().isError()) {
+                continue;
+            }
+            int index = indexOf(f);
+            int order = index < 0 ? -1 : index;
+            if (order < at) {
+                first = f;
+                at = order;
             }
         }
-        return null;
+        return first == null ? null : first.report().asException().inSource(indexOf(first));
     }
 
     /** Which source a report belongs to: the one it named, or the one that declares the module it

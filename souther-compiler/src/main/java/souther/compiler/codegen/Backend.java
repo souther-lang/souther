@@ -264,7 +264,7 @@ public final class Backend {
         b.ctx.setRequiredSignatures(requiredParam, requiredSuccess);
         Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
         Map<String, List<String>> behaviorDeps = requirementSets(module, requiredNames);
-        Map<String, List<String>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, List<Ast.ValueRef>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef bd : module.behaviors()) {
             switch (bd) {
                 case Ast.SpecBehavior spec -> {
@@ -280,14 +280,14 @@ public final class Backend {
                         }
                         out.put(module.name() + "." + behaviorClass(spec.name()),
                                 b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
-                                        spec.requires()));
+                                        requiredBy(spec)));
                     }
                     // else: injection target — its abstract base was generated above (spec 13.3)
                 }
                 case Ast.PipeBehavior pipe -> {
                     out.put(module.name() + "." + CodegenContext.behaviorImplClass(pipe.name()),
                             b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
-                    Sig sig = PipelineSigs.stageSig(pipe.name(), sigs, symbols, pipe.pos());
+                    Sig sig = sigs.get(pipe.name());   // its own signature, worked out above
                     out.put(module.name() + "." + behaviorClass(pipe.name()),
                             b.generateBehaviorInterface(pipe.name(), sig.ins(), sig.out(),
                                     behaviorDeps.getOrDefault(pipe.name(), List.of())));
@@ -716,7 +716,7 @@ public final class Backend {
         int n = spec.params().size();
         // declared requires, validated to equal what the fn calls (E1602/E1603); the same order is
         // used by pipeline callers (requirementSets), so the injected fields line up.
-        List<String> injected = spec.requires();
+        List<String> injected = requiredBy(spec);
         ClassDesc[] applyParams = new ClassDesc[n];
         for (int i = 0; i < n; i++) {
             applyParams[i] = CD_Object;
@@ -796,10 +796,10 @@ public final class Backend {
         switch (bd) {
             // an injection target short-circuits above, so a SpecBehavior here is fn-implemented:
             // its dependencies are its declared requires, in that order (spec 12.6, 13.6)
-            case Ast.SpecBehavior spec -> deps.addAll(spec.requires());
+            case Ast.SpecBehavior spec -> deps.addAll(requiredBy(spec));
             case Ast.PipeBehavior pipe -> {
-                for (String stage : pipe.stages()) {
-                    deps.addAll(resolveDeps(stage, byName, requiredNames, memo, inProgress));
+                for (Ast.ValueRef stage : pipe.stages()) {
+                    deps.addAll(resolveDeps(stage.bare(), byName, requiredNames, memo, inProgress));
                 }
             }
         }
@@ -809,14 +809,23 @@ public final class Backend {
         return out;
     }
 
+    /** The behaviors a spec declares it requires, by the name each is reached by. */
+    private static List<String> requiredBy(Ast.SpecBehavior spec) {
+        List<String> names = new ArrayList<>();
+        for (Ast.ValueRef req : spec.requires()) {
+            names.add(req.bare());
+        }
+        return names;
+    }
+
     private byte[] generatePipe(Ast.PipeBehavior pipe, Set<String> requiredNames,
                                 Map<String, Sig> sigs, Map<String, List<String>> behaviorDeps,
-                                Map<String, List<String>> pipeStages) {
+                                Map<String, List<Ast.ValueRef>> pipeStages) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
         // Flatten nested pipeline stages so the routing is over leaf behaviors (spec 14.2): a named
         // intermediate `half = split >-> work` inlines to `split, work`, which keeps a retired case
         // retired across the composition, making `>->` associative.
-        List<String> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<Ast.ValueRef> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
         // the pipeline's injected fields are the union of its stages' requirements (spec 14.3)
         List<String> reqStages = behaviorDeps.getOrDefault(pipe.name(), List.of());
         // the pipeline takes whatever its first stage takes (spec 14.1)
@@ -833,14 +842,14 @@ public final class Backend {
 
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).
-                List<String> stages = flat;
+                List<Ast.ValueRef> stages = flat;
                 // stage 0 consumes the pipeline's arguments unconditionally
-                applyFirstStage(code, cdP, stages.get(0), arity, requiredNames, behaviorDeps);
+                applyFirstStage(code, cdP, stages.get(0).bare(), arity, requiredNames, behaviorDeps);
                 Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).out();
                 Label end = code.newLabel();
                 for (int i = 1; i < stages.size(); i++) {
-                    String stage = stages.get(i);
-                    Sig g = PipelineSigs.stageSig(stage, sigs, symbols, pipe.pos());
+                    String stage = stages.get(i).bare();
+                    Sig g = PipelineSigs.stageSig(stages.get(i), sigs, symbols, pipe.pos());
                     if (TypeOps.isDataLike(mainline)) {
                         // Apply g only when the running value is one of the main-line cases it
                         // accepts. Anything else has left the main line: jump to the end rather
@@ -867,7 +876,7 @@ public final class Backend {
                 code.areturn();
             });
             if (arity != 1) {
-                Sig sig = PipelineSigs.stageSig(pipe.name(), sigs, symbols, pipe.pos());
+                Sig sig = sigs.get(pipe.name());   // its own signature, worked out above
                 emitTypedApplyBridge(cb, cdP, typedApplyDesc(pipe.name(), sig.ins(), sig.out()));
             }
         });

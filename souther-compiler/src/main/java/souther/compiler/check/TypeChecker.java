@@ -220,7 +220,11 @@ public final class TypeChecker {
                     outputCases.add(t.name());
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
-                DataChecker.rejectDuplicateNames(spec.requires(), "`requires`", spec.pos());
+                List<String> required = new ArrayList<>();
+                for (Ast.ValueRef req : spec.requires()) {
+                    required.add(req.bare());
+                }
+                DataChecker.rejectDuplicateNames(required, "`requires`", spec.pos());
                 DataChecker.rejectDuplicateTypes(spec.constructs(), "`constructs`", spec.pos());
             }
         }
@@ -290,7 +294,7 @@ public final class TypeChecker {
         }
         // Fail-fast with the reqSigs it reads: a `requires` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1401).
-        SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, importedSigs.keySet());
+        SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs);
         // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {

@@ -7,6 +7,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -29,37 +30,28 @@ public final class SpecChecker {
      * imports. Reported where the clause is written, so a behavior that has an implementation and one
      * that was never declared are told apart — the body check sees only a call it cannot type and
      * reports both as an arbitrary JVM call (E1401, issue #96).
+     *
+     * <p>That the name is a behavior at all was settled when the module's names were resolved, and a
+     * clause that names none was reported there. What is left here is the behavior that exists and
+     * implements itself.
      */
-    static void checkRequiresAreInjectionTargets(Ast.Module module, Map<String, ReqSig> reqSigs,
-                                                 Set<String> importedBehaviors) {
-        Set<String> behaviorNames = new HashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            behaviorNames.add(b.name());
-        }
+    static void checkRequiresAreInjectionTargets(Ast.Module module, Map<String, ReqSig> reqSigs) {
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (!(b instanceof Ast.SpecBehavior spec)) {
                 continue;
             }
-            for (String req : spec.requires()) {
-                if (reqSigs.containsKey(req)) {
+            for (Ast.ValueRef required : spec.requires()) {
+                if (required.unresolved() || reqSigs.containsKey(required.bare())) {
                     continue;
                 }
-                if (behaviorNames.contains(req) || importedBehaviors.contains(req)) {
-                    throw CompileException.of(
-                            Diagnostic.of("E1607", "e1607.implemented").title("e1607.title")
-                                    .at(spec.pos()).args(spec.name(), req)
-                                    .hint("e1607.implemented.hint").build(),
-                            "`behavior " + spec.name() + "` declares `requires " + req + "`, but `"
-                                    + req + "` has an implementation of its own, so it is not an"
-                                    + " injection target — compose it with `>->` instead (spec 13.2)");
-                }
+                String req = required.bare();
                 throw CompileException.of(
-                        Diagnostic.of("E1607", "e1607.unknown").title("e1607.title")
+                        Diagnostic.of("E1607", "e1607.implemented").title("e1607.title")
                                 .at(spec.pos()).args(spec.name(), req)
-                                .suggestion(Suggest.candidate(req, reqSigs.keySet()))
-                                .hint("e1607.unknown.hint").build(),
-                        "`behavior " + spec.name() + "` declares `requires " + req + "`, which is not a"
-                                + " behavior in scope" + Suggest.hint(req, reqSigs.keySet()));
+                                .hint("e1607.implemented.hint").build(),
+                        "`behavior " + spec.name() + "` declares `requires " + req + "`, but `"
+                                + req + "` has an implementation of its own, so it is not an"
+                                + " injection target — compose it with `>->` instead (spec 13.2)");
             }
         }
     }
@@ -97,7 +89,14 @@ public final class SpecChecker {
             if (!(b instanceof Ast.PipeBehavior pipe) || !exposed.contains(pipe.name())) {
                 continue;
             }
-            Set<TypeName> inferred = TypeOps.leafCases(sigs.get(pipe.name()).out(), symbols);
+            Sig sig = sigs.get(pipe.name());
+            if (sig == null) {
+                // A composition with no signature is one that rests on a stage naming nothing,
+                // reported where that stage was written. There is no output to hold a declaration
+                // against, and the other compositions still have theirs.
+                continue;
+            }
+            Set<TypeName> inferred = TypeOps.leafCases(sig.out(), symbols);
             Ast.RetType declared = module.exposedOutputs().get(pipe.name());
             if (declared == null) {
                 throw CompileException.of(
@@ -169,7 +168,7 @@ public final class SpecChecker {
         }
         for (int i = 0; i < nReq; i++) {
             String got = fn.params().get(nBusiness + i).name();
-            String want = spec.requires().get(i);
+            String want = spec.requires().get(i).bare();
             if (!got.equals(want)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.impl.reqorder").title("check.impl.title")
@@ -256,8 +255,12 @@ public final class SpecChecker {
         // The requires clause must match what the fn actually calls (spec 12.6): missing -> E1602,
         // extra -> E1603.
         List<String> actual = requiredCalls(body, reqSigs.keySet());
+        List<String> declared = new ArrayList<>();
+        for (Ast.ValueRef required : spec.requires()) {
+            declared.add(required.bare());
+        }
         for (String call : actual) {
-            if (!spec.requires().contains(call)) {
+            if (!declared.contains(call)) {
                 throw CompileException.of(
                         Diagnostic.of("E1602", "e1602.msg").at(spec.pos())
                                 .args(fn.name(), call, spec.name()).hint("e1602.hint").build(),
@@ -265,7 +268,7 @@ public final class SpecChecker {
                                 + " `behavior " + spec.name() + "` does not declare `requires " + call + "`.");
             }
         }
-        for (String req : spec.requires()) {
+        for (String req : declared) {
             if (!actual.contains(req)) {
                 throw CompileException.of(
                         Diagnostic.of("E1603", "e1603.msg").at(spec.pos())
@@ -423,16 +426,17 @@ public final class SpecChecker {
                 arity.put(spec.name(), spec.params().size());
             }
         }
-        Map<String, List<String>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, List<Ast.ValueRef>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (!(b instanceof Ast.PipeBehavior pipe)) {
                 continue;
             }
             // check the flattened stages: a named intermediate splices in its own first stage, which
             // then sits after `>->` and so must be single-input too (spec 14.1, 14.2)
-            List<String> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
+            List<Ast.ValueRef> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
+                    pipe.pos());
             for (int i = 1; i < stages.size(); i++) {
-                String stage = stages.get(i);
+                String stage = stages.get(i).bare();
                 Integer n = arity.get(stage);
                 if (n != null && n != 1) {
                     throw CompileException.of(
