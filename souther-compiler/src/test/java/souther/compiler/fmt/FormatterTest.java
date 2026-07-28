@@ -225,6 +225,24 @@ class FormatterTest {
     }
 
     @Test
+    void formattingKeepsAReadOffACallResult() {
+        // the read hangs off the call, so the formatter has to render the chain from its left operand
+        // rather than from a name (issue #158)
+        String source = "module demo\n"
+                + "data Amount = Int invariant value >= 0\n"
+                + "data In = { n: Int }\n"
+                + "data Out = { m: Int }\n"
+                + "let amountOf (i: In) = Amount(i.n)\n"
+                + "behavior run : (i: In) -> Out constructs Out, Amount\n"
+                + "let run (i) = Out { m=amountOf(i).value }\n";
+        String formatted = Formatter.format(source);
+        assertEquals(code(source), code(formatted), "the code token stream changed");
+        assertEquals(formatted, Formatter.format(formatted), "formatting is not idempotent");
+        assertTrue(formatted.contains("amountOf(i).value"), formatted);
+        assertTrue(CstParser.parse(formatted).errors().isEmpty(), "formatted output does not re-parse");
+    }
+
+    @Test
     void canonicalFormOfAnExample() {
         String messy = "module demo\n"
                 + "data M={ n:Int }\n"

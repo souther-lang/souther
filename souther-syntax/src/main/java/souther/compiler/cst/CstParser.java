@@ -1155,35 +1155,39 @@ public final class CstParser {
         expect(SyntaxKind.RPAREN);
     }
 
-    /** An identifier-led primary: a call, a qualified call, a construction, or a field-access chain. */
+    /** An identifier-led primary: a call, a qualified call, a construction, or a bare variable —
+     * each of which a field-access chain may follow. */
     private void identExpr() {
-        // qualified call `Mod.name(args)`
         if (nth(1) == SyntaxKind.DOT && nth(2) == SyntaxKind.IDENT && nth(3) == SyntaxKind.LPAREN) {
+            // qualified call `Mod.name(args)`
             start(SyntaxKind.CALL_EXPR);
             bump();   // Mod
             bump();   // .
             bump();   // name
             argList();
             finish();
-            return;
-        }
-        // plain call `name(args)`
-        if (nth(1) == SyntaxKind.LPAREN) {
+        } else if (nth(1) == SyntaxKind.LPAREN) {
+            // plain call `name(args)`
             start(SyntaxKind.CALL_EXPR);
             bump();   // name
             argList();
             finish();
-            return;
-        }
-        // construction `Type { ... }` (unless suppressed, as in a match scrutinee)
-        if (!noConstruct && nth(1) == SyntaxKind.LBRACE) {
+        } else if (!noConstruct && nth(1) == SyntaxKind.LBRACE) {
+            // construction `Type { ... }` (unless suppressed, as in a match scrutinee)
             newDataExpr();
-            return;
+        } else {
+            start(SyntaxKind.VAR_EXPR);
+            bump();   // ident
+            finish();
         }
-        // a bare variable or a field-access chain `a.b.c`
-        start(SyntaxKind.VAR_EXPR);
-        bump();   // ident
-        finish();
+        fieldAccessChain();
+    }
+
+    /** {@code .a.b} following a primary. What precedes it is any ident-led expression, so a newtype is
+     * opened on the call that builds it (`amountOf(i).value`) rather than through a binding written to
+     * hold the result (issue #158). A qualified call is taken before this, so `Mod.name(args)` is that
+     * call and not a field `name` read off `Mod`. */
+    private void fieldAccessChain() {
         while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
             int m = markForFieldAccess();
             wrap(m, SyntaxKind.FIELD_ACCESS);

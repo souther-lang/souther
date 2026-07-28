@@ -732,6 +732,8 @@ Because a local shadowing a built-in value is always an error, using a *built-in
 [#field-visibility]
 === Field visibility
 
+A field is read as `+e.field+`, where `+e+` is a name, a call, or a construction, and `+.a.b+` chains from the left. So `+amountOf(i).value+` opens a newtype on the call that builds it, with no `+let+` written to hold the result. This never competes with the bare `+.field+` getter of <<blocks>>: a getter starts an expression, a read follows one.
+
 *Reading* a field is possible wherever that data's type is visible. Within the same module, any data of that module may be read. A data of another module may have its fields read if it is exposed with `+exposing+` — being importable means it is exposed. An exposed data has all fields readable (there is no per-field exposure). A behavior may read the fields of its input data even when they come from another module.
 
 What is constrained is *not reading but construction*. Reading a field and constructing a new value of that data are separate authorities, so allowing cross-boundary reads leaves the guarantee that no unvalidated value can be built (<<asymmetric-interop>>) intact. There is no need to define a getter-only behavior just to pass a value out (<<behavior-composition-unit>>).
