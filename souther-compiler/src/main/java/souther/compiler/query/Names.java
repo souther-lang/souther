@@ -292,24 +292,35 @@ public final class Names {
             Map<String, Ast.Import> from = new HashMap<>();
             Map<String, String> aliases = new HashMap<>();
             Set<String> broken = db.ask(new Front.Broken()).value();
+            // An import line that is wrong is reported and skipped, and the ones that are fine still
+            // bring in what they bring in. A half-typed import is as ordinary as a half-typed name,
+            // and taking the whole scope away would leave every name in the file meaning nothing —
+            // which is when an author most wants to be told what one means.
+            List<Report> reports = new ArrayList<>();
             for (Ast.Import imp : m.imports()) {
                 if (broken != null && broken.contains(imp.module())) {
-                    return Answer.absent();   // the file that will not parse reports its own error
+                    nameless(scope, imp.names());
+                    continue;   // the file that will not parse reports its own error
                 }
                 Ast.Module src = db.ask(new Front.Available(imp.module())).value();
                 if (src == null) {
-                    return Answer.absent(unknownModule(imp));
+                    reports.add(unknownModule(imp));
+                    nameless(scope, imp.names());
+                    continue;
                 }
                 if (!db.ask(new Declarations(imp.module())).present()) {
                     // The module is there but says nothing usable. Whatever is wrong with it is
                     // reported on its own source; repeating it here would send the author to a file
                     // that is fine.
-                    return Answer.absent();
+                    nameless(scope, imp.names());
+                    continue;
                 }
                 if (imp.alias() != null) {
                     Report clash = aliasTaken(imp, aliases, registry.moduleNames());
                     if (clash != null) {
-                        return Answer.absent(clash);
+                        reports.add(clash);
+                        nameless(scope, imp.names());
+                        continue;   // an alias that names two things names neither here
                     }
                     aliases.put(imp.alias(), imp.module());
                 }
@@ -317,10 +328,12 @@ public final class Names {
                 Set<String> exposed = registry.exposedBy(imp.module());
                 for (String imported : imp.names()) {
                     if (!exposed.contains(imported)) {
-                        return Answer.absent(Report.raised(
+                        reports.add(Report.raised(
                                 Diagnostic.of(null, "check.import.notexposed").title("check.module.title")
                                         .at(imp.pos()).args(imported, imp.module()).build(),
                                 "`" + imported + "` is not exposed by `" + imp.module() + "`"));
+                        nameless(scope, List.of(imported));
+                        continue;
                     }
                     if (!srcDefs.containsKey(imported)) {
                         // a behavior import is resolved separately; it is not a data Def, so it does
@@ -328,19 +341,40 @@ public final class Names {
                         if (behaviorNames(src).contains(imported)) {
                             continue;
                         }
-                        return Answer.absent(Report.raised(
+                        reports.add(Report.raised(
                                 Diagnostic.of(null, "check.import.notdefined").title("check.module.title")
                                         .at(imp.pos()).args(imported, imp.module()).build(),
                                 "`" + imported + "` is not defined in `" + imp.module() + "`"));
+                        nameless(scope, List.of(imported));
+                        continue;
                     }
-                    if (scope.put(imported, new TypeName(imp.module(), imported)) != null) {
-                        return Answer.absent(importCollision(imported, imp,
+                    if (scope.containsKey(imported)) {
+                        reports.add(importCollision(imported, imp,
                                 ownNames.contains(imported) ? null : from.get(imported)));
+                        continue;   // the first claim on the name keeps it
                     }
+                    scope.put(imported, new TypeName(imp.module(), imported));
                     from.put(imported, imp);
                 }
             }
+            if (!reports.isEmpty()) {
+                return Answer.of(new Of(Ordered.map(scope), Ordered.map(aliases)), reports);
+            }
             return Answer.of(new Of(Ordered.map(scope), Ordered.map(aliases)));
+        }
+    }
+
+    /**
+     * Puts {@code names} in scope as names that denote nothing.
+     *
+     * <p>An import line that could not do its job was reported on that line. A name it was to bring
+     * in is in scope all the same, denoting nothing — so a use of it takes the error type and says
+     * nothing more. Leaving it out of scope instead would report an unknown type at every use, which
+     * sends the author to a field when what is wrong is the import.
+     */
+    private static void nameless(Map<String, TypeName> scope, List<String> names) {
+        for (String written : names) {
+            scope.putIfAbsent(written, TypeName.unresolved(written));
         }
     }
 
