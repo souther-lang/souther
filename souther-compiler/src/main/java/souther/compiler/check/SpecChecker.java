@@ -5,6 +5,7 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -224,8 +225,13 @@ public final class SpecChecker {
         // match `requires` gets (E1602/E1603). Injected behaviors still declare it: no body to infer
         // from, and it drives factory generation (spec 13.3).
         if (!spec.constructs().isEmpty()) {
+            // Both sides name types, and a type has one identity however it is written — `up.Amount`
+            // and an `Amount` an import brings in are the same one. So the sets are compared resolved,
+            // and each side keeps its own spelling in whatever it has to report.
+            Set<String> declared = canonicalConstructs(spec.constructs(), symbols);
+            Set<String> built = canonicalConstructs(constructed, symbols);
             for (String c : constructed) {
-                if (!spec.constructs().contains(c)) {
+                if (!declared.contains(canonicalConstruct(c, symbols))) {
                     throw CompileException.of(
                             Diagnostic.of("E1002", "e1002.msg").at(spec.pos())
                                     .args(spec.name(), c).hint("e1002.hint").build(),
@@ -233,13 +239,13 @@ public final class SpecChecker {
                                     + "` but does not declare `constructs " + c + "`.");
                 }
             }
-            for (String declared : spec.constructs()) {
-                if (!constructed.contains(declared)) {
+            for (String name : spec.constructs()) {
+                if (!built.contains(canonicalConstruct(name, symbols))) {
                     throw CompileException.of(
                             Diagnostic.of("E1006", "e1006.msg").at(spec.pos())
-                                    .args(spec.name(), declared).hint("e1006.hint").build(),
-                            "Behavior `" + spec.name() + "` declares `constructs " + declared
-                                    + "` but never builds " + declared + " — it passes an existing"
+                                    .args(spec.name(), name).hint("e1006.hint").build(),
+                            "Behavior `" + spec.name() + "` declares `constructs " + name
+                                    + "` but never builds " + name + " — it passes an existing"
                                     + " value through. Remove it from the `constructs` clause.");
                 }
             }
@@ -381,8 +387,10 @@ public final class SpecChecker {
             TypeName built = symbols.resolve(c);
             // What Java needs is a way in: the decoder, which a module publishes by exposing the type.
             // For a type of another module that is its own `exposing` to answer, not this one's.
+            // `exposed` lists this module's own names, so the resolved name is what to look up — a
+            // type of this module written through it (`down.Out`) is the same one as `Out`
             boolean buildable = symbols.isForeign(built)
-                    ? symbols.isExposed(built) : exposeAll || exposed.contains(c);
+                    ? symbols.isExposed(built) : exposeAll || exposed.contains(built.name());
             if (!buildable) {
                 throw CompileException.of(
                         Diagnostic.of("E1305", "e1305.msg").at(spec.pos())
@@ -471,6 +479,24 @@ public final class SpecChecker {
                     "only required behaviors can be called from a body; compose others with `>->`");
         }
         TypeChecker.forEachChild(e, c -> rejectNonRequiredCalls(c, allBehaviors, reqSigs));
+    }
+
+    /**
+     * The identity a written construction name stands for, so a `constructs` clause and a body are
+     * compared by type rather than by spelling. A name that denotes nothing here stands for itself:
+     * resolution is not this check's job, and the checks that own it report a better error.
+     */
+    static String canonicalConstruct(String written, Symbols symbols) {
+        TypeName resolved = symbols.resolve(written);
+        return resolved == null ? written : resolved.qualified();
+    }
+
+    private static Set<String> canonicalConstructs(Collection<String> written, Symbols symbols) {
+        Set<String> out = new HashSet<>();
+        for (String w : written) {
+            out.add(canonicalConstruct(w, symbols));
+        }
+        return out;
     }
 
 }

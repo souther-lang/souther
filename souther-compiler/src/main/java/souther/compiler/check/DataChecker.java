@@ -149,9 +149,19 @@ public final class DataChecker {
      * meaningless and, left to codegen, would emit a duplicate JVM member — a duplicate method,
      * field, or implemented interface, i.e. a malformed class file. */
     static void rejectDuplicateNames(List<String> names, String where, SourcePos pos) {
+        rejectDuplicateNames(names, where, pos, n -> n);
+    }
+
+    /**
+     * As above, but two entries are the same when {@code identity} maps them to the same thing. A
+     * list of type names admits two spellings of one type — `Amount` an import brings in and
+     * `up.Amount` — and listing both is the duplicate that a spelling comparison would miss.
+     */
+    static void rejectDuplicateNames(List<String> names, String where, SourcePos pos,
+                                     java.util.function.UnaryOperator<String> identity) {
         Set<String> seen = new HashSet<>();
         for (String n : names) {
-            if (!seen.add(n)) {
+            if (!seen.add(identity.apply(n))) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.dup.name").title("check.duplicate.title")
                                 .at(pos).args(n, where).build(),

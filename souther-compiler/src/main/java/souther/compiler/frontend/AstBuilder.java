@@ -312,22 +312,12 @@ public final class AstBuilder {
             List<String> constructs = new ArrayList<>();
             List<String> requires = new ArrayList<>();
             for (SyntaxNode clause : s.childNodes()) {
+                // either clause may name through a module, so the idents of one name are joined and
+                // a comma starts the next
                 if (clause.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
-                    for (SyntaxToken t : identTokens(clause)) {
-                        constructs.add(t.text());
-                    }
+                    collectDottedNames(clause, constructs);
                 } else if (clause.kind() == SyntaxKind.REQUIRES_CLAUSE) {
-                    // a required behavior may be named through its module, so the idents of one
-                    // name are joined and a comma starts the next
-                    List<SyntaxElement> es = meaningful(clause);
-                    int[] at = {1};                       // past the `requires` keyword
-                    while (at[0] < es.size()) {
-                        if (isToken(es.get(at[0]), SyntaxKind.COMMA)) {
-                            at[0]++;
-                            continue;
-                        }
-                        requires.add(dottedName(es, at));
-                    }
+                    collectDottedNames(clause, requires);
                 }
             }
             return new Ast.SpecBehavior(name, params, ret, constructs, requires, pos);
@@ -745,6 +735,20 @@ public final class AstBuilder {
             sb.append('.').append(tokenText(es.get(at[0]++)));
         }
         return sb.toString();
+    }
+
+    /** The comma-separated names of a {@code constructs}/{@code requires} clause, each possibly
+     * qualified by its module. */
+    private void collectDottedNames(SyntaxNode clause, List<String> out) {
+        List<SyntaxElement> es = meaningful(clause);
+        int[] at = {1};                           // past the clause keyword
+        while (at[0] < es.size()) {
+            if (isToken(es.get(at[0]), SyntaxKind.COMMA)) {
+                at[0]++;
+                continue;
+            }
+            out.add(dottedName(es, at));
+        }
     }
 
     private Ast.Case matchCase(SyntaxNode n) {

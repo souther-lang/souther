@@ -221,7 +221,8 @@ public final class TypeChecker {
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 DataChecker.rejectDuplicateNames(spec.requires(), "`requires`", spec.pos());
-                DataChecker.rejectDuplicateNames(spec.constructs(), "`constructs`", spec.pos());
+                DataChecker.rejectDuplicateNames(spec.constructs(), "`constructs`", spec.pos(),
+                        n -> SpecChecker.canonicalConstruct(n, symbols));
             }
         }
         // A data is Java-buildable from outside iff the whole module is public (no `exposing`) or

@@ -358,8 +358,8 @@ public final class Formatter {
     }
 
     private Doc nameList(SyntaxNode clause) {
-        // a `requires` entry may name its behavior through a module, so the dots of one name are kept
-        // and only a comma starts the next
+        // an entry may name through a module, so the dots of one name are kept and only a comma
+        // starts the next
         List<Doc> names = new ArrayList<>();
         StringBuilder current = new StringBuilder();
         for (SyntaxElement e : meaningful(clause)) {
