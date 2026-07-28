@@ -603,11 +603,41 @@ public interface Ast {
 
     record BoolLit(boolean value, SourcePos pos) implements Expr {}
 
-    record Var(String name, SourcePos pos) implements Expr {}
+    /**
+     * A name used as a value. {@code denotes} is what it names, answered once during resolution; a
+     * reader asks it rather than deciding for itself whether the spelling is a local, a unit data or
+     * something the language provides.
+     */
+    record Var(String name, ValueName denotes, SourcePos pos) implements Expr {
+
+        /** A name as the parser read it, before resolution has said what it denotes. */
+        public Var(String name, SourcePos pos) {
+            this(name, null, pos);
+        }
+
+        public Var denoting(ValueName resolved) {
+            return new Var(name, resolved, pos);
+        }
+    }
 
     record FieldAccess(Expr target, String field, SourcePos pos) implements Expr {}
 
-    record Call(String fn, List<Expr> args, SourcePos pos) implements Expr {}
+    /**
+     * A call. {@code denotes} is what {@code fn} names — a helper, a library function, an injected
+     * behavior, a function-typed parameter, or the type a newtype construction wraps — answered once
+     * during resolution.
+     */
+    record Call(String fn, ValueName denotes, List<Expr> args, SourcePos pos) implements Expr {
+
+        /** A call as the parser read it, before resolution has said what {@code fn} denotes. */
+        public Call(String fn, List<Expr> args, SourcePos pos) {
+            this(fn, null, args, pos);
+        }
+
+        public Call denoting(ValueName resolved) {
+            return new Call(fn, resolved, args, pos);
+        }
+    }
 
     record Binary(BinOp op, Expr left, Expr right, SourcePos pos) implements Expr {}
 
@@ -630,7 +660,7 @@ public interface Ast {
             case Neg n -> new Neg(f.apply(n.operand()), n.pos());
             case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.pos());
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
-            case Call c -> new Call(c.fn(), mapExprs(c.args(), f), c.pos());
+            case Call c -> new Call(c.fn(), c.denotes(), mapExprs(c.args(), f), c.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
             case LetIn li -> new LetIn(li.name(), f.apply(li.value()), li.declaredType(), li.annotated(),
                     li.opens(), f.apply(li.body()), li.pos());

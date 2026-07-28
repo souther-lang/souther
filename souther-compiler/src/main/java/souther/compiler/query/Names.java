@@ -128,6 +128,52 @@ public final class Names {
     }
 
     /**
+     * The behaviors a module can name without a qualifier: its own, and the ones its imports bring
+     * in, each under the bare name it is reached by.
+     *
+     * <p>{@code whole} is false when an import could not be followed, so a name that is not here may
+     * still have come from somewhere — the difference between "nothing declares this" and "this
+     * compilation cannot say".
+     */
+    public record BehaviorsInScope(String name) implements Key<BehaviorsInScope.Of> {
+
+        public record Of(Map<String, ValueName.Behavior> byName, boolean whole) {}
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Of> compute(Db db) {
+            Ast.Module m = db.ask(new Front.Exposed(name)).value();
+            if (m == null) {
+                return Answer.absent();
+            }
+            Map<String, ValueName.Behavior> byName = new LinkedHashMap<>();
+            for (String own : behaviorNames(m)) {
+                byName.put(own, new ValueName.Behavior(name, own));
+            }
+            boolean whole = true;
+            for (Ast.Import imp : m.imports()) {
+                Answer<Set<String>> declared = db.ask(new Front.Behaviors(imp.module()));
+                if (!declared.present()) {
+                    whole = false;
+                    continue;
+                }
+                for (String imported : imp.names()) {
+                    if (declared.value().contains(imported)) {
+                        // a name this module declares itself is the one it means
+                        byName.putIfAbsent(imported,
+                                new ValueName.Behavior(imp.module(), imported));
+                    }
+                }
+            }
+            return Answer.of(new Of(Ordered.map(byName), whole));
+        }
+    }
+
+    /**
      * Resolving one module's behavior names: which behavior each stage and each {@code requires}
      * denotes, and which imports naming them through a module asks for.
      */
@@ -248,32 +294,20 @@ public final class Names {
 
         /** A bare name: this module's own behavior, or one an import brought in. */
         private Ast.ValueRef bare(Ast.ValueRef ref, String written, Unknown unknown) {
-            if (behaviorNames(m).contains(written)) {
-                return ref.denoting(new ValueName.Behavior(m.name(), written));
+            BehaviorsInScope.Of scope = db.ask(new BehaviorsInScope(m.name())).value();
+            if (scope == null) {
+                return ref.denoting(new ValueName.Unresolved(written));
             }
-            Set<String> reachable = new LinkedHashSet<>(behaviorNames(m));
-            boolean unreadable = false;
-            for (Ast.Import imp : m.imports()) {
-                Answer<Set<String>> declared = db.ask(new Front.Behaviors(imp.module()));
-                if (!declared.present()) {
-                    unreadable = true;
-                    continue;
-                }
-                for (String name : imp.names()) {
-                    if (declared.value().contains(name)) {
-                        if (name.equals(written)) {
-                            return ref.denoting(new ValueName.Behavior(imp.module(), written));
-                        }
-                        reachable.add(name);
-                    }
-                }
+            ValueName.Behavior named = scope.byName().get(written);
+            if (named != null) {
+                return ref.denoting(named);
             }
-            if (unreadable) {
+            if (!scope.whole()) {
                 // An import that could not be followed may have been where this name came from.
                 // Whatever is wrong with that module is reported there.
                 return ref.denoting(new ValueName.Unresolved(written));
             }
-            return nothing(ref, unknown.report(ref, reachable));
+            return nothing(ref, unknown.report(ref, scope.byName().keySet()));
         }
 
         /** What to say about a name no behavior answers to, given the names that were reachable. */
@@ -547,7 +581,8 @@ public final class Names {
             }
             Resolve.Resolved resolution;
             try {
-                resolution = Resolve.resolving(available.value(), scope.value());
+                resolution = Resolve.resolving(available.value(), scope.value(),
+                        reachableValues(db, available.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -611,6 +646,18 @@ public final class Names {
             }
             return Answer.of(Boolean.TRUE);
         }
+    }
+
+    /** What a module's bodies can name without a binding: its own helpers, and every behavior it can
+     * reach — its own and the ones its imports bring in. */
+    private static Resolve.Values reachableValues(Db db, Ast.Module m) {
+        Set<String> helpers = new LinkedHashSet<>();
+        for (Ast.FnDef fn : m.fns()) {
+            helpers.add(fn.name());
+        }
+        BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
+        return new Resolve.Values(m.name(), helpers,
+                behaviors == null ? Map.of() : behaviors.byName());
     }
 
     /** The resolved module — {@link Resolution} without the record of how it got there. */
