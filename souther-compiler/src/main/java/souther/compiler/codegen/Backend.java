@@ -227,18 +227,19 @@ public final class Backend {
                 // pass-through output (会員) by shape alone.
                 List<String> unitCases = new ArrayList<>();
                 for (Ast.TypeRef t : spec.ret().cases()) {
-                    if (b.symbols.declaration(t.name()) instanceof Ast.UnitData) {
-                        unitCases.add(t.name());
+                    if (t.denotes() instanceof Type.Ref r
+                            && b.symbols.get(r.name()) instanceof Ast.UnitData) {
+                        unitCases.add(r.name().name());
                     }
                 }
                 List<Ast.Data> dataConstructs = new ArrayList<>();
-                Set<String> seenConstruct = new HashSet<>();
+                Set<TypeName> seenConstruct = new HashSet<>();
                 if (spec.constructs() != null) {
                     for (Ast.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
                         if (b.symbols.get(tn.denotes()) instanceof Ast.Data data
-                                && seenConstruct.add(tn.denotes().name())) {
+                                && seenConstruct.add(tn.denotes())) {
                             dataConstructs.add(data);
                         }
                     }

@@ -6,6 +6,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 
@@ -33,18 +34,16 @@ public final class Deriver {
     /** Derives codecs using {@code symbols} for type resolution (own definitions plus any
      * imported ones, for cross-module fields — spec 4). */
     public static Ast.Module derive(Ast.Module module, Symbols symbols) {
-        java.util.Set<String> caseNames = new java.util.HashSet<>();
+        java.util.Set<TypeName> caseNames = new java.util.HashSet<>();
         for (Ast.Def def : symbols.visible()) {
             if (def instanceof Ast.SumData s) {
-                for (Ast.Name c : s.cases()) {
-                    caseNames.add(c.written());
-                }
+                caseNames.addAll(TypeOps.caseNames(s));
             }
         }
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             defs.add(switch (def) {
-                case Ast.Data d -> deriveData(d, symbols, caseNames.contains(d.name()));
+                case Ast.Data d -> deriveData(d, symbols, caseNames.contains(symbols.own(d.name())));
                 case Ast.SumData s -> deriveSum(s, symbols);
                 case Ast.UnitData u -> u;
             });
@@ -69,7 +68,7 @@ public final class Deriver {
     private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, Type> fields, boolean isCase,
                                                Symbols symbols) {
         SourcePos pos = d.pos();
-        Ast.Name self = Ast.Name.of(symbols.own(d.name()), pos);
+        Ast.Name self = Ast.Name.resolved(symbols.own(d.name()), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even
         // with one field (spec 8.7). A sum case is embedded in the discriminated object, never bare.
         Map.Entry<String, Type> single = bareField(d, fields, isCase);
@@ -144,7 +143,7 @@ public final class Deriver {
             return new Ast.PrimDecRef(primKind(t), pos);
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.DataDecRef(Ast.Name.of(r.name(), pos), pos);
+            return new Ast.DataDecRef(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListDecRef(decRef(lo.element(), d, field, pos), pos);
@@ -219,7 +218,7 @@ public final class Deriver {
             return primRaw(t, access, pos);
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.EncodeRaw(Ast.Name.of(r.name(), pos), access, pos);
+            return new Ast.EncodeRaw(Ast.Name.resolved(r.name(), pos), access, pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListEnc(access, encElem(lo.element(), d, field, pos), pos);
@@ -247,7 +246,7 @@ public final class Deriver {
      */
     private static Ast.DecRef mapKeyDec(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
         if (mo.key() instanceof Type.Ref r) {
-            return new Ast.DataDecRef(Ast.Name.of(r.name(), pos), pos);
+            return new Ast.DataDecRef(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
             return new Ast.PrimDecRef(primKind(mo.key()), pos);
@@ -257,7 +256,7 @@ public final class Deriver {
 
     private static Ast.EncElem mapKeyEnc(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
         if (mo.key() instanceof Type.Ref r) {
-            return new Ast.DataEnc(Ast.Name.of(r.name(), pos), pos);
+            return new Ast.DataEnc(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
             return new Ast.PrimEnc(primKind(mo.key()), pos);
@@ -296,7 +295,7 @@ public final class Deriver {
             return new Ast.PrimEnc(primKind(t), pos);   // every primitive has a leaf encoder
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.DataEnc(Ast.Name.of(r.name(), pos), pos);
+            return new Ast.DataEnc(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListElemEnc(encElem(lo.element(), d, field, pos), pos);
@@ -393,7 +392,7 @@ public final class Deriver {
     private static List<Ast.Variant> tagVariants(Ast.SumData s, List<Ast.Name> cases) {
         List<Ast.Variant> variants = new ArrayList<>();
         for (Ast.Name caseName : cases) {
-            variants.add(new Ast.Variant(caseName.written(), caseName, s.pos()));
+            variants.add(new Ast.Variant(caseName.denotes().name(), caseName, s.pos()));
         }
         return variants;
     }
@@ -401,7 +400,7 @@ public final class Deriver {
     private static List<Ast.EncVariant> encVariants(Ast.SumData s, List<Ast.Name> cases) {
         List<Ast.EncVariant> variants = new ArrayList<>();
         for (Ast.Name caseName : cases) {
-            variants.add(new Ast.EncVariant(caseName, caseName.written(), s.pos()));
+            variants.add(new Ast.EncVariant(caseName, caseName.denotes().name(), s.pos()));
         }
         return variants;
     }

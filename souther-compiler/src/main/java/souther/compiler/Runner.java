@@ -153,8 +153,7 @@ public final class Runner {
         String moduleName = moduleName(file);
 
         Map<String, byte[]> classes = Compiler.compile(source, moduleName);
-        Ast.Module parsed = CstFrontend.parse(source, moduleName);
-        Ast.Module module = Resolve.module(parsed, TypeChecker.symbols(parsed));
+        Ast.Module module = Resolve.module(CstFrontend.parse(source, moduleName));
         Symbols symbols = TypeChecker.symbols(module);
         Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols);
 

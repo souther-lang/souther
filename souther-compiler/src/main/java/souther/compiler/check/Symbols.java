@@ -94,9 +94,8 @@ public final class Symbols {
         return get(name) != null;
     }
 
-    /** The definition the written name {@code written} denotes here, or null when nothing does.
-     * The name must have been written in the module being compiled — for one read out of another
-     * module's declaration, resolve it there first ({@link #resolveIn}, {@link TypeName#sibling}). */
+    /** The definition the written name {@code written} denotes here, or null when nothing does. The
+     * name must have been written in the module being compiled. */
     public Ast.Def declaration(String written) {
         TypeName name = resolve(written);
         return name == null ? null : get(name);

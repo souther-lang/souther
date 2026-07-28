@@ -114,7 +114,7 @@ public final class TypeOps {
         // across runs rather than dependent on the symbol map's iteration order.
         String chosen = null;
         for (Ast.Def d : symbols.declaredIn(ref.name().module()).values()) {
-            if (d instanceof Ast.SumData sum && namesCase(sum, ref.name())
+            if (d instanceof Ast.SumData sum && caseNames(sum).contains(ref.name())
                     && (chosen == null || sum.name().compareTo(chosen) < 0)) {
                 chosen = sum.name();
             }
@@ -140,7 +140,7 @@ public final class TypeOps {
             if (!visiting.add(ref.name())) {
                 return List.of();   // a sum reaching itself; DataChecker reports it, this must terminate
             }
-            names = caseNames(ref.name(), sum);
+            names = caseNames(sum);
         } else if (t instanceof Type.Union union) {
             names = List.copyOf(union.members());
         } else {
@@ -159,25 +159,13 @@ public final class TypeOps {
         return leaves;
     }
 
-    /** A sum's cases, canonical. A case is declared in the same module as the sum that lists it — the
-     * generated sum is a sealed interface, which only its own package can implement — so the sum's
-     * module is the case's. */
-    public static List<TypeName> caseNames(TypeName sumName, Ast.SumData sum) {
+    /** A sum's cases: what each name it lists denotes. */
+    public static List<TypeName> caseNames(Ast.SumData sum) {
         List<TypeName> names = new ArrayList<>();
         for (Ast.Name c : sum.cases()) {
             names.add(c.denotes());
         }
         return names;
-    }
-
-    /** Whether {@code sum} lists {@code caseName} among its cases. */
-    static boolean namesCase(Ast.SumData sum, TypeName caseName) {
-        for (Ast.Name c : sum.cases()) {
-            if (caseName.equals(c.denotes())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
@@ -379,7 +367,7 @@ public final class TypeOps {
                 if (!visiting.add(name)) {
                     continue;   // a sum reaching itself; DataChecker reports it, this must terminate
                 }
-                for (TypeName caseName : caseNames(name, s)) {
+                for (TypeName caseName : caseNames(s)) {
                     collectLeafCases(Type.ref(caseName), symbols, out, visiting);
                 }
             } else {

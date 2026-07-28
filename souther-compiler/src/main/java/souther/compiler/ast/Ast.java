@@ -35,13 +35,14 @@ public interface Ast {
      */
     record Name(String written, TypeName denotes, SourcePos pos) implements Ast {
 
-        /** A name as the parser read it, before the resolve pass has said what it denotes. */
-        public static Name of(String written, SourcePos pos) {
+        /** A name as the parser read it, before the resolve pass has said what it denotes. Only the
+         * parser writes one: every other producer knows what it means and says so. */
+        public static Name written(String written, SourcePos pos) {
             return new Name(written, null, pos);
         }
 
         /** A name a pass synthesized, already knowing what it denotes. */
-        public static Name of(TypeName denotes, SourcePos pos) {
+        public static Name resolved(TypeName denotes, SourcePos pos) {
             return new Name(denotes.name(), denotes, pos);
         }
 

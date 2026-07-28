@@ -32,6 +32,12 @@ public final class Resolve {
         this.symbols = symbols;
     }
 
+    /** {@code m} with every name it writes resolved against its own definitions — a module compiled
+     * with nothing else in sight. */
+    public static Ast.Module module(Ast.Module m) {
+        return module(m, TypeChecker.symbols(m));
+    }
+
     /** {@code m} with every name it writes resolved against {@code symbols}. */
     public static Ast.Module module(Ast.Module m, Symbols symbols) {
         Resolve r = new Resolve(symbols);
@@ -41,12 +47,12 @@ public final class Resolve {
         }
         List<Ast.BehaviorDef> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
-            behaviors.add(b instanceof Ast.SpecBehavior spec
-                    ? new Ast.SpecBehavior(spec.name(), r.params(spec.params()), r.retType(spec.ret()),
-                            r.names(spec.constructs()), spec.requires(), spec.pos())
-                    : new Ast.PipeBehavior(((Ast.PipeBehavior) b).name(),
-                            ((Ast.PipeBehavior) b).stages(),
-                            r.retType(((Ast.PipeBehavior) b).declaredOut()), b.pos()));
+            behaviors.add(switch (b) {
+                case Ast.SpecBehavior spec -> new Ast.SpecBehavior(spec.name(), r.params(spec.params()),
+                        r.retType(spec.ret()), r.names(spec.constructs()), spec.requires(), spec.pos());
+                case Ast.PipeBehavior pipe -> new Ast.PipeBehavior(pipe.name(), pipe.stages(),
+                        r.retType(pipe.declaredOut()), pipe.pos());
+            });
         }
         List<Ast.FnDef> fns = new ArrayList<>();
         for (Ast.FnDef fn : m.fns()) {
@@ -80,12 +86,6 @@ public final class Resolve {
         }
         return new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
                 behaviors, fns, examples, fakes, m.exampleFileTarget(), m.pos());
-    }
-
-    /** One {@code fn} resolved on its own — what a pass that injects a helper into a module calls,
-     * so an injected body arrives resolved like every other body. */
-    public static Ast.FnDef fn(Ast.FnDef f, Symbols symbols) {
-        return new Resolve(symbols).fn(f);
     }
 
     private Ast.FnDef fn(Ast.FnDef f) {
@@ -306,7 +306,7 @@ public final class Resolve {
             // for what it is — a name that opens nothing — rather than as a name nothing declares
             case Ast.LetIn li -> new Ast.LetIn(li.name(), li.value(), paramType(li.declaredType()),
                     li.annotated(),
-                    li.opens() == null ? null : caseNames(List.of(li.opens())).get(0),
+                    li.opens() == null ? null : caseName(li.opens()),
                     li.body(), li.pos());
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
@@ -356,19 +356,22 @@ public final class Resolve {
     private List<Ast.Name> caseNames(List<Ast.Name> names) {
         List<Ast.Name> out = new ArrayList<>();
         for (Ast.Name n : names) {
-            if (n.denotes() != null) {
-                out.add(n);
-                continue;
-            }
-            TypeName denoted = symbols.resolveCase(n.written());
-            if (denoted == null) {
-                denoted = TypeName.optionCase(n.written());
-            }
-            if (denoted == null) {
-                throw TypeOps.unknownType(n.written(), n.pos(), symbols);
-            }
-            out.add(n.denoting(denoted));
+            out.add(caseName(n));
         }
         return out;
+    }
+
+    private Ast.Name caseName(Ast.Name n) {
+        if (n.denotes() != null) {
+            return n;
+        }
+        TypeName denoted = symbols.resolveCase(n.written());
+        if (denoted == null) {
+            denoted = TypeName.optionCase(n.written());
+        }
+        if (denoted == null) {
+            throw TypeOps.unknownType(n.written(), n.pos(), symbols);
+        }
+        return n.denoting(denoted);
     }
 }

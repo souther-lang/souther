@@ -133,7 +133,7 @@ public final class SpecChecker {
                                     Symbols symbols, Set<String> allBehaviors,
                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
-                                    Map<String, Map<TypeName, Ast.Name>> recHelperConstructs,
+                                    Map<String, Map<TypeName, String>> recHelperConstructs,
                                     List<Diagnostic> warnings) {
         if (fn.declaredReturn() != null) {
             throw CompileException.of(
@@ -217,7 +217,7 @@ public final class SpecChecker {
 
         // One expression (spec 16.4): this single walk sees every construction, including under a
         // desugared `require`.
-        Map<TypeName, Ast.Name> constructed = new LinkedHashMap<>();
+        Map<TypeName, String> constructed = new LinkedHashMap<>();
         DataChecker.collectConstructs(body, constructed, symbols, new HashSet<>(env.keySet()), recHelperConstructs);
         // `constructs` on an fn-backed behavior is optional: its construction permission is internal
         // (invisible to callers, unlike `requires`), so with the body visible the set can be inferred
@@ -230,13 +230,10 @@ public final class SpecChecker {
             // Both sides name types, and a type has one identity however it is written — `up.Amount`
             // and an `Amount` an import brings in are the same one. Each side keeps its own spelling
             // in whatever it has to report.
-            Set<TypeName> declared = new HashSet<>();
-            for (Ast.Name n : spec.constructs()) {
-                declared.add(n.denotes());
-            }
-            for (Ast.Name built : constructed.values()) {
-                if (!declared.contains(built.denotes())) {
-                    String c = built.written();
+            Set<TypeName> declared = new HashSet<>(MatchElaborator.denoted(spec.constructs()));
+            for (Map.Entry<TypeName, String> built : constructed.entrySet()) {
+                if (!declared.contains(built.getKey())) {
+                    String c = built.getValue();
                     throw CompileException.of(
                             Diagnostic.of("E1002", "e1002.msg").at(spec.pos())
                                     .args(spec.name(), c).hint("e1002.hint").build(),

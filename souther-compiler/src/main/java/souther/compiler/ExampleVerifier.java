@@ -875,25 +875,13 @@ public final class ExampleVerifier {
 
     /**
      * The declared type of a field, used only to shape the written value (a map's entry pairs, a
-     * set's list). It is best-effort on purpose: the {@code TypeRef} comes from the module that
-     * declares the data, which may name a type this module never imported — building a
-     * {@code TaxBreakdown} fixture does not require its {@code rate}'s type to be in scope here. That
-     * resolution failing is not the author's problem and, worse, carries the *declaring* file's
-     * position, which rendered against this file pointed at an unrelated line (issue #110).
-     *
-     * <p>An unshaped value still reaches the decoder, which accepts it or reports at the fixture's own
-     * row. A type this module genuinely may not name is caught where it is written, by
-     * {@code newtypeInner}.
+     * set's list). The {@code TypeRef} comes from the module that declares the data, and it says what
+     * it denotes — resolved where it was written, so naming a type this module never imported is not
+     * a question asked here at all (issue #110 was that question being asked, and answered with the
+     * declaring file's position).
      */
     private Type shapeOf(Ast.TypeRef declaredType) {
-        if (declaredType == null) {
-            return null;
-        }
-        try {
-            return declaredType.denotes();
-        } catch (CompileException _) {
-            return null;
-        }
+        return declaredType == null ? null : declaredType.denotes();
     }
 
     /**

@@ -40,7 +40,7 @@ public final class MatchElaborator {
                             .at(m.pos(), 5).args(Type.show(st)).build(),
                     "match requires a sum-typed value, got " + st);
         }
-        return elaborateCasesMatch(m, scrutinee, new HashSet<>(TypeOps.caseNames(ref.name(), sum)),
+        return elaborateCasesMatch(m, scrutinee, new HashSet<>(TypeOps.caseNames(sum)),
                 "data `" + sum.name() + "`", st, env, ctx, expected);
     }
 
@@ -56,9 +56,11 @@ public final class MatchElaborator {
         String caseName = written.written();
         String otherSum = null;
         for (TypeName name : symbols.visibleNames()) {
-            if (symbols.get(name) instanceof Ast.SumData sum
-                    && TypeOps.namesCase(sum, written.denotes())
-                    && !cases.containsAll(TypeOps.caseNames(name, sum))) {
+            if (!(symbols.get(name) instanceof Ast.SumData sum)) {
+                continue;
+            }
+            List<TypeName> others = TypeOps.caseNames(sum);
+            if (others.contains(written.denotes()) && !cases.containsAll(others)) {
                 otherSum = sum.name();
                 break;
             }
@@ -99,7 +101,7 @@ public final class MatchElaborator {
                 }
             }
             Type bindType = c.caseTypes().size() == 1
-                    ? caseBindType(c.caseTypes().get(0).written(), ctx.symbols()) : scrutinee;
+                    ? caseBindType(c.caseTypes().get(0).denotes()) : scrutinee;
             if (c.unwrapAsserts() != null) {
                 if (c.caseTypes().size() != 1) {
                     throw CompileException.of(
@@ -138,7 +140,7 @@ public final class MatchElaborator {
      * {@code None}; both must be present (spec 16.3). */
     static Core elaborateOptionMatch(Ast.Match m, Core scrutineeCore, Type element,
                                           Map<String, Type> env, CheckContext ctx, Type expected) {
-        Set<String> covered = new HashSet<>();
+        Set<TypeName> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
         for (Ast.Case c : m.cases()) {
@@ -148,17 +150,21 @@ public final class MatchElaborator {
                                 .at(c.pos()).build(),
                         "or-patterns are not allowed in an Option match; use separate Some and None cases");
             }
-            String caseType = c.caseTypes().get(0).written();
-            Type bind = switch (caseType) {
-                case "Some" -> element;
-                case "None" -> null;
-                default -> throw CompileException.of(
+            Ast.Name arm = c.caseTypes().get(0);
+            String caseType = arm.written();
+            Type bind;
+            if (TypeName.SOME.equals(arm.denotes())) {
+                bind = element;
+            } else if (TypeName.NONE.equals(arm.denotes())) {
+                bind = null;
+            } else {
+                throw CompileException.of(
                         Diagnostic.of(null, "check.match.option.notcase").title("check.match.title")
                                 .at(c.pos()).args(caseType).build(),
                         "`" + caseType + "` is not a case of Option; use Some or None");
-            };
+            }
             if (c.unwrapAsserts() != null) {
-                if (!caseType.equals("Some")) {
+                if (!TypeName.SOME.equals(arm.denotes())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.match.option.nopayload").title("check.match.title")
                                     .at(c.pos()).args(caseType).build(),
@@ -166,7 +172,7 @@ public final class MatchElaborator {
                 }
                 checkOptionUnwrapAsserts(c, element, ctx.symbols());
             }
-            if (!covered.add(caseType)) {
+            if (!covered.add(arm.denotes())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.match.overlap").title("check.match.title")
                                 .at(c.pos()).args(caseType).build(),
@@ -179,9 +185,9 @@ public final class MatchElaborator {
             branchType = mergeBranch(m, branchType, body.type(), c);
         }
         List<String> missing = new ArrayList<>();
-        for (String caseName : List.of("Some", "None")) {
+        for (TypeName caseName : List.of(TypeName.SOME, TypeName.NONE)) {
             if (!covered.contains(caseName)) {
-                missing.add(caseName);
+                missing.add(caseName.name());
             }
         }
         if (!missing.isEmpty()) {
@@ -200,21 +206,22 @@ public final class MatchElaborator {
     }
 
     /** The type a match case binds. A primitive-named case (e.g. {@code Int} in {@code Int |
-     * DivisionByZero}) binds that primitive; a data-named case binds its data type. */
-    public static Type caseBindType(String caseName, Symbols symbols) {
-        switch (caseName) {
-            case "Int" -> { return Type.INT; }
-            case "String" -> { return Type.STRING; }
-            case "Bool" -> { return Type.BOOL; }
-            case "Decimal" -> { return Type.DECIMAL; }
-            case "Date" -> { return Type.DATE; }
-            case "DateTime" -> { return Type.DATETIME; }
-            default -> { }
+     * DivisionByZero}) binds that primitive; a data-named case binds its data type. Option's own
+     * cases bind nothing readable here — an Option match binds the element, which
+     * {@link #elaborateOptionMatch} knows and this does not. */
+    public static Type caseBindType(TypeName caseName) {
+        if (!caseName.isPrimitive()) {
+            return Type.ref(caseName);
         }
-        TypeName resolved = symbols.resolveCase(caseName);
-        // an arm the match check already accepted resolves; anything else binds nothing readable, and
-        // the caller (an analysis running beside the check) leaves the binding untyped
-        return resolved == null ? null : Type.ref(resolved);
+        return switch (caseName.name()) {
+            case "Int" -> Type.INT;
+            case "String" -> Type.STRING;
+            case "Bool" -> Type.BOOL;
+            case "Decimal" -> Type.DECIMAL;
+            case "Date" -> Type.DATE;
+            case "DateTime" -> Type.DATETIME;
+            default -> null;
+        };
     }
 
     /** A constructor-destructuring pattern {@code X(Y(s))} opens one newtype per layer: {@code X}

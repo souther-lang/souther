@@ -223,7 +223,7 @@ public final class AstBuilder {
             for (SyntaxNode member : product.get().childNodes()) {
                 if (member.kind() == SyntaxKind.SPREAD_MEMBER) {
                     SyntaxToken included = identTokens(member).get(0);
-                    includes.add(Ast.Name.of(included.text(), posOf(included)));
+                    includes.add(Ast.Name.written(included.text(), posOf(included)));
                 } else if (member.kind() == SyntaxKind.FIELD) {
                     fields.add(field(member));
                 }
@@ -245,7 +245,7 @@ public final class AstBuilder {
         if (sum.isPresent()) {
             List<Ast.Name> cases = new ArrayList<>();
             for (SyntaxToken t : identTokens(sum.get())) {
-                cases.add(Ast.Name.of(t.text(), posOf(t)));
+                cases.add(Ast.Name.written(t.text(), posOf(t)));
             }
             return new Ast.SumData(name, cases, Optional.empty(), Optional.empty(), pos);
         }
@@ -680,7 +680,7 @@ public final class AstBuilder {
 
     private Ast.Expr newData(SyntaxNode n) {
         SyntaxToken head = identTokens(n).get(0);
-        Ast.Name typeName = Ast.Name.of(head.text(), posOf(head));
+        Ast.Name typeName = Ast.Name.written(head.text(), posOf(head));
         List<Ast.FieldInit> inits = new ArrayList<>();
         List<String> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction
@@ -739,7 +739,7 @@ public final class AstBuilder {
             at[0]++;                              // .
             sb.append('.').append(tokenText(es.get(at[0]++)));
         }
-        return Ast.Name.of(sb.toString(), posOf((SyntaxToken) head));
+        return Ast.Name.written(sb.toString(), posOf((SyntaxToken) head));
     }
 
     /** The comma-separated names of a {@code constructs}/{@code requires} clause, each possibly
@@ -775,25 +775,24 @@ public final class AstBuilder {
         List<Ast.Name> unwrapNames = new ArrayList<>();
         if (i < es.size() && isToken(es.get(i), SyntaxKind.LPAREN)) {
             int depth = 0;
-            int[] layer = {i};
-            while (layer[0] < es.size()) {
-                SyntaxElement e = es.get(layer[0]);
+            while (at[0] < es.size()) {
+                SyntaxElement e = es.get(at[0]);
                 if (isToken(e, SyntaxKind.LPAREN)) {
                     depth++;
-                    layer[0]++;
+                    at[0]++;
                 } else if (isToken(e, SyntaxKind.RPAREN)) {
                     depth--;
-                    layer[0]++;
+                    at[0]++;
                     if (depth == 0) {
                         break;
                     }
                 } else if (isToken(e, SyntaxKind.IDENT)) {
-                    unwrapNames.add(dottedName(es, layer));   // a layer is named like any other type
+                    unwrapNames.add(dottedName(es, at));   // a layer is named like any other type
                 } else {
                     break;
                 }
             }
-            i = layer[0];
+            i = at[0];
         }
         // Option's positional binding `Some v`: a bare identifier before `{` / `as` / `->`. It never
         // follows a constructor destructure, so a trailing ident after the parens is not consumed here.
@@ -944,7 +943,7 @@ public final class AstBuilder {
                 Ast.Expr inner = new Ast.FieldAccess(new Ast.Var(whole, pos), "value", pos);
                 Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos);
                 yield Ast.LetIn.opening(whole, value,
-                        Ast.Name.of(qualifiedNameText(pat), pos(pat)), body, pos);
+                        Ast.Name.written(qualifiedNameText(pat), pos(pat)), body, pos);
             }
             case PATTERN_RECORD -> {
                 String whole = "$r" + (patternCounter++);

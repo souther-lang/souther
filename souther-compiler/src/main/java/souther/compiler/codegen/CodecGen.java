@@ -189,10 +189,6 @@ final class CodecGen {
 
     /** Invokes a type's static {@code decoder()}/{@code encoder()} factory, as an interface
      * method reference when the type is a sum (its factory lives on a sealed interface). */
-    private void invokeCodec(CodeBuilder code, String typeName, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(typeName), method, mtd, symbols.declaration(typeName) instanceof Ast.SumData);
-    }
-
     private void invokeCodec(CodeBuilder code, Ast.Name typeName, String method, MethodTypeDesc mtd) {
         code.invokestatic(cd(typeName.denotes()), method, mtd,
                 symbols.get(typeName.denotes()) instanceof Ast.SumData);

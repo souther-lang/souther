@@ -115,7 +115,7 @@ public final class Compiler {
         rejectUserImports(exposed);
         // Every written name is resolved here, before anything reads the tree (issue #177): what a
         // later pass reads is a name that already says which module declares it.
-        Ast.Module named = Resolve.module(exposed, TypeChecker.symbols(exposed));
+        Ast.Module named = Resolve.module(exposed);
         Ast.Module module = Deriver.derive(named);
         module = HelperInliner.forModule(module).withInlinedInvariants(module);
         module = NewtypeDesugar.rewrite(module, TypeChecker.symbols(module));

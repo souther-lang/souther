@@ -37,11 +37,19 @@ public record TypeName(String module, String name) implements Comparable<TypeNam
     }
 
     /** {@code Some} / {@code None}: written in a match arm over an {@code Option}, declared by no
-     * module. They are named here for the same reason a primitive case is — a name a pattern writes
-     * has to denote something — and {@code null} for any other spelling. */
+     * module. They are named for the same reason a primitive case is — a name a pattern writes has to
+     * denote something — and they name no class: an Option match dispatches on the runtime Option
+     * classes, never on the arm's own name. */
+    public static final TypeName SOME = primitive("Some");
+
+    /** @see #SOME */
+    public static final TypeName NONE = primitive("None");
+
+    /** Option's case of that spelling, or {@code null} for any other. */
     public static TypeName optionCase(String written) {
         return switch (written) {
-            case "Some", "None" -> new TypeName(PRIMITIVE, written);
+            case "Some" -> SOME;
+            case "None" -> NONE;
             default -> null;
         };
     }

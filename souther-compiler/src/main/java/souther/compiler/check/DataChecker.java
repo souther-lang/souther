@@ -74,9 +74,9 @@ public final class DataChecker {
      * construction only when nothing has bound it — a local of the same name wins (spec 8.4).
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
-    static void collectConstructs(Ast.Expr e, Map<TypeName, Ast.Name> out, Symbols symbols,
+    static void collectConstructs(Ast.Expr e, Map<TypeName, String> out, Symbols symbols,
                                           Set<String> bound,
-                                          Map<String, Map<TypeName, Ast.Name>> recConstructs) {
+                                          Map<String, Map<TypeName, String>> recConstructs) {
         switch (e) {
             case Ast.LetIn li -> {
                 collectConstructs(li.value(), out, symbols, bound, recConstructs);
@@ -85,7 +85,7 @@ public final class DataChecker {
                 collectConstructs(li.body(), out, symbols, inner, recConstructs);
             }
             case Ast.NewData nd -> {
-                out.putIfAbsent(nd.typeName().denotes(), nd.typeName());
+                out.putIfAbsent(nd.typeName().denotes(), nd.typeName().written());
                 for (Ast.FieldInit init : nd.inits()) {
                     collectConstructs(init.value(), out, symbols, bound, recConstructs);
                 }
@@ -96,7 +96,7 @@ public final class DataChecker {
             case Ast.Call call -> {
                 // a recursive helper is not inlined, so its own (transitive) constructions are
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be.
-                Map<TypeName, Ast.Name> viaHelper = recConstructs.get(call.fn());
+                Map<TypeName, String> viaHelper = recConstructs.get(call.fn());
                 if (viaHelper != null) {
                     viaHelper.forEach(out::putIfAbsent);
                 }
@@ -136,8 +136,7 @@ public final class DataChecker {
             // a bare name that resolves to a unit data is that unit's construction (spec 8.4)
             case Ast.Var v when !bound.contains(v.name())
                     && symbols.declaration(v.name()) instanceof Ast.UnitData ->
-                    out.putIfAbsent(symbols.resolve(v.name()),
-                            Ast.Name.of(symbols.resolve(v.name()), v.pos()));
+                    out.putIfAbsent(symbols.resolve(v.name()), v.name());
             case Ast.IntLit _ -> { }
             case Ast.DecimalLit _ -> { }
             case Ast.StringLit _ -> { }
@@ -153,12 +152,16 @@ public final class DataChecker {
         Set<String> seen = new HashSet<>();
         for (String n : names) {
             if (!seen.add(n)) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.dup.name").title("check.duplicate.title")
-                                .at(pos).args(n, where).build(),
-                        "`" + n + "` is listed more than once in " + where);
+                throw duplicate(n, where, pos);
             }
         }
+    }
+
+    private static CompileException duplicate(String written, String where, SourcePos pos) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.dup.name").title("check.duplicate.title")
+                        .at(pos).args(written, where).build(),
+                "`" + written + "` is listed more than once in " + where);
     }
 
     /**
@@ -169,10 +172,7 @@ public final class DataChecker {
         Set<TypeName> seen = new HashSet<>();
         for (Ast.Name n : names) {
             if (!seen.add(n.denotes())) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.dup.name").title("check.duplicate.title")
-                                .at(pos).args(n.written(), where).build(),
-                        "`" + n.written() + "` is listed more than once in " + where);
+                throw duplicate(n.written(), where, pos);
             }
         }
     }

@@ -181,7 +181,6 @@ final class CodegenContext {
         });
     }
 
-
     ClassDesc cdBehavior(String name) {
         return behaviorDescs.computeIfAbsent(name,
                 n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorClass(n)));
@@ -237,20 +236,11 @@ final class CodegenContext {
         return cd(typeName);
     }
 
-    /** The JVM class of a case as an arm wrote it. */
-    ClassDesc caseClass(String written) {
-        return switch (written) {
-            case "DivisionByZero" -> CD_DivisionByZero;
-            case "NotANumber" -> CD_NotANumber;
-            default -> cd(written);
-        };
-    }
-
     /** The class a match case is tested against: a boxed/reference class for a primitive case,
      * otherwise the case's data class, which its resolved name already names. */
     ClassDesc matchCaseClass(TypeName caseName) {
         if (!caseName.isPrimitive()) {
-            return cd(caseName);
+            return caseClass(caseName);
         }
         return switch (caseName.name()) {
             case "Int" -> CD_Long;
@@ -259,7 +249,10 @@ final class CodegenContext {
             case "String" -> CD_String;
             case "Date" -> CD_LocalDate;
             case "DateTime" -> CD_LocalDateTime;
-            default -> cd(caseName);
+            // Option's `Some`/`None` are named here as well, being declared by no module, and never
+            // reach this: an Option match dispatches on the runtime Option classes, not on an arm's
+            // own name. Anything else naming no class is a resolution that should not have happened.
+            default -> throw new IllegalStateException("no class for the case " + caseName);
         };
     }
 

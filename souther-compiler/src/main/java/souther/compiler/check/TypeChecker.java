@@ -27,13 +27,6 @@ public final class TypeChecker {
 
     private TypeChecker() {}
 
-    /** Type-checks a self-contained module against its own symbols, collecting every error. Names are
-     * resolved first, as a compile resolves them, so a check reads the same tree either way. */
-    public static List<Diagnostic> check(Ast.Module module) {
-        Ast.Module named = Resolve.module(module, symbols(module));
-        return check(named, symbols(named), Map.of(), Set.of(), Lower.run(named));
-    }
-
     /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
      * carrying the type decided for each node, plus the warnings the check raised. The backend emits
@@ -319,7 +312,7 @@ public final class TypeChecker {
         collect(errors, () -> TotalityChecker.check(inliner));
         // What each recursive helper constructs, transitively — a recursive helper is not inlined, so
         // its constructions are attributed to the behavior that calls it (spec 12.5).
-        Map<String, Map<TypeName, Ast.Name>> recHelperConstructs =
+        Map<String, Map<TypeName, String>> recHelperConstructs =
                 HelperTyping.recursiveHelperConstructs(recursiveHelperFns.keySet(), loweredBodies, inliner, symbols);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec) {
