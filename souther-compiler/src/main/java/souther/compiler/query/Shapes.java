@@ -3,11 +3,13 @@ package souther.compiler.query;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.NewtypeDesugar;
+import souther.compiler.check.TypeChecker;
 import souther.compiler.check.Symbols;
 import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -49,11 +51,31 @@ public final class Shapes {
                 return Answer.absent();
             }
             try {
-                Ast.Module derived = Deriver.derive(resolved.value(), scope.value());
+                Ast.Module declared = onlyWhatItDeclares(resolved.value());
+                Ast.Module derived = Deriver.derive(declared, scope.value());
                 return Answer.of(HelperInliner.withSettledInvariants(derived, scope.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+
+        /**
+         * The module carrying only the declarations it may have. A name written twice keeps the first,
+         * reported by {@link Names.Declarations}; the second is not a declaration, so nothing below
+         * here should read it and find it disagreeing with the one that is.
+         *
+         * <p>Which those are is {@link TypeChecker#declared}'s to say, and it says it once — asking it
+         * again here rather than repeating the rule is what keeps the tree and the scope agreeing about
+         * what the module declares.
+         */
+        private Ast.Module onlyWhatItDeclares(Ast.Module m) {
+            Collection<Ast.Def> kept = TypeChecker.declared(m).defs().values();
+            if (kept.size() == m.defs().size()) {
+                return m;
+            }
+            return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
+                    List.copyOf(kept), m.behaviors(), m.fns(), m.examples(), m.fakes(),
+                    m.exampleFileTarget(), m.pos());
         }
     }
 

@@ -307,15 +307,14 @@ public final class Names {
                     continue;   // the file that will not parse reports its own error
                 }
                 Ast.Module src = db.ask(new Front.Available(imp.module())).value();
-                if (src == null) {
-                    reports.add(unknownModule(imp));
-                    nameless(scope, imp.names());
-                    continue;
-                }
-                if (!db.ask(new Declarations(imp.module())).present()) {
-                    // The module is there but says nothing usable. Whatever is wrong with it is
-                    // reported on its own source; repeating it here would send the author to a file
-                    // that is fine.
+                if (src == null || !db.ask(new Declarations(imp.module())).present()) {
+                    // Not being part of this compilation and being part of it while saying nothing
+                    // usable are different things, and only the first is the importer's business.
+                    // Whatever is wrong with a module that is here is reported on its own source;
+                    // saying it again here sends the author to a file that is fine.
+                    if (!registry.moduleNames().contains(imp.module())) {
+                        reports.add(unknownModule(imp));
+                    }
                     nameless(scope, imp.names());
                     continue;
                 }
@@ -444,6 +443,41 @@ public final class Names {
                 reports.addAll(Report.of(unresolved));
             }
             return Answer.of(resolution, reports);
+        }
+    }
+
+    /**
+     * Whether everything the compiler worked out about a module's names came out.
+     *
+     * <p>One question, asked in one place, so that whether a module may be emitted does not become a
+     * list of conditions appended to over time. Each of these has already said what was wrong where
+     * it found it; this only asks whether any of them did.
+     *
+     * <p>It covers the error type too, and so replaces looking for one in the tree: a type nobody
+     * could name comes from a name that denoted nothing, which is exactly what {@link Resolution} or
+     * {@link Imports} reported.
+     */
+    public record Sound(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            List<Answer<?>> asked = List.of(
+                    db.ask(new Front.Exposed(name)),
+                    db.ask(new Front.ShadowsPath(name)),
+                    db.ask(new InCycle(name)),
+                    db.ask(new Declarations(name)),
+                    db.ask(new Imports(name)),
+                    db.ask(new Resolution(name)));
+            for (Answer<?> answer : asked) {
+                if (answer.hasError()) {
+                    return Answer.of(Boolean.FALSE);
+                }
+            }
+            return Answer.of(Boolean.TRUE);
         }
     }
 

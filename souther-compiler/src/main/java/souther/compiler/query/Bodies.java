@@ -232,13 +232,11 @@ public final class Bodies {
                     || !injected.present()) {
                 return Answer.absent();
             }
-            if (TypeOps.holdsAnErroneousType(lowering.value().settled())) {
-                // Something in this module has no type, and why was reported where it was found.
-                // The module is not checked and not emitted: there is no bytecode for a type nobody
-                // could name, and a check run against one would report the hole again at every
-                // position the value reached.
-                return Answer.absent();
-            }
+            // Whether anything about this module's names came out wrong decides whether it can be
+            // emitted, and nothing else. It must not decide whether the module is checked: the error
+            // type absorbs so that the check can carry on, and stopping here would mean a mistake in
+            // one declaration silencing every other definition in the file.
+            boolean named = Boolean.TRUE.equals(db.ask(new Names.Sound(name)).value());
             TypeChecker.Reported reported;
             try {
                 reported = TypeChecker.checkReporting(lowering.value().settled(), scope.value(),
@@ -256,7 +254,14 @@ public final class Bodies {
             // A unit the check could not read at all leaves the module without a meaning to emit,
             // and says nothing of its own: the name it rested on was reported where it was written.
             // Whatever else the check found is still reported, which is the point of carrying on.
-            boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty();
+            // Both, and both after the check. Sound says nothing about this module's names came out
+            // wrong; the tree says it holds no type nobody could name, which can happen with nothing
+            // reported here at all — an import of a module that is here and unusable leaves a hole,
+            // and what is wrong was reported on that module.
+            boolean sound = named
+                    && !TypeOps.holdsAnErroneousType(lowering.value().settled())
+                    && reported.errors().isEmpty()
+                    && reported.abandoned().isEmpty();
             return sound ? Answer.of(reported.checked(), reports) : Answer.absent(reports);
         }
     }

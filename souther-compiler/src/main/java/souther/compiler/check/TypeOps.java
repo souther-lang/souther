@@ -171,11 +171,15 @@ public final class TypeOps {
     /**
      * Whether anything in {@code module} has a type the compiler could not work out.
      *
-     * <p>This is the one gate on emitting a module. An error type absorbs, so a check run against a
-     * tree holding one stays quiet about it — which is what stops one mistake being reported at every
-     * position the value reached, and also what stops the check from being the thing that notices.
-     * Asking the tree is what notices, and no pass added later can forget to: a pass that cannot work
-     * a type out puts an error type in, and this finds it wherever it is.
+     * <p>Asked after the module is checked, never before: the error type exists so that the check can
+     * carry on past one mistake, and a hole in one declaration must not silence every other definition
+     * in the file.
+     *
+     * <p>It is asked as well as {@link Names.Sound}, not instead of it, because a module can hold a
+     * hole without having reported anything: an import of a module that is here and unusable leaves
+     * the names it was to bring denoting nothing, and what is wrong was reported on that module's
+     * source. No pass added later can forget this gate — a pass that cannot work a type out puts an
+     * error type in, and this finds it wherever it is.
      */
     public static boolean holdsAnErroneousType(Ast.Module module) {
         for (Ast.Def def : module.defs()) {

@@ -123,4 +123,28 @@ class UnresolvedNamesTest {
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and a type mismatch in the definition that has one: " + found);
     }
+
+    /**
+     * The same as {@link #abandoningOneDefinitionStillChecksTheOthers}, with the unknown name in a
+     * declaration rather than in a body. Where the name is written must not decide whether the rest
+     * of the module is checked.
+     */
+    @Test
+    void anUnknownTypeInADeclarationStillLetsTheOtherDefinitionsBeChecked() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( A, g )
+
+                data A = { value: Nowhere }
+
+                behavior g : (n: Int) -> Int
+                let g (n) = "not an Int"
+                """);
+
+        assertEquals(2, found.size(),
+                "the unknown name, and g's own mistake: " + found);
+        assertTrue(found.stream().anyMatch(d -> "check.unknown.type.msg".equals(d.messageKey())),
+                "the name that denotes nothing: " + found);
+        assertTrue(found.stream().anyMatch(d -> d.diff() != null),
+                "and the type mismatch in the definition that has one: " + found);
+    }
 }
