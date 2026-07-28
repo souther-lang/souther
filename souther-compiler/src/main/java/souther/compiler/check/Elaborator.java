@@ -8,6 +8,7 @@ import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -154,35 +155,26 @@ public final class Elaborator {
                             .at(block.pos()).build(),
                     "a block is not a value: it may be passed as an argument or bound to a `let` and "
                             + "applied, but it cannot be returned or stored in a data (spec 12.5)");
-            case Ast.Var v -> {
-                Type t = env.get(v.name());
-                if (t != null) {
-                    yield new Core.Var(v.name(), t, v.pos());
-                }
-                // a bare name that isn't a local is a unit-data value (spec 8.4)
-                if (ctx.symbols().declaration(v.name()) instanceof Ast.UnitData) {
-                    yield new Core.Var(v.name(), Type.ref(ctx.symbols().resolve(v.name())), v.pos());
-                }
-                if (v.name().equals("null")) {
-                    throw new CompileException(v.pos(), "E1301",
-                            "`null` is not part of the language. Use an optional field with `?`.");
-                }
+            // What the name is was answered when the module's names were resolved; what is left here
+            // is its type. A binding is looked up, a unit data is its own value (spec 8.4), and
+            // anything else is not a value — reported below under the name that was written.
+            case Ast.Var v -> switch (v.denotes()) {
+                case null -> throw new IllegalStateException(
+                        "`" + v.name() + "` reached the check unresolved, at " + v.pos());
+                // A binding with no type here is not a naming question: an inference probe types a
+                // body before the binding it asks about has one, and reads the report to find out.
+                case ValueName.Local _ when env.get(v.name()) != null ->
+                        new Core.Var(v.name(), env.get(v.name()), v.pos());
+                case ValueName.OfType named
+                        when ctx.symbols().get(named.type()) instanceof Ast.UnitData ->
+                        new Core.Var(v.name(), Type.ref(named.type()), v.pos());
                 // `None` where a `?` field is being given a value: the empty optional (spec 7.3).
                 // Only the field's own type puts it here — nothing else expects an optional, because
                 // nothing else can say `T?` (ADR-0011) — so this stays a construction rule.
-                if (v.name().equals("None") && expected instanceof Type.OptionOf) {
-                    yield new Core.OptionNone(expected, v.pos());
-                }
-                optionCaseWritten(v.name(), v.pos());
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.unknown.name.msg")
-                                .title("check.unknown.title")
-                                .at(v.pos(), v.name().length())
-                                .args(v.name())
-                                .suggestion(Suggest.candidate(v.name(), env.keySet()))
-                                .build(),
-                        "unknown identifier `" + v.name() + "`" + Suggest.hint(v.name(), env.keySet()));
-            }
+                case ValueName.Builtin b when b.name().equals("None")
+                        && expected instanceof Type.OptionOf -> new Core.OptionNone(expected, v.pos());
+                default -> throw notAValue(v, env);
+            };
             case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
             case Ast.Call call -> CallElaborator.elaborateCall(call, env, ctx, expected);
             case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
@@ -731,6 +723,27 @@ public final class Elaborator {
      * latter sent the reader off to write a Java binding, which makes no optional either (issue
      * #166). Patterns do not come through here: {@code | Some v} is matched, not evaluated.
      */
+    /**
+     * A name written where a value goes that is not one: an unknown name, a type that is not a unit
+     * data, a function named without being applied, or one of Option's cases outside the one place
+     * an optional is made.
+     */
+    private static CompileException notAValue(Ast.Var v, Map<String, Type> env) {
+        if (v.name().equals("null")) {
+            return new CompileException(v.pos(), "E1301",
+                    "`null` is not part of the language. Use an optional field with `?`.");
+        }
+        optionCaseWritten(v.name(), v.pos());
+        return CompileException.of(
+                Diagnostic.of(null, "check.unknown.name.msg")
+                        .title("check.unknown.title")
+                        .at(v.pos(), v.name().length())
+                        .args(v.name())
+                        .suggestion(Suggest.candidate(v.name(), env.keySet()))
+                        .build(),
+                "unknown identifier `" + v.name() + "`" + Suggest.hint(v.name(), env.keySet()));
+    }
+
     static void optionCaseWritten(String name, SourcePos pos) {
         boolean some = name.equals("Some");
         if (!some && !name.equals("None")) {

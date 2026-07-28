@@ -615,6 +615,18 @@ public interface Ast {
             this(name, null, pos);
         }
 
+        /**
+         * A read of something bound in the body, as a pass that put the binding there writes it.
+         *
+         * <p>A pass that runs after resolution says what it means rather than leaving a spelling for
+         * a reader to work out. The binder it gives is where this pass put the name, which is
+         * identity within the tree it built and nothing beyond it — an editor reads the resolved
+         * tree, where a binder is where the author wrote it.
+         */
+        public static Var local(String name, SourcePos pos) {
+            return new Var(name, new ValueName.Local(name, pos), pos);
+        }
+
         public Var denoting(ValueName resolved) {
             return new Var(name, resolved, pos);
         }

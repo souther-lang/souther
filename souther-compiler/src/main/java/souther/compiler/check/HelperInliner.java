@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
@@ -212,7 +213,8 @@ public final class HelperInliner {
         }
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.add(new Ast.IntLit(0, call.pos()));
-        return new Ast.Call("List.foldFrom", args, call.pos());
+        return new Ast.Call("List.foldFrom", new ValueName.Stdlib("List.foldFrom"), args,
+                call.pos());
     }
 
     /** Inlines a recursive helper's own body, expanding the non-recursive helper calls it makes while
@@ -254,7 +256,7 @@ public final class HelperInliner {
             return body;
         }
         String bound = "$r" + k;
-        return Ast.LetIn.annotated(bound, body, declared, new Ast.Var(bound, pos), pos);
+        return Ast.LetIn.annotated(bound, body, declared, Ast.Var.local(bound, pos), pos);
     }
 
     /** Whether a written type has a collection anywhere inside it — the types whose element/value type
@@ -382,7 +384,7 @@ public final class HelperInliner {
                 if (helper == null || recursive.contains(call.fn())) {
                     // builtin, injected behavior, or a recursive helper — a recursive helper is
                     // lowered to a method, so its call stays a Call (spec 13.1); only its args inline.
-                    yield new Ast.Call(call.fn(), args, call.pos());
+                    yield new Ast.Call(call.fn(), call.denotes(), args, call.pos());
                 }
                 if (args.size() != helper.params().size()) {
                     LambdaOrigin origin = lambdaOrigins.get(helper.name());
@@ -580,12 +582,13 @@ public final class HelperInliner {
         for (int i = 0; i < helper.params().size(); i++) {
             String p = "$b" + k + "_" + i;
             params.add(p);
-            callArgs.add(new Ast.Var(p, v.pos()));
+            callArgs.add(Ast.Var.local(p, v.pos()));
         }
-        Ast.Block block = new Ast.Block(params, new Ast.Call(v.name(), callArgs, v.pos()), v.pos());
+        Ast.Block block = new Ast.Block(params,
+                new Ast.Call(v.name(), v.denotes(), callArgs, v.pos()), v.pos());
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
-        return new Ast.Call(call.fn(), args, call.pos());
+        return new Ast.Call(call.fn(), call.denotes(), args, call.pos());
     }
 
     /**
@@ -606,12 +609,18 @@ public final class HelperInliner {
      */
     private Ast.Expr rename(Ast.Expr e, Map<String, String> subst, Set<String> fnParams, SourcePos at) {
         return switch (e) {
-            case Ast.Var v -> subst.containsKey(v.name()) ? new Ast.Var(subst.get(v.name()), at(at, v.pos())) : e;
+            case Ast.Var v -> subst.containsKey(v.name())
+                    ? Ast.Var.local(subst.get(v.name()), at(at, v.pos())) : e;
             case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, fnParams, at), fa.field(), at(at, fa.pos()));
             case Ast.Call call -> {
-                String callee = fnParams.contains(call.fn()) && subst.containsKey(call.fn())
-                        ? subst.get(call.fn()) : call.fn();
-                yield new Ast.Call(callee, renameList(call.args(), subst, fnParams, at), at(at, call.pos()));
+                boolean renamed = fnParams.contains(call.fn()) && subst.containsKey(call.fn());
+                String callee = renamed ? subst.get(call.fn()) : call.fn();
+                // a renamed callee is the function argument this parameter was bound to, under the
+                // name this expansion gave it; anything else keeps what the call already denoted
+                ValueName denotes = renamed
+                        ? new ValueName.Local(callee, at(at, call.pos())) : call.denotes();
+                yield new Ast.Call(callee, denotes, renameList(call.args(), subst, fnParams, at),
+                        at(at, call.pos()));
             }
             case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), subst, fnParams, at), rename(bin.right(), subst, fnParams, at), at(at, bin.pos()));
             case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), subst, fnParams, at), at(at, neg.pos()));

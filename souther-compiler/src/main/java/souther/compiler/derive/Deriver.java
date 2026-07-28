@@ -82,7 +82,7 @@ public final class Deriver {
         if (single != null) {
             Ast.RawKind kind = rawKind(single.getValue());
             Ast.Construct result = new Ast.Construct(self,
-                    List.of(new Ast.FieldInit(single.getKey(), new Ast.Var("__in", pos), pos)),
+                    List.of(new Ast.FieldInit(single.getKey(), Ast.Var.local("__in", pos), pos)),
                     List.of(), pos);
             return new Ast.PrimDecoder(kind, "__in", List.of(), result, pos);
         }
@@ -90,7 +90,7 @@ public final class Deriver {
         if (d.newtype() && !isCase) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
             Ast.Construct result = new Ast.Construct(self,
-                    List.of(new Ast.FieldInit(only.getKey(), new Ast.Var("__in", pos), pos)),
+                    List.of(new Ast.FieldInit(only.getKey(), Ast.Var.local("__in", pos), pos)),
                     List.of(), pos);
             return new Ast.NewtypeDecoder(
                     decRef(only.getValue(), d, only.getKey(), fieldPos(d, only.getKey())),
@@ -101,7 +101,7 @@ public final class Deriver {
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             binds.add(new Ast.Bind(f.getKey(), f.getKey(),
                     decRef(f.getValue(), d, f.getKey(), fieldPos(d, f.getKey())), pos));
-            inits.add(new Ast.FieldInit(f.getKey(), new Ast.Var(f.getKey(), pos), pos));
+            inits.add(new Ast.FieldInit(f.getKey(), Ast.Var.local(f.getKey(), pos), pos));
         }
         return new Ast.ObjectDecoder(binds, new Ast.Construct(self, inits, List.of(), pos), pos);
     }
@@ -173,7 +173,7 @@ public final class Deriver {
         SourcePos pos = d.pos();
         Map.Entry<String, Type> single = bareField(d, fields, isCase);
         if (single != null) {
-            Ast.Expr access = new Ast.FieldAccess(new Ast.Var("self", pos), single.getKey(), pos);
+            Ast.Expr access = new Ast.FieldAccess(Ast.Var.local("self", pos), single.getKey(), pos);
             return new Ast.EncoderDef("self", primRaw(single.getValue(), access, pos), pos);
         }
         // a newtype over a non-primitive Y encodes self.value as Y writes itself — Y's
@@ -181,7 +181,7 @@ public final class Deriver {
         // so this is the same choice a field of type Y makes.
         if (d.newtype() && !isCase) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
-            Ast.Expr access = new Ast.FieldAccess(new Ast.Var("self", pos), only.getKey(), pos);
+            Ast.Expr access = new Ast.FieldAccess(Ast.Var.local("self", pos), only.getKey(), pos);
             return new Ast.EncoderDef("self",
                     rawForAccess(only.getValue(), access, d, only.getKey(), pos), pos);
         }
@@ -215,7 +215,7 @@ public final class Deriver {
     }
 
     private static Ast.RawExpr rawFor(Type t, String field, Ast.Data d, SourcePos pos) {
-        return rawForAccess(t, new Ast.FieldAccess(new Ast.Var("self", pos), field, pos),
+        return rawForAccess(t, new Ast.FieldAccess(Ast.Var.local("self", pos), field, pos),
                 d, field, pos);
     }
 
@@ -235,7 +235,7 @@ public final class Deriver {
         }
         if (t instanceof Type.OptionOf oo) {
             String elemVar = "$opt";
-            Ast.RawExpr inner = rawForAccess(oo.element(), new Ast.Var(elemVar, pos), d, field, pos);
+            Ast.RawExpr inner = rawForAccess(oo.element(), Ast.Var.local(elemVar, pos), d, field, pos);
             return new Ast.OptionRaw(access, inner, elemVar, pos);
         }
         if (t instanceof Type.MapOf mo) {
