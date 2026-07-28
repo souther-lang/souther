@@ -30,28 +30,26 @@ import java.util.Set;
 public final class Symbols {
 
     private final String module;
-    /** Every module in this compilation, by name. The module being compiled is among them. */
-    private final Map<String, Ast.Module> registry;
+    /** Where the declarations of this compilation are read from. */
+    private final Registry registry;
     /** What a bare name means here: this module's own definitions plus the imported ones. */
     private final Map<String, TypeName> scope;
-    /** A qualifier a reference may carry → the module it names. Holds every module in the
-     * compilation under its own name, plus each {@code import ... as} alias. */
-    private final Map<String, String> qualifiers;
-    /** Per-module definitions, built on first use so a module's own errors are still reported while
-     * that module is being compiled rather than pulled forward into an unrelated one. */
-    private final Map<String, Map<String, Ast.Def>> declared = new HashMap<>();
+    /** Each {@code import ... as} alias → the module it names. A module of the compilation is also
+     * a qualifier under its own name, which {@link #moduleOfQualifier} reads off the registry
+     * rather than listing here — listing it would mean naming every module up front. */
+    private final Map<String, String> aliases;
 
-    private Symbols(String module, Map<String, Ast.Module> registry,
-                    Map<String, TypeName> scope, Map<String, String> qualifiers) {
+    private Symbols(String module, Registry registry,
+                    Map<String, TypeName> scope, Map<String, String> aliases) {
         this.module = module;
         this.registry = registry;
         this.scope = scope;
-        this.qualifiers = qualifiers;
+        this.aliases = aliases;
     }
 
     /** No module at all — for signatures written over primitives and type variables only. */
     public static Symbols none() {
-        return new Symbols("", Map.of(), Map.of(), Map.of());
+        return new Symbols("", Registry.empty(), Map.of(), Map.of());
     }
 
     /** A lone module, compiled with nothing else in sight: bare names are its own definitions. */
@@ -60,19 +58,22 @@ public final class Symbols {
         for (String name : TypeChecker.ownDefs(m).keySet()) {
             scope.put(name, new TypeName(m.name(), name));
         }
-        return new Symbols(m.name(), Map.of(m.name(), m), scope, Map.of(m.name(), m.name()));
+        return new Symbols(m.name(), Registry.of(Map.of(m.name(), m)), scope, Map.of());
     }
 
     /** A module compiled against a registry: {@code scope} is what its bare names mean (own plus
      * imported) and {@code aliases} maps each {@code import ... as} alias to its module. */
     public static Symbols of(Ast.Module m, Map<String, Ast.Module> registry,
                              Map<String, TypeName> scope, Map<String, String> aliases) {
-        Map<String, String> qualifiers = new HashMap<>();
-        for (String name : registry.keySet()) {
-            qualifiers.put(name, name);
-        }
-        qualifiers.putAll(aliases);
-        return new Symbols(m.name(), registry, scope, qualifiers);
+        return of(m.name(), Registry.of(registry), scope, aliases);
+    }
+
+    /** As {@link #of(Ast.Module, Map, Map, Map)}, over a registry that reads its declarations
+     * however it likes — the form a query-backed compilation uses, where a module's definitions are
+     * asked for one at a time rather than held in a map. */
+    public static Symbols of(String module, Registry registry,
+                             Map<String, TypeName> scope, Map<String, String> aliases) {
+        return new Symbols(module, registry, scope, Map.copyOf(aliases));
     }
 
     /** The module being compiled. */
@@ -133,7 +134,7 @@ public final class Symbols {
         if (dot < 0) {
             return scope.get(written);
         }
-        String target = qualifiers.get(written.substring(0, dot));
+        String target = moduleOfQualifier(written.substring(0, dot));
         if (target == null) {
             return null;
         }
@@ -145,12 +146,18 @@ public final class Symbols {
      * when it names none. Used to tell "unknown module" apart from "unknown type in a known
      * module". */
     public String moduleOfQualifier(String qualifier) {
-        return qualifiers.get(qualifier);
+        String alias = aliases.get(qualifier);
+        if (alias != null) {
+            return alias;
+        }
+        return registry.moduleNames().contains(qualifier) ? qualifier : null;
     }
 
     /** Every qualifier a reference may carry here — what a "did you mean" may offer for one. */
     public Set<String> qualifiers() {
-        return qualifiers.keySet();
+        Set<String> all = new LinkedHashSet<>(registry.moduleNames());
+        all.addAll(aliases.keySet());
+        return all;
     }
 
     /** Whether {@code name} is reachable here as a bare name. */
@@ -182,13 +189,7 @@ public final class Symbols {
 
     /** Every definition of one module, keyed by the name written there. */
     public Map<String, Ast.Def> declaredIn(String moduleName) {
-        Map<String, Ast.Def> defs = declared.get(moduleName);
-        if (defs == null) {
-            Ast.Module m = registry.get(moduleName);
-            defs = m == null ? Map.of() : TypeChecker.ownDefs(m);
-            declared.put(moduleName, defs);
-        }
-        return defs;
+        return registry.declaredIn(moduleName);
     }
 
     /** Whether the module that declares {@code name} exposes it — its own names always count. */
@@ -201,16 +202,6 @@ public final class Symbols {
         if (moduleName.equals(module)) {
             return true;   // a module reaches its own definitions whether it exposes them or not
         }
-        Ast.Module m = registry.get(moduleName);
-        if (m == null) {
-            return false;
-        }
-        for (String exposed : m.exposing()) {
-            int dot = exposed.indexOf('.');
-            if (name.equals(dot < 0 ? exposed : exposed.substring(0, dot))) {
-                return true;
-            }
-        }
-        return false;
+        return registry.exposedBy(moduleName).contains(name);
     }
 }
