@@ -289,6 +289,86 @@ class CompileHelperBodyTypingTest {
     }
 
     @Test
+    void aBodyDeterminedTypeReachesTheExpansion() throws Exception {
+        // `v` is the value of `W`'s `u` field, so the body determines it as the sum `U` — and that is
+        // the type the binding the call expands to carries, rather than the case the caller passed.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data U = A | B
+                data W = { u: U }
+                data X = Int
+                behavior f : (a: A) -> X constructs X, W
+                let describe (v) = {
+                    let w = W { u = v }
+                    match v with
+                        | A as a -> a.x
+                        | B as b -> b.y
+                }
+                let f (a) = X(describe(a))
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object behavior = loader.loadClass("demo.F$Impl").getConstructor().newInstance();
+        Object in = Codecs.decoded(loader, "demo.A", java.util.Map.of("x", 7L));
+        assertEquals(7L, Codecs.encode(loader, "demo.X", Codecs.apply(behavior, in)));
+    }
+
+    @Test
+    void aBodyDeterminedTypeTypesTheNextHelpersParameter() {
+        // `hold`'s parameter is determined by its body, and `describe`'s only comes from passing it to
+        // `hold` — so one helper's determined type has to be settled before the next one is read.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data U = A | B
+                data W = { u: U }
+                data X = Int
+                behavior f : (a: A) -> X constructs X, W
+                let hold (v) = W { u = v }
+                let describe (w) = {
+                    let kept = hold(w)
+                    match w with
+                        | A as a -> a.x
+                        | B as b -> b.y
+                }
+                let f (a) = X(describe(a))
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "`hold`'s determined parameter type types `describe`'s");
+    }
+
+    @Test
+    void aBodyDeterminedTypeReachesAnInvariantsExpansionToo() {
+        // An invariant is expanded from a helper as a body is, and earlier in the pipeline — an
+        // importer reads an included data's invariant already expanded. `w` is determined as `U` by
+        // the call to `size`, and that is what the binding in the invariant's expansion carries.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data U = A | B
+                data X = Int
+                partial let size (v: U): Int = match v with
+                        | A as a -> a.x
+                        | B as b -> b.y
+                let describe (w) = {
+                    let n = size(w)
+                    match w with
+                        | A as a -> a.x + n
+                        | B as b -> b.y
+                }
+                data V = { a: A }
+                    invariant describe(a) > 0
+                behavior f : (v: V) -> X constructs X
+                let f (v) = X(v.a.x)
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "the determined type reaches the expansion inside the invariant");
+    }
+
+    @Test
     void anAnnotatedHelperIsUnchanged() {
         String src = """
                 module demo

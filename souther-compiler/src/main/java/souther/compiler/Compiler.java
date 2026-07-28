@@ -117,13 +117,15 @@ public final class Compiler {
         // later pass reads is a name that already says which module declares it.
         Ast.Module named = Resolve.module(exposed);
         Ast.Module module = Deriver.derive(named);
-        module = HelperInliner.forModule(module).withInlinedInvariants(module);
+        module = HelperInliner.withSettledInvariants(module, TypeChecker.symbols(module));
         module = NewtypeDesugar.rewrite(module, TypeChecker.symbols(module));
         module = Compiler.injectRecursivePrelude(module);
-        Ast.Module lowered = Lower.run(module);
-        // the module no longer changes, so its symbol table is built once and shared by the check,
-        // the constant verification, and the example run
+        // the module's definitions no longer change, so its symbol table is built once and shared by
+        // the settling, the check, the constant verification, and the example run
         Symbols symbols = TypeChecker.symbols(module);
+        Lower.Lowered lowering = Lower.run(module, symbols, Map.of(), Set.of());
+        module = lowering.settled();
+        Ast.Module lowered = lowering.lowered();
         TypeChecker.Checked checked = TypeChecker.checkOrThrow(module, symbols, Map.of(), Set.of(), lowered);
         warningsOut.addAll(checked.warnings());
         Map<String, byte[]> out = Backend.generate(lowered, checked);
@@ -386,7 +388,7 @@ public final class Compiler {
         for (Ast.Module m : toDerive) {
             try {
                 Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
-                derived.put(m.name(), HelperInliner.forModule(d).withInlinedInvariants(d));
+                derived.put(m.name(), HelperInliner.withSettledInvariants(d, visibleDefs(d, byName)));
             } catch (CompileException e) {
                 throw e.inSource(sourceIndex(sourceOfModule, m.name()));
             }
@@ -417,7 +419,9 @@ public final class Compiler {
                 imported.put(original.name(), importedSigs);
                 Set<String> importedInjected = importedInjectedBehaviors(m, derived, injectedElsewhere);
                 m = injectRecursivePrelude(m);
-                Ast.Module lowered = Lower.run(m);
+                Lower.Lowered lowering = Lower.run(m, symbols, importedSigs, importedInjected);
+                m = lowering.settled();
+                Ast.Module lowered = lowering.lowered();
                 TypeChecker.Checked checked = TypeChecker.checkOrThrow(m, symbols, importedSigs, importedInjected, lowered);
                 warningsOut.addAll(checked.warnings());
                 out.putAll(Backend.generate(lowered, symbols, importedPackages(m), importedSigs,
@@ -708,7 +712,7 @@ public final class Compiler {
                 continue;   // its names did not resolve, so there is nothing to derive from
             }
             Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
-            d = HelperInliner.forModule(d).withInlinedInvariants(d);
+            d = HelperInliner.withSettledInvariants(d, visibleDefs(d, byName));
             derived.put(m.name(), NewtypeDesugar.rewrite(d, visibleDefs(d, derived)));
         }
         Map<String, byte[]> out = new LinkedHashMap<>();
@@ -723,7 +727,7 @@ public final class Compiler {
             }
             try {
                 Ast.Module d = Deriver.derive(original, visibleDefs(original, byName));
-                d = HelperInliner.forModule(d).withInlinedInvariants(d);
+                d = HelperInliner.withSettledInvariants(d, visibleDefs(d, byName));
                 derived.put(original.name(), d);   // visible to its own newtype constructors during desugar
                 Ast.Module m = NewtypeDesugar.rewrite(d, visibleDefs(d, derived));
                 derived.put(original.name(), m);
@@ -731,7 +735,9 @@ public final class Compiler {
                 Map<String, Sig> importedSigs = importedBehaviorSigs(m, derived);
                 Set<String> importedInjected = importedInjectedBehaviors(m, derived, injectedElsewhere);
                 m = injectRecursivePrelude(m);
-                Ast.Module lowered = Lower.run(m);
+                Lower.Lowered lowering = Lower.run(m, symbols, importedSigs, importedInjected);
+                m = lowering.settled();
+                Ast.Module lowered = lowering.lowered();
                 TypeChecker.CheckResult result0 =
                         TypeChecker.checkAndElaborate(m, symbols, importedSigs, importedInjected, lowered);
                 List<Diagnostic> typeErrors = result0.diagnostics();

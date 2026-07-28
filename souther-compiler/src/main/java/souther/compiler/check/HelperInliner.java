@@ -149,11 +149,30 @@ public final class HelperInliner {
     }
 
     /**
+     * Settles the helper parameter types the author left unwritten, then inlines the helper calls in
+     * every data's {@code invariant}.
+     *
+     * <p>The two go together: expanding a call carries the parameter's type onto the binding the call
+     * becomes, so a type settled afterwards would never reach this expansion (issue #178). An
+     * invariant is inlined well before the module is lowered — an importer reads an included data's
+     * invariant through the symbol table, so it must already be expanded there — which is why the
+     * settling is done here as well as in {@link Lower}. It is idempotent: a parameter already typed
+     * is left alone, and {@code Lower} settles what only the fully desugared module can determine.
+     *
+     * <p>An invariant is pure and cannot call an injected behavior (spec §invariant-expressions), so
+     * nothing here needs the injected signatures to settle the helpers an invariant reaches.
+     */
+    public static Ast.Module withSettledInvariants(Ast.Module m, Symbols symbols) {
+        Ast.Module settled = HelperParams.settle(m, symbols, Map.of());
+        return forModule(settled).withInlinedInvariants(settled);
+    }
+
+    /**
      * Inlines helper calls inside every data's {@code invariant}, so a rule named with a {@code let}
      * (e.g. {@code invariant 正の数(value)}) expands to its body before the invariant is type-checked
      * or emitted — the same lowering a behavior body gets (spec 12.5, §invariant-expressions).
      */
-    public Ast.Module withInlinedInvariants(Ast.Module m) {
+    Ast.Module withInlinedInvariants(Ast.Module m) {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {
             if (def instanceof Ast.Data d && d.invariant().isPresent()) {

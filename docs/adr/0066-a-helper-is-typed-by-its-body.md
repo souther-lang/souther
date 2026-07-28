@@ -30,7 +30,9 @@ The measured migration cost is zero lines. Of the 240 helper `let`s in the bundl
 
 Where the body leaves a parameter open the report names the parameter and labels the use that named no type. The "used at conflicting types" error of ADR-0050 no longer exists: with no call sites read, there is nothing to conflict, and a body that uses the parameter at two types is an ordinary type error at the second use.
 
-What a helper settles about itself does not yet reach its expansion: the binding a call inlines to carries only a written parameter type, so a body-determined sum narrows to the argument's case there (#178). The type a resolved parameter has cannot be written onto a surface tree, which is what that needs.
+What a helper settles about itself reaches its expansion (#178). The settled type is written back onto the parameter, as a reference that carries what it denotes and no surface text at all. ADR-0067 is what makes that possible: everything downstream of `Resolve` reads what a reference denotes rather than how it was spelled, so a type with no spelling is as good as a written one, and the type-to-surface writer this looked like it needed is not needed. The inliner then carries it onto the binding the call becomes, like any written type, and a `match` on a body-determined sum sees the sum rather than the case the caller passed.
+
+Settling happens before a helper call is expanded, which is twice: once before the data invariants are inlined, and once before the bodies are lowered. The two are separate points in the pipeline because an importer reads an included data's invariant through the symbol table and must find it already expanded. Settling is idempotent, so running it at both is running it once at each place it is needed.
 
 The rule that reads the body is deliberately small, and every gap in it is closed by annotating. When names and types resolve through one implementation (#177 steps 2 and 4), a built-in's parameter types become readable the same way a declared one is, and the gap closes without the rule changing.
 

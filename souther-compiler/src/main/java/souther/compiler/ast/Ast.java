@@ -288,6 +288,16 @@ public interface Ast {
             return new TypeRef(name, arg, tupleElems, type, pos);
         }
 
+        /**
+         * A reference nobody wrote: it carries what it denotes and no surface text. A helper
+         * parameter whose type its body settles is written back as one (issue #178) — the type is
+         * decided, and there is no source it stands for. Everything downstream of {@code Resolve}
+         * reads {@link #denotes()}, so a reference with a decided type is as good as a written one.
+         */
+        public static TypeRef of(Type type, SourcePos pos) {
+            return new TypeRef(null, null, null, type, pos);
+        }
+
         /** A tuple type is the nameless form; a named ref that also carries {@code tupleElems}
          *  (a {@code Map} carrying its key) is not a tuple. */
         public boolean isTuple() {

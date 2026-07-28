@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.diag.CompileException;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -27,9 +29,37 @@ public final class Lower {
 
     private Lower() {}
 
-    /** Returns {@code module} with each behavior-implementing fn body inlined and every list
-     * comprehension (in a body or a data invariant) desugared to an {@code if}. */
-    public static Ast.Module run(Ast.Module module) {
+    /**
+     * The two trees this stage answers with: the surface module it settled helper parameter types on,
+     * and the lowered module the backend emits from. The type check reads both — the surface one for
+     * the declarations, the lowered one for the bodies — so they must be the same settling, which is
+     * why they are handed back together rather than settled again downstream.
+     */
+    public record Lowered(Ast.Module settled, Ast.Module lowered) {}
+
+    /**
+     * Settles the helper parameter types the author left unwritten, then returns {@code module} with
+     * each behavior-implementing fn body inlined and every list comprehension (in a body or a data
+     * invariant) desugared to an {@code if}.
+     *
+     * <p>Settling comes first because inlining is what carries a parameter's type onto the binding a
+     * call becomes (issue #178): a type settled after this stage would never reach the expansion.
+     */
+    public static Lowered run(Ast.Module module, Symbols symbols,
+                              Map<String, Sig> importedSigs, Set<String> importedInjected) {
+        Map<String, ReqSig> reqSigs;
+        try {
+            reqSigs = InjectionSigs.of(module, symbols, importedSigs, importedInjected);
+        } catch (CompileException _) {
+            // a signature that does not build is reported by the check that follows; settling reads
+            // what it can and leaves the rest for the annotation rule.
+            reqSigs = Map.of();
+        }
+        Ast.Module settled = HelperParams.settle(module, symbols, reqSigs);
+        return new Lowered(settled, lower(settled));
+    }
+
+    private static Ast.Module lower(Ast.Module module) {
         HelperInliner inliner = HelperInliner.forModule(module);
         Set<String> behaviorNames = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
