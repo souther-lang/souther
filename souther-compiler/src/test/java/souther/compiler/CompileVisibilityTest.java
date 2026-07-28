@@ -24,7 +24,8 @@ class CompileVisibilityTest {
                 module demo exposing ( Public )
 
                 data Internal = Int
-                data Public = { inner: Internal }
+                data Wrapper = { inner: Internal }
+                data Public = { n: Int }
                 """), getClass().getClassLoader());
 
         assertTrue(Modifier.isPublic(loader.loadClass("demo.Public").getModifiers()),
@@ -32,8 +33,11 @@ class CompileVisibilityTest {
         assertFalse(Modifier.isPublic(loader.loadClass("demo.Internal").getModifiers()),
                 "a type absent from exposing is package-private");
 
-        // the module still works internally: Public's derived decoder reads Internal
-        assertTrue(Codecs.decode(loader, "demo.Public", Map.of("inner", 5L)) instanceof Ok);
+        // Wrapper rests on Internal and stays behind the same boundary — which is what a module may
+        // do with what it keeps, and what it may not do with a name it exposes.
+        assertFalse(Modifier.isPublic(loader.loadClass("demo.Wrapper").getModifiers()),
+                "a data resting on a type the module keeps is itself kept");
+        assertTrue(Codecs.decode(loader, "demo.Public", Map.of("n", 5L)) instanceof Ok);
     }
 
     @Test

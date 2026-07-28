@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -143,39 +144,45 @@ class CompileConstructsImportedTest {
         assertTrue(e.getMessage().contains("Email"), e.getMessage());
     }
 
-    /** A type its module keeps to itself has no entry to build with. A value of it still arrives —
-     * through a field of a data that module does expose — and it arrives whole: this module holds it
-     * and hands it on, and neither reads nor builds it. */
+    /**
+     * A type its module keeps to itself never reaches another module to begin with: the field that
+     * would have carried it there is on a data the module exposes, and a module may not expose a
+     * data resting on a type it keeps (issue #187). So the downstream question — what a reader may
+     * do with a value it has no name for — does not arise, and it is `hid` that is told, once,
+     * where it publishes the leak rather than each reader that walks into it.
+     */
     @Test
-    void aTypeItsModuleKeepsToItselfCannotBeBuiltHere() {
-        String hidden = """
-                module hid exposing ( Invoice )
-                data Amount = Int
-                    invariant value >= 0
-                data Invoice = { total: Amount }
-                """;
-
-        Compiler.compileModules(List.of(hidden, """
-                module down
-                data Out = { i: hid.Invoice }
-
-                behavior hold : (i: hid.Invoice) -> Out constructs Out
-                let hold (i) = Out { i = i }
-                """));
-
+    void aModuleMayNotExposeADataRestingOnATypeItKeeps() {
         CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(hidden, """
-                        module down
-                        data Out = { n: Int }
-
-                        behavior double : (i: hid.Invoice) -> Out constructs Out
-                        let double (i) = {
-                            let doubled = i.total + i.total
-                            Out { n = doubled.value }
-                        }
+                () -> Compiler.compileModules(List.of("""
+                        module hid exposing ( Invoice )
+                        data Amount = Int
+                            invariant value >= 0
+                        data Invoice = { total: Amount }
                         """)));
 
         assertTrue(e.getMessage().contains("Amount"), e.getMessage());
-        assertTrue(e.getMessage().contains("expose"), e.getMessage());
+        assertTrue(e.getMessage().contains("Invoice"), e.getMessage());
+    }
+
+    /** With `Amount` exposed there is an entry to build one with, wherever the arithmetic is written
+     * (ADR-0059): the invariant runs on the result the same as it does at home. */
+    @Test
+    void arithmeticOnAnExposedNewtypeOfAnotherModuleBuildsThroughItsEntry() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module hid exposing ( Amount, Invoice )
+                data Amount = Int
+                    invariant value >= 0
+                data Invoice = { total: Amount }
+                """, """
+                module down
+                data Out = { n: Int }
+
+                behavior double : (i: hid.Invoice) -> Out constructs Out
+                let double (i) = {
+                    let doubled = i.total + i.total
+                    Out { n = doubled.value }
+                }
+                """)));
     }
 }

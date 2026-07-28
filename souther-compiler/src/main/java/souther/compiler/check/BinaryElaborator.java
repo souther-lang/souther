@@ -18,62 +18,6 @@ public final class BinaryElaborator {
 
     private BinaryElaborator() {}
 
-    /**
-     * Arithmetic that stays in a newtype re-wraps its result, so it builds one — through the type's
-     * checked entry, which its module opens by exposing the type. A value of a type another module
-     * keeps to itself can arrive here through a field of a data that module does expose, and there is
-     * no entry to build the result with, so it is refused rather than left to fail when it runs.
-     */
-    private static void requireConstructible(Type result, Ast.Binary bin, Symbols symbols) {
-        if (!(result instanceof Type.Ref ref) || !symbols.isForeign(ref.name())
-                || symbols.isExposed(ref.name())) {
-            return;
-        }
-        throw CompileException.of(
-                Diagnostic.of(null, "check.arith.notexposed").title("check.boundary.title")
-                        .at(bin.pos()).args(ref.name().name(), ref.name().module())
-                        .hint("check.arith.notexposed.hint", ref.name().name(), ref.name().module()).build(),
-                "arithmetic on `" + ref.name().name() + "` builds one, and `" + ref.name().module()
-                        + "` does not expose it");
-    }
-
-    /**
-     * A comparison opens a single-value newtype to the value it wraps, and keeps going until it
-     * reaches the base (ADR-0047) — so it names every class on the way down. A link whose module
-     * keeps it to itself is not one this module may name, and the comparison is refused rather than
-     * emitted as a read of a class out of reach. The link need not be the operand's own type: an
-     * exposed newtype may wrap one that is not.
-     *
-     * <p>Nothing else opens anything here. A data compares by its fields, decided by the module that
-     * declares it, and a collection compares by its elements the same way, so either compares
-     * wherever its value arrives — which is where Elm and Haskell leave it too.
-     */
-    private static void requireTransparentOperands(Type left, Type right, Ast.Binary bin,
-                                                   Symbols symbols) {
-        refuseOpaque(left, bin, symbols);
-        refuseOpaque(right, bin, symbols);
-    }
-
-    private static void refuseOpaque(Type operand, Ast.Binary bin, Symbols symbols) {
-        Type t = operand;
-        while (t instanceof Type.Ref ref
-                && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype()) {
-            if (symbols.isOpaque(ref.name())) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.compare.notexposed").title("check.boundary.title")
-                                .at(bin.pos()).args(ref.name().name(), ref.name().module())
-                                .hint("check.opaque.hint", ref.name().name(), ref.name().module()).build(),
-                        "comparing opens `" + ref.name().name() + "`, and `" + ref.name().module()
-                                + "` does not expose it");
-            }
-            Type inner = TypeOps.fieldType(d, "value", symbols);
-            if (inner == null) {
-                return;
-            }
-            t = inner;
-        }
-    }
-
     /** Whether either side of {@code bin} has a type the compiler could not work out. */
     private static boolean erroneousOperand(Ast.Binary bin, Map<String, Type> env,
                                             CheckContext ctx) {
@@ -117,7 +61,6 @@ public final class BinaryElaborator {
                 Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
-                requireTransparentOperands(lt, rt, bin, ctx.symbols());
                 if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.compare.ordered").title("check.type.mismatch.title")
@@ -143,7 +86,6 @@ public final class BinaryElaborator {
                 // with a bare literal of its base (as for comparison).
                 if (addSub && arithClosedNewtype(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
                     Type result = TypeOps.closedNewtypeArithResult(lt, rt, ctx.symbols());
-                    requireConstructible(result, bin, ctx.symbols());
                     yield new Core.Binary(bin.op(), left, right, result, bin.pos());
                 }
                 // Scalar newtype arithmetic: `*`/`/` scale a numeric newtype by a plain Int/Decimal of
@@ -152,7 +94,6 @@ public final class BinaryElaborator {
                 // to the base path below, an error.
                 if (!addSub && scalarNewtypeArith(lt, rt, bin.op(), ctx.symbols())) {
                     Type result = TypeOps.closedNewtypeArithResult(lt, rt, ctx.symbols());
-                    requireConstructible(result, bin, ctx.symbols());
                     yield new Core.Binary(bin.op(), left, right, result, bin.pos());
                 }
                 if (lt != Type.INT && lt != Type.DECIMAL) {
@@ -201,7 +142,6 @@ public final class BinaryElaborator {
                 Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
-                requireTransparentOperands(lt, rt, bin, ctx.symbols());
                 // two values of the same data compare by their fields (spec 16.2); across different
                 // types there is nothing to compare. An operand may be the scalar empty-collection
                 // bottom (`Nothing`) when it reads an accumulator a `[]` seed grows — the `e` in

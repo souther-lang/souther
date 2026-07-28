@@ -41,10 +41,14 @@ and output types where it does. A type the module keeps to itself cannot be writ
 and no raw-typed override stands in for it — javac reports the erased signature as clashing
 with the one being overridden rather than overriding it. So an injected behavior's input and
 output are exposed by the module that declares them, whether or not the behavior itself is in
-`exposing` (issue #187). The *cases* of a multi-case output are not reached by this: that
-output is generated as a union interface of its own, public regardless, and a case is
-returned through the `protected` factory or through the decoder without being named — which
-is why E1305's unit-data allowance stands.
+`exposing` (issue #187). This is the same rule an exposed name follows, applied to the one
+other thing a module reaches out with (`[#exposed-surface]`).
+
+The *cases* of a multi-case output are not reached by it: that output is generated as a union
+interface of its own, public regardless, and a case is returned through the `protected`
+factory or through the decoder without being named — measured, not stipulated, since javac
+accepts and runs such an implementation from another package. That is what E1305's unit-data
+allowance rests on.
 
 Which behaviors get a `let` and which are injected is not mechanically derivable from the
 DSL: `// 依存:` is a note, not an obligation, so its absence does not prove a behavior is
@@ -54,6 +58,6 @@ the form using the `// 依存:` / `// 副作用:` notes as a guide.
 
 ## References
 
-- Specification: `[#no-impl-for-outside]`, `[#injected-behavior]`, `[#java-base-class]`
+- Specification: `[#no-impl-for-outside]`, `[#injected-behavior]`, `[#java-base-class]`, `[#exposed-surface]`
 - ADR-0001 (one-to-one with the spec DSL), ADR-0016 (requirements as arguments)
-- ADR-0015 (a value of a type its module keeps to itself arrives whole), issue #187
+- ADR-0015 (what reaches out may not rest on what is kept), issue #187

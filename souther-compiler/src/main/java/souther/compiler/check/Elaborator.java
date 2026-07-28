@@ -263,19 +263,6 @@ public final class Elaborator {
         Core targetCore = elaborate(fa.target(), env, ctx);
         Type target = targetCore.type();
         if (target instanceof Type.Ref ref && ctx.symbols().get(ref.name()) instanceof Ast.Data owner) {
-            // Reading a field opens the value, and a value whose module keeps its type to itself
-            // arrives here whole: the class carrying the field is not one this module may touch.
-            // Left alone this becomes bytecode that fails with `IllegalAccessError` when it runs.
-            if (ctx.symbols().isOpaque(ref.name())) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.access.notexposed").title("check.boundary.title")
-                                .at(fa.pos(), fa.field().length())
-                                .args(fa.field(), ref.name().name(), ref.name().module())
-                                .hint("check.opaque.hint", ref.name().name(), ref.name().module())
-                                .build(),
-                        "reading `" + fa.field() + "` opens a `" + ref.name().name() + "`, and `"
-                                + ref.name().module() + "` does not expose it");
-            }
             Type ft = TypeOps.fieldType(owner, fa.field(), ctx.symbols());
             if (ft != null) {
                 return new Core.FieldAccess(targetCore, fa.field(), ft, fa.pos());

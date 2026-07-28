@@ -21,7 +21,7 @@ class CompileExposedPipeOutputTest {
      * {@code process = guard >-> toDoubled} produces {@code Doubled | TooLarge}. */
     private static String mod(String exposing) {
         return """
-                module demo exposing ( %s )
+                module demo exposing ( Amount, %s )
 
                 data Amount = Int
                 data TooLarge = { limit: Int }

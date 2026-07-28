@@ -26,7 +26,7 @@ class CompileMultiModuleExampleFailuresTest {
 
     /** `Line` gains a field none of the three downstream fixtures writes. */
     private static final String SHARED = """
-            module shared exposing ( Line, total )
+            module shared exposing ( Line, Bag, Sum, total )
             data Line = { sku: String, qty: Int, weight: Int }
             data Bag = { lines: List<Line> }
             data Sum = { n: Int }
