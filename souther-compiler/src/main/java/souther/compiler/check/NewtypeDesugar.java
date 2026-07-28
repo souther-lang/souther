@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -35,7 +36,11 @@ public final class NewtypeDesugar {
         return switch (e) {
             case Ast.Call call -> {
                 List<Ast.Expr> args = mapExprs(call.args(), symbols);
-                TypeName built = symbols.resolve(call.fn());
+                // Whether this name is a type or something else was answered when the module's names
+                // were resolved. Asking the type namespace again here would read a binding of the
+                // same spelling as the type it shadows, and rewrite an application of it into a
+                // construction — both of which compile, so the meaning would change in silence.
+                TypeName built = call.denotes() instanceof ValueName.OfType named ? named.type() : null;
                 if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(
@@ -50,7 +55,7 @@ public final class NewtypeDesugar {
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), call.pos());
                 }
-                yield new Ast.Call(call.fn(), args, call.pos());
+                yield new Ast.Call(call.fn(), call.denotes(), args, call.pos());
             }
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();

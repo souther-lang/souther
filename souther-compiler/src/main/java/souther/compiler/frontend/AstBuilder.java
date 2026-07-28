@@ -310,7 +310,7 @@ public final class AstBuilder {
             });
             Ast.RetType ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
             List<Ast.Name> constructs = new ArrayList<>();
-            List<String> requires = new ArrayList<>();
+            List<Ast.ValueRef> requires = new ArrayList<>();
             for (SyntaxNode clause : s.childNodes()) {
                 // either clause may name through a module, so the idents of one name are joined and
                 // a comma starts the next
@@ -318,14 +318,14 @@ public final class AstBuilder {
                     constructs.addAll(dottedNames(clause));
                 } else if (clause.kind() == SyntaxKind.REQUIRES_CLAUSE) {
                     for (Ast.Name required : dottedNames(clause)) {
-                        requires.add(required.written());
+                        requires.add(Ast.ValueRef.written(required.written(), required.pos()));
                     }
                 }
             }
             return new Ast.SpecBehavior(name, params, ret, constructs, requires, pos);
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
-        List<String> stages = new ArrayList<>();
+        List<Ast.ValueRef> stages = new ArrayList<>();
         for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
             StringBuilder sb = new StringBuilder();
             for (SyntaxToken t : identTokens(st)) {
@@ -334,7 +334,7 @@ public final class AstBuilder {
                 }
                 sb.append(t.text());
             }
-            stages.add(sb.toString());
+            stages.add(Ast.ValueRef.written(sb.toString(), pos(st)));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         return new Ast.PipeBehavior(name, stages, declaredOut, pos);

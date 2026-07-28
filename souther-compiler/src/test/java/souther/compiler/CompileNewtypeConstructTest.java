@@ -270,4 +270,25 @@ class CompileNewtypeConstructTest {
         Object addNeg = Codecs.decoded(loader, "demo.Cmd", Map.of("type", "Add", "n", -5L));
         assertThrows(ConstraintViolation.class, () -> apply(loader, "Run", addNeg));
     }
+
+    /**
+     * A binding of the same spelling is what the name means where it is bound, so applying it is a
+     * call and not a construction. The desugar used to ask the type namespace on its own and rewrote
+     * this to `Amount { value = n }` — a silent change of meaning, since both forms compile.
+     */
+    @Test
+    void aParameterNamedLikeANewtypeIsAppliedRatherThanConstructed() throws Exception {
+        String src = """
+                module demo
+                data Amount = Int
+
+                let call (Amount: (Int) -> Int, n: Int): Int = Amount(n)
+
+                behavior g : (n: Int) -> Int
+                let g (n) = call(x -> x * 2, n)
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+
+        assertEquals(6L, apply(loader, "G", 3L));
+    }
 }

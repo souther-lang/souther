@@ -125,6 +125,133 @@ class UnresolvedNamesTest {
     }
 
     /**
+     * The same, for a name in the value namespace. A stage that names no behavior is one definition's
+     * mistake, and the definitions around it are checked as they would be without it.
+     */
+    @Test
+    void anUnknownBehaviorInAPipelineStillLetsTheOtherDefinitionsBeChecked() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, p, g )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = f >-> nosuch
+
+                behavior g : (n: Int) -> Int
+                let g (n) = "not an Int"
+                """);
+
+        assertEquals(2, found.size(),
+                "the unknown behavior, and g's own mistake: " + found);
+        assertTrue(found.stream().anyMatch(d -> "check.unknown.behavior.msg".equals(d.messageKey())),
+                "the stage that names no behavior: " + found);
+        assertTrue(found.stream().anyMatch(d -> d.diff() != null),
+                "and the type mismatch in the definition that has one: " + found);
+    }
+
+    /** Every unknown name in a body at once, as for a type — not the first one a check happened to
+     * reach. */
+    @Test
+    void everyUnknownNameInABodyIsReportedAtOnce() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, g )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = nowhere
+
+                behavior g : (n: Int) -> Int
+                let g (n) = elsewhere
+                """);
+
+        assertEquals(2, found.size(), "both, not the first: " + found);
+        assertTrue(found.stream().allMatch(d -> "check.unknown.name.msg".equals(d.messageKey())),
+                found.toString());
+    }
+
+    /** A definition resting on a name in the value namespace that denotes nothing says nothing
+     * further, and the definitions around it are checked as they would be without it. */
+    @Test
+    void abandoningADefinitionOverAnUnknownValueNameStillChecksTheOthers() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, g )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = nowhere
+
+                behavior g : (n: Int) -> Int
+                let g (n) = "not an Int"
+                """);
+
+        assertEquals(2, found.size(),
+                "the unknown name, and g's own mistake — nothing about what f does: " + found);
+        assertTrue(found.stream().anyMatch(d -> "check.unknown.name.msg".equals(d.messageKey())),
+                "the name that denotes nothing: " + found);
+        assertTrue(found.stream().anyMatch(d -> d.diff() != null),
+                "and the type mismatch in the definition that has one: " + found);
+    }
+
+    /** A stage that names nothing is pointed at where it is written, not at the whole behavior. */
+    @Test
+    void anUnknownStageIsReportedAtTheStage() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, p )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = f >-> nosuch
+                """);
+
+        assertEquals(1, found.size(), found.toString());
+        assertEquals(6, found.get(0).region().start().line(), found.toString());
+        assertEquals(20, found.get(0).region().start().column(),
+                "the stage, not the behavior it is in: " + found);
+    }
+
+    /** A composition resting on a stage that names nothing has no meaning to emit, and neither has
+     * the module it is in. */
+    @Test
+    void aModuleWithAStageThatNamesNothingEmitsNothing() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("a.sou", """
+                module m.a exposing ( f, p )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = f >-> nosuch
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(),
+                souther.compiler.meta.ModulePath.EMPTY);
+        c.diagnostics();
+
+        assertEquals(Map.of(), c.classes(),
+                "there is no bytecode for a composition nobody could resolve");
+    }
+
+    /** The same, where the stage names a module this compilation does not have. */
+    @Test
+    void aStageInAModuleNobodyHasStillLetsTheOtherDefinitionsBeChecked() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, p, g )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = nosuch.h >-> f
+
+                behavior g : (n: Int) -> Int
+                let g (n) = "not an Int"
+                """);
+
+        assertEquals(2, found.size(),
+                "the stage nobody declares, and g's own mistake: " + found);
+        assertTrue(found.stream().anyMatch(d -> d.diff() != null),
+                "and the type mismatch in the definition that has one: " + found);
+    }
+
+    /**
      * The same as {@link #abandoningOneDefinitionStillChecksTheOthers}, with the unknown name in a
      * declaration rather than in a body. Where the name is written must not decide whether the rest
      * of the module is checked.
@@ -146,5 +273,64 @@ class UnresolvedNamesTest {
                 "the name that denotes nothing: " + found);
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and the type mismatch in the definition that has one: " + found);
+    }
+
+    /**
+     * A stage naming a module this compilation has and cannot read leaves a hole nothing here
+     * reported: what is wrong is that module's, and its author is the one who can act on it. The
+     * module holding the hole must still not be emitted — its composition calls a behavior that will
+     * not exist — and the compiler must say so rather than fail on the way to saying it.
+     */
+    @Test
+    void aStageInAModuleThatCannotBeReadIsNotEmittedAndSaysNothingHere() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("x.sou", """
+                module souther.x exposing ( ship )
+
+                behavior ship : (n: Int) -> Int
+                let ship (n) = n
+                """);
+        byId.put("a.sou", """
+                module m.a exposing ( f, p )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = f >-> souther.x.ship
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(),
+                souther.compiler.meta.ModulePath.EMPTY);
+
+        assertEquals(List.of(), c.diagnostics().get("a.sou"),
+                "the reserved module name is x's mistake, not this one's");
+        assertTrue(c.diagnostics().get("x.sou").stream()
+                        .anyMatch(d -> "check.module.reserved".equals(d.messageKey())),
+                "and it is reported there: " + c.diagnostics().get("x.sou"));
+        assertEquals(Map.of(), c.classes(),
+                "a composition whose stage nobody can name is not emitted");
+    }
+
+    /** One mistake in a `requires`, one diagnostic: the fn's trailing parameters are named by the
+     * clause, so a clause that names nothing leaves nothing to hold them against. */
+    @Test
+    void aRequiresNamingNothingIsReportedOnceNotTwice() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("b.sou", """
+                module m.b exposing ( ship )
+
+                behavior ship : (n: Int) -> Int
+                """);
+        byId.put("a.sou", """
+                module m.a exposing ( f )
+
+                behavior f : (n: Int) -> Int
+                    requires m.b.charge
+                let f (n, charge) = charge(n)
+                """);
+        List<Diagnostic> found = Compiler.diagnoseModules(byId, Set.of()).get("a.sou");
+
+        assertEquals(1, found.size(),
+                "the clause that names nothing, and nothing about the parameters it names: " + found);
+        assertEquals("E1607", found.get(0).code(), found.toString());
     }
 }

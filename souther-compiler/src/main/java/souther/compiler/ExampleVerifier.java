@@ -274,10 +274,10 @@ public final class ExampleVerifier {
     /** Builds a {@code Behavior} proxy for each of {@code spec}'s requires, in declared order; null
      * (with a diagnostic reported) when one is missing or invalid. */
     private Object[] resolveFakes(Ast.SpecBehavior spec, Ast.ExampleRow row, List<Diagnostic> out) {
-        List<String> reqs = spec.requires();
+        List<Ast.ValueRef> reqs = spec.requires();
         Object[] proxies = new Object[reqs.size()];
         for (int i = 0; i < reqs.size(); i++) {
-            Object p = resolveFake(spec.name(), reqs.get(i), row, out);
+            Object p = resolveFake(spec.name(), reqs.get(i).bare(), row, out);
             if (p == null) {
                 return null;
             }

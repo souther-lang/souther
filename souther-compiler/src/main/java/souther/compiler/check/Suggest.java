@@ -8,20 +8,20 @@ import java.util.Collection;
  * closeness bound is Levenshtein distance ≤ 2 and strictly less than the name's length, so a short
  * name does not match every candidate.
  */
-final class Suggest {
+public final class Suggest {
 
     private Suggest() {
     }
 
     /** {@code " (did you mean `X`?)"} for the closest candidate within bound, or {@code ""}. */
-    static String hint(String name, Collection<String> candidates) {
+    public static String hint(String name, Collection<String> candidates) {
         String best = candidate(name, candidates);
         return best == null ? "" : " (did you mean `" + best + "`?)";
     }
 
     /** The closest in-scope candidate to {@code name} within the closeness bound, or {@code null}.
      * The structured form of {@link #hint}, for a diagnostic's {@code suggestion} field. */
-    static String candidate(String name, Collection<String> candidates) {
+    public static String candidate(String name, Collection<String> candidates) {
         String best = null;
         int bestDistance = Integer.MAX_VALUE;
         for (String candidate : candidates) {

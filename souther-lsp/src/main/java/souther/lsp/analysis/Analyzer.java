@@ -5,6 +5,7 @@ import souther.compiler.check.Resolve;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 import souther.compiler.ast.Ast;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstLexer;
@@ -318,6 +319,10 @@ public final class Analyzer {
         if (answered.isPresent()) {
             return answered;
         }
+        Optional<Location> value = valueDeclarationOf(uri, pos, graph);
+        if (value.isPresent()) {
+            return value;
+        }
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
         SyntaxToken ident = identAt(root, lines.offsetOf(pos.line(), pos.character()));
@@ -431,6 +436,78 @@ public final class Analyzer {
             }
         }
         return byUri;
+    }
+
+    /** What the cursor is on in the value namespace, as the compiler answers it, or null when
+     * nothing there is a name used as a value. */
+    private ValueName valueUnderCursor(Compilation compilation, String uri, ModuleGraph graph,
+                                       Position pos) {
+        String text = graph.text(uri);
+        String module = text == null ? null : Compiler.moduleNameFromHeader(text);
+        if (module == null) {
+            return null;
+        }
+        SourcePos at = new SourcePos(pos.line() + 1, pos.character() + 1);
+        Resolve.ValueUse use = compilation.db().ask(new Names.ValueDenotedAt(module, at)).value();
+        return use == null ? null : use.denotes();
+    }
+
+    /**
+     * Where what the cursor names as a value is written, as the compiler answers it: the binding
+     * that introduced a local, or the {@code let} or {@code behavior} that declares it.
+     *
+     * <p>A local was out of reach while this was matched by spelling — one spelling may be bound in
+     * several bodies, and nothing said which binding a use belonged to. Resolution says.
+     */
+    private Optional<Location> valueDeclarationOf(String uri, Position pos, ModuleGraph graph) {
+        Compilation compilation = compileOf(graph);
+        ValueName target = valueUnderCursor(compilation, uri, graph, pos);
+        if (target == null) {
+            return Optional.empty();
+        }
+        SourcePos at = compilation.db().ask(new Names.ValueDeclaredAt(target)).value();
+        if (at == null) {
+            return Optional.empty();
+        }
+        String targetUri = switch (target) {
+            case ValueName.Local _ -> uri;   // bound in the body the cursor is in
+            case ValueName.Helper h -> compilation.sourceIdOf(h.module());
+            case ValueName.Behavior b -> compilation.sourceIdOf(b.module());
+            case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _,
+                    ValueName.Unresolved _ -> null;
+        };
+        String targetText = targetUri == null ? null : graph.text(targetUri);
+        if (targetText == null) {
+            return Optional.empty();
+        }
+        // Which name, and where it was written, is the compiler's; which characters spell it there
+        // is the syntax tree's — the declaration's position is its first keyword, and a binding's is
+        // the form that binds it.
+        LineIndex lines = new LineIndex(targetText);
+        SyntaxToken name = identFrom(CstParser.parse(targetText).root(),
+                lines.offsetOf(at.line() - 1, at.column() - 1), target.name());
+        return name == null ? Optional.empty()
+                : Optional.of(new Location(targetUri, tokenRange(lines, name)));
+    }
+
+    /** The first identifier spelled {@code name} at or after {@code offset} — the name token of the
+     * form that starts there. */
+    private SyntaxToken identFrom(SyntaxNode node, int offset, String name) {
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxNode child) {
+                if (child.end() <= offset) {
+                    continue;
+                }
+                SyntaxToken found = identFrom(child, offset, name);
+                if (found != null) {
+                    return found;
+                }
+            } else if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT
+                    && t.start() >= offset && t.text().equals(name)) {
+                return t;
+            }
+        }
+        return null;
     }
 
     /**

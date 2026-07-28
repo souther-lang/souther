@@ -3,6 +3,7 @@ package souther.compiler.ast;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,6 +50,53 @@ public interface Ast {
         /** The same name, resolved to what it denotes. */
         public Name denoting(TypeName resolved) {
             return new Name(written, resolved, pos);
+        }
+
+        @Override
+        public String toString() {
+            return written;
+        }
+    }
+
+    /**
+     * A name in the value namespace, in both forms it has: {@code written} as the source spelled it —
+     * bare {@code price}, qualified {@code billing.price}, or through an import alias — and
+     * {@code denotes} as it resolves. What {@link Name} is for a type.
+     *
+     * <p>A check reads {@link #denotes()}. A name that denotes nothing was reported where it was
+     * written and carries {@link ValueName.Unresolved}, so a reader downstream never has a spelling
+     * to match and never repeats the report.
+     */
+    record ValueRef(String written, ValueName denotes, SourcePos pos) implements Ast {
+
+        /** A name as the parser read it, before resolution has said what it denotes. */
+        public static ValueRef written(String written, SourcePos pos) {
+            return new ValueRef(written, null, pos);
+        }
+
+        /** The same name, resolved to what it denotes. */
+        public ValueRef denoting(ValueName resolved) {
+            return new ValueRef(written, resolved, pos);
+        }
+
+        /**
+         * The bare name this reaches its declaration by, whatever the source spelled.
+         *
+         * <p>Every name here has been through resolution by the time anything reads it, including
+         * one that denotes nothing — that is an answer too. A name with no answer at all means a
+         * tree reached a reader without being resolved, which would put this back to matching
+         * spellings, so it says so rather than falling back to the spelling.
+         */
+        public String bare() {
+            if (denotes == null) {
+                throw new IllegalStateException("`" + written + "` was never resolved");
+            }
+            return denotes.name();
+        }
+
+        /** Whether this name denotes nothing — reported where it was written. */
+        public boolean unresolved() {
+            return denotes instanceof ValueName.Unresolved;
         }
 
         @Override
@@ -142,7 +190,7 @@ public interface Ast {
                         List<Param> params,
                         RetType ret,
                         List<Name> constructs,
-                        List<String> requires,
+                        List<ValueRef> requires,
                         SourcePos pos) implements BehaviorDef {}
 
     /** A behavior parameter. Its type may be an anonymous union of cases (spec 12.2). */
@@ -153,7 +201,7 @@ public interface Ast {
      * is the optional trailing output declaration (14.5): null when absent (output is inferred), else
      * the declared cases, which must match the inferred output exactly (E1604).
      */
-    record PipeBehavior(String name, List<String> stages, RetType declaredOut, SourcePos pos)
+    record PipeBehavior(String name, List<ValueRef> stages, RetType declaredOut, SourcePos pos)
             implements BehaviorDef {}
 
     /**
@@ -555,11 +603,53 @@ public interface Ast {
 
     record BoolLit(boolean value, SourcePos pos) implements Expr {}
 
-    record Var(String name, SourcePos pos) implements Expr {}
+    /**
+     * A name used as a value. {@code denotes} is what it names, answered once during resolution; a
+     * reader asks it rather than deciding for itself whether the spelling is a local, a unit data or
+     * something the language provides.
+     */
+    record Var(String name, ValueName denotes, SourcePos pos) implements Expr {
+
+        /** A name as the parser read it, before resolution has said what it denotes. */
+        public Var(String name, SourcePos pos) {
+            this(name, null, pos);
+        }
+
+        /**
+         * A read of something bound in the body, as a pass that put the binding there writes it.
+         *
+         * <p>A pass that runs after resolution says what it means rather than leaving a spelling for
+         * a reader to work out. The binder it gives is where this pass put the name, which is
+         * identity within the tree it built and nothing beyond it — an editor reads the resolved
+         * tree, where a binder is where the author wrote it.
+         */
+        public static Var local(String name, SourcePos pos) {
+            return new Var(name, new ValueName.Local(name, pos), pos);
+        }
+
+        public Var denoting(ValueName resolved) {
+            return new Var(name, resolved, pos);
+        }
+    }
 
     record FieldAccess(Expr target, String field, SourcePos pos) implements Expr {}
 
-    record Call(String fn, List<Expr> args, SourcePos pos) implements Expr {}
+    /**
+     * A call. {@code denotes} is what {@code fn} names — a helper, a library function, an injected
+     * behavior, a function-typed parameter, or the type a newtype construction wraps — answered once
+     * during resolution.
+     */
+    record Call(String fn, ValueName denotes, List<Expr> args, SourcePos pos) implements Expr {
+
+        /** A call as the parser read it, before resolution has said what {@code fn} denotes. */
+        public Call(String fn, List<Expr> args, SourcePos pos) {
+            this(fn, null, args, pos);
+        }
+
+        public Call denoting(ValueName resolved) {
+            return new Call(fn, resolved, args, pos);
+        }
+    }
 
     record Binary(BinOp op, Expr left, Expr right, SourcePos pos) implements Expr {}
 
@@ -582,7 +672,7 @@ public interface Ast {
             case Neg n -> new Neg(f.apply(n.operand()), n.pos());
             case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.pos());
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
-            case Call c -> new Call(c.fn(), mapExprs(c.args(), f), c.pos());
+            case Call c -> new Call(c.fn(), c.denotes(), mapExprs(c.args(), f), c.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
             case LetIn li -> new LetIn(li.name(), f.apply(li.value()), li.declaredType(), li.annotated(),
                     li.opens(), f.apply(li.body()), li.pos());

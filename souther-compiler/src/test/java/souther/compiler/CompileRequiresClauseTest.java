@@ -126,4 +126,36 @@ class CompileRequiresClauseTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E1401", e.code(), e.getMessage());
     }
+
+    /**
+     * Both ways a `requires` can be wrong are reported at the name it writes: one clause, one place
+     * to look. The unknown one is answered where the module's names are resolved and the implemented
+     * one where the injection targets are known, so the two would otherwise drift apart.
+     */
+    @Test
+    void bothKindsOfBadRequiresArePointedAtTheName() {
+        String implemented = """
+                module demo
+                data A = { x: Int }
+                data R = { z: Int }
+
+                behavior one : (a: A) -> R constructs R
+                let one (a) = R { z = a.x }
+
+                behavior use : (a: A) -> R
+                    requires one
+                let use (a, one) = one(a)
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(implemented));
+        assertEquals("E1607", e.code(), e.getMessage());
+        assertTrue(e.getMessage().startsWith("9:14 "),
+                "at the `one` of `requires one`: " + e.getMessage());
+
+        String unknown = implemented.replace("requires one", "requires nosuch")
+                .replace("let use (a, one) = one(a)", "let use (a, nosuch) = nosuch(a)");
+        CompileException absent = assertThrows(CompileException.class, () -> Compiler.compile(unknown));
+        assertEquals("E1607", absent.code(), absent.getMessage());
+        assertTrue(absent.getMessage().startsWith("9:14 "),
+                "and at the `nosuch` of `requires nosuch`: " + absent.getMessage());
+    }
 }
