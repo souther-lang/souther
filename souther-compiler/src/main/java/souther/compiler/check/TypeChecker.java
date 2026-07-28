@@ -42,31 +42,13 @@ public final class TypeChecker {
     }
 
     /**
-     * Type-checks {@code module} and, if any error was found, throws the first — the fail-fast entry
-     * point for the CLI and the annotation processor, which stop at the first error. The recovering
-     * {@link #check(Ast.Module, Map, Map, Set, Ast.Module)} collects every error for the LSP instead.
-     */
-    public static Checked checkOrThrow(Ast.Module module, Symbols symbols,
-                                                Map<String, Sig> importedSigs, Set<String> importedInjected,
-                                                Ast.Module lowered) {
-        Reported reported =
-                checkReporting(module, symbols, importedSigs, importedInjected, lowered);
-        if (!reported.errors().isEmpty()) {
-            // the original exception, so its rendered message is unchanged
-            throw reported.errors().get(0);
-        }
-        return reported.checked();
-    }
-
-    /**
      * A recovering check that keeps each error as the exception it was raised as, together with
      * what the check elaborated.
      *
-     * <p>The other two entry points are this one with a decision attached: {@link #checkOrThrow}
-     * raises the first error, {@link #checkAndElaborate} hands back the diagnostics. A caller that
-     * reports without throwing but must still be able to raise exactly what a batch compile would
-     * have raised — a query — needs the exceptions themselves, because a diagnostic does not carry
-     * the English body a throw site passed alongside it.
+     * <p>The only entry point. A caller decides what to do with what was found: raise the first, or
+     * report them all. It hands back the exceptions rather than the diagnostics because a diagnostic
+     * does not carry the English body a throw site passed alongside it, and a caller that has to
+     * raise one should raise what the pass raised.
      */
     /**
      * @param errors what the check found wrong
@@ -125,10 +107,6 @@ public final class TypeChecker {
 
     /** Runs one independent unit's check, recording its first error instead of throwing so the next
      * unit is still checked — the recovery boundary that lets a module report more than one error. */
-    static void collect(List<CompileException> errors, Runnable unitCheck) {
-        collect(errors, new ArrayList<>(), unitCheck);
-    }
-
     /**
      * Runs one unit's check, recording its first error instead of throwing so the next unit is still
      * checked — the recovery boundary that lets a module report more than one error.
@@ -167,35 +145,6 @@ public final class TypeChecker {
         return d.code() + "|" + d.messageKey() + "|" + d.literalMessage() + "|" + at;
     }
 
-    /**
-     * Type-checks a module whose behavior fn bodies have already been inlined by the {@link Lower}
-     * stage (ADR-0021), so the inlining is computed once and shared with the backend rather than the
-     * checker inlining a second time. The main body check reads {@code lowered}; the standalone
-     * helper check and the function-argument check still read the original bodies, which carry the
-     * un-inlined helper calls they inspect.
-     */
-    public static List<Diagnostic> check(Ast.Module module, Symbols symbols,
-                             Map<String, Sig> importedSigs, Set<String> importedInjected,
-                             Ast.Module lowered) {
-        return checkAndElaborate(module, symbols, importedSigs, importedInjected, lowered).diagnostics();
-    }
-
-    /** The diagnostics of a recovering check together with what it elaborated — the entry point for a
-     * multi-module compile, which reports every module's errors and emits only the clean ones. */
-    public record CheckResult(List<Diagnostic> diagnostics, Checked checked) {}
-
-    public static CheckResult checkAndElaborate(Ast.Module module, Symbols symbols,
-                                                Map<String, Sig> importedSigs, Set<String> importedInjected,
-                                                Ast.Module lowered) {
-        Reported reported =
-                checkReporting(module, symbols, importedSigs, importedInjected, lowered);
-        List<Diagnostic> out = new ArrayList<>();
-        for (CompileException e : reported.errors()) {
-            out.add(e.diagnostic());
-        }
-        out.addAll(reported.checked().warnings());
-        return new CheckResult(out, reported.checked());
-    }
 
     /**
      * The check phases, appending to {@code errors} rather than returning them. Contract: each

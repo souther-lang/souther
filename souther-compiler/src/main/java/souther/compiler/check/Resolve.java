@@ -76,7 +76,14 @@ public final class Resolve {
 
     /** {@code m} with every name it writes resolved against {@code symbols}. */
     public static Ast.Module module(Ast.Module m, Symbols symbols) {
-        return resolving(m, symbols).module();
+        Resolved resolved = resolving(m, symbols);
+        if (!resolved.unresolved().isEmpty()) {
+            // This entry point answers with a module or not at all, which is what its one caller —
+            // loading the shipped core — needs: a misspelled type in a prelude resource is a fault in
+            // the compiler, not something an author can be told about and carry on past.
+            throw resolved.unresolved().get(0);
+        }
+        return resolved.module();
     }
 
     /** As {@link #module(Ast.Module, Symbols)}, keeping what each name was answered with. */

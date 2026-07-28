@@ -351,11 +351,14 @@ public final class Names {
                         nameless(scope, List.of(imported));
                         continue;
                     }
-                    if (scope.containsKey(imported)) {
+                    TypeName standingIn = scope.get(imported);
+                    if (standingIn != null && !standingIn.isUnresolved()) {
                         reports.add(importCollision(imported, imp,
                                 ownNames.contains(imported) ? null : from.get(imported)));
                         continue;   // the first claim on the name keeps it
                     }
+                    // A name a failed import line only stood in for is not a claim on it: an import
+                    // that can do the job takes it, and says nothing about the line that could not.
                     scope.put(imported, new TypeName(imp.module(), imported));
                     from.put(imported, imp);
                 }
@@ -453,9 +456,11 @@ public final class Names {
      * list of conditions appended to over time. Each of these has already said what was wrong where
      * it found it; this only asks whether any of them did.
      *
-     * <p>It covers the error type too, and so replaces looking for one in the tree: a type nobody
-     * could name comes from a name that denoted nothing, which is exactly what {@link Resolution} or
-     * {@link Imports} reported.
+     * <p>It is transitive. A module built against one that was rejected is built against declarations
+     * nothing will emit, so it cannot be emitted either — its classes would name a class that is not
+     * there, and its examples would fail for a reason that is not its own. An import that could not be
+     * followed counts the same way, whether or not anything was reported here about it. An import cycle
+     * is settled before this recurses, so following imports terminates.
      */
     public record Sound(String name) implements Key<Boolean> {
         @Override
@@ -475,6 +480,18 @@ public final class Names {
             for (Answer<?> answer : asked) {
                 if (answer.hasError()) {
                     return Answer.of(Boolean.FALSE);
+                }
+            }
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            if (m != null) {
+                for (Ast.Import imp : m.imports()) {
+                    // An import that could not be followed at all — the module is not here, or the
+                    // caller is holding its file back — leaves the names it was to bring denoting
+                    // nothing, whether or not anything was reported here to say so.
+                    if (!db.ask(new Front.Available(imp.module())).present()
+                            || Boolean.FALSE.equals(db.ask(new Sound(imp.module())).value())) {
+                        return Answer.of(Boolean.FALSE);
+                    }
                 }
             }
             return Answer.of(Boolean.TRUE);
