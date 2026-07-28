@@ -7,4 +7,13 @@ package souther.compiler.diag;
  * locale); {@code labelArgs} fill its placeholders.
  */
 public record LabeledRegion(Region region, String labelKey, Object[] labelArgs) {
+
+    /** What makes two labels the same label. A record compares an array component by identity, and
+     * {@code labelArgs} is one. */
+    public record Of(Region region, String labelKey, java.util.List<Object> labelArgs) {}
+
+    public Of identity() {
+        return new Of(region, labelKey,
+                labelArgs == null ? java.util.List.of() : java.util.Arrays.asList(labelArgs));
+    }
 }

@@ -1,14 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.diag.CompileException;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * The Lower stage (ADR-0021): rewrites the surface AST toward the form the backend emits, so the
@@ -38,49 +35,35 @@ public final class Lower {
     public record Lowered(Ast.Module settled, Ast.Module lowered) {}
 
     /**
-     * Settles the helper parameter types the author left unwritten, then returns {@code module} with
-     * each behavior-implementing fn body inlined and every list comprehension (in a body or a data
-     * invariant) desugared to an {@code if}.
+     * {@code module} with every helper parameter the author left unwritten carrying the type its body
+     * gives it.
      *
-     * <p>Settling comes first because inlining is what carries a parameter's type onto the binding a
-     * call becomes (issue #178): a type settled after this stage would never reach the expansion.
+     * <p>Settling comes before the expansion because inlining is what carries a parameter's type onto
+     * the binding a call becomes (issue #178): a type settled afterwards would never reach it.
      */
-    public static Lowered run(Ast.Module module, Symbols symbols,
-                              Map<String, Sig> importedSigs, Set<String> importedInjected) {
-        Map<String, ReqSig> reqSigs;
-        try {
-            reqSigs = InjectionSigs.of(module, symbols, importedSigs, importedInjected);
-        } catch (CompileException _) {
-            // a signature that does not build is reported by the check that follows; settling reads
-            // what it can and leaves the rest for the annotation rule.
-            reqSigs = Map.of();
-        }
-        Ast.Module settled = HelperParams.settle(module, symbols, reqSigs);
-        return new Lowered(settled, lower(settled));
+    public static Ast.Module settle(Ast.Module module, Symbols symbols,
+                                    Map<String, ReqSig> reqSigs) {
+        return HelperParams.settle(module, symbols, reqSigs);
     }
 
-    private static Ast.Module lower(Ast.Module module) {
-        HelperInliner inliner = HelperInliner.forModule(module);
-        Set<String> behaviorNames = new HashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            behaviorNames.add(b.name());
-        }
-        Set<String> recursive = inliner.recursiveHelpers();
-        List<Ast.FnDef> fns = new ArrayList<>();
-        for (Ast.FnDef fn : module.fns()) {
-            // A behavior body and a recursive helper both survive to the backend with their body
-            // inlined (non-recursive calls expanded, recursive calls left standing, spec 13.1). A
-            // non-recursive helper is fully inlined at its call sites and never emitted — drop it.
-            if (behaviorNames.contains(fn.name()) || recursive.contains(fn.name())) {
-                // a recursive helper expands its own body with its parameters hidden from helper
-                // resolution (foldFrom's `step` is a parameter, not a same-named user helper).
-                Ast.Expr expanded = recursive.contains(fn.name())
-                        ? inliner.inlineRecursiveBody(fn)
-                        : inliner.inline(fn.body());
-                fns.add(new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
-                        desugar(expanded), fn.partial(), fn.pos()));
-            }
-        }
+    /**
+     * One fn as the backend emits it: its helper calls expanded and its comprehensions desugared.
+     *
+     * <p>A behavior body and a recursive helper both survive to the backend this way — non-recursive
+     * calls expanded, recursive calls left standing (spec 13.1). A recursive helper expands its own
+     * body with its parameters hidden from helper resolution ({@code foldFrom}'s {@code step} is a
+     * parameter, not a same-named user helper), which is what {@code recursive} says. A helper that is
+     * neither is fully inlined at its call sites and never emitted, so nothing asks for it here.
+     */
+    public static Ast.FnDef body(Ast.FnDef fn, HelperInliner inliner, boolean recursive) {
+        Ast.Expr expanded = recursive ? inliner.inlineRecursiveBody(fn) : inliner.inline(fn.body());
+        return new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
+                desugar(expanded), fn.partial(), fn.pos());
+    }
+
+    /** {@code module} with {@code fns} as its fns and every data invariant desugared — the tree the
+     * backend emits from. */
+    public static Ast.Module lowered(Ast.Module module, List<Ast.FnDef> fns) {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.Data d && d.invariant().isPresent()) {

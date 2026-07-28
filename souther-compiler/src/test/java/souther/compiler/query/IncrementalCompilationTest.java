@@ -170,6 +170,95 @@ class IncrementalCompilationTest {
         return c.db().ask(new Output.Classes("shop.prices")).value();
     }
 
+    /** Two behaviors and a helper both of them call, in one module. */
+    private static final String ORDERS = """
+            module shop.orders exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            let doubled (n) = n * 2
+
+            behavior twice : (n: Amount) -> Amount
+                constructs Amount
+            let twice (n) = Amount(doubled(n.value))
+
+            behavior thrice : (n: Amount) -> Amount
+                constructs Amount
+            let thrice (n) = Amount(n.value * 3)
+            """;
+
+    private static Compilation orders(String source) {
+        Compilation c = Compilation.ofDocuments(Map.of("orders.sou", source), Set.of(),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
+        return c;
+    }
+
+    /** The same workspace with {@code thrice}'s body changed — an edit inside one definition, made
+     * at the end of the file so nothing before it moves. */
+    private static Map<String, String> thriceTimes(String factor) {
+        return Map.of("orders.sou", ORDERS.replace("n.value * 3)", "n.value * " + factor + ")"));
+    }
+
+    /**
+     * A body is expanded from itself and the helpers around it, so what another body in the same
+     * module says is none of its business. Expanding a module's bodies as one tree made every
+     * behavior depend on every other one, so editing any body in a file re-expanded all of them.
+     */
+    @Test
+    void editingOneBodyExpandsThatBodyAndNotTheOnesBesideIt() {
+        Compilation c = orders(ORDERS);
+        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
+        Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", "thrice"));
+
+        c.update(thriceTimes("30"), Set.of());
+        c.answerEverything();
+
+        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", "thrice")),
+                "the edit is `thrice`'s, so it is expanded again");
+        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
+                "`twice` says what it said, and `thrice` is not part of it");
+    }
+
+    /**
+     * And a body is checked against the behavior it implements and what the module around it means,
+     * so a mistake made in another body — or its being edited at all — is none of its business.
+     */
+    @Test
+    void editingOneBodyChecksThatBodyAndNotTheOnesBesideIt() {
+        Compilation c = orders(ORDERS);
+        Answer<?> twice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
+        Answer<?> thrice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice"));
+
+        c.update(thriceTimes("30"), Set.of());
+        c.answerEverything();
+
+        assertNotSame(thrice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice")),
+                "the edit is `thrice`'s, so it is checked again");
+        assertSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
+                "`twice` is checked against `behavior twice`, which says what it said");
+    }
+
+    /**
+     * A helper is expanded into the bodies that call it, so editing one reaches them. It reaches the
+     * ones that do not call it as well: a body reads the module's helpers, not the helpers it calls,
+     * and narrowing that is per-helper work rather than per-body work.
+     */
+    @Test
+    void editingAHelperReachesTheBodiesItIsExpandedInto() {
+        Compilation c = orders(ORDERS);
+        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
+
+        c.update(Map.of("orders.sou", ORDERS.replace("let doubled (n) = n * 2",
+                "let doubled (n) = n * 2 + 0")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
+                "`twice` calls `doubled`, and `doubled` is part of what `twice` becomes");
+    }
+
     @Test
     void changingWhatAModuleDeclaresReachesTheModulesThatImportIt() {
         Compilation c = started();

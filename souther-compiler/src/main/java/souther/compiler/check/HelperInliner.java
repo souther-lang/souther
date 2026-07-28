@@ -10,6 +10,7 @@ import souther.compiler.diag.SourcePos;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -50,25 +51,47 @@ public final class HelperInliner {
      * auto-imported prelude helpers (spec §reserved-namespace) join the inlining map so a bare
      * {@code not(x)} expands at any call site; a module-own helper of the same name shadows one. */
     public static HelperInliner forModule(Ast.Module module) {
-        Set<String> behaviorNames = new HashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            behaviorNames.add(b.name());
-        }
-        Map<String, Ast.FnDef> own = new HashMap<>();
-        for (Ast.FnDef fn : module.fns()) {
-            if (!behaviorNames.contains(fn.name())) {
-                own.put(fn.name(), fn);
-            }
-        }
+        HelperInliner inliner = forHelpers(helpersOf(module));
+        inliner.computeReferencedPreludeRecursive(module);
+        return inliner;
+    }
+
+    /**
+     * The inlining an expansion needs, over the helpers alone.
+     *
+     * <p>Which helper a call expands to, and which calls are left standing because the helper recurses,
+     * follow from the helpers and nothing else — so a body is expanded without reading the bodies
+     * beside it. What does read the whole module is {@link #injectedRecursiveHelpers}: which prelude
+     * recursive helpers a module emits as its own methods is a fact about the module, not about any
+     * one call, and {@link #forModule} is what answers it. A module that has already taken those on as
+     * its own fns has them here like any other helper, so both say the same thing about it.
+     */
+    public static HelperInliner forHelpers(Map<String, Ast.FnDef> own) {
         // prelude helpers are keyed by their qualified name (`List.map`); a module's own helpers by
         // their bare name (`対象明細`). A qualified call resolves to the prelude, a bare call to the
         // module's own — the standard library has no bare names (spec §stdlib).
         Map<String, Ast.FnDef> helpers = new HashMap<>(Prelude.helpers());
         helpers.putAll(own);
-        HelperInliner inliner = new HelperInliner(helpers, own);
+        // In the order they are written, so a module with two helpers to complain about complains
+        // about the earlier one first.
+        HelperInliner inliner = new HelperInliner(helpers, new LinkedHashMap<>(own));
         inliner.classifyRecursion();
-        inliner.computeReferencedPreludeRecursive(module);
         return inliner;
+    }
+
+    /** A module's helpers: the fns that implement no behavior, keyed by name. */
+    public static Map<String, Ast.FnDef> helpersOf(Ast.Module module) {
+        Set<String> behaviorNames = new HashSet<>();
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            behaviorNames.add(b.name());
+        }
+        Map<String, Ast.FnDef> own = new LinkedHashMap<>();
+        for (Ast.FnDef fn : module.fns()) {
+            if (!behaviorNames.contains(fn.name())) {
+                own.put(fn.name(), fn);
+            }
+        }
+        return own;
     }
 
     /** Prelude recursive helpers this module reaches, by qualified name (`List.foldFrom`). A prelude

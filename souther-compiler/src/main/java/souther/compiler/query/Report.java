@@ -76,6 +76,23 @@ public record Report(Diagnostic diagnostic, String legacyMessage) {
         return reports.stream().filter(Report::isError).toList();
     }
 
+    /**
+     * What makes this the same problem as another: everything the diagnostic says, said the same way,
+     * in the same place — {@link Diagnostic#identity()}, arguments included.
+     *
+     * <p>Two questions can find one problem. A helper is checked on its own and again wherever it is
+     * expanded, and both are looking at the same line of the same helper — so the author is told
+     * twice about one mistake unless the two are recognised as one. Neither is wrong to have found
+     * it, and neither can see the other, so it is the reading of them that settles it.
+     *
+     * <p>The whole diagnostic, because a narrower comparison merges what it leaves out. Two checks of
+     * one expression against different expectations say the same thing at the same place with
+     * different arguments, and those are two problems.
+     */
+    public Diagnostic.Identity problem() {
+        return diagnostic.identity();
+    }
+
     /** This report as an error to throw. One built from a raised exception throws that exception's
      * message again; one built any other way renders its own, in English, because that message has
      * always been English and a test that reads it should not move with the reader's locale. */

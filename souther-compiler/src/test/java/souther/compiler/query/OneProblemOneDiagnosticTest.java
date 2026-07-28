@@ -50,6 +50,30 @@ class OneProblemOneDiagnosticTest {
         assertEquals(1, found.size(), "one reserved name, one diagnostic: " + found);
     }
 
+    /**
+     * A helper is checked on its own and again wherever it is expanded, so a mistake in one is found
+     * twice, at the same place, by two questions that cannot see each other. The author has one
+     * mistake and is told once.
+     */
+    @Test
+    void aMistakeInAHelperThatIsExpandedIntoABodyIsReportedOnce() {
+        List<Diagnostic> found = diagnose("""
+                module m.a
+
+                data A = Int
+                    invariant value >= 0
+
+                let doubled (n: Int) : Int = n * "two"
+
+                behavior twice : (a: A) -> A
+                    constructs A
+                let twice (a) = A(doubled(a.value))
+                """).get("a.sou");
+
+        assertEquals(1, found.size(),
+                "one mistake in `doubled`, one diagnostic: " + found);
+    }
+
     private static Map<String, List<Diagnostic>> diagnoseAs(String id, String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(id, source);
