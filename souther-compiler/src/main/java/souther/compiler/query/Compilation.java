@@ -270,11 +270,6 @@ public final class Compilation {
         return published;
     }
 
-    /** Everything reported in answering {@code key} and everything that answering it needed. */
-    public List<Db.Found> reportsUnder(Key<?> key) {
-        return db.reportsUnder(key);
-    }
-
     /** The first error among {@code found}, as the exception the pass raised, tagged with the source
      * it belongs to — or null when nothing there is an error. */
     public CompileException firstError(List<Db.Found> found) {

@@ -109,6 +109,11 @@ public final class Db {
      */
     public void forget(String sourceId, String moduleName) {
         set(new Front.Text(sourceId), null);
+        // Dropping by module name is exact, not approximate. Every question about a module reads its
+        // declaring source through the workspace layout, and the layout names one source per module
+        // however many claim it — so while this source was the module, every answer about that module
+        // was an answer about this source. A source that claimed a name it did not get is passed a
+        // null module name and takes nothing else with it.
         memos.keySet().removeIf(key -> sourceId.equals(key.sourceId())
                 || (moduleName != null && moduleName.equals(key.module())));
         hasSpoken.removeIf(key -> !memos.containsKey(key));
@@ -136,10 +141,13 @@ public final class Db {
         frames.push(new LinkedHashSet<>());
         Answer<T> answer;
         Set<Key<?>> read;
-        // Every trace of answering this key is undone here, whether it answered or threw. A compile
-        // error is a value, so a throw is an internal fault — and a store that is kept across edits
-        // must come out of one as it went in, or the key it happened under would never be kept
-        // again.
+        // This key leaves nothing of itself behind, whether it answered or threw: not its frame, not
+        // its place in the chain, not a cycle mark. A compile error is a value, so a throw is an
+        // internal fault, and a store kept across edits would otherwise never keep this key again.
+        //
+        // What a dependency answered before the throw is kept, and should be: a query is a function
+        // of its inputs, so an answer that was reached is as good as any other. Only the key that
+        // failed is unfinished.
         boolean reachedThroughCycle = false;
         try {
             answer = key.compute(this);
@@ -188,16 +196,22 @@ public final class Db {
     /**
      * Everything this compilation now has to report, in the order the keys first reported it.
      *
-     * <p>Only questions this revision actually asked are read. A question that was asked and
+     * <p>Only questions asked since the last input changed are read. A question that was asked and
      * recomputed contributes what it says now, so a problem that was fixed is not still listed —
      * and a question that stopped being asked contributes nothing, because there is no longer
      * anything that wants to know. Deleting the last row of an {@code examples for} file is the
      * second case: nothing asks whether that file's rows hold any more, so nothing recomputes the
      * answer, and reading it would put a failure on a line that is not there.
      *
-     * <p>Being asked is what {@code verifiedAt} records. Answering a key sets it, and so does
-     * finding that a kept answer still holds, so every key reachable from what a caller asked for
-     * carries this revision and every key that is not reachable carries an older one.
+     * <p>Being asked is what {@code verifiedAt} records. Answering a key sets it, and so does finding
+     * that a kept answer still holds, so every key reached since the last input change carries this
+     * revision and every key that was not reached carries an older one.
+     *
+     * <p>"Since the last input change" is not "in the last round of asking", and the two come apart
+     * if a caller asks for less than it did before without changing anything: what the wider round
+     * reached still counts as reached. Every caller here asks for the whole compilation, so it does
+     * not arise — but a caller that asked only about the file in front of the author would need a
+     * generation of its own, separate from the input revision.
      */
     public List<Found> allReports() {
         List<Found> found = new ArrayList<>();
@@ -227,33 +241,6 @@ public final class Db {
 
     /** A report, the module it is about, and the source it names — either of which may be null. */
     public record Found(String module, String sourceId, Report report) {}
-
-    /**
-     * Everything reported while answering {@code root}, and by everything answering it needed.
-     * Deepest first — a module's own errors come before those of a module that read it — so a
-     * caller that stops at the first error stops at the same one the passes used to raise.
-     */
-    public List<Found> reportsUnder(Key<?> root) {
-        List<Found> found = new ArrayList<>();
-        gather(root, new HashSet<>(), found);
-        return found;
-    }
-
-    private void gather(Key<?> key, Set<Key<?>> seen, List<Found> found) {
-        if (!seen.add(key)) {
-            return;
-        }
-        Memo memo = memos.get(key);
-        if (memo == null) {
-            return;
-        }
-        for (Key<?> read : memo.reads()) {
-            gather(read, seen, found);
-        }
-        for (Report report : memo.answer().reports()) {
-            found.add(new Found(key.module(), key.sourceId(), report));
-        }
-    }
 
     private void recordRead(Key<?> key) {
         Set<Key<?>> frame = frames.peek();

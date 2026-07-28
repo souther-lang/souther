@@ -179,7 +179,9 @@ class IncrementalCompilationTest {
         assertFalse(c.db().isComputed(new Output.Classes("shop.customers")),
                 "nothing will ask about a module that is not there any more");
         assertFalse(c.db().isComputed(new Front.Parsed("customers.sou")),
-                "and its text is not held either");
+                "nor is its parse tree");
+        assertFalse(c.db().isComputed(new Front.Text("customers.sou")),
+                "nor its text");
         assertEquals(List.of("shop.prices", "shop.cart"), c.modules());
     }
 }

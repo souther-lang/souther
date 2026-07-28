@@ -41,7 +41,12 @@ public final class Front {
     public record Ids() implements Input<List<String>> {}
 
     /** The text of one source. */
-    public record Text(String id) implements Input<String> {}
+    public record Text(String id) implements Input<String> {
+        @Override
+        public String sourceId() {
+            return id;
+        }
+    }
 
     /** The compiled modules of the projects this one depends on. */
     public record Path() implements Input<ModulePath> {}
