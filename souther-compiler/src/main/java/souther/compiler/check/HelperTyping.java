@@ -141,18 +141,20 @@ public final class HelperTyping {
     private static void typeFromBody(Ast.FnDef h, List<Integer> open, Map<String, Type> env,
             Ast.Expr body, Symbols symbols, Map<String, ReqSig> reqSigs,
             Map<String, Type> recursiveHelperFns) {
-        // a parameter that is applied in the body is a function, and a function type is not determined
-        // by its application; the inliner also needs the annotation to tell a function parameter from
-        // a value one when it expands the call (spec 13.1).
+        // A parameter used as a function is one, and neither applying it nor handing it to a
+        // combinator determines its type; the inliner also needs the annotation to tell a function
+        // parameter from a value one when it expands the call (spec 13.1). The expanded body is what
+        // is read, so a parameter handed to `List.map` — applied inside the expansion rather than
+        // where it is written — is reported as the function it is.
         for (int idx : open) {
             Ast.FnParam p = h.params().get(idx);
-            if (isApplied(h.body(), p.name())) {
+            if (isApplied(body, p.name())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.helper.fnparam").title("check.helper.title")
                                 .at(p.pos(), p.name().length()).args(h.name(), p.name()).build(),
-                        "helper `let " + h.name() + "` parameter `" + p.name() + "` is applied in the"
-                                + " body, so it is a function; a function-typed parameter must be"
-                                + " annotated with its type (spec 13.1)");
+                        "helper `let " + h.name() + "` parameter `" + p.name() + "` is used as a"
+                                + " function; a function-typed parameter must be annotated with its"
+                                + " type (spec 13.1)");
             }
         }
         BodyTyping typing = new BodyTyping(symbols, reqSigs, recursiveHelperFns);

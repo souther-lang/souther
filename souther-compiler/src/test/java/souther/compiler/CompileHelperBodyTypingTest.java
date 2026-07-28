@@ -244,6 +244,21 @@ class CompileHelperBodyTypingTest {
     }
 
     @Test
+    void aParameterHandedToACombinatorIsReportedAsTheFunctionItIs() {
+        // `g` is not applied where it is written — `List.map` applies it, after expansion. It is a
+        // function all the same, and the report says so rather than that nothing determined it.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X
+                let applyAll (g) = List.map(g, [1, 2])
+                let f (x) = x
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.fnparam", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
     void aRecursiveHelperStillAnnotatesItsParameters() {
         // A recursive helper is lowered to a method and typed on its declaration, so it writes its
         // parameter types even where a body use would determine them.
