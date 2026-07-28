@@ -47,17 +47,26 @@ public interface ModulePath {
     /** The classes on an ordinary class path: directories and jars, read in order. Nothing is held
      * open between reads, so a path can be built as often as a compile is run. */
     static ModulePath ofClassPath(List<Path> entries) {
-        List<Path> path = List.copyOf(entries);
-        return binaryName -> {
+        return new ClassPath(List.copyOf(entries));
+    }
+
+    /**
+     * A class path, by its entries. It is a value rather than a lambda so that two paths over the
+     * same entries are the same path: a language server rebuilds one on every request, and a
+     * compilation it wants to keep between edits has to be able to tell that nothing moved.
+     */
+    record ClassPath(List<Path> entries) implements ModulePath {
+        @Override
+        public byte[] bytes(String binaryName) {
             String resource = binaryName.replace('.', '/') + ".class";
-            for (Path entry : path) {
+            for (Path entry : entries) {
                 byte[] bytes = read(entry, resource);
                 if (bytes != null) {
                     return bytes;
                 }
             }
             return null;
-        };
+        }
     }
 
     /** One class path entry's copy of {@code resource}, or null when it has none. An entry that is

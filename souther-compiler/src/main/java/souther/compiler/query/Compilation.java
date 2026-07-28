@@ -216,6 +216,33 @@ public final class Compilation {
         return found;
     }
 
+    /**
+     * Every problem these sources have, on the source it belongs to. A source with none maps to an
+     * empty list.
+     *
+     * <p>Where a report goes is the report's to say, not this method's: an error in an imported
+     * module lands on that module's document however far away it was asked for, and a failing
+     * example row lands on the file the row was written in. A report about something the caller does
+     * not have — a module read off the path — has nowhere to go and is left out.
+     */
+    public Map<String, List<Diagnostic>> diagnostics() {
+        answerEverything();
+        Map<String, List<Diagnostic>> byId = new LinkedHashMap<>();
+        for (String id : sourceIds()) {
+            byId.put(id, new ArrayList<>());
+        }
+        for (Db.Found found : db.allReports()) {
+            String id = found.sourceId() != null ? found.sourceId() : sourceIdOf(found.module());
+            List<Diagnostic> on = id == null ? null : byId.get(id);
+            if (on != null) {
+                on.add(found.report().diagnostic());
+            }
+        }
+        Map<String, List<Diagnostic>> published = new LinkedHashMap<>();
+        byId.forEach((id, found) -> published.put(id, List.copyOf(found)));
+        return published;
+    }
+
     /** Everything reported in answering {@code key} and everything that answering it needed. */
     public List<Db.Found> reportsUnder(Key<?> key) {
         return db.reportsUnder(key);

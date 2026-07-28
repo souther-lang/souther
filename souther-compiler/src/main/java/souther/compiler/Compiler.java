@@ -272,31 +272,7 @@ public final class Compiler {
     public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById,
                                                                 Set<String> brokenModuleNames,
                                                                 ModulePath path) {
-        Compilation compilation =
-                Compilation.ofDocuments(sourcesById, brokenModuleNames, path);
-        compilation.answerEverything();
-
-        Map<String, List<Diagnostic>> result = new LinkedHashMap<>();
-        for (String id : sourcesById.keySet()) {
-            result.put(id, new ArrayList<>());
-        }
-        // Every report lands on the source it is about — an error in an imported module on that
-        // module's document, an `examples for` file's failing row on that file — which is what the
-        // reports carry with them. A report about something the caller did not hand over (a module
-        // read off the path) has nowhere to go and is left out.
-        for (Db.Found found : compilation.db().allReports()) {
-            String id = found.sourceId() != null ? found.sourceId()
-                    : compilation.sourceIdOf(found.module());
-            List<Diagnostic> on = id == null ? null : result.get(id);
-            if (on != null) {
-                on.add(found.report().diagnostic());
-            }
-        }
-        Map<String, List<Diagnostic>> published = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Diagnostic>> e : result.entrySet()) {
-            published.put(e.getKey(), List.copyOf(e.getValue()));
-        }
-        return published;
+        return Compilation.ofDocuments(sourcesById, brokenModuleNames, path).diagnostics();
     }
     /** The module name from a source's {@code module <name>} header, for identifying a source that will
      * not parse (so its importers can be skipped, and the LSP can map a broken file to its module).

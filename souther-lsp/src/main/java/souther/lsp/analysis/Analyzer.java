@@ -1,6 +1,7 @@
 package souther.lsp.analysis;
 
 import souther.compiler.Compiler;
+import souther.compiler.query.Compilation;
 import souther.compiler.ast.Ast;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstLexer;
@@ -43,6 +44,19 @@ import java.util.Set;
  * (the type checker does not recover yet, ADR-deferred).
  */
 public final class Analyzer {
+
+    /**
+     * The workspace's compile, kept between edits. An answer is recomputed only when something it
+     * read has changed, so a keystroke costs what it reached rather than a whole workspace — and a
+     * source that is edited back to what it said costs nothing at all.
+     *
+     * <p>Null until the first workspace-wide diagnose; a single-document analysis does not build
+     * one, because it is a compile of one file with nothing else in sight.
+     */
+    private Compilation workspaceCompile;
+    /** Which module path {@link #workspaceCompile} was built for. A different one is a different
+     * set of modules to resolve an import against, so the compile is started again. */
+    private souther.compiler.meta.ModulePath compiledAgainst;
 
     /** All diagnostics for a document: every syntax error, or — when there are none — the first
      * semantic error a compile turns up. */
@@ -140,7 +154,7 @@ public final class Analyzer {
 
         Map<String, List<Diagnostic>> byUri;
         try {
-            byUri = Compiler.diagnoseModules(compileSet, brokenModules, path);
+            byUri = compileOf(path, compileSet, brokenModules).diagnostics();
         } catch (RuntimeException | StackOverflowError e) {
             // Which file broke the walk is not known here, so every file that entered the compile is
             // marked. Silence would leave the whole workspace looking clean.
@@ -160,6 +174,18 @@ public final class Analyzer {
             }
         }
         return out;
+    }
+
+    /** The workspace's compile, brought up to date with what the documents now say. */
+    private Compilation compileOf(souther.compiler.meta.ModulePath path,
+                                  Map<String, String> sources, Set<String> broken) {
+        if (workspaceCompile == null || !path.equals(compiledAgainst)) {
+            workspaceCompile = Compilation.ofDocuments(sources, broken, path);
+            compiledAgainst = path;
+        } else {
+            workspaceCompile.update(sources, broken);
+        }
+        return workspaceCompile;
     }
 
     /**

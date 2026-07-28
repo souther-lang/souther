@@ -12,6 +12,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -78,5 +80,17 @@ class ModulePathTest {
             assertArrayEquals(CLASS, ModulePath.ofClassPath(List.of(jar)).bytes("shared.billing.Amount"));
         }
         Files.delete(jar);   // a handle left open would keep this from being replaceable on Windows
+    }
+
+    @Test
+    void twoPathsOverTheSameEntriesAreTheSamePath(@TempDir Path dir) throws IOException {
+        // A language server rebuilds its path on every request and keeps one compilation between
+        // edits. If a path were only ever equal to itself, that compilation would be thrown away and
+        // started again on every keystroke, and nothing would say so.
+        Path classes = classesDir(dir, CLASS);
+        assertEquals(ModulePath.ofClassPath(List.of(classes)),
+                ModulePath.ofClassPath(List.of(classes)));
+        assertNotEquals(ModulePath.ofClassPath(List.of(classes)),
+                ModulePath.ofClassPath(List.of()));
     }
 }
