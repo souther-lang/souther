@@ -274,4 +274,63 @@ class UnresolvedNamesTest {
         assertTrue(found.stream().anyMatch(d -> d.diff() != null),
                 "and the type mismatch in the definition that has one: " + found);
     }
+
+    /**
+     * A stage naming a module this compilation has and cannot read leaves a hole nothing here
+     * reported: what is wrong is that module's, and its author is the one who can act on it. The
+     * module holding the hole must still not be emitted — its composition calls a behavior that will
+     * not exist — and the compiler must say so rather than fail on the way to saying it.
+     */
+    @Test
+    void aStageInAModuleThatCannotBeReadIsNotEmittedAndSaysNothingHere() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("x.sou", """
+                module souther.x exposing ( ship )
+
+                behavior ship : (n: Int) -> Int
+                let ship (n) = n
+                """);
+        byId.put("a.sou", """
+                module m.a exposing ( f, p )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = n
+
+                behavior p = f >-> souther.x.ship
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(),
+                souther.compiler.meta.ModulePath.EMPTY);
+
+        assertEquals(List.of(), c.diagnostics().get("a.sou"),
+                "the reserved module name is x's mistake, not this one's");
+        assertTrue(c.diagnostics().get("x.sou").stream()
+                        .anyMatch(d -> "check.module.reserved".equals(d.messageKey())),
+                "and it is reported there: " + c.diagnostics().get("x.sou"));
+        assertEquals(Map.of(), c.classes(),
+                "a composition whose stage nobody can name is not emitted");
+    }
+
+    /** One mistake in a `requires`, one diagnostic: the fn's trailing parameters are named by the
+     * clause, so a clause that names nothing leaves nothing to hold them against. */
+    @Test
+    void aRequiresNamingNothingIsReportedOnceNotTwice() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("b.sou", """
+                module m.b exposing ( ship )
+
+                behavior ship : (n: Int) -> Int
+                """);
+        byId.put("a.sou", """
+                module m.a exposing ( f )
+
+                behavior f : (n: Int) -> Int
+                    requires m.b.charge
+                let f (n, charge) = charge(n)
+                """);
+        List<Diagnostic> found = Compiler.diagnoseModules(byId, Set.of()).get("a.sou");
+
+        assertEquals(1, found.size(),
+                "the clause that names nothing, and nothing about the parameters it names: " + found);
+        assertEquals("E1607", found.get(0).code(), found.toString());
+    }
 }

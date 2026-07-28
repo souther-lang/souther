@@ -287,7 +287,7 @@ public final class Backend {
                 case Ast.PipeBehavior pipe -> {
                     out.put(module.name() + "." + CodegenContext.behaviorImplClass(pipe.name()),
                             b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
-                    Sig sig = sigs.get(pipe.name());   // its own signature, worked out above
+                    Sig sig = declaredSig(pipe, sigs);
                     out.put(module.name() + "." + behaviorClass(pipe.name()),
                             b.generateBehaviorInterface(pipe.name(), sig.ins(), sig.out(),
                                     behaviorDeps.getOrDefault(pipe.name(), List.of())));
@@ -809,6 +809,22 @@ public final class Backend {
         return out;
     }
 
+    /**
+     * A composition's own signature, worked out when the module's signatures were.
+     *
+     * <p>A composition resting on a stage that names nothing has none — it was abandoned there. A
+     * module holding one is not emitted, so reaching this with no signature means the gate that
+     * decides let something through that has no meaning, and there is nothing to emit for it.
+     */
+    private static Sig declaredSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs) {
+        Sig sig = sigs.get(pipe.name());
+        if (sig == null) {
+            throw new IllegalStateException("`" + pipe.name() + "` reached codegen with no signature,"
+                    + " at " + pipe.pos());
+        }
+        return sig;
+    }
+
     /** The behaviors a spec declares it requires, by the name each is reached by. */
     private static List<String> requiredBy(Ast.SpecBehavior spec) {
         List<String> names = new ArrayList<>();
@@ -876,7 +892,7 @@ public final class Backend {
                 code.areturn();
             });
             if (arity != 1) {
-                Sig sig = sigs.get(pipe.name());   // its own signature, worked out above
+                Sig sig = declaredSig(pipe, sigs);
                 emitTypedApplyBridge(cb, cdP, typedApplyDesc(pipe.name(), sig.ins(), sig.out()));
             }
         });

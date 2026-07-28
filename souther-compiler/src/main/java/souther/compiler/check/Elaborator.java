@@ -716,14 +716,6 @@ public final class Elaborator {
     }
 
     /**
-     * Rejects {@code Some} / {@code None} written where no {@code ?} field is being given a value
-     * (E1303). Giving a field its value is the one place an optional is made — the wrap is implicit
-     * and {@code None} is the empty one (spec 7.3) — and everywhere else an optional is read and
-     * passed on. Neither an unknown-name report nor an arbitrary-call report says that, and the
-     * latter sent the reader off to write a Java binding, which makes no optional either (issue
-     * #166). Patterns do not come through here: {@code | Some v} is matched, not evaluated.
-     */
-    /**
      * A name written where a value goes that is not one: an unknown name, a type that is not a unit
      * data, a function named without being applied, or one of Option's cases outside the one place
      * an optional is made.
@@ -744,6 +736,14 @@ public final class Elaborator {
                 "unknown identifier `" + v.name() + "`" + Suggest.hint(v.name(), env.keySet()));
     }
 
+    /**
+     * Rejects {@code Some} / {@code None} written where no {@code ?} field is being given a value
+     * (E1303). Giving a field its value is the one place an optional is made — the wrap is implicit
+     * and {@code None} is the empty one (spec 7.3) — and everywhere else an optional is read and
+     * passed on. Neither an unknown-name report nor an arbitrary-call report says that, and the
+     * latter sent the reader off to write a Java binding, which makes no optional either (issue
+     * #166). Patterns do not come through here: {@code | Some v} is matched, not evaluated.
+     */
     static void optionCaseWritten(String name, SourcePos pos) {
         boolean some = name.equals("Some");
         if (!some && !name.equals("None")) {

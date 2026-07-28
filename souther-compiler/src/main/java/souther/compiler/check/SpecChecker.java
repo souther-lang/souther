@@ -145,6 +145,14 @@ public final class SpecChecker {
                             + "`, so its return type comes from the behavior — do not declare one"
                             + " (spec 13.1)");
         }
+        for (Ast.ValueRef required : spec.requires()) {
+            // A `requires` naming nothing was reported where it is written. What this fn's trailing
+            // parameters should be called comes from those names, so there is nothing to hold them
+            // against — saying they are named wrongly would name the spelling that denotes nothing.
+            if (required.unresolved()) {
+                throw new Unanswerable(required.pos());
+            }
+        }
         int nBusiness = spec.params().size();
         int nReq = spec.requires().size();
         if (fn.params().size() != nBusiness + nReq) {

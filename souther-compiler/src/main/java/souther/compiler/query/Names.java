@@ -632,6 +632,13 @@ public final class Names {
                     return Answer.of(Boolean.FALSE);
                 }
             }
+            // Whether anything was reported here is not the whole question. A name that denotes
+            // nothing because the module it would have come from cannot be read is reported on that
+            // module, and leaves a hole here that nothing said anything about — so the names are
+            // asked as well as the reports.
+            if (Boolean.TRUE.equals(db.ask(new Nameless(name)).value())) {
+                return Answer.of(Boolean.FALSE);
+            }
             Ast.Module m = db.ask(new Front.Available(name)).value();
             if (m != null) {
                 for (Ast.Import imp : m.imports()) {
@@ -645,6 +652,41 @@ public final class Names {
                 }
             }
             return Answer.of(Boolean.TRUE);
+        }
+    }
+
+    /**
+     * Whether a module writes a name in the value namespace that denotes nothing.
+     *
+     * <p>Asked because a report is not the only way a hole gets there. A stage naming a module this
+     * compilation has and cannot read is reported on that module — the author of this one has
+     * nothing to fix — and this module is left with a composition that has no meaning, which nothing
+     * here said. Emitting it would emit a call to a behavior that does not exist.
+     */
+    public record Nameless(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Ast.Module m = db.ask(new Bound(name)).value();
+            if (m == null) {
+                return Answer.of(Boolean.FALSE);   // there is no module here to have a hole in
+            }
+            for (Ast.BehaviorDef b : m.behaviors()) {
+                List<Ast.ValueRef> named = switch (b) {
+                    case Ast.PipeBehavior pipe -> pipe.stages();
+                    case Ast.SpecBehavior spec -> spec.requires();
+                };
+                for (Ast.ValueRef ref : named) {
+                    if (ref.unresolved()) {
+                        return Answer.of(Boolean.TRUE);
+                    }
+                }
+            }
+            return Answer.of(Boolean.FALSE);
         }
     }
 
@@ -785,30 +827,6 @@ public final class Names {
                 }
             }
             return Answer.absent();
-        }
-    }
-
-    /** Every place a module names {@code denoted} as a value. */
-    public record ValueUsesOf(String name, ValueName denoted)
-            implements Key<List<Resolve.ValueUse>> {
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public Answer<List<Resolve.ValueUse>> compute(Db db) {
-            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
-            if (!resolution.present()) {
-                return Answer.of(List.of());
-            }
-            List<Resolve.ValueUse> uses = new ArrayList<>();
-            for (Resolve.ValueUse use : resolution.value().values()) {
-                if (denoted.equals(use.denotes())) {
-                    uses.add(use);
-                }
-            }
-            return Answer.of(List.copyOf(uses));
         }
     }
 
