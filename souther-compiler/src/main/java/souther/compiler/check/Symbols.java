@@ -88,7 +88,7 @@ public final class Symbols {
 
     /** The definition of {@code name}, or null when no module declares it. */
     public Ast.Def get(TypeName name) {
-        return declaredIn(name.module()).get(name.name());
+        return registry.declaration(name);
     }
 
     public boolean contains(TypeName name) {

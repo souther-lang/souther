@@ -44,6 +44,16 @@ public final class Names {
     public static Registry registry(Db db, Stage stage) {
         return new Registry() {
             @Override
+            public Ast.Def declaration(TypeName named) {
+                Answer<Ast.Def> def = switch (stage) {
+                    case AVAILABLE -> db.ask(new Declaration(named));
+                    case RESOLVED -> db.ask(new ResolvedDeclaration(named));
+                    case DERIVED -> db.ask(new Shapes.DerivedDef(named));
+                };
+                return def.present() ? def.value() : null;
+            }
+
+            @Override
             public Map<String, Ast.Def> declaredIn(String moduleName) {
                 Answer<Map<String, Ast.Def>> defs = switch (stage) {
                     case AVAILABLE -> db.ask(new Declarations(moduleName));
@@ -387,6 +397,49 @@ public final class Names {
         }
     }
 
+    /**
+     * One declaration, as the module wrote it.
+     *
+     * <p>Its own question, so that reading it is a dependency on it and not on everything declared
+     * beside it. Whether the work behind it is done for one declaration or for the module is not
+     * this key's business: what a reader depends on is the answer, and this answer says what one
+     * declaration says.
+     */
+    public record Declaration(TypeName named) implements Key<Ast.Def> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Ast.Def> compute(Db db) {
+            Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(named.module()));
+            if (!defs.present()) {
+                return Answer.absent();
+            }
+            Ast.Def def = defs.value().get(named.name());
+            return def == null ? Answer.absent() : Answer.of(def);
+        }
+    }
+
+    /** The same, with every written name in it resolved. */
+    public record ResolvedDeclaration(TypeName named) implements Key<Ast.Def> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Ast.Def> compute(Db db) {
+            Answer<Map<String, Ast.Def>> defs = db.ask(new ResolvedDeclarations(named.module()));
+            if (!defs.present()) {
+                return Answer.absent();
+            }
+            Ast.Def def = defs.value().get(named.name());
+            return def == null ? Answer.absent() : Answer.of(def);
+        }
+    }
+
     /** The same declarations, with every written name in them resolved. */
     public record ResolvedDeclarations(String name) implements Key<Map<String, Ast.Def>> {
         @Override
@@ -475,7 +528,6 @@ public final class Names {
                     }
                     aliases.put(imp.alias(), imp.module());
                 }
-                Map<String, Ast.Def> srcDefs = registry.declaredIn(imp.module());
                 Set<String> exposed = registry.exposedBy(imp.module());
                 for (String imported : imp.names()) {
                     if (!exposed.contains(imported)) {
@@ -486,7 +538,9 @@ public final class Names {
                         nameless(scope, List.of(imported));
                         continue;
                     }
-                    if (!srcDefs.containsKey(imported)) {
+                    // asked one name at a time: what else that module declares is not what this
+                    // import is about, and reading it would make this module depend on it
+                    if (registry.declaration(new TypeName(imp.module(), imported)) == null) {
                         // a behavior import is resolved separately; it is not a data Def, so it does
                         // not go into the symbols map.
                         if (behaviorNames(src).contains(imported)) {

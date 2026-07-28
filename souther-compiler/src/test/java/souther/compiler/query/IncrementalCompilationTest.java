@@ -65,6 +65,54 @@ class IncrementalCompilationTest {
         return c;
     }
 
+    /**
+     * An importer names some of what a module declares, so a declaration it does not name is none of
+     * its business. Reading a module's declarations as one map made every importer depend on all of
+     * them, so declaring something new — which no importer can even see yet — reached every module
+     * that imported anything from there.
+     */
+    @Test
+    void declaringSomethingNewDoesNotReachAnImporterThatDoesNotNameIt() {
+        Compilation c = started();
+        Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
+
+        c.update(workspace(PRICES + """
+
+                data Discount = Int
+                """, CART, CUSTOMERS), Set.of());
+        c.answerEverything();
+
+        assertSame(cart, c.db().ask(new Output.Classes("shop.cart")),
+                "shop.cart names `Amount`, and `Amount` says what it said");
+    }
+
+    /**
+     * And an edit to a declaration an importer does not name leaves it alone as well — the importer
+     * reads the one it named, so what the one beside it says is none of its business.
+     */
+    @Test
+    void editingADeclarationAnImporterDoesNotNameDoesNotReachIt() {
+        Compilation c = started();
+        Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
+
+        c.update(workspace(PRICES + """
+
+                data Discount = { off: Int }
+                """, CART, CUSTOMERS), Set.of());
+        c.answerEverything();
+        Answer<?> once = c.db().ask(new Output.Classes("shop.cart"));
+        assertSame(cart, once, "declaring `Discount` is not shop.cart's business");
+
+        c.update(workspace(PRICES + """
+
+                data Discount = { off: Int, until: Date }
+                """, CART, CUSTOMERS), Set.of());
+        c.answerEverything();
+
+        assertSame(once, c.db().ask(new Output.Classes("shop.cart")),
+                "and neither is changing what `Discount` says");
+    }
+
     @Test
     void anEditReachesTheModuleItWasMadeIn() {
         Compilation c = started();
