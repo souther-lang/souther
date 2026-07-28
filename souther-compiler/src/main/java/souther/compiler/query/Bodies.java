@@ -6,6 +6,7 @@ import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
@@ -229,6 +230,13 @@ public final class Bodies {
             Answer<Set<String>> injected = db.ask(new ImportedInjected(name));
             if (!lowering.present() || !scope.present() || !imported.present()
                     || !injected.present()) {
+                return Answer.absent();
+            }
+            if (TypeOps.holdsAnErroneousType(lowering.value().settled())) {
+                // Something in this module has no type, and why was reported where it was found.
+                // The module is not checked and not emitted: there is no bytecode for a type nobody
+                // could name, and a check run against one would report the hole again at every
+                // position the value reached.
                 return Answer.absent();
             }
             TypeChecker.Reported reported;

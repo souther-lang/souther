@@ -391,11 +391,21 @@ public final class Names {
             if (!scope.present()) {
                 return Answer.absent();
             }
+            Resolve.Resolved resolution;
             try {
-                return Answer.of(Resolve.resolving(available.value(), scope.value()));
+                resolution = Resolve.resolving(available.value(), scope.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+            // A name that denotes nothing is reported here and the tree carries on with the error
+            // type in its place. The answer is present, so an editor can still say what the names
+            // around the mistake mean; what must not happen — emitting a module with a hole in it —
+            // is stopped where the module is checked.
+            List<Report> reports = new ArrayList<>();
+            for (CompileException unresolved : resolution.unresolved()) {
+                reports.addAll(Report.of(unresolved));
+            }
+            return Answer.of(resolution, reports);
         }
     }
 

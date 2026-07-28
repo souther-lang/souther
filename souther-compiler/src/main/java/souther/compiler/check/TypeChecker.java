@@ -97,8 +97,8 @@ public final class TypeChecker {
             // cycle) is fail-fast: it can leave later phases without the state they read, so its first
             // error is recorded and the rest of the module is abandoned. Per-definition and
             // per-behavior errors are collected instead, so one broken body does not hide another.
-            // An unresolvable type can still poison a later phase and abort here — reporting every such
-            // error needs an error-type bottom (issue #37 follow-up), out of this change's scope.
+            // An unresolvable type no longer gets here: it denotes the error type, which absorbs, so
+            // the module is checked past it and never reaches codegen.
             errors.add(e);
         }
         return deduped(errors);

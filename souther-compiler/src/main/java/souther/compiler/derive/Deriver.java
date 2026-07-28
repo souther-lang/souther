@@ -55,6 +55,13 @@ public final class Deriver {
 
     private static Ast.Data deriveData(Ast.Data d, Symbols symbols, boolean isCase) {
         Map<String, Type> fields = TypeOps.fieldTypes(d, symbols);
+        if (fields.values().stream().anyMatch(t -> t instanceof Type.Erroneous)) {
+            // A field whose type nobody could name has no external representation, and saying so
+            // would be saying the same thing twice: the name that denotes nothing was reported where
+            // it was written. The declaration keeps no codec, which costs nothing — a module holding
+            // a type like this is never emitted.
+            return d;
+        }
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
                 ? d.decoder() : Optional.of(deriveDecoder(d, fields, isCase, symbols));
         Optional<Ast.EncoderDef> encoder = d.encoder().isPresent()

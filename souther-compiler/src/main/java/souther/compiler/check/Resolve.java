@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
@@ -21,15 +22,21 @@ import java.util.Map;
  * {@link TypeName} it denotes, and a check that wants to know whether two names are the same type
  * compares what they denote. There is no spelling left to compare.
  *
- * <p>A name that denotes nothing is reported here and the compile stops, so no later pass sees an
- * unresolved one and none of them needs a null branch. A name a pass synthesized already knowing
- * what it means (a codec {@code Deriver} builds from a field's type) is left as it is.
+ * <p>A name that denotes nothing is reported here and denotes {@link TypeName#unresolved} — which
+ * becomes {@link souther.compiler.types.Type#ERRONEOUS} — so no later pass sees an unresolved name
+ * and none of them needs a null branch. The pass does not stop: the rest of the module is resolved
+ * as if the mistake were not there, which is what lets an author be told about every unknown name at
+ * once and lets an editor still say what the names around one mean. A name a pass synthesized
+ * already knowing what it means (a codec {@code Deriver} builds from a field's type) is left as it
+ * is.
  */
 public final class Resolve {
 
     private final Symbols symbols;
     /** Every name this pass answered, in the order it met them. */
     private final List<Denotation> denotations = new ArrayList<>();
+    /** Every name it could not answer, as the error it would once have thrown. */
+    private final List<CompileException> unresolved = new ArrayList<>();
 
     private Resolve(Symbols symbols) {
         this.symbols = symbols;
@@ -50,8 +57,16 @@ public final class Resolve {
      */
     public record Denotation(String written, TypeName denotes, SourcePos pos) {}
 
-    /** A resolved module together with every name the pass answered in it. */
-    public record Resolved(Ast.Module module, List<Denotation> denotations) {}
+    /**
+     * A resolved module, every name the pass answered in it, and the names it could not answer.
+     *
+     * <p>A name that denotes nothing does not end the pass. It denotes {@link TypeName#unresolved},
+     * which becomes {@link souther.compiler.types.Type#ERRONEOUS}, and the rest of the module is
+     * resolved as if the mistake were not there — so an author is told about every unknown name at
+     * once instead of one per compile, and an editor can still say what the names around it mean.
+     */
+    public record Resolved(Ast.Module module, List<Denotation> denotations,
+                           List<CompileException> unresolved) {}
 
     /** {@code m} with every name it writes resolved against its own definitions — a module compiled
      * with nothing else in sight. */
@@ -113,7 +128,7 @@ public final class Resolve {
         return new Resolved(
                 new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
                         behaviors, fns, examples, fakes, m.exampleFileTarget(), m.pos()),
-                List.copyOf(r.denotations));
+                List.copyOf(r.denotations), List.copyOf(r.unresolved));
     }
 
     private Ast.FnDef fn(Ast.FnDef f) {
@@ -183,7 +198,7 @@ public final class Resolve {
             }
         }
         Ast.TypeRef resolved = new Ast.TypeRef(ref.name(), arg, elems, ref.pos());
-        Ast.TypeRef denoted = resolved.denoting(TypeOps.denoted(resolved, symbols));
+        Ast.TypeRef denoted = resolved.denoting(typeOf(resolved));
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
             TypeName names = symbols.resolve(denoted.name());
@@ -381,7 +396,7 @@ public final class Resolve {
         }
         TypeName denoted = symbols.resolve(n.written());
         if (denoted == null) {
-            throw TypeOps.unknownType(n.written(), n.pos(), symbols);
+            return answered(n.denoting(nothingDenotes(n)));
         }
         return answered(n.denoting(denoted));
     }
@@ -406,9 +421,31 @@ public final class Resolve {
             denoted = TypeName.optionCase(n.written());
         }
         if (denoted == null) {
-            throw TypeOps.unknownType(n.written(), n.pos(), symbols);
+            return answered(n.denoting(nothingDenotes(n)));
         }
         return answered(n.denoting(denoted));
+    }
+
+    /**
+     * What a reference denotes, or {@link souther.compiler.types.Type#ERRONEOUS} when nothing does.
+     *
+     * <p>This pass is where a failure becomes a value. {@link TypeOps#denoted} answers or says it
+     * cannot, because it is asked one reference at a time and has nowhere to put a report; here there
+     * is somewhere to put it, and a tree to carry on resolving.
+     */
+    private Type typeOf(Ast.TypeRef ref) {
+        try {
+            return TypeOps.denoted(ref, symbols);
+        } catch (CompileException e) {
+            unresolved.add(e);
+            return Type.ERRONEOUS;
+        }
+    }
+
+    /** Records that {@code n} denotes nothing, and gives it the name that says so. */
+    private TypeName nothingDenotes(Ast.Name n) {
+        unresolved.add(TypeOps.unknownType(n.written(), n.pos(), symbols));
+        return TypeName.unresolved(n.written());
     }
 
     /** Records what a name was answered with, and hands it back. A name with no position was

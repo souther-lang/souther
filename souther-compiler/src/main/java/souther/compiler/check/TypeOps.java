@@ -168,11 +168,102 @@ public final class TypeOps {
         return names;
     }
 
+    /**
+     * Whether anything in {@code module} has a type the compiler could not work out.
+     *
+     * <p>This is the one gate on emitting a module. An error type absorbs, so a check run against a
+     * tree holding one stays quiet about it — which is what stops one mistake being reported at every
+     * position the value reached, and also what stops the check from being the thing that notices.
+     * Asking the tree is what notices, and no pass added later can forget to: a pass that cannot work
+     * a type out puts an error type in, and this finds it wherever it is.
+     */
+    public static boolean holdsAnErroneousType(Ast.Module module) {
+        for (Ast.Def def : module.defs()) {
+            if (def instanceof Ast.Data d) {
+                for (Ast.Field f : d.fields()) {
+                    if (erroneous(f.type())) {
+                        return true;
+                    }
+                }
+                for (Ast.Name include : d.includes()) {
+                    if (include.denotes() != null && include.denotes().isUnresolved()) {
+                        return true;
+                    }
+                }
+            }
+            if (def instanceof Ast.SumData sum) {
+                for (Ast.Name c : sum.cases()) {
+                    if (c.denotes() != null && c.denotes().isUnresolved()) {
+                        return true;
+                    }
+                }
+            }
+        }
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Ast.SpecBehavior spec) {
+                for (Ast.Param param : spec.params()) {
+                    if (erroneous(param.type())) {
+                        return true;
+                    }
+                }
+                if (erroneous(spec.ret())) {
+                    return true;
+                }
+                for (Ast.Name constructs : spec.constructs()) {
+                    if (constructs.denotes() != null && constructs.denotes().isUnresolved()) {
+                        return true;
+                    }
+                }
+            } else if (b instanceof Ast.PipeBehavior pipe && erroneous(pipe.declaredOut())) {
+                return true;
+            }
+        }
+        for (Ast.FnDef fn : module.fns()) {
+            for (Ast.FnParam param : fn.params()) {
+                if (param.type() instanceof Ast.RetType ret && erroneous(ret)) {
+                    return true;
+                }
+                if (param.type() instanceof Ast.FnType fnType
+                        && (fnType.params().stream().anyMatch(TypeOps::erroneous)
+                                || erroneous(fnType.result()))) {
+                    return true;
+                }
+            }
+            if (erroneous(fn.declaredReturn())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean erroneous(Ast.RetType ret) {
+        return ret != null && ret.cases().stream().anyMatch(TypeOps::erroneous);
+    }
+
+    private static boolean erroneous(Ast.TypeRef ref) {
+        if (ref == null) {
+            return false;
+        }
+        if (ref.denotes() instanceof Type.Erroneous) {
+            return true;
+        }
+        if (ref.tupleElems() != null && ref.tupleElems().stream().anyMatch(TypeOps::erroneous)) {
+            return true;
+        }
+        return erroneous(ref.arg());
+    }
+
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
      * covariant, and a data-like type widens to the set of leaf cases it can be — so a list of
      * a sum's cases is assignable to a list of the sum (spec 8.3, 12.2). */
     public static boolean assignable(Type from, Type to, Symbols symbols) {
         if (from.equals(to)) {
+            return true;
+        }
+        if (from instanceof Type.Erroneous || to instanceof Type.Erroneous) {
+            // Something here has no type because the compiler already said why. Answering "yes"
+            // reports nothing further about it: the alternative is one mistake arriving again at
+            // every position the value it produced flowed into.
             return true;
         }
         if (from == Type.NOTHING) {
@@ -221,6 +312,9 @@ public final class TypeOps {
     public static Type join(Type a, Type b) {
         if (a.equals(b)) {
             return a;
+        }
+        if (a instanceof Type.Erroneous || b instanceof Type.Erroneous) {
+            return Type.ERRONEOUS;   // one side has no type; neither has the joined position
         }
         if (BottomInfer.isBottom(a)) {
             return b;
@@ -637,7 +731,7 @@ public final class TypeOps {
                 }
                 TypeName resolved = symbols.resolve(ref.name());
                 if (resolved != null) {
-                    yield Type.ref(resolved);
+                    yield resolved.isUnresolved() ? Type.ERRONEOUS : Type.ref(resolved);
                 }
                 throw unknownType(ref, symbols);
             }
