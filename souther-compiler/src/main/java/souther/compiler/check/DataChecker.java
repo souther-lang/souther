@@ -228,6 +228,23 @@ public final class DataChecker {
 
     static void checkSum(Ast.SumData sum, Symbols symbols) {
         rejectDuplicateTypes(sum.cases(), "the sum `" + sum.name() + "`", sum.pos());
+        // A generated sum is a sealed interface, and its `permits` is settled when its own module is
+        // generated — a case of another module cannot implement it, so it would be permitted without
+        // being a member: no value satisfies the type and an exhaustive switch over it has no arms
+        // (ADR-0057, the declared-sum counterpart of E1606).
+        for (Ast.Name c : sum.cases()) {
+            if (symbols.isForeign(c.denotes())) {
+                throw CompileException.of(
+                        Diagnostic.of("E1606", "check.sum.foreigncase").title("check.sum.title")
+                                .at(c.pos(), c.written().length())
+                                .args(c.written(), sum.name(), c.denotes().module())
+                                .hint("check.sum.foreigncase.hint").build(),
+                        "`" + c.written() + "` is declared in `" + c.denotes().module() + "`, so it"
+                                + " cannot be a case of `" + sum.name() + "` — a sum's cases are"
+                                + " declared with it; consume it at the boundary, or re-express it as"
+                                + " a case of this module");
+            }
+        }
         List<String> cycle = sumCycle(symbols.own(sum.name()), symbols, new LinkedHashSet<>());
         if (cycle != null) {
             throw CompileException.of(

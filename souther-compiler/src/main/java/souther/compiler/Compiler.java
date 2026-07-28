@@ -684,11 +684,13 @@ public final class Compiler {
             try {
                 named.put(m.name(), Resolve.module(m, visibleDefs(m, byName)));
             } catch (CompileException e) {
+                // The tree stays unresolved, so nothing may derive from it — including a module read
+                // off the class path, which has no source to report against but still cannot be used.
                 named.put(m.name(), m);
+                failed.add(m.name());
                 String id = idByName.get(m.name());
                 if (id != null) {
                     result.get(id).add(e.diagnostic());
-                    failed.add(m.name());
                 }
             }
         }
@@ -702,6 +704,9 @@ public final class Compiler {
         // context so examples can be evaluated afterwards, once every module's bytecode is present.
         Map<String, Ast.Module> derived = new LinkedHashMap<>();
         for (Ast.Module m : fromPath) {
+            if (failed.contains(m.name())) {
+                continue;   // its names did not resolve, so there is nothing to derive from
+            }
             Ast.Module d = Deriver.derive(m, visibleDefs(m, byName));
             d = HelperInliner.forModule(d).withInlinedInvariants(d);
             derived.put(m.name(), NewtypeDesugar.rewrite(d, visibleDefs(d, derived)));

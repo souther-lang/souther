@@ -14,7 +14,7 @@ Text also has no home. A name written inside another module's declaration means 
 
 Every written name is resolved once, by a pass that runs before anything else reads the tree, and the tree carries the answer.
 
-- `Ast.Name(written, denotes, pos)` replaces the `String` in each of the thirteen positions that name a declared type: a sum's cases, a spread, a construction's type, `constructs`, a codec variant's case, a decoder or encoder reference, a match arm's cases, a pattern's opened layers, and a binding's opened newtype.
+- `Ast.Name(written, denotes, pos)` replaces the `String` in each of the thirteen positions that name a declared type: a sum's cases, a spread, a construction's type, `constructs`, a codec variant's case, a decoder or encoder reference, a match arm's cases, a pattern's opened layers, and a binding's opened newtype. Which of them admit a qualified spelling is a separate question, settled per position by the grammar; a sum's case list does not, because its cases are declared with it.
 - `Ast.TypeRef` carries the `Type` it denotes. A written type becomes a `Type` in exactly one function, called once per reference.
 - `Resolve` runs per module, in the module that wrote the names, immediately after parsing and before the deriver. A name that denotes nothing is reported there and the compile stops, so `denotes` is non-null everywhere downstream and no consumer needs a null branch.
 - A pass that synthesizes a node states what its name means rather than writing a spelling for someone else to resolve. The deriver builds codec references from a field's `Type`, so it has the resolved name already.
