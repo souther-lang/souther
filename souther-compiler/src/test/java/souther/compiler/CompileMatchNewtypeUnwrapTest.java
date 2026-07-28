@@ -1,12 +1,15 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -126,6 +129,56 @@ class CompileMatchNewtypeUnwrapTest {
                     match m with
                         | アクティベート済み | 未アクティベート(a) -> a.value
                 """;
-        assertThrows(CompileException.class, () -> Compiler.compile(HEAD + body));
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(HEAD + body));
+        assertTrue(render(ex).contains("or-pattern"), render(ex));
+    }
+
+    /** Every one of these rejections is read as rendered prose, and each of the three used to reach
+     *  the reader as its own message key. */
+    @Test
+    void eachRejectionRendersAsAMessage() {
+        String wrongInner = """
+                    match m with
+                        | アクティベート済み(ソース(s)) -> s
+                        | 未アクティベート(メールアドレス(s)) -> s
+                """;
+        String notNewtype = """
+                    match m with
+                        | アクティベート済み(メールアドレス(String(s))) -> s
+                        | 未アクティベート(メールアドレス(s)) -> s
+                """;
+        String orPattern = """
+                    match m with
+                        | アクティベート済み | 未アクティベート(a) -> a.value
+                """;
+        for (String body : new String[] {wrongInner, notNewtype, orPattern}) {
+            String rendered = render(assertThrows(CompileException.class,
+                    () -> Compiler.compile(HEAD + body)));
+            assertFalse(rendered.contains("check.match.newtype"), rendered);
+        }
+    }
+
+    @Test
+    void openingAPrimitiveCaseSaysHowToBindItInstead() {
+        // `Int` heads a primitive union case, so it is bound with `as`, not opened with `(...)`
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module p exposing ( run, In, Out )
+                data In = { a: Int, b: Int }
+                data Out = { r: Int }
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = {
+                    let q = match Int.divide(i.a, i.b) with
+                        | DivisionByZero -> 0
+                        | Int(n) -> n
+                    Out { r = q }
+                }
+                """));
+        String rendered = render(ex);
+        assertTrue(rendered.contains("`Int` is not a newtype"), rendered);
+        assertTrue(rendered.contains("| Int as v"), rendered);
+    }
+
+    private static String render(CompileException ex) {
+        return new HumanRenderer(false).render(ex.diagnostic(), null, Locale.ENGLISH);
     }
 }

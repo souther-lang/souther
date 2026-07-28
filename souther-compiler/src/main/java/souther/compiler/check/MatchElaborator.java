@@ -212,7 +212,7 @@ public final class MatchElaborator {
         List<String> opened = new ArrayList<>();
         opened.add(c.caseTypes().get(0));
         opened.addAll(c.unwrapAsserts());
-        checkOpenedLayers(c, opened, symbols);
+        checkOpenedLayers(c, opened, symbols, true);
     }
 
     /** {@code Some(X(v))} opens the Option's element in the pattern. Unlike a user case, {@code Some}
@@ -228,21 +228,29 @@ public final class MatchElaborator {
         if (!elementName.equals(first)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.match.newtype.mismatch").title("check.match.title")
-                            .at(c.pos()).args(first, elementName).build(),
+                            .at(c.pos()).args("Some", elementName, first).build(),
                     "`Some` wraps `" + elementName + "`, not `" + first + "`");
         }
-        checkOpenedLayers(c, layers, symbols);
+        checkOpenedLayers(c, layers, symbols, false);
     }
 
-    static void checkOpenedLayers(Ast.Case c, List<String> opened, Symbols symbols) {
+    /** {@code firstOpensTheCase} says the first opened name is the arm's own case, which is where
+     * {@code | X as v} is the spelling to reach for when X turns out not to be a newtype. An inner
+     * layer (and Option's element) is reached through the case, so no such binding replaces it. */
+    static void checkOpenedLayers(Ast.Case c, List<String> opened, Symbols symbols,
+                                  boolean firstOpensTheCase) {
         for (int i = 0; i < opened.size(); i++) {
             String name = opened.get(i);
             TypeName layer = symbols.resolve(name);
             Type inner = layer == null ? null : TypeOps.newtypeInner(layer, symbols);
             if (inner == null) {
-                throw CompileException.of(
+                Diagnostic.Builder d =
                         Diagnostic.of(null, "check.match.newtype.notnewtype").title("check.match.title")
-                                .at(c.pos()).args(name).build(),
+                                .at(c.pos()).args(name);
+                if (i == 0 && firstOpensTheCase) {
+                    d = d.hint("check.match.newtype.notnewtype.hint");
+                }
+                throw CompileException.of(d.build(),
                         "`" + name + "` is not a newtype, so it cannot be opened with `" + name + "(...)`");
             }
             if (i + 1 < opened.size()) {
@@ -251,7 +259,7 @@ public final class MatchElaborator {
                 if (!innerName.equals(next)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.match.newtype.mismatch").title("check.match.title")
-                                    .at(c.pos()).args(next, innerName).build(),
+                                    .at(c.pos()).args(name, innerName, next).build(),
                             "`" + name + "` wraps `" + innerName + "`, not `" + next + "`");
                 }
             }
