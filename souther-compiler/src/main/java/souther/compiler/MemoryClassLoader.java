@@ -9,14 +9,14 @@ import java.util.function.Supplier;
  * unknown to the parent loader. Used to run generated code without writing {@code .class} files:
  * the compiler's compile-time {@code $Ctfe.check} evaluation and {@link Runner}'s behavior driving.
  */
-final class MemoryClassLoader extends ClassLoader {
+public final class MemoryClassLoader extends ClassLoader {
 
     private final Map<String, byte[]> classes;
     /** Classes defined on the fly (a multi-argument fake's base subclass; issue #57), cached so a name
      * is never defined twice — which would be a {@code LinkageError}. */
     private final Map<String, Class<?>> defined = new HashMap<>();
 
-    MemoryClassLoader(Map<String, byte[]> classes, ClassLoader parent) {
+    public MemoryClassLoader(Map<String, byte[]> classes, ClassLoader parent) {
         super(parent);
         this.classes = classes;
     }
