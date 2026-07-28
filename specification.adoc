@@ -222,6 +222,7 @@ module example.businesstrip exposing (
 
 `+exposing+` exposes at type granularity. A public data's `+decoder()+` / `+encoder()+` is always public API (<<jvm-codec>>), so member-level narrowing such as `+出張申請.decoder+` is not written — there is nothing to narrow.
 
+
 When an exposed behavior is a `+>->+` composition, its output SHALL be written in `+exposing+` in the form `+name : cases+` (<<declared-composition-output>>). A composition's output is inferred from its stages (<<composition-with-requirements>>), but at the public boundary a signature is required rather than inference, so that the contract used by another module or by Java does not change silently when an upstream stage changes. Omitting it is a compile error (E1605).
 
 [,text]
@@ -272,9 +273,8 @@ souther compile app/order.sou -d out-app -cp out-lib
 ----
 
 What crosses that boundary is what crosses a boundary within one compilation: `+exposing+` is the
-gate, an imported case may not join a union declared here (<<e1606>>), and a `+let+` may not call an
-imported behavior. A module read this way is not generated again — its classes and its examples
-belong to the build that produced them.
+gate, and an imported case may not join a union declared here (<<e1606>>). A module read this way is
+not generated again — its classes and its examples belong to the build that produced them.
 
 A compiled module records the version of what an importing module reaches. A module whose version is
 not this compiler's is refused, naming the compiler that built it, rather than read and
@@ -828,7 +828,7 @@ data 金額 = Int  invariant 正の数(value)
 data カゴ = { items: List<明細> } invariant List.all(x -> 正の数(x.数量), items)
 ----
 
-What may be called is a `+let+`, not a behavior (<<fn>>). An invariant runs on a data's construction path, where touching the outside world is unacceptable. A behavior may touch the outside world — if no implementation is written, a Java implementation is injected — so it MUST NOT be called from an invariant. To name a business rule, use a `+let+`.
+What may be called is a `+let+`, not a behavior (<<fn>>). An invariant is part of what a type is: it travels to an importing module as the source it was written as, together with the helper `+let+`s it names (<<published-modules>>). It names only what travels with it, so a behavior MUST NOT be called from an invariant whatever its requirement set — including one that requires nothing and is callable from a `+let+` body (<<calling-a-behavior>>). To name a business rule, use a `+let+`.
 
 A `+let+` may be called from an invariant when it satisfies all of the following, all statically decidable.
 
@@ -836,11 +836,11 @@ A `+let+` may be called from an invariant when it satisfies all of the following
 * it constructs no data (the construction set of any helper `+let+` it calls is also empty; <<blocks>>)
 * it is not `+partial+`
 
-The first is decided by reading the declaration. `+let 事前承認する+` does not touch the outside world directly and so is pure in the sense of <<purity>>, but `+behavior 事前承認する+` writes `+requires 現在時刻+`, so its requirement set is non-empty and it MUST NOT be called from an invariant.
+The first is decided by reading the declaration. `+let 事前承認する+` does not touch the outside world directly and so is pure in the sense of <<purity>>, but `+behavior 事前承認する+` writes `+requires 現在時刻+`, so its requirement set is non-empty and that `+let+` MUST NOT be called from an invariant.
 
 A helper `+let+` always satisfies the first and second. To touch the outside world it can only receive a function as an argument (<<fn-declaration>>), and an invariant has no way to pass one. The third is about termination: an invariant is checked on every construction and must terminate. A `+partial+` helper disclaims totality and may loop, so it cannot appear in an invariant. A *total* helper is admissible even when it recurses — the compiler has proven it terminates (<<fn-declaration>>, ADR-0052). This is what lets the list quantifiers `+List.all+` / `+List.any+` / `+List.member+` and the uniqueness checks `+List.distinct+` / `+List.allUniqueBy+` appear in an invariant: each derives from the total stdlib fold `+List.foldFrom+`, which is bounded by the finite list (ADR-0051, ADR-0052). Only a `+partial+` helper in an invariant is a compile error.
 
-Forbidden: Decoder, Encoder, data construction, `+partial+` recursion, non-deterministic processing. Data construction is barred throughout the invariant expression, including inside a quantifier's closure — an invariant observes the value being built, it does not build another. A behavior call is not forbidden separately — an invariant calls a `+let+`, not a behavior (above), and if a `+let+` goes through a behavior that touches the outside world, its requirement set is that much non-empty and is rejected by condition 1. Only pure (empty-requirement-set) computation enters an invariant.
+Forbidden: Decoder, Encoder, data construction, `+partial+` recursion, non-deterministic processing. Data construction is barred throughout the invariant expression, including inside a quantifier's closure — an invariant observes the value being built, it does not build another. A behavior call is barred by the rule above, whether written in the invariant or reached through a `+let+` it calls; and a `+let+` that goes through a behavior touching the outside world has that much of a requirement set and is rejected by condition 1 as well. Only pure (empty-requirement-set) computation enters an invariant.
 
 [#violation-destination]
 === A violation's destination differs inside and outside the boundary
@@ -1325,9 +1325,9 @@ behavior 事前承認する : (申請: 事前承認待ち, 承認者ID: 従業�
     constructs 事前承認済み, 承認権限なし
 ----
 
-What is written is the name of a behavior with no implementation (<<injected-behavior>>), declared in this module or imported from another (<<module>>). Write it if the `+let+` uses that name. Even when used indirectly by passing it to a helper `+let+`, the one passing is you, so you write it.
+What is written is the name of a behavior whose *requirement set is not empty* (<<requirement-propagation>>) — one with no implementation (<<injected-behavior>>), or one whose own `+let+` declares `+requires+` — declared in this module or imported from another (<<modules>>). Write it if the `+let+` uses that name. Even when used indirectly by passing it to a helper `+let+`, the one passing is you, so you write it.
 
-A name that is not an injection target is rejected where the clause is written (<<e1607>>): a behavior with an implementation is composed with `+>->+`, not injected, and a name that was never declared is not a dependency at all.
+A behavior with an empty requirement set is not written here. It depends on nothing, so there is nothing to inject, and it is called directly (<<calling-a-behavior>>). Writing one in `+requires+` is rejected where the clause is written (<<e1607>>), as is a `+>->+` composition — whose requirements are inferred from its stages and are not written, so requiring one would make a caller declare a set that changes when an upstream stage changes — and as is a name that is no behavior in scope.
 
 Only a simple behavior with a `+let+` may have `+requires+`. A behavior with no implementation does not write it: it is the leaf of the dependency, and its name being listed is itself the statement of dependency. A `+>->+` composition does not write it either: it is decided by the union over stages, readable from the stages (<<composition-with-requirements>>).
 
@@ -1385,7 +1385,33 @@ The `+現在時刻+` appearing inside a `+let+` is an argument in either case. T
 
 ==== Checking
 
-The set of behaviors with no implementation that a `+let+` uses and the set written in `+requires+` MUST match. Too few is E1602, too many is E1603 (<<e1602>>, <<e1603>>). An over-declaration erring on the safe side is not admitted either.
+The set of behaviors with a non-empty requirement set that a `+let+` uses and the set written in `+requires+` MUST match. Too few is E1602, too many is E1603 (<<e1602>>, <<e1603>>). An over-declaration erring on the safe side is not admitted either.
+
+[#calling-a-behavior]
+=== Calling a behavior
+
+A `+let+` body may call a behavior. Which ones it may call is decided by one question — the requirement set — and the answer does not depend on where the behavior was declared. A behavior this module declares and one it imported are called the same way.
+
+* An *empty* requirement set: call it by name. Nothing is injected and nothing is written in `+requires+`.
+* A *non-empty* requirement set: write it in `+requires+` and call it through that name (<<requires>>). It arrives already bound, as any requirement does.
+
+[,text]
+----
+behavior 事前承認する : (申請: 事前承認待ち) -> 事前承認済み | 承認権限なし
+    requires 現在時刻
+
+behavior 却下して通知する : (申請: 事前承認待ち) -> 通知済み | 承認権限なし
+    requires 事前承認する
+let 却下して通知する (申請, 事前承認する) = match 事前承認する(申請) with
+    | 事前承認済み 済 -> 通知済み { 宛先 = 済.申請者 }
+    | 承認権限なし 拒 -> 拒
+----
+
+A call yields the behavior's declared output. Where that output is a sum, the caller opens it with `+match+`, and a case it does not handle is its own to declare in its output. Nothing departs on its own: departure is what `+>->+` does (<<type-routing>>), and a call is not a stage.
+
+A behavior's `+constructs+` is its own and adds nothing to its caller's. A helper `+let+` is different — it is not a specification statement and declares no authority, so its construction set folds into the behavior that calls it (<<constructs>>).
+
+Behaviors do not recurse. A behavior MUST NOT reach itself, through calls, through `+requires+`, or through a mixture of the two (<<e1608>>). Recursion is a property of a named module helper (<<fn-rules>>).
 
 [#tuple]
 == Tuples
@@ -1452,6 +1478,7 @@ The body is an expression. `+{ ... }+` is a block expression (<<block-expression
 
 `+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow (as in F# and Elm). Binding a lambda to a named definition (`+let f = (x) -> ...+`) is not adopted.
 
+[#fn-rules]
 ==== Rules
 
 * A `+let+` with a same-named behavior does not write argument types; the type comes from the behavior. A count mismatch is a compile error.
@@ -1582,7 +1609,9 @@ behavior loadAndConvert = findMember >-> toView      // requires not written
 
 This requires the implementation of `+findMember+`. Composing several gives a union. A composition is not made to write it, because it is readable from the stage declarations; the spec DSL also attaches no `+// 依存:+` to a composition.
 
-The call graph is static at every stage, so the requirement set is decided as a concrete set. That no variable enters is what makes this design hold: inference and declaration can be reconciled, and the composition union can be computed, because the set is concrete (<<core-semantics>>).
+A stage and a call differ in who owns the behavior. A `+>->+` composition *builds* its stages, so a stage's requirements become the composition's and accumulate outward. A `+let+` that calls a behavior *receives* it, so the behavior itself is the caller's requirement and its own requirements stay with it (<<calling-a-behavior>>). One behavior may be reached both ways; which a module writes says which relationship it means.
+
+The call graph is static at every stage, so the requirement set is decided as a concrete set. That no variable enters is what makes this design hold: inference and declaration can be reconciled, and the composition union can be computed, because the set is concrete (<<core-semantics>>). A behavior reaching itself would leave nothing to build first, so it is a compile error (<<e1608>>).
 
 This is unchanged by making a `+let+` higher-order.
 
@@ -2708,17 +2737,28 @@ A behavior's output union is generated as a sealed interface its leaf cases impl
 The move is to translate: match the imported behavior's result and return a case of this module. A module boundary is where another context's vocabulary is restated in this one's.
 
 [#e1607]
-=== requires does not name an injection target
+=== requires does not name a dependency
 
 [,text]
 ----
 error E1607:
-`behavior 出荷する` declares `requires 引き当てる`, but `引き当てる` has an
-implementation of its own, so it is not an injection target.
-Remove `引き当てる` from `requires` and compose it with `>->`.
+`behavior 出荷する` declares `requires 引き当てる`, but `引き当てる` requires
+nothing, so there is nothing to inject. Call it directly.
 ----
 
-`+requires+` names a behavior with no implementation of its own, declared here or imported (<<requires>>). A `+let+`-implemented behavior is E1607, and so is a `+>->+` composition — which is its own implementation and takes no `+let+` — and so is a name that is no behavior in scope. All three are reported at the clause, where the name was written.
+`+requires+` names a behavior whose requirement set is not empty, declared here or imported (<<requires>>). A behavior that requires nothing is E1607 — call it instead (<<calling-a-behavior>>) — and so is a `+>->+` composition, whose requirements are inferred from its stages rather than written, and so is a name that is no behavior in scope. All three are reported at the clause, where the name was written.
+
+[#e1608]
+=== A behavior reaches itself
+
+[,text]
+----
+error E1608:
+`behavior 出荷する` reaches itself: 出荷する -> 引き当てる -> 出荷する.
+A behavior does not recurse; write the recursion as a helper `let`.
+----
+
+The cycle is reported wherever it closes, and the edges may be calls, `+requires+`, `+>->+` stages, or a mixture of them (<<calling-a-behavior>>). A `+requires+` cycle leaves nothing to build first, and a call cycle does not terminate. Recursion belongs to a named module helper, where it is proven total (<<fn-rules>>, ADR-0052).
 
 [#e1305]
 === An injected behavior constructs an uncreatable data
