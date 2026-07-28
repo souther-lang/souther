@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -43,7 +45,7 @@ public final class TypeOps {
     public static Type successType(Ast.RetType ret, Symbols symbols) {
         List<Type> members = new ArrayList<>();
         for (Ast.TypeRef t : ret.cases()) {
-            members.add(resolveType(t, symbols));
+            members.add(t.denotes());
         }
         if (members.size() == 1) {
             return members.get(0);
@@ -112,7 +114,7 @@ public final class TypeOps {
         // across runs rather than dependent on the symbol map's iteration order.
         String chosen = null;
         for (Ast.Def d : symbols.declaredIn(ref.name().module()).values()) {
-            if (d instanceof Ast.SumData sum && sum.cases().contains(ref.name().name())
+            if (d instanceof Ast.SumData sum && caseNames(sum).contains(ref.name())
                     && (chosen == null || sum.name().compareTo(chosen) < 0)) {
                 chosen = sum.name();
             }
@@ -138,7 +140,7 @@ public final class TypeOps {
             if (!visiting.add(ref.name())) {
                 return List.of();   // a sum reaching itself; DataChecker reports it, this must terminate
             }
-            names = caseNames(ref.name(), sum);
+            names = caseNames(sum);
         } else if (t instanceof Type.Union union) {
             names = List.copyOf(union.members());
         } else {
@@ -157,13 +159,11 @@ public final class TypeOps {
         return leaves;
     }
 
-    /** A sum's cases, canonical. A case is declared in the same module as the sum that lists it — the
-     * generated sum is a sealed interface, which only its own package can implement — so the sum's
-     * module is the case's. */
-    public static List<TypeName> caseNames(TypeName sumName, Ast.SumData sum) {
+    /** A sum's cases: what each name it lists denotes. */
+    public static List<TypeName> caseNames(Ast.SumData sum) {
         List<TypeName> names = new ArrayList<>();
-        for (String c : sum.cases()) {
-            names.add(sumName.sibling(c));
+        for (Ast.Name c : sum.cases()) {
+            names.add(c.denotes());
         }
         return names;
     }
@@ -367,7 +367,7 @@ public final class TypeOps {
                 if (!visiting.add(name)) {
                     continue;   // a sum reaching itself; DataChecker reports it, this must terminate
                 }
-                for (TypeName caseName : caseNames(name, s)) {
+                for (TypeName caseName : caseNames(s)) {
                     collectLeafCases(Type.ref(caseName), symbols, out, visiting);
                 }
             } else {
@@ -378,35 +378,27 @@ public final class TypeOps {
 
     /** Effective field name → type (included data flattened first, then own fields). */
     public static Map<String, Type> fieldTypes(Ast.Data data, Symbols symbols) {
-        String home = symbols.moduleOf(data);
         Map<String, Type> types = new LinkedHashMap<>();
-        for (Ast.Include inc : data.includes()) {
-            TypeName included = symbols.resolveIn(home, inc.name());
-            if (included == null) {
-                // Nothing here denotes the name. This is the same miss a field's type reports, so it
-                // is reported the same way, at the name in the spread (issue #154) — reaching the
-                // "not a product data" case below would say the wrong thing about a name that
-                // denotes nothing at all.
-                throw unknownType(inc.name(), inc.pos(), symbols);
-            }
+        for (Ast.Name inc : data.includes()) {
+            TypeName included = inc.denotes();
             if (!(symbols.get(included) instanceof Ast.Data id)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.spread.notproduct").title("check.construct.title")
-                                .at(inc.pos(), inc.name().length()).args(inc.name()).build(),
-                        "cannot spread `..." + inc.name() + "` (not a product data)");
+                                .at(inc.pos(), inc.written().length()).args(inc.written()).build(),
+                        "cannot spread `..." + inc.written() + "` (not a product data)");
             }
             for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
                 if (types.put(e.getKey(), e.getValue()) != null) {
                     throw CompileException.of(
                             Diagnostic.of("E1004", "e1004.msg").at(data.pos())
-                                    .args(e.getKey(), inc.name(), data.name()).build(),
-                            "Field `" + e.getKey() + "` from `..." + inc.name() + "` conflicts with a field of `"
+                                    .args(e.getKey(), inc.written(), data.name()).build(),
+                            "Field `" + e.getKey() + "` from `..." + inc.written() + "` conflicts with a field of `"
                                     + data.name() + "`.");
                 }
             }
         }
         for (Ast.Field f : data.fields()) {
-            if (types.put(f.name(), resolveTypeIn(home, f.type(), symbols)) != null) {
+            if (types.put(f.name(), f.type().denotes()) != null) {
                 throw CompileException.of(
                         Diagnostic.of("E1004", "e1004.dup").at(f.pos())
                                 .args(f.name(), data.name()).build(),
@@ -424,14 +416,13 @@ public final class TypeOps {
      * belong to the declaring module's own check, which has already run.
      */
     public static Type fieldType(Ast.Data data, String field, Symbols symbols) {
-        String home = symbols.moduleOf(data);
         for (Ast.Field f : data.fields()) {
             if (f.name().equals(field)) {
-                return resolveTypeIn(home, f.type(), symbols);
+                return f.type().denotes();
             }
         }
-        for (Ast.Include inc : data.includes()) {
-            Ast.Data included = spreadTarget(home, inc, symbols);
+        for (Ast.Name inc : data.includes()) {
+            Ast.Data included = spreadTarget(inc, symbols);
             if (included != null) {
                 Type t = fieldType(included, field, symbols);
                 if (t != null) {
@@ -445,9 +436,8 @@ public final class TypeOps {
     /** The product data a spread names, or null when nothing here denotes it or what it denotes is
      * not a product. Only {@link #fieldTypes} turns those into a diagnostic, and every declared data
      * goes through it; the readers asked about one field or one invariant answer for what they see. */
-    private static Ast.Data spreadTarget(String home, Ast.Include inc, Symbols symbols) {
-        TypeName name = symbols.resolveIn(home, inc.name());
-        return name != null && symbols.get(name) instanceof Ast.Data d ? d : null;
+    private static Ast.Data spreadTarget(Ast.Name inc, Symbols symbols) {
+        return symbols.get(inc.denotes()) instanceof Ast.Data d ? d : null;
     }
 
     /** Whether a data has a field of that name, without resolving any type. */
@@ -457,8 +447,8 @@ public final class TypeOps {
                 return true;
             }
         }
-        for (Ast.Include inc : data.includes()) {
-            Ast.Data included = spreadTarget(symbols.moduleOf(data), inc, symbols);
+        for (Ast.Name inc : data.includes()) {
+            Ast.Data included = spreadTarget(inc, symbols);
             if (included != null && hasField(included, field, symbols)) {
                 return true;
             }
@@ -469,8 +459,8 @@ public final class TypeOps {
     /** All invariants that apply to a data: included data's invariants first, then its own. */
     public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Symbols symbols) {
         List<Ast.Expr> invs = new ArrayList<>();
-        for (Ast.Include inc : data.includes()) {
-            Ast.Data id = spreadTarget(symbols.moduleOf(data), inc, symbols);
+        for (Ast.Name inc : data.includes()) {
+            Ast.Data id = spreadTarget(inc, symbols);
             if (id != null) {
                 invs.addAll(effectiveInvariants(id, symbols));
             }
@@ -607,18 +597,17 @@ public final class TypeOps {
         };
     }
 
-    public static Type resolveType(Ast.TypeRef ref, Symbols symbols) {
-        return resolveTypeIn(symbols.module(), ref, symbols);
-    }
-
-    /** Resolves a type written inside {@code inModule} — which is the module being compiled for
-     * everything it declares itself, and the declaring module for a type read out of an imported
-     * data (spec 4). */
-    public static Type resolveTypeIn(String inModule, Ast.TypeRef ref, Symbols symbols) {
+    /**
+     * The type {@code ref} denotes, computed from the reference and the scope it was written in. The
+     * one place a written type becomes a {@link Type}; {@code Resolve} calls it once per reference and
+     * everything else reads {@link Ast.TypeRef#denotes()}. Its own arguments are already resolved, so
+     * a nested reference is read rather than recomputed.
+     */
+    static Type denoted(Ast.TypeRef ref, Symbols symbols) {
         if (ref.isTuple()) {
             List<Type> elems = new ArrayList<>();
             for (Ast.TypeRef e : ref.tupleElems()) {
-                elems.add(resolveTypeIn(inModule, e, symbols));
+                elems.add(e.denotes());
             }
             return Type.tuple(elems);   // (A, B, ...) — a helper/stdlib signature only (ADR-0036)
         }
@@ -630,59 +619,40 @@ public final class TypeOps {
             case "Date" -> Type.DATE;
             case "DateTime" -> Type.DATETIME;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec 7.3, 9.4).
-            case "List" -> {
-                if (ref.arg() == null) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.typearg.list").title("check.typearg.title")
-                                    .at(ref.pos(), 4).build(),
-                            "List needs a type argument, e.g. List<Int>");
-                }
-                yield Type.list(resolveTypeIn(inModule, ref.arg(), symbols));
-            }
-            case "Set" -> {
-                if (ref.arg() == null) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.typearg.set").title("check.typearg.title")
-                                    .at(ref.pos(), 3).build(),
-                            "Set needs a type argument, e.g. Set<String>");
-                }
-                yield Type.set(resolveTypeIn(inModule, ref.arg(), symbols));
-            }
-            case "Option" -> {
-                if (ref.arg() == null) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.typearg.option").title("check.typearg.title")
-                                    .at(ref.pos(), 6).build(),
-                            "Option needs a type argument");
-                }
-                yield Type.option(resolveTypeIn(inModule, ref.arg(), symbols));
-            }
+            case "List" -> Type.list(typeArg(ref, "list", 4, "List needs a type argument, e.g. List<Int>"));
+            case "Set" -> Type.set(typeArg(ref, "set", 3, "Set needs a type argument, e.g. Set<String>"));
+            case "Option" -> Type.option(typeArg(ref, "option", 6, "Option needs a type argument"));
             case "Map" -> {
-                if (ref.arg() == null) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.typearg.map").title("check.typearg.title")
-                                    .at(ref.pos(), 3).build(),
-                            "Map needs a value type, e.g. Map<String, Int>");
-                }
                 // The key is not restricted here: a map that stays inside a behavior body renders
                 // nothing, so it may be keyed by any value (`List.groupBy` already builds such maps).
                 // What a key must satisfy is the boundary — see #isBoundaryMapKey, checked where a
                 // type is a data field or a behavior's input/output.
-                Type key = ref.tupleElems() == null
-                        ? Type.STRING : resolveTypeIn(inModule, ref.tupleElems().get(0), symbols);
-                yield Type.map(key, resolveTypeIn(inModule, ref.arg(), symbols));
+                Type value = typeArg(ref, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
+                Type key = ref.tupleElems() == null ? Type.STRING : ref.tupleElems().get(0).denotes();
+                yield Type.map(key, value);
             }
             default -> {
                 if (ref.name().startsWith("'")) {
                     yield Type.var(ref.name());   // a type variable, admitted only in the core
                 }
-                TypeName resolved = symbols.resolveIn(inModule, ref.name());
+                TypeName resolved = symbols.resolve(ref.name());
                 if (resolved != null) {
                     yield Type.ref(resolved);
                 }
                 throw unknownType(ref, symbols);
             }
         };
+    }
+
+    /** The single type argument of a built-in constructor, or the error that says it is missing. */
+    private static Type typeArg(Ast.TypeRef ref, String key, int width, String message) {
+        if (ref.arg() == null) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.typearg." + key).title("check.typearg.title")
+                            .at(ref.pos(), width).build(),
+                    message);
+        }
+        return ref.arg().denotes();
     }
 
     /**
@@ -694,7 +664,7 @@ public final class TypeOps {
         return unknownType(ref.name(), ref.pos(), symbols);
     }
 
-    private static CompileException unknownType(String written, SourcePos pos, Symbols symbols) {
+    static CompileException unknownType(String written, SourcePos pos, Symbols symbols) {
         int dot = written.lastIndexOf('.');
         if (dot >= 0) {
             String qualifier = written.substring(0, dot);

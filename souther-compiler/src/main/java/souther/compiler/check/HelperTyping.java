@@ -7,10 +7,13 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -375,8 +378,8 @@ public final class HelperTyping {
         }
 
         /** The parameter written as a field of a construction takes that field's type. */
-        private void pinFromInits(String typeName, List<Ast.FieldInit> inits, String name) {
-            if (!(symbols.declaration(typeName) instanceof Ast.Data data)) {
+        private void pinFromInits(Ast.Name typeName, List<Ast.FieldInit> inits, String name) {
+            if (!(symbols.get(typeName.denotes()) instanceof Ast.Data data)) {
                 return;
             }
             for (Ast.FieldInit init : inits) {
@@ -495,8 +498,9 @@ public final class HelperTyping {
         if (e instanceof Ast.NewData nd) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.invariant.construct").title("check.invariant.invalid.title")
-                            .at(nd.pos(), nd.typeName().length()).args(data, nd.typeName()).build(),
-                    "the invariant of `" + data + "` constructs `" + nd.typeName()
+                            .at(nd.pos(), nd.typeName().written().length())
+                            .args(data, nd.typeName().written()).build(),
+                    "the invariant of `" + data + "` constructs `" + nd.typeName().written()
                             + "`, but an invariant may not construct a data — it observes the value being"
                             + " built, it does not build another (spec §invariant-expressions)");
         }
@@ -676,10 +680,10 @@ public final class HelperTyping {
      * closure follows recursive-helper calls: a helper's set includes what the recursive helpers it
      * calls construct. Non-recursive helper calls are already inlined into the bodies here.
      */
-    static Map<String, Set<String>> recursiveHelperConstructs(
+    static Map<String, Map<TypeName, String>> recursiveHelperConstructs(
             Set<String> recursive, Map<String, Ast.Expr> loweredBodies,
             HelperInliner inliner, Symbols symbols) {
-        Map<String, Set<String>> own = new HashMap<>();
+        Map<String, Map<TypeName, String>> own = new HashMap<>();
         Map<String, Set<String>> calls = new HashMap<>();
         for (String h : recursive) {
             Ast.Expr body = loweredBodies.get(h);
@@ -687,16 +691,16 @@ public final class HelperTyping {
             for (Ast.FnParam p : inliner.helper(h).params()) {
                 bound.add(p.name());
             }
-            Set<String> c = new HashSet<>();
+            Map<TypeName, String> c = new LinkedHashMap<>();
             DataChecker.collectConstructs(body, c, symbols, bound, Map.of());   // recursive calls opaque here
             own.put(h, c);
             Set<String> callees = new LinkedHashSet<>();
             collectCalls(body, callees, recursive);
             calls.put(h, callees);
         }
-        Map<String, Set<String>> full = new HashMap<>();
+        Map<String, Map<TypeName, String>> full = new HashMap<>();
         for (String h : recursive) {
-            full.put(h, new HashSet<>(own.get(h)));
+            full.put(h, new LinkedHashMap<>(own.get(h)));
         }
         // fixpoint: propagate each callee's constructions until nothing new is added (handles mutual
         // recursion, whose call graph has cycles).
@@ -705,8 +709,10 @@ public final class HelperTyping {
             changed = false;
             for (String h : recursive) {
                 for (String g : calls.get(h)) {
-                    if (full.get(h).addAll(full.get(g))) {
-                        changed = true;
+                    for (Map.Entry<TypeName, String> c : full.get(g).entrySet()) {
+                        if (full.get(h).putIfAbsent(c.getKey(), c.getValue()) == null) {
+                            changed = true;
+                        }
                     }
                 }
             }

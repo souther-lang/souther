@@ -3,7 +3,8 @@ package souther.compiler.codegen;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
@@ -54,6 +55,7 @@ final class CodecGen {
     enum Src { NEUTRAL, JSON, JOOQ }
 
     private ClassDesc cd(String typeName) { return ctx.cd(typeName); }
+    private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
     private ClassDesc[] fieldDescs(Map<String, Type> fields) { return JvmTypes.fieldDescs(fields, ctx); }
     private void unbox(CodeBuilder code, Type type, int slot) { JvmTypes.unbox(code, type, slot, ctx); }
@@ -133,7 +135,7 @@ final class CodecGen {
      *  cannot collide with a data whose name is {@code Date}. */
     private static String rekeyMethod(Ast.DecRef key) {
         return switch (key) {
-            case Ast.DataDecRef d -> "__rekey$" + d.typeName().replace('.', '$');
+            case Ast.DataDecRef d -> "__rekey$" + d.typeName().denotes().qualified().replace('.', '$');
             case Ast.PrimDecRef p -> "__rekey$$" + p.kind();
             default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
         };
@@ -158,13 +160,13 @@ final class CodecGen {
         return switch (key) {
             case Ast.DataEnc d -> {
                 DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                        DirectMethodHandleDesc.Kind.VIRTUAL, cd(d.typeName()), "value", MTD_value);
+                        DirectMethodHandleDesc.Kind.VIRTUAL, cd(d.typeName().denotes()), "value", MTD_value);
                 yield DynamicCallSiteDesc.of(
                         BSM_METAFACTORY, "apply",
                         MethodTypeDesc.of(CD_Function),                  // no captures: () -> Function
                         MethodTypeDesc.of(CD_Object, CD_Object),         // samMethodType: (Object) -> Object
                         impl,                                            // implMethod: K.value() -> String
-                        MethodTypeDesc.of(CD_String, cd(d.typeName()))); // instantiatedMethodType: (K) -> String
+                        MethodTypeDesc.of(CD_String, cd(d.typeName().denotes()))); // (K) -> String
             }
             // a temporal renders as its ISO form, which is its `toString` — the same rendering an
             // IsoTextRaw field gets
@@ -187,8 +189,9 @@ final class CodecGen {
 
     /** Invokes a type's static {@code decoder()}/{@code encoder()} factory, as an interface
      * method reference when the type is a sum (its factory lives on a sealed interface). */
-    private void invokeCodec(CodeBuilder code, String typeName, String method, MethodTypeDesc mtd) {
-        code.invokestatic(cd(typeName), method, mtd, symbols.declaration(typeName) instanceof Ast.SumData);
+    private void invokeCodec(CodeBuilder code, Ast.Name typeName, String method, MethodTypeDesc mtd) {
+        code.invokestatic(cd(typeName.denotes()), method, mtd,
+                symbols.get(typeName.denotes()) instanceof Ast.SumData);
     }
 
     byte[] generateSumEncoder(Ast.SumData sum, Ast.SumEncoder enc) {
@@ -202,7 +205,7 @@ final class CodecGen {
             // discriminator key = case tag (spec 11.2).
             cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
                 for (Ast.EncVariant v : enc.variants()) {
-                    ClassDesc caseCd = cd(v.caseType());
+                    ClassDesc caseCd = cd(v.caseType().denotes());
                     code.aload(1);
                     code.instanceOf(caseCd);
                     Label next = code.newLabel();
@@ -391,8 +394,8 @@ final class CodecGen {
         }
         Ast.Def def = symbols.declaration(typeName);
         if (def instanceof Ast.SumData sum) {
-            for (String caseName : sum.cases()) {
-                if (!jsonOk(caseName, seen)) return false;
+            for (Ast.Name caseName : sum.cases()) {
+                if (!jsonOk(caseName.denotes().qualified(), seen)) return false;
             }
             return true;
         }
@@ -419,8 +422,8 @@ final class CodecGen {
     boolean recordCompatible(String typeName) {
         Ast.Def def = symbols.declaration(typeName);
         if (def instanceof Ast.SumData sum) {
-            for (String caseName : sum.cases()) {
-                Ast.Def caseDef = symbols.declaration(caseName);
+            for (Ast.Name caseName : sum.cases()) {
+                Ast.Def caseDef = symbols.get(caseName.denotes());
                 if (caseDef instanceof Ast.UnitData) continue;
                 if (!(caseDef instanceof Ast.Data d) || !isFlatObject(d)) return false;
             }
@@ -635,7 +638,14 @@ final class CodecGen {
     /** True when the type's decoder reads from a {@code Map} (object/sum), false for a bare
      * value (newtype/unit). Used to bridge nested field-value decoders with {@code nested()}. */
     boolean isMapInput(String typeName) {
-        Ast.Def def = symbols.declaration(typeName);
+        return isMapInputOf(symbols.declaration(typeName));
+    }
+
+    boolean isMapInput(Ast.Name typeName) {
+        return isMapInputOf(symbols.get(typeName.denotes()));
+    }
+
+    private boolean isMapInputOf(Ast.Def def) {
         if (def instanceof Ast.SumData) {
             return true;
         }
@@ -828,7 +838,7 @@ final class CodecGen {
     private Type bindType(Ast.DecRef ref) {
         return switch (ref) {
             case Ast.PrimDecRef p -> TypeOps.primType(p.kind());
-            case Ast.DataDecRef d -> Type.ref(symbols.resolve(d.typeName()));
+            case Ast.DataDecRef d -> Type.ref(d.typeName().denotes());
             case Ast.ListDecRef l -> Type.list(bindType(l.element()));
             case Ast.SetDecRef s -> Type.set(bindType(s.element()));
             case Ast.OptionDecRef o -> Type.option(bindType(o.element()));

@@ -6,8 +6,8 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Type;
-import souther.compiler.check.TypeName;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
@@ -100,8 +100,9 @@ public final class Backend {
         Map<String, List<String>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
-                for (String caseName : sum.cases()) {
-                    caseToSums.computeIfAbsent(caseName, k -> new ArrayList<>()).add(sum.name());
+                for (Ast.Name caseName : sum.cases()) {
+                    caseToSums.computeIfAbsent(caseName.denotes().name(), k -> new ArrayList<>())
+                            .add(sum.name());
                 }
             }
         }
@@ -226,17 +227,19 @@ public final class Backend {
                 // pass-through output (会員) by shape alone.
                 List<String> unitCases = new ArrayList<>();
                 for (Ast.TypeRef t : spec.ret().cases()) {
-                    if (b.symbols.declaration(t.name()) instanceof Ast.UnitData) {
-                        unitCases.add(t.name());
+                    if (t.denotes() instanceof Type.Ref r
+                            && b.symbols.get(r.name()) instanceof Ast.UnitData) {
+                        unitCases.add(r.name().name());
                     }
                 }
                 List<Ast.Data> dataConstructs = new ArrayList<>();
-                Set<String> seenConstruct = new HashSet<>();
+                Set<TypeName> seenConstruct = new HashSet<>();
                 if (spec.constructs() != null) {
-                    for (String tn : spec.constructs()) {
+                    for (Ast.Name tn : spec.constructs()) {
                         // a field-bearing data or newtype; de-duplicated so a repeated `constructs`
                         // entry does not emit the factory method twice (a duplicate-method class file)
-                        if (b.symbols.declaration(tn) instanceof Ast.Data data && seenConstruct.add(tn)) {
+                        if (b.symbols.get(tn.denotes()) instanceof Ast.Data data
+                                && seenConstruct.add(tn.denotes())) {
                             dataConstructs.add(data);
                         }
                     }

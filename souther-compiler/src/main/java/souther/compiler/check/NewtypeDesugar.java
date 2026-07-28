@@ -1,8 +1,9 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.ast.Ast;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +35,8 @@ public final class NewtypeDesugar {
         return switch (e) {
             case Ast.Call call -> {
                 List<Ast.Expr> args = mapExprs(call.args(), symbols);
-                if (symbols.declaration(call.fn()) instanceof Ast.Data nt && nt.newtype()) {
+                TypeName built = symbols.resolve(call.fn());
+                if (built != null && symbols.get(built) instanceof Ast.Data nt && nt.newtype()) {
                     if (args.size() != 1) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.newtype.arity").title("check.arity.title")
@@ -43,7 +45,8 @@ public final class NewtypeDesugar {
                                 "`" + call.fn() + "` wraps one value, but is applied to " + args.size()
                                         + " argument(s)");
                     }
-                    yield new Ast.NewData(call.fn(),
+                    yield new Ast.NewData(
+                            new Ast.Name(call.fn(), built, call.pos()),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), call.pos());
                 }

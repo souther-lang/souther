@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.types.Type;
 import java.util.List;
 
 /**

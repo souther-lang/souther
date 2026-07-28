@@ -6,6 +6,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -52,16 +54,12 @@ public final class DataChecker {
     }
 
     private static void collectConstChecks(Ast.Expr e, Symbols symbols, List<ConstCheck> out) {
-        if (e instanceof Ast.NewData nd && symbols.declaration(nd.typeName()) instanceof Ast.Data nt
-                && nt.newtype() && isInvariantBearing(nd.typeName(), symbols)) {
+        if (e instanceof Ast.NewData nd && symbols.get(nd.typeName().denotes()) instanceof Ast.Data nt
+                && nt.newtype() && isInvariantBearing(nd.typeName().denotes(), symbols)) {
             CallElaborator.newtypeConstantArg(nd).ifPresent(v ->
-                    out.add(new ConstCheck(nd.typeName(), symbols.resolve(nd.typeName()), v, nd.pos())));
+                    out.add(new ConstCheck(nd.typeName().written(), nd.typeName().denotes(), v, nd.pos())));
         }
         TypeChecker.forEachChild(e, c -> collectConstChecks(c, symbols, out));
-    }
-
-    public static boolean isInvariantBearing(String typeName, Symbols symbols) {
-        return isInvariantBearing(symbols.resolve(typeName), symbols);
     }
 
     public static boolean isInvariantBearing(TypeName typeName, Symbols symbols) {
@@ -76,8 +74,9 @@ public final class DataChecker {
      * construction only when nothing has bound it — a local of the same name wins (spec 8.4).
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
-    static void collectConstructs(Ast.Expr e, Set<String> out, Symbols symbols,
-                                          Set<String> bound, Map<String, Set<String>> recConstructs) {
+    static void collectConstructs(Ast.Expr e, Map<TypeName, String> out, Symbols symbols,
+                                          Set<String> bound,
+                                          Map<String, Map<TypeName, String>> recConstructs) {
         switch (e) {
             case Ast.LetIn li -> {
                 collectConstructs(li.value(), out, symbols, bound, recConstructs);
@@ -86,7 +85,7 @@ public final class DataChecker {
                 collectConstructs(li.body(), out, symbols, inner, recConstructs);
             }
             case Ast.NewData nd -> {
-                out.add(nd.typeName());
+                out.putIfAbsent(nd.typeName().denotes(), nd.typeName().written());
                 for (Ast.FieldInit init : nd.inits()) {
                     collectConstructs(init.value(), out, symbols, bound, recConstructs);
                 }
@@ -97,9 +96,9 @@ public final class DataChecker {
             case Ast.Call call -> {
                 // a recursive helper is not inlined, so its own (transitive) constructions are
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be.
-                Set<String> viaHelper = recConstructs.get(call.fn());
+                Map<TypeName, String> viaHelper = recConstructs.get(call.fn());
                 if (viaHelper != null) {
-                    out.addAll(viaHelper);
+                    viaHelper.forEach(out::putIfAbsent);
                 }
                 call.args().forEach(a -> collectConstructs(a, out, symbols, bound, recConstructs));
             }
@@ -136,7 +135,8 @@ public final class DataChecker {
             }
             // a bare name that resolves to a unit data is that unit's construction (spec 8.4)
             case Ast.Var v when !bound.contains(v.name())
-                    && symbols.declaration(v.name()) instanceof Ast.UnitData -> out.add(v.name());
+                    && symbols.declaration(v.name()) instanceof Ast.UnitData ->
+                    out.putIfAbsent(symbols.resolve(v.name()), v.name());
             case Ast.IntLit _ -> { }
             case Ast.DecimalLit _ -> { }
             case Ast.StringLit _ -> { }
@@ -149,23 +149,30 @@ public final class DataChecker {
      * meaningless and, left to codegen, would emit a duplicate JVM member — a duplicate method,
      * field, or implemented interface, i.e. a malformed class file. */
     static void rejectDuplicateNames(List<String> names, String where, SourcePos pos) {
-        rejectDuplicateNames(names, where, pos, n -> n);
+        Set<String> seen = new HashSet<>();
+        for (String n : names) {
+            if (!seen.add(n)) {
+                throw duplicate(n, where, pos);
+            }
+        }
+    }
+
+    private static CompileException duplicate(String written, String where, SourcePos pos) {
+        return CompileException.of(
+                Diagnostic.of(null, "check.dup.name").title("check.duplicate.title")
+                        .at(pos).args(written, where).build(),
+                "`" + written + "` is listed more than once in " + where);
     }
 
     /**
-     * As above, but two entries are the same when {@code identity} maps them to the same thing. A
-     * list of type names admits two spellings of one type — `Amount` an import brings in and
-     * `up.Amount` — and listing both is the duplicate that a spelling comparison would miss.
+     * As above for a list of type names. Two entries are the same when they denote one type, so
+     * `Amount` an import brings in and `up.Amount` are the duplicate a spelling comparison misses.
      */
-    static void rejectDuplicateNames(List<String> names, String where, SourcePos pos,
-                                     java.util.function.UnaryOperator<String> identity) {
-        Set<String> seen = new HashSet<>();
-        for (String n : names) {
-            if (!seen.add(identity.apply(n))) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.dup.name").title("check.duplicate.title")
-                                .at(pos).args(n, where).build(),
-                        "`" + n + "` is listed more than once in " + where);
+    static void rejectDuplicateTypes(List<Ast.Name> names, String where, SourcePos pos) {
+        Set<TypeName> seen = new HashSet<>();
+        for (Ast.Name n : names) {
+            if (!seen.add(n.denotes())) {
+                throw duplicate(n.written(), where, pos);
             }
         }
     }
@@ -186,47 +193,59 @@ public final class DataChecker {
      * it has no leaf to dispatch a codec over and no case list a {@code match} could be exhaustive
      * against. Reported here rather than left to the walks, which would recurse until the stack ran
      * out — codec derivation runs before this check and stops at the repeat for the same reason. */
-    private static List<String> sumCycle(String target, Symbols symbols,
-                                         LinkedHashSet<String> path) {
-        if (!(symbols.declaration(path.isEmpty() ? target : last(path)) instanceof Ast.SumData s)) {
+    private static List<String> sumCycle(TypeName target, Symbols symbols,
+                                         LinkedHashSet<TypeName> path) {
+        if (!(symbols.get(path.isEmpty() ? target : last(path)) instanceof Ast.SumData s)) {
             return null;
         }
-        for (String caseName : s.cases()) {
-            if (caseName.equals(target)) {
-                List<String> out = new ArrayList<>(path);
-                out.add(caseName);
+        for (Ast.Name caseName : s.cases()) {
+            if (target.equals(caseName.denotes())) {
+                List<String> out = new ArrayList<>();
+                for (TypeName seen : path) {
+                    out.add(seen.name());
+                }
+                out.add(caseName.written());
                 return out;
             }
-            if (symbols.declaration(caseName) instanceof Ast.SumData && path.add(caseName)) {
+            if (symbols.get(caseName.denotes()) instanceof Ast.SumData && path.add(caseName.denotes())) {
                 List<String> found = sumCycle(target, symbols, path);
                 if (found != null) {
                     return found;
                 }
-                path.remove(caseName);
+                path.remove(caseName.denotes());
             }
         }
         return null;
     }
 
-    private static String last(LinkedHashSet<String> path) {
-        String out = null;
-        for (String s : path) {
-            out = s;
+    private static TypeName last(LinkedHashSet<TypeName> path) {
+        TypeName out = null;
+        for (TypeName t : path) {
+            out = t;
         }
         return out;
     }
 
     static void checkSum(Ast.SumData sum, Symbols symbols) {
-        rejectDuplicateNames(sum.cases(), "the sum `" + sum.name() + "`", sum.pos());
-        for (String caseName : sum.cases()) {
-            if (symbols.resolve(caseName) == null) {
+        rejectDuplicateTypes(sum.cases(), "the sum `" + sum.name() + "`", sum.pos());
+        // A generated sum is a sealed interface, and its `permits` is settled when its own module is
+        // generated — a case of another module cannot implement it, so it would be permitted without
+        // being a member: no value satisfies the type and an exhaustive switch over it has no arms
+        // (ADR-0057, the declared-sum counterpart of E1606).
+        for (Ast.Name c : sum.cases()) {
+            if (symbols.isForeign(c.denotes())) {
                 throw CompileException.of(
-                        Diagnostic.of(null, "check.sum.unknowncase").title("check.sum.title")
-                                .at(sum.pos()).args(caseName, sum.name()).build(),
-                        "unknown case `" + caseName + "` in sum `" + sum.name() + "`");
+                        Diagnostic.of("E1606", "check.sum.foreigncase").title("check.sum.title")
+                                .at(c.pos(), c.written().length())
+                                .args(c.written(), sum.name(), c.denotes().module())
+                                .hint("check.sum.foreigncase.hint").build(),
+                        "`" + c.written() + "` is declared in `" + c.denotes().module() + "`, so it"
+                                + " cannot be a case of `" + sum.name() + "` — a sum's cases are"
+                                + " declared with it; consume it at the boundary, or re-express it as"
+                                + " a case of this module");
             }
         }
-        List<String> cycle = sumCycle(sum.name(), symbols, new LinkedHashSet<>());
+        List<String> cycle = sumCycle(symbols.own(sum.name()), symbols, new LinkedHashSet<>());
         if (cycle != null) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.sum.cycle").title("check.sum.title")
@@ -239,12 +258,12 @@ public final class DataChecker {
             // a derived codec dispatches over the leaves, so a nested sum's cases count too (8.3, 10.3)
             Set<TypeName> dispatchable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
             for (Ast.Variant v : disc.variants()) {
-                Ast.Def caseDef = symbols.declaration(v.caseType());
-                if (caseDef == null || !dispatchable.contains(symbols.resolve(v.caseType()))) {
+                Ast.Def caseDef = symbols.get(v.caseType().denotes());
+                if (!dispatchable.contains(v.caseType().denotes())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.notcase").title("check.codec.title")
-                                    .at(v.pos()).args(v.caseType(), sum.name()).build(),
-                            "variant `" + v.caseType() + "` is not a case of `" + sum.name() + "`");
+                                    .at(v.pos()).args(v.caseType().written(), sum.name()).build(),
+                            "variant `" + v.caseType().written() + "` is not a case of `" + sum.name() + "`");
                 }
                 // a unit-data case has an implicit (field-less) decoder generated on its class;
                 // a case may itself be a sum (spec 8.3's nested `自社負担 | 先方負担`)
@@ -254,8 +273,8 @@ public final class DataChecker {
                 if (!caseDecodes) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.needdecoder").title("check.codec.title")
-                                    .at(v.pos()).args(v.caseType()).build(),
-                            "variant `" + v.caseType() + "` needs a decoder");
+                                    .at(v.pos()).args(v.caseType().written()).build(),
+                            "variant `" + v.caseType().written() + "` needs a decoder");
                 }
             }
         });
@@ -263,23 +282,23 @@ public final class DataChecker {
             Set<TypeName> covered = new HashSet<>();
             Set<TypeName> encodable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
             for (Ast.EncVariant v : enc.variants()) {
-                if (!encodable.contains(symbols.resolve(v.caseType()))) {
+                if (!encodable.contains(v.caseType().denotes())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.notcase").title("check.codec.title")
-                                    .at(v.pos()).args(v.caseType(), sum.name()).build(),
-                            "`" + v.caseType() + "` is not a case of `" + sum.name() + "`");
+                                    .at(v.pos()).args(v.caseType().written(), sum.name()).build(),
+                            "`" + v.caseType().written() + "` is not a case of `" + sum.name() + "`");
                 }
-                Ast.Def caseDef = symbols.declaration(v.caseType());
+                Ast.Def caseDef = symbols.get(v.caseType().denotes());
                 boolean caseEncodes = caseDef instanceof Ast.UnitData
                         || (caseDef instanceof Ast.Data d && d.encoder().isPresent())
                         || (caseDef instanceof Ast.SumData s && s.encoder().isPresent());
                 if (!caseEncodes) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.needencoder").title("check.codec.title")
-                                    .at(v.pos()).args(v.caseType()).build(),
-                            "case `" + v.caseType() + "` needs an encoder");
+                                    .at(v.pos()).args(v.caseType().written()).build(),
+                            "case `" + v.caseType().written() + "` needs an encoder");
                 }
-                covered.add(symbols.resolve(v.caseType()));
+                covered.add(v.caseType().denotes());
             }
             for (TypeName caseName : encodable) {
                 if (!covered.contains(caseName)) {
@@ -445,16 +464,17 @@ public final class DataChecker {
             case Ast.SetDecRef s -> Type.set(decRefType(s.element(), symbols));
             case Ast.PrimDecRef p -> TypeOps.primType(p.kind());
             case Ast.DataDecRef d -> {
-                Ast.Def def = symbols.declaration(d.typeName());
+                Ast.Def def = symbols.get(d.typeName().denotes());
                 boolean hasDecoder = (def instanceof Ast.Data dd && dd.decoder().isPresent())
                         || (def instanceof Ast.SumData s && s.decoder().isPresent());
                 if (!hasDecoder) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.nodecoder").title("check.codec.title")
-                                    .at(d.pos()).args(d.typeName()).build(),
-                            "`" + d.typeName() + "` has no decoder to call `" + d.typeName() + ".decoder`");
+                                    .at(d.pos()).args(d.typeName().written()).build(),
+                            "`" + d.typeName().written() + "` has no decoder to call `"
+                                    + d.typeName().written() + ".decoder`");
                 }
-                yield Type.ref(symbols.resolve(d.typeName()));
+                yield Type.ref(d.typeName().denotes());
             }
             case Ast.ListDecRef l -> Type.list(decRefType(l.element(), symbols));
             case Ast.OptionDecRef o -> Type.option(decRefType(o.element(), symbols));
@@ -465,14 +485,14 @@ public final class DataChecker {
 
     private static void checkConstruct(Ast.Construct c, CheckContext ctx, Map<String, Type> fields,
                                        Map<String, Type> env) {
-        if (!c.typeName().equals(ctx.data().name())) {
+        if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data().name()))) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.codec.mustconstruct").title("check.codec.title")
-                            .at(c.pos()).args(ctx.data().name(), c.typeName()).build(),
+                            .at(c.pos()).args(ctx.data().name(), c.typeName().written()).build(),
                     "decoder for `" + ctx.data().name() + "` must construct `" + ctx.data().name()
-                            + "`, but constructs `" + c.typeName() + "`");
+                            + "`, but constructs `" + c.typeName().written() + "`");
         }
-        checkConstruction(c.typeName(), c.inits(), c.spreads(), c.pos(), fields, env, ctx);
+        checkConstruction(c.typeName().written(), c.inits(), c.spreads(), c.pos(), fields, env, ctx);
     }
 
     static List<Core.FieldInit> checkConstruction(String typeName, List<Ast.FieldInit> inits,
@@ -586,17 +606,18 @@ public final class DataChecker {
                 }
             }
             case Ast.EncodeRaw e -> {
-                Ast.Def encDef = ctx.symbols().declaration(e.typeName());
+                Ast.Def encDef = ctx.symbols().get(e.typeName().denotes());
                 boolean hasEncoder = (encDef instanceof Ast.Data ed && ed.encoder().isPresent())
                         || (encDef instanceof Ast.SumData sd && sd.encoder().isPresent());
                 if (!hasEncoder) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.codec.noencoder").title("check.codec.title")
-                                    .at(e.pos()).args(e.typeName()).build(),
-                            "`" + e.typeName() + "` has no encoder to call `" + e.typeName() + ".encode`");
+                                    .at(e.pos()).args(e.typeName().written()).build(),
+                            "`" + e.typeName().written() + "` has no encoder to call `"
+                                    + e.typeName().written() + ".encode`");
                 }
-                Elaborator.requireType(e.arg(), Type.ref(ctx.symbols().resolve(e.typeName())), env, ctx,
-                        "argument of " + e.typeName() + ".encode");
+                Elaborator.requireType(e.arg(), Type.ref(e.typeName().denotes()), env, ctx,
+                        "argument of " + e.typeName().written() + ".encode");
             }
             case Ast.ListEnc le -> {
                 Type st = Elaborator.typeOf(le.source(), env, ctx);
@@ -641,11 +662,11 @@ public final class DataChecker {
             }
             case Ast.DataEnc d -> {
                 // the element may be a product or a sum: `List<事前承認理由>` holds a sum (spec 11.2)
-                Ast.Def def = symbols.declaration(d.typeName());
+                Ast.Def def = symbols.get(d.typeName().denotes());
                 boolean hasEncoder = (def instanceof Ast.Data dd && dd.encoder().isPresent())
                         || (def instanceof Ast.SumData sd && sd.encoder().isPresent());
-                if (!elemType.equals(Type.ref(symbols.resolve(d.typeName()))) || !hasEncoder) {
-                    throw elemEncMismatch(d.typeName(), elemType, pos);
+                if (!elemType.equals(Type.ref(d.typeName().denotes())) || !hasEncoder) {
+                    throw elemEncMismatch(d.typeName().written(), elemType, pos);
                 }
             }
             // a collection element is itself a collection: descend both the encoder and the type

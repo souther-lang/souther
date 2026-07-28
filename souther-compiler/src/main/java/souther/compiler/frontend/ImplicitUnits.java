@@ -59,9 +59,8 @@ public final class ImplicitUnits {
         Map<String, Ast.UnitData> added = new LinkedHashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
-                // a case list carries names, not type nodes, so the sum's own position is the unit's
-                for (String caseName : sum.cases()) {
-                    introduce(caseName, sum.pos(), declared, added);
+                for (Ast.Name caseName : sum.cases()) {
+                    introduce(caseName.written(), caseName.pos(), declared, added);
                 }
             }
         }

@@ -1,7 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.diag.CompileException;
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
 import souther.compiler.core.Core;
 
 import java.lang.constant.ClassDesc;

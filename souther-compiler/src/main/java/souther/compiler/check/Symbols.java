@@ -1,11 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,12 +40,6 @@ public final class Symbols {
     /** Per-module definitions, built on first use so a module's own errors are still reported while
      * that module is being compiled rather than pulled forward into an unrelated one. */
     private final Map<String, Map<String, Ast.Def>> declared = new HashMap<>();
-    /** Other modules' scopes, for names written in their declarations. Same reason to be lazy. */
-    private final Map<String, Map<String, TypeName>> scopes = new HashMap<>();
-    /** Other modules' qualifiers, since an {@code as} alias belongs to the module that wrote it. */
-    private final Map<String, Map<String, String>> foreignQualifiers = new HashMap<>();
-    /** Definition → declaring module, built on first use (see {@link #moduleOf}). */
-    private IdentityHashMap<Ast.Def, String> homes;
 
     private Symbols(String module, Map<String, Ast.Module> registry,
                     Map<String, TypeName> scope, Map<String, String> qualifiers) {
@@ -100,9 +94,8 @@ public final class Symbols {
         return get(name) != null;
     }
 
-    /** The definition the written name {@code written} denotes here, or null when nothing does.
-     * The name must have been written in the module being compiled — for one read out of another
-     * module's declaration, resolve it there first ({@link #resolveIn}, {@link TypeName#sibling}). */
+    /** The definition the written name {@code written} denotes here, or null when nothing does. The
+     * name must have been written in the module being compiled. */
     public Ast.Def declaration(String written) {
         TypeName name = resolve(written);
         return name == null ? null : get(name);
@@ -130,85 +123,22 @@ public final class Symbols {
 
     /** What the written name {@code written} denotes here, or null when nothing does. Accepts a bare
      * name, a module-qualified one ({@code probe.b.金額}) and an alias-qualified one ({@code B.金額}).
-     * Visibility is enforced: a qualified name must be exposed by the module that declares it. */
-    public TypeName resolve(String written) {
-        return resolveIn(module, written);
-    }
-
-    /**
-     * What {@code written} denotes where it was written — inside {@code inModule}. A name inside
-     * another module's declaration (the element of a spread, a field's type) means what that module
-     * says it means, not what the same spelling would mean here.
+     * Visibility is enforced: a qualified name must be exposed by the module that declares it.
+     *
+     * <p>"Here" is the whole story: a name is resolved in the module that wrote it, by that module's
+     * own {@link Resolve} pass, so this never has to answer for a spelling written somewhere else.
      */
-    public TypeName resolveIn(String inModule, String written) {
+    public TypeName resolve(String written) {
         int dot = written.lastIndexOf('.');
         if (dot < 0) {
-            return scopeOf(inModule).get(written);
+            return scope.get(written);
         }
-        String target = qualifiersOf(inModule).get(written.substring(0, dot));
+        String target = qualifiers.get(written.substring(0, dot));
         if (target == null) {
             return null;
         }
         TypeName candidate = new TypeName(target, written.substring(dot + 1));
         return contains(candidate) && exposes(target, candidate.name()) ? candidate : null;
-    }
-
-    /** The qualifiers a name written in {@code inModule} may carry: every module of this compilation
-     * under its own name, plus that module's own {@code as} aliases — an alias is local to the module
-     * that wrote it, so a name written there is read with its aliases, not this one's. */
-    private Map<String, String> qualifiersOf(String inModule) {
-        if (inModule.equals(module)) {
-            return qualifiers;
-        }
-        Map<String, String> known = foreignQualifiers.get(inModule);
-        if (known != null) {
-            return known;
-        }
-        Map<String, String> built = new HashMap<>();
-        for (String name : registry.keySet()) {
-            built.put(name, name);
-        }
-        Ast.Module m = registry.get(inModule);
-        if (m != null) {
-            for (Ast.Import imp : m.imports()) {
-                if (imp.alias() != null) {
-                    built.put(imp.alias(), imp.module());
-                }
-            }
-        }
-        foreignQualifiers.put(inModule, built);
-        return built;
-    }
-
-    /** What a bare name means in {@code inModule}: its own definitions plus what it imports. The
-     * module being compiled has its scope built by the caller, with the import diagnostics; any other
-     * module's is derived here, and an import it cannot satisfy is left out rather than reported —
-     * that module's own compile is where such an import is answered for. */
-    private Map<String, TypeName> scopeOf(String inModule) {
-        if (inModule.equals(module)) {
-            return scope;
-        }
-        Map<String, TypeName> known = scopes.get(inModule);
-        if (known != null) {
-            return known;
-        }
-        Map<String, TypeName> built = new HashMap<>();
-        Ast.Module m = registry.get(inModule);
-        if (m != null) {
-            for (String name : declaredIn(inModule).keySet()) {
-                built.put(name, new TypeName(inModule, name));
-            }
-            for (Ast.Import imp : m.imports()) {
-                for (String name : imp.names()) {
-                    TypeName imported = new TypeName(imp.module(), name);
-                    if (contains(imported)) {
-                        built.put(name, imported);
-                    }
-                }
-            }
-        }
-        scopes.put(inModule, built);
-        return built;
     }
 
     /** The module a qualifier names — a module of this compilation, or an import alias — or null
@@ -248,24 +178,6 @@ public final class Symbols {
     /** The names reachable here, canonical. */
     public Collection<TypeName> visibleNames() {
         return new LinkedHashSet<>(scope.values());
-    }
-
-    /**
-     * The module that declares {@code def} — the module whose scope the names written inside it
-     * (a spread, a field's type) are resolved in. Definitions are matched by identity, since two
-     * modules may declare equal-looking ones. A definition the registry does not hold is one this
-     * pass built for the module being compiled, so that is what it falls back to.
-     */
-    public String moduleOf(Ast.Def def) {
-        if (homes == null) {
-            homes = new IdentityHashMap<>();
-            for (Ast.Module m : registry.values()) {
-                for (Ast.Def d : m.defs()) {
-                    homes.put(d, m.name());
-                }
-            }
-        }
-        return homes.getOrDefault(def, module);
     }
 
     /** Every definition of one module, keyed by the name written there. */

@@ -299,7 +299,9 @@ data 明細 =
     }
 ----
 
-This is what a module does when two it depends on declare the same type name — `+金額+` in each of two bounded contexts, which is normal and not the integrator's to rename. A qualified reference MAY be written in a type position (a field, a behavior's input or output, a helper's parameter) and as a `+match+` arm's case name.
+This is what a module does when two it depends on declare the same type name — `+金額+` in each of two bounded contexts, which is normal and not the integrator's to rename. A qualified reference MAY be written wherever a type is named: a type position (a field, a behavior's input or output, a helper's parameter), a `+match+` arm's case name, a layer a constructor pattern opens (<<binding-patterns>>, <<match>>), and a `+constructs+` entry. A sum's case list is the exception: its cases are declared with it (<<sum-data>>), so there is no other module to name.
+
+Which spelling names a type is not something a check has an opinion about. A bare `+金額+` an `+import+` brings in and a qualified `+example.pricing.金額+` are one type, so a clause and a body that spell it differently agree, and a pattern opens the type it names however the field that holds it was written.
 
 `+import ... as+` names a module locally, and the alias may then carry the reference. The alias holds only in the module that writes it, and it MUST be a name nothing else answers to there — not another alias, not a module of this compilation, not a standard-library qualifier.
 

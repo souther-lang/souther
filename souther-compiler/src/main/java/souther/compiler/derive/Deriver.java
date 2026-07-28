@@ -5,7 +5,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 
@@ -33,16 +34,16 @@ public final class Deriver {
     /** Derives codecs using {@code symbols} for type resolution (own definitions plus any
      * imported ones, for cross-module fields — spec 4). */
     public static Ast.Module derive(Ast.Module module, Symbols symbols) {
-        java.util.Set<String> caseNames = new java.util.HashSet<>();
+        java.util.Set<TypeName> caseNames = new java.util.HashSet<>();
         for (Ast.Def def : symbols.visible()) {
             if (def instanceof Ast.SumData s) {
-                caseNames.addAll(s.cases());
+                caseNames.addAll(TypeOps.caseNames(s));
             }
         }
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             defs.add(switch (def) {
-                case Ast.Data d -> deriveData(d, symbols, caseNames.contains(d.name()));
+                case Ast.Data d -> deriveData(d, symbols, caseNames.contains(symbols.own(d.name())));
                 case Ast.SumData s -> deriveSum(s, symbols);
                 case Ast.UnitData u -> u;
             });
@@ -55,7 +56,7 @@ public final class Deriver {
     private static Ast.Data deriveData(Ast.Data d, Symbols symbols, boolean isCase) {
         Map<String, Type> fields = TypeOps.fieldTypes(d, symbols);
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
-                ? d.decoder() : Optional.of(deriveDecoder(d, fields, isCase));
+                ? d.decoder() : Optional.of(deriveDecoder(d, fields, isCase, symbols));
         Optional<Ast.EncoderDef> encoder = d.encoder().isPresent()
                 ? d.encoder() : Optional.of(deriveEncoder(d, fields, isCase));
         return new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(), d.invariant(),
@@ -64,14 +65,16 @@ public final class Deriver {
 
     // --- decoder derivation ---
 
-    private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, Type> fields, boolean isCase) {
+    private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, Type> fields, boolean isCase,
+                                               Symbols symbols) {
         SourcePos pos = d.pos();
+        Ast.Name self = Ast.Name.resolved(symbols.own(d.name()), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even
         // with one field (spec 8.7). A sum case is embedded in the discriminated object, never bare.
         Map.Entry<String, Type> single = bareField(d, fields, isCase);
         if (single != null) {
             Ast.RawKind kind = rawKind(single.getValue());
-            Ast.Construct result = new Ast.Construct(d.name(),
+            Ast.Construct result = new Ast.Construct(self,
                     List.of(new Ast.FieldInit(single.getKey(), new Ast.Var("__in", pos), pos)),
                     List.of(), pos);
             return new Ast.PrimDecoder(kind, "__in", List.of(), result, pos);
@@ -79,7 +82,7 @@ public final class Deriver {
         // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec 8.7)
         if (d.newtype() && !isCase) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
-            Ast.Construct result = new Ast.Construct(d.name(),
+            Ast.Construct result = new Ast.Construct(self,
                     List.of(new Ast.FieldInit(only.getKey(), new Ast.Var("__in", pos), pos)),
                     List.of(), pos);
             return new Ast.NewtypeDecoder(
@@ -93,7 +96,7 @@ public final class Deriver {
                     decRef(f.getValue(), d, f.getKey(), fieldPos(d, f.getKey())), pos));
             inits.add(new Ast.FieldInit(f.getKey(), new Ast.Var(f.getKey(), pos), pos));
         }
-        return new Ast.ObjectDecoder(binds, new Ast.Construct(d.name(), inits, List.of(), pos), pos);
+        return new Ast.ObjectDecoder(binds, new Ast.Construct(self, inits, List.of(), pos), pos);
     }
 
     private static Ast.RawKind rawKind(Type t) {
@@ -140,7 +143,7 @@ public final class Deriver {
             return new Ast.PrimDecRef(primKind(t), pos);
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.DataDecRef(r.name().qualified(), pos);
+            return new Ast.DataDecRef(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListDecRef(decRef(lo.element(), d, field, pos), pos);
@@ -215,7 +218,7 @@ public final class Deriver {
             return primRaw(t, access, pos);
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.EncodeRaw(r.name().qualified(), access, pos);
+            return new Ast.EncodeRaw(Ast.Name.resolved(r.name(), pos), access, pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListEnc(access, encElem(lo.element(), d, field, pos), pos);
@@ -243,7 +246,7 @@ public final class Deriver {
      */
     private static Ast.DecRef mapKeyDec(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
         if (mo.key() instanceof Type.Ref r) {
-            return new Ast.DataDecRef(r.name().qualified(), pos);
+            return new Ast.DataDecRef(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
             return new Ast.PrimDecRef(primKind(mo.key()), pos);
@@ -253,7 +256,7 @@ public final class Deriver {
 
     private static Ast.EncElem mapKeyEnc(Type.MapOf mo, Ast.Data d, String field, SourcePos pos) {
         if (mo.key() instanceof Type.Ref r) {
-            return new Ast.DataEnc(r.name().qualified(), pos);
+            return new Ast.DataEnc(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (mo.key() == Type.STRING || mo.key() == Type.DATE || mo.key() == Type.DATETIME) {
             return new Ast.PrimEnc(primKind(mo.key()), pos);
@@ -292,7 +295,7 @@ public final class Deriver {
             return new Ast.PrimEnc(primKind(t), pos);   // every primitive has a leaf encoder
         }
         if (t instanceof Type.Ref r) {
-            return new Ast.DataEnc(r.name().qualified(), pos);
+            return new Ast.DataEnc(Ast.Name.resolved(r.name(), pos), pos);
         }
         if (t instanceof Type.ListOf lo) {
             return new Ast.ListElemEnc(encElem(lo.element(), d, field, pos), pos);
@@ -343,7 +346,7 @@ public final class Deriver {
     // --- sum derivation ---
 
     private static Ast.SumData deriveSum(Ast.SumData s, Symbols symbols) {
-        List<String> leaves = leafCases(s, symbols);
+        List<Ast.Name> leaves = leafCases(s, symbols);
         Optional<Ast.Discriminate> decoder = s.decoder().isPresent()
                 ? s.decoder()
                 : Optional.of(new Ast.Discriminate("type", tagVariants(s, leaves), s.pos()));
@@ -362,23 +365,23 @@ public final class Deriver {
      * two levels on one `"type"` key: the outer encoder wrote {@code {type: 自社負担}}, losing
      * which leaf it was, and the inner decoder then rejected that same tag.
      */
-    private static List<String> leafCases(Ast.SumData s, Symbols symbols) {
-        List<String> leaves = new ArrayList<>();
+    private static List<Ast.Name> leafCases(Ast.SumData s, Symbols symbols) {
+        List<Ast.Name> leaves = new ArrayList<>();
         collectLeafCases(s, symbols, leaves);
         return leaves;
     }
 
-    private static void collectLeafCases(Ast.SumData s, Symbols symbols, List<String> out) {
+    private static void collectLeafCases(Ast.SumData s, Symbols symbols, List<Ast.Name> out) {
         collectLeafCases(s, symbols, out, new java.util.HashSet<>());
     }
 
-    private static void collectLeafCases(Ast.SumData s, Symbols symbols, List<String> out,
+    private static void collectLeafCases(Ast.SumData s, Symbols symbols, List<Ast.Name> out,
                                          java.util.Set<String> visiting) {
         if (!visiting.add(s.name())) {
             return;   // a sum that reaches itself; DataChecker reports it, this only has to terminate
         }
-        for (String caseName : s.cases()) {
-            if (symbols.declaration(caseName) instanceof Ast.SumData nested) {
+        for (Ast.Name caseName : s.cases()) {
+            if (symbols.get(caseName.denotes()) instanceof Ast.SumData nested) {
                 collectLeafCases(nested, symbols, out, visiting);
             } else if (!out.contains(caseName)) {
                 out.add(caseName);
@@ -386,18 +389,18 @@ public final class Deriver {
         }
     }
 
-    private static List<Ast.Variant> tagVariants(Ast.SumData s, List<String> cases) {
+    private static List<Ast.Variant> tagVariants(Ast.SumData s, List<Ast.Name> cases) {
         List<Ast.Variant> variants = new ArrayList<>();
-        for (String caseName : cases) {
-            variants.add(new Ast.Variant(caseName, caseName, s.pos()));
+        for (Ast.Name caseName : cases) {
+            variants.add(new Ast.Variant(caseName.denotes().name(), caseName, s.pos()));
         }
         return variants;
     }
 
-    private static List<Ast.EncVariant> encVariants(Ast.SumData s, List<String> cases) {
+    private static List<Ast.EncVariant> encVariants(Ast.SumData s, List<Ast.Name> cases) {
         List<Ast.EncVariant> variants = new ArrayList<>();
-        for (String caseName : cases) {
-            variants.add(new Ast.EncVariant(caseName, caseName, s.pos()));
+        for (Ast.Name caseName : cases) {
+            variants.add(new Ast.EncVariant(caseName, caseName.denotes().name(), s.pos()));
         }
         return variants;
     }

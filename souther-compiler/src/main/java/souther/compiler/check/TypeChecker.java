@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
-import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
+import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,11 +26,6 @@ import java.util.Set;
 public final class TypeChecker {
 
     private TypeChecker() {}
-
-    /** Type-checks a self-contained module against its own symbols, collecting every error. */
-    public static List<Diagnostic> check(Ast.Module module) {
-        return check(module, symbols(module), Map.of(), Set.of(), Lower.run(module));
-    }
 
     /**
      * What a successful check produced for the backend (issue #81): the Core of every body it typed,
@@ -221,8 +218,7 @@ public final class TypeChecker {
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 DataChecker.rejectDuplicateNames(spec.requires(), "`requires`", spec.pos());
-                DataChecker.rejectDuplicateNames(spec.constructs(), "`constructs`", spec.pos(),
-                        n -> SpecChecker.canonicalConstruct(n, symbols));
+                DataChecker.rejectDuplicateTypes(spec.constructs(), "`constructs`", spec.pos());
             }
         }
         // A data is Java-buildable from outside iff the whole module is public (no `exposing`) or
@@ -316,7 +312,7 @@ public final class TypeChecker {
         collect(errors, () -> TotalityChecker.check(inliner));
         // What each recursive helper constructs, transitively — a recursive helper is not inlined, so
         // its constructions are attributed to the behavior that calls it (spec 12.5).
-        Map<String, Set<String>> recHelperConstructs =
+        Map<String, Map<TypeName, String>> recHelperConstructs =
                 HelperTyping.recursiveHelperConstructs(recursiveHelperFns.keySet(), loweredBodies, inliner, symbols);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec) {

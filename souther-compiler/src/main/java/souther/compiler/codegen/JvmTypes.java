@@ -1,6 +1,6 @@
 package souther.compiler.codegen;
 
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
 import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
 import java.lang.classfile.ClassFile;

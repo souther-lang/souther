@@ -1,8 +1,8 @@
 package souther.compiler;
 
 import org.junit.jupiter.api.Test;
-import souther.compiler.check.Type;
-import souther.compiler.check.TypeName;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.diag.CompileException;
 
 import java.util.List;

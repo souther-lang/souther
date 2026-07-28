@@ -3,8 +3,9 @@ package souther.compiler;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
+import souther.compiler.check.Resolve;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.diag.Messages;
 import souther.compiler.frontend.CstFrontend;
@@ -152,7 +153,7 @@ public final class Runner {
         String moduleName = moduleName(file);
 
         Map<String, byte[]> classes = Compiler.compile(source, moduleName);
-        Ast.Module module = CstFrontend.parse(source, moduleName);
+        Ast.Module module = Resolve.module(CstFrontend.parse(source, moduleName));
         Symbols symbols = TypeChecker.symbols(module);
         Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols);
 

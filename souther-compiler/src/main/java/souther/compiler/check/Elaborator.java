@@ -6,6 +6,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -185,16 +187,17 @@ public final class Elaborator {
             case Ast.Call call -> CallElaborator.elaborateCall(call, env, ctx, expected);
             case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Ast.NewData nd -> {
-                if (!(ctx.symbols().declaration(nd.typeName()) instanceof Ast.Data owner)) {
+                Ast.Name built = nd.typeName();
+                if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.construct.no").title("check.construct.title")
-                                    .at(nd.pos(), nd.typeName().length()).args(nd.typeName()).build(),
-                            "cannot construct `" + nd.typeName() + "`");
+                                    .at(nd.pos(), built.written().length()).args(built.written()).build(),
+                            "cannot construct `" + built.written() + "`");
                 }
-                List<Core.FieldInit> inits = DataChecker.checkConstruction(nd.typeName(), nd.inits(), nd.spreads(),
-                        nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
-                yield new Core.NewData(nd.typeName(), inits, nd.spreads(),
-                        Type.ref(ctx.symbols().resolve(nd.typeName())), nd.pos());
+                List<Core.FieldInit> inits = DataChecker.checkConstruction(built.written(), nd.inits(),
+                        nd.spreads(), nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
+                yield new Core.NewData(built.denotes(), inits, nd.spreads(),
+                        Type.ref(built.denotes()), nd.pos());
             }
             case Ast.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);
             case Ast.If iff -> {
@@ -439,9 +442,9 @@ public final class Elaborator {
      * value does not have and {@code .value} would be read off the wrong nominal type.
      */
     private static void checkOpens(Ast.LetIn li, Type valueType, Symbols symbols) {
-        String opened = li.opens();
-        TypeName layer = symbols.resolve(opened);
-        if (layer == null || TypeOps.newtypeInner(layer, symbols) == null) {
+        String opened = li.opens().written();
+        TypeName layer = li.opens().denotes();
+        if (TypeOps.newtypeInner(layer, symbols) == null) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.open.notnewtype").title("check.open.title")
                             .at(li.pos()).args(opened)

@@ -4,10 +4,12 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -131,7 +133,7 @@ public final class SpecChecker {
                                     Symbols symbols, Set<String> allBehaviors,
                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
-                                    Map<String, Set<String>> recHelperConstructs,
+                                    Map<String, Map<TypeName, String>> recHelperConstructs,
                                     List<Diagnostic> warnings) {
         if (fn.declaredReturn() != null) {
             throw CompileException.of(
@@ -215,7 +217,7 @@ public final class SpecChecker {
 
         // One expression (spec 16.4): this single walk sees every construction, including under a
         // desugared `require`.
-        Set<String> constructed = new HashSet<>();
+        Map<TypeName, String> constructed = new LinkedHashMap<>();
         DataChecker.collectConstructs(body, constructed, symbols, new HashSet<>(env.keySet()), recHelperConstructs);
         // `constructs` on an fn-backed behavior is optional: its construction permission is internal
         // (invisible to callers, unlike `requires`), so with the body visible the set can be inferred
@@ -226,12 +228,12 @@ public final class SpecChecker {
         // from, and it drives factory generation (spec 13.3).
         if (!spec.constructs().isEmpty()) {
             // Both sides name types, and a type has one identity however it is written — `up.Amount`
-            // and an `Amount` an import brings in are the same one. So the sets are compared resolved,
-            // and each side keeps its own spelling in whatever it has to report.
-            Set<String> declared = canonicalConstructs(spec.constructs(), symbols);
-            Set<String> built = canonicalConstructs(constructed, symbols);
-            for (String c : constructed) {
-                if (!declared.contains(canonicalConstruct(c, symbols))) {
+            // and an `Amount` an import brings in are the same one. Each side keeps its own spelling
+            // in whatever it has to report.
+            Set<TypeName> declared = new HashSet<>(MatchElaborator.denoted(spec.constructs()));
+            for (Map.Entry<TypeName, String> built : constructed.entrySet()) {
+                if (!declared.contains(built.getKey())) {
+                    String c = built.getValue();
                     throw CompileException.of(
                             Diagnostic.of("E1002", "e1002.msg").at(spec.pos())
                                     .args(spec.name(), c).hint("e1002.hint").build(),
@@ -239,8 +241,9 @@ public final class SpecChecker {
                                     + "` but does not declare `constructs " + c + "`.");
                 }
             }
-            for (String name : spec.constructs()) {
-                if (!built.contains(canonicalConstruct(name, symbols))) {
+            for (Ast.Name declaredName : spec.constructs()) {
+                String name = declaredName.written();
+                if (!constructed.containsKey(declaredName.denotes())) {
                     throw CompileException.of(
                             Diagnostic.of("E1006", "e1006.msg").at(spec.pos())
                                     .args(spec.name(), name).hint("e1006.hint").build(),
@@ -379,12 +382,12 @@ public final class SpecChecker {
 
     static void checkInjectionConstructs(Ast.SpecBehavior spec, Symbols symbols,
                                                  boolean exposeAll, Set<String> exposed) {
-        for (String c : spec.constructs()) {
-            Ast.Def d = symbols.declaration(c);
-            if (d == null || d instanceof Ast.UnitData) {
-                continue;   // unknown names are caught elsewhere; a unit has a generated factory
+        for (Ast.Name name : spec.constructs()) {
+            String c = name.written();
+            TypeName built = name.denotes();
+            if (symbols.get(built) instanceof Ast.UnitData) {
+                continue;   // a unit has a generated factory
             }
-            TypeName built = symbols.resolve(c);
             // What Java needs is a way in: the decoder, which a module publishes by exposing the type.
             // For a type of another module that is its own `exposing` to answer, not this one's.
             // `exposed` lists this module's own names, so the resolved name is what to look up — a
@@ -479,24 +482,6 @@ public final class SpecChecker {
                     "only required behaviors can be called from a body; compose others with `>->`");
         }
         TypeChecker.forEachChild(e, c -> rejectNonRequiredCalls(c, allBehaviors, reqSigs));
-    }
-
-    /**
-     * The identity a written construction name stands for, so a `constructs` clause and a body are
-     * compared by type rather than by spelling. A name that denotes nothing here stands for itself:
-     * resolution is not this check's job, and the checks that own it report a better error.
-     */
-    static String canonicalConstruct(String written, Symbols symbols) {
-        TypeName resolved = symbols.resolve(written);
-        return resolved == null ? written : resolved.qualified();
-    }
-
-    private static Set<String> canonicalConstructs(Collection<String> written, Symbols symbols) {
-        Set<String> out = new HashSet<>();
-        for (String w : written) {
-            out.add(canonicalConstruct(w, symbols));
-        }
-        return out;
     }
 
 }

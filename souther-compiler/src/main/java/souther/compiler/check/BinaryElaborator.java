@@ -5,6 +5,8 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import java.util.Map;
 import java.util.Set;
 

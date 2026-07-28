@@ -1,4 +1,4 @@
-package souther.compiler.check;
+package souther.compiler.types;
 
 /**
  * The Souther value types. Either a primitive ({@code Int}/{@code String}/{@code Bool})
