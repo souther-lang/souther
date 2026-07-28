@@ -6,6 +6,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -108,16 +109,6 @@ public final class SpecChecker {
         return false;
     }
 
-    /** Whether {@code name} is a {@code >->} composition this module declares. */
-    private static boolean isComposition(Ast.Module module, String name) {
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.PipeBehavior pipe && pipe.name().equals(name)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     /**
      * A {@code requires} names a behavior whose requirement set is not empty (spec
      * {@code [#requires]}): one with no implementation of its own, or one whose {@code let} declares
@@ -141,11 +132,15 @@ public final class SpecChecker {
                 }
                 String req = required.bare();
                 // Three ways a name can be wrong here, told apart because the fix differs. A
-                // composition and a behavior that requires nothing are both in scope — one cannot be
-                // rested on, the other has nothing to inject — and the third names no behavior at
-                // all. All are reported at the name, as the clause that names nothing is.
-                String key = isComposition(module, req) ? "e1607.composition"
-                        : calleeSigs.containsKey(req) ? "e1607.nothing" : "e1607.unknown";
+                // behavior that requires nothing has nothing to inject and is called instead; a
+                // composition cannot be rested on because its requirements are not written; a name
+                // that is no behavior has to be declared or imported. Which of the three is read off
+                // what the name was resolved to, so an imported composition is the composition case
+                // rather than the unknown one — scanning this module's own behaviors would only find
+                // the local ones. All are reported at the name, as the clause that names nothing is.
+                String key = calleeSigs.containsKey(req) ? "e1607.nothing"
+                        : required.denotes() instanceof ValueName.Behavior ? "e1607.composition"
+                        : "e1607.unknown";
                 throw CompileException.of(
                         Diagnostic.of("E1607", key).title("e1607.title")
                                 .at(required.pos(), required.written().length())

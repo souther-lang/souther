@@ -1390,7 +1390,9 @@ The set of behaviors with a non-empty requirement set that a `+let+` uses and th
 [#calling-a-behavior]
 === Calling a behavior
 
-A `+let+` body may call a behavior. Which ones it may call is decided by one question — the requirement set — and the answer does not depend on where the behavior was declared. A behavior this module declares and one it imported are called the same way.
+A behavior's `+let+` may call a behavior. Which ones it may call is decided by one question — the requirement set — and the answer does not depend on where the behavior was declared. A behavior this module declares and one it imported are called the same way.
+
+A helper `+let+` may not. A helper is expanded into what calls it, and an invariant that names one carries it to an importing module as source (<<published-modules>>); it names only what travels with it, which is what keeps an invariant's rule a single question about the requirement set rather than a second one about where a name came from. A behavior a helper wanted is called from the behavior's own `+let+` and its result passed in.
 
 * An *empty* requirement set: call it by name. Nothing is injected and nothing is written in `+requires+`.
 * A *non-empty* requirement set: write it in `+requires+` and call it through that name (<<requires>>). It arrives already bound, as any requirement does.

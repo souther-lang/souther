@@ -176,6 +176,74 @@ class CompileCallBehaviorTest {
                 """)));
     }
 
+    /**
+     * A helper `let` does not reach a behavior. A helper is expanded into what calls it, and an
+     * invariant that names one carries it to an importing module as source, so it names only what
+     * travels with it. This is also what keeps a behavior from reaching itself through a helper: the
+     * edge cannot be written, so E1608's graph does not have to chase one.
+     */
+    @Test
+    void aHelperCannotCallABehavior() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module h exposing ( A, B, twice, use )
+
+                data A = { n: Int }
+                data B = { m: Int }
+
+                behavior twice : (a: A) -> B
+                    constructs B
+                let twice (a) = B { m = a.n * 2 }
+
+                let viaHelper (a: A): B = twice(a)
+
+                behavior use : (a: A) -> B
+                let use (a) = viaHelper(a)
+                """));
+        assertTrue(e.getMessage().contains("`twice` is a behavior"), e.getMessage());
+    }
+
+    /** The shape a review asked about: it cannot be written, so no cycle is built out of it. */
+    @Test
+    void aBehaviorCannotReachItselfThroughAHelper() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module h exposing ( A, B, loop )
+
+                data A = { n: Int }
+                data B = { m: Int }
+
+                behavior loop : (a: A) -> B
+                let loop (a) = helper(a)
+
+                let helper (a: A): B = loop(a)
+                """));
+        assertTrue(e.getMessage().contains("`loop` is a behavior"), e.getMessage());
+    }
+
+    /** A composition is composed with, not called — from a body as well as from `requires`. */
+    @Test
+    void aCompositionCannotBeCalledFromABody() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module c exposing ( A, B, one, two, chain : B, use )
+
+                data A = { x: Int }
+                data B = { z: Int }
+
+                behavior one : (a: A) -> A
+                    constructs A
+                let one (a) = A { x = a.x }
+
+                behavior two : (a: A) -> B
+                    constructs B
+                let two (a) = B { z = a.x }
+
+                behavior chain = one >-> two
+
+                behavior use : (a: A) -> B
+                let use (a) = chain(a)
+                """));
+        assertTrue(e.getMessage().contains("`chain` is a behavior"), e.getMessage());
+    }
+
     /** A behavior does not recurse, whether the loop is calls or `requires` (E1608). */
     @Test
     void aBehaviorThatReachesItselfThroughCallsIsRejected() {

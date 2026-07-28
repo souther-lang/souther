@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Suggest;
@@ -747,10 +748,11 @@ public final class Names {
     /** What a module's bodies can name without a binding: its own helpers, and every behavior it can
      * reach — its own and the ones its imports bring in. */
     private static Resolve.Values reachableValues(Db db, Ast.Module m) {
-        Set<String> helpers = new LinkedHashSet<>();
-        for (Ast.FnDef fn : m.fns()) {
-            helpers.add(fn.name());
-        }
+        // A behavior's `let` is not a helper: it implements the behavior, and the name reaches the
+        // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
+        // two answers to one question is how a name came to denote a helper here and a behavior
+        // there.
+        Set<String> helpers = new LinkedHashSet<>(HelperInliner.helpersOf(m).keySet());
         BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
         return new Resolve.Values(m.name(), helpers,
                 behaviors == null ? Map.of() : behaviors.byName());
