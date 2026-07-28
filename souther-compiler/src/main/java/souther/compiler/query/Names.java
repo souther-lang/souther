@@ -204,11 +204,15 @@ public final class Names {
             if (!m.present()) {
                 return Answer.absent();
             }
-            try {
-                return Answer.of(TypeChecker.ownDefs(m.value()));
-            } catch (CompileException e) {
-                return Answer.absent(e);
+            // A declaration the module may not have is reported and left out; the ones it may have
+            // are what it declares. So a name written twice does not take every other name in the
+            // file with it.
+            TypeChecker.Declared declared = TypeChecker.declared(m.value());
+            List<Report> reports = new ArrayList<>();
+            for (CompileException rejected : declared.rejected()) {
+                reports.addAll(Report.of(rejected));
             }
+            return Answer.of(declared.defs(), reports);
         }
     }
 
@@ -292,24 +296,34 @@ public final class Names {
             Map<String, Ast.Import> from = new HashMap<>();
             Map<String, String> aliases = new HashMap<>();
             Set<String> broken = db.ask(new Front.Broken()).value();
+            // An import line that is wrong is reported and skipped, and the ones that are fine still
+            // bring in what they bring in. A half-typed import is as ordinary as a half-typed name,
+            // and taking the whole scope away would leave every name in the file meaning nothing —
+            // which is when an author most wants to be told what one means.
+            List<Report> reports = new ArrayList<>();
             for (Ast.Import imp : m.imports()) {
                 if (broken != null && broken.contains(imp.module())) {
-                    return Answer.absent();   // the file that will not parse reports its own error
+                    nameless(scope, imp.names());
+                    continue;   // the file that will not parse reports its own error
                 }
                 Ast.Module src = db.ask(new Front.Available(imp.module())).value();
-                if (src == null) {
-                    return Answer.absent(unknownModule(imp));
-                }
-                if (!db.ask(new Declarations(imp.module())).present()) {
-                    // The module is there but says nothing usable. Whatever is wrong with it is
-                    // reported on its own source; repeating it here would send the author to a file
-                    // that is fine.
-                    return Answer.absent();
+                if (src == null || !db.ask(new Declarations(imp.module())).present()) {
+                    // Not being part of this compilation and being part of it while saying nothing
+                    // usable are different things, and only the first is the importer's business.
+                    // Whatever is wrong with a module that is here is reported on its own source;
+                    // saying it again here sends the author to a file that is fine.
+                    if (!registry.moduleNames().contains(imp.module())) {
+                        reports.add(unknownModule(imp));
+                    }
+                    nameless(scope, imp.names());
+                    continue;
                 }
                 if (imp.alias() != null) {
                     Report clash = aliasTaken(imp, aliases, registry.moduleNames());
                     if (clash != null) {
-                        return Answer.absent(clash);
+                        reports.add(clash);
+                        nameless(scope, imp.names());
+                        continue;   // an alias that names two things names neither here
                     }
                     aliases.put(imp.alias(), imp.module());
                 }
@@ -317,10 +331,12 @@ public final class Names {
                 Set<String> exposed = registry.exposedBy(imp.module());
                 for (String imported : imp.names()) {
                     if (!exposed.contains(imported)) {
-                        return Answer.absent(Report.raised(
+                        reports.add(Report.raised(
                                 Diagnostic.of(null, "check.import.notexposed").title("check.module.title")
                                         .at(imp.pos()).args(imported, imp.module()).build(),
                                 "`" + imported + "` is not exposed by `" + imp.module() + "`"));
+                        nameless(scope, List.of(imported));
+                        continue;
                     }
                     if (!srcDefs.containsKey(imported)) {
                         // a behavior import is resolved separately; it is not a data Def, so it does
@@ -328,19 +344,43 @@ public final class Names {
                         if (behaviorNames(src).contains(imported)) {
                             continue;
                         }
-                        return Answer.absent(Report.raised(
+                        reports.add(Report.raised(
                                 Diagnostic.of(null, "check.import.notdefined").title("check.module.title")
                                         .at(imp.pos()).args(imported, imp.module()).build(),
                                 "`" + imported + "` is not defined in `" + imp.module() + "`"));
+                        nameless(scope, List.of(imported));
+                        continue;
                     }
-                    if (scope.put(imported, new TypeName(imp.module(), imported)) != null) {
-                        return Answer.absent(importCollision(imported, imp,
+                    TypeName standingIn = scope.get(imported);
+                    if (standingIn != null && !standingIn.isUnresolved()) {
+                        reports.add(importCollision(imported, imp,
                                 ownNames.contains(imported) ? null : from.get(imported)));
+                        continue;   // the first claim on the name keeps it
                     }
+                    // A name a failed import line only stood in for is not a claim on it: an import
+                    // that can do the job takes it, and says nothing about the line that could not.
+                    scope.put(imported, new TypeName(imp.module(), imported));
                     from.put(imported, imp);
                 }
             }
+            if (!reports.isEmpty()) {
+                return Answer.of(new Of(Ordered.map(scope), Ordered.map(aliases)), reports);
+            }
             return Answer.of(new Of(Ordered.map(scope), Ordered.map(aliases)));
+        }
+    }
+
+    /**
+     * Puts {@code names} in scope as names that denote nothing.
+     *
+     * <p>An import line that could not do its job was reported on that line. A name it was to bring
+     * in is in scope all the same, denoting nothing — so a use of it takes the error type and says
+     * nothing more. Leaving it out of scope instead would report an unknown type at every use, which
+     * sends the author to a field when what is wrong is the import.
+     */
+    private static void nameless(Map<String, TypeName> scope, List<String> names) {
+        for (String written : names) {
+            scope.putIfAbsent(written, TypeName.unresolved(written));
         }
     }
 
@@ -391,11 +431,70 @@ public final class Names {
             if (!scope.present()) {
                 return Answer.absent();
             }
+            Resolve.Resolved resolution;
             try {
-                return Answer.of(Resolve.resolving(available.value(), scope.value()));
+                resolution = Resolve.resolving(available.value(), scope.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+            // A name that denotes nothing is reported here and the tree carries on with the error
+            // type in its place. The answer is present, so an editor can still say what the names
+            // around the mistake mean; what must not happen — emitting a module with a hole in it —
+            // is stopped where the module is checked.
+            List<Report> reports = new ArrayList<>();
+            for (CompileException unresolved : resolution.unresolved()) {
+                reports.addAll(Report.of(unresolved));
+            }
+            return Answer.of(resolution, reports);
+        }
+    }
+
+    /**
+     * Whether everything the compiler worked out about a module's names came out.
+     *
+     * <p>One question, asked in one place, so that whether a module may be emitted does not become a
+     * list of conditions appended to over time. Each of these has already said what was wrong where
+     * it found it; this only asks whether any of them did.
+     *
+     * <p>It is transitive. A module built against one that was rejected is built against declarations
+     * nothing will emit, so it cannot be emitted either — its classes would name a class that is not
+     * there, and its examples would fail for a reason that is not its own. An import that could not be
+     * followed counts the same way, whether or not anything was reported here about it. An import cycle
+     * is settled before this recurses, so following imports terminates.
+     */
+    public record Sound(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            List<Answer<?>> asked = List.of(
+                    db.ask(new Front.Exposed(name)),
+                    db.ask(new Front.ShadowsPath(name)),
+                    db.ask(new InCycle(name)),
+                    db.ask(new Declarations(name)),
+                    db.ask(new Imports(name)),
+                    db.ask(new Resolution(name)));
+            for (Answer<?> answer : asked) {
+                if (answer.hasError()) {
+                    return Answer.of(Boolean.FALSE);
+                }
+            }
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            if (m != null) {
+                for (Ast.Import imp : m.imports()) {
+                    // An import that could not be followed at all — the module is not here, or the
+                    // caller is holding its file back — leaves the names it was to bring denoting
+                    // nothing, whether or not anything was reported here to say so.
+                    if (!db.ask(new Front.Available(imp.module())).present()
+                            || Boolean.FALSE.equals(db.ask(new Sound(imp.module())).value())) {
+                        return Answer.of(Boolean.FALSE);
+                    }
+                }
+            }
+            return Answer.of(Boolean.TRUE);
         }
     }
 

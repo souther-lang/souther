@@ -37,7 +37,30 @@ public final class BinaryElaborator {
                         + "` does not expose it");
     }
 
+    /** Whether either side of {@code bin} has a type the compiler could not work out. */
+    private static boolean erroneousOperand(Ast.Binary bin, Map<String, Type> env,
+                                            CheckContext ctx) {
+        return erroneous(bin.left(), env, ctx) || erroneous(bin.right(), env, ctx);
+    }
+
+    private static boolean erroneous(Ast.Expr operand, Map<String, Type> env, CheckContext ctx) {
+        try {
+            return Elaborator.elaborate(operand, env, ctx).type() instanceof Type.Erroneous;
+        } catch (CompileException _) {
+            return false;   // it has its own error; the operator's check will raise it as before
+        }
+    }
+
     static Core elaborateBinary(Ast.Binary bin, Map<String, Type> env, CheckContext ctx) {
+        // An operator wants a particular shape of type — Int or Decimal to add, two lists or two
+        // strings to append — and an operand the compiler could not work out has no shape. Absorbing
+        // is for a comparison, which can answer "no disagreement"; there is no answer to give here, so
+        // the definition is abandoned and the name that denoted nothing stands as what was wrong.
+        // Left alone, the operand's type reaches the message as `?`, which names nothing the author
+        // could go looking for.
+        if (erroneousOperand(bin, env, ctx)) {
+            throw new Unanswerable(bin.pos());
+        }
         return switch (bin.op()) {
             case AND, OR -> {
                 Core left = Elaborator.requireTyped(bin.left(), Type.BOOL, env, ctx,

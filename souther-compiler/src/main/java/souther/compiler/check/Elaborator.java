@@ -188,6 +188,9 @@ public final class Elaborator {
             case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Ast.NewData nd -> {
                 Ast.Name built = nd.typeName();
+                if (built.denotes().isUnresolved()) {
+                    throw new Unanswerable(nd.pos());
+                }
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.construct.no").title("check.construct.title")

@@ -6,7 +6,7 @@ package souther.compiler.types;
  */
 public sealed interface Type
         permits Type.Prim, Type.Ref, Type.ListOf, Type.MapOf, Type.SetOf, Type.OptionOf, Type.Union,
-                Type.FnOf, Type.Var, Type.Nothing, Type.TupleOf {
+                Type.FnOf, Type.Var, Type.Nothing, Type.TupleOf, Type.Erroneous {
 
     enum Prim implements Type { INT, STRING, BOOL, DECIMAL, DATE, DATETIME, RAW }
 
@@ -16,6 +16,25 @@ public sealed interface Type
      * {@code List<T>} a position expects). It never reaches codegen: an empty list is element-agnostic
      * at runtime. */
     record Nothing() implements Type {}
+
+    /**
+     * A type the compiler could not work out, and has already said so about.
+     *
+     * <p>It exists so that being wrong about one thing does not stop the compiler saying anything
+     * about the rest. A name that denotes nothing used to end the module: everything after it went
+     * unchecked, and an editor could not answer what any name in the file meant, which is when an
+     * author most wants to ask. The name denotes this instead, the tree stays whole, and the passes
+     * below carry on.
+     *
+     * <p>It absorbs. Every comparison with it holds and every join with it yields it, so the one
+     * mistake is reported once rather than as a mismatch at each place the value flowed. That is what
+     * makes it different from {@link Nothing}, which is a real inference result — the element type of
+     * {@code []} — and must not silence anything.
+     *
+     * <p>It never reaches codegen. There is no bytecode for a type nobody could name, so the one
+     * place that gates emitting a module refuses a tree that holds one.
+     */
+    record Erroneous() implements Type {}
 
     /** A type variable ({@code 'a}), written only in the shipped core (ADR-0028). It stands for any
      * type; a non-recursive core helper carrying one is monomorphised by inline expansion, so the
@@ -58,6 +77,9 @@ public sealed interface Type
      * like {@link FnOf}, a tuple is never stored in a data field or a behavior's I/O, so it never
      * crosses a codec boundary; it only carries several values through a computation. */
     record TupleOf(java.util.List<Type> elements) implements Type {}
+
+    /** The one {@link Erroneous}: it carries nothing, so there is nothing to tell two apart. */
+    Type ERRONEOUS = new Erroneous();
 
     Type INT = Prim.INT;
     Type STRING = Prim.STRING;
@@ -197,6 +219,10 @@ public sealed interface Type
             // the name carries the `'` it was written with (`'a`), so it is not added twice
             case Var v -> v.name().startsWith("'") ? v.name() : "'" + v.name();
             case Nothing _ -> "_";
+            // An error type should not reach a message: it absorbs, so nothing compares against it
+            // and finds a mismatch to describe. If one does, say what it is rather than a shape the
+            // author could go looking for.
+            case Erroneous _ -> "?";
             case ListOf l -> "List<" + show(l.element(), qualify) + ">";
             case SetOf s -> "Set<" + show(s.element(), qualify) + ">";
             case OptionOf o -> show(o.element(), qualify) + "?";
