@@ -35,6 +35,24 @@ class CompileExposingTest {
         assertTrue(e.getMessage().contains("type-granular"), e.getMessage());
     }
 
+    /**
+     * A helper is defined right there in the file, so "not a data or behavior of this module" sends
+     * the author looking for a typo they did not make. It is the first thing someone carrying Elm's
+     * `exposing (toRate)` habit writes, and what they have to be told is that a pure rule meant to be
+     * shared is declared as a behavior (ADR-0005, ADR-0068).
+     */
+    @Test
+    void exposingAHelperSaysToDeclareItAsABehavior() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                exposing ( Real, rateOf )
+                data Real = { v: Int }
+                let rateOf (r: Real): Int = r.v * 2
+                """));
+        assertTrue(e.getMessage().contains("helper"), e.getMessage());
+        assertTrue(e.getMessage().contains("declare it as a behavior"), e.getMessage());
+    }
+
     @Test
     void realExposedNamesAreAccepted() {
         assertDoesNotThrow(() -> Compiler.compile("""

@@ -75,13 +75,14 @@ public final class TypeChecker {
     public static Reported checkModule(Ast.Module module, Symbols symbols,
                                        Map<String, Sig> importedSigs, Set<String> importedInjected,
                                        Ast.Module lowered, Map<String, ReqSig> reqSigs,
+                                       Map<String, ReqSig> calleeSigs,
                                        Map<String, Type> recursiveHelperFns) {
         Elaborated elaborated = new Elaborated();
         List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
-            checkRecovering(module, symbols, importedSigs, importedInjected, lowered, errors,
+            checkRecovering(module, symbols, importedSigs, importedInjected, lowered, calleeSigs, errors,
                     elaborated, abandoned, reqSigs, recursiveHelperFns);
         } catch (Unanswerable e) {
             abandoned.add(e);
@@ -105,12 +106,12 @@ public final class TypeChecker {
      * around it means — never another body.
      */
     public static Core checkBehavior(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr loweredBody,
-                                     Symbols symbols, Set<String> allBehaviors,
+                                     Symbols symbols, Map<String, ReqSig> calleeSigs,
                                      Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
                                      Map<String, Map<TypeName, String>> recHelperConstructs,
                                      List<Diagnostic> warnings) {
-        return SpecChecker.checkSpecFn(spec, fn, loweredBody, symbols, allBehaviors, reqSigs,
+        return SpecChecker.checkSpecFn(spec, fn, loweredBody, symbols, calleeSigs, reqSigs,
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
     }
 
@@ -172,7 +173,7 @@ public final class TypeChecker {
      */
     static void checkRecovering(Ast.Module module, Symbols symbols,
                                         Map<String, Sig> importedSigs, Set<String> importedInjected,
-                                        Ast.Module lowered,
+                                        Ast.Module lowered, Map<String, ReqSig> calleeSigs,
                                         List<CompileException> errors,
                                         Elaborated elaborated, List<Unanswerable> abandoned,
                                         Map<String, ReqSig> reqSigs,
@@ -273,15 +274,27 @@ public final class TypeChecker {
             // an exposed name must be one of this module's own definitions. An imported name that is
             // merely visible here is not re-exported — importers reach it from its declaring module.
             if (!ownTypes.contains(e) && !allBehaviors.contains(e)) {
-                boolean imported = symbols.inScope(e);
-                String why = imported
+                // A helper of this module is told apart from a name nothing declares. The name is
+                // right there in the file, so "not a data or behavior of this module" sends the
+                // author looking for a typo; what they have to know is that a helper is not part of
+                // the specification and a behavior is how a pure rule is shared (ADR-0005).
+                boolean helper = module.fns().stream().anyMatch(f -> f.name().equals(e));
+                boolean imported = !helper && symbols.inScope(e);
+                String key = helper ? "check.exposing.helper"
+                        : imported ? "check.exposing.imported" : "check.exposing.notdefined";
+                String why = helper
+                        ? ", which is a helper `let` of this module. A helper is not a specification"
+                          + " statement, so it is not exposed; to share it, declare it as a behavior"
+                        : imported
                         ? " is imported into this module, not defined here; `exposing` lists a"
                           + " module's own definitions and does not re-export imported names"
                         : ", which is not a data or behavior of this module";
-                throw CompileException.of(
-                        Diagnostic.of(null, imported ? "check.exposing.imported" : "check.exposing.notdefined")
-                                .title("check.module.title").at(module.pos()).args(e).build(),
-                        "`exposing` names `" + e + "`" + why);
+                Diagnostic.Builder d = Diagnostic.of(null, key).title("check.module.title")
+                        .at(module.pos()).args(e);
+                if (helper) {
+                    d = d.hint("check.exposing.helper.hint", e);
+                }
+                throw CompileException.of(d.build(), "`exposing` names `" + e + "`" + why);
             }
             exposed.add(e);
         }
@@ -312,7 +325,10 @@ public final class TypeChecker {
         }
         // Fail-fast with the reqSigs it reads: a `requires` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1401).
-        SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs);
+        SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
+        // Fail-fast too: a behavior reaching itself has no first element to build, and the code that
+        // works out requirement sets and emits classes would walk the loop.
+        SpecChecker.checkBehaviorsDoNotRecurse(module);
         // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {

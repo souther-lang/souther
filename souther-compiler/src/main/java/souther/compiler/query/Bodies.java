@@ -66,6 +66,139 @@ public final class Bodies {
         }
     }
 
+    /**
+     * The behaviors of a module a body may call by name: the ones whose requirement set is empty
+     * (spec {@code [#calling-a-behavior]}). Those are the behaviors written with a {@code let} and
+     * no {@code requires} — an injection target requires itself, and one that declares
+     * {@code requires} is reached through that clause instead.
+     *
+     * <p>A composition is not here. Its requirements are inferred from its stages rather than
+     * written, so a caller resting on one would take on a set that changes when an upstream stage
+     * changes — the reason a composition may not be named in {@code requires} either.
+     *
+     * <p>A module read from the path published no {@code let}, so which of its behaviors are
+     * injection targets is asked of {@link Injected} rather than read off the fns, exactly as that
+     * key does. What it did publish is the declaration, so its {@code requires} is here to read.
+     */
+    public record Callable(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            if (m == null) {
+                return Answer.of(Set.of());
+            }
+            Set<String> injected = db.ask(new Injected(name)).value();
+            Set<String> callable = new LinkedHashSet<>();
+            for (Ast.BehaviorDef b : m.behaviors()) {
+                if (b instanceof Ast.SpecBehavior spec
+                        && (injected == null || !injected.contains(spec.name()))
+                        && spec.requires().isEmpty()) {
+                    callable.add(spec.name());
+                }
+            }
+            return Answer.of(Ordered.set(callable));
+        }
+    }
+
+    /**
+     * The behaviors of a module whose requirement set is not empty — what a {@code requires} clause
+     * may name (spec {@code [#requires]}). An injection target is one because it requires itself; a
+     * behavior written with a {@code let} is one when it declares {@code requires} of its own.
+     *
+     * <p>A composition is not here. Its requirements are inferred from its stages rather than
+     * written, so a caller resting on one would take on a set that changes when an upstream stage
+     * changes.
+     */
+    public record Dependencies(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            if (m == null) {
+                return Answer.of(Set.of());
+            }
+            Set<String> injected = db.ask(new Injected(name)).value();
+            Set<String> result = new LinkedHashSet<>();
+            for (Ast.BehaviorDef b : m.behaviors()) {
+                if (!(b instanceof Ast.SpecBehavior spec)) {
+                    continue;
+                }
+                if ((injected != null && injected.contains(spec.name()))
+                        || !spec.requires().isEmpty()) {
+                    result.add(spec.name());
+                }
+            }
+            return Answer.of(Ordered.set(result));
+        }
+    }
+
+    /** The behaviors a module borrows whose requirement set is not empty where they are declared. */
+    public record ImportedDependencies(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            if (m == null) {
+                return Answer.of(Set.of());
+            }
+            Set<String> result = new LinkedHashSet<>();
+            for (Ast.Import imp : m.imports()) {
+                Set<String> deps = db.ask(new Dependencies(imp.module())).value();
+                if (deps == null) {
+                    continue;
+                }
+                for (String bare : imp.names()) {
+                    if (deps.contains(bare)) {
+                        result.add(bare);
+                    }
+                }
+            }
+            return Answer.of(Ordered.set(result));
+        }
+    }
+
+    /** The behaviors a module borrows that may be called by name where they are declared. */
+    public record ImportedCallable(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Ast.Module m = db.ask(new Front.Available(name)).value();
+            if (m == null) {
+                return Answer.of(Set.of());
+            }
+            Set<String> result = new LinkedHashSet<>();
+            for (Ast.Import imp : m.imports()) {
+                Set<String> callable = db.ask(new Callable(imp.module())).value();
+                if (callable == null) {
+                    continue;
+                }
+                for (String bare : imp.names()) {
+                    if (callable.contains(bare)) {
+                        result.add(bare);
+                    }
+                }
+            }
+            return Answer.of(Ordered.set(result));
+        }
+    }
+
     /** The signatures of the behaviors a module declares. */
     public record Signatures(String name) implements Key<Map<String, Sig>> {
         @Override
@@ -207,14 +340,49 @@ public final class Bodies {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
-            Answer<Set<String>> injected = db.ask(new ImportedInjected(name));
+            Answer<Set<String>> own = db.ask(new Dependencies(name));
+            Answer<Set<String>> borrowed = db.ask(new ImportedDependencies(name));
             if (!prepared.present() || !scope.present() || !imported.present()
-                    || !injected.present()) {
+                    || !own.present() || !borrowed.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(InjectionSigs.of(prepared.value(), scope.value(), imported.value(),
-                        injected.value()));
+                return Answer.of(InjectionSigs.dependencies(prepared.value(), scope.value(),
+                        own.value(), imported.value(), borrowed.value()));
+            } catch (CompileException _) {
+                return Answer.of(Map.of());
+            }
+        }
+    }
+
+    /**
+     * The signatures of the behaviors a body may call by name — its own and the imported ones it
+     * names. The sibling of {@link ReqSigs}: what a call is typed against when the behavior requires
+     * nothing and so arrives by being built rather than by being injected.
+     *
+     * <p>What this reads of the callee is its declaration. A behavior's body is not among the
+     * questions here, so editing one does not re-check the behaviors that call it.
+     */
+    public record CalleeSigs(String name) implements Key<Map<String, ReqSig>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, ReqSig>> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
+            Answer<Set<String>> own = db.ask(new Callable(name));
+            Answer<Set<String>> borrowed = db.ask(new ImportedCallable(name));
+            if (!prepared.present() || !scope.present() || !imported.present()
+                    || !own.present() || !borrowed.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(InjectionSigs.callable(prepared.value(), scope.value(), own.value(),
+                        imported.value(), borrowed.value()));
             } catch (CompileException _) {
                 return Answer.of(Map.of());
             }
@@ -495,21 +663,21 @@ public final class Bodies {
             Answer<Ast.FnDef> fn = db.ask(new SettledFn(module, behavior));
             Answer<Ast.FnDef> body = db.ask(new LoweredBody(module, behavior));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
-            Answer<Set<String>> behaviors = db.ask(new BehaviorNames(module));
+            Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(module));
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
             Answer<Map<String, Map<TypeName, String>>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
-                    || !behaviors.present() || !reqSigs.present() || !helpers.present()
+                    || !calleeSigs.present() || !reqSigs.present() || !helpers.present()
                     || !sigs.present() || !constructs.present()) {
                 return Answer.absent();
             }
             List<Diagnostic> warnings = new ArrayList<>();
             try {
                 Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().body(),
-                        scope.value(), behaviors.value(), reqSigs.value(),
+                        scope.value(), calleeSigs.value(), reqSigs.value(),
                         HelperInliner.forHelpers(helpers.value()), sigs.value(), constructs.value(),
                         warnings);
                 List<Report> reports = new ArrayList<>();
@@ -558,15 +726,17 @@ public final class Bodies {
             Answer<Set<String>> injected = db.ask(new ImportedInjected(name));
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
+            Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
             if (!lowering.present() || !scope.present() || !imported.present()
-                    || !injected.present() || !reqSigs.present() || !sigs.present()) {
+                    || !injected.present() || !reqSigs.present() || !sigs.present()
+                    || !calleeSigs.present()) {
                 return Answer.absent();
             }
             TypeChecker.Reported reported;
             try {
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         imported.value(), injected.value(), lowering.value().lowered(),
-                        reqSigs.value(), sigs.value());
+                        reqSigs.value(), calleeSigs.value(), sigs.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

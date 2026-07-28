@@ -425,8 +425,13 @@ public final class CallElaborator {
                                     .at(call.pos(), call.fn().length()).args(call.fn()).build(),
                             "`" + call.fn() + "` is not a standard-library function.");
                 }
-                // a required behavior called inline (spec 12.2, 13): type it as its success case
+                // a required behavior called inline (spec 12.2, 13), or one that requires nothing and
+                // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
+                // declaration; where the behavior comes from at run time is the backend's to know.
                 ReqSig callee = ctx.reqs().get(call.fn());
+                if (callee == null) {
+                    callee = ctx.callees().get(call.fn());
+                }
                 if (callee == null) {
                     Elaborator.optionCaseWritten(call.fn(), call.pos());
                     String qualified = Prelude.qualifiedFor(call.fn());
@@ -437,6 +442,21 @@ public final class CallElaborator {
                                         .args(call.fn(), qualified).build(),
                                 "`" + call.fn() + "` is a standard-library function and must be called"
                                         + " qualified, as `" + qualified + "` (spec §stdlib).");
+                    }
+                    // The name may be a behavior all the same — resolution said so. Saying it is not
+                    // one sends the author looking for a typo they did not make: what is wrong is the
+                    // position, which is a helper `let` or a composition, and neither reaches a
+                    // behavior (spec [#calling-a-behavior]).
+                    if (call.denotes() instanceof ValueName.Behavior) {
+                        throw CompileException.of(
+                                Diagnostic.of("E1401", "e1401.behavior")
+                                        .title("e1401.title").at(call.pos(), call.fn().length())
+                                        .args(call.fn()).hint("e1401.behavior.hint", call.fn())
+                                        .build(),
+                                "`" + call.fn() + "` is a behavior, and it cannot be called from"
+                                        + " here: a helper `let` does not reach one, and a `>->`"
+                                        + " composition is composed with rather than called (spec"
+                                        + " [#calling-a-behavior])");
                     }
                     throw CompileException.of(
                             Diagnostic.of("E1401", "e1401.msg").at(call.pos(), call.fn().length())

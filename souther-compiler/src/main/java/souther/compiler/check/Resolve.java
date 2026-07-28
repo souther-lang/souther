@@ -63,10 +63,7 @@ public final class Resolve {
 
         /** What a module reaches when nothing else is in sight. */
         public static Values of(Ast.Module m) {
-            Set<String> helpers = new LinkedHashSet<>();
-            for (Ast.FnDef fn : m.fns()) {
-                helpers.add(fn.name());
-            }
+            Set<String> helpers = new LinkedHashSet<>(HelperInliner.helpersOf(m).keySet());
             Map<String, ValueName.Behavior> behaviors = new LinkedHashMap<>();
             for (Ast.BehaviorDef b : m.behaviors()) {
                 behaviors.put(b.name(), new ValueName.Behavior(m.name(), b.name()));

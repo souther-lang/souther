@@ -874,6 +874,8 @@ final class BodyGen {
                         recursiveHelperCall(call);
                     } else if (reqNames.contains(call.fn())) {
                         requiredCall(call);
+                    } else if (ctx.calleeSig(call.fn()) != null) {
+                        behaviorCall(call);
                     } else {
                         throw new CompileException(call.pos(), "unknown function `" + call.fn() + "`");
                     }
@@ -1017,6 +1019,39 @@ final class BodyGen {
 
         /** Emits an inline call to an injected required behavior, leaving its success value on
          * the stack cast to the success type (spec 12.2, 13). */
+        /**
+         * Calls a behavior that requires nothing (spec {@code [#calling-a-behavior]}). It is built
+         * here rather than read out of a field: with an empty requirement set there is nothing to
+         * inject, so its {@code $Impl} has a no-argument constructor. This is the same sequence a
+         * {@code >->} stage already emits for a behavior it builds, and it reaches an imported one
+         * the same way, because {@link CodegenContext#cdBehaviorImpl} resolves the declaring
+         * module's package.
+         *
+         * <p>A single-input behavior's interface extends {@code Behavior}, so the erased
+         * {@code apply} links; one with any other arity declares a typed {@code apply} of its own.
+         */
+        private void behaviorCall(Core.Call call) {
+            ReqSig sig = ctx.calleeSig(call.fn());
+            ClassDesc impl = ctx.cdBehaviorImpl(call.fn());
+            code.new_(impl);
+            code.dup();
+            code.invokespecial(impl, "<init>", MTD_void);
+            if (sig.params().size() == 1) {
+                Type at = genExpr(call.args().get(0));
+                box(code, at);
+                code.invokeinterface(CD_Behavior, "apply", MTD_apply);
+                stackCast(sig.success());
+                return;
+            }
+            for (Core arg : call.args()) {
+                Type at = genExpr(arg);
+                box(code, at);
+            }
+            code.invokeinterface(ctx.cdBehavior(call.fn()), "apply",
+                    ctx.typedApplyDesc(call.fn(), sig.params(), sig.success()));
+            stackCast(sig.success());
+        }
+
         private void requiredCall(Core.Call call) {
             Type success = reqSuccess.get(call.fn());
             if (ctx.isStandaloneRequired(call.fn())) {
