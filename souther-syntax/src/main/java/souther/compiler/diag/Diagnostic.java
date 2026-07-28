@@ -36,6 +36,33 @@ public record Diagnostic(Severity severity,
         return region == null ? null : region.start();
     }
 
+    /**
+     * What makes two diagnostics one problem: everything this one says, compared by what it says.
+     *
+     * <p>Written out rather than left to the record because {@code args} is an array, and a record
+     * compares an array component by identity — so two diagnostics built the same way from the same
+     * values are never equal. The arguments are the difference between "expected A, found B" and
+     * "expected C, found B", which is two problems and not one, so they are in here.
+     */
+    public record Identity(Severity severity, String code, String titleKey, Region region,
+                           List<LabeledRegion.Of> secondary, String messageKey, List<Object> args,
+                           String literalMessage, TypeComparison diff, List<Note.Of> notes,
+                           String suggestion) {}
+
+    public Identity identity() {
+        List<LabeledRegion.Of> labels = new ArrayList<>();
+        for (LabeledRegion label : secondary == null ? List.<LabeledRegion>of() : secondary) {
+            labels.add(label.identity());
+        }
+        List<Note.Of> hints = new ArrayList<>();
+        for (Note note : notes == null ? List.<Note>of() : notes) {
+            hints.add(note.identity());
+        }
+        return new Identity(severity, code, titleKey, region, labels, messageKey,
+                args == null ? List.of() : java.util.Arrays.asList(args), literalMessage, diff,
+                hints, suggestion);
+    }
+
     /** A pre-formatted English message wrapped verbatim — the compatibility path for a site that
      * has not yet been moved onto a catalog key. {@code pos} may be null for a position-less error. */
     public static Diagnostic literal(SourcePos pos, String code, String message) {

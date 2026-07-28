@@ -1,11 +1,14 @@
 package souther.compiler.query;
 
 import java.util.ArrayDeque;
+import souther.compiler.diag.Diagnostic;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -214,7 +217,7 @@ public final class Db {
      * generation of its own, separate from the input revision.
      */
     public List<Found> allReports() {
-        Map<String, Found> found = new java.util.LinkedHashMap<>();
+        Map<Told, Found> found = new LinkedHashMap<>();
         for (Key<?> key : spoke) {
             Memo memo = memos.get(key);
             if (memo == null || memo.verifiedAt() != revision) {
@@ -225,13 +228,15 @@ public final class Db {
                 // legitimately: a helper is checked on its own and again in each body it is expanded
                 // into, and both are looking at the same line. The first to say it is the one that
                 // says it, so the order is the order the work happened in.
-                found.putIfAbsent(
-                        key.module() + " " + key.sourceId() + " " + report.problem(),
+                found.putIfAbsent(new Told(key.module(), key.sourceId(), report.problem()),
                         new Found(key.module(), key.sourceId(), report));
             }
         }
         return new ArrayList<>(found.values());
     }
+
+    /** One thing the author is told, wherever it was found: a problem, on a file. */
+    private record Told(String module, String sourceId, Diagnostic.Identity problem) {}
 
     /** What {@code key} read while it was answered, empty if it has not been asked. */
     public Set<Key<?>> dependenciesOf(Key<?> key) {

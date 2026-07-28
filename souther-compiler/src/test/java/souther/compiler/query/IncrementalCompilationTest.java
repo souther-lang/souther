@@ -196,19 +196,28 @@ class IncrementalCompilationTest {
         return c;
     }
 
+    /** The same workspace with {@code thrice}'s body changed — an edit inside one definition, made
+     * at the end of the file so nothing before it moves. */
+    private static Map<String, String> thriceTimes(String factor) {
+        return Map.of("orders.sou", ORDERS.replace("n.value * 3)", "n.value * " + factor + ")"));
+    }
+
     /**
      * A body is expanded from itself and the helpers around it, so what another body in the same
      * module says is none of its business. Expanding a module's bodies as one tree made every
      * behavior depend on every other one, so editing any body in a file re-expanded all of them.
      */
     @Test
-    void editingOneBodyDoesNotExpandTheBodiesBesideIt() {
+    void editingOneBodyExpandsThatBodyAndNotTheOnesBesideIt() {
         Compilation c = orders(ORDERS);
         Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
+        Answer<?> thrice = c.db().ask(new Bodies.LoweredBody("shop.orders", "thrice"));
 
-        c.update(Map.of("orders.sou", ORDERS.replace("n.value * 3", "n.value * 30")), Set.of());
+        c.update(thriceTimes("30"), Set.of());
         c.answerEverything();
 
+        assertNotSame(thrice, c.db().ask(new Bodies.LoweredBody("shop.orders", "thrice")),
+                "the edit is `thrice`'s, so it is expanded again");
         assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
                 "`twice` says what it said, and `thrice` is not part of it");
     }
@@ -218,15 +227,36 @@ class IncrementalCompilationTest {
      * so a mistake made in another body — or its being edited at all — is none of its business.
      */
     @Test
-    void editingOneBodyDoesNotCheckTheBodiesBesideIt() {
+    void editingOneBodyChecksThatBodyAndNotTheOnesBesideIt() {
         Compilation c = orders(ORDERS);
         Answer<?> twice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
+        Answer<?> thrice = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice"));
 
-        c.update(Map.of("orders.sou", ORDERS.replace("n.value * 3", "n.value * 30")), Set.of());
+        c.update(thriceTimes("30"), Set.of());
         c.answerEverything();
 
+        assertNotSame(thrice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "thrice")),
+                "the edit is `thrice`'s, so it is checked again");
         assertSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
                 "`twice` is checked against `behavior twice`, which says what it said");
+    }
+
+    /**
+     * A helper is expanded into the bodies that call it, so editing one reaches them. It reaches the
+     * ones that do not call it as well: a body reads the module's helpers, not the helpers it calls,
+     * and narrowing that is per-helper work rather than per-body work.
+     */
+    @Test
+    void editingAHelperReachesTheBodiesItIsExpandedInto() {
+        Compilation c = orders(ORDERS);
+        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
+
+        c.update(Map.of("orders.sou", ORDERS.replace("let doubled (n) = n * 2",
+                "let doubled (n) = n * 2 + 0")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
+                "`twice` calls `doubled`, and `doubled` is part of what `twice` becomes");
     }
 
     @Test

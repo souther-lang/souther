@@ -285,8 +285,15 @@ public final class Bodies {
         }
     }
 
-    /** One settled fn, so what a body is expanded from is the fn itself and not the module it sits
-     * in. */
+    /**
+     * One settled fn, so what a body is expanded from is the fn itself and not the module it sits in.
+     *
+     * <p>A projection, not a settling of its own: the module is settled together — one helper's
+     * settled type can settle the next one's — and this reads one fn out of the result. The
+     * difference matters because it is what a reader depends on that decides how far an edit
+     * travels, not what the work was. Settling per definition, if it is ever worth it, goes behind
+     * this without any reader noticing.
+     */
     public record SettledFn(String module, String fn) implements Key<Ast.FnDef> {
 
         @Override

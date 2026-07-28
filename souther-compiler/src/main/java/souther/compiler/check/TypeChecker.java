@@ -4,7 +4,6 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.diag.Region;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -150,23 +149,17 @@ public final class TypeChecker {
         }
     }
 
-    /** Collected errors as a stable set in first-seen order: one per (code, message, region), so the
-     * same underlying error reported by two phases is shown once. */
+    /** Collected errors as a stable set in first-seen order: one per problem, so the same underlying
+     * error found by two phases is shown once. What makes two of them one problem is the diagnostic's
+     * own {@link Diagnostic#identity()} — the same comparison a caller collecting from several
+     * questions makes. */
     static List<CompileException> deduped(List<CompileException> errors) {
-        Map<String, CompileException> unique = new LinkedHashMap<>();
+        Map<Object, CompileException> unique = new LinkedHashMap<>();
         for (CompileException e : errors) {
-            unique.putIfAbsent(dedupKey(e.diagnostic()), e);
+            Diagnostic d = e.diagnostic();
+            unique.putIfAbsent(d == null ? "null" : d.identity(), e);
         }
         return new ArrayList<>(unique.values());
-    }
-
-    static String dedupKey(Diagnostic d) {
-        if (d == null) {
-            return "null";
-        }
-        Region r = d.region();
-        String at = r == null ? "" : r.start() + ":" + r.end();
-        return d.code() + "|" + d.messageKey() + "|" + d.literalMessage() + "|" + at;
     }
 
 
