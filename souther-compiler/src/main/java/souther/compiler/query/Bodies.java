@@ -253,9 +253,11 @@ public final class Bodies {
             for (Diagnostic warning : reported.checked().warnings()) {
                 reports.add(Report.of(warning));
             }
-            return reported.errors().isEmpty()
-                    ? Answer.of(reported.checked(), reports)
-                    : Answer.absent(reports);
+            // A unit the check could not read at all leaves the module without a meaning to emit,
+            // and says nothing of its own: the name it rested on was reported where it was written.
+            // Whatever else the check found is still reported, which is the point of carrying on.
+            boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty();
+            return sound ? Answer.of(reported.checked(), reports) : Answer.absent(reports);
         }
     }
 }

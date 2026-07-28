@@ -75,4 +75,52 @@ class UnresolvedNamesTest {
         assertEquals(Map.of(), c.classes(),
                 "there is no bytecode for a type nobody could name");
     }
+    @Test
+    void anUnknownNameInABodyAlsoStopsTheModuleBeingEmitted() {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("a.sou", """
+                module m.a exposing ( A, f )
+
+                data A = { n: Int }
+
+                behavior f : (n: Int) -> A
+                    constructs A
+                let f (n) = Nowhere { n = n }
+                """);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(),
+                souther.compiler.meta.ModulePath.EMPTY);
+        List<Diagnostic> found = c.diagnostics().get("a.sou");
+
+        assertEquals(1, found.size(),
+                "the name that denotes nothing, and nothing about constructing it: " + found);
+        assertTrue(found.stream().anyMatch(d -> "check.unknown.type.msg".equals(d.messageKey())),
+                "the construction names nothing, and that is said: " + found);
+        assertEquals(Map.of(), c.classes(),
+                "a construction of a type nobody could name is not emitted");
+    }
+
+    @Test
+    void abandoningOneDefinitionStillChecksTheOthers() {
+        // `f` rests on a name that denotes nothing, so there is nothing to say about what it does.
+        // `g` is a different definition and is wrong in its own right.
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( A, f, g )
+
+                data A = { n: Int }
+
+                behavior f : (n: Int) -> A
+                    constructs A
+                let f (n) = Nowhere { n = n }
+
+                behavior g : (n: Int) -> Int
+                let g (n) = "not an Int"
+                """);
+
+        assertEquals(2, found.size(),
+                "the unknown name, and g's own mistake — nothing about what f does: " + found);
+        assertTrue(found.stream().anyMatch(d -> "check.unknown.type.msg".equals(d.messageKey())),
+                "the name that denotes nothing: " + found);
+        assertTrue(found.stream().anyMatch(d -> d.diff() != null),
+                "and a type mismatch in the definition that has one: " + found);
+    }
 }

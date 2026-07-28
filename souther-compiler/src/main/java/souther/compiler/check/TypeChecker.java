@@ -68,17 +68,25 @@ public final class TypeChecker {
      * have raised — a query — needs the exceptions themselves, because a diagnostic does not carry
      * the English body a throw site passed alongside it.
      */
-    public record Reported(List<CompileException> errors, Checked checked) {}
+    /**
+     * @param errors what the check found wrong
+     * @param abandoned the units it could not read at all, each resting on a name that denotes
+     *                  nothing — reported already, and each a reason the module cannot be emitted
+     */
+    public record Reported(List<CompileException> errors, List<Unanswerable> abandoned,
+                           Checked checked) {}
 
     public static Reported checkReporting(Ast.Module module, Symbols symbols,
                                           Map<String, Sig> importedSigs, Set<String> importedInjected,
                                           Ast.Module lowered) {
         List<Diagnostic> warnings = new ArrayList<>();
         Elaborated elaborated = new Elaborated();
+        List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors =
                 checkCollecting(module, symbols, importedSigs, importedInjected, lowered, warnings,
-                        elaborated);
-        return new Reported(errors, new Checked(elaborated.behaviors, elaborated.helpers, warnings));
+                        elaborated, abandoned);
+        return new Reported(errors, List.copyOf(abandoned),
+                new Checked(elaborated.behaviors, elaborated.helpers, warnings));
     }
 
     /** Every error found in {@code module}, recovering past each so the whole module is checked; the
@@ -88,10 +96,21 @@ public final class TypeChecker {
                                                           Map<String, Sig> importedSigs,
                                                           Set<String> importedInjected, Ast.Module lowered,
                                                           List<Diagnostic> warnings, Elaborated elaborated) {
+        return checkCollecting(module, symbols, importedSigs, importedInjected, lowered, warnings,
+                elaborated, new ArrayList<>());
+    }
+
+    static List<CompileException> checkCollecting(Ast.Module module, Symbols symbols,
+                                                          Map<String, Sig> importedSigs,
+                                                          Set<String> importedInjected, Ast.Module lowered,
+                                                          List<Diagnostic> warnings, Elaborated elaborated,
+                                                          List<Unanswerable> abandoned) {
         List<CompileException> errors = new ArrayList<>();
         try {
             checkRecovering(module, symbols, importedSigs, importedInjected, lowered, errors, warnings,
-                    elaborated);
+                    elaborated, abandoned);
+        } catch (Unanswerable e) {
+            abandoned.add(e);
         } catch (CompileException e) {
             // A structural / prerequisite check (a duplicate name, an `exposing` violation, a module
             // cycle) is fail-fast: it can leave later phases without the state they read, so its first
@@ -107,10 +126,25 @@ public final class TypeChecker {
     /** Runs one independent unit's check, recording its first error instead of throwing so the next
      * unit is still checked — the recovery boundary that lets a module report more than one error. */
     static void collect(List<CompileException> errors, Runnable unitCheck) {
+        collect(errors, new ArrayList<>(), unitCheck);
+    }
+
+    /**
+     * Runs one unit's check, recording its first error instead of throwing so the next unit is still
+     * checked — the recovery boundary that lets a module report more than one error.
+     *
+     * <p>A unit that was abandoned rather than found wrong is recorded in {@code abandoned}. It has
+     * no error of its own: the name it rested on was reported where it was written. But the module
+     * cannot be emitted, because this unit has no meaning to emit, and that is what the list says.
+     */
+    static void collect(List<CompileException> errors, List<Unanswerable> abandoned,
+                        Runnable unitCheck) {
         try {
             unitCheck.run();
         } catch (CompileException e) {
             errors.add(e);
+        } catch (Unanswerable e) {
+            abandoned.add(e);
         }
     }
 
@@ -174,7 +208,7 @@ public final class TypeChecker {
                                         Map<String, Sig> importedSigs, Set<String> importedInjected,
                                         Ast.Module lowered,
                                         List<CompileException> errors, List<Diagnostic> warnings,
-                                        Elaborated elaborated) {
+                                        Elaborated elaborated, List<Unanswerable> abandoned) {
         Map<String, Ast.Expr> loweredBodies = new HashMap<>();
         for (Ast.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.body());
@@ -204,7 +238,7 @@ public final class TypeChecker {
             }
         }
         for (Ast.Def def : module.defs()) {
-            collect(errors, () -> {
+            collect(errors, abandoned, () -> {
                 switch (def) {
                     case Ast.Data data ->
                             DataChecker.checkData(CheckContext.of(symbols).forData(data), recursiveHelperFns);
@@ -213,7 +247,7 @@ public final class TypeChecker {
                 }
             });
         }
-        collect(errors, () -> DataChecker.checkNoUninhabitableCycle(module, symbols));
+        collect(errors, abandoned, () -> DataChecker.checkNoUninhabitableCycle(module, symbols));
         Map<String, Ast.FnDef> fns = new HashMap<>();
         for (Ast.FnDef fn : module.fns()) {
             if (fns.put(fn.name(), fn) != null) {
@@ -311,16 +345,16 @@ public final class TypeChecker {
         // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {
-            collect(errors, () -> Elaborator.rejectAnnotatedLambdaBindings(fn.body()));
+            collect(errors, abandoned, () -> Elaborator.rejectAnnotatedLambdaBindings(fn.body()));
         }
         // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
         // helper is checked standalone against its own parameter types, which its body settles
         // (spec 13.1). Recovered so a broken helper does not hide the behavior-body errors below.
-        collect(errors, () -> HelperTyping.checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns,
+        collect(errors, abandoned, () -> HelperTyping.checkHelpers(inliner, symbols, reqSigs, recursiveHelperFns,
                 loweredBodies, elaborated));
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
-        collect(errors, () -> TotalityChecker.check(inliner));
+        collect(errors, abandoned, () -> TotalityChecker.check(inliner));
         // What each recursive helper constructs, transitively — a recursive helper is not inlined, so
         // its constructions are attributed to the behavior that calls it (spec 12.5).
         Map<String, Map<TypeName, String>> recHelperConstructs =
@@ -329,7 +363,7 @@ public final class TypeChecker {
             if (b instanceof Ast.SpecBehavior spec) {
                 Ast.FnDef fn = fns.get(spec.name());
                 if (fn != null) {
-                    collect(errors, () -> elaborated.behaviors.put(fn.name(),
+                    collect(errors, abandoned, () -> elaborated.behaviors.put(fn.name(),
                             SpecChecker.checkSpecFn(spec, fn, loweredBodies.get(spec.name()), symbols,
                             allBehaviors, reqSigs, inliner, recursiveHelperFns, recHelperConstructs,
                             warnings)));
@@ -340,7 +374,7 @@ public final class TypeChecker {
         // cannot also have a fn body — spec 13.1). A fn matching a SpecBehavior is that behavior's
         // implementation (checked above); any other fn is a helper (checked by checkHelpers). These
         // terminal validations build no state, so each is recovered independently.
-        collect(errors, () -> {
+        collect(errors, abandoned, () -> {
             for (Ast.FnDef fn : module.fns()) {
                 if (!specNames.contains(fn.name()) && allBehaviors.contains(fn.name())) {
                     throw CompileException.of(
@@ -351,11 +385,11 @@ public final class TypeChecker {
                 }
             }
         });
-        collect(errors, () -> SpecChecker.checkStagesAreSingleInput(module));
+        collect(errors, abandoned, () -> SpecChecker.checkStagesAreSingleInput(module));
         // an exposed composition must declare its output in `exposing`, matching the inferred one
         // (spec 14.5, ADR-0024), so a far-away change cannot grow a published output silently.
         // `signatures` builds the map `checkExposedPipeOutputs` reads, so it stays fail-fast.
-        collect(errors, () -> SpecChecker.checkExposedPipeOutputs(module,
+        collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
                 exposed, PipelineSigs.signatures(module, symbols, importedSigs), symbols));
     }
 
