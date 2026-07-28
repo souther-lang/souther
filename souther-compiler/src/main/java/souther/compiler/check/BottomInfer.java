@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
 
 import java.util.HashMap;
 import java.util.List;

@@ -6,6 +6,7 @@ import souther.compiler.check.NumericDomain.Rel;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -116,7 +117,7 @@ final class InvariantChecker {
                 for (Ast.Case c : m.cases()) {
                     Map<String, Type> t2 = new HashMap<>(types);
                     if (c.binding() != null && c.caseTypes().size() == 1) {
-                        Type bound = MatchElaborator.caseBindType(c.caseTypes().get(0), symbols);
+                        Type bound = MatchElaborator.caseBindType(c.caseTypes().get(0).written(), symbols);
                         if (bound != null) {
                             t2.put(c.binding(), bound);
                         }
@@ -158,7 +159,7 @@ final class InvariantChecker {
     private void checkIfConstruction(Ast.Expr e, NumericDomain d, Map<String, Type> types) {
         switch (e) {
             case Ast.NewData nd when nd.spreads().isEmpty() -> {
-                if (symbols.declaration(nd.typeName()) instanceof Ast.Data type) {
+                if (symbols.get(nd.typeName().denotes()) instanceof Ast.Data type) {
                     Map<String, LinearForm> fields = new HashMap<>();
                     for (Ast.FieldInit fi : nd.inits()) {
                         LinearForm f = affineOf(fi.value(), types);
@@ -344,7 +345,7 @@ final class InvariantChecker {
         return affine(e, n -> {
             if (n instanceof Ast.NewData nd && nd.spreads().isEmpty() && nd.inits().size() == 1
                     && nd.inits().get(0).name().equals("value")
-                    && numericNewtype(Type.ref(symbols.resolve(nd.typeName())))) {
+                    && numericNewtype(Type.ref(nd.typeName().denotes()))) {
                 return affineOf(nd.inits().get(0).value(), types);
             }
             String atom = atomOf(n, types);
@@ -400,7 +401,7 @@ final class InvariantChecker {
                 yield owner instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.Data d
                         ? TypeOps.fieldTypes(d, symbols).get(fa.field()) : null;
             }
-            case Ast.NewData nd -> Type.ref(symbols.resolve(nd.typeName()));
+            case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
             case Ast.Neg n -> typeExpr(n.operand(), types);
             case Ast.Binary b when isArith(b.op()) -> arithType(b, types);
             default -> null;

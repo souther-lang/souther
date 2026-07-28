@@ -1,7 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;

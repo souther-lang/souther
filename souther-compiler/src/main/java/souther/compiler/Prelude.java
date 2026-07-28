@@ -1,8 +1,9 @@
 package souther.compiler;
 
+import souther.compiler.check.Resolve;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
 import souther.compiler.check.TypeOps;
 import souther.compiler.frontend.CstFrontend;
 
@@ -140,7 +141,10 @@ public final class Prelude {
     private static void load() {
         Symbols noSymbols = Symbols.none();   // prelude signatures use only primitives / 'a
         for (String resource : RESOURCES) {
-            Ast.Module module = CstFrontend.parse(read(resource));
+            // The prelude is resolved like any other module (issue #177). Its signatures name only
+            // primitives, type variables and Option's cases, so `Symbols.none()` answers them all;
+            // a prelude body naming a data type would be reported here, where it is unanswerable.
+            Ast.Module module = Resolve.module(CstFrontend.parse(read(resource)), noSymbols);
             String alias = MODULE_TO_ALIAS.get(module.name());
             if (alias == null) {
                 throw new IllegalStateException("prelude resource " + resource

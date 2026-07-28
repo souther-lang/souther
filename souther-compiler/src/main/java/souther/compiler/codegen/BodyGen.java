@@ -9,8 +9,8 @@ import souther.compiler.check.Elaborator;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
-import souther.compiler.check.Type;
-import souther.compiler.check.TypeName;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
 
@@ -54,7 +54,7 @@ final class BodyGen {
         return ctx.cd(typeName);
     }
 
-    private ClassDesc matchCaseClass(String caseName) {
+    private ClassDesc matchCaseClass(TypeName caseName) {
         return ctx.matchCaseClass(caseName);
     }
 
@@ -347,7 +347,7 @@ final class BodyGen {
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
                 case Core.NewData nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
-                    Map<String, Type> flds = fieldTypes((Ast.Data) symbols.declaration(nd.typeName()));
+                    Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
                     emitFieldValues(flds, nd.inits(), nd.spreads());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
@@ -634,14 +634,14 @@ final class BodyGen {
          * jumps to {@code nextCase}. Shared by value-position {@link #match} and tail-position
          * {@link #emitTailMatch} so the two stay in step. */
         private void emitCaseGuard(Core.Case c, int sSlot, Type st, Type element, Label nextCase) {
-            List<String> cases = c.caseTypes();
+            List<TypeName> cases = c.caseTypes();
             if (element != null) {
                 // Option match: a single Some/None case (or-patterns are rejected by the checker)
-                String caseName = cases.get(0);
+                boolean isSome = cases.get(0).name().equals("Some");
                 code.aload(sSlot);
-                code.instanceOf(caseName.equals("Some") ? CD_OptionSome : CD_OptionNone);
+                code.instanceOf(isSome ? CD_OptionSome : CD_OptionNone);
                 code.ifeq(nextCase);
-                if (caseName.equals("Some")) {
+                if (isSome) {
                     // unwrap Some(v) -> v, bound to the element type
                     code.aload(sSlot);
                     code.checkcast(CD_OptionSome);
@@ -668,7 +668,7 @@ final class BodyGen {
                 // or-pattern: run the body if the value is any of the cases; the binding (if any)
                 // is the scrutinee's sum type, which every alternative already is
                 Label body = code.newLabel();
-                for (String caseName : cases) {
+                for (TypeName caseName : cases) {
                     code.aload(sSlot);
                     code.instanceOf(matchCaseClass(caseName));
                     code.ifne(body);
@@ -691,10 +691,10 @@ final class BodyGen {
         }
 
         private void newData(Core.NewData nd) {
-            Ast.Data owner = (Ast.Data) symbols.declaration(nd.typeName());
+            Ast.Data owner = (Ast.Data) symbols.get(nd.typeName());
             Map<String, Type> flds = fieldTypes(owner);
             ClassDesc cdType = cd(nd.typeName());
-            TypeName built = symbols.resolve(nd.typeName());
+            TypeName built = nd.typeName();
             // A type of another module is built through its checked entry: `new` reaches a constructor
             // that is not public, and the checked entry is the declared path either way.
             if (DataChecker.isInvariantBearing(built, symbols) || symbols.isForeign(built)) {

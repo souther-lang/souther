@@ -2,7 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
 import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
@@ -28,7 +28,7 @@ class HighValueDiagnosticTest {
         assertEquals("Int", Type.show(Type.INT));
         assertEquals("Bool", Type.show(Type.BOOL));
         assertEquals("List<Int>", Type.show(Type.list(Type.INT)));
-        assertEquals("N", Type.show(Type.ref(new souther.compiler.check.TypeName("demo", "N"))));
+        assertEquals("N", Type.show(Type.ref(new souther.compiler.types.TypeName("demo", "N"))));
         assertEquals("Int?", Type.show(Type.option(Type.INT)));
     }
 

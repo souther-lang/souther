@@ -1,6 +1,7 @@
 package souther.compiler.core;
 
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 
@@ -84,12 +85,12 @@ public sealed interface Core {
 
     record FieldInit(String name, Core value, SourcePos pos) {}
 
-    record NewData(String typeName, List<FieldInit> inits, List<String> spreads, Type type,
+    record NewData(TypeName typeName, List<FieldInit> inits, List<String> spreads, Type type,
                    SourcePos pos) implements Core {}
 
     /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
      * narrows to, or the element a {@code Some x} opens. */
-    record Case(List<String> caseTypes, String binding, Core body, Type bindType, SourcePos pos) {}
+    record Case(List<TypeName> caseTypes, String binding, Core body, Type bindType, SourcePos pos) {}
 
     record Match(Core scrutinee, List<Case> cases, Type type, SourcePos pos) implements Core {}
 

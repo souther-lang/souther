@@ -2,8 +2,8 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Type;
-import souther.compiler.check.TypeName;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 
 import java.lang.classfile.ClassFile;
@@ -181,6 +181,7 @@ final class CodegenContext {
         });
     }
 
+
     ClassDesc cdBehavior(String name) {
         return behaviorDescs.computeIfAbsent(name,
                 n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorClass(n)));
@@ -246,16 +247,19 @@ final class CodegenContext {
     }
 
     /** The class a match case is tested against: a boxed/reference class for a primitive case,
-     * otherwise the case's data or built-in class. */
-    ClassDesc matchCaseClass(String caseName) {
-        return switch (caseName) {
+     * otherwise the case's data class, which its resolved name already names. */
+    ClassDesc matchCaseClass(TypeName caseName) {
+        if (!caseName.isPrimitive()) {
+            return cd(caseName);
+        }
+        return switch (caseName.name()) {
             case "Int" -> CD_Long;
             case "Bool" -> CD_Boolean;
             case "Decimal" -> CD_BigDecimal;
             case "String" -> CD_String;
             case "Date" -> CD_LocalDate;
             case "DateTime" -> CD_LocalDateTime;
-            default -> caseClass(caseName);
+            default -> cd(caseName);
         };
     }
 
@@ -285,10 +289,6 @@ final class CodegenContext {
 
     Map<String, Type> fieldTypes(Ast.Data data) {
         return TypeOps.fieldTypes(data, symbols);
-    }
-
-    Type resolveType(Ast.TypeRef ref) {
-        return TypeOps.resolveType(ref, symbols);
     }
 
     Type successType(Ast.RetType ret) {

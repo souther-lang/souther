@@ -1,6 +1,8 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +20,41 @@ public interface Ast {
 
     /** The source position of this node. Every record below provides it. */
     SourcePos pos();
+
+    /**
+     * A name that denotes a declared type, in both forms it has: {@code written} as the source spelled
+     * it — bare {@code 金額}, qualified {@code billing.金額}, or through an import alias — and
+     * {@code denotes} as it resolves. Resolution happens once, in {@code Resolve}, before any check
+     * runs; every name-bearing position in this tree carries one of these, so no later pass decides
+     * for itself what a spelling means or whether a qualified one is allowed here (issue #177).
+     *
+     * <p>A check reads {@link #denotes()}, which is set on every name the resolve pass let through —
+     * a name that denotes nothing is reported there and the compile stops, so nothing downstream sees
+     * an unresolved one. {@link #written()} is for a diagnostic that quotes the source, and is not
+     * what two names are compared by: a bare and a qualified spelling of one type are one name.
+     */
+    record Name(String written, TypeName denotes, SourcePos pos) implements Ast {
+
+        /** A name as the parser read it, before the resolve pass has said what it denotes. */
+        public static Name of(String written, SourcePos pos) {
+            return new Name(written, null, pos);
+        }
+
+        /** A name a pass synthesized, already knowing what it denotes. */
+        public static Name of(TypeName denotes, SourcePos pos) {
+            return new Name(denotes.name(), denotes, pos);
+        }
+
+        /** The same name, resolved to what it denotes. */
+        public Name denoting(TypeName resolved) {
+            return new Name(written, resolved, pos);
+        }
+
+        @Override
+        public String toString() {
+            return written;
+        }
+    }
 
     /**
      * A whole source file: its public surface, imports, and definitions.
@@ -103,7 +140,7 @@ public interface Ast {
     record SpecBehavior(String name,
                         List<Param> params,
                         RetType ret,
-                        List<String> constructs,
+                        List<Name> constructs,
                         List<String> requires,
                         SourcePos pos) implements BehaviorDef {}
 
@@ -191,7 +228,7 @@ public interface Ast {
      */
     record Data(String name,
                 boolean newtype,
-                List<Include> includes,
+                List<Name> includes,
                 List<Field> fields,
                 Optional<Expr> invariant,
                 Optional<DecoderDef> decoder,
@@ -200,7 +237,7 @@ public interface Ast {
 
     /** A sum data definition {@code data X = A | B | ...} with optional discriminate decoder/encoder. */
     record SumData(String name,
-                   List<String> cases,
+                   List<Name> cases,
                    Optional<Discriminate> decoder,
                    Optional<SumEncoder> encoder,
                    SourcePos pos) implements Def {}
@@ -208,7 +245,7 @@ public interface Ast {
     /** {@code encoder discriminate on "key" { Case -> "tag" ... }} — the inverse of discriminate. */
     record SumEncoder(String key, List<EncVariant> variants, SourcePos pos) implements Ast {}
 
-    record EncVariant(String caseType, String tag, SourcePos pos) implements Ast {}
+    record EncVariant(Name caseType, String tag, SourcePos pos) implements Ast {}
 
     /** A unit data definition {@code data U} with no fields. */
     record UnitData(String name, SourcePos pos) implements Def {}
@@ -216,14 +253,10 @@ public interface Ast {
     /** {@code decoder from Object discriminate on "key" { "tag" -> Case.decoder ... }} */
     record Discriminate(String key, List<Variant> variants, SourcePos pos) implements Ast {}
 
-    record Variant(String tag, String caseType, SourcePos pos) implements Ast {}
+    record Variant(String tag, Name caseType, SourcePos pos) implements Ast {}
 
     /** A field: a role name and its type. */
     record Field(String name, TypeRef type, SourcePos pos) implements Ast {}
-
-    /** A {@code ...Name} in a data body: the data whose fields are included, and where the name was
-     * written — a spread that names nothing in scope is reported there, like a field's type. */
-    record Include(String name, SourcePos pos) implements Ast {}
 
     /**
      * A named type reference, optionally with one type argument (e.g. {@code List<T>}). When
@@ -231,11 +264,27 @@ public interface Ast {
      * {@code (A, B, ...)} (ADR-0036), written only in a helper/stdlib signature. A {@code Map<K, V>}
      * reuses {@code tupleElems} to carry its key type (a single element) while {@code name} is
      * {@code "Map"} and {@code arg} is the value type (ADR-0040).
+     *
+     * <p>{@code denotes} is the type the reference stands for, decided once by {@code Resolve}
+     * (issue #177). Every reference the pass let through carries one, so nothing downstream resolves
+     * a written type a second time — nor has to know which module the reference was written in, which
+     * is what a second resolution needed to get right.
      */
-    record TypeRef(String name, TypeRef arg, List<TypeRef> tupleElems, SourcePos pos) implements Ast {
+    record TypeRef(String name, TypeRef arg, List<TypeRef> tupleElems, Type denotes, SourcePos pos)
+            implements Ast {
+        /** A reference as the parser read it, before the resolve pass has said what it denotes. */
+        public TypeRef(String name, TypeRef arg, List<TypeRef> tupleElems, SourcePos pos) {
+            this(name, arg, tupleElems, null, pos);
+        }
+
         /** An ordinary (non-tuple) reference. */
         public TypeRef(String name, TypeRef arg, SourcePos pos) {
-            this(name, arg, null, pos);
+            this(name, arg, null, null, pos);
+        }
+
+        /** The same reference, resolved. */
+        public TypeRef denoting(Type type) {
+            return new TypeRef(name, arg, tupleElems, type, pos);
         }
 
         /** A tuple type is the nameless form; a named ref that also carries {@code tupleElems}
@@ -280,7 +329,7 @@ public interface Ast {
 
     record PrimDecRef(PrimKind kind, SourcePos pos) implements DecRef {}
 
-    record DataDecRef(String typeName, SourcePos pos) implements DecRef {}
+    record DataDecRef(Name typeName, SourcePos pos) implements DecRef {}
 
     /** {@code list(<elementDecRef>)} */
     record ListDecRef(DecRef element, SourcePos pos) implements DecRef {}
@@ -306,7 +355,7 @@ public interface Ast {
     record Let(String name, Expr value, SourcePos pos) implements DecStmt {}
 
     /** A typed record literal {@code TypeName { ..src, field: expr, ... }} — a construction. */
-    record Construct(String typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
+    record Construct(Name typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
             implements Ast {}
 
     /** One {@code field: expr} (or shorthand {@code field}) inside a record literal. */
@@ -346,7 +395,7 @@ public interface Ast {
     record ObjectRaw(List<RawEntry> entries, SourcePos pos) implements RawExpr {}
 
     /** {@code TypeName.encode(expr)} — encode a nested data value to Raw. */
-    record EncodeRaw(String typeName, Expr arg, SourcePos pos) implements RawExpr {}
+    record EncodeRaw(Name typeName, Expr arg, SourcePos pos) implements RawExpr {}
 
     /** {@code list(expr, <elemEnc>)} — encode a {@code List<T>} to a Raw.List. */
     record ListEnc(Expr source, EncElem elem, SourcePos pos) implements RawExpr {}
@@ -361,7 +410,7 @@ public interface Ast {
 
     record PrimEnc(PrimKind kind, SourcePos pos) implements EncElem {}
 
-    record DataEnc(String typeName, SourcePos pos) implements EncElem {}
+    record DataEnc(Name typeName, SourcePos pos) implements EncElem {}
 
     /** A {@code List<T>} element, each {@code T} encoded by {@code elem}. */
     record ListElemEnc(EncElem elem, SourcePos pos) implements EncElem {}
@@ -403,7 +452,7 @@ public interface Ast {
      * declared type, bound to the argument at the call site) is not: the argument's own type and
      * the call-site check already cover it.
      */
-    record LetIn(String name, Expr value, ParamType declaredType, boolean annotated, String opens,
+    record LetIn(String name, Expr value, ParamType declaredType, boolean annotated, Name opens,
                  Expr body, SourcePos pos) implements Expr {
         /** An ordinary {@code let x = e}: the bound name takes {@code e}'s inferred type. */
         public LetIn(String name, Expr value, Expr body, SourcePos pos) {
@@ -426,7 +475,7 @@ public interface Ast {
          * the exhaustiveness pass, which knows the scrutinee's cases; a binding has no such pass
          * behind it, so the name is carried here for the checker to hold against the value's type.
          */
-        public static LetIn opening(String name, Expr value, String opens, Expr body, SourcePos pos) {
+        public static LetIn opening(String name, Expr value, Name opens, Expr body, SourcePos pos) {
             return new LetIn(name, value, null, false, opens, body, pos);
         }
 
@@ -473,15 +522,15 @@ public interface Ast {
      * destructure; an empty list is the single-layer form {@code X(v)}. The {@code TypeChecker}
      * verifies every opened layer is a newtype and that each name matches the layer it opens.
      */
-    record Case(List<String> caseTypes, String binding, Expr body, List<String> unwrapAsserts,
+    record Case(List<Name> caseTypes, String binding, Expr body, List<Name> unwrapAsserts,
                 SourcePos pos) implements Ast {
-        public Case(List<String> caseTypes, String binding, Expr body, SourcePos pos) {
+        public Case(List<Name> caseTypes, String binding, Expr body, SourcePos pos) {
             this(caseTypes, binding, body, null, pos);
         }
     }
 
     /** {@code TypeName { ..src, field: expr, ... }} used as an expression (construction in a behavior). */
-    record NewData(String typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
+    record NewData(Name typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
             implements Expr {}
 
     record IntLit(long value, SourcePos pos) implements Expr {}

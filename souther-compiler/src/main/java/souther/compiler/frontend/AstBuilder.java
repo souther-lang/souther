@@ -218,12 +218,12 @@ public final class AstBuilder {
 
         Optional<SyntaxNode> product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
-            List<Ast.Include> includes = new ArrayList<>();
+            List<Ast.Name> includes = new ArrayList<>();
             List<Ast.Field> fields = new ArrayList<>();
             for (SyntaxNode member : product.get().childNodes()) {
                 if (member.kind() == SyntaxKind.SPREAD_MEMBER) {
                     SyntaxToken included = identTokens(member).get(0);
-                    includes.add(new Ast.Include(included.text(), posOf(included)));
+                    includes.add(Ast.Name.of(included.text(), posOf(included)));
                 } else if (member.kind() == SyntaxKind.FIELD) {
                     fields.add(field(member));
                 }
@@ -243,9 +243,9 @@ public final class AstBuilder {
         }
         Optional<SyntaxNode> sum = n.child(SyntaxKind.SUM_BODY);
         if (sum.isPresent()) {
-            List<String> cases = new ArrayList<>();
+            List<Ast.Name> cases = new ArrayList<>();
             for (SyntaxToken t : identTokens(sum.get())) {
-                cases.add(t.text());
+                cases.add(Ast.Name.of(t.text(), posOf(t)));
             }
             return new Ast.SumData(name, cases, Optional.empty(), Optional.empty(), pos);
         }
@@ -309,15 +309,17 @@ public final class AstBuilder {
                 }
             });
             Ast.RetType ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
-            List<String> constructs = new ArrayList<>();
+            List<Ast.Name> constructs = new ArrayList<>();
             List<String> requires = new ArrayList<>();
             for (SyntaxNode clause : s.childNodes()) {
                 // either clause may name through a module, so the idents of one name are joined and
                 // a comma starts the next
                 if (clause.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
-                    collectDottedNames(clause, constructs);
+                    constructs.addAll(dottedNames(clause));
                 } else if (clause.kind() == SyntaxKind.REQUIRES_CLAUSE) {
-                    collectDottedNames(clause, requires);
+                    for (Ast.Name required : dottedNames(clause)) {
+                        requires.add(required.written());
+                    }
                 }
             }
             return new Ast.SpecBehavior(name, params, ret, constructs, requires, pos);
@@ -677,7 +679,8 @@ public final class AstBuilder {
     }
 
     private Ast.Expr newData(SyntaxNode n) {
-        String typeName = firstIdentText(n);
+        SyntaxToken head = identTokens(n).get(0);
+        Ast.Name typeName = Ast.Name.of(head.text(), posOf(head));
         List<Ast.FieldInit> inits = new ArrayList<>();
         List<String> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction
@@ -725,21 +728,24 @@ public final class AstBuilder {
         return new Ast.Match(scrutinee, cases, pos(n));
     }
 
-    /** A case name as the arm wrote it — bare, or qualified through a module or an import alias.
-     * Advances {@code at} past the name it read. */
-    private String dottedName(List<SyntaxElement> es, int[] at) {
-        StringBuilder sb = new StringBuilder(tokenText(es.get(at[0]++)));
+    /** A name as the source wrote it — bare, or qualified through a module or an import alias — read
+     * from a run of tokens the parser did not wrap in a node. Advances {@code at} past the name, and
+     * positions the name at its first identifier so a diagnostic points at the name, not the clause. */
+    private Ast.Name dottedName(List<SyntaxElement> es, int[] at) {
+        SyntaxElement head = es.get(at[0]++);
+        StringBuilder sb = new StringBuilder(tokenText(head));
         while (at[0] + 1 < es.size() && isToken(es.get(at[0]), SyntaxKind.DOT)
                 && isToken(es.get(at[0] + 1), SyntaxKind.IDENT)) {
             at[0]++;                              // .
             sb.append('.').append(tokenText(es.get(at[0]++)));
         }
-        return sb.toString();
+        return Ast.Name.of(sb.toString(), posOf((SyntaxToken) head));
     }
 
     /** The comma-separated names of a {@code constructs}/{@code requires} clause, each possibly
      * qualified by its module. */
-    private void collectDottedNames(SyntaxNode clause, List<String> out) {
+    private List<Ast.Name> dottedNames(SyntaxNode clause) {
+        List<Ast.Name> out = new ArrayList<>();
         List<SyntaxElement> es = meaningful(clause);
         int[] at = {1};                           // past the clause keyword
         while (at[0] < es.size()) {
@@ -749,13 +755,14 @@ public final class AstBuilder {
             }
             out.add(dottedName(es, at));
         }
+        return out;
     }
 
     private Ast.Case matchCase(SyntaxNode n) {
         List<SyntaxElement> es = meaningful(n);
         SourcePos casePos = pos(n);
         int[] at = {0};
-        List<String> caseTypes = new ArrayList<>();
+        List<Ast.Name> caseTypes = new ArrayList<>();
         caseTypes.add(dottedName(es, at));
         while (at[0] + 1 < es.size() && isToken(es.get(at[0]), SyntaxKind.PIPE)
                 && isToken(es.get(at[0] + 1), SyntaxKind.IDENT)) {
@@ -765,27 +772,28 @@ public final class AstBuilder {
         int i = at[0];
         // newtype constructor destructuring `X(inner)` / nested `X(Y(s))`: the ident chain inside the
         // parens. The last ident is the bound variable; each earlier ident names a newtype layer peeled.
-        List<String> unwrapNames = new ArrayList<>();
+        List<Ast.Name> unwrapNames = new ArrayList<>();
         if (i < es.size() && isToken(es.get(i), SyntaxKind.LPAREN)) {
             int depth = 0;
-            while (i < es.size()) {
-                SyntaxElement e = es.get(i);
+            int[] layer = {i};
+            while (layer[0] < es.size()) {
+                SyntaxElement e = es.get(layer[0]);
                 if (isToken(e, SyntaxKind.LPAREN)) {
                     depth++;
-                    i++;
+                    layer[0]++;
                 } else if (isToken(e, SyntaxKind.RPAREN)) {
                     depth--;
-                    i++;
+                    layer[0]++;
                     if (depth == 0) {
                         break;
                     }
                 } else if (isToken(e, SyntaxKind.IDENT)) {
-                    unwrapNames.add(tokenText(e));
-                    i++;
+                    unwrapNames.add(dottedName(es, layer));   // a layer is named like any other type
                 } else {
                     break;
                 }
             }
+            i = layer[0];
         }
         // Option's positional binding `Some v`: a bare identifier before `{` / `as` / `->`. It never
         // follows a constructor destructure, so a trailing ident after the parens is not consumed here.
@@ -821,7 +829,7 @@ public final class AstBuilder {
             i++;
             asBinding = tokenText(es.get(i++));
         }
-        boolean isSome = caseTypes.size() == 1 && caseTypes.get(0).equals("Some");
+        boolean isSome = caseTypes.size() == 1 && caseTypes.get(0).written().equals("Some");
         if (isSome && asBinding != null) {
             throw error(casePos, "parse.option.positional",
                     "Option's wrapped value is bound positionally: write `| Some v`, not `| Some as v`");
@@ -830,7 +838,7 @@ public final class AstBuilder {
         // Only `Some(X(...))`, which opens a wrapped newtype, uses the paren form.
         if (isSome && unwrapNames.size() == 1) {
             throw error(casePos, "parse.option.positional",
-                    "write `| Some v` to bind the whole value; `Some(...)` opens a wrapped newtype, as in `| Some(" + unwrapNames.get(0) + "(v))`");
+                    "write `| Some v` to bind the whole value; `Some(...)` opens a wrapped newtype, as in `| Some(" + unwrapNames.get(0).written() + "(v))`");
         }
         // skip the arrow, then the body is the trailing expression node
         Ast.Expr body = expr(lastExprChild(n));
@@ -856,12 +864,12 @@ public final class AstBuilder {
             for (int k = 0; k < unwrapNames.size() - 1; k++) {
                 target = new Ast.FieldAccess(target, "value", casePos);
             }
-            body = new Ast.LetIn(unwrapNames.get(unwrapNames.size() - 1), target, body, casePos);
+            body = new Ast.LetIn(unwrapNames.get(unwrapNames.size() - 1).written(), target, body, casePos);
             binding = whole;
         }
         // null = no constructor destructure; otherwise the inner names (before the bound variable),
         // which the type checker prepends the case type to when verifying the opened layers.
-        List<String> unwrapAsserts = unwrapNames.isEmpty()
+        List<Ast.Name> unwrapAsserts = unwrapNames.isEmpty()
                 ? null
                 : new ArrayList<>(unwrapNames.subList(0, unwrapNames.size() - 1));
         return new Ast.Case(caseTypes, binding, body, unwrapAsserts, casePos);
@@ -935,7 +943,8 @@ public final class AstBuilder {
                 String whole = "$p" + (patternCounter++);
                 Ast.Expr inner = new Ast.FieldAccess(new Ast.Var(whole, pos), "value", pos);
                 Ast.Expr body = bindPattern(patternChild(pat), inner, rest, pos);
-                yield Ast.LetIn.opening(whole, value, qualifiedNameText(pat), body, pos);
+                yield Ast.LetIn.opening(whole, value,
+                        Ast.Name.of(qualifiedNameText(pat), pos(pat)), body, pos);
             }
             case PATTERN_RECORD -> {
                 String whole = "$r" + (patternCounter++);

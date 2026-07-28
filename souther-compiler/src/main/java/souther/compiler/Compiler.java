@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.compiler.check.TypeName;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
@@ -12,6 +12,7 @@ import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Lower;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.NewtypeDesugar;
+import souther.compiler.check.Resolve;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.check.TypeChecker;
@@ -112,7 +113,10 @@ public final class Compiler {
         rejectReservedNamespace(raw);
         Ast.Module exposed = Exposing.rewrite(raw);
         rejectUserImports(exposed);
-        Ast.Module module = Deriver.derive(exposed);
+        // Every written name is resolved here, before anything reads the tree (issue #177): what a
+        // later pass reads is a name that already says which module declares it.
+        Ast.Module named = Resolve.module(exposed, TypeChecker.symbols(exposed));
+        Ast.Module module = Deriver.derive(named);
         module = HelperInliner.forModule(module).withInlinedInvariants(module);
         module = NewtypeDesugar.rewrite(module, TypeChecker.symbols(module));
         module = Compiler.injectRecursivePrelude(module);
@@ -356,6 +360,22 @@ public final class Compiler {
             byName.put(m.name(), m);
         }
         detectCycles(parsed, byName, sourceOfModule);
+
+        // pass 0: resolve every written name, in the module that wrote it (issue #177). A module off
+        // the path is resolved too — its declarations are read by the modules being compiled, and a
+        // spread or a case inside one means what its own module says it means.
+        Map<String, Ast.Module> named = new LinkedHashMap<>();
+        for (Ast.Module m : byName.values()) {
+            try {
+                named.put(m.name(), Resolve.module(m, visibleDefs(m, byName)));
+            } catch (CompileException e) {
+                throw e.inSource(sourceIndex(sourceOfModule, m.name()));
+            }
+        }
+        byName.clear();
+        byName.putAll(named);
+        parsed = reread(parsed, byName);
+        fromPath = reread(fromPath, byName);
 
         // pass 1: derive each module's codecs, resolving imported types against the original defs.
         // A module off the path is derived the same way, so what an import resolves against here is
@@ -653,6 +673,29 @@ public final class Compiler {
             fromPath = List.of();
         }
 
+        // Names are resolved before anything reads a tree (issue #177). A module whose name resolves
+        // to nothing is reported and skipped, so an editor still gets every other module's errors.
+        Map<String, Ast.Module> named = new LinkedHashMap<>();
+        for (Ast.Module m : byName.values()) {
+            if (failed.contains(m.name()) || importsAnyFailed(m, failed)) {
+                named.put(m.name(), m);
+                continue;   // an importer of a broken module is skipped, not cascaded
+            }
+            try {
+                named.put(m.name(), Resolve.module(m, visibleDefs(m, byName)));
+            } catch (CompileException e) {
+                named.put(m.name(), m);
+                String id = idByName.get(m.name());
+                if (id != null) {
+                    result.get(id).add(e.diagnostic());
+                    failed.add(m.name());
+                }
+            }
+        }
+        byName.clear();
+        byName.putAll(named);
+        fromPath = reread(fromPath, byName);
+
         List<Ast.Module> order = dependencyOrder(byName, idByName, result);
 
         // Compile each module (no example evaluation yet). Retain the derived module and its resolution
@@ -666,6 +709,9 @@ public final class Compiler {
         Map<String, byte[]> out = new LinkedHashMap<>();
         Map<String, VerifyContext> ready = new LinkedHashMap<>();
         for (Ast.Module original : order) {
+            if (failed.contains(original.name())) {
+                continue;   // its error is already reported; its tree was not resolved past it
+            }
             if (importsAnyFailed(original, failed)) {
                 failed.add(original.name());
                 continue;   // an importer of a broken module is skipped, not cascaded
@@ -750,7 +796,10 @@ public final class Compiler {
         Ast.Module m = ctx.module();
         Ast.Module toCheck = new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                 m.defs(), m.behaviors(), m.fns(), examples, fakes, m.exampleFileTarget(), m.pos());
-        return ExampleVerifier.check(toCheck, ctx.symbols(), ctx.sigs(), classes);
+        // An `examples for` file is parsed on its own and attached here, so its rows have not been
+        // through the resolve pass; the module's own rows have, and a resolved name is left alone.
+        return ExampleVerifier.check(Resolve.module(toCheck, ctx.symbols()), ctx.symbols(),
+                ctx.sigs(), classes);
     }
 
     private static List<Ast.Fake> mergedFakes(List<Ast.Fake> own, List<Ast.Fake> attached) {
@@ -1057,6 +1106,16 @@ public final class Compiler {
             }
         }
         return injected;
+    }
+
+    /** The same modules, as {@code byName} now holds them — a list rebuilt after a pass replaced
+     * every module in the registry. */
+    private static List<Ast.Module> reread(List<Ast.Module> modules, Map<String, Ast.Module> byName) {
+        List<Ast.Module> out = new ArrayList<>();
+        for (Ast.Module m : modules) {
+            out.add(byName.get(m.name()));
+        }
+        return out;
     }
 
     /** What each bare name means in {@code m} — its own definitions plus the imported ones — paired

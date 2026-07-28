@@ -2,7 +2,7 @@ package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
 import souther.compiler.codegen.Backend;
 import souther.compiler.frontend.CstFrontend;
 

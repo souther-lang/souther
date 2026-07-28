@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
-import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
+import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,9 +27,11 @@ public final class TypeChecker {
 
     private TypeChecker() {}
 
-    /** Type-checks a self-contained module against its own symbols, collecting every error. */
+    /** Type-checks a self-contained module against its own symbols, collecting every error. Names are
+     * resolved first, as a compile resolves them, so a check reads the same tree either way. */
     public static List<Diagnostic> check(Ast.Module module) {
-        return check(module, symbols(module), Map.of(), Set.of(), Lower.run(module));
+        Ast.Module named = Resolve.module(module, symbols(module));
+        return check(named, symbols(named), Map.of(), Set.of(), Lower.run(named));
     }
 
     /**
@@ -221,8 +225,7 @@ public final class TypeChecker {
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 DataChecker.rejectDuplicateNames(spec.requires(), "`requires`", spec.pos());
-                DataChecker.rejectDuplicateNames(spec.constructs(), "`constructs`", spec.pos(),
-                        n -> SpecChecker.canonicalConstruct(n, symbols));
+                DataChecker.rejectDuplicateTypes(spec.constructs(), "`constructs`", spec.pos());
             }
         }
         // A data is Java-buildable from outside iff the whole module is public (no `exposing`) or
@@ -316,7 +319,7 @@ public final class TypeChecker {
         collect(errors, () -> TotalityChecker.check(inliner));
         // What each recursive helper constructs, transitively — a recursive helper is not inlined, so
         // its constructions are attributed to the behavior that calls it (spec 12.5).
-        Map<String, Set<String>> recHelperConstructs =
+        Map<String, Map<TypeName, Ast.Name>> recHelperConstructs =
                 HelperTyping.recursiveHelperConstructs(recursiveHelperFns.keySet(), loweredBodies, inliner, symbols);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec) {

@@ -1,8 +1,8 @@
 package souther.compiler.check;
 
+import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
-import souther.compiler.ast.Ast;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,7 +43,8 @@ public final class NewtypeDesugar {
                                 "`" + call.fn() + "` wraps one value, but is applied to " + args.size()
                                         + " argument(s)");
                     }
-                    yield new Ast.NewData(call.fn(),
+                    yield new Ast.NewData(
+                            new Ast.Name(call.fn(), symbols.resolve(call.fn()), call.pos()),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), call.pos());
                 }

@@ -174,10 +174,7 @@ public final class CstParser {
     private void qualifiedName() {
         start(SyntaxKind.QUALIFIED_NAME);
         expect(SyntaxKind.IDENT);
-        while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
-            bump();   // .
-            bump();   // ident
-        }
+        dottedTail();
         finish();
     }
 
@@ -348,13 +345,13 @@ public final class CstParser {
         start(kind);
         bump();   // constructs / requires
         expect(SyntaxKind.IDENT);
-        caseNameTail();
+        dottedTail();
         while (eat(SyntaxKind.COMMA)) {
             if (!at(SyntaxKind.IDENT)) {
                 break;   // a trailing comma is consumed and ends the list
             }
             bump();   // ident
-            caseNameTail();
+            dottedTail();
         }
         finish();
     }
@@ -374,10 +371,7 @@ public final class CstParser {
     private void stage() {
         start(SyntaxKind.STAGE);
         expect(SyntaxKind.IDENT);
-        while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
-            bump();   // .
-            bump();   // ident
-        }
+        dottedTail();
         finish();
     }
 
@@ -610,10 +604,7 @@ public final class CstParser {
             expect(SyntaxKind.IDENT);
             // a type may be named through its module (`example.billing.Amount`) or an import alias
             // (`B.Amount`), so the head is a dotted name like a module's own
-            while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
-                bump();   // .
-                bump();   // ident
-            }
+            dottedTail();
             if (at(SyntaxKind.LT)) {
                 typeArgs();
             }
@@ -695,11 +686,7 @@ public final class CstParser {
         if (nth(1) != SyntaxKind.IDENT) {
             return false;
         }
-        int n = 2;
-        while (nth(n) == SyntaxKind.DOT && nth(n + 1) == SyntaxKind.IDENT) {
-            n += 2;
-        }
-        return nth(n) == SyntaxKind.LPAREN;
+        return nth(pastDottedName(1)) == SyntaxKind.LPAREN;
     }
 
     private void letDestructure() {
@@ -742,7 +729,7 @@ public final class CstParser {
         if (atCtorPattern()) {
             start(SyntaxKind.PATTERN_CTOR);
             expect(SyntaxKind.IDENT);
-            caseNameTail();   // a newtype may be named through its module, as in a match arm
+            dottedTail();   // a newtype may be named through its module, as in a match arm
             expect(SyntaxKind.LPAREN);
             pattern();
             expect(SyntaxKind.RPAREN);
@@ -759,11 +746,7 @@ public final class CstParser {
         if (!at(SyntaxKind.IDENT)) {
             return false;
         }
-        int n = 1;
-        while (nth(n) == SyntaxKind.DOT && nth(n + 1) == SyntaxKind.IDENT) {
-            n += 2;
-        }
-        return nth(n) == SyntaxKind.LPAREN;
+        return nth(pastDottedName(0)) == SyntaxKind.LPAREN;
     }
 
     private void patternRecord() {
@@ -1076,13 +1059,13 @@ public final class CstParser {
     private void matchCase() {
         start(SyntaxKind.MATCH_CASE);
         expect(SyntaxKind.IDENT);
-        caseNameTail();
+        dottedTail();
         while (at(SyntaxKind.PIPE) && nth(1) == SyntaxKind.IDENT) {
             // an or-pattern alternative; a `|` that begins the next case is followed by the arrow
             // path instead. Only consume `|` here when another case name follows.
             bump();   // |
             bump();   // ident
-            caseNameTail();
+            dottedTail();
         }
         // newtype constructor destructuring `X(inner)`, nestable `X(Y(s))` — the inverse of
         // construction `X(v)`. It opens the case's newtype value; the inner `Y(...)` opens another.
@@ -1122,14 +1105,31 @@ public final class CstParser {
         finish();
     }
 
-    /** The rest of a dotted case name: an arm may name a case through its module or an import alias
-     * ({@code | probe.b.Amount v ->}), the same way a type position may. A binding after the name is a
-     * bare identifier, so no dot follows it and the two do not run together. */
-    private void caseNameTail() {
+    /**
+     * The rest of a dotted name, after its first identifier has been read. Every position that names
+     * something declared elsewhere — a module, a pipeline stage, a type, a match arm's case — may
+     * write it through the declaring module or an import alias, so all of them read the tail here
+     * rather than each spelling out the loop (issue #177). A binding after the name is a bare
+     * identifier, so no dot follows it and the two do not run together.
+     */
+    private void dottedTail() {
         while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
             bump();   // .
             bump();   // ident
         }
+    }
+
+    /**
+     * The offset just past a dotted name starting at {@code start}, which must be an identifier —
+     * what a lookahead needs to see the token that follows the name. The counterpart of
+     * {@link #dottedTail} for a decision made before anything is consumed.
+     */
+    private int pastDottedName(int start) {
+        int n = start + 1;
+        while (nth(n) == SyntaxKind.DOT && nth(n + 1) == SyntaxKind.IDENT) {
+            n += 2;
+        }
+        return n;
     }
 
     /** {@code ( IDENT [casePattern] )} — a newtype-destructuring sub-pattern, nestable for a
@@ -1137,6 +1137,7 @@ public final class CstParser {
     private void casePattern() {
         expect(SyntaxKind.LPAREN);
         expect(SyntaxKind.IDENT);
+        dottedTail();   // the layer a pattern opens is named like any other type (issue #177)
         if (at(SyntaxKind.LBRACE)) {
             // `Some(Booking { member })`: the parens open a *newtype*, so a record named in them has
             // nothing to open. Its fields are destructured directly, as on a user case.

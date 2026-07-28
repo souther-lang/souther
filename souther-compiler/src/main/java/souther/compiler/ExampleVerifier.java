@@ -3,8 +3,8 @@ package souther.compiler;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
-import souther.compiler.check.Type;
-import souther.compiler.check.TypeName;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
 import souther.compiler.diag.CompileException;
@@ -533,7 +533,7 @@ public final class ExampleVerifier {
     private Object buildExpected(Ast.Expr expected, Type outType) {
         try {
             if (expected instanceof Ast.NewData nd) {
-                return decode(Type.ref(symbols.resolve(nd.typeName())), raw(expected));
+                return decode(Type.ref(nd.typeName().denotes()), raw(expected));
             }
             if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
                 return decode(Type.ref(symbols.resolve(c.fn())), raw(expected));
@@ -560,7 +560,7 @@ public final class ExampleVerifier {
             return v.name();
         }
         if (expected instanceof Ast.NewData nd) {
-            return nd.typeName();
+            return nd.typeName().written();
         }
         if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
             return c.fn();
@@ -858,7 +858,7 @@ public final class ExampleVerifier {
         if (!nd.spreads().isEmpty()) {
             throw new FixtureException("a `...spread` cannot be used in an example fixture");
         }
-        Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName());
+        Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName().denotes());
         Map<String, Object> map = new LinkedHashMap<>();
         for (Ast.FieldInit fi : nd.inits()) {
             Object v = shaped(raw(fi.value()), shapeOf(declared.get(fi.name())));
@@ -869,7 +869,7 @@ public final class ExampleVerifier {
             }
             map.put(fi.name(), v);
         }
-        tagged(nd.typeName(), map);
+        tagged(nd.typeName().denotes(), map);
         return map;
     }
 
@@ -890,7 +890,7 @@ public final class ExampleVerifier {
             return null;
         }
         try {
-            return TypeOps.resolveType(declaredType, symbols);
+            return declaredType.denotes();
         } catch (CompileException _) {
             return null;
         }
@@ -909,13 +909,20 @@ public final class ExampleVerifier {
      * decoding something the author did not write. Leaving the written value in place makes the row
      * fail on the tag it cannot match, which is the honest outcome.
      */
-    private void tagged(String caseName, Map<String, Object> map) {
+    private void tagged(String written, Map<String, Object> map) {
+        TypeName caseName = symbols.resolve(written);
+        if (caseName != null) {
+            tagged(caseName, map);
+        }
+    }
+
+    private void tagged(TypeName caseName, Map<String, Object> map) {
         for (Ast.Def def : symbols.visible()) {
             if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
                 continue;
             }
             for (Ast.Variant variant : sum.decoder().get().variants()) {
-                if (variant.caseType().equals(caseName)) {
+                if (caseName.equals(variant.caseType().denotes())) {
                     map.putIfAbsent(sum.decoder().get().key(), variant.tag());
                     return;
                 }
@@ -924,11 +931,11 @@ public final class ExampleVerifier {
     }
 
     /** A data's fields by name, following the `...includes` it composes in (spec §data). */
-    private Map<String, Ast.TypeRef> fieldTypes(String typeName) {
+    private Map<String, Ast.TypeRef> fieldTypes(TypeName typeName) {
         Map<String, Ast.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.declaration(typeName) instanceof Ast.Data d) {
-            for (Ast.Include inc : d.includes()) {
-                out.putAll(fieldTypes(inc.name()));
+        if (symbols.get(typeName) instanceof Ast.Data d) {
+            for (Ast.Name inc : d.includes()) {
+                out.putAll(fieldTypes(inc.denotes()));
             }
             for (Ast.Field f : d.fields()) {
                 out.put(f.name(), f.type());

@@ -265,8 +265,10 @@ class CompileExampleTest {
                 """;
         souther.compiler.ast.Ast.Module module =
                 souther.compiler.frontend.CstFrontend.parse(model, "Main");
-        module = souther.compiler.derive.Deriver.derive(
-                souther.compiler.check.Exposing.rewrite(module));
+        module = souther.compiler.check.Exposing.rewrite(module);
+        module = souther.compiler.check.Resolve.module(module,
+                souther.compiler.check.TypeChecker.symbols(module));
+        module = souther.compiler.derive.Deriver.derive(module);
         module = souther.compiler.check.HelperInliner.forModule(module)
                 .withInlinedInvariants(module);
         module = souther.compiler.check.NewtypeDesugar.rewrite(module,

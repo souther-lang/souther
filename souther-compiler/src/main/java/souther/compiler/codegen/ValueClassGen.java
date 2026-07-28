@@ -2,7 +2,8 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Type;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 
 import java.lang.classfile.Attribute;
@@ -50,6 +51,7 @@ final class ValueClassGen {
     }
 
     private ClassDesc cd(String typeName) { return ctx.cd(typeName); }
+    private ClassDesc cd(TypeName typeName) { return ctx.cd(typeName); }
     private ClassDesc[] caseInterfaces(String name) { return ctx.caseInterfaces(name); }
     private Map<String, Type> fieldTypes(Ast.Data data) { return ctx.fieldTypes(data); }
     private int pub(String name) { return ctx.pub(name); }
@@ -150,8 +152,8 @@ final class ValueClassGen {
     void generateSum(Ast.SumData sum, Map<String, byte[]> out) {
         ClassDesc cdX = cd(sum.name());
         List<ClassDesc> caseCds = new ArrayList<>();
-        for (String caseName : sum.cases()) {
-            caseCds.add(cd(caseName));
+        for (Ast.Name caseName : sum.cases()) {
+            caseCds.add(cd(caseName.denotes()));
         }
         out.put(pkg + "." + sum.name(), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
