@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
@@ -27,10 +28,30 @@ import java.util.Map;
 public final class Resolve {
 
     private final Symbols symbols;
+    /** Every name this pass answered, in the order it met them. */
+    private final List<Denotation> denotations = new ArrayList<>();
 
     private Resolve(Symbols symbols) {
         this.symbols = symbols;
     }
+
+    /**
+     * One written name and what it turned out to denote, where it was written.
+     *
+     * <p>This is the pass's other product. Working out what a name means is a traversal of the whole
+     * module, and an editor asking "what is under the cursor" or "where else is this named" is asking
+     * about the answers that traversal already gave. Collecting them here is what keeps the editor
+     * from walking the tree again with a rule of its own — which, before this, is how renaming a
+     * type could rewrite the tail of a qualified reference to a different module's type.
+     *
+     * @param written the name as the source wrote it, bare or qualified
+     * @param denotes what it names
+     * @param pos where the written name starts
+     */
+    public record Denotation(String written, TypeName denotes, SourcePos pos) {}
+
+    /** A resolved module together with every name the pass answered in it. */
+    public record Resolved(Ast.Module module, List<Denotation> denotations) {}
 
     /** {@code m} with every name it writes resolved against its own definitions — a module compiled
      * with nothing else in sight. */
@@ -40,6 +61,11 @@ public final class Resolve {
 
     /** {@code m} with every name it writes resolved against {@code symbols}. */
     public static Ast.Module module(Ast.Module m, Symbols symbols) {
+        return resolving(m, symbols).module();
+    }
+
+    /** As {@link #module(Ast.Module, Symbols)}, keeping what each name was answered with. */
+    public static Resolved resolving(Ast.Module m, Symbols symbols) {
         Resolve r = new Resolve(symbols);
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {
@@ -84,8 +110,10 @@ public final class Resolve {
         for (Map.Entry<String, Ast.RetType> e : m.exposedOutputs().entrySet()) {
             exposedOutputs.put(e.getKey(), r.retType(e.getValue()));
         }
-        return new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
-                behaviors, fns, examples, fakes, m.exampleFileTarget(), m.pos());
+        return new Resolved(
+                new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
+                        behaviors, fns, examples, fakes, m.exampleFileTarget(), m.pos()),
+                List.copyOf(r.denotations));
     }
 
     private Ast.FnDef fn(Ast.FnDef f) {
@@ -155,7 +183,15 @@ public final class Resolve {
             }
         }
         Ast.TypeRef resolved = new Ast.TypeRef(ref.name(), arg, elems, ref.pos());
-        return resolved.denoting(TypeOps.denoted(resolved, symbols));
+        Ast.TypeRef denoted = resolved.denoting(TypeOps.denoted(resolved, symbols));
+        // A reference with no name is a tuple or a container shape, which names no declaration.
+        if (denoted.name() != null && denoted.pos() != null) {
+            TypeName names = symbols.resolve(denoted.name());
+            if (names != null) {
+                denotations.add(new Denotation(denoted.name(), names, denoted.pos()));
+            }
+        }
+        return denoted;
     }
 
     // --- definitions ---
@@ -347,7 +383,7 @@ public final class Resolve {
         if (denoted == null) {
             throw TypeOps.unknownType(n.written(), n.pos(), symbols);
         }
-        return n.denoting(denoted);
+        return answered(n.denoting(denoted));
     }
 
     /** The names a {@code match} arm may write: a declared case, a primitive heading a union
@@ -372,6 +408,15 @@ public final class Resolve {
         if (denoted == null) {
             throw TypeOps.unknownType(n.written(), n.pos(), symbols);
         }
-        return n.denoting(denoted);
+        return answered(n.denoting(denoted));
+    }
+
+    /** Records what a name was answered with, and hands it back. A name with no position was
+     * synthesized by an earlier pass rather than written, so there is nothing to point at. */
+    private Ast.Name answered(Ast.Name n) {
+        if (n.pos() != null) {
+            denotations.add(new Denotation(n.written(), n.denotes(), n.pos()));
+        }
+        return n;
     }
 }

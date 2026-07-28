@@ -49,15 +49,36 @@ public final class TypeChecker {
     public static Checked checkOrThrow(Ast.Module module, Symbols symbols,
                                                 Map<String, Sig> importedSigs, Set<String> importedInjected,
                                                 Ast.Module lowered) {
+        Reported reported =
+                checkReporting(module, symbols, importedSigs, importedInjected, lowered);
+        if (!reported.errors().isEmpty()) {
+            // the original exception, so its rendered message is unchanged
+            throw reported.errors().get(0);
+        }
+        return reported.checked();
+    }
+
+    /**
+     * A recovering check that keeps each error as the exception it was raised as, together with
+     * what the check elaborated.
+     *
+     * <p>The other two entry points are this one with a decision attached: {@link #checkOrThrow}
+     * raises the first error, {@link #checkAndElaborate} hands back the diagnostics. A caller that
+     * reports without throwing but must still be able to raise exactly what a batch compile would
+     * have raised — a query — needs the exceptions themselves, because a diagnostic does not carry
+     * the English body a throw site passed alongside it.
+     */
+    public record Reported(List<CompileException> errors, Checked checked) {}
+
+    public static Reported checkReporting(Ast.Module module, Symbols symbols,
+                                          Map<String, Sig> importedSigs, Set<String> importedInjected,
+                                          Ast.Module lowered) {
         List<Diagnostic> warnings = new ArrayList<>();
         Elaborated elaborated = new Elaborated();
         List<CompileException> errors =
                 checkCollecting(module, symbols, importedSigs, importedInjected, lowered, warnings,
                         elaborated);
-        if (!errors.isEmpty()) {
-            throw errors.get(0);   // the original exception, so its rendered message is unchanged
-        }
-        return new Checked(elaborated.behaviors, elaborated.helpers, warnings);
+        return new Reported(errors, new Checked(elaborated.behaviors, elaborated.helpers, warnings));
     }
 
     /** Every error found in {@code module}, recovering past each so the whole module is checked; the
@@ -132,15 +153,14 @@ public final class TypeChecker {
     public static CheckResult checkAndElaborate(Ast.Module module, Symbols symbols,
                                                 Map<String, Sig> importedSigs, Set<String> importedInjected,
                                                 Ast.Module lowered) {
+        Reported reported =
+                checkReporting(module, symbols, importedSigs, importedInjected, lowered);
         List<Diagnostic> out = new ArrayList<>();
-        List<Diagnostic> warnings = new ArrayList<>();
-        Elaborated elaborated = new Elaborated();
-        for (CompileException e : checkCollecting(module, symbols, importedSigs, importedInjected, lowered,
-                warnings, elaborated)) {
+        for (CompileException e : reported.errors()) {
             out.add(e.diagnostic());
         }
-        out.addAll(warnings);
-        return new CheckResult(out, new Checked(elaborated.behaviors, elaborated.helpers, warnings));
+        out.addAll(reported.checked().warnings());
+        return new CheckResult(out, reported.checked());
     }
 
     /**

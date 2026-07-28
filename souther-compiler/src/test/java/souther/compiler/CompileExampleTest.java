@@ -4,6 +4,12 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.query.Compilation;
+import souther.compiler.query.Output;
+import souther.compiler.query.Report;
+
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -263,27 +269,12 @@ class CompileExampleTest {
                   | (申請準備中 { 申請者 = 従業員ID("emp-1"), 予定費用 = 金額(200000) }, "2026-07-14") -> 提出済み
                   | (申請準備中 { 申請者 = 従業員ID("emp-1"), 予定費用 = 金額(300000) }, "2026-07-14") -> 提出済み
                 """;
-        souther.compiler.ast.Ast.Module module =
-                souther.compiler.frontend.CstFrontend.parse(model, "Main");
-        module = souther.compiler.check.Exposing.rewrite(module);
-        module = souther.compiler.check.Resolve.module(module,
-                souther.compiler.check.TypeChecker.symbols(module));
-        module = souther.compiler.derive.Deriver.derive(module);
-        module = souther.compiler.check.HelperInliner.withSettledInvariants(
-                module, souther.compiler.check.TypeChecker.symbols(module));
-        module = souther.compiler.check.NewtypeDesugar.rewrite(module,
-                souther.compiler.check.TypeChecker.symbols(module));
-        var symbols = souther.compiler.check.TypeChecker.symbols(module);
-        var lowering = souther.compiler.check.Lower.run(
-                module, symbols, java.util.Map.of(), java.util.Set.of());
-        module = lowering.settled();
-        var lowered = lowering.lowered();
-        var checked = souther.compiler.check.TypeChecker
-                .checkAndElaborate(module, symbols, java.util.Map.of(), java.util.Set.of(), lowered)
-                .checked();
-        var classes = souther.compiler.codegen.Backend.generate(lowered, checked);
-        var sigs = souther.compiler.check.PipelineSigs.signatures(module, symbols);
-        var fails = ExampleVerifier.check(module, symbols, sigs, classes);
+        // Every failing row is reported, not just the first: the query answers with all of them.
+        Compilation compilation = Compilation.ofSource(model, "Main");
+        String moduleName = compilation.modules().get(0);
+        compilation.answerEverything();
+        List<Report> fails = compilation.db()
+                .ask(new Output.Examples(moduleName, compilation.sourceIds().get(0))).reports();
         assertEquals(2, fails.size());
     }
 }

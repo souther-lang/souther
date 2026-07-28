@@ -123,7 +123,7 @@ class MultiFileDiagnosticOriginTest {
     }
 
     @Test
-    void aFailingExampleInAMergedModuleNamesNoSource() {
+    void aFailingExampleNamesTheFileItWasWrittenIn() {
         String target = """
                 module t
                 data Out = { v: Int }
@@ -140,8 +140,8 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(target, examples)));
 
-        assertEquals(-1, e.sourceIndex(),
-                "the example was written in the other file, so neither file's line is quoted");
+        assertEquals(1, e.sourceIndex(),
+                "the row is written in the `examples for` file, so that is the file quoted");
     }
 
     @Test
