@@ -7,6 +7,7 @@ import souther.compiler.check.TypeChecker;
 import souther.compiler.check.Symbols;
 import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -76,6 +77,31 @@ public final class Shapes {
             return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                     List.copyOf(kept), m.behaviors(), m.fns(), m.examples(), m.fakes(),
                     m.exampleFileTarget(), m.pos());
+        }
+    }
+
+    /**
+     * One declaration with its codecs derived and its spreads settled — what every later stage
+     * resolves a type to.
+     *
+     * <p>Its own question, so a reader depends on the declaration it named and not on everything
+     * declared beside it. A module still derives its declarations together; that is how the answer
+     * is worked out, not what the answer is about, and moving that apart changes nothing here.
+     */
+    public record DerivedDef(TypeName named) implements Key<Ast.Def> {
+        @Override
+        public String module() {
+            return named.module();
+        }
+
+        @Override
+        public Answer<Ast.Def> compute(Db db) {
+            Answer<Map<String, Ast.Def>> defs = db.ask(new DerivedDeclarations(named.module()));
+            if (!defs.present()) {
+                return Answer.absent();
+            }
+            Ast.Def def = defs.value().get(named.name());
+            return def == null ? Answer.absent() : Answer.of(def);
         }
     }
 

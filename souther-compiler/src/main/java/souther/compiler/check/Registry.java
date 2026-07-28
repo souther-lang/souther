@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.TypeName;
 
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -18,8 +19,21 @@ import java.util.Set;
  */
 public interface Registry {
 
+    /**
+     * One declaration, or null when no module of this compilation declares it.
+     *
+     * <p>The question nearly everything asks, and the reason it is not {@link #declaredIn}: reading
+     * a whole module's declarations to reach one of them makes the reader depend on all of them, so
+     * declaring something new — which nobody can even see yet — reaches every module that imported
+     * anything from there.
+     */
+    Ast.Def declaration(TypeName name);
+
     /** Every definition of one module, keyed by the name written there. Empty when this compilation
-     * has no such module. */
+     * has no such module.
+     *
+     * <p>For the questions that really are about a whole module — which sum a case belongs to, what
+     * a "did you mean" may offer. A reader after one declaration asks {@link #declaration}. */
     Map<String, Ast.Def> declaredIn(String moduleName);
 
     /** The base type names {@code moduleName} exposes, with any {@code .decoder} / {@code .encoder}
@@ -40,6 +54,11 @@ public interface Registry {
         return new Registry() {
             private final Map<String, Map<String, Ast.Def>> defs = new HashMap<>();
             private final Map<String, Set<String>> exposed = new HashMap<>();
+
+            @Override
+            public Ast.Def declaration(TypeName name) {
+                return declaredIn(name.module()).get(name.name());
+            }
 
             @Override
             public Map<String, Ast.Def> declaredIn(String moduleName) {
