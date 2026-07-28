@@ -61,8 +61,11 @@ final class HelperParams {
         try {
             recursiveHelperFns = HelperTyping.recursiveHelperSigs(inliner, symbols);
         } catch (CompileException _) {
-            // a recursive helper that does not declare its types is reported by the check; here it
-            // only means calls to it name no types.
+            // One recursive helper that does not declare its types costs the signatures of all of
+            // them, which is not observable: the check builds this same map outside its recovery, so
+            // the module is abandoned on that error before any helper is typed. If that map is ever
+            // made recoverable, this has to be made per-helper along with it — otherwise a helper
+            // this leaves unsettled is reported as undetermined on top of the real error.
             recursiveHelperFns = Map.of();
         }
         Map<String, Ast.FnDef> settled = new LinkedHashMap<>();

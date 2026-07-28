@@ -4,6 +4,8 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -366,6 +368,39 @@ class CompileHelperBodyTypingTest {
                 """;
         assertTrue(Compiler.compile(src).containsKey("demo.F"),
                 "the determined type reaches the expansion inside the invariant");
+    }
+
+    @Test
+    void aRecursiveHelperMissingItsTypesIsTheOnlyThingReported() {
+        // Settling reads the recursive helpers' signatures, and one that does not declare its types
+        // costs it all of them — so `describe`, which is determined only by a call to the recursive
+        // helper that IS declared, is left unsettled. That is not observable: the check builds the
+        // same map outside its recovery and abandons the module on the same error. Holding it here
+        // means making that map recoverable cannot quietly add a second, derived report about
+        // `describe` on top of the real one.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data U = A | B
+                data X = Int
+                partial let validRecursive (v: U): Int = match v with
+                        | A as a -> a.x
+                        | B as b -> b.y
+                partial let brokenRecursive (x) = brokenRecursive(x)
+                let describe (v) = {
+                    let n = validRecursive(v)
+                    match v with
+                        | A as a -> a.x + n
+                        | B as b -> b.y
+                }
+                behavior f : (a: A) -> X constructs X
+                let f (a) = X(describe(a))
+                """;
+        assertEquals(List.of("check.rechelper.return"),
+                Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)).get("demo.sou").stream()
+                        .map(souther.compiler.diag.Diagnostic::messageKey).toList(),
+                "the undeclared recursive helper is reported, and nothing else is");
     }
 
     @Test
