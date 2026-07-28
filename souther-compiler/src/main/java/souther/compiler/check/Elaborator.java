@@ -728,10 +728,10 @@ public final class Elaborator {
      * data, a function named without being applied, or one of Option's cases outside the one place
      * an optional is made.
      */
-    private static CompileException notAValue(Ast.Var v, Map<String, Type> env) {
-        if (v.name().equals("null")) {
-            return new CompileException(v.pos(), "E1301",
-                    "`null` is not part of the language. Use an optional field with `?`.");
+    private static RuntimeException notAValue(Ast.Var v, Map<String, Type> env) {
+        if (v.denotes() instanceof ValueName.Unresolved) {
+            // reported where the name was written; this definition has no meaning to work out
+            return new Unanswerable(v.pos());
         }
         optionCaseWritten(v.name(), v.pos());
         return CompileException.of(

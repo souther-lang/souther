@@ -291,11 +291,28 @@ public final class Resolve {
         return out;
     }
 
-    /** The fields of a declaration, as the names its own invariant reads. */
+    /**
+     * The fields of a declaration, as the names its own invariant reads — the ones written here and
+     * the ones a spread brings in, which are as much this declaration's fields as the written ones
+     * (and are what a spread-in invariant was written against).
+     */
     private Bindings boundFields(Ast.Data d) {
-        Bindings bound = Bindings.NONE;
+        return boundFields(d, Bindings.NONE, new LinkedHashSet<>());
+    }
+
+    private Bindings boundFields(Ast.Data d, Bindings bound, Set<TypeName> spread) {
         for (Ast.Field f : d.fields()) {
             bound = bound.and(f.name(), f.pos());
+        }
+        for (Ast.Name include : d.includes()) {
+            TypeName source = include.denotes() != null
+                    ? include.denotes() : symbols.resolve(include.written());
+            // a spread of a spread reaches the fields underneath; a spread that names nothing, or
+            // names its way back round, is reported where the declaration is checked
+            if (source != null && spread.add(source)
+                    && symbols.get(source) instanceof Ast.Data src) {
+                bound = boundFields(src, bound, spread);
+            }
         }
         return bound;
     }
@@ -493,7 +510,16 @@ public final class Resolve {
         if (type != null && !type.isUnresolved()) {
             return new ValueName.OfType(written, type);
         }
-        return new ValueName.Unresolved(written);
+        // a helper or a behavior named without being applied — handed to a combinator by name,
+        // which the inliner expands into a block that applies it
+        if (values.helpers().contains(written)) {
+            return new ValueName.Helper(values.module(), written);
+        }
+        ValueName.Behavior behavior = values.behaviors().get(written);
+        if (behavior != null) {
+            return behavior;
+        }
+        return nothing(written, pos, unknownIdentifier(written, pos, bound));
     }
 
     /** What the name a call applies denotes. */
@@ -502,6 +528,9 @@ public final class Resolve {
         SourcePos binder = bound.binderOf(written);
         if (binder != null) {
             return new ValueName.Local(written, binder);   // a function-typed parameter, applied
+        }
+        if (written.equals("Some") || written.equals("None")) {
+            return new ValueName.Builtin(written);   // Option's cases, which are not calls (E1303)
         }
         // A library qualifier makes this a library reference — `Date(...)`, whose namespace is the
         // whole name, included. Whether the library has a function of that name is the check's to
@@ -522,7 +551,57 @@ public final class Resolve {
         if (type != null && !type.isUnresolved()) {
             return new ValueName.OfType(written, type);   // a newtype applied to what it wraps
         }
+        return nothing(written, call.pos(), notCallable(written, call.pos(), bound));
+    }
+
+    /** Records that a name in a body denotes nothing, and gives it the name that says so. */
+    private ValueName nothing(String written, SourcePos pos, CompileException why) {
+        unresolved.add(why);
         return new ValueName.Unresolved(written);
+    }
+
+    /** The names a body could have written where it wrote one nothing answers to. */
+    private List<String> reachable(Bindings bound) {
+        List<String> names = new ArrayList<>(bound.byName().keySet());
+        names.addAll(values.helpers());
+        names.addAll(values.behaviors().keySet());
+        return names;
+    }
+
+    private CompileException unknownIdentifier(String written, SourcePos pos, Bindings bound) {
+        if (written.equals("null")) {
+            return new CompileException(pos, "E1301",
+                    "`null` is not part of the language. Use an optional field with `?`.");
+        }
+        List<String> candidates = reachable(bound);
+        return CompileException.of(
+                Diagnostic.of(null, "check.unknown.name.msg").title("check.unknown.title")
+                        .at(pos, written.length()).args(written)
+                        .suggestion(Suggest.candidate(written, candidates)).build(),
+                "unknown identifier `" + written + "`" + Suggest.hint(written, candidates));
+    }
+
+    /**
+     * A name applied to arguments that names nothing that can be applied. A standard-library
+     * function written bare is told apart: it exists, and is reached qualified (spec §stdlib).
+     */
+    private CompileException notCallable(String written, SourcePos pos, Bindings bound) {
+        String qualified = Prelude.qualifiedFor(written);
+        if (qualified != null) {
+            return CompileException.of(
+                    Diagnostic.of(null, "check.stdlib.qualified.msg").title("check.unknown.title")
+                            .at(pos, written.length()).args(written, qualified).build(),
+                    "`" + written + "` is a standard-library function and must be called qualified,"
+                            + " as `" + qualified + "` (spec §stdlib).");
+        }
+        List<String> candidates = reachable(bound);
+        return CompileException.of(
+                Diagnostic.of("E1401", "e1401.msg").at(pos, written.length()).args(written)
+                        .suggestion(Suggest.candidate(written, candidates))
+                        .hint("e1401.hint").build(),
+                "`" + written + "` is not a behavior or builtin" + Suggest.hint(written, candidates)
+                        + ". Calling arbitrary JVM methods is not allowed; declare a behavior"
+                        + " without a `let` and implement it from Java.");
     }
 
     /**

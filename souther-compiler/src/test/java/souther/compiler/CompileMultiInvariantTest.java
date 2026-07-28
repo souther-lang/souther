@@ -54,4 +54,26 @@ class CompileMultiInvariantTest {
                 new BytesClassLoader(Compiler.compile(MODULE), CompileMultiInvariantTest.class.getClassLoader());
         assertThrows(ConstraintViolation.class, () -> make(150L, loader));
     }
+
+    /**
+     * An invariant reads the fields a spread brought in as its own, including through a spread of a
+     * spread. They are named where the invariant is written, so name resolution has to reach them
+     * the same way the check does.
+     */
+    @Test
+    void anInvariantReadsTheFieldsASpreadBringsIn() {
+        String src = """
+                module demo
+
+                data Common = { createdOn: Int }
+                data Worked = { ...Common, touches: Int }
+                data Lead = { ...Worked, score: Int }
+                    invariant touches >= 1 && createdOn >= 0 && score >= 0
+
+                behavior make : (n: Int) -> Lead constructs Lead
+                let make (n) = Lead { createdOn = n, touches = 1, score = n }
+                """;
+
+        assertEquals(true, Compiler.compile(src).containsKey("demo.Lead"));
+    }
 }

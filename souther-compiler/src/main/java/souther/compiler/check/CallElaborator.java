@@ -124,6 +124,10 @@ public final class CallElaborator {
             throw new IllegalStateException(
                     "`" + call.fn() + "` reached the check unresolved, at " + call.pos());
         }
+        if (call.denotes() instanceof ValueName.Unresolved) {
+            // reported where the name was written; this definition has no meaning to work out
+            throw new Unanswerable(call.pos());
+        }
         boolean library = call.denotes() instanceof ValueName.Stdlib;
         // A shipped intrinsic behaves like a built-in: check the call against its declared signature
         // (from the prelude) and yield its result type; the backend emits the primitive for its key.

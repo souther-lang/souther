@@ -150,6 +150,47 @@ class UnresolvedNamesTest {
                 "and the type mismatch in the definition that has one: " + found);
     }
 
+    /** Every unknown name in a body at once, as for a type — not the first one a check happened to
+     * reach. */
+    @Test
+    void everyUnknownNameInABodyIsReportedAtOnce() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, g )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = nowhere
+
+                behavior g : (n: Int) -> Int
+                let g (n) = elsewhere
+                """);
+
+        assertEquals(2, found.size(), "both, not the first: " + found);
+        assertTrue(found.stream().allMatch(d -> "check.unknown.name.msg".equals(d.messageKey())),
+                found.toString());
+    }
+
+    /** A definition resting on a name in the value namespace that denotes nothing says nothing
+     * further, and the definitions around it are checked as they would be without it. */
+    @Test
+    void abandoningADefinitionOverAnUnknownValueNameStillChecksTheOthers() {
+        List<Diagnostic> found = diagnose("""
+                module m.a exposing ( f, g )
+
+                behavior f : (n: Int) -> Int
+                let f (n) = nowhere
+
+                behavior g : (n: Int) -> Int
+                let g (n) = "not an Int"
+                """);
+
+        assertEquals(2, found.size(),
+                "the unknown name, and g's own mistake — nothing about what f does: " + found);
+        assertTrue(found.stream().anyMatch(d -> "check.unknown.name.msg".equals(d.messageKey())),
+                "the name that denotes nothing: " + found);
+        assertTrue(found.stream().anyMatch(d -> d.diff() != null),
+                "and the type mismatch in the definition that has one: " + found);
+    }
+
     /** A stage that names nothing is pointed at where it is written, not at the whole behavior. */
     @Test
     void anUnknownStageIsReportedAtTheStage() {
