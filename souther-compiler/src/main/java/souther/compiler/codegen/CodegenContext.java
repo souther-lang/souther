@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.ReqSig;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
@@ -56,6 +57,21 @@ final class CodegenContext {
     void setRequiredSignatures(Map<String, List<Type>> params, Map<String, Type> success) {
         this.reqParams = params;
         this.reqSuccess = success;
+    }
+
+    /** The behaviors a body may call by name — the ones whose requirement set is empty (spec
+     * {@code [#calling-a-behavior]}). A call to one is built where it is called rather than read out
+     * of a field, so it needs no injection; what is kept is the signature the call was typed against,
+     * which decides the descriptor the call links to. Set once, with the required signatures. */
+    private Map<String, ReqSig> callees = Map.of();
+
+    void setCalleeSignatures(Map<String, ReqSig> sigs) {
+        this.callees = sigs;
+    }
+
+    /** The signature a behavior called by name was typed against, or null when the name is not one. */
+    ReqSig calleeSig(String name) {
+        return callees.get(name);
     }
 
     /** A required (injected) behavior takes other than one input, so it is a standalone base rather

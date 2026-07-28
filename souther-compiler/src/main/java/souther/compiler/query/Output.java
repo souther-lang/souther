@@ -4,6 +4,7 @@ import souther.compiler.MemoryClassLoader;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
+import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -48,15 +49,16 @@ public final class Output {
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Bodies.Imported(name));
             Answer<Set<String>> injected = db.ask(new Bodies.ImportedInjected(name));
+            Answer<Map<String, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
-                    || !injected.present() || !prepared.present()) {
+                    || !injected.present() || !callees.present() || !prepared.present()) {
                 return Answer.absent();
             }
             try {
                 Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
                         lowering.value().lowered(), scope.value(), typePackages(prepared.value()),
-                        imported.value(), injected.value(), checked.value()));
+                        imported.value(), injected.value(), callees.value(), checked.value()));
                 stamp(db, classes);
                 return Answer.of(Ordered.map(classes));
             } catch (CompileException e) {

@@ -5,6 +5,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
+import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -82,7 +83,8 @@ public final class Backend {
     }
 
     public static Map<String, byte[]> generate(Ast.Module module, TypeChecker.Checked checked) {
-        return generate(module, TypeChecker.symbols(module), Map.of(), Map.of(), Set.of(), checked);
+        return generate(module, TypeChecker.symbols(module), Map.of(), Map.of(), Set.of(), Map.of(),
+                checked);
     }
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
@@ -96,6 +98,7 @@ public final class Backend {
                                                Map<String, String> typePackage,
                                                Map<String, Sig> importedSigs,
                                                Set<String> importedInjected,
+                                               Map<String, ReqSig> calleeSigs,
                                                TypeChecker.Checked checked) {
         Map<String, List<String>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
@@ -252,6 +255,44 @@ public final class Backend {
         // An imported injected behavior (its base lives in the declaring module, so no base is built
         // here) is a requirement too; take its arity from the imported signature so the unary-vs-multi
         // dispatch treats a cross-module multi-input dependency the same as a local one (issue #57).
+        // A behavior with an implementation of its own may be a requirement too, when it declares
+        // `requires` (spec [#requires]). Nothing is generated for it here — it has its own $Impl —
+        // but the module that named it holds it as a field, so its arity and output belong in the
+        // same maps the unary-vs-multi dispatch reads.
+        Map<String, Ast.SpecBehavior> ownSpecs = new HashMap<>();
+        for (Ast.BehaviorDef bd : module.behaviors()) {
+            if (bd instanceof Ast.SpecBehavior spec) {
+                ownSpecs.put(spec.name(), spec);
+            }
+        }
+        for (Ast.BehaviorDef bd : module.behaviors()) {
+            if (!(bd instanceof Ast.SpecBehavior spec)) {
+                continue;
+            }
+            for (Ast.ValueRef req : spec.requires()) {
+                String name = req.bare();
+                if (requiredNames.contains(name)) {
+                    continue;
+                }
+                Ast.SpecBehavior own = ownSpecs.get(name);
+                if (own != null) {
+                    List<Type> ins = new ArrayList<>();
+                    for (Ast.Param p : own.params()) {
+                        ins.add(b.successType(p.type()));
+                    }
+                    requiredNames.add(name);
+                    requiredParam.put(name, ins);
+                    requiredSuccess.put(name, b.successType(own.ret()));
+                    continue;
+                }
+                Sig imported = importedSigs.get(name);
+                if (imported != null) {
+                    requiredNames.add(name);
+                    requiredParam.put(name, imported.ins());
+                    requiredSuccess.put(name, imported.out());
+                }
+            }
+        }
         for (String name : importedInjected) {
             Sig sig = importedSigs.get(name);
             if (sig != null) {
@@ -262,6 +303,9 @@ public final class Backend {
         // The unary-vs-multi dispatch for required behaviors reads these; set once, so the base class,
         // the $Impl field/ctor, the bind factory, and every call site agree (issue #57).
         b.ctx.setRequiredSignatures(requiredParam, requiredSuccess);
+        // A behavior that requires nothing is called by being built where it is called, so it is not
+        // in the injection maps above; what a call site needs is the signature it was typed against.
+        b.ctx.setCalleeSignatures(calleeSigs);
         Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
         Map<String, List<String>> behaviorDeps = requirementSets(module, requiredNames);
         Map<String, List<Ast.ValueRef>> pipeStages = PipelineSigs.pipelineStages(module);

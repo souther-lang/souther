@@ -11,31 +11,126 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * The checks a {@code behavior} and its implementing {@code let} are subject to: that the two agree
- * on inputs and output, that only required behaviors are called from a body, that a stage takes one
- * input, and that an exposed composition declares the output it actually produces.
+ * on inputs and output, that a {@code requires} names something with a requirement of its own, that
+ * no behavior reaches itself, that a stage takes one input, and that an exposed composition declares
+ * the output it actually produces.
  */
 public final class SpecChecker {
 
     private SpecChecker() {}
 
     /**
-     * A {@code requires} names injection targets (spec 12.6, 13.2): a behavior with no implementation
-     * of its own — no {@code let}, and not a {@code >->} composition — here or in a module this one
-     * imports. Reported where the clause is written, so a behavior that has an implementation and one
-     * that was never declared are told apart — the body check sees only a call it cannot type and
-     * reports both as an arbitrary JVM call (E1401, issue #96).
+     * A behavior does not reach itself (spec {@code [#calling-a-behavior]}, E1608). The edges are
+     * calls, {@code requires} and {@code >->} stages, walked as one graph because a cycle through a
+     * mixture of them is the same cycle: a {@code requires} cycle leaves nothing to build first, and
+     * a call cycle does not terminate.
      *
-     * <p>That the name is a behavior at all was settled when the module's names were resolved, and a
-     * clause that names none was reported there. What is left here is the behavior that exists and
-     * implements itself.
+     * <p>Only this module's behaviors are walked. Reaching another module's takes an import, and a
+     * cycle of imports is already refused (E1501), so following one here could not close a loop this
+     * check has not already seen.
      */
-    static void checkRequiresAreInjectionTargets(Ast.Module module, Map<String, ReqSig> reqSigs) {
+    static void checkBehaviorsDoNotRecurse(Ast.Module module) {
+        Set<String> names = new LinkedHashSet<>();
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            names.add(b.name());
+        }
+        Map<String, List<String>> edges = new LinkedHashMap<>();
+        Map<String, Ast.FnDef> fns = new LinkedHashMap<>();
+        for (Ast.FnDef fn : module.fns()) {
+            fns.put(fn.name(), fn);
+        }
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            List<String> out = new ArrayList<>();
+            switch (b) {
+                case Ast.SpecBehavior spec -> {
+                    for (Ast.ValueRef req : spec.requires()) {
+                        if (names.contains(req.bare()) && !out.contains(req.bare())) {
+                            out.add(req.bare());
+                        }
+                    }
+                    Ast.FnDef fn = fns.get(spec.name());
+                    if (fn != null) {
+                        for (String called : requiredCalls(fn.body(), names)) {
+                            if (!out.contains(called)) {
+                                out.add(called);
+                            }
+                        }
+                    }
+                }
+                case Ast.PipeBehavior pipe -> {
+                    for (Ast.ValueRef stage : pipe.stages()) {
+                        if (names.contains(stage.bare()) && !out.contains(stage.bare())) {
+                            out.add(stage.bare());
+                        }
+                    }
+                }
+            }
+            edges.put(b.name(), out);
+        }
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            List<String> path = new ArrayList<>();
+            if (reaches(b.name(), b.name(), edges, path, new HashSet<>())) {
+                path.add(b.name());
+                throw CompileException.of(
+                        Diagnostic.of("E1608", "e1608.msg").title("e1608.title")
+                                .at(b.pos()).args(b.name(), String.join(" -> ", path))
+                                .hint("e1608.hint", b.name()).build(),
+                        "behavior `" + b.name() + "` reaches itself: "
+                                + String.join(" -> ", path)
+                                + "; a behavior does not recurse, so write the recursion as a helper"
+                                + " `let` (spec [#calling-a-behavior])");
+            }
+        }
+    }
+
+    /** Whether {@code target} is reachable from {@code from}, recording the way there in
+     *  {@code path}. {@code path} starts with {@code from} and ends at the last step before
+     *  {@code target}. */
+    private static boolean reaches(String from, String target, Map<String, List<String>> edges,
+                                   List<String> path, Set<String> seen) {
+        if (!seen.add(from)) {
+            return false;
+        }
+        path.add(from);
+        for (String next : edges.getOrDefault(from, List.of())) {
+            if (next.equals(target) || reaches(next, target, edges, path, seen)) {
+                return true;
+            }
+        }
+        path.remove(path.size() - 1);
+        return false;
+    }
+
+    /** Whether {@code name} is a {@code >->} composition this module declares. */
+    private static boolean isComposition(Ast.Module module, String name) {
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            if (b instanceof Ast.PipeBehavior pipe && pipe.name().equals(name)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A {@code requires} names a behavior whose requirement set is not empty (spec
+     * {@code [#requires]}): one with no implementation of its own, or one whose {@code let} declares
+     * {@code requires} in turn, here or in a module this one imports.
+     *
+     * <p>Reported where the clause is written, and the three ways it can be wrong are told apart
+     * because the fix differs: a behavior that requires nothing is called instead, a {@code >->}
+     * composition cannot be rested on because its requirements are not written, and a name that is no
+     * behavior has to be declared or imported. The body check would see only a call it cannot type
+     * and report all three as an arbitrary JVM call (E1401, issue #96).
+     */
+    static void checkRequiresAreInjectionTargets(Ast.Module module, Map<String, ReqSig> reqSigs,
+                                                 Map<String, ReqSig> calleeSigs) {
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (!(b instanceof Ast.SpecBehavior spec)) {
                 continue;
@@ -45,16 +140,20 @@ public final class SpecChecker {
                     continue;
                 }
                 String req = required.bare();
-                // at the name, as the clause that names nothing is: one clause, one place to look,
-                // whichever of the two is wrong with it
+                // Three ways a name can be wrong here, told apart because the fix differs. A
+                // composition and a behavior that requires nothing are both in scope — one cannot be
+                // rested on, the other has nothing to inject — and the third names no behavior at
+                // all. All are reported at the name, as the clause that names nothing is.
+                String key = isComposition(module, req) ? "e1607.composition"
+                        : calleeSigs.containsKey(req) ? "e1607.nothing" : "e1607.unknown";
                 throw CompileException.of(
-                        Diagnostic.of("E1607", "e1607.implemented").title("e1607.title")
+                        Diagnostic.of("E1607", key).title("e1607.title")
                                 .at(required.pos(), required.written().length())
                                 .args(spec.name(), req)
-                                .hint("e1607.implemented.hint").build(),
-                        "`behavior " + spec.name() + "` declares `requires " + req + "`, but `"
-                                + req + "` has an implementation of its own, so it is not an"
-                                + " injection target — compose it with `>->` instead (spec 13.2)");
+                                .hint(key + ".hint", spec.name(), req)
+                                .build(),
+                        "`behavior " + spec.name() + "` declares `requires " + req + "`, which"
+                                + " requires nothing of its own to inject (spec [#requires])");
             }
         }
     }
@@ -132,7 +231,7 @@ public final class SpecChecker {
      * do not bind values — they resolve as inline calls to those behaviors.
      */
     static Core checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
-                                    Symbols symbols, Set<String> allBehaviors,
+                                    Symbols symbols, Map<String, ReqSig> calleeSigs,
                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
                                     Map<String, Map<TypeName, String>> recHelperConstructs,
@@ -211,11 +310,11 @@ public final class SpecChecker {
         // checked as one expression, so a helper's constructions and injected calls count toward this
         // behavior's permission and requires — exactly as if the code had been written inline (12.5).
         Ast.Expr body = inlinedBody;
-        rejectNonRequiredCalls(body, allBehaviors, reqSigs);
 
         // push the declared output type into the body so a body that is directly an empty collection
         // (or a construction whose field is one) takes the declared type rather than a bottom
-        Core elaboratedBody = Elaborator.elaborate(body, tenv, new CheckContext(symbols, null, reqSigs), output);
+        Core elaboratedBody = Elaborator.elaborate(body, tenv,
+                new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs), output);
         Type rt = elaboratedBody.type();
         if (!TypeOps.assignable(rt, output, symbols)) {
             throw CompileException.of(
@@ -480,23 +579,6 @@ public final class SpecChecker {
         // the set, and a block's requirements still float out to the behavior that passes it
         // (spec 12.5, 29) because a Block's body is one of its children.
         Ast.forEachChild(e, c -> collectRequiredCalls(c, requiredNames, out));
-    }
-
-    /**
-     * Only required behaviors may be called from a body; other behaviors compose with {@code >->}
-     * (spec 14.1). Checked up front so the diagnostic names the rule rather than reporting the
-     * behavior as an unknown function.
-     */
-    private static void rejectNonRequiredCalls(Ast.Expr e, Set<String> allBehaviors,
-                                               Map<String, ReqSig> reqSigs) {
-        if (e instanceof Ast.Call call && allBehaviors.contains(call.fn())
-                && !reqSigs.containsKey(call.fn())) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.call.nonrequired").title("check.impl.title")
-                            .at(call.pos(), call.fn().length()).build(),
-                    "only required behaviors can be called from a body; compose others with `>->`");
-        }
-        TypeChecker.forEachChild(e, c -> rejectNonRequiredCalls(c, allBehaviors, reqSigs));
     }
 
 }

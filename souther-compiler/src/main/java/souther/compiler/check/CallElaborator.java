@@ -425,8 +425,13 @@ public final class CallElaborator {
                                     .at(call.pos(), call.fn().length()).args(call.fn()).build(),
                             "`" + call.fn() + "` is not a standard-library function.");
                 }
-                // a required behavior called inline (spec 12.2, 13): type it as its success case
+                // a required behavior called inline (spec 12.2, 13), or one that requires nothing and
+                // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
+                // declaration; where the behavior comes from at run time is the backend's to know.
                 ReqSig callee = ctx.reqs().get(call.fn());
+                if (callee == null) {
+                    callee = ctx.callees().get(call.fn());
+                }
                 if (callee == null) {
                     Elaborator.optionCaseWritten(call.fn(), call.pos());
                     String qualified = Prelude.qualifiedFor(call.fn());

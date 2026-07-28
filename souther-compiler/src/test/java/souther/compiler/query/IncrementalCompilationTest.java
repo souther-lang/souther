@@ -188,6 +188,21 @@ class IncrementalCompilationTest {
             let thrice (n) = Amount(n.value * 3)
             """;
 
+    /** One behavior calling another, both requiring nothing. */
+    private static final String CALLS = """
+            module shop.orders exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            behavior twice : (n: Amount) -> Amount
+                constructs Amount
+            let twice (n) = Amount(n.value * 2)
+
+            behavior viaTwice : (n: Amount) -> Amount
+            let viaTwice (n) = twice(n)
+            """;
+
     private static Compilation orders(String source) {
         Compilation c = Compilation.ofDocuments(Map.of("orders.sou", source), Set.of(),
                 ModulePath.EMPTY);
@@ -239,6 +254,27 @@ class IncrementalCompilationTest {
                 "the edit is `thrice`'s, so it is checked again");
         assertSame(twice, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
                 "`twice` is checked against `behavior twice`, which says what it said");
+    }
+
+    /**
+     * A body that calls a behavior reads the callee's declaration and not its body, so editing what
+     * the callee does leaves the caller's check alone. This is the difference between calling a
+     * behavior and calling a helper: a helper is expanded into its callers, so editing one reaches
+     * them (below); a behavior is built and called, so only its signature is the caller's business.
+     */
+    @Test
+    void editingACalledBehaviorsBodyDoesNotRecheckTheCaller() {
+        Compilation c = orders(CALLS);
+        Answer<?> callee = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice"));
+        Answer<?> caller = c.db().ask(new Bodies.CheckedBehavior("shop.orders", "viaTwice"));
+
+        c.update(Map.of("orders.sou", CALLS.replace("n.value * 2)", "n.value * 20)")), Set.of());
+        c.answerEverything();
+
+        assertNotSame(callee, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "twice")),
+                "the edit is `twice`'s, so it is checked again");
+        assertSame(caller, c.db().ask(new Bodies.CheckedBehavior("shop.orders", "viaTwice")),
+                "`viaTwice` was checked against `behavior twice`, which says what it said");
     }
 
     /**
