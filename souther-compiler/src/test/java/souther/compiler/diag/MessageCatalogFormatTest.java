@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -16,8 +18,10 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * Every message in the catalog is a {@link java.text.MessageFormat} pattern, where a lone {@code '}
@@ -79,6 +83,82 @@ class MessageCatalogFormatTest {
             highest = Math.max(highest, Integer.parseInt(m.group(1)));
         }
         return highest + 1;
+    }
+
+    /**
+     * A key the compiler names but the catalog does not define renders as the key itself, so the
+     * reader gets {@code check.match.newtype.notnewtype} where the message belongs. Nothing else
+     * catches it: the site compiles, and the text is only read when that diagnostic fires.
+     *
+     * <p>The keys are collected from the sources rather than from the call sites, because a key is
+     * also passed to the parser's and the AST builder's own {@code error(...)} helpers, and those
+     * sites are invisible to a scan for {@code Diagnostic.of}. A string literal counts as a key when
+     * it is shaped like one and its first segment is one the catalog already uses — so the very
+     * first key of a brand-new namespace is the one case this does not see.
+     */
+    @Test
+    void everyKeyTheCompilerNamesIsInTheCatalog() throws IOException {
+        Set<String> defined = keysOf("/souther/compiler/diag/messages.properties");
+        Set<String> namespaces = new TreeSet<>();
+        for (String key : defined) {
+            namespaces.add(key.substring(0, key.indexOf('.')));
+        }
+        Set<String> named = new TreeSet<>();
+        for (Path source : mainSources()) {
+            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                String key = m.group(1);
+                if (namespaces.contains(key.substring(0, key.indexOf('.')))) {
+                    named.add(key);
+                }
+            }
+        }
+        assertFalse(named.isEmpty(), "found no message keys at all — the source scan missed the tree");
+        named.removeAll(defined);
+        assertEquals(Set.of(), named);
+    }
+
+    @Test
+    void bothCatalogsDefineTheSameKeys() throws IOException {
+        Set<String> english = keysOf("/souther/compiler/diag/messages.properties");
+        Set<String> japanese = keysOf("/souther/compiler/diag/messages_ja.properties");
+        Set<String> onlyEnglish = new TreeSet<>(english);
+        onlyEnglish.removeAll(japanese);
+        Set<String> onlyJapanese = new TreeSet<>(japanese);
+        onlyJapanese.removeAll(english);
+        assertEquals(Set.of(), onlyEnglish, "defined in English only");
+        assertEquals(Set.of(), onlyJapanese, "defined in Japanese only");
+    }
+
+    private static final Pattern KEY_LITERAL =
+            Pattern.compile("\"([a-z][a-z0-9]*(?:\\.[a-z0-9]+)+)\"");
+
+    private static Set<String> keysOf(String resource) throws IOException {
+        Properties catalog = new Properties();
+        try (InputStream in = MessageCatalogFormatTest.class.getResourceAsStream(resource)) {
+            catalog.load(new InputStreamReader(in, StandardCharsets.UTF_8));
+        }
+        return new TreeSet<>(catalog.stringPropertyNames());
+    }
+
+    /** Every module's main sources. The test runs in its own module directory, so the repo root is
+     *  that directory's parent, and any module may name a message key. */
+    private static List<Path> mainSources() throws IOException {
+        Path module = Path.of("").toAbsolutePath();
+        Path repo = Files.isDirectory(module.resolve(Path.of("src", "main", "java")))
+                ? module.getParent() : module;
+        List<Path> sources = new ArrayList<>();
+        try (Stream<Path> modules = Files.list(repo)) {
+            for (Path root : modules.map(m -> m.resolve(Path.of("src", "main", "java"))).toList()) {
+                if (!Files.isDirectory(root)) {
+                    continue;
+                }
+                try (Stream<Path> walk = Files.walk(root)) {
+                    walk.filter(p -> p.toString().endsWith(".java")).forEach(sources::add);
+                }
+            }
+        }
+        return sources;
     }
 
     @Test
