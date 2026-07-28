@@ -7,6 +7,7 @@ import souther.compiler.types.Type;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,10 +90,21 @@ final class HelperParams {
                 m.behaviors(), fns, m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
     }
 
-    /** Whether any fn of {@code m} writes a parameter without a type — behaviors included, whose
-     * parameters are typed from the behavior rather than settled, so this only over-approximates. */
+    /**
+     * Whether {@code m} has a helper parameter with no type written on it — the only thing there is
+     * to settle. A behavior's implementation is not a helper: its parameters are typed from the
+     * behavior and carry no type of their own, so counting them would answer yes for every module
+     * that implements a behavior and this would never skip anything.
+     */
     private static boolean hasOpenParam(Ast.Module m) {
+        Set<String> behaviors = new HashSet<>();
+        for (Ast.BehaviorDef b : m.behaviors()) {
+            behaviors.add(b.name());
+        }
         for (Ast.FnDef fn : m.fns()) {
+            if (behaviors.contains(fn.name())) {
+                continue;
+            }
             for (Ast.FnParam p : fn.params()) {
                 if (p.type() == null) {
                     return true;
