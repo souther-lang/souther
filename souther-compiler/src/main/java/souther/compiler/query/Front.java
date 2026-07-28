@@ -72,10 +72,15 @@ public final class Front {
     /** One source, parsed, with the text of each declaration kept for publishing. */
     public record Parsed(String id) implements Key<CstFrontend.Parsed> {
         @Override
+        public String sourceId() {
+            return id;
+        }
+
+        @Override
         public Answer<CstFrontend.Parsed> compute(Db db) {
             Answer<String> text = db.ask(new Text(id));
             if (!text.present()) {
-                return Answer.absent(text.reports());
+                return Answer.absent();
             }
             try {
                 return Answer.of(CstFrontend.parseWithSlices(
@@ -114,7 +119,6 @@ public final class Front {
             Map<String, String> idOfModule = new LinkedHashMap<>();
             Map<String, List<String>> exampleFilesOf = new LinkedHashMap<>();
             Map<String, String> exampleFileTargets = new LinkedHashMap<>();
-            List<Report> reports = new ArrayList<>();
             for (String id : ids) {
                 Answer<CstFrontend.Parsed> parsed = db.ask(new Parsed(id));
                 if (!parsed.present()) {
@@ -129,7 +133,7 @@ public final class Front {
                 idOfModule.putIfAbsent(m.name(), id);
             }
             return Answer.of(new Of(Ordered.map(idOfModule), Ordered.map(exampleFilesOf),
-                    Ordered.map(exampleFileTargets)), reports);
+                    Ordered.map(exampleFileTargets)));
         }
     }
 
@@ -143,6 +147,11 @@ public final class Front {
      */
     public record Exposed(String name) implements Key<Ast.Module> {
         @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
         public Answer<Ast.Module> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             if (layout == null) {
@@ -154,7 +163,7 @@ public final class Front {
             }
             Answer<CstFrontend.Parsed> parsed = db.ask(new Parsed(id));
             if (!parsed.present()) {
-                return Answer.absent(parsed.reports());
+                return Answer.absent();
             }
             Ast.Module raw = parsed.value().module();
             if (!Boolean.TRUE.equals(db.ask(new Core()).value())) {
@@ -265,14 +274,41 @@ public final class Front {
      */
     public record Available(String name) implements Key<Ast.Module> {
         @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
         public Answer<Ast.Module> compute(Db db) {
             Answer<Ast.Module> bound = db.ask(new Names.Bound(name));
             if (bound.present()) {
-                return bound;
+                return Answer.of(bound.value());
             }
             FromPath.Of path = db.ask(new FromPath()).value();
             Ast.Module fromPath = path == null ? null : path.modules().get(name);
-            return fromPath == null ? Answer.absent(bound.reports()) : Answer.of(fromPath);
+            return fromPath == null ? Answer.absent() : Answer.of(fromPath);
+        }
+    }
+
+    /**
+     * The type names a module exposes.
+     *
+     * <p>Its own question, not a read of the module. Everything that resolves a name against another
+     * module asks this, and a module changes far more often than its {@code exposing} line does —
+     * reading the whole module here would mean a new behavior in one module rebuilding every module
+     * that imports a type from it.
+     */
+    public record Exposes(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Ast.Module m = db.ask(new Available(name)).value();
+            return Answer.of(m == null ? Set.of()
+                    : souther.compiler.check.Registry.baseNames(m.exposing()));
         }
     }
 
@@ -379,28 +415,30 @@ public final class Front {
     }
 
     /**
-     * The source modules that also exist on the path. Which one an import means would be decided by
+     * A source module that also exists on the path. Which one an import means would be decided by
      * nothing the author wrote, and the two would be different types under one name — the same
      * reason two sources may not share a name.
      */
-    public record Shadows() implements Key<Map<String, Report>> {
+    public record ShadowsPath(String name) implements Key<Boolean> {
         @Override
-        public Answer<Map<String, Report>> compute(Db db) {
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
             Layout.Of layout = db.ask(new Layout()).value();
             ModulePath path = db.ask(new Path()).value();
-            if (layout == null || path == null) {
-                return Answer.of(Map.of());
+            if (layout == null || path == null || !layout.idOfModule().containsKey(name)) {
+                return Answer.of(Boolean.FALSE);
             }
-            Map<String, Report> found = new LinkedHashMap<>();
-            for (String name : layout.idOfModule().keySet()) {
-                if (PublishedModule.read(name, path.declarations()) != null) {
-                    found.put(name, Report.raised(
-                            Diagnostic.of(null, "check.module.shadowspath").title("check.module.title")
-                                    .args(name).hint("check.module.shadowspath.hint", name).build(),
-                            "module `" + name + "` is compiled here and is also on the path"));
-                }
+            if (PublishedModule.read(name, path.declarations()) == null) {
+                return Answer.of(Boolean.FALSE);
             }
-            return Answer.of(Ordered.map(found));
+            return Answer.absent(Report.raised(
+                    Diagnostic.of(null, "check.module.shadowspath").title("check.module.title")
+                            .args(name).hint("check.module.shadowspath.hint", name).build(),
+                    "module `" + name + "` is compiled here and is also on the path"));
         }
     }
 

@@ -8,6 +8,7 @@ import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -26,6 +27,8 @@ public final class Compilation {
     private final Db db = new Db();
     /** Which source each id was, for a caller that names sources by index. */
     private final Map<String, Integer> indexOfId = new LinkedHashMap<>();
+    /** The sources this compilation currently has, so one that goes away can be forgotten. */
+    private final Set<String> held = new LinkedHashSet<>();
 
     private Compilation() {}
 
@@ -71,6 +74,7 @@ public final class Compilation {
         c.db.set(new Front.Ids(), List.copyOf(byId.keySet()));
         c.db.set(new Front.Broken(), Set.copyOf(broken));
         c.db.set(new Front.Path(), path);
+        c.held.addAll(byId.keySet());
         return c;
     }
 
@@ -83,11 +87,34 @@ public final class Compilation {
      * the edit actually reached.
      */
     public void update(Map<String, String> byId, Set<String> broken) {
+        // A source that is gone is forgotten, along with the module it declared. Which module that
+        // was has to be read before the layout is told the source is gone.
+        for (String gone : List.copyOf(held)) {
+            if (!byId.containsKey(gone)) {
+                db.forget(gone, moduleDeclaredBy(gone));
+                held.remove(gone);
+            }
+        }
         for (Map.Entry<String, String> e : byId.entrySet()) {
             db.set(new Front.Text(e.getKey()), e.getValue());
         }
         db.set(new Front.Ids(), List.copyOf(byId.keySet()));
         db.set(new Front.Broken(), Set.copyOf(broken));
+        held.addAll(byId.keySet());
+    }
+
+    /** The module {@code id} declares, as this compilation currently has it. */
+    private String moduleDeclaredBy(String id) {
+        Front.Layout.Of layout = db.ask(new Front.Layout()).value();
+        if (layout == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> e : layout.idOfModule().entrySet()) {
+            if (e.getValue().equals(id)) {
+                return e.getKey();
+            }
+        }
+        return null;
     }
 
     /** A compile of one of the compiler's own core sources, which may take a reserved name. */
@@ -205,13 +232,13 @@ public final class Compilation {
                 found.add(new Db.Found(null, id, report));
             }
         }
-        Map<String, Report> shadows = db.ask(new Front.Shadows()).value();
-        if (shadows != null) {
-            shadows.forEach((module, report) -> found.add(new Db.Found(module, null, report)));
-        }
-        Map<String, Report> cycles = db.ask(new Names.Cycles()).value();
-        if (cycles != null) {
-            cycles.forEach((module, report) -> found.add(new Db.Found(module, null, report)));
+        for (String module : modules()) {
+            for (Report report : db.ask(new Front.ShadowsPath(module)).reports()) {
+                found.add(new Db.Found(module, null, report));
+            }
+            for (Report report : db.ask(new Names.InCycle(module)).reports()) {
+                found.add(new Db.Found(module, null, report));
+            }
         }
         return found;
     }

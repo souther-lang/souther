@@ -47,8 +47,11 @@ public interface Key<T> {
 
     /**
      * The answer when this question is reached while it is already being answered — the key depends,
-     * through some chain, on itself. {@code cycle} is that chain, outermost first, ending at this
-     * key's other occurrence.
+     * through some chain, on itself.
+     *
+     * <p>{@code cycle} is every key being answered at that moment, outermost first. This key is in
+     * it, once, at the point the chain came back round to it; it is not repeated at the end. The
+     * keys before it are the ones that asked, which need not be part of the cycle at all.
      *
      * <p>A key kind that can be part of a cycle must say what a cycle means for it: modules that
      * import each other, helpers that call each other. Left unimplemented it is a programming error,

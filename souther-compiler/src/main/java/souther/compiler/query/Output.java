@@ -57,28 +57,33 @@ public final class Output {
                 Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
                         lowering.value().lowered(), scope.value(), typePackages(prepared.value()),
                         imported.value(), injected.value(), checked.value()));
-                Report stamped = stamp(db, classes);
-                return stamped == null ? Answer.of(Ordered.map(classes)) : Answer.absent(stamped);
+                stamp(db, classes);
+                return Answer.of(Ordered.map(classes));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
         }
 
-        /** Puts this module's declarations on its classes, as written. Null when it worked. */
-        private Report stamp(Db db, Map<String, byte[]> classes) {
+        /**
+         * Puts this module's declarations on its classes, as its source wrote them.
+         *
+         * <p>Nothing here can fail in a way worth reporting. A module with no source of its own was
+         * read off the path, and its jar was stamped where it was built; and the declarations are
+         * only asked for once the module has checked, so they are there.
+         */
+        private void stamp(Db db, Map<String, byte[]> classes) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             String id = layout == null ? null : layout.idOfModule().get(name);
             if (id == null) {
-                return null;   // read off the path: its jar was stamped where it was built
+                return;
             }
             CstFrontend.Parsed written = db.ask(new Front.Parsed(id)).value();
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
             Set<String> injected = db.ask(new Bodies.Injected(name)).value();
             if (written == null || !sigs.present() || injected == null) {
-                return null;
+                return;
             }
             ModuleMetadata.stamp(classes, written.module(), written.slices(), sigs.value(), injected);
-            return null;
         }
 
         /** Maps each imported type name to its declaring module, for cross-package references. */

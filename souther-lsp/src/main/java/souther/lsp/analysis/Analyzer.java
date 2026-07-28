@@ -408,7 +408,17 @@ public final class Analyzer {
         }
         // references() treats a name in an `exposing`/`import` list as a binding site, not a use, and
         // skips it. Rename must still update those, or the module stops exposing (and importers stop
-        // importing) the renamed symbol, breaking the build. Resolve the symbol again and add them.
+        // importing) the renamed symbol, breaking the build.
+        //
+        // Which module those belong to is the same question the references were found by, and it has
+        // to be answered the same way: renaming from a qualified use renames the module the
+        // reference names, and matching the spelling here would edit this module's own `exposing`
+        // instead — leaving both modules uncompilable.
+        TypeName target = typeUnderCursor(compileOf(graph), uri, graph, pos);
+        if (target != null) {
+            addExposingAndImportSites(target.name(), target.module(), graph, byUri);
+            return byUri;
+        }
         String text = graph.text(uri);
         SyntaxNode root = CstParser.parse(text).root();
         SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));

@@ -5,9 +5,12 @@ import souther.compiler.meta.ModulePath;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -92,6 +95,33 @@ class IncrementalCompilationTest {
         assertSame(cart, c.db().ask(new Output.Classes("shop.cart")));
     }
 
+    /**
+     * The boundary the whole claim rests on. An importer builds against what a module declares, so
+     * changing a body it cannot see must not reach it — and that only works because a module's
+     * declarations compare by what they say.
+     */
+    @Test
+    void changingOnlyABodyDoesNotReachTheModulesThatImportIt() {
+        Compilation c = started();
+        Answer<?> cart = c.db().ask(new Output.Classes("shop.cart"));
+
+        c.update(workspace(PRICES + """
+
+                behavior twice : (n: Amount) -> Amount
+                    constructs Amount
+                let twice (n) = Amount(n.value * 2)
+                """, CART, CUSTOMERS), Set.of());
+        c.answerEverything();
+
+        assertNotSame(prices(c), null, "the edited module is still compiled");
+        assertSame(cart, c.db().ask(new Output.Classes("shop.cart")),
+                "shop.cart imports a type, and the type did not change");
+    }
+
+    private static Object prices(Compilation c) {
+        return c.db().ask(new Output.Classes("shop.prices")).value();
+    }
+
     @Test
     void changingWhatAModuleDeclaresReachesTheModulesThatImportIt() {
         Compilation c = started();
@@ -133,5 +163,23 @@ class IncrementalCompilationTest {
         c.answerEverything();
 
         assertTrue(c.db().allReports().isEmpty(), "the fixed error is not still listed");
+    }
+
+    @Test
+    void aClosedDocumentIsForgotten() {
+        Compilation c = started();
+        assertTrue(c.db().isComputed(new Output.Classes("shop.customers")));
+
+        Map<String, String> without = new LinkedHashMap<>();
+        without.put("prices.sou", PRICES);
+        without.put("cart.sou", CART);
+        c.update(without, Set.of());
+        c.answerEverything();
+
+        assertFalse(c.db().isComputed(new Output.Classes("shop.customers")),
+                "nothing will ask about a module that is not there any more");
+        assertFalse(c.db().isComputed(new Front.Parsed("customers.sou")),
+                "and its text is not held either");
+        assertEquals(List.of("shop.prices", "shop.cart"), c.modules());
     }
 }

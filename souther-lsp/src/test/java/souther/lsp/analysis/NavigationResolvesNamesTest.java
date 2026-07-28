@@ -68,6 +68,25 @@ class NavigationResolvesNamesTest {
         }
     }
 
+    /**
+     * Renaming from a qualified use renames the module the reference names. The binding sites go
+     * with it — {@code up} stops exposing the old name — and this module's own {@code exposing},
+     * which is about its own type of the same spelling, is left alone.
+     */
+    @Test
+    void renamingFromAQualifiedUseCarriesTheRightModulesExposing() {
+        Map<String, List<Range>> edits =
+                new Analyzer().renameEdits("file:///here.sou", THE_QUALIFIED_USE, graph());
+
+        assertEquals(2, edits.getOrDefault("file:///up.sou", List.of()).size(),
+                "up's declaration and up's `exposing` entry");
+        List<Range> here = edits.getOrDefault("file:///here.sou", List.of());
+        assertEquals(1, here.size(), "only the tail of `up.Amount`");
+        assertEquals(4, here.get(0).start().line());
+        assertEquals(21, here.get(0).start().character(),
+                "the `Amount` of `up.Amount`, not the `up`");
+    }
+
     @Test
     void aQualifiedReferenceGoesToTheModuleItNames() {
         Optional<Location> found =

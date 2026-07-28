@@ -26,6 +26,18 @@ import java.util.Set;
  * changes that module's classes; it does not change what the module declares, so nothing that
  * imports it is looked at again.
  *
+ * <p>That rests on the answers being values, and two of them carry it. {@link Front.Layout} is what
+ * stops an edit to any source from reaching the whole workspace: every parse feeds it, and it comes
+ * out the same. {@link Names.Declarations} is what stops an edit at the module boundary: an importer
+ * builds against what a module declares, not against its bodies. Both are maps of records, and
+ * {@code IncrementalCompilationTest} pins both.
+ *
+ * <p>It does not hold everywhere. A module's classes are a {@code Map<String, byte[]>}, and arrays
+ * compare by identity, so regenerating them always counts as a change — and every module's examples
+ * read every module's classes. Comparing the bytes would not help: after a real edit they differ.
+ * What would is for an example to depend on the classes it reaches rather than on all of them,
+ * which is per-definition work and not here.
+ *
  * <p>One store is one workspace over time, not one compile. It is not thread-safe and does not need
  * to be: the work inside a compile is a graph walk, not a set of independent jobs.
  */
@@ -57,15 +69,19 @@ public final class Db {
     /**
      * Keys whose current answer was reached through a cycle. A cyclic answer depends on where the
      * cycle was entered, so keeping it would make one caller's answer depend on whether another
-     * asked first; the whole chain in flight when the cycle was found is discarded instead. Cycles
-     * are the compiler reporting on a source that names itself, so recomputing them costs nothing
-     * that matters.
+     * asked first; the whole chain in flight is discarded, not only the part inside the cycle,
+     * because an answer built from a cyclic one is as entry-dependent as the cyclic one.
+     *
+     * <p>That is more than the cycle, and it costs: while one exists, every key that reached it is
+     * recomputed on every ask. It is affordable because nothing in a compile is supposed to get
+     * here — modules that name each other are found by {@link Names.Cycles} and stopped before any
+     * question is asked that would answer itself.
      */
     private final Set<Key<?>> throughCycle = new HashSet<>();
     /** Every key that has ever reported something, in the order it first did — the order reports
      * are read back in. */
     private final List<Key<?>> spoke = new ArrayList<>();
-    private final Set<Key<?>> hasSpoken = new HashSet<>();
+    private final Set<Key<?>> hasSpoken = new LinkedHashSet<>();
 
     /**
      * Gives an input its value. An input set to what it already held changes nothing, so a caller
@@ -81,6 +97,22 @@ public final class Db {
         revision++;
         memos.put(key, new Memo(now, revision, revision, Set.of()));
         return this;
+    }
+
+    /**
+     * Drops everything kept about a source that is no longer part of this compilation — its text,
+     * and every answer that was about it or about the module it declared.
+     *
+     * <p>A store lives as long as the workspace does, so what it keeps about a file it will never be
+     * asked about again is held for nothing. Dropping an answer is always safe: the next question
+     * that wants it computes it.
+     */
+    public void forget(String sourceId, String moduleName) {
+        set(new Front.Text(sourceId), null);
+        memos.keySet().removeIf(key -> sourceId.equals(key.sourceId())
+                || (moduleName != null && moduleName.equals(key.module())));
+        hasSpoken.removeIf(key -> !memos.containsKey(key));
+        spoke.removeIf(key -> !memos.containsKey(key));
     }
 
     /** Answers {@code key}, computing it if nothing kept from before still holds. */
@@ -104,6 +136,11 @@ public final class Db {
         frames.push(new LinkedHashSet<>());
         Answer<T> answer;
         Set<Key<?>> read;
+        // Every trace of answering this key is undone here, whether it answered or threw. A compile
+        // error is a value, so a throw is an internal fault — and a store that is kept across edits
+        // must come out of one as it went in, or the key it happened under would never be kept
+        // again.
+        boolean reachedThroughCycle = false;
         try {
             answer = key.compute(this);
         } finally {
@@ -112,8 +149,9 @@ public final class Db {
             // reports depend on hash order.
             read = Collections.unmodifiableSet(frames.pop());
             inProgress.remove(key);
+            reachedThroughCycle = throughCycle.remove(key);
         }
-        if (!throughCycle.remove(key)) {
+        if (!reachedThroughCycle) {
             long changedAt = memo != null && memo.answer().equals(answer)
                     ? memo.changedAt() : revision;
             memos.put(key, new Memo(answer, revision, changedAt, read));
@@ -148,15 +186,24 @@ public final class Db {
     }
 
     /**
-     * Everything the answers this store now holds have to report, in the order the keys first
-     * reported. A key whose answer has since been recomputed contributes what it says now, so a
-     * problem that was fixed is not still listed.
+     * Everything this compilation now has to report, in the order the keys first reported it.
+     *
+     * <p>Only questions this revision actually asked are read. A question that was asked and
+     * recomputed contributes what it says now, so a problem that was fixed is not still listed —
+     * and a question that stopped being asked contributes nothing, because there is no longer
+     * anything that wants to know. Deleting the last row of an {@code examples for} file is the
+     * second case: nothing asks whether that file's rows hold any more, so nothing recomputes the
+     * answer, and reading it would put a failure on a line that is not there.
+     *
+     * <p>Being asked is what {@code verifiedAt} records. Answering a key sets it, and so does
+     * finding that a kept answer still holds, so every key reachable from what a caller asked for
+     * carries this revision and every key that is not reachable carries an older one.
      */
     public List<Found> allReports() {
         List<Found> found = new ArrayList<>();
         for (Key<?> key : spoke) {
             Memo memo = memos.get(key);
-            if (memo == null) {
+            if (memo == null || memo.verifiedAt() != revision) {
                 continue;
             }
             for (Report report : memo.answer().reports()) {

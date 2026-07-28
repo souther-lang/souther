@@ -42,11 +42,11 @@ public final class Shapes {
         public Answer<Ast.Module> compute(Db db) {
             Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
             if (!resolved.present()) {
-                return Answer.absent(resolved.reports());
+                return Answer.absent();
             }
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!scope.present()) {
-                return Answer.absent(scope.reports());
+                return Answer.absent();
             }
             try {
                 Ast.Module derived = Deriver.derive(resolved.value(), scope.value());
@@ -86,11 +86,11 @@ public final class Shapes {
         public Answer<Ast.Module> compute(Db db) {
             Answer<Ast.Module> derived = db.ask(new Derived(name));
             if (!derived.present()) {
-                return Answer.absent(derived.reports());
+                return Answer.absent();
             }
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.DERIVED);
             if (!scope.present()) {
-                return Answer.absent(scope.reports());
+                return Answer.absent();
             }
             try {
                 return Answer.of(NewtypeDesugar.rewrite(derived.value(), scope.value()));
@@ -118,7 +118,7 @@ public final class Shapes {
         public Answer<Ast.Module> compute(Db db) {
             Answer<Ast.Module> desugared = db.ask(new Desugared(name));
             if (!desugared.present()) {
-                return Answer.absent(desugared.reports());
+                return Answer.absent();
             }
             Ast.Module m = desugared.value();
             try {

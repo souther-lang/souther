@@ -53,10 +53,10 @@ public final class Names {
 
             @Override
             public Set<String> exposedBy(String moduleName) {
-                Ast.Module m = db.ask(new Front.Available(moduleName)).value();
                 // `exposing` is written in the source and no pass rewrites it, so which stage this
                 // registry reads makes no difference to the answer.
-                return m == null ? Set.of() : Registry.baseNames(m.exposing());
+                Set<String> exposed = db.ask(new Front.Exposes(moduleName)).value();
+                return exposed == null ? Set.of() : exposed;
             }
 
             @Override
@@ -86,7 +86,7 @@ public final class Names {
         public Answer<Ast.Module> compute(Db db) {
             Answer<Ast.Module> exposed = db.ask(new Front.Exposed(name));
             if (!exposed.present()) {
-                return exposed;
+                return Answer.absent();
             }
             Set<String> modules = db.ask(new Front.ModuleNames()).value();
             Ast.Module m = exposed.value();
@@ -194,15 +194,44 @@ public final class Names {
 
         @Override
         public Answer<Map<String, Ast.Def>> compute(Db db) {
+            if (cyclic(db, name)) {
+                // What this module declares depends on the module it names, which depends on this
+                // one. Reported by InCycle; nothing below here can be answered, and going on would
+                // ask a question that is answering itself.
+                return Answer.absent();
+            }
             Answer<Ast.Module> m = db.ask(new Front.Available(name));
             if (!m.present()) {
-                return Answer.absent(m.reports());
+                return Answer.absent();
             }
             try {
                 return Answer.of(TypeChecker.ownDefs(m.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * Whether a module takes part in an import cycle — absent, with the error, when it does.
+     *
+     * <p>{@link Cycles} finds them all in one walk; this is where one module's share of that is
+     * reported, so the error lands on the source that closes the cycle like any other.
+     */
+    public record InCycle(String name) implements Key<Boolean> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Cycles.Of cycles = db.ask(new Cycles()).value();
+            Report found = cycles == null ? null : cycles.reported().get(name);
+            if (found != null) {
+                return Answer.absent(found);
+            }
+            return cyclic(db, name) ? Answer.absent() : Answer.of(Boolean.FALSE);
         }
     }
 
@@ -249,7 +278,7 @@ public final class Names {
         public Answer<Of> compute(Db db) {
             Answer<Ast.Module> module = db.ask(new Front.Available(name));
             if (!module.present()) {
-                return Answer.absent(module.reports());
+                return Answer.absent();
             }
             Ast.Module m = module.value();
             Registry registry = registry(db, Stage.AVAILABLE);
@@ -319,7 +348,7 @@ public final class Names {
     static Answer<Symbols> symbols(Db db, String name, Stage stage) {
         Answer<Imports.Of> imports = db.ask(new Imports(name));
         if (!imports.present()) {
-            return Answer.absent(imports.reports());
+            return Answer.absent();
         }
         return Answer.of(Symbols.of(name, registry(db, stage), imports.value().scope(),
                 imports.value().aliases()));
@@ -353,14 +382,14 @@ public final class Names {
         public Answer<Resolve.Resolved> compute(Db db) {
             Answer<Ast.Module> available = db.ask(new Front.Available(name));
             if (!available.present()) {
-                return Answer.absent(available.reports());
+                return Answer.absent();
             }
             // Resolution reads other modules' declarations as they were written, not as they will
             // be resolved: a name written there is that module's to resolve, and asking for its
             // resolved form here would be this module waiting on its own.
             Answer<Symbols> scope = symbols(db, name, Stage.AVAILABLE);
             if (!scope.present()) {
-                return Answer.absent(scope.reports());
+                return Answer.absent();
             }
             try {
                 return Answer.of(Resolve.resolving(available.value(), scope.value()));
@@ -499,12 +528,21 @@ public final class Names {
      * followed through imports and through qualified type references alike: a qualified reference
      * needs no import line, so reading only the import lines would let a cycle through unseen.
      */
-    public record Cycles() implements Key<Map<String, Report>> {
+    public record Cycles() implements Key<Cycles.Of> {
+
+        /**
+         * @param reported the error for each module a cycle was closed at — one per cycle, on the
+         *                 source that wrote the reference that closes it
+         * @param members every module taking part in one, which is more: the error belongs to one
+         *                of them, but none of them can be compiled
+         */
+        public record Of(Map<String, Report> reported, Set<String> members) {}
+
         @Override
-        public Answer<Map<String, Report>> compute(Db db) {
+        public Answer<Of> compute(Db db) {
             List<String> declared = db.ask(new Front.Declared()).value();
             if (declared == null) {
-                return Answer.of(Map.of());
+                return Answer.of(new Of(Map.of(), Set.of()));
             }
             Set<String> modules = db.ask(new Front.ModuleNames()).value();
             Map<String, List<Dependency>> deps = new LinkedHashMap<>();
@@ -515,35 +553,45 @@ public final class Names {
                 }
             }
             Map<String, Report> found = new LinkedHashMap<>();
+            Set<String> members = new LinkedHashSet<>();
             Set<String> done = new LinkedHashSet<>();
-            Set<String> onStack = new LinkedHashSet<>();
+            List<String> stack = new ArrayList<>();
             for (String name : declared) {
-                visit(name, deps, done, onStack, found);
+                visit(name, deps, done, stack, found, members);
             }
-            return Answer.of(Ordered.map(found));
+            return Answer.of(new Of(Ordered.map(found), Ordered.set(members)));
         }
 
         private void visit(String name, Map<String, List<Dependency>> deps, Set<String> done,
-                           Set<String> onStack, Map<String, Report> found) {
+                           List<String> stack, Map<String, Report> found, Set<String> members) {
             if (done.contains(name) || !deps.containsKey(name)) {
                 return;
             }
-            onStack.add(name);
+            stack.add(name);
             for (Dependency dep : deps.get(name)) {
-                if (onStack.contains(dep.module())) {
-                    // the reference that closes the cycle is written here, so this is the file to
-                    // quote
+                int closes = stack.indexOf(dep.module());
+                if (closes >= 0) {
+                    // The reference that closes the cycle is written here, so this is the file to
+                    // quote. Everything from the module it names round to this one is in the cycle,
+                    // and none of them can be compiled — each needs an answer from the next.
                     found.putIfAbsent(name, Report.raised(
                             Diagnostic.literal(dep.pos(), "E1501",
                                     "Cyclic module dependency detected."),
                             "Cyclic module dependency detected."));
+                    members.addAll(stack.subList(closes, stack.size()));
                     continue;
                 }
-                visit(dep.module(), deps, done, onStack, found);
+                visit(dep.module(), deps, done, stack, found, members);
             }
-            onStack.remove(name);
+            stack.remove(stack.size() - 1);
             done.add(name);
         }
+    }
+
+    /** Whether {@code name} takes part in an import cycle, so nothing about it can be worked out. */
+    static boolean cyclic(Db db, String name) {
+        Cycles.Of cycles = db.ask(new Cycles()).value();
+        return cycles != null && cycles.members().contains(name);
     }
 
     /** One module reaching another, and where it does so. */

@@ -257,6 +257,51 @@ class DbTest {
         assertEquals(1, db.allReports().size(), "the same complaint is not collected twice");
     }
 
+    /** Whether {@link Fragile} still takes the path that cycles and then throws. */
+    private static boolean fragile = true;
+
+    /**
+     * A key that reaches a cycle and then fails outright — an internal fault, not a compile error,
+     * which is what a compile error is a value for. The store has to come out of it as it went in.
+     */
+    record Fragile(int depth) implements Key<String> {
+        @Override
+        public Answer<String> compute(Db db) {
+            ran("fragile" + depth);
+            if (depth == 0) {
+                if (!fragile) {
+                    return Answer.of("ok");
+                }
+                db.ask(new Fragile(1));
+                throw new IllegalStateException("boom");
+            }
+            db.ask(new Fragile(0));
+            return Answer.of("inner");
+        }
+
+        @Override
+        public Answer<String> onCycle(List<Key<?>> cycle) {
+            return Answer.of("cycle");
+        }
+    }
+
+    @Test
+    void aFailedAnswerLeavesNothingBehind() {
+        Db db = new Db();
+        assertThrows(IllegalStateException.class, () -> db.ask(new Fragile(0)));
+
+        // The store is used again — a language server keeps one across edits, so a fault in one
+        // request must not make every later answer to that question uncacheable.
+        fragile = false;
+        try {
+            assertEquals("ok", db.ask(new Fragile(0)).value());
+            db.ask(new Fragile(0));
+            assertEquals(2, runs("fragile0"), "the answer after the fault is kept like any other");
+        } finally {
+            fragile = true;
+        }
+    }
+
     @Test
     void reportsWhetherAKeyHasBeenComputed() {
         Db db = new Db().set(new Text("a.sou"), "x");

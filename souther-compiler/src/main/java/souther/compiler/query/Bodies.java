@@ -95,6 +95,12 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, Sig>> compute(Db db) {
+            // A module in a cycle borrows a signature from a module that borrows one from it. This
+            // is where that would be asked, so this is where it stops; the cycle itself is reported
+            // by Names.InCycle.
+            if (Names.cyclic(db, name)) {
+                return Answer.absent();
+            }
             Ast.Module m = db.ask(new Front.Available(name)).value();
             if (m == null) {
                 return Answer.absent();
