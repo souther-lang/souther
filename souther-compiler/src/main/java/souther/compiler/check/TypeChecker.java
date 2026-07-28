@@ -262,7 +262,12 @@ public final class TypeChecker {
         }
         // Injection targets (spec 13.2): a SpecBehavior with no matching fn. Its name and success
         // type let a fn call it inline (spec 12.2); it is the "required" behavior of the old form.
-        Map<String, ReqSig> reqSigs = new HashMap<>();
+        // An imported injection target is one here too (spec 14.3): the module that names it injects
+        // and binds it, whether it named it as a `>->` stage or as a `requires` dependency. Its
+        // signature comes from the module that declared it; a local behavior of the same name wins.
+        // The same map is built before the module is lowered, where a helper's parameter type is
+        // settled from a call to an injected behavior (issue #178), so it is built in one place.
+        Map<String, ReqSig> reqSigs = InjectionSigs.of(module, symbols, importedSigs, importedInjected);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec && !fns.containsKey(spec.name())) {
                 // `requires` names what an implementation calls (12.6), and an injection target has
@@ -277,21 +282,7 @@ public final class TypeChecker {
                                     + " (spec 13.2); it cannot declare `requires` — the behavior that"
                                     + " calls or composes it does");
                 }
-                List<Type> reqParams = new ArrayList<>();
-                for (Ast.Param p : spec.params()) {
-                    reqParams.add(TypeOps.successType(p.type(), symbols));
-                }
-                reqSigs.put(spec.name(), new ReqSig(reqParams, TypeOps.successType(spec.ret(), symbols)));
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
-            }
-        }
-        // An imported injection target is one here too (spec 14.3): the module that names it injects and
-        // binds it, whether it named it as a `>->` stage or as a `requires` dependency. Its signature
-        // comes from the module that declared it; a local behavior of the same name wins.
-        for (String name : importedInjected) {
-            Sig sig = importedSigs.get(name);
-            if (sig != null) {
-                reqSigs.putIfAbsent(name, new ReqSig(sig.ins(), sig.out()));
             }
         }
         // Fail-fast with the reqSigs it reads: a `requires` that named something else leaves the call

@@ -4,6 +4,8 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -286,6 +288,119 @@ class CompileHelperBodyTypingTest {
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("check.helper.return", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void aBodyDeterminedTypeReachesTheExpansion() throws Exception {
+        // `v` is the value of `W`'s `u` field, so the body determines it as the sum `U` — and that is
+        // the type the binding the call expands to carries, rather than the case the caller passed.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data U = A | B
+                data W = { u: U }
+                data X = Int
+                behavior f : (a: A) -> X constructs X, W
+                let describe (v) = {
+                    let w = W { u = v }
+                    match v with
+                        | A as a -> a.x
+                        | B as b -> b.y
+                }
+                let f (a) = X(describe(a))
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object behavior = loader.loadClass("demo.F$Impl").getConstructor().newInstance();
+        Object in = Codecs.decoded(loader, "demo.A", java.util.Map.of("x", 7L));
+        assertEquals(7L, Codecs.encode(loader, "demo.X", Codecs.apply(behavior, in)));
+    }
+
+    @Test
+    void aBodyDeterminedTypeTypesTheNextHelpersParameter() {
+        // `hold`'s parameter is determined by its body, and `describe`'s only comes from passing it to
+        // `hold` — so one helper's determined type has to be settled before the next one is read.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data U = A | B
+                data W = { u: U }
+                data X = Int
+                behavior f : (a: A) -> X constructs X, W
+                let hold (v) = W { u = v }
+                let describe (w) = {
+                    let kept = hold(w)
+                    match w with
+                        | A as a -> a.x
+                        | B as b -> b.y
+                }
+                let f (a) = X(describe(a))
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "`hold`'s determined parameter type types `describe`'s");
+    }
+
+    @Test
+    void aBodyDeterminedTypeReachesAnInvariantsExpansionToo() {
+        // An invariant is expanded from a helper as a body is, and earlier in the pipeline — an
+        // importer reads an included data's invariant already expanded. `w` is determined as `U` by
+        // the call to `size`, and that is what the binding in the invariant's expansion carries.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data U = A | B
+                data X = Int
+                partial let size (v: U): Int = match v with
+                        | A as a -> a.x
+                        | B as b -> b.y
+                let describe (w) = {
+                    let n = size(w)
+                    match w with
+                        | A as a -> a.x + n
+                        | B as b -> b.y
+                }
+                data V = { a: A }
+                    invariant describe(a) > 0
+                behavior f : (v: V) -> X constructs X
+                let f (v) = X(v.a.x)
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "the determined type reaches the expansion inside the invariant");
+    }
+
+    @Test
+    void aRecursiveHelperMissingItsTypesIsTheOnlyThingReported() {
+        // Settling reads the recursive helpers' signatures, and one that does not declare its types
+        // costs it all of them — so `describe`, which is determined only by a call to the recursive
+        // helper that IS declared, is left unsettled. That is not observable: the check builds the
+        // same map outside its recovery and abandons the module on the same error. Holding it here
+        // means making that map recoverable cannot quietly add a second, derived report about
+        // `describe` on top of the real one.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data U = A | B
+                data X = Int
+                partial let validRecursive (v: U): Int = match v with
+                        | A as a -> a.x
+                        | B as b -> b.y
+                partial let brokenRecursive (x) = brokenRecursive(x)
+                let describe (v) = {
+                    let n = validRecursive(v)
+                    match v with
+                        | A as a -> a.x + n
+                        | B as b -> b.y
+                }
+                behavior f : (a: A) -> X constructs X
+                let f (a) = X(describe(a))
+                """;
+        assertEquals(List.of("check.rechelper.return"),
+                Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)).get("demo.sou").stream()
+                        .map(souther.compiler.diag.Diagnostic::messageKey).toList(),
+                "the undeclared recursive helper is reported, and nothing else is");
     }
 
     @Test

@@ -269,12 +269,15 @@ class CompileExampleTest {
         module = souther.compiler.check.Resolve.module(module,
                 souther.compiler.check.TypeChecker.symbols(module));
         module = souther.compiler.derive.Deriver.derive(module);
-        module = souther.compiler.check.HelperInliner.forModule(module)
-                .withInlinedInvariants(module);
+        module = souther.compiler.check.HelperInliner.withSettledInvariants(
+                module, souther.compiler.check.TypeChecker.symbols(module));
         module = souther.compiler.check.NewtypeDesugar.rewrite(module,
                 souther.compiler.check.TypeChecker.symbols(module));
-        var lowered = souther.compiler.check.Lower.run(module);
         var symbols = souther.compiler.check.TypeChecker.symbols(module);
+        var lowering = souther.compiler.check.Lower.run(
+                module, symbols, java.util.Map.of(), java.util.Set.of());
+        module = lowering.settled();
+        var lowered = lowering.lowered();
         var checked = souther.compiler.check.TypeChecker
                 .checkAndElaborate(module, symbols, java.util.Map.of(), java.util.Set.of(), lowered)
                 .checked();

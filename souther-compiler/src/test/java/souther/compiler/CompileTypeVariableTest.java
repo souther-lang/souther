@@ -5,6 +5,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Lower;
 import souther.compiler.check.Resolve;
+import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.codegen.Backend;
 import souther.compiler.derive.Deriver;
@@ -30,9 +31,11 @@ class CompileTypeVariableTest {
     /** Compiles a core (reserved-namespace) module directly, bypassing the user-facing guard. */
     private static Map<String, byte[]> compileCore(String src) {
         Ast.Module m = Deriver.derive(Resolve.module(CstFrontend.parse(src)));
-        Ast.Module lowered = Lower.run(m);
+        Symbols symbols = TypeChecker.symbols(m);
+        Lower.Lowered lowering = Lower.run(m, symbols, Map.of(), Set.of());
+        Ast.Module lowered = lowering.lowered();
         TypeChecker.Checked checked =
-                TypeChecker.checkOrThrow(m, TypeChecker.symbols(m), Map.of(), Set.of(), lowered);
+                TypeChecker.checkOrThrow(lowering.settled(), symbols, Map.of(), Set.of(), lowered);
         return Backend.generate(lowered, checked);
     }
 
