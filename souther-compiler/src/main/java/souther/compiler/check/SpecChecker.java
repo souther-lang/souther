@@ -515,6 +515,65 @@ public final class SpecChecker {
     }
 
     /**
+     * The abstract base an injected behavior generates is public whatever {@code exposing} says
+     * (spec 13.3), so the implementation lives outside the module and overrides {@code apply} —
+     * writing the input type and the output type where it does. A type the module keeps to itself
+     * cannot be written there, and there is no raw-typed override to fall back on: the erased
+     * signature clashes with the one being overridden. So an injected behavior's input and output
+     * are exposed by the module that declares them, whether or not the behavior itself is exposed.
+     *
+     * <p>An output written as more than one case is generated as a union interface of its own, which
+     * is public regardless, and each case reaches the implementation through a {@code protected}
+     * factory or a decoder rather than by being named — so the rule does not reach the cases, and
+     * the unit-case exemption of E1305 stands.
+     */
+    static void checkInjectionSignature(Ast.SpecBehavior spec, Symbols symbols,
+                                        boolean exposeAll, Set<String> exposed) {
+        for (Ast.Param p : spec.params()) {
+            for (Ast.TypeRef ref : p.type().cases()) {
+                refuseHidden(ref.denotes(), spec, "check.inject.hiddeninput", symbols, exposeAll, exposed);
+            }
+        }
+        if (spec.ret().cases().size() == 1) {
+            refuseHidden(spec.ret().cases().get(0).denotes(), spec, "check.inject.hiddenoutput",
+                    symbols, exposeAll, exposed);
+        }
+    }
+
+    private static void refuseHidden(Type written, Ast.SpecBehavior spec, String key, Symbols symbols,
+                                     boolean exposeAll, Set<String> exposed) {
+        if (written == null) {
+            return;   // an unresolved reference has its own error
+        }
+        // `mentions` stops at the first match, so the predicate keeps the name it stopped on: a
+        // collection carries its element into `apply`'s signature too (`List<Id>` names `Id`).
+        TypeName[] hidden = new TypeName[1];
+        Type.mentions(written, t -> {
+            if (t instanceof Type.Ref ref && !nameableOutside(ref.name(), symbols, exposeAll, exposed)) {
+                hidden[0] = ref.name();
+                return true;
+            }
+            return false;
+        });
+        if (hidden[0] == null) {
+            return;
+        }
+        String name = hidden[0].name();
+        throw CompileException.of(
+                Diagnostic.of(null, key).title("check.module.title").at(spec.pos())
+                        .args(spec.name(), name).hint("check.inject.hidden.hint", name).build(),
+                "`behavior " + spec.name() + "` has no `let`, so it is implemented outside this"
+                        + " module, and `" + name + "` is not in `exposing`");
+    }
+
+    /** Whether an implementation outside the declaring module can write {@code name}. */
+    private static boolean nameableOutside(TypeName name, Symbols symbols, boolean exposeAll,
+                                           Set<String> exposed) {
+        return symbols.isForeign(name)
+                ? symbols.isExposed(name) : exposeAll || exposed.contains(name.name());
+    }
+
+    /**
      * Every stage after the first takes exactly one input (spec 14.1): {@code >->} hands a single
      * value along.
      *

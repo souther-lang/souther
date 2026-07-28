@@ -14,8 +14,13 @@ Reading a field is possible wherever the data's type is visible: within a module
 
 Reading a field cannot break an invariant; only construction can, and construction is limited to the paths of ADR-0002. So allowing cross-boundary reads does not weaken the "no unvalidated value" guarantee — reading and constructing are separate permissions. No getter-only behavior is needed to pass a value outward: such a getter would not appear in the spec DSL, so it could not be a behavior at all (ADR-0005).
 
+A field of an exposed data may itself be of a type its module keeps to itself, so a value whose type is *not* visible arrives in a module all the same. The decision above is about the data whose field is being read, and that data has to be visible, so such a value arrives whole and is not readable here: it may be bound, put in a field of this module's own data, and handed to a behavior of the module that declares its type, and nothing here opens it. Reading a field of it, and comparing two of them, are compile errors, as arithmetic on it already was (ADR-0059). That is what the generated classes do — the class is package-private, so its accessors are out of reach — and until issue #187 the compiler emitted the read anyway, which failed with `IllegalAccessError` when it ran.
+
+Elm and Haskell settle the same shape the same way: a value of an unexported type passes through a module that cannot name it, and the read that would open it is refused where it is written (`Not in scope: data constructor`, Elm's `NAMING ERROR`). javac draws the line in the same place — holding a package-private-typed value across packages compiles and runs, and calling a method on it does not. F# takes the other route and refuses the signature at the declaration (`FS0410`), which it can afford because `type T = private T of string` exposes the name while keeping the representation private; `exposing` works at type granularity and an exposed data has all fields readable, so requiring the name here would publish the fields with it.
+
 On the JVM, exposed data get public read accessors, because module = package and a package-private field cannot be read across the boundary. Constructors stay non-public, so nothing reaches the fields without the invariant: building one goes through the decoder or through the checked entry, which an exposed data publishes (`[#jvm-construction-privacy]`). Reading a field from Java is the same exposure the encoder already gives by emitting every field as JSON; what is protected is the invariant, not the act of building.
 
 ## References
 
-- Specification: `[#field-visibility]`, `[#jvm-product]`, `[#jvm-construction-privacy]`
+- Specification: `[#field-visibility]`, `[#jvm-product]`, `[#jvm-construction-privacy]`, `[#newtype-arithmetic]`
+- ADR-0059 (construction is closed to declared paths), issue #187 (the read that was emitted anyway)

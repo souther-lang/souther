@@ -144,7 +144,8 @@ class CompileConstructsImportedTest {
     }
 
     /** A type its module keeps to itself has no entry to build with. A value of it still arrives —
-     * through a field of a data that module does expose — and reading it is all this module can do. */
+     * through a field of a data that module does expose — and it arrives whole: this module holds it
+     * and hands it on, and neither reads nor builds it. */
     @Test
     void aTypeItsModuleKeepsToItselfCannotBeBuiltHere() {
         String hidden = """
@@ -156,10 +157,10 @@ class CompileConstructsImportedTest {
 
         Compiler.compileModules(List.of(hidden, """
                 module down
-                data Out = { n: Int }
+                data Out = { i: hid.Invoice }
 
-                behavior read : (i: hid.Invoice) -> Out constructs Out
-                let read (i) = Out { n = i.total.value }
+                behavior hold : (i: hid.Invoice) -> Out constructs Out
+                let hold (i) = Out { i = i }
                 """));
 
         CompileException e = assertThrows(CompileException.class,

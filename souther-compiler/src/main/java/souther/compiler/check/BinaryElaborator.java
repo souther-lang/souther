@@ -37,6 +37,30 @@ public final class BinaryElaborator {
                         + "` does not expose it");
     }
 
+    /**
+     * A comparison reads what is inside its operands — the base of a single-value newtype, the
+     * fields of a data. A value whose module keeps its type to itself arrives here whole, and
+     * nothing here can open it, so the comparison is refused rather than emitted as a read of a
+     * class this module may not touch.
+     */
+    private static void requireTransparentOperands(Type left, Type right, Ast.Binary bin,
+                                                   Symbols symbols) {
+        refuseOpaque(left, bin, symbols);
+        refuseOpaque(right, bin, symbols);
+    }
+
+    private static void refuseOpaque(Type operand, Ast.Binary bin, Symbols symbols) {
+        if (!(operand instanceof Type.Ref ref) || !symbols.isOpaque(ref.name())) {
+            return;
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.compare.notexposed").title("check.boundary.title")
+                        .at(bin.pos()).args(ref.name().name(), ref.name().module())
+                        .hint("check.opaque.hint", ref.name().name(), ref.name().module()).build(),
+                "comparing `" + ref.name().name() + "` opens it, and `" + ref.name().module()
+                        + "` does not expose it");
+    }
+
     /** Whether either side of {@code bin} has a type the compiler could not work out. */
     private static boolean erroneousOperand(Ast.Binary bin, Map<String, Type> env,
                                             CheckContext ctx) {
@@ -80,6 +104,7 @@ public final class BinaryElaborator {
                 Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
+                requireTransparentOperands(lt, rt, bin, ctx.symbols());
                 if (!orderedComparable(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.compare.ordered").title("check.type.mismatch.title")
@@ -163,6 +188,7 @@ public final class BinaryElaborator {
                 Core right = Elaborator.elaborate(bin.right(), env, ctx);
                 Type lt = left.type();
                 Type rt = right.type();
+                requireTransparentOperands(lt, rt, bin, ctx.symbols());
                 // two values of the same data compare by their fields (spec 16.2); across different
                 // types there is nothing to compare. An operand may be the scalar empty-collection
                 // bottom (`Nothing`) when it reads an accumulator a `[]` seed grows — the `e` in

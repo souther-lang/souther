@@ -35,6 +35,17 @@ reads the same as if it were implemented in Souther — `findMember` mints its f
 but does *not* mint `会員` (it reads an outside value through a decoder). The generated
 Java base class (`[#java-base-class]`) hands out factories for the declared unit cases from here.
 
+The base class an implementation extends is public whatever `exposing` says, so the
+implementation overrides `apply` from outside the module and *writes* the behavior's input
+and output types where it does. A type the module keeps to itself cannot be written there,
+and no raw-typed override stands in for it — javac reports the erased signature as clashing
+with the one being overridden rather than overriding it. So an injected behavior's input and
+output are exposed by the module that declares them, whether or not the behavior itself is in
+`exposing` (issue #187). The *cases* of a multi-case output are not reached by this: that
+output is generated as a union interface of its own, public regardless, and a case is
+returned through the `protected` factory or through the decoder without being named — which
+is why E1305's unit-data allowance stands.
+
 Which behaviors get a `let` and which are injected is not mechanically derivable from the
 DSL: `// 依存:` is a note, not an obligation, so its absence does not prove a behavior is
 internal. The one-to-one correspondence (ADR-0001) is therefore at the level of the
@@ -45,3 +56,4 @@ the form using the `// 依存:` / `// 副作用:` notes as a guide.
 
 - Specification: `[#no-impl-for-outside]`, `[#injected-behavior]`, `[#java-base-class]`
 - ADR-0001 (one-to-one with the spec DSL), ADR-0016 (requirements as arguments)
+- ADR-0015 (a value of a type its module keeps to itself arrives whole), issue #187

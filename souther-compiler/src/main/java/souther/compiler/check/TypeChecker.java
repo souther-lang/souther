@@ -321,6 +321,7 @@ public final class TypeChecker {
                                     + " calls or composes it does");
                 }
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
+                SpecChecker.checkInjectionSignature(spec, symbols, exposeAll, exposed);
             }
         }
         // Fail-fast with the reqSigs it reads: a `requires` that named something else leaves the call

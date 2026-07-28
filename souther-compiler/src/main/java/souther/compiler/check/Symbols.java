@@ -197,6 +197,16 @@ public final class Symbols {
         return exposes(name.module(), name.name());
     }
 
+    /**
+     * Whether a value of {@code name} arrives here opaque: another module declares the type and
+     * keeps it to itself, so the value can be held, put in a field and handed back to a behavior of
+     * that module, and nothing here can read what is inside it. Such a value reaches this module
+     * through a field of a data its module does expose.
+     */
+    public boolean isOpaque(TypeName name) {
+        return isForeign(name) && !isExposed(name);
+    }
+
     /** Whether {@code moduleName} exposes {@code name} (dropping any {@code .decoder} member). */
     private boolean exposes(String moduleName, String name) {
         if (moduleName.equals(module)) {
