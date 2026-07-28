@@ -1,20 +1,12 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.query.Compilation;
 
-import souther.compiler.ast.Ast;
-import souther.compiler.check.Lower;
-import souther.compiler.check.Resolve;
-import souther.compiler.check.Symbols;
-import souther.compiler.check.TypeChecker;
-import souther.compiler.codegen.Backend;
-import souther.compiler.derive.Deriver;
-import souther.compiler.frontend.CstFrontend;
 
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -28,15 +20,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class CompileTypeVariableTest {
 
-    /** Compiles a core (reserved-namespace) module directly, bypassing the user-facing guard. */
+    /** Compiles a core (reserved-namespace) module, which the user-facing guard would reject. */
     private static Map<String, byte[]> compileCore(String src) {
-        Ast.Module m = Deriver.derive(Resolve.module(CstFrontend.parse(src)));
-        Symbols symbols = TypeChecker.symbols(m);
-        Lower.Lowered lowering = Lower.run(m, symbols, Map.of(), Set.of());
-        Ast.Module lowered = lowering.lowered();
-        TypeChecker.Checked checked =
-                TypeChecker.checkOrThrow(lowering.settled(), symbols, Map.of(), Set.of(), lowered);
-        return Backend.generate(lowered, checked);
+        Compilation compilation = Compilation.ofCoreSource(src);
+        compilation.answerEverything();
+        CompileException failed = compilation.firstError(compilation.db().allReports());
+        if (failed != null) {
+            throw failed;
+        }
+        return compilation.classes();
     }
 
     @Test
