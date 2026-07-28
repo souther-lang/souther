@@ -188,6 +188,75 @@ class DbTest {
         assertThrows(IllegalStateException.class, () -> db.ask(new Loop()));
     }
 
+    /** Two files joined, so an edit to one can be watched for its effect on the other. */
+    record Length(String file) implements Key<Integer> {
+        @Override
+        public Answer<Integer> compute(Db db) {
+            ran("length:" + file);
+            Answer<String> text = db.ask(new Text(file));
+            return text.present() ? Answer.of(text.value().length()) : Answer.absent();
+        }
+    }
+
+    record Longest(String left, String right) implements Key<String> {
+        @Override
+        public Answer<String> compute(Db db) {
+            ran("longest");
+            int a = db.ask(new Length(left)).value();
+            int b = db.ask(new Length(right)).value();
+            return Answer.of(a >= b ? left : right);
+        }
+    }
+
+    @Test
+    void recomputesWhatAnEditCanHaveChanged() {
+        Db db = new Db().set(new Text("a.sou"), "one").set(new Text("b.sou"), "two");
+        assertEquals(3, db.ask(new Length("a.sou")).value());
+        db.set(new Text("a.sou"), "seven!");
+        assertEquals(6, db.ask(new Length("a.sou")).value());
+        assertEquals(2, runs("length:a.sou"));
+    }
+
+    @Test
+    void leavesAloneWhatTheEditCannotReach() {
+        Db db = new Db().set(new Text("a.sou"), "one").set(new Text("b.sou"), "two");
+        db.ask(new Length("b.sou"));
+        db.set(new Text("a.sou"), "changed");
+        db.ask(new Length("b.sou"));
+        assertEquals(1, runs("length:b.sou"));
+    }
+
+    @Test
+    void stopsWhereTheAnswerCameOutTheSame() {
+        Db db = new Db().set(new Text("a.sou"), "one").set(new Text("b.sou"), "xx");
+        assertEquals("a.sou", db.ask(new Longest("a.sou", "b.sou")).value());
+        // A different text of the same length: the length is recomputed and comes out equal, so
+        // nothing that read the length has anything to do.
+        db.set(new Text("a.sou"), "two");
+        assertEquals("a.sou", db.ask(new Longest("a.sou", "b.sou")).value());
+        assertEquals(2, runs("length:a.sou"));
+        assertEquals(1, runs("longest"));
+    }
+
+    @Test
+    void doesNothingWhenTheTextIsSetToWhatItAlreadyWas() {
+        Db db = new Db().set(new Text("a.sou"), "one");
+        db.ask(new Length("a.sou"));
+        db.set(new Text("a.sou"), "one");
+        db.ask(new Length("a.sou"));
+        assertEquals(1, runs("length:a.sou"));
+    }
+
+    @Test
+    void reportsWhatTheCurrentAnswersFoundRatherThanEveryAttempt() {
+        Db db = new Db().set(new Text("a.sou"), "one");
+        db.ask(new Complains("nope"));
+        assertEquals(1, db.allReports().size());
+        db.set(new Text("a.sou"), "two");
+        db.ask(new Complains("nope"));
+        assertEquals(1, db.allReports().size(), "the same complaint is not collected twice");
+    }
+
     @Test
     void reportsWhetherAKeyHasBeenComputed() {
         Db db = new Db().set(new Text("a.sou"), "x");

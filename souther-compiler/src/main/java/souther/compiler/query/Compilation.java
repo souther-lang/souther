@@ -74,6 +74,22 @@ public final class Compilation {
         return c;
     }
 
+    /**
+     * The same workspace after an edit: every source as it now reads, and which modules the caller
+     * is still holding back.
+     *
+     * <p>Nothing is thrown away. A source whose text is unchanged is unchanged, and an answer that
+     * comes out the same as before leaves everything that read it alone — so what this costs is what
+     * the edit actually reached.
+     */
+    public void update(Map<String, String> byId, Set<String> broken) {
+        for (Map.Entry<String, String> e : byId.entrySet()) {
+            db.set(new Front.Text(e.getKey()), e.getValue());
+        }
+        db.set(new Front.Ids(), List.copyOf(byId.keySet()));
+        db.set(new Front.Broken(), Set.copyOf(broken));
+    }
+
     /** A compile of one of the compiler's own core sources, which may take a reserved name. */
     public static Compilation ofCoreSource(String source) {
         Compilation c = ofSource(source, null);
