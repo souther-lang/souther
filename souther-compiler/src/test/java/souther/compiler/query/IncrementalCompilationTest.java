@@ -170,6 +170,49 @@ class IncrementalCompilationTest {
         return c.db().ask(new Output.Classes("shop.prices")).value();
     }
 
+    /** Two behaviors and a helper both of them call, in one module. */
+    private static final String ORDERS = """
+            module shop.orders exposing ( Amount )
+
+            data Amount = Int
+                invariant value >= 0
+
+            let doubled (n) = n * 2
+
+            behavior twice : (n: Amount) -> Amount
+                constructs Amount
+            let twice (n) = Amount(doubled(n.value))
+
+            behavior thrice : (n: Amount) -> Amount
+                constructs Amount
+            let thrice (n) = Amount(n.value * 3)
+            """;
+
+    private static Compilation orders(String source) {
+        Compilation c = Compilation.ofDocuments(Map.of("orders.sou", source), Set.of(),
+                ModulePath.EMPTY);
+        c.answerEverything();
+        assertTrue(c.db().allReports().isEmpty(), "the module compiles to begin with");
+        return c;
+    }
+
+    /**
+     * A body is expanded from itself and the helpers around it, so what another body in the same
+     * module says is none of its business. Expanding a module's bodies as one tree made every
+     * behavior depend on every other one, so editing any body in a file re-expanded all of them.
+     */
+    @Test
+    void editingOneBodyDoesNotExpandTheBodiesBesideIt() {
+        Compilation c = orders(ORDERS);
+        Answer<?> twice = c.db().ask(new Bodies.LoweredBody("shop.orders", "twice"));
+
+        c.update(Map.of("orders.sou", ORDERS.replace("n.value * 3", "n.value * 30")), Set.of());
+        c.answerEverything();
+
+        assertSame(twice, c.db().ask(new Bodies.LoweredBody("shop.orders", "twice")),
+                "`twice` says what it said, and `thrice` is not part of it");
+    }
+
     @Test
     void changingWhatAModuleDeclaresReachesTheModulesThatImportIt() {
         Compilation c = started();

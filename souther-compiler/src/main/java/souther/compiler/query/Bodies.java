@@ -1,8 +1,11 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.HelperInliner;
+import souther.compiler.check.InjectionSigs;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PipelineSigs;
+import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
@@ -180,17 +183,23 @@ public final class Bodies {
     }
 
     /**
-     * A module with every helper call expanded into the body that called it, and with the parameter
-     * types those expansions settled written back into the declarations.
+     * The signatures of the behaviors a module injects — its own targets and the imported ones it
+     * names (spec 13.2, 14.3). What a call to one of them is typed against, both where a helper's
+     * parameter types are settled and in the check itself.
+     *
+     * <p>A signature that does not build is not reported here: the check reports it where it reports
+     * it today, and settling reads what it can and leaves the rest to the annotation rule. Answering
+     * with nothing at all would make every helper in the module undetermined on top of the real
+     * error.
      */
-    public record Lowering(String name) implements Key<Lower.Lowered> {
+    public record ReqSigs(String name) implements Key<Map<String, ReqSig>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Lower.Lowered> compute(Db db) {
+        public Answer<Map<String, ReqSig>> compute(Db db) {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> imported = db.ask(new Imported(name));
@@ -200,11 +209,168 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(Lower.run(prepared.value(), scope.value(), imported.value(),
+                return Answer.of(InjectionSigs.of(prepared.value(), scope.value(), imported.value(),
                         injected.value()));
+            } catch (CompileException _) {
+                return Answer.of(Map.of());
+            }
+        }
+    }
+
+    /** A module with every helper parameter the author left unwritten carrying the type its body
+     * gives it — the surface tree the check reads its declarations from. */
+    public record Settled(String name) implements Key<Ast.Module> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Ast.Module> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
+            if (!prepared.present() || !scope.present() || !reqSigs.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(Lower.settle(prepared.value(), scope.value(), reqSigs.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
+        }
+    }
+
+    /**
+     * The module's helpers, settled — what every body in it expands its calls against.
+     *
+     * <p>Its own question, and a map of definitions rather than an inliner, because that is what makes
+     * it an answer two bodies can share: a helper says what it says whatever the behavior beside it
+     * was edited to, so a body that reads this is left alone. An inliner cannot do that job — nothing
+     * says when two of them are the same, so every reader of one would run again whatever changed.
+     */
+    public record Helpers(String name) implements Key<Map<String, Ast.FnDef>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Ast.FnDef>> compute(Db db) {
+            Answer<Ast.Module> settled = db.ask(new Settled(name));
+            return settled.present()
+                    ? Answer.of(HelperInliner.helpersOf(settled.value())) : Answer.absent();
+        }
+    }
+
+    /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec
+     * 13.1), including the prelude ones it has taken on as its own. */
+    public record RecursiveHelpers(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
+            if (!helpers.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(HelperInliner.forHelpers(helpers.value()).recursiveHelpers());
+        }
+    }
+
+    /** One settled fn, so what a body is expanded from is the fn itself and not the module it sits
+     * in. */
+    public record SettledFn(String module, String fn) implements Key<Ast.FnDef> {
+
+        @Override
+        public Answer<Ast.FnDef> compute(Db db) {
+            Answer<Ast.Module> settled = db.ask(new Settled(module));
+            if (!settled.present()) {
+                return Answer.absent();
+            }
+            for (Ast.FnDef candidate : settled.value().fns()) {
+                if (candidate.name().equals(fn)) {
+                    return Answer.of(candidate);
+                }
+            }
+            return Answer.absent();
+        }
+    }
+
+    /**
+     * One body as the backend emits it: its helper calls expanded and its comprehensions desugared.
+     *
+     * <p>What it reads is the fn itself and the helpers around it, so editing another body in the same
+     * module does not expand this one again.
+     */
+    public record LoweredBody(String module, String fn) implements Key<Ast.FnDef> {
+
+        @Override
+        public Answer<Ast.FnDef> compute(Db db) {
+            Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
+            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
+            Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
+            if (!def.present() || !helpers.present() || !recursive.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(Lower.body(def.value(), HelperInliner.forHelpers(helpers.value()),
+                        recursive.value().contains(fn)));
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+        }
+    }
+
+    /**
+     * A module with every helper call expanded into the body that called it, and with the parameter
+     * types those expansions settled written back into the declarations.
+     *
+     * <p>The bodies are asked for one at a time; what is left here is which fns survive to the
+     * backend — a behavior's implementation and a recursive helper — which is a fact about the module
+     * rather than about any one of them.
+     */
+    public record Lowering(String name) implements Key<Lower.Lowered> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Lower.Lowered> compute(Db db) {
+            Answer<Ast.Module> settled = db.ask(new Settled(name));
+            Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(name));
+            if (!settled.present() || !recursive.present()) {
+                return Answer.absent();
+            }
+            Set<String> behaviors = Names.behaviorNames(settled.value());
+            Set<String> taken = new LinkedHashSet<>();
+            List<Ast.FnDef> fns = new ArrayList<>();
+            for (Ast.FnDef fn : settled.value().fns()) {
+                // A non-recursive helper is fully inlined at its call sites and never emitted — it has
+                // no body of its own down here, so nothing asks for one.
+                if (!behaviors.contains(fn.name()) && !recursive.value().contains(fn.name())) {
+                    continue;
+                }
+                // A name is one question, so a name written twice is asked once and answered by the
+                // first. The check reports the duplicate and this module is not emitted; what it must
+                // not do is carry the same body twice.
+                if (!taken.add(fn.name())) {
+                    continue;
+                }
+                Answer<Ast.FnDef> body = db.ask(new LoweredBody(name, fn.name()));
+                if (!body.present()) {
+                    // Why is the body's to say, and it said it. A module with a body that does not
+                    // expand has none to emit.
+                    return Answer.absent();
+                }
+                fns.add(body.value());
+            }
+            return Answer.of(new Lower.Lowered(settled.value(),
+                    Lower.lowered(settled.value(), fns)));
         }
     }
 

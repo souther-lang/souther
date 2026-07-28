@@ -16,7 +16,7 @@ import java.util.Set;
  * 14.3). A call to any of them is typed from its declaration, so both the settling of helper
  * parameter types (before the module is lowered) and the type check itself read the same map.
  */
-final class InjectionSigs {
+public final class InjectionSigs {
 
     private InjectionSigs() {}
 
@@ -26,8 +26,8 @@ final class InjectionSigs {
      * of the same name as an imported one wins; the imported signature only fills a name this module
      * does not declare.
      */
-    static Map<String, ReqSig> of(Ast.Module module, Symbols symbols,
-                                  Map<String, Sig> importedSigs, Set<String> importedInjected) {
+    public static Map<String, ReqSig> of(Ast.Module module, Symbols symbols,
+                                         Map<String, Sig> importedSigs, Set<String> importedInjected) {
         Set<String> implemented = new HashSet<>();
         for (Ast.FnDef fn : module.fns()) {
             implemented.add(fn.name());
