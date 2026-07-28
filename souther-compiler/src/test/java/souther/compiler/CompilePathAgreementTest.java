@@ -41,7 +41,7 @@ class CompilePathAgreementTest {
                         data Stock = Map<String, Int>
                         """),
                 arguments("a newtype over a list of named data", """
-                        module demo exposing ( Lines )
+                        module demo exposing ( Line, Lines )
                         data Line = { sku: String, qty: Int }
                         data Lines = List<Line>
                         """),
@@ -73,7 +73,7 @@ class CompilePathAgreementTest {
                         let countTags (t) = count(t)
                         """),
                 arguments("a lambda parameter opening a record", """
-                        module demo exposing ( In, Out, quantities )
+                        module demo exposing ( Line, In, Out, quantities )
                         import List ( map )
                         data Line = { sku: String, qty: Int }
                         data In = { lines: List<Line> }

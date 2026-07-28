@@ -18,25 +18,6 @@ public final class BinaryElaborator {
 
     private BinaryElaborator() {}
 
-    /**
-     * Arithmetic that stays in a newtype re-wraps its result, so it builds one — through the type's
-     * checked entry, which its module opens by exposing the type. A value of a type another module
-     * keeps to itself can arrive here through a field of a data that module does expose, and there is
-     * no entry to build the result with, so it is refused rather than left to fail when it runs.
-     */
-    private static void requireConstructible(Type result, Ast.Binary bin, Symbols symbols) {
-        if (!(result instanceof Type.Ref ref) || !symbols.isForeign(ref.name())
-                || symbols.isExposed(ref.name())) {
-            return;
-        }
-        throw CompileException.of(
-                Diagnostic.of(null, "check.arith.notexposed").title("check.boundary.title")
-                        .at(bin.pos()).args(ref.name().name(), ref.name().module())
-                        .hint("check.arith.notexposed.hint", ref.name().name(), ref.name().module()).build(),
-                "arithmetic on `" + ref.name().name() + "` builds one, and `" + ref.name().module()
-                        + "` does not expose it");
-    }
-
     /** Whether either side of {@code bin} has a type the compiler could not work out. */
     private static boolean erroneousOperand(Ast.Binary bin, Map<String, Type> env,
                                             CheckContext ctx) {
@@ -105,7 +86,6 @@ public final class BinaryElaborator {
                 // with a bare literal of its base (as for comparison).
                 if (addSub && arithClosedNewtype(lt, rt, bin.left(), bin.right(), ctx.symbols())) {
                     Type result = TypeOps.closedNewtypeArithResult(lt, rt, ctx.symbols());
-                    requireConstructible(result, bin, ctx.symbols());
                     yield new Core.Binary(bin.op(), left, right, result, bin.pos());
                 }
                 // Scalar newtype arithmetic: `*`/`/` scale a numeric newtype by a plain Int/Decimal of
@@ -114,7 +94,6 @@ public final class BinaryElaborator {
                 // to the base path below, an error.
                 if (!addSub && scalarNewtypeArith(lt, rt, bin.op(), ctx.symbols())) {
                     Type result = TypeOps.closedNewtypeArithResult(lt, rt, ctx.symbols());
-                    requireConstructible(result, bin, ctx.symbols());
                     yield new Core.Binary(bin.op(), left, right, result, bin.pos());
                 }
                 if (lt != Type.INT && lt != Type.DECIMAL) {

@@ -57,7 +57,7 @@ class CompileExposingTest {
     void realExposedNamesAreAccepted() {
         assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
-                exposing ( Real, greet )
+                exposing ( Real, Out, greet )
 
                 data Real = { v: Int }
                 data Out = { v: Int }

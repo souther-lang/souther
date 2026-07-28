@@ -234,6 +234,17 @@ module example.order exposing (
 
 `+exposing+` is the module's interface description: implementations are inferred, only the boundary is stated explicitly. This is the same position as OCaml's `+.mli+`, F#'s `+.fsi+`, and TypeScript's `+.d.ts+`.
 
+[#exposed-surface]
+==== What reaches out may not rest on what is kept
+
+What a module reaches out with SHALL NOT rest on a type it keeps to itself. An exposed data's field types, and an exposed behavior's input and output, are exposed by the module that declares them. A type carried inside a collection counts — `+List<UserId>+` names `+UserId+` as surely as a bare `+UserId+` does.
+
+The same holds for an injected behavior — one with no `+let+` — whether or not it is in `+exposing+`, because the abstract base it generates is public regardless (<<java-base-class>>) and the implementation writes both types where it overrides `+apply+`.
+
+Otherwise a reader is handed a value it has no name for, and the generated classes carry a public surface over classes it may not touch. Reported where the module decides it, not at each reader that runs into it, as Rust's `+private_interfaces+` and F#'s `+FS0410+` do.
+
+This does not reach the *cases* of a sum, or of an output written as more than one case. Those are generated as a union interface that is public regardless (<<jvm-anonymous-union>>), and a case reaches a reader through the decoder or through the `+protected+` factory rather than by being named — which is what E1305's unit-data allowance rests on. A module keeping a case to itself therefore stays a decision about the union (ADR-0057), not about this rule.
+
 [#imports]
 Imports SHALL be listed explicitly. Wildcard imports are forbidden. A cyclic import is a compile error.
 
@@ -466,7 +477,7 @@ A single-value newtype over `+Int+` or `+Decimal+` supports `+{plus}+` and `+-+`
 
 Operand pairing is the same as comparison (<<newtype-comparison>>): the *same* newtype, or a newtype with a bare literal of its base (`+Money {plus} 100+`, the `+100+` taken as `+Money+`). Two *different* newtypes do not combine — `+Money - Quantity+` is a compile error even though both wrap `+Int+` — and a non-literal value of the wrapped type is not taken implicitly.
 
-Arithmetic builds a value, so it is subject to <<closed-construction>>: a newtype of another module is built through the entry that module opens by exposing it. A value of a type its module does *not* expose can still arrive here — through a field of a data it does expose — and arithmetic on that value is a compile error, since there is no entry to build the result with.
+Arithmetic builds a value, so it is subject to <<closed-construction>>: a newtype of another module is built through the entry that module opens by exposing it. A newtype of another module is built through the entry that module opens by exposing it, and a value of a type its module does *not* expose does not reach here at all: a module may not expose a data whose field would carry one out (<<exposed-surface>>). So the arithmetic and the entry it needs are always in the same place.
 
 `+*+` and `+/+` *scale* a newtype by a plain number of its base and stay in the newtype (`+Money * 2+`, `+2 * Money+`, `+Money / 2+`) — the dimension is unchanged. The scalar is a bare `+Int+` / `+Decimal+` (literal or variable) of the newtype's base, not itself coerced to the newtype. A product or quotient of *two* newtypes *does* change dimension (`+UnitPrice * Quantity+` is a `+Money+`, not a `+UnitPrice+`), which the language does not model, so `+newtype * newtype+` (and `+Money * Money+`) is a compile error; compute those on `+.value+` and wrap the result explicitly. Only a newtype whose value is *directly* `+Int+` or `+Decimal+` has arithmetic — a newtype over another newtype does not.
 
@@ -737,6 +748,8 @@ Because a local shadowing a built-in value is always an error, using a *built-in
 A field is read as `+e.field+`, where `+e+` is a name, a call, or a construction, and `+.a.b+` chains from the left. So `+amountOf(i).value+` opens a newtype on the call that builds it, with no `+let+` written to hold the result. This never competes with the bare `+.field+` getter of <<blocks>>: a getter starts an expression, a read follows one.
 
 *Reading* a field is possible wherever that data's type is visible. Within the same module, any data of that module may be read. A data of another module may have its fields read if it is exposed with `+exposing+` — being importable means it is exposed. An exposed data has all fields readable (there is no per-field exposure). A behavior may read the fields of its input data even when they come from another module.
+
+A value of a type its module keeps to itself never arrives in another module, because the field that would have carried it there cannot exist: what a module reaches out with may not rest on what it keeps (<<exposed-surface>>). So "the data's type is visible" is the whole rule, and there is no second one about what a reader may do with a value it has no name for.
 
 What is constrained is *not reading but construction*. Reading a field and constructing a new value of that data are separate authorities, so allowing cross-boundary reads leaves the guarantee that no unvalidated value can be built (<<asymmetric-interop>>) intact. There is no need to define a getter-only behavior just to pass a value out (<<behavior-composition-unit>>).
 
@@ -1552,6 +1565,8 @@ public abstract class FindMember implements Behavior {
 Java `+extends+` this and implements `+apply+` (<<java-example>>). Success values (such as `+会員+`) are assembled by the decoder; failure cases are created by the inherited `+protected+` factory. Because a data's constructor is non-public, the implementation may be placed outside the generated package (in any package). An output case that is not a unit or that carries an invariant gets no factory and is obtained via the decoder.
 
 This abstract base class is *always public*, regardless of whether it is in `+exposing+`, so that a Java implementation can `+extends+` it from any module; a behavior subject to injection is by definition implemented outside the module. `+exposing+` controls the exposure of domain types, but the injection base class is scaffolding for implementation and is exposed independently. Without it the injection example of <<example>> would not hold.
+
+Because the base is public and the implementation overrides `+apply+` from outside the module, the implementation *writes* the behavior's input type and its output type. A type the module keeps to itself cannot be written there, and no raw-typed override stands in for it — the erased signature clashes with the one being overridden. So an injected behavior's input and output MUST be exposed by the module that declares them, whether or not the behavior itself is in `+exposing+` (<<exposed-surface>>).
 
 When a *non-unit* data is listed in `+constructs+` and that data is not exposed with `+exposing+`, it is a compile error (E1305). A factory is generated only for a unit data, and a non-exposed data has no decoder either, so a Java implementation would have no way to create that value. If exposed, it can be created via the decoder (<<jvm-codec>>). The requirement is that it be either a unit data or an exposed data.
 

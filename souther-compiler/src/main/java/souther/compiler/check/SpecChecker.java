@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -512,6 +513,96 @@ public final class SpecChecker {
                                 + ", or make it a unit data.");
             }
         }
+    }
+
+    /**
+     * What a module reaches out with may not rest on what it keeps to itself.
+     *
+     * <p>Two things reach out. A name in {@code exposing} is one: a reader names it, so it names the
+     * types its fields and its signature are written in, and a type this module keeps to itself has
+     * no name there and a class the reader may not touch. The abstract base of an injected behavior
+     * is the other, whether or not the behavior is exposed, because it is public whatever
+     * {@code exposing} says (spec 13.3) and the implementation writes the input and output types
+     * where it overrides {@code apply} — with no raw-typed override to fall back on, since the
+     * erased signature clashes with the one being overridden rather than overriding it.
+     *
+     * <p>Reported here, where the module decides it, rather than at each reader that runs into it —
+     * as Rust's {@code private_interfaces} and F#'s {@code FS0410} do.
+     *
+     * <p>This does not reach the <em>cases</em> of a sum, or of an output written as more than one
+     * case. Those are generated as a union interface which is public regardless, and a case reaches
+     * a reader through the decoder or through the {@code protected} factory rather than by being
+     * named — which is what E1305's unit-data allowance rests on.
+     */
+    static void checkExposedSurface(Ast.Module module, Set<String> injectionTargets,
+                                    Map<String, Sig> sigs, Symbols symbols,
+                                    boolean exposeAll, Set<String> exposed) {
+        if (exposeAll) {
+            return;   // nothing is kept to the module, so nothing can be rested on
+        }
+        for (Ast.Def d : module.defs()) {
+            if (!(d instanceof Ast.Data data) || !exposed.contains(data.name())) {
+                continue;
+            }
+            // Read through the includes: a spread flattens another data's fields into this one, so
+            // they are this data's fields on the generated class and carry their types with them.
+            for (Map.Entry<String, Type> f : TypeOps.fieldTypes(data, symbols).entrySet()) {
+                refuseHidden(f.getValue(), "check.surface.field", data.name(), f.getKey(),
+                        "check.surface.hint", data.pos(), symbols, exposeAll, exposed);
+            }
+        }
+        // Read off the signature map rather than the declarations: a composition's input and output
+        // are inferred from its stages, so they are written nowhere, and this is the one place both
+        // kinds of behavior answer the same question.
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            boolean injected = injectionTargets.contains(b.name());
+            Sig sig = sigs.get(b.name());
+            if (sig == null || (!injected && !exposed.contains(b.name()))) {
+                continue;
+            }
+            String inKey = injected ? "check.inject.hiddeninput" : "check.surface.input";
+            String outKey = injected ? "check.inject.hiddenoutput" : "check.surface.output";
+            String hint = injected ? "check.inject.hidden.hint" : "check.surface.hint";
+            for (Type in : sig.ins()) {
+                refuseHidden(in, inKey, b.name(), null, hint, b.pos(), symbols, exposeAll, exposed);
+            }
+            refuseHidden(sig.out(), outKey, b.name(), null, hint, b.pos(),
+                    symbols, exposeAll, exposed);
+        }
+    }
+
+    private static void refuseHidden(Type written, String key, String owner, String field,
+                                     String hint, SourcePos pos, Symbols symbols,
+                                     boolean exposeAll, Set<String> exposed) {
+        if (written == null) {
+            return;   // an unresolved reference has its own error
+        }
+        // `mentions` stops at the first match, so the predicate keeps the name it stopped on: a
+        // collection carries its element out with it too (`List<Id>` names `Id`).
+        TypeName[] hidden = new TypeName[1];
+        Type.mentions(written, t -> {
+            if (t instanceof Type.Ref ref && !nameableOutside(ref.name(), symbols, exposeAll, exposed)) {
+                hidden[0] = ref.name();
+                return true;
+            }
+            return false;
+        });
+        if (hidden[0] == null) {
+            return;
+        }
+        String name = hidden[0].name();
+        Diagnostic.Builder d = Diagnostic.of(null, key).title("check.module.title").at(pos);
+        d = field == null ? d.args(owner, name) : d.args(owner, field, name);
+        throw CompileException.of(d.hint(hint, name, owner).build(),
+                "`" + owner + "` reaches outside this module and rests on `" + name
+                        + "`, which is not in `exposing`");
+    }
+
+    /** Whether a reader outside the declaring module can write {@code name}. */
+    private static boolean nameableOutside(TypeName name, Symbols symbols, boolean exposeAll,
+                                           Set<String> exposed) {
+        return symbols.isForeign(name)
+                ? symbols.isExposed(name) : exposeAll || exposed.contains(name.name());
     }
 
     /**

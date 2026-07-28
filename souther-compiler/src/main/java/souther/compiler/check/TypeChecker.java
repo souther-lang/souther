@@ -306,6 +306,7 @@ public final class TypeChecker {
         // The same map is built before the module is lowered, where a helper's parameter type is
         // settled from a call to an injected behavior (issue #178), and read again by every body
         // check. It arrives here rather than being built again because it is one question.
+        Set<String> injectionTargets = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec && !fns.containsKey(spec.name())) {
                 // `requires` names what an implementation calls (12.6), and an injection target has
@@ -321,6 +322,7 @@ public final class TypeChecker {
                                     + " calls or composes it does");
                 }
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
+                injectionTargets.add(spec.name());
             }
         }
         // Fail-fast with the reqSigs it reads: a `requires` that named something else leaves the call
@@ -362,8 +364,15 @@ public final class TypeChecker {
         // an exposed composition must declare its output in `exposing`, matching the inferred one
         // (spec 14.5, ADR-0024), so a far-away change cannot grow a published output silently.
         // `signatures` builds the map `checkExposedPipeOutputs` reads, so it stays fail-fast.
+        Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
-                exposed, PipelineSigs.signatures(module, symbols, importedSigs), symbols));
+                exposed, sigs, symbols));
+        // What this module reaches out with may not rest on what it keeps to itself — a name in
+        // `exposing`, and an injection target, whose base is public whatever `exposing` says. After
+        // the exposing signature checks: a signature that should not be there at all (E1605), or one
+        // that disagrees with the pipeline (E1604), is the more particular thing to say.
+        collect(errors, abandoned, () -> SpecChecker.checkExposedSurface(module, injectionTargets,
+                sigs, symbols, exposeAll, exposed));
     }
 
     /** Applies {@code f} to every direct subexpression of {@code e}. Delegates to the one
