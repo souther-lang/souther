@@ -89,13 +89,6 @@ public final class Prelude {
      *  checker built-ins (which are not in the prelude sources) are listed here explicitly. */
     private static final Map<String, String> BARE_TO_QUALIFIED = new LinkedHashMap<>();
 
-    /** Names that are sugar for another standard-library call, recognised as library functions but
-     *  rewritten before inlining: {@code List.fold(step, seed, xs)} is {@code List.foldFrom(step, seed,
-     *  xs, 0)} (the walk from the head). */
-    private static final Set<String> SUGARED = Set.of("List.fold");
-
-    // Everything the load below reads must be in place before it runs: it resolves the prelude
-    // sources, and resolving a call asks whether the name it applies is a library function.
     static {
         load();
     }
@@ -114,6 +107,11 @@ public final class Prelude {
     public static Set<String> qualifiers() {
         return QUALIFIERS;
     }
+
+    /** Names that are sugar for another standard-library call, recognised as library functions but
+     *  rewritten before inlining: {@code List.fold(step, seed, xs)} is {@code List.foldFrom(step, seed,
+     *  xs, 0)} (the walk from the head). */
+    private static final Set<String> SUGARED = Set.of("List.fold");
 
     /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function —
      *  a prelude helper, a prelude intrinsic, a checker built-in, or a sugar for one. */

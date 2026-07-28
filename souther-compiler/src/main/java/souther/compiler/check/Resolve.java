@@ -503,7 +503,12 @@ public final class Resolve {
         if (binder != null) {
             return new ValueName.Local(written, binder);   // a function-typed parameter, applied
         }
-        if (Prelude.hasQualified(written)) {
+        // A library qualifier makes this a library reference — `Date(...)`, whose namespace is the
+        // whole name, included. Whether the library has a function of that name is the check's to
+        // say: asking here would tie the answer to how much of the library has been loaded, and the
+        // library resolves its own sources while it loads.
+        int dot = written.lastIndexOf('.');
+        if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             return new ValueName.Stdlib(written);
         }
         if (values.helpers().contains(written)) {

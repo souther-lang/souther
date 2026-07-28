@@ -9,6 +9,7 @@ import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 import java.util.Set;
 
 import java.util.ArrayList;
@@ -109,11 +110,24 @@ public final class CallElaborator {
         }
     }
 
+    /**
+     * The type of a call, by what the name it applies denotes.
+     *
+     * <p>Which of these a name is was answered when the module's names were resolved, so the order
+     * the cases are written in here decides nothing. Before that this was a sequence of attempts —
+     * the library, then a function-typed binding, then an injected behavior — and a name that could
+     * be read two ways was whichever came first.
+     */
     static Type typeOfCall(CallArgs ca, Ast.Call call, Map<String, Type> env, CheckContext ctx, Type expected) {
         List<Ast.Expr> args = call.args();
+        if (call.denotes() == null) {
+            throw new IllegalStateException(
+                    "`" + call.fn() + "` reached the check unresolved, at " + call.pos());
+        }
+        boolean library = call.denotes() instanceof ValueName.Stdlib;
         // A shipped intrinsic behaves like a built-in: check the call against its declared signature
         // (from the prelude) and yield its result type; the backend emits the primitive for its key.
-        Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(call.fn());
+        Prelude.IntrinsicSig intrinsic = library ? Prelude.intrinsics().get(call.fn()) : null;
         if (intrinsic != null) {
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(
@@ -148,7 +162,7 @@ public final class CallElaborator {
             }
             return result;
         }
-        return switch (call.fn()) {
+        return switch (library ? call.fn() : "") {
             case "String.length" -> {
                 arity(call, 1);
                 ca.require(0, Type.STRING, "argument of String.length");
@@ -399,9 +413,9 @@ public final class CallElaborator {
                     }
                     yield TypeOps.substitute(fn.result(), bind);
                 }
-                // a qualified name that matched no stdlib builtin/intrinsic above is a wrong stdlib
+                // a library qualifier that matched no builtin or intrinsic above is a wrong stdlib
                 // call (spec §stdlib) — report it as such, not as a missing behavior.
-                if (call.fn().indexOf('.') >= 0) {
+                if (library || call.fn().indexOf('.') >= 0) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
                                     .at(call.pos(), call.fn().length()).args(call.fn()).build(),
