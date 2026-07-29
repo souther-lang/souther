@@ -21,6 +21,9 @@ import java.lang.classfile.attribute.RecordComponentInfo;
 import java.lang.classfile.attribute.RuntimeVisibleTypeAnnotationsAttribute;
 import java.lang.classfile.attribute.SignatureAttribute;
 import java.lang.constant.ClassDesc;
+import java.lang.constant.DirectMethodHandleDesc;
+import java.lang.constant.DynamicCallSiteDesc;
+import java.lang.constant.MethodHandleDesc;
 import java.lang.constant.ConstantDescs;
 import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
@@ -178,6 +181,7 @@ final class ValueClassGen {
             // is, and the codecs on both sides read it from here.
             if (enumeration) {
                 emitTagMethod(cb, cases);
+                emitOrderMethods(cb, cdX, cases);
             }
             sum.decoder().ifPresent(disc -> {
                 codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"),
@@ -205,6 +209,46 @@ final class ValueClassGen {
         sum.encoder().ifPresent(enc -> out.put(pkg + "." + sum.name() + "$Enc", enumeration
                 ? codec.generateEnumSumEncoder(sum)
                 : codec.generateSumEncoder(sum, enc)));
+    }
+
+    /**
+     * Emits {@code static int __order(Object)} — where a value's case stands in the declaration —
+     * and {@code static Comparator __ordering()} over it. The order sits on the sum rather than on
+     * the case records because one unit data may be a case of two sums, which place it differently;
+     * a {@code Comparable} on the record would have to answer for both (issue #161).
+     */
+    private void emitOrderMethods(ClassBuilder cb, ClassDesc cdX, List<TypeName> cases) {
+        cb.withMethod(ORDER_METHOD, MTD_order, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
+                | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
+            int i = 0;
+            for (TypeName c : cases) {
+                code.aload(0);
+                code.instanceOf(cd(c));
+                Label next = code.newLabel();
+                code.ifeq(next);
+                code.loadConstant(i);
+                code.ireturn();
+                code.labelBinding(next);
+                i++;
+            }
+            code.new_(CD_IllegalStateException);
+            code.dup();
+            code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
+            code.athrow();
+        }));
+        cb.withMethod(ORDERING_METHOD, MTD_ordering, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
+                | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
+            code.invokedynamic(DynamicCallSiteDesc.of(
+                    BSM_METAFACTORY, "applyAsInt",
+                    MethodTypeDesc.of(CD_ToIntFunction),
+                    MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object),
+                    MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
+                            cdX, ORDER_METHOD, MTD_order),
+                    MTD_order));
+            code.invokestatic(CD_Comparator, "comparingInt",
+                    MethodTypeDesc.of(CD_Comparator, CD_ToIntFunction), true);
+            code.areturn();
+        }));
     }
 
     /** Emits {@code static String __tag(Object)}: which case a value of this enumeration is. */

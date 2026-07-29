@@ -592,15 +592,6 @@ public final class TypeOps {
         return fields;
     }
 
-    /** A sum's leaf cases in declaration order, nested sums flattened where they are written. */
-    public static List<TypeName> leafCases(Ast.SumData sum, Symbols symbols) {
-        Set<TypeName> leaves = new LinkedHashSet<>();
-        for (TypeName c : caseNames(sum)) {
-            leaves.addAll(leafCases(Type.ref(c), symbols));
-        }
-        return List.copyOf(leaves);
-    }
-
     /** Every data reachable from {@code data} through spreads, transitively — the set two cases are
      * intersected on. The data itself is not one of them: a case is not its own shared part. */
     private static Set<TypeName> spreadAncestors(Ast.Data data, Symbols symbols) {
@@ -686,6 +677,15 @@ public final class TypeOps {
         return true;
     }
 
+    /** A sum's leaf cases in declaration order, nested sums flattened where they are written. */
+    public static List<TypeName> leafCases(Ast.SumData sum, Symbols symbols) {
+        Set<TypeName> leaves = new LinkedHashSet<>();
+        for (TypeName c : caseNames(sum)) {
+            leaves.addAll(leafCases(Type.ref(c), symbols));
+        }
+        return List.copyOf(leaves);
+    }
+
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
      * every one can — what a data field or a behavior's input/output is checked against. */
     public static Type nonBoundaryMapKey(Type t, Symbols symbols) {
@@ -720,7 +720,82 @@ public final class TypeOps {
      * operators and the sort family read. The generated wrapper carries that ordering as
      * {@link Comparable}, so the runtime's natural-order compare reaches it. */
     public static boolean isOrderedValue(Type t, Symbols symbols) {
-        return isOrdered(base(t, symbols));
+        return isOrdered(base(t, symbols)) || orderingEnumeration(t, symbols) != null;
+    }
+
+    /**
+     * The enumeration two operands of {@code <}/{@code <=}/{@code >}/{@code >=} are ordered by, or
+     * null when they are not both values of one. Either side may name it: {@code stage < Won}
+     * carries the order on the left, and a case listed by two sums takes the one it is compared with.
+     */
+    public static TypeName comparisonEnumeration(Type lt, Type rt, Symbols symbols) {
+        TypeName named = orderingEnumeration(lt, symbols);
+        if (named == null) {
+            named = orderingEnumeration(rt, symbols);
+        }
+        return named != null && isValueOfEnumeration(lt, named, symbols)
+                && isValueOfEnumeration(rt, named, symbols) ? named : null;
+    }
+
+    /** Whether {@code t} is that enumeration, one of its leaves, or a union of them. */
+    private static boolean isValueOfEnumeration(Type t, TypeName enumeration, Symbols symbols) {
+        if (t instanceof Type.Union union) {
+            for (TypeName member : union.members()) {
+                if (!isValueOfEnumeration(Type.ref(member), enumeration, symbols)) {
+                    return false;
+                }
+            }
+            return !union.members().isEmpty();
+        }
+        return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
+                || (symbols.get(enumeration) instanceof Ast.SumData sum
+                    && leafCases(sum, symbols).contains(ref.name())));
+    }
+
+    /**
+     * The enumeration that orders a value of {@code t} — a sum all of whose cases are unit data,
+     * ordered by the order they are declared in, which is the order a state machine moves through
+     * (F#'s discriminated union, Haskell's derived {@code Ord}, Java's ordinal; issue #161). It is
+     * the type itself when it is one, or the single one that lists it as a case.
+     *
+     * <p>Null when the type is not one and when more than one enumeration lists it: a unit data may
+     * be a case of two sums, which place it differently, so no one order is the value's own. The
+     * order therefore belongs to the sum and not to the case value.
+     */
+    public static TypeName orderingEnumeration(Type t, Symbols symbols) {
+        if (t instanceof Type.Union union) {
+            // a list literal of case values (`[ Lost, Won ]`) is typed as the union of their types,
+            // and they are ordered when they all come from the one enumeration
+            TypeName shared = null;
+            for (TypeName member : union.members()) {
+                TypeName owner = orderingEnumeration(Type.ref(member), symbols);
+                if (owner == null || (shared != null && !shared.equals(owner))) {
+                    return null;
+                }
+                shared = owner;
+            }
+            return shared;
+        }
+        if (!(t instanceof Type.Ref ref)) {
+            return null;
+        }
+        if (symbols.get(ref.name()) instanceof Ast.SumData sum) {
+            return isUnitOnlySum(sum, symbols) ? ref.name() : null;
+        }
+        if (!(symbols.get(ref.name()) instanceof Ast.UnitData)) {
+            return null;
+        }
+        TypeName found = null;
+        for (TypeName name : symbols.visibleNames()) {
+            if (symbols.get(name) instanceof Ast.SumData s && isUnitOnlySum(s, symbols)
+                    && leafCases(s, symbols).contains(ref.name())) {
+                if (found != null) {
+                    return null;
+                }
+                found = name;
+            }
+        }
+        return found;
     }
 
     /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —

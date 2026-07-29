@@ -196,7 +196,9 @@ public final class BinaryElaborator {
                                              Symbols symbols) {
         Type lb = TypeOps.base(lt, symbols);
         if (!TypeOps.isOrdered(lb) || !lb.equals(TypeOps.base(rt, symbols))) {
-            return false;
+            // An enumeration is ordered by its declaration, and a case value is a value of its sum
+            // (spec 8.3), so `stage < Won` compares in the sum both sides belong to (issue #161).
+            return TypeOps.comparisonEnumeration(lt, rt, symbols) != null;
         }
         if (lt.equals(rt)) {
             return true;
