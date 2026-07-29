@@ -221,6 +221,34 @@ class FormatterTest {
         assertEquals(expected, Formatter.format(expected), "formatting is not idempotent");
     }
 
+    /** A value writes no parameter list, and a lambda written on the right of {@code =} is the
+     * parameter-list form — one definition, so the formatter writes one spelling of it. */
+    @Test
+    void canonicalFormOfAValueAndALambdaBoundToAName() {
+        String messy = "module demo\n"
+                + "data Amount=Int\n"
+                + "let cap=Amount(100)\n"
+                + "let raise=(a)->a.value+1\n"
+                + "behavior pay:(a:Amount)->Amount constructs Amount\n"
+                + "let pay (a)=Amount(raise(a)+cap.value)\n";
+        String expected = """
+                module demo
+
+                data Amount = Int
+
+                let cap = Amount(100)
+
+                let raise (a) = a.value + 1
+
+                behavior pay : (a: Amount) -> Amount
+                    constructs Amount
+
+                let pay (a) = Amount(raise(a) + cap.value)
+                """;
+        assertEquals(expected, Formatter.format(messy));
+        assertEquals(expected, Formatter.format(expected), "formatting is not idempotent");
+    }
+
     @Test
     void formattingKeepsThePartialModifier() {
         // `partial` is a helper modifier; dropping it flips the helper from opted-out to

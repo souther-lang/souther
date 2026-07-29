@@ -189,9 +189,15 @@ public final class Elaborator {
                                     .at(nd.pos(), built.written().length()).args(built.written()).build(),
                             "cannot construct `" + built.written() + "`");
                 }
+                // by here every spread names a binding in force: a value spread was bound ahead of
+                // the construction when it was inlined, so Core reads the name it copies
+                List<String> spreads = new ArrayList<>();
+                for (Ast.ValueRef s : nd.spreads()) {
+                    spreads.add(s.bare());
+                }
                 List<Core.FieldInit> inits = DataChecker.checkConstruction(built.written(), nd.inits(),
-                        nd.spreads(), nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
-                yield new Core.NewData(built.denotes(), inits, nd.spreads(),
+                        spreads, nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
+                yield new Core.NewData(built.denotes(), inits, spreads,
                         Type.ref(built.denotes()), nd.pos());
             }
             case Ast.Match m -> MatchElaborator.elaborateMatch(m, env, ctx, expected);

@@ -399,9 +399,15 @@ public final class Formatter {
 
     private Doc fnDef(SyntaxNode n) {
         String name = firstIdent(n);
-        Doc params = fnParamList(n.child(SyntaxKind.FN_PARAM_LIST).orElseThrow());
         Doc keyword = n.child(SyntaxKind.PARTIAL_MODIFIER).isPresent() ? text("partial let ") : text("let ");
-        Doc head = concat(keyword, text(name), text(" "), params, writtenType(n));
+        var written = n.child(SyntaxKind.FN_PARAM_LIST);
+        // A lambda on the right of `=` is the parameter-list form written the other way round, so it
+        // is written back with its parameters on the left. A definition with neither is a value, and
+        // writes no list at all.
+        SyntaxNode lifted = written.isPresent() ? null : liftedLambda(n);
+        Doc params = written.isPresent() ? concat(text(" "), fnParamList(written.get()))
+                : lifted == null ? Doc.NIL : concat(text(" "), lambdaParams(lifted));
+        Doc head = concat(keyword, text(name), params, writtenType(n));
 
         var intrinsic = n.child(SyntaxKind.INTRINSIC_BODY);
         if (intrinsic.isPresent()) {
@@ -412,8 +418,30 @@ public final class Formatter {
         if (block.isPresent()) {
             return concat(head, text(" = "), block(block.get()));
         }
-        SyntaxNode body = onlyExpr(n);
+        SyntaxNode body = lifted == null ? onlyExpr(n) : lastExprChild(lifted);
         return concat(head, text(" ="), group(nest(INDENT, concat(LINE, expr(body)))));
+    }
+
+    /** The lambda a parameter-less definition was written as, or null when its body is an ordinary
+     * expression and the definition is a value. */
+    private SyntaxNode liftedLambda(SyntaxNode n) {
+        if (n.child(SyntaxKind.BLOCK_EXPR).isPresent() || n.child(SyntaxKind.INTRINSIC_BODY).isPresent()) {
+            return null;
+        }
+        SyntaxNode body = onlyExpr(n);
+        return body.kind() == SyntaxKind.LAMBDA_EXPR ? body : null;
+    }
+
+    /** A lambda's parameters as a definition's parameter list — always parenthesised, which is the
+     * only shape a definition writes. */
+    private Doc lambdaParams(SyntaxNode lambda) {
+        List<Doc> params = new ArrayList<>();
+        for (SyntaxNode c : lambda.childNodes()) {
+            if (isPatternNode(c.kind())) {
+                params.add(pattern(c));
+            }
+        }
+        return concat(text("("), Doc.join(text(", "), params), text(")"));
     }
 
     private Doc fnParamList(SyntaxNode n) {

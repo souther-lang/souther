@@ -21,7 +21,7 @@ class CompileZeroArgStageTest {
             data D = Int
 
             behavior now : () -> D constructs D
-            let now () = D { value = 1 }
+            let now = D { value = 1 }
 
             behavior inc : (d: D) -> D constructs D
             let inc (d) = D { value = d.value + 1 }

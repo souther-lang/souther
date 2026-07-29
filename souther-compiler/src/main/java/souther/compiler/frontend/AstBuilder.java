@@ -372,6 +372,18 @@ public final class AstBuilder {
         }
         SyntaxNode bodyNode = onlyExpr(n);
         Ast.Expr body = expr(bodyNode);
+        // `let f = (x) -> e` is the parameter-list form written the other way round: the parameters
+        // move to the left of `=` and the two spellings settle to one definition. A definition that
+        // already wrote parameters keeps a lambda body as its result. Only a lambda the source wrote
+        // moves — a `.field` getter is a block too, but its parameter is synthesized, and lifting it
+        // would name a definition's parameter something the author never wrote.
+        if (params.isEmpty() && bodyNode.kind() == SyntaxKind.LAMBDA_EXPR
+                && body instanceof Ast.Block lambda) {
+            for (String p : lambda.params()) {
+                params.add(new Ast.FnParam(p, null, false, lambda.pos()));
+            }
+            body = lambda.body();
+        }
         // a pattern parameter took a fresh name above; it opens itself at the top of the body, so
         // the helper still takes plain names and nothing downstream sees a pattern
         for (int i = paramPatterns.size() - 1; i >= 0; i--) {
@@ -704,7 +716,7 @@ public final class AstBuilder {
         SyntaxToken head = identTokens(n).get(0);
         Ast.Name typeName = Ast.Name.written(head.text(), posOf(head));
         List<Ast.FieldInit> inits = new ArrayList<>();
-        List<String> spreads = new ArrayList<>();
+        List<Ast.ValueRef> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction
         // itself still spreads a plain local: `let $s0 = c.address in Address { ...$s0, ... }`
         List<String> pathNames = new ArrayList<>();
@@ -713,7 +725,7 @@ public final class AstBuilder {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
                 List<SyntaxToken> path = identTokens(c);
                 if (path.size() == 1) {
-                    spreads.add(path.get(0).text());
+                    spreads.add(Ast.ValueRef.written(path.get(0).text(), posOf(path.get(0))));
                 } else {
                     String bound = "$s" + (spreadCounter++);
                     Ast.Expr value = new Ast.Var(path.get(0).text(), posOf(path.get(0)));
@@ -722,7 +734,8 @@ public final class AstBuilder {
                     }
                     pathNames.add(bound);
                     pathValues.add(value);
-                    spreads.add(bound);
+                    // the path was bound just above, so what the construction spreads is that binding
+                    spreads.add(Ast.ValueRef.local(bound, posOf(path.get(0))));
                 }
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 String field = firstIdentText(c);

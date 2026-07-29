@@ -404,8 +404,11 @@ public final class CstParser {
             finish();
         }
         bump();   // let
+        String name = at(SyntaxKind.IDENT) ? tokenText(mi(0)) : "?";
         expect(SyntaxKind.IDENT);
-        fnParamList();
+        if (at(SyntaxKind.LPAREN)) {
+            fnParamList(name);   // with none written the definition is a value, and there is no list
+        }
         if (eat(SyntaxKind.COLON)) {
             retType();
         }
@@ -424,9 +427,16 @@ public final class CstParser {
         finish();
     }
 
-    private void fnParamList() {
+    /** The parenthesized parameters of a function definition. It is written only where there are
+     * parameters — an empty {@code ()} would be a second spelling of the value form, so it is
+     * refused rather than read as a definition taking nothing. */
+    private void fnParamList(String name) {
         start(SyntaxKind.FN_PARAM_LIST);
         expect(SyntaxKind.LPAREN);
+        if (at(SyntaxKind.RPAREN)) {
+            error("parse.fn.emptyparams",
+                    "`let " + name + "` takes no parameters, so it is written without `()`", name);
+        }
         if (!at(SyntaxKind.RPAREN)) {
             fnParam();
             while (eat(SyntaxKind.COMMA)) {

@@ -21,7 +21,9 @@ import net.unit8.raoh.decode.Decoder;
 import net.unit8.raoh.decode.ObjectDecoders;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -783,7 +785,7 @@ public final class ExampleVerifier {
             case Ast.BoolLit b -> b.value();
             case Ast.Neg n -> negate(raw(n.operand()));
             case Ast.Binary bin -> fold(bin);
-            case Ast.Call c -> newtypeInner(c);
+            case Ast.Call c -> collectionOrNewtype(c, expected);
             case Ast.Var v -> unitInput(v.name(), expected);
             case Ast.NewData nd -> record(nd);
             case Ast.ListLit l -> {
@@ -858,7 +860,47 @@ public final class ExampleVerifier {
             tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
             return unit;
         }
+        Ast.Expr value = valueBody(name);
+        if (value != null) {
+            return expandedValue(name, value, expected);
+        }
         throw new FixtureException("`" + name + "` is not a value a fixture can name");
+    }
+
+    /**
+     * The body a value — a {@code let} with no parameter list — was defined as, or null where the
+     * name is not one of this module's values.
+     *
+     * <p>Whether a fixture may name it is not a property of this one body: a value stands for a
+     * fixture when it is a literal, a construction, a spread, a {@code fromList} over one, or a name
+     * of another such value. So the body is read the same way the row's own text is, and a chain of
+     * values holds.
+     */
+    private Ast.Expr valueBody(String name) {
+        for (Ast.FnDef fn : module.fns()) {
+            if (fn.name().equals(name) && fn.params().isEmpty() && fn.body() != null) {
+                return fn.body();
+            }
+        }
+        return null;
+    }
+
+    /** The names being expanded, innermost last — a value that reaches itself has no fixture to be. */
+    private final Deque<String> expanding = new ArrayDeque<>();
+
+    private Object expandedValue(String name, Ast.Expr body, Type expected) {
+        if (expanding.contains(name)) {
+            List<String> cycle = new ArrayList<>(expanding);
+            cycle.add(name);
+            throw new FixtureException("`" + name + "` is defined in terms of itself ("
+                    + String.join(" -> ", cycle) + ")");
+        }
+        expanding.addLast(name);
+        try {
+            return raw(body, expected);
+        } finally {
+            expanding.removeLast();
+        }
     }
 
     /** Whether the position this case is written in reads a bare name: it is typed as an enumeration,
@@ -888,6 +930,23 @@ public final class ExampleVerifier {
             }
         }
         return listed;
+    }
+
+    /**
+     * {@code Set.fromList([…])} and {@code Map.fromList([…])} are the forms a fixture's own notation
+     * stands for — a set is written as its elements and a map as its entry pairs — so the neutral
+     * value is the argument's. A value has to be ordinary code, where a list literal is a
+     * {@code List} whatever the position declares, so this is what lets one record serve as both a
+     * value and a fixture. Anything else applied here is a newtype or nothing.
+     */
+    private Object collectionOrNewtype(Ast.Call c, Type expected) {
+        if (c.fn().equals("Set.fromList") || c.fn().equals("Map.fromList")) {
+            if (c.args().size() != 1) {
+                throw new FixtureException("`" + c.fn() + "` takes one argument");
+            }
+            return raw(c.args().get(0), expected);
+        }
+        return newtypeInner(c);
     }
 
     private Object newtypeInner(Ast.Call c) {
@@ -938,11 +997,36 @@ public final class ExampleVerifier {
     }
 
     private Object record(Ast.NewData nd) {
-        if (!nd.spreads().isEmpty()) {
-            throw new FixtureException("a `...spread` cannot be used in an example fixture");
+        // `金額(500)` is the record literal `金額 { value = 500 }` written in call form (ADR-0032), and
+        // a value's body reaches here already written the second way. Either spelling is the newtype's
+        // own neutral form — its inner value — not a field map.
+        String written = nd.typeName().written();
+        if (isNewtype(written) && nd.spreads().isEmpty() && nd.inits().size() == 1
+                && nd.inits().get(0).name().equals("value")) {
+            return adjacentlyTagged(written,
+                    shaped(raw(nd.inits().get(0).value(), shapeOf(newtypeBaseType(written))),
+                            shapeOf(newtypeBaseType(written))));
         }
         Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName().denotes());
         Map<String, Object> map = new LinkedHashMap<>();
+        // `...base` copies the fields of a value, and the fields written after it replace what it
+        // brought. Only a value can be spread here: a row has no bindings to read from.
+        for (Ast.ValueRef ref : nd.spreads()) {
+            String spread = ref.bare();
+            Ast.Expr value = valueBody(spread);
+            if (value == null) {
+                throw new FixtureException("`" + spread
+                        + "` is not a value a fixture can spread");
+            }
+            Object copied = expandedValue(spread, value, Type.ref(nd.typeName().denotes()));
+            if (!(copied instanceof Map<?, ?> fields)) {
+                throw new FixtureException("`" + spread + "` is not a record, so it has no fields to"
+                        + " spread");
+            }
+            for (Map.Entry<?, ?> f : fields.entrySet()) {
+                map.put(String.valueOf(f.getKey()), f.getValue());
+            }
+        }
         for (Ast.FieldInit fi : nd.inits()) {
             Object v = shaped(raw(fi.value(), shapeOf(declared.get(fi.name()))),
                     shapeOf(declared.get(fi.name())));

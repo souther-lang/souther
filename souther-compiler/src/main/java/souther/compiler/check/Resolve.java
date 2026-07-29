@@ -463,7 +463,14 @@ public final class Resolve {
                 for (Ast.FieldInit i : nd.inits()) {
                     inits.add(new Ast.FieldInit(i.name(), expr(i.value(), bound), i.pos()));
                 }
-                yield new Ast.NewData(type(nd.typeName()), inits, nd.spreads(), nd.pos());
+                // a spread names a value, so it is resolved the way a bare name is: a binding in
+                // force wins over a declaration here too
+                List<Ast.ValueRef> spreads = new ArrayList<>();
+                for (Ast.ValueRef s : nd.spreads()) {
+                    spreads.add(s.denotes() != null ? s : s.denoting(
+                            answered(s.written(), s.pos(), valueName(s.written(), s.pos(), bound))));
+                }
+                yield new Ast.NewData(type(nd.typeName()), inits, spreads, nd.pos());
             }
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
