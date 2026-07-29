@@ -4,8 +4,10 @@ import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ReqSig;
+import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -84,7 +86,7 @@ public final class Backend {
 
     public static Map<String, byte[]> generate(Ast.Module module, TypeChecker.Checked checked) {
         return generate(module, TypeChecker.symbols(module), Map.of(), Map.of(), Set.of(), Map.of(),
-                checked);
+                Requirements.of(module, Set.of()), checked);
     }
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
@@ -92,6 +94,8 @@ public final class Backend {
      * {@code importedSigs} carries imported behaviors' signatures so a composition can name one as
      * a stage (spec 14); {@code importedInjected} are imported injection-target behaviors, which a
      * composition here inherits as requirements to inject and bind (spec 13.2, 14.3);
+     * {@code requirements} says what each behavior takes injected and in what order — the answer the
+     * example verifier reads too, so a fake reaches the parameter this constructor binds it to;
      * {@code checked} carries the type checker's elaborated bodies, which is what the emitter reads
      * instead of inferring types again (issue #81). */
     public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
@@ -99,6 +103,7 @@ public final class Backend {
                                                Map<String, Sig> importedSigs,
                                                Set<String> importedInjected,
                                                Map<String, ReqSig> calleeSigs,
+                                               Map<String, List<BehaviorRequirement>> requirements,
                                                TypeChecker.Checked checked) {
         Map<String, List<String>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
@@ -211,12 +216,11 @@ public final class Backend {
         // abstract base class a Java implementation extends (13.3). Imported injection targets
         // (their base lives in the declaring module) are requirements too, so a composition here
         // injects and binds them (spec 14.3) — but no base is generated for them here.
-        Set<String> requiredNames = new HashSet<>(importedInjected);
+        Set<String> requiredNames = Requirements.injectedNames(module, importedInjected);
         Map<String, Type> requiredSuccess = new HashMap<>();
         Map<String, List<Type>> requiredParam = new HashMap<>();
         for (Ast.BehaviorDef bd : module.behaviors()) {
-            if (bd instanceof Ast.SpecBehavior spec && !fns.containsKey(spec.name())) {
-                requiredNames.add(spec.name());
+            if (bd instanceof Ast.SpecBehavior spec && requiredNames.contains(spec.name())) {
                 requiredSuccess.put(spec.name(), b.successType(spec.ret()));
                 List<Type> reqParams = new ArrayList<>();
                 for (Ast.Param p : spec.params()) {
@@ -307,7 +311,12 @@ public final class Backend {
         // in the injection maps above; what a call site needs is the signature it was typed against.
         b.ctx.setCalleeSignatures(calleeSigs);
         Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
-        Map<String, List<String>> behaviorDeps = requirementSets(module, requiredNames);
+        // What each behavior takes injected, worked out once and read here and at an example
+        // (Bodies.Requirements): the order is this constructor's parameter order.
+        Map<String, List<String>> behaviorDeps = new LinkedHashMap<>();
+        for (Map.Entry<String, List<BehaviorRequirement>> e : requirements.entrySet()) {
+            behaviorDeps.put(e.getKey(), Requirements.names(e.getValue()));
+        }
         Map<String, List<Ast.ValueRef>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef bd : module.behaviors()) {
             switch (bd) {
@@ -814,61 +823,6 @@ public final class Backend {
         });
     }
 
-
-    /**
-     * Every behavior's requirement set, in constructor (first-seen) order (spec 13.6, 14.3).
-     *
-     * <p>A required behavior requires itself; a body behavior requires what it calls; a pipeline
-     * requires the union of its stages'. Pipelines are resolved too, and transitively: a pipeline
-     * used as a stage of another pipeline still needs its own dependencies injected, and leaving
-     * it out produced a class whose {@code apply} called a constructor that does not exist.
-     */
-    private static Map<String, List<String>> requirementSets(Ast.Module module, Set<String> requiredNames) {
-        Map<String, Ast.BehaviorDef> byName = new HashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            byName.put(bd.name(), bd);
-        }
-        Map<String, List<String>> memo = new HashMap<>();
-        for (Ast.BehaviorDef bd : module.behaviors()) {
-            resolveDeps(bd.name(), byName, requiredNames, memo, new LinkedHashSet<>());
-        }
-        return memo;
-    }
-
-    private static List<String> resolveDeps(String name, Map<String, Ast.BehaviorDef> byName,
-                                            Set<String> requiredNames, Map<String, List<String>> memo,
-                                            LinkedHashSet<String> inProgress) {
-        if (requiredNames.contains(name)) {
-            return List.of(name);
-        }
-        List<String> cached = memo.get(name);
-        if (cached != null) {
-            return cached;
-        }
-        Ast.BehaviorDef bd = byName.get(name);
-        if (bd == null) {
-            return List.of();
-        }
-        if (!inProgress.add(name)) {
-            throw new CompileException(bd.pos(),
-                    "cyclic behavior composition: " + String.join(" >-> ", inProgress) + " >-> " + name);
-        }
-        LinkedHashSet<String> deps = new LinkedHashSet<>();
-        switch (bd) {
-            // an injection target short-circuits above, so a SpecBehavior here is fn-implemented:
-            // its dependencies are what it declared it depends on, in that order (spec 12.6, 13.6)
-            case Ast.SpecBehavior spec -> deps.addAll(requiredBy(spec));
-            case Ast.PipeBehavior pipe -> {
-                for (Ast.ValueRef stage : pipe.stages()) {
-                    deps.addAll(resolveDeps(stage.bare(), byName, requiredNames, memo, inProgress));
-                }
-            }
-        }
-        inProgress.remove(name);
-        List<String> out = new ArrayList<>(deps);
-        memo.put(name, out);
-        return out;
-    }
 
     /**
      * A composition's own signature, worked out when the module's signatures were.
