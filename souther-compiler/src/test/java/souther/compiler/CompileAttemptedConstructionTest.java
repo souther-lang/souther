@@ -291,4 +291,100 @@ class CompileAttemptedConstructionTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E2012", e.code(), e.getMessage());
     }
+    /**
+     * The binder names the built value in the success branch alone, and the else branch is emitted
+     * after it. A binder shadowing an outer name must therefore not still be in the emitter's
+     * environment there, or the else branch reads the attempted value's slot for a name that means
+     * something else entirely.
+     */
+    @Test
+    void aBinderShadowingAnOuterNameDoesNotLeakIntoTheElseBranch() throws Exception {
+        String src = """
+                module demo exposing (take, Out)
+
+                data Code = String
+                    invariant String.matches("[A-Z]{2}", value)
+
+                data Out = { n: Int }
+
+                behavior take : (raw: String) -> Out
+                    constructs Out, Code
+
+                let take (raw) = {
+                    let c = 7
+
+                    if Code(raw) as c then Out { n = 1 } else Out { n = c }
+                }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object impl = loader.loadClass("demo.Take" + "$Impl").getConstructor().newInstance();
+
+        assertEquals(Map.of("n", 7L), Codecs.encode(loader, "demo.Out", Codecs.apply(impl, "zzz")),
+                "the else branch's `c` is the outer 7, not the value the attempt tried to build");
+        assertEquals(Map.of("n", 1L), Codecs.encode(loader, "demo.Out", Codecs.apply(impl, "AB")));
+    }
+    /**
+     * The binder must not outlive the whole form either. The emitter's environment is destructive,
+     * so a binder left in it renames an outer value for every expression emitted after the attempt,
+     * not only for the else branch.
+     */
+    @Test
+    void aBinderDoesNotOutliveTheAttemptItself() throws Exception {
+        String src = """
+                module demo exposing (take, Out)
+
+                data Code = String
+                    invariant String.matches("[A-Z]{2}", value)
+
+                data Out = { n: Int }
+
+                behavior take : (raw: String) -> Out
+                    constructs Out, Code
+
+                let take (raw) = {
+                    let c = 7
+                    let taken = if Code(raw) as c then 1 else 2
+
+                    Out { n = c + taken }
+                }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object impl = loader.loadClass("demo.Take" + "$Impl").getConstructor().newInstance();
+
+        assertEquals(Map.of("n", 8L), Codecs.encode(loader, "demo.Out", Codecs.apply(impl, "AB")),
+                "after the attempt `c` is the outer 7 again, so 7 + 1");
+        assertEquals(Map.of("n", 9L), Codecs.encode(loader, "demo.Out", Codecs.apply(impl, "zzz")),
+                "and the same on the path the attempt departed by, so 7 + 2");
+    }
+    /**
+     * A self tail call is emitted as a jump back to the helper's entry, so a recursive helper loops
+     * instead of growing the stack. An attempt in tail position has to reach that too: written with
+     * a plain condition this helper loops, and it would be surprising for the same helper to
+     * overflow only because the guard became an attempted construction.
+     */
+    @Test
+    void aSelfTailCallInAnAttemptsBranchStillLoops() throws Exception {
+        String src = """
+                module demo exposing (run, Out)
+
+                data Positive = Int
+                    invariant value >= 1
+
+                data Out = { n: Int }
+
+                partial let walk (n: Int, acc: Int): Int =
+                    if Positive(n) as p then walk(p.value - 1, acc + 1) else acc
+
+                behavior run : (n: Int) -> Out
+                    constructs Out, Positive
+
+                let run (n) = Out { n = walk(n, 0) }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object impl = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+
+        assertEquals(Map.of("n", 200000L),
+                Codecs.encode(loader, "demo.Out", Codecs.apply(impl, 200000L)),
+                "a depth this far past the stack only returns if the tail call became a jump");
+    }
 }

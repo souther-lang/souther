@@ -348,6 +348,18 @@ final class BodyGen {
                     code.labelBinding(elseL);
                     emitTail(iff.els(), cdB, requiredNames, requiredSuccess, expected);
                 }
+                // Both branches stay in tail position, so a self-recursive helper guarded by an
+                // attempt loops exactly as one guarded by a plain condition does. Falling through to
+                // the value emitter would leave the recursive call a real call and grow the stack.
+                case Core.IfConstructed ic -> {
+                    Attempt a = emitAttempt(ic);
+                    Var shadowed = env.get(ic.binder());
+                    bind(ic.binder(), a.slot(), ic.construct().type());
+                    emitTail(ic.then(), cdB, requiredNames, requiredSuccess, expected);
+                    restore(ic.binder(), shadowed);
+                    code.labelBinding(a.elseLabel());
+                    emitTail(ic.els(), cdB, requiredNames, requiredSuccess, expected);
+                }
                 case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
                 case Core.Call call when tcoName != null && call.fn().equals(tcoName)
                         && call.args().size() == tcoParams.size() -> emitSelfTailCall(call);
@@ -551,35 +563,15 @@ final class BodyGen {
                     code.labelBinding(end);
                 }
                 case Core.IfConstructed ic -> {
-                    // The same `__construct` a plain construction calls; what differs is where its
-                    // Result goes. orThrow would abort here — instead the Err side takes the else
-                    // branch and the Ok side binds the built value for the then branch.
-                    Core.NewData nd = ic.construct();
-                    Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
-                    ClassDesc cdType = cd(nd.typeName());
-                    emitFieldValues(flds, nd.inits(), nd.spreads());
-                    emitLine(ic);
-                    code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
-
-                    int rSlot = slot(Type.STRING);   // a reference slot for the Result
-                    code.astore(rSlot);
-                    code.aload(rSlot);
-                    code.instanceOf(CD_ResultErr);
-                    Label elseL = code.newLabel();
+                    Attempt a = emitAttempt(ic);
                     Label end = code.newLabel();
-                    code.ifne(elseL);
-
-                    int bound = slot(nd.type());
-                    code.aload(rSlot);
-                    code.checkcast(CD_ResultOk);
-                    code.invokevirtual(CD_ResultOk, "value", MTD_Object);
-                    code.checkcast(cdType);
-                    store(code, bound, nd.type());
-                    bind(ic.binder(), bound, nd.type());
+                    Var shadowed = env.get(ic.binder());
+                    bind(ic.binder(), a.slot(), ic.construct().type());
                     genExpr(ic.then(), expected);
+                    restore(ic.binder(), shadowed);
                     code.goto_(end);
 
-                    code.labelBinding(elseL);
+                    code.labelBinding(a.elseLabel());
                     genExpr(ic.els(), expected);
                     code.labelBinding(end);
                 }
@@ -751,6 +743,42 @@ final class BodyGen {
             emitFieldValues(flds, nd.inits(), nd.spreads());
             code.invokespecial(cdType, "<init>",
                     MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds)));
+        }
+
+        /** Where an attempt's failing side continues, and the slot holding the value its success side
+         * names. The binder is the caller's to scope, because how far the success branch reaches
+         * differs between value and tail position. */
+        private record Attempt(Label elseLabel, int slot) {}
+
+        /**
+         * Emits an attempted construction up to its branch: the same {@code __construct} a plain
+         * construction calls, with the {@code Result} branched on rather than handed to
+         * {@code ConstraintViolation.orThrow}. The success value is left in the returned slot and the
+         * Err side jumps to the returned label; the caller emits the two branches, which is where
+         * value position and tail position part company.
+         */
+        private Attempt emitAttempt(Core.IfConstructed ic) {
+            Core.NewData nd = ic.construct();
+            Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
+            ClassDesc cdType = cd(nd.typeName());
+            emitFieldValues(flds, nd.inits(), nd.spreads());
+            emitLine(ic);   // re-pin: a field init may have moved the line off the construction
+            code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
+
+            int rSlot = slot(Type.STRING);   // a reference slot, as the codecs take for the same Result
+            code.astore(rSlot);
+            code.aload(rSlot);
+            code.instanceOf(CD_ResultErr);
+            Label elseL = code.newLabel();
+            code.ifne(elseL);
+
+            int bound = slot(nd.type());
+            code.aload(rSlot);
+            code.checkcast(CD_ResultOk);
+            code.invokevirtual(CD_ResultOk, "value", MTD_Object);
+            code.checkcast(cdType);
+            store(code, bound, nd.type());
+            return new Attempt(elseL, bound);
         }
 
         /** Emits the checked-construction tail — {@code __construct(fields) -> Result}, {@code orThrow}
