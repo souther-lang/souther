@@ -208,10 +208,12 @@ public final class Elaborator {
                         when ctx.symbols().get(named.type()) instanceof Ast.UnitData ->
                         new Core.Var(v.name(), Type.ref(named.type()), v.pos());
                 // `None` where a `?` field is being given a value: the empty optional (spec 7.3).
-                // Only the field's own type puts it here — nothing else expects an optional, because
-                // nothing else can say `T?` (ADR-0011) — so this stays a construction rule.
+                // What puts it here is the field, which the context says (ADR-0011) — not the expected
+                // type, since a model may name `Option<T>` where it reads one and an expectation would
+                // then license making one anywhere the name is written (issue #202).
                 case ValueName.Builtin b when b.name().equals("None")
-                        && expected instanceof Type.OptionOf -> new Core.OptionNone(expected, v.pos());
+                        && ctx.makingAnOptional() && expected instanceof Type.OptionOf ->
+                        new Core.OptionNone(expected, v.pos());
                 default -> throw notAValue(v, env);
             };
             case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
@@ -797,11 +799,20 @@ public final class Elaborator {
         return out;
     }
 
-    /** Types a function value against inferred parameter types: a lambda binds its parameters and
+    /**
+     * Types a function value against inferred parameter types: a lambda binds its parameters and
      * yields {@code FnOf(params, resultOfBody)}; an {@code if} requires both branches to be the same
-     * function type (spec §blocks). */
+     * function type (spec §blocks).
+     *
+     * <p>A function's body is not the value a {@code ?} field is being given, whatever encloses the
+     * function, so it does not make an optional (ADR-0011): a step handed to {@code List.filterMap}
+     * answers an optional it read. A body is typed with no expected type, which already refuses
+     * {@code None} — this drops the permission as well, so the rule holds here on its own rather than
+     * resting on how an argument happens to be typed elsewhere.
+     */
     static Core elaborateFunctionValue(Ast.Expr value, List<Type> paramTypes, Map<String, Type> env,
-                                          CheckContext ctx) {
+                                          CheckContext outer) {
+        CheckContext ctx = outer.makingAnOptional(false);
         return switch (value) {
             case Ast.Block b -> {
                 if (b.params().size() != paramTypes.size()) {

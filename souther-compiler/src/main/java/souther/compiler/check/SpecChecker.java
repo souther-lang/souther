@@ -481,6 +481,32 @@ public final class SpecChecker {
         }
     }
 
+    /**
+     * A behavior does not answer an optional (ADR-0011). "Might not be there" as a business result is
+     * the model's own sum — {@code -> 会員 | 会員なし} — which reads closer to the specification than
+     * {@code Option<会員>}, and it is what a reader of the answer gets to match on. It also keeps the
+     * runtime's {@code Option} out of the Java-facing signature an exposed behavior generates
+     * (ADR-0008).
+     *
+     * <p>Asked of the resolved type, so it holds whichever way the type was written: naming it and
+     * marking it with {@code ?} reach the same type, and a rule attached to one spelling is a rule the
+     * other spelling walks past (issue #202). A data with an optional field is unaffected — that is a
+     * field, which is where an optional belongs.
+     */
+    static void rejectOptionalOutput(Ast.SpecBehavior spec, Symbols symbols) {
+        if (!(TypeOps.successType(spec.ret(), symbols) instanceof Type.OptionOf opt)) {
+            return;
+        }
+        String element = Type.show(opt.element());
+        throw CompileException.of(
+                Diagnostic.of(null, "check.output.optional").title("check.boundary.title")
+                        .at(spec.pos()).args(spec.name(), Type.show(opt))
+                        .hint("check.output.optional.hint", element).build(),
+                "behavior `" + spec.name() + "` outputs an optional (" + Type.show(opt)
+                        + "); an absence a behavior answers with is a case of the model's own sum —"
+                        + " write `-> " + element + " | <the absence>` and name what it is (ADR-0011)");
+    }
+
     /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object
      * and its keys are strings (ADR-0040). A map that stays inside the body is unrestricted — the
      * same rule, read where it applies. */

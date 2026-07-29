@@ -1,7 +1,10 @@
 # ADR-0011: Option, Never, and Unit are not surface-writable types
 
-Status: Accepted. Amended (decided 2026-07-28) — where an optional is made is now stated rather than
-left implicit, which is what issue #167 found: the compiler had implemented neither half of it.
+Status: Accepted for `Never` and `Unit`. Amended (2026-07-28) — where an optional is made is now stated
+rather than left implicit, which is what issue #167 found: the compiler had implemented neither half of
+it. **Revised for `Option` by ADR-0078 (2026-07-30):** `Option<T>` is writable where a model reads an
+optional; what is refused is making one and answering one out of a behavior. The title's claim about
+`Option` is what ADR-0078 revises — read that one for the rule in force.
 
 ## Context
 
