@@ -231,24 +231,69 @@ public final class ExampleVerifier {
     // --- one row ------------------------------------------------------------------------------
 
     /**
+     * One row's evaluation, and the state it builds up while it runs: its own diagnostics, and the
+     * helper it is currently inside.
+     *
+     * <p>A row that does not finish leaves its worker running — a pure computation reaches no interrupt
+     * point, so cancelling it is a request and not a stop. So nothing that worker can still write to is
+     * read by the rows after it: the evaluation has its own {@link ExampleVerifier}, so the state a
+     * fixture builds up (which values it is expanding, which helper it is in) belongs to this row, and
+     * the diagnostics it produces are its own list, handed to the caller only when it finishes. A late
+     * result is dropped rather than landing among another row's.
+     */
+    private static final class RowEvaluation implements java.util.concurrent.Callable<List<Diagnostic>> {
+
+        private final ExampleVerifier evaluation;
+        private final String target;
+        private final Ast.SpecBehavior spec;
+        private final Sig sig;
+        private final Set<TypeName> outCases;
+        private final Ast.ExampleRow row;
+
+        RowEvaluation(ExampleVerifier of, String target, Ast.SpecBehavior spec, Sig sig,
+                      Set<TypeName> outCases, Ast.ExampleRow row) {
+            this.evaluation = new ExampleVerifier(of.module, of.symbols, of.sigs, of.loader, of.values);
+            this.target = target;
+            this.spec = spec;
+            this.sig = sig;
+            this.outCases = outCases;
+            this.row = row;
+        }
+
+        @Override
+        public List<Diagnostic> call() {
+            List<Diagnostic> mine = new ArrayList<>();
+            evaluation.checkRowNow(target, spec, sig, outCases, row, mine);
+            return mine;
+        }
+
+        /** The helper this row is inside, for the budget to name when the row does not finish. */
+        String helper() {
+            return evaluation.applying.get();
+        }
+    }
+
+    /**
      * One row, evaluated within the budget: building its fixtures, running the helpers they apply,
      * applying the behavior and comparing the result are one evaluation, so a row cannot buy more time
-     * by applying more helpers (ADR-0077).
+     * by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
+     * {@link RowEvaluation} for why the row's own worker must not.
      */
     private void checkRow(String target, Ast.SpecBehavior spec, Sig sig,
                           Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
-        java.util.concurrent.FutureTask<Object> task = new java.util.concurrent.FutureTask<>(() -> {
-            checkRowNow(target, spec, sig, outCases, row, out);
-            return null;
-        });
+        RowEvaluation evaluation = new RowEvaluation(this, target, spec, sig, outCases, row);
+        java.util.concurrent.FutureTask<List<Diagnostic>> task =
+                new java.util.concurrent.FutureTask<>(evaluation);
         Thread worker = new Thread(task, "souther-example-eval");
         worker.setDaemon(true);
         worker.start();
         try {
-            task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+            out.addAll(task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
         } catch (java.util.concurrent.TimeoutException _) {
+            // Read what the row was doing before cancelling: the interrupt may let the worker leave the
+            // helper it is in, and then the reason would depend on which thread got there first.
+            String helper = evaluation.helper();
             task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
-            String helper = applying;
             out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
                     .at(row.pos()).args("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms"
                             + (helper == null ? "" : " while calling `" + helper + "`")).build());
@@ -263,9 +308,14 @@ public final class ExampleVerifier {
                 throw re;
             }
             throw new IllegalStateException(cause);
-        } catch (InterruptedException _) {
+        } catch (InterruptedException e) {
+            // Whoever is compiling asked to stop. Nothing is known about this row — no result was
+            // produced and no comparison was made — so this is not a failing example, and reporting it
+            // as one would put a diagnostic on a model that may be correct.
+            task.cancel(true);
             Thread.currentThread().interrupt();
-            out.add(mismatch(row, describeExpected(row.expected(), sig.out()), "aborted: interrupted"));
+            throw new java.util.concurrent.CancellationException(
+                    "interrupted while evaluating an example of `" + target + "`");
         }
     }
 
@@ -1082,9 +1132,11 @@ public final class ExampleVerifier {
         return neutral(run(c.fn(), args), expected, c.fn());
     }
 
-    /** The helper currently being run, for the row's budget to name when it does not finish. Read from
-     * the thread that is waiting on the row, so it is written where the row is evaluated. */
-    private volatile String applying;
+    /** The helper currently being run, for the row's budget to name when it does not finish. One row's,
+     * because an evaluation is one row's ({@link RowEvaluation}); read from the thread waiting on that
+     * row, which is why it is not a plain field. */
+    private final java.util.concurrent.atomic.AtomicReference<String> applying =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
     /**
      * Runs the helper's emitted method ({@code $Fns}) on the decoded arguments. A helper this module
@@ -1104,8 +1156,8 @@ public final class ExampleVerifier {
             throw new FixtureException("`" + name + "` cannot be called from an example fixture:"
                     + " it has no executable helper method");
         }
-        String outer = applying;
-        applying = name;
+        String outer = applying.get();
+        applying.set(name);
         try {
             return method.invoke(null, args);
         } catch (java.lang.reflect.InvocationTargetException ite) {
@@ -1118,7 +1170,7 @@ public final class ExampleVerifier {
         } catch (ReflectiveOperationException e) {
             throw new FixtureException("`" + name + "` could not be called: " + e.getMessage());
         } finally {
-            applying = outer;
+            applying.set(outer);
         }
     }
 

@@ -4,6 +4,7 @@ import souther.compiler.diag.CompileException;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -324,6 +325,39 @@ class ExampleCallsHelperTest {
                 example bill
                   | (standard) -> Receipt { total = Amount(110) }
                 """));
+    }
+
+    @Test
+    void aRowThatDoesNotFinishLeavesTheRowsAfterItAlone() {
+        // The worker evaluating a non-terminating row is not stopped by cancelling it — a pure
+        // computation reaches no interrupt point — so it must share nothing with the rows after it: the
+        // diagnostics stay in row order, and each row's own reason is its own.
+        CompileException e = err("""
+                module demo
+
+                data Amount = Int
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt
+                    constructs Receipt
+
+                let bill (a) = Receipt { total = a }
+
+                partial let spin (n: Int) : Int = if n < 0 then 0 else spin(n + 1)
+
+                let looping (n: Int) = Amount(spin(n))
+
+                let taxed (a: Amount) = Amount(a.value * 110 / 100)
+
+                example bill
+                  | (looping(1)) -> Receipt { total = Amount(0) }
+                  | (taxed(Amount(100))) -> Receipt { total = Amount(999) }
+                """);
+
+        assertEquals(2, e.diagnostics().size(), e.getMessage());
+        assertEquals("E1910", e.diagnostics().get(0).code(), "the row that did not finish comes first");
+        assertEquals("E1905", e.diagnostics().get(1).code(),
+                "the row after it is compared, and its failure is its own");
     }
 
     @Test
