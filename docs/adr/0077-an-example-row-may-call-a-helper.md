@@ -54,6 +54,8 @@ Issue #200 closes. An example of a behavior that applies a rule states the rule,
 
 A value whose body calls a helper becomes fixture-evaluable, so ADR-0072's exclusion of it — a value "whose body computes" — is withdrawn. It follows from the row's own rule rather than being a second decision: a value's body is read the way a row's text is, so the helpers a row reaches are the ones its own text names *and* the ones the values it names apply, as far as those values name each other.
 
+A row that states, on its expected side, the very rule the behavior under test applies asserts nothing: both sides compute the same thing, so the row holds whatever that rule does. Nothing refuses it. The useful applications are the input a rule produces, and an expected result stated in terms of a *different* rule than the one being tested — and telling those apart is reading the row, not checking it. This is accepted rather than overlooked: a check would have to decide that a behavior reaching a helper makes a row about it invalid, which is false whenever the behavior does something else with the result.
+
 A row may now fail because of a helper rather than because of the behavior. That is the point — the alternative was a row that could not fail at all when the rule changed — but it puts the helper in the row's failure, so the diagnostic names it.
 
 The generated `$Fns` may carry a method nothing in the shipped module calls, for a helper only an example applies. A compile-time-only class already ships (`$Ctfe`, ADR-0032), and the alternative is a second emission path for methods that are the same methods.
