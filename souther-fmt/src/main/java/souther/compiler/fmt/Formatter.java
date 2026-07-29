@@ -588,10 +588,25 @@ public final class Formatter {
 
     private Doc ifExpr(SyntaxNode n) {
         List<SyntaxNode> parts = exprChildren(n);
-        return group(concat(text("if "), expr(parts.get(0)), text(" then"),
+        return group(concat(text("if "), expr(parts.get(0)), attemptBinder(n), text(" then"),
                 nest(INDENT, concat(LINE, expr(parts.get(1)))),
                 LINE, text("else"),
                 nest(INDENT, concat(LINE, expr(parts.get(2))))));
+    }
+
+    /** The {@code as x} of an attempted construction, or nothing where none was written. It sits
+     * between the construction and the {@code then}/{@code else} that follows it. */
+    private Doc attemptBinder(SyntaxNode n) {
+        boolean afterAs = false;
+        for (SyntaxElement e : meaningful(n)) {
+            if (!(e instanceof SyntaxToken t)) continue;
+            if (t.kind() == SyntaxKind.AS_KW) {
+                afterAs = true;
+            } else if (afterAs && t.kind() == SyntaxKind.IDENT) {
+                return text(" as " + t.text());
+            }
+        }
+        return Doc.NIL;
     }
 
     private Doc matchExpr(SyntaxNode n) {
@@ -761,7 +776,8 @@ public final class Formatter {
 
     private Doc requireStmt(SyntaxNode n) {
         List<SyntaxNode> exprs = exprChildren(n);
-        return concat(text("require "), expr(exprs.get(0)), text(" else "), expr(exprs.get(1)));
+        return concat(text("require "), expr(exprs.get(0)), attemptBinder(n),
+                text(" else "), expr(exprs.get(1)));
     }
 
     // --- comments / blank lines ---

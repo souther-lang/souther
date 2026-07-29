@@ -103,6 +103,29 @@ class FormatterTest {
                 "formatted output does not re-parse for " + source + ":\n" + formatted);
     }
 
+    /** An attempted construction's `as x` is code, not whitespace: dropping it would silently turn a
+     * bound success branch into one with an unknown name, or a departure into a plain condition. */
+    @Test
+    void anAttemptedConstructionKeepsItsBinder() {
+        String src = """
+                module demo
+                data Code = String
+                    invariant String.matches("[A-Z]{2}", value)
+                data Kept = { code: Code }
+                data Skipped
+                behavior take : (raw: String) -> Kept | Skipped
+                    constructs Kept, Code, Skipped
+                let take (raw) = {
+                    require Code(raw) as c else Skipped
+                    Kept { code = c }
+                }
+                let accept (raw: String): List<Code> =
+                    if Code(raw) as c then [ c ] else []
+                """;
+        assertEquals(code(src), code(Formatter.format(src)),
+                "the `as` binder was lost:\n" + Formatter.format(src));
+    }
+
     /** A spread naming a field path keeps its path: `...c.address`, not `...c`. */
     @Test
     void aNestedSpreadPathSurvivesFormatting() {
