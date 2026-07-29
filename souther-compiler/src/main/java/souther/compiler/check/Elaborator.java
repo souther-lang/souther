@@ -61,6 +61,29 @@ public final class Elaborator {
      * empty collection has its accumulator pinned by context before the step is checked.
      */
     public static Core elaborate(Ast.Expr e, Map<String, Type> env, CheckContext ctx, Type expected) {
+        return equatableCollections(elaborating(e, env, ctx, expected));
+    }
+
+    /**
+     * Refuses a {@code Set} or a {@code Map} that would have to compare a function. Asked of what
+     * elaboration decided rather than of what was written, because such a collection need not be
+     * written to exist: {@code List.distinct} grows a seen-set of its elements, and only the
+     * elaborated type says what those are.
+     */
+    private static Core equatableCollections(Core c) {
+        Type bad = TypeOps.uncomparableCollection(c.type());
+        if (bad != null) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.set.function").title("check.boundary.title")
+                            .at(c.pos()).args(Type.show(bad)).build(),
+                    "this collection would have to compare " + Type.show(bad)
+                            + ", and a function has no value to compare");
+        }
+        return c;
+    }
+
+    private static Core elaborating(Ast.Expr e, Map<String, Type> env, CheckContext ctx,
+                                    Type expected) {
         return switch (e) {
             case Ast.IntLit x -> new Core.Int(x.value(), Type.INT, x.pos());
             case Ast.DecimalLit x -> new Core.Decimal(x.value(), Type.DECIMAL, x.pos());

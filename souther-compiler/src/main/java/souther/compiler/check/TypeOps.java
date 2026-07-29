@@ -975,6 +975,37 @@ public final class TypeOps {
         };
     }
 
+    /**
+     * The element of a {@code Set} or the key of a {@code Map} inside {@code t} that cannot be
+     * compared, or null when every one of them can. Walks the whole type, so a set nested in a list
+     * or a map's value is asked the same question as one written on its own.
+     */
+    public static Type uncomparableCollection(Type t) {
+        return switch (t) {
+            case Type.SetOf s -> !supportsEquality(s.element())
+                    ? s.element() : uncomparableCollection(s.element());
+            case Type.MapOf m -> !supportsEquality(m.key())
+                    ? m.key() : firstNonNull(uncomparableCollection(m.key()),
+                            uncomparableCollection(m.value()));
+            case Type.ListOf l -> uncomparableCollection(l.element());
+            case Type.OptionOf o -> uncomparableCollection(o.element());
+            case Type.TupleOf tu -> {
+                for (Type e : tu.elements()) {
+                    Type bad = uncomparableCollection(e);
+                    if (bad != null) {
+                        yield bad;
+                    }
+                }
+                yield null;
+            }
+            default -> null;
+        };
+    }
+
+    private static Type firstNonNull(Type a, Type b) {
+        return a != null ? a : b;
+    }
+
     /** Refuses a collection whose element or key a function makes uncomparable. */
     private static void requireEquality(Type t, Ast.TypeRef at, String key, String message) {
         if (!supportsEquality(t)) {

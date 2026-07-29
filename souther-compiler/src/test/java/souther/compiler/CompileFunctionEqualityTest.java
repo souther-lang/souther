@@ -68,4 +68,22 @@ class CompileFunctionEqualityTest {
                 """);
         assertEquals("check.map.key.function", d.messageKey());
     }
+
+    // The set `distinct` grows to remember what it has seen is never written down, so only the
+    // elaborated type says what its elements are.
+    @Test
+    void aCollectionTheCheckerInfersIsAskedTheSameQuestion() {
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data R = { n: Int }
+                behavior run : (n: Int) -> R
+                    constructs R
+                let run (n) = {
+                    let f: (Int) -> Bool = (x) -> x > n
+                    let fs: List<(Int) -> Bool> = [f, f]
+                    R { n = List.length(List.distinct(fs)) }
+                }
+                """);
+        assertEquals("check.set.function", d.messageKey());
+    }
 }
