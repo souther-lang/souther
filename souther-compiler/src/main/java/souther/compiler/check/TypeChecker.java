@@ -34,7 +34,7 @@ public final class TypeChecker {
      * <p>What the check found is not in here. A warning belongs to the question that raised it, which
      * is one body, and a caller that wants them reads them from there.
      */
-    public record Checked(Map<String, Core> behaviorBodies, Map<String, Core> recursiveHelpers) {}
+    public record Checked(Map<String, Core> behaviorBodies, Map<String, Core> emittedHelpers) {}
 
     /** The bodies elaborated so far, filled as the check walks them. */
     static final class Elaborated {
@@ -65,11 +65,11 @@ public final class TypeChecker {
      *                later phase reads — the {@code fns} map, the {@code exposed} set — so when one
      *                fails there is nothing left to check the rest against, and a body checked all
      *                the same reports being unable to see what was already reported missing.
-     * @param recursiveHelpers the recursive helper bodies it elaborated, which the backend emits as
+     * @param emittedHelpers the recursive helper bodies it elaborated, which the backend emits as
      *                         methods
      */
     public record Reported(List<CompileException> errors, List<Unanswerable> abandoned,
-                           boolean stopped, Map<String, Core> recursiveHelpers) {}
+                           boolean stopped, Map<String, Core> emittedHelpers) {}
 
     /**
      * Everything the check has to say about a module that is not one behavior's body: its

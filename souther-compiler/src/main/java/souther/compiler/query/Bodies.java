@@ -619,6 +619,28 @@ public final class Bodies {
     }
 
     /**
+     * The helpers a module emits because an {@code example} row applies them (ADR-0077): a row is a
+     * fixture, and a helper written in one is run rather than expanded into it, so it needs a method.
+     * Read off the rows, which is where the reason is.
+     */
+    public record ExampleHelpers(String name) implements Key<Set<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Set<String>> compute(Db db) {
+            Answer<Ast.Module> settled = db.ask(new Settled(name));
+            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
+            if (!settled.present() || !helpers.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(HelperInliner.exampleHelpers(settled.value(), helpers.value()));
+        }
+    }
+
+    /**
      * One settled fn, so what a body is expanded from is the fn itself and not the module it sits in.
      *
      * <p>A projection, not a settling of its own: the module is settled together — one helper's
@@ -687,7 +709,8 @@ public final class Bodies {
         public Answer<Lower.Lowered> compute(Db db) {
             Answer<Ast.Module> settled = db.ask(new Settled(name));
             Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(name));
-            if (!settled.present() || !recursive.present()) {
+            Answer<Set<String>> examples = db.ask(new ExampleHelpers(name));
+            if (!settled.present() || !recursive.present() || !examples.present()) {
                 return Answer.absent();
             }
             Set<String> behaviors = Names.behaviorNames(settled.value());
@@ -695,8 +718,10 @@ public final class Bodies {
             List<Ast.FnDef> fns = new ArrayList<>();
             for (Ast.FnDef fn : settled.value().fns()) {
                 // A non-recursive helper is fully inlined at its call sites and never emitted — it has
-                // no body of its own down here, so nothing asks for one.
-                if (!behaviors.contains(fn.name()) && !recursive.value().contains(fn.name())) {
+                // no body of its own down here, so nothing asks for one. Unless an example row applies
+                // it (ADR-0077): a row runs a helper rather than expanding it, so that one is emitted.
+                if (!behaviors.contains(fn.name()) && !recursive.value().contains(fn.name())
+                        && !examples.value().contains(fn.name())) {
                     continue;
                 }
                 // A name is one question, so a name written twice is asked once and answered by the
@@ -870,13 +895,13 @@ public final class Bodies {
     public record ModuleCheck(String name) implements Key<ModuleCheck.Of> {
 
         /**
-         * @param recursiveHelpers the bodies it elaborated, which the backend emits as methods
+         * @param emittedHelpers the bodies it elaborated, which the backend emits as methods
          * @param sound whether it found nothing wrong. An abandoned unit is wrong and says nothing
          *              of its own, so this is not the same as having reported nothing
          * @param stopped whether it stopped rather than finished, leaving the bodies nothing to be
          *                checked against
          */
-        public record Of(Map<String, Core> recursiveHelpers, boolean sound, boolean stopped) {}
+        public record Of(Map<String, Core> emittedHelpers, boolean sound, boolean stopped) {}
 
         @Override
         public String module() {
@@ -912,7 +937,7 @@ public final class Bodies {
             }
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty();
             return Answer.of(
-                    new Of(reported.recursiveHelpers(), sound, reported.stopped()),
+                    new Of(reported.emittedHelpers(), sound, reported.stopped()),
                     reports);
         }
     }
@@ -984,7 +1009,7 @@ public final class Bodies {
                     && module.value().sound()
                     && !TypeOps.holdsAnErroneousType(settled.value());
             return sound
-                    ? Answer.of(new TypeChecker.Checked(bodies, module.value().recursiveHelpers()))
+                    ? Answer.of(new TypeChecker.Checked(bodies, module.value().emittedHelpers()))
                     : Answer.absent();
         }
     }

@@ -345,6 +345,13 @@ public final class Backend {
         return out;
     }
 
+    /** The {@code $Fns} method a helper is emitted as, for a caller outside this package: an
+     * {@code example} that applies a helper looks the method up by name (ADR-0077), and the name is
+     * decided in one place. */
+    public static String helperMethod(String helper) {
+        return CodegenContext.helperMethod(helper);
+    }
+
     /**
      * Emits the module's recursive helpers as {@code static} methods on a package-private {@code $Fns}
      * class (spec 13.1). Each helper's declared parameter and return types are boxed as {@code Object}
@@ -360,7 +367,7 @@ public final class Backend {
                 int n = h.params().size();
                 ClassDesc[] params = new ClassDesc[n];
                 java.util.Arrays.fill(params, CD_Object);
-                cb.withMethodBody(CodegenContext.recursiveHelperMethod(h.name()),
+                cb.withMethodBody(CodegenContext.helperMethod(h.name()),
                         MethodTypeDesc.of(CD_Object, params), ClassFile.ACC_STATIC,
                         code -> {
                     BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
@@ -379,7 +386,7 @@ public final class Backend {
                     // a recursive helper declares its return type; thread it so a tail-position fold
                     // over an empty seed materialises its step at the declared type, not a bottom (#70)
                     Type helperReturn = h.declaredReturn() == null ? null : successType(h.declaredReturn());
-                    gen.emitTail(elaborated(checked.recursiveHelpers(), h.name()),
+                    gen.emitTail(elaborated(checked.emittedHelpers(), h.name()),
                             cdFns, Set.of(), Map.of(), helperReturn);
                 });
             }

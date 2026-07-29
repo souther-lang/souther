@@ -1908,7 +1908,7 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 
 A behavior with a `+let+` implementation is evaluated (<<fn>>). An injected behavior (no `+let+`, <<injected-behavior>>) or a `+>->+` composition cannot be — you fake an injected behavior, you do not example it (<<e1902>>). A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
-An input and an expected value are fixtures: literals, newtype applications, and record constructions. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
+An input and an expected value are fixtures: literals, newtype applications, record constructions, and helpers applied to those. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
 
 A row may also *name a value* (<<fn-declaration>>) rather than write the whole input again, and may spread one to vary a field.
 
@@ -1921,7 +1921,23 @@ example 変換する
     | "未確定なら変換できない" : (適格見込客 { ...適格見込客, 予算確定 = false }) -> 変換不可
 ----
 
-What a row may name is a property of the value graph, not of one definition's text: a value is *fixture-evaluable* when its body is a literal, a construction, a spread, `+Set.fromList+` / `+Map.fromList+` over one, or a reference to another fixture-evaluable value. So a chain of values holds even though each link names the next, and a value whose body computes — a call to a helper — is not one (<<e1903>>). A value that reaches itself has no fixture to be, and is reported as the cycle it is.
+What a row may name is a property of the value graph, not of one definition's text: a value is *fixture-evaluable* when its body is a literal, a construction, a spread, `+Set.fromList+` / `+Map.fromList+` over one, a helper applied to those, or a reference to another fixture-evaluable value. So a chain of values holds even though each link names the next. A value that reaches itself has no fixture to be, and is reported as the cycle it is.
+
+A row may also *apply a helper* — the rule the row is about — wherever a fixture value is written: an input, an expected result, a `+with+` value, a `+fake+` table's inputs and outputs, a record field, a list element, a map key or value, and an argument of another helper application. The helper is *run*, as the module that compiled it runs it, and the value it returns is read back into the form a fixture is written in, so what encloses the application is built the one way. Its arguments are fixtures like any others, so a fixture that breaks the argument type's invariant is <<e1903>>.
+
+[,text]
+----
+let 税込 (金額: 金額) = 金額(金額.value * 110 / 100)
+
+example 請求する
+    | "税込価格で請求する" : (税込(金額(100))) -> 請求 { 合計 = 金額(110) }
+----
+
+Without this a row restates what the rule computes — `+金額(110)+` where it means "the taxed price of 100" — and a change to the rule leaves a row that is wrong and still passes.
+
+Two functions cannot be applied in a fixture, because there is no method to run: a standard-library intrinsic implemented in Java, and a helper whose body produces a function. Both are <<e1903>>, saying that.
+
+Building the fixtures, running the helpers they apply, applying the behavior and comparing the result are one evaluation under one time budget, so a row cannot buy more time by applying more helpers.
 
 `+Set.fromList+` and `+Map.fromList+` are admitted because a value is ordinary code, where a list literal is a `+List+` whatever the position declares, while a row writes a set as its elements and a map as its entry pairs. They are the forms that notation stands for, so one record serves as both a value and a row.
 
@@ -2985,7 +3001,7 @@ error E1903:
 Input #1 of `提出する` could not be built: value must be >= 0
 ----
 
-Emitted when a row's input fixture cannot be decoded into the parameter type — a wrong arity, an unsupported form, or a value that breaks the type's invariant (<<example-evaluable>>).
+Emitted when a fixture a row writes cannot be built: an input against the parameter type, or the expected result against the output type — a wrong arity, an unsupported form, a value that breaks the type's invariant, or a function the example cannot run (<<example-evaluable>>). The expected result is built before the behavior is applied, so a row whose expectation cannot be built is reported here rather than as a mismatch (<<e1905>>) against a value nothing built.
 
 [#e1904]
 === Expected arm is not a result case
@@ -3044,7 +3060,7 @@ error E1908:
 hint: add `with 現在時刻 = ...` on the row, or a `fake 現在時刻` table
 ----
 
-Emitted when an example targets a behavior whose `+depends on+` dependency has neither a `+with+` on the row nor a `+fake+` declaration (<<example-fakes>>).
+Emitted when an example targets a behavior whose `+depends on+` dependency has neither a `+with+` on the row nor a `+fake+` declaration (<<example-fakes>>). A dependency that *is* faked but whose faked value cannot be built is reported under the same code and says that instead — the row supplies the fake, and what failed is the fixture.
 
 [#e1909]
 === A fake has no output for an input

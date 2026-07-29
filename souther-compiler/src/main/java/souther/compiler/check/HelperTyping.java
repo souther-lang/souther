@@ -67,16 +67,15 @@ public final class HelperTyping {
                 env.put(p.name(), TypeOps.resolveParamType(p.type(), symbols));
             }
             Elaborator.rejectBuiltinShadowing(h.body());
-            // A recursive helper survives to the backend as a method on `$Fns`, so it is typed on the
-            // body the Lower stage produced — the same tree the backend emits — and the Core this
-            // check produces is what the backend emits from (issue #81). A non-recursive helper is
-            // inlined at its call sites and never emitted on its own, so its standalone check expands
-            // its body here; a recursive helper hides its own parameters from helper resolution while
-            // that expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
+            // A helper the lowered module carries is one the backend emits — a recursive one, and one
+            // an example row applies (ADR-0077) — so it is typed on the tree the backend emits from,
+            // and the Core this check produces is what is emitted (issue #81). One that is only
+            // inlined at its call sites has no body down there, so its standalone check expands its
+            // body here; a recursive helper hides its own parameters from helper resolution while that
+            // expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
             // Expanded once: the body an un-annotated parameter takes its type from is the same tree.
-            Ast.Expr body = recursive
-                    ? loweredBodies.get(h.name())
-                    : inliner.inline(h.body());
+            Ast.Expr emitted = loweredBodies.get(h.name());
+            Ast.Expr body = emitted != null ? emitted : inliner.inline(h.body());
             if (recursive && body == null) {
                 // Lower keeps every recursive helper as a fn of the lowered module, and the backend
                 // emits from that same list, so a recursive helper without a lowered body would leave
@@ -112,7 +111,7 @@ public final class HelperTyping {
             Core elaboratedBody = Elaborator.elaborate(body, tenv, new CheckContext(symbols, null, reqSigs), declaredReturn);
             Type bodyType = elaboratedBody.type();
             elaborated.definitionTypes.put(h.name(), bodyType);
-            if (recursive) {
+            if (emitted != null) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
             }
             // a declared return type — required on a recursive helper, allowed on any helper — must

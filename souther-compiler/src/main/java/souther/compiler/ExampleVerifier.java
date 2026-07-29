@@ -7,6 +7,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
+import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Messages;
@@ -42,7 +43,13 @@ import java.util.Set;
  * {@code with dep = value} on the row (a constant/value dependency) or a {@code fake dep | table}
  * declaration (an input-keyed function dependency). Each fake is a {@code Behavior} proxy passed to
  * the generated behavior's injecting constructor — it produces no run-time class. Inputs, expected
- * values, and fake entries are fixtures — literals, newtype constructions, and record constructions.
+ * values, and fake entries are fixtures — literals, newtype constructions, record constructions, and
+ * helpers applied to those (ADR-0077).
+ *
+ * <p>Three things a row needs are not here, because they are not about what an example means:
+ * {@link NeutralForm} says what a value looks like in the form a decoder reads, {@link HelperInvoker}
+ * runs a helper as the method its module emits, and {@link RowEvaluation} owns the state one row builds
+ * up while it is evaluated.
  */
 public final class ExampleVerifier {
 
@@ -142,6 +149,10 @@ public final class ExampleVerifier {
     private final MemoryClassLoader loader;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Ast.FnDef> values;
+    /** Runs a helper a fixture applies. One evaluation's, because what it is running is one row's. */
+    private final HelperInvoker helpers;
+    /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
+    private final NeutralForm neutral;
 
     private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                             MemoryClassLoader loader, Map<String, Ast.FnDef> values) {
@@ -150,6 +161,8 @@ public final class ExampleVerifier {
         this.sigs = sigs;
         this.loader = loader;
         this.values = values;
+        this.helpers = new HelperInvoker(module.name(), loader);
+        this.neutral = new NeutralForm(symbols);
     }
 
     // --- one example (a target and its rows) --------------------------------------------------
@@ -229,8 +242,97 @@ public final class ExampleVerifier {
 
     // --- one row ------------------------------------------------------------------------------
 
+    /**
+     * One row's evaluation, and the state it builds up while it runs: its own diagnostics, and the
+     * helper it is currently inside.
+     *
+     * <p>A row that does not finish leaves its worker running — a pure computation reaches no interrupt
+     * point, so cancelling it is a request and not a stop. So nothing that worker can still write to is
+     * read by the rows after it: the evaluation has its own {@link ExampleVerifier}, so the state a
+     * fixture builds up (which values it is expanding, which helper it is in) belongs to this row, and
+     * the diagnostics it produces are its own list, handed to the caller only when it finishes. A late
+     * result is dropped rather than landing among another row's.
+     */
+    private static final class RowEvaluation implements java.util.concurrent.Callable<List<Diagnostic>> {
+
+        private final ExampleVerifier evaluation;
+        private final String target;
+        private final Ast.SpecBehavior spec;
+        private final Sig sig;
+        private final Set<TypeName> outCases;
+        private final Ast.ExampleRow row;
+
+        RowEvaluation(ExampleVerifier of, String target, Ast.SpecBehavior spec, Sig sig,
+                      Set<TypeName> outCases, Ast.ExampleRow row) {
+            this.evaluation = new ExampleVerifier(of.module, of.symbols, of.sigs, of.loader, of.values);
+            this.target = target;
+            this.spec = spec;
+            this.sig = sig;
+            this.outCases = outCases;
+            this.row = row;
+        }
+
+        @Override
+        public List<Diagnostic> call() {
+            List<Diagnostic> mine = new ArrayList<>();
+            evaluation.checkRowNow(target, spec, sig, outCases, row, mine);
+            return mine;
+        }
+
+        /** The helper this row is inside, for the budget to name when the row does not finish. */
+        String helper() {
+            return evaluation.helpers.running();
+        }
+    }
+
+    /**
+     * One row, evaluated within the budget: building its fixtures, running the helpers they apply,
+     * applying the behavior and comparing the result are one evaluation, so a row cannot buy more time
+     * by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
+     * {@link RowEvaluation} for why the row's own worker must not.
+     */
     private void checkRow(String target, Ast.SpecBehavior spec, Sig sig,
                           Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
+        RowEvaluation evaluation = new RowEvaluation(this, target, spec, sig, outCases, row);
+        java.util.concurrent.FutureTask<List<Diagnostic>> task =
+                new java.util.concurrent.FutureTask<>(evaluation);
+        Thread worker = new Thread(task, "souther-example-eval");
+        worker.setDaemon(true);
+        worker.start();
+        try {
+            out.addAll(task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
+        } catch (java.util.concurrent.TimeoutException _) {
+            // Read what the row was doing before cancelling: the interrupt may let the worker leave the
+            // helper it is in, and then the reason would depend on which thread got there first.
+            String helper = evaluation.helper();
+            task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
+            out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
+                    .at(row.pos()).args("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms"
+                            + (helper == null ? "" : " while calling `" + helper + "`")).build());
+        } catch (java.util.concurrent.ExecutionException ee) {
+            Throwable cause = ee.getCause();
+            if (cause instanceof NonTerminationException nt) {
+                out.add(Diagnostic.of("E1910", "check.example.nonterminating")
+                        .title("check.example.title").at(row.pos()).args(nt.getMessage()).build());
+                return;
+            }
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IllegalStateException(cause);
+        } catch (InterruptedException e) {
+            // Whoever is compiling asked to stop. Nothing is known about this row — no result was
+            // produced and no comparison was made — so this is not a failing example, and reporting it
+            // as one would put a diagnostic on a model that may be correct.
+            task.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new java.util.concurrent.CancellationException(
+                    "interrupted while evaluating an example of `" + target + "`");
+        }
+    }
+
+    private void checkRowNow(String target, Ast.SpecBehavior spec, Sig sig,
+                             Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of("E1903", "check.example.arity").title("check.example.title")
@@ -263,6 +365,18 @@ public final class ExampleVerifier {
                     .hint("check.example.arm.hint", String.join(", ", names)).build());
             return;
         }
+        // Build the expected value before running: a row whose expectation cannot be built states no
+        // expectation, and comparing a result against a value nothing built reported a mismatch
+        // against an empty expected value — a wrong answer for a row that was right.
+        Object expectedValue;
+        try {
+            expectedValue = row.expected() instanceof Ast.Var ? null
+                    : builtExpected(row.expected(), sig.out());
+        } catch (FixtureException fe) {
+            out.add(Diagnostic.of("E1903", "check.example.expected").title("check.example.title")
+                    .at(row.pos()).args(target, fe.getMessage()).build());
+            return;
+        }
         Object[] fakes = resolveFakes(spec, row, out);
         if (fakes == null) {
             return;   // a fake was missing/invalid; the diagnostic is already reported
@@ -282,7 +396,7 @@ public final class ExampleVerifier {
                     .at(row.pos()).args(nt.getMessage()).build());
             return;
         }
-        if (!matches(row.expected(), result, sig.out())) {
+        if (!matches(row.expected(), result, expectedValue)) {
             out.add(mismatch(row, describeExpected(row.expected(), sig.out()), describeActual(result)));
         }
     }
@@ -320,8 +434,10 @@ public final class ExampleVerifier {
                             raw(w.value(), fixtureType(w.value(), outType)));
                     return fakeInstance(dep, a -> value, out);   // constant: ignores its inputs
                 } catch (FixtureException fe) {
-                    out.add(fakeMissingDiag(target, depName, row,
-                            "the `with " + depName + "` value could not be built: " + fe.getMessage()));
+                    // The row does supply a fake. What failed is building its value, which is a
+                    // different problem from a dependency nothing stands in for.
+                    out.add(Diagnostic.of("E1908", "check.fake.value").title("check.example.title")
+                            .at(w.value().pos()).args(depName, fe.getMessage()).build());
                     return null;
                 }
             }
@@ -539,33 +655,41 @@ public final class ExampleVerifier {
     // --- comparison ---------------------------------------------------------------------------
 
     /** Whether {@code result} matches the row's expected: a bare {@link Ast.Var} asserts only the
-     * arm (the concrete case class); anything else asserts the whole value by structural equality. */
-    private boolean matches(Ast.Expr expected, Object result, Type outType) {
+     * arm (the concrete case class); anything else asserts the whole value, {@code expectedValue}
+     * (built before the behavior ran), by structural equality. */
+    private boolean matches(Ast.Expr expected, Object result, Object expectedValue) {
         if (expected instanceof Ast.Var v) {
-            return simpleName(result).equals(v.name());
+            return NeutralForm.simpleName(result).equals(v.name());
         }
-        Object expectedValue = buildExpected(expected, outType);
         return expectedValue != null && expectedValue.equals(result);
     }
 
     /** The expected value built the same way as an input, so structural equality compares like with
-     * like: a construction/newtype decodes through its type's decoder; a literal is its raw value. */
-    private Object buildExpected(Ast.Expr expected, Type outType) {
+     * like: a construction/newtype decodes through its type's decoder; a literal is its raw value.
+     * Throws {@link FixtureException} when the row's expectation cannot be built — the caller reports
+     * that as the fixture error it is, rather than comparing against nothing. */
+    private Object builtExpected(Ast.Expr expected, Type outType) {
+        if (expected instanceof Ast.NewData nd) {
+            return decode(Type.ref(nd.typeName().denotes()),
+                    raw(expected, Type.ref(nd.typeName().denotes())));
+        }
+        if (expected instanceof Ast.Call c && neutral.isNewtype(c.fn())) {
+            return decode(Type.ref(symbols.resolve(c.fn())), raw(expected));
+        }
+        // A collection output has no case name to decode against, so the behavior's declared
+        // output type is what says which of `List`/`Set`/`Map` the written list means and what
+        // its elements are — the same decision a collection argument's declared type makes.
+        if (isCollection(outType)) {
+            return decode(outType, raw(expected, outType));
+        }
+        return raw(expected);   // a literal expected value
+    }
+
+    /** As above, for the rendering of a failure, where a value that cannot be built is shown as
+     * written rather than reported a second time. */
+    private Object builtExpectedOrNull(Ast.Expr expected, Type outType) {
         try {
-            if (expected instanceof Ast.NewData nd) {
-                return decode(Type.ref(nd.typeName().denotes()),
-                        raw(expected, Type.ref(nd.typeName().denotes())));
-            }
-            if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
-                return decode(Type.ref(symbols.resolve(c.fn())), raw(expected));
-            }
-            // A collection output has no case name to decode against, so the behavior's declared
-            // output type is what says which of `List`/`Set`/`Map` the written list means and what
-            // its elements are — the same decision a collection argument's declared type makes.
-            if (isCollection(outType)) {
-                return decode(outType, raw(expected, outType));
-            }
-            return raw(expected);   // a literal expected value
+            return builtExpected(expected, outType);
         } catch (FixtureException _) {
             return null;
         }
@@ -583,7 +707,7 @@ public final class ExampleVerifier {
         if (expected instanceof Ast.NewData nd) {
             return nd.typeName().written();
         }
-        if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
+        if (expected instanceof Ast.Call c && neutral.isNewtype(c.fn())) {
             return c.fn();
         }
         return null;   // a literal expected (a primitive output)
@@ -608,13 +732,13 @@ public final class ExampleVerifier {
             return arm;   // a bare arm asserts only the case, so there is no value to show
         }
         if (isCollection(outType)) {
-            Object built = buildExpected(expected, outType);
+            Object built = builtExpectedOrNull(expected, outType);
             return built == null ? showValue(rawOrNull(expected)) : showAny(built);
         }
         // Render it through the same encoder the actual goes through, so the two sides are written
         // in one notation and can be read against each other; the fixture's own neutral form (which
         // still holds e.g. a LocalDate where the encoder writes its ISO text) is the fallback.
-        Object built = buildExpected(expected, outType);
+        Object built = builtExpectedOrNull(expected, outType);
         Object neutral = built == null || arm == null ? rawOrNull(expected) : encodedOrNull(built, arm);
         if (neutral == null) {
             neutral = rawOrNull(expected);
@@ -629,7 +753,7 @@ public final class ExampleVerifier {
      * writes, so the two sides of a mismatch can be read against each other. A value with no encoder
      * (or one that fails to encode) falls back to its case name alone. */
     private String describeActual(Object result) {
-        String name = simpleName(result);
+        String name = NeutralForm.simpleName(result);
         if (name.isEmpty()) {
             return String.valueOf(result);
         }
@@ -640,7 +764,7 @@ public final class ExampleVerifier {
         if (encoded != null) {
             return show(name, encoded);
         }
-        return isScalar(result) ? showValue(result) : name;
+        return NeutralForm.isScalar(result) ? showValue(result) : name;
     }
 
     /** A live value in the notation a fixture is written in, at any depth: a collection element by
@@ -648,7 +772,7 @@ public final class ExampleVerifier {
      * mismatch go through this, so they can be read against each other — and neither shows the JDK
      * class that happened to carry the collection. */
     private String showAny(Object v) {
-        if (v == null || isScalar(v)) {
+        if (v == null || NeutralForm.isScalar(v)) {
             return showValue(v);
         }
         if (v instanceof Map<?, ?> m) {
@@ -665,16 +789,9 @@ public final class ExampleVerifier {
             }
             return elements.isEmpty() ? "[]" : "[ " + String.join(", ", elements) + " ]";
         }
-        String name = simpleName(v);
+        String name = NeutralForm.simpleName(v);
         Object encoded = encodedOrNull(v, name);
         return encoded != null ? show(name, encoded) : name;
-    }
-
-    /** Whether a value is a neutral scalar, so it can be shown as written rather than by class name. */
-    private static boolean isScalar(Object v) {
-        return v instanceof String || v instanceof Long || v instanceof Boolean
-                || v instanceof BigDecimal || v instanceof java.time.LocalDate
-                || v instanceof java.time.LocalDateTime;
     }
 
     /**
@@ -762,15 +879,6 @@ public final class ExampleVerifier {
         }
     }
 
-    private static String simpleName(Object o) {
-        if (o == null) {
-            return "null";
-        }
-        String n = o.getClass().getName();
-        int dot = n.lastIndexOf('.');
-        return dot < 0 ? n : n.substring(dot + 1);
-    }
-
     private Set<TypeName> outCases(Type out) {
         if (out instanceof Type.Union || out instanceof Type.Ref) {
             return TypeOps.leafCases(out, symbols);
@@ -805,7 +913,7 @@ public final class ExampleVerifier {
             case Ast.Var v -> unitInput(v.name(), expected);
             case Ast.NewData nd -> record(nd);
             case Ast.ListLit l -> {
-                Type element = elementOf(expected);
+                Type element = NeutralForm.elementOf(expected);
                 List<Object> out = new ArrayList<>();
                 for (Ast.Expr el : l.elements()) {
                     out.add(raw(el, element));
@@ -815,7 +923,7 @@ public final class ExampleVerifier {
             // a `(key, value)` pair: only a `Map` field's entries are written this way, and `shaped`
             // collects them into the map the decoder reads (a tuple is not a data field type itself).
             case Ast.Tuple t -> {
-                List<Type> parts = entryTypes(expected, t.elements().size());
+                List<Type> parts = NeutralForm.entryTypes(expected, t.elements().size());
                 List<Object> out = new ArrayList<>();
                 for (int i = 0; i < t.elements().size(); i++) {
                     out.add(raw(t.elements().get(i), parts == null ? null : parts.get(i)));
@@ -824,34 +932,6 @@ public final class ExampleVerifier {
             }
             default -> throw new FixtureException("an example fixture must be a literal or a construction");
         };
-    }
-
-    /** What a written list holds, when the position says: a list's or a set's element, or a map's
-     * entry pair. An optional is opened first — writing a value for a `T?` field writes a `T`. */
-    private static Type elementOf(Type expected) {
-        return switch (open(expected)) {
-            case Type.ListOf l -> l.element();
-            case Type.SetOf s -> s.element();
-            case Type.MapOf m -> Type.tuple(List.of(m.key(), m.value()));
-            case null, default -> null;
-        };
-    }
-
-    /** The types of a written tuple's parts, or null when the position does not say. A map's entry is
-     * the pair that carries its key type, which is where an enumeration key is written. */
-    private static List<Type> entryTypes(Type expected, int arity) {
-        Type opened = open(expected);
-        if (opened instanceof Type.MapOf m && arity == 2) {
-            return List.of(m.key(), m.value());
-        }
-        if (opened instanceof Type.TupleOf t && t.elements().size() == arity) {
-            return t.elements();
-        }
-        return null;
-    }
-
-    private static Type open(Type t) {
-        return t instanceof Type.OptionOf o ? open(o.element()) : t;
     }
 
     /** A bare name in a fixture is only meaningful as a unit case (no fields) or the built-in {@code
@@ -869,11 +949,11 @@ public final class ExampleVerifier {
             // be a case of an enumeration and of a sum that has a field-bearing case, and those travel
             // differently — so the position's own type decides, and the case's sums answer only where
             // the position does not say.
-            if (caseName != null && readsABareName(expected, caseName)) {
+            if (caseName != null && neutral.readsABareName(expected, caseName)) {
                 return caseName.name();
             }
             Map<String, Object> unit = new LinkedHashMap<>();
-            tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
+            neutral.tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
             return unit;
         }
         Ast.Expr value = valueBody(name);
@@ -920,35 +1000,6 @@ public final class ExampleVerifier {
         }
     }
 
-    /** Whether the position this case is written in reads a bare name: it is typed as an enumeration,
-     * or it is untyped here and every sum that lists the case is one. */
-    private boolean readsABareName(Type expected, TypeName caseName) {
-        Type position = open(expected);
-        return position != null
-                ? TypeOps.isUnitOnlySum(position, symbols)
-                : onlyEnumerationsList(caseName);
-    }
-
-    /** Whether every sum that lists this case is an enumeration, so its neutral form is its name
-     * wherever it is written. Asked only where the position has no declared type to read it as. */
-    private boolean onlyEnumerationsList(TypeName caseName) {
-        boolean listed = false;
-        for (Ast.Def def : symbols.visible()) {
-            if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
-                continue;
-            }
-            for (Ast.Variant variant : sum.decoder().get().variants()) {
-                if (caseName.equals(variant.caseType().denotes())) {
-                    if (!TypeOps.isUnitOnlySum(sum, symbols)) {
-                        return false;
-                    }
-                    listed = true;
-                }
-            }
-        }
-        return listed;
-    }
-
     /**
      * {@code Set.fromList([…])} and {@code Map.fromList([…])} are the forms a fixture's own notation
      * stands for — a set is written as its elements and a map as its entry pairs — so the neutral
@@ -963,7 +1014,61 @@ public final class ExampleVerifier {
             }
             return raw(c.args().get(0), expected);
         }
+        if (!neutral.isNewtype(c.fn()) && helperDef(c.fn()) instanceof Ast.FnDef helper) {
+            return applied(c, helper, expected);
+        }
         return newtypeInner(c);
+    }
+
+    /**
+     * The helper a fixture may apply under {@code name}, or null where the name is not one: a
+     * definition written with a parameter list, read from the table that keys every helper this module
+     * reaches — its own, the ones its imports publish, and the prelude's — as the emitted method is
+     * keyed. The types come from there rather than from the written module because that table is
+     * settled (ADR-0066), and an argument is decoded against the parameter's settled type.
+     */
+    private Ast.FnDef helperDef(String name) {
+        Ast.FnDef helper = values.get(name);
+        return helper != null && !helper.params().isEmpty() ? helper : null;
+    }
+
+    /** Whether {@code name} is a function this example cannot run: nothing emitted a method for it.
+     * A helper that has one is applied; the ones that never do are the standard library's intrinsics
+     * and a helper whose body produces a function, and both read as this. */
+    private boolean noMethod(String name) {
+        if (Prelude.hasQualified(name)) {
+            return true;   // a standard-library function: an intrinsic, or one nothing emitted here
+        }
+        for (Ast.FnDef fn : module.fns()) {
+            if (fn.name().equals(name) && !fn.params().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A helper applied in a fixture (ADR-0077): its arguments are built as fixtures against its
+     * parameter types, it is run as the method its module emits, and the value it returns is
+     * re-materialised into the neutral form a fixture is written in — so what encloses the call goes on
+     * being built the one way, whether the call stands at the top of a position or inside a record.
+     */
+    private Object applied(Ast.Call c, Ast.FnDef helper, Type expected) {
+        if (c.args().size() != helper.params().size()) {
+            throw new FixtureException("`" + c.fn() + "` takes " + helper.params().size()
+                    + " argument(s) but is called with " + c.args().size());
+        }
+        Object[] args = new Object[helper.params().size()];
+        for (int i = 0; i < args.length; i++) {
+            Ast.FnParam p = helper.params().get(i);
+            if (p.type() == null) {
+                throw new FixtureException("`" + c.fn() + "` parameter `" + p.name()
+                        + "` has no type a fixture can be built against");
+            }
+            Type paramType = TypeOps.resolveParamType(p.type(), symbols);
+            args[i] = decode(paramType, raw(c.args().get(i), paramType));
+        }
+        return neutral.of(helpers.invoke(c.fn(), args), expected, c.fn());
     }
 
     private Object newtypeInner(Ast.Call c) {
@@ -975,7 +1080,14 @@ public final class ExampleVerifier {
             }
             return CallElaborator.parseTemporal(c.fn(), lit.value(), c.pos());
         }
-        if (!isNewtype(c.fn())) {
+        if (!neutral.isNewtype(c.fn())) {
+            if (noMethod(c.fn())) {
+                // A function this module cannot run: an intrinsic implemented in Java, or a helper
+                // whose body produces a function. Said as that, so the rule that a fixture may apply a
+                // helper does not appear to have exceptions nothing explains (ADR-0077).
+                throw new FixtureException("`" + c.fn() + "` cannot be called from an example fixture:"
+                        + " it has no executable helper method");
+            }
             throw new FixtureException("`" + c.fn() + "` is not a newtype; a fixture cannot call it");
         }
         if (c.args().size() != 1) {
@@ -983,7 +1095,7 @@ public final class ExampleVerifier {
         }
         // a newtype over a temporal (`data 貸出日 = Date`) wraps the parsed value, so its written
         // string is read here as it would be for a bare `Date("...")`
-        String base = newtypeBase(c.fn());
+        String base = neutral.newtypeBase(c.fn());
         if (("Date".equals(base) || "DateTime".equals(base))
                 && c.args().get(0) instanceof Ast.StringLit lit) {
             return CallElaborator.parseTemporal(base, lit.value(), c.pos());
@@ -991,26 +1103,9 @@ public final class ExampleVerifier {
         // the argument is shaped against what the newtype wraps, the same way a record fixture
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe
-        return adjacentlyTagged(c.fn(),
-                shaped(raw(c.args().get(0), shapeOf(newtypeBaseType(c.fn()))),
-                        shapeOf(newtypeBaseType(c.fn()))));
-    }
-
-    /**
-     * A newtype case of a sum decodes from the adjacent form its sum's decoder reads — the inner value
-     * under {@code value}, next to the discriminator (spec 10.3) — while a fixture names the case the
-     * way the domain constructs it, {@code アクティベート済み(メールアドレス("a@example.com"))}. Wrap it
-     * here, as {@link #record} does for a product case and {@link #unitInput} for a unit one; a newtype
-     * that is nobody's case is its bare inner value, unchanged.
-     */
-    private Object adjacentlyTagged(String caseName, Object inner) {
-        Map<String, Object> tagged = new LinkedHashMap<>();
-        tagged(caseName, tagged);
-        if (tagged.isEmpty()) {
-            return inner;   // not a case of any sum: the newtype's own form is its inner value
-        }
-        tagged.put("value", inner);
-        return tagged;
+        return neutral.adjacentlyTagged(c.fn(),
+                neutral.shaped(raw(c.args().get(0), neutral.shapeOf(neutral.newtypeBaseType(c.fn()))),
+                        neutral.shapeOf(neutral.newtypeBaseType(c.fn()))));
     }
 
     private Object record(Ast.NewData nd) {
@@ -1018,13 +1113,13 @@ public final class ExampleVerifier {
         // a value's body reaches here already written the second way. Either spelling is the newtype's
         // own neutral form — its inner value — not a field map.
         TypeName built = nd.typeName().denotes();
-        if (isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
+        if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return adjacentlyTagged(nd.typeName().written(),
-                    shaped(raw(nd.inits().get(0).value(), shapeOf(newtypeBaseType(built))),
-                            shapeOf(newtypeBaseType(built))));
+            return neutral.adjacentlyTagged(nd.typeName().written(),
+                    neutral.shaped(raw(nd.inits().get(0).value(), neutral.shapeOf(neutral.newtypeBaseType(built))),
+                            neutral.shapeOf(neutral.newtypeBaseType(built))));
         }
-        Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName().denotes());
+        Map<String, Ast.TypeRef> declared = neutral.fieldTypes(nd.typeName().denotes());
         Map<String, Object> map = new LinkedHashMap<>();
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought. Only a value can be spread here: a row has no bindings to read from.
@@ -1045,8 +1140,8 @@ public final class ExampleVerifier {
             }
         }
         for (Ast.FieldInit fi : nd.inits()) {
-            Object v = shaped(raw(fi.value(), shapeOf(declared.get(fi.name()))),
-                    shapeOf(declared.get(fi.name())));
+            Object v = neutral.shaped(raw(fi.value(), neutral.shapeOf(declared.get(fi.name()))),
+                    neutral.shapeOf(declared.get(fi.name())));
             // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads
             // it as absent (spec 8, absent -> None), the same neutral form as omitting the field.
             if (v == null) {
@@ -1054,140 +1149,8 @@ public final class ExampleVerifier {
             }
             map.put(fi.name(), v);
         }
-        tagged(nd.typeName().denotes(), map);
+        neutral.tagged(nd.typeName().denotes(), map);
         return map;
-    }
-
-    /**
-     * The declared type of a field, used only to shape the written value (a map's entry pairs, a
-     * set's list). The {@code TypeRef} comes from the module that declares the data, and it says what
-     * it denotes — resolved where it was written, so naming a type this module never imported is not
-     * a question asked here at all (issue #110 was that question being asked, and answered with the
-     * declaring file's position).
-     */
-    private Type shapeOf(Ast.TypeRef declaredType) {
-        return declaredType == null ? null : declaredType.denotes();
-    }
-
-    /**
-     * Writes the discriminator a sum's decoder reads, when the constructed data is a case of one.
-     * A fixture names the case it means — `予算枠 = 未定予算`, or a whole `プロジェクト依頼 { … }` where
-     * the parameter is the sum `依頼` — the same way the domain writes a construction, while the
-     * decoder that reads it wants a tag on a key. Where the case is read as itself rather than
-     * through its sum, the tag is a field the decoder does not look at.
-     *
-     * <p>A field the fixture wrote itself is never replaced. A case whose own field is named like its
-     * sum's discriminator is already ambiguous at the boundary — the case encoder and the sum encoder
-     * both claim that key — and overwriting here would hide that behind an example that passes while
-     * decoding something the author did not write. Leaving the written value in place makes the row
-     * fail on the tag it cannot match, which is the honest outcome.
-     */
-    private void tagged(String written, Map<String, Object> map) {
-        TypeName caseName = symbols.resolve(written);
-        if (caseName != null) {
-            tagged(caseName, map);
-        }
-    }
-
-    private void tagged(TypeName caseName, Map<String, Object> map) {
-        for (Ast.Def def : symbols.visible()) {
-            if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
-                continue;
-            }
-            for (Ast.Variant variant : sum.decoder().get().variants()) {
-                if (caseName.equals(variant.caseType().denotes())) {
-                    map.putIfAbsent(sum.decoder().get().key(), variant.tag());
-                    return;
-                }
-            }
-        }
-    }
-
-    /** A data's fields by name, following the `...includes` it composes in (spec §data). */
-    private Map<String, Ast.TypeRef> fieldTypes(TypeName typeName) {
-        Map<String, Ast.TypeRef> out = new LinkedHashMap<>();
-        if (symbols.get(typeName) instanceof Ast.Data d) {
-            for (Ast.Name inc : d.includes()) {
-                out.putAll(fieldTypes(inc.denotes()));
-            }
-            for (Ast.Field f : d.fields()) {
-                // an example builds its input through a decoder, so a field with no external
-                // representation is not one it can state; the data declaration refused it already
-                if (f.type() instanceof Ast.TypeRef ref) {
-                    out.put(f.name(), ref);
-                }
-            }
-        }
-        return out;
-    }
-
-    /** Gives a fixture value the neutral shape its declared type decodes from. A {@code Map} is
-     * written as a list of {@code (key, value)} pairs — Elm's {@code Dict.fromList}, and the same
-     * list literal a {@code Set} takes — while the decoder wants a map, so the pairs are collected
-     * here. Everything else passes through; a {@code List} written as a list stays one, since the
-     * declared type, not the literal, decides. Read on the checked type, so it applies wherever a
-     * value is decoded: a field of a record fixture, and a behavior's argument or output. */
-    private Object shaped(Object v, Type type) {
-        if (type == null || v == null) {
-            return v;
-        }
-        if (type instanceof Type.MapOf map && v instanceof List<?> entries) {
-            Map<Object, Object> m = new LinkedHashMap<>();
-            for (Object entry : entries) {
-                if (!(entry instanceof List<?> pair) || pair.size() != 2) {
-                    throw new FixtureException("a `Map` fixture is a list of (key, value) pairs,"
-                            + " e.g. [ (\"apple\", 3) ]");
-                }
-                m.put(pair.get(0), shaped(pair.get(1), map.value()));
-            }
-            return m;
-        }
-        if (v instanceof List<?> elements) {
-            Type element = switch (type) {
-                case Type.ListOf l -> l.element();
-                case Type.SetOf s -> s.element();
-                default -> null;
-            };
-            if (element != null) {
-                List<Object> out = new ArrayList<>(elements.size());
-                for (Object e : elements) {
-                    out.add(shaped(e, element));
-                }
-                return out;
-            }
-        }
-        return v;
-    }
-
-    private boolean isNewtype(String name) {
-        return symbols.declaration(name) instanceof Ast.Data d && d.newtype();
-    }
-
-    /** As above, for a name that has already been resolved — an imported value's body names its own
-     * module's types, which the module reading the row need not have imported. */
-    private boolean isNewtype(TypeName name) {
-        return name != null && symbols.get(name) instanceof Ast.Data d && d.newtype();
-    }
-
-    private Ast.TypeRef newtypeBaseType(TypeName name) {
-        return name != null && symbols.get(name) instanceof Ast.Data d && d.newtype()
-                && d.fields().size() == 1 && d.fields().get(0).type() instanceof Ast.TypeRef base
-                ? base : null;
-    }
-
-    /** The type a newtype wraps ({@code Date} for {@code data 貸出日 = Date}), or null. */
-    private String newtypeBase(String name) {
-        Ast.TypeRef base = newtypeBaseType(name);
-        return base == null ? null : base.name();
-    }
-
-    /** The written form of what a newtype wraps, kept whole so a generic base
-     * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
-    private Ast.TypeRef newtypeBaseType(String name) {
-        return symbols.declaration(name) instanceof Ast.Data d && d.newtype() && d.fields().size() == 1
-                && d.fields().get(0).type() instanceof Ast.TypeRef base
-                ? base
-                : null;
     }
 
     private static Object negate(Object v) {
@@ -1225,7 +1188,7 @@ public final class ExampleVerifier {
     // --- decode a raw value into the parameter/expected type ----------------------------------
 
     private Object decode(Type type, Object rawValue) {
-        Object raw = shaped(rawValue, type);
+        Object raw = neutral.shaped(rawValue, type);
         Decoder<Object, ?> decoder = decoderFor(type);
         Result<?> result;
         try {
@@ -1352,40 +1315,14 @@ public final class ExampleVerifier {
     }
 
     /**
-     * Evaluates the behavior on a daemon worker thread with a timeout. Recursion is total by default,
-     * so most code cannot loop; a `partial` recursion that does not terminate is the only risk, and
-     * this bounds it — on timeout the row is reported (E1910). A non-terminating recursion that
-     * overflows the stack instead of tail-looping is reported the same way (a non-termination, not a
-     * generic failure). The worker is interrupted best-effort; a pure compute loop has no interrupt
-     * point, so a deterministic step budget is the deferred complete fix.
+     * Applies the behavior. The row it belongs to is what carries the budget ({@link #checkRow}):
+     * recursion is total by default, so most code cannot loop, and a `partial` recursion that does not
+     * terminate is bounded there along with everything else the row runs — on timeout the row is
+     * reported (E1910). A non-terminating recursion that overflows the stack instead of tail-looping is
+     * reported the same way (a non-termination, not a generic failure).
      */
     private Object invoke(Ast.SpecBehavior spec, Object[] args, Object[] fakes) {
-        java.util.concurrent.FutureTask<Object> task =
-                new java.util.concurrent.FutureTask<>(() -> invokeNow(spec, args, fakes));
-        Thread worker = new Thread(task, "souther-example-eval");
-        worker.setDaemon(true);
-        worker.start();
-        try {
-            return task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (java.util.concurrent.TimeoutException _) {
-            task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
-            throw new NonTerminationException("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms");
-        } catch (java.util.concurrent.ExecutionException ee) {
-            Throwable cause = ee.getCause();
-            if (cause instanceof FakeMissException fm) {
-                throw fm;
-            }
-            if (cause instanceof NonTerminationException nt) {
-                throw nt;   // a stack-overflowing `partial` recursion (invokeNow classified it)
-            }
-            if (cause instanceof AbortException ae) {
-                throw ae;
-            }
-            throw new AbortException(cause == null ? "aborted" : String.valueOf(cause.getMessage()));
-        } catch (InterruptedException _) {
-            Thread.currentThread().interrupt();
-            throw new AbortException("interrupted");
-        }
+        return invokeNow(spec, args, fakes);
     }
 
     /** The {@code $Impl}'s constructor, opened. A behavior its module does not expose generates a
@@ -1445,24 +1382,9 @@ public final class ExampleVerifier {
         return Character.toUpperCase(name.charAt(0)) + name.substring(1);
     }
 
-    /** A fixture that cannot be built (an unsupported form, or an invariant a fixture value breaks). */
-    private static final class FixtureException extends RuntimeException {
-        FixtureException(String message) {
-            super(message);
-        }
-    }
-
     /** The behavior aborted while evaluating a row (e.g. an invariant violation) — a failed example. */
     private static final class AbortException extends RuntimeException {
         AbortException(String message) {
-            super(message);
-        }
-    }
-
-    /** Evaluating a row did not finish within the budget — a `partial` recursion it reaches may not
-     * terminate. Reported as its own diagnostic rather than hanging the compiler. */
-    private static final class NonTerminationException extends RuntimeException {
-        NonTerminationException(String message) {
             super(message);
         }
     }
