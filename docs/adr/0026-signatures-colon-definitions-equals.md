@@ -1,6 +1,8 @@
 # ADR-0026: Signatures use `:`, definitions use `=`; a function is defined with `let`
 
 Status: Accepted (decided 2026-07-18; implemented). Revised 2026-07-18 — see *Revision*.
+Amended by ADR-0072: the paragraph declining `let f = (x) -> e` is replaced by a pointer to where
+that spelling is settled. The `:`/`=` split this ADR draws is unchanged.
 
 ## Revision (2026-07-18)
 
@@ -71,11 +73,10 @@ comma-separated.) Elm draws the same line — `{ x : Int }` is a record type,
 `{ x = 1 }` a record value (and `{ r | x = 2 }` an update, which Souther writes as a
 type-named spread `会員 { ..r, x = 2 }`, ADR-0018).
 
-Parameters stay on the left of `=` (`let f (x) = e`), not bound as a lambda
-(`let f = (x) -> e`). F#, OCaml, and Haskell all write the named form and treat the
-lambda-binding form as redundant; Souther already rejected `fn f = (x) -> ...` on the same
-ground (ADR-0019). Because parameters sit left of `=` in a definition and inside the type
-to the right of `:` in a signature, the two shapes never collide.
+Parameters sit left of `=` in a definition and inside the type to the right of `:` in a
+signature, so the two shapes never collide. Whether a lambda may be written on the right of
+`=` in a named definition is settled by ADR-0072: it is the parameter-list form written the
+other way round, and the parameter-list form is what is written back.
 
 The prior art is uniform: Elm writes `add : Int -> Int -> Int` then `add x y = ...`; F#
 writes `val add : int -> int` then `let add x y = ...`; OCaml and Haskell do the same with
@@ -102,3 +103,4 @@ meaning; only the implementation keyword and the signature's binder change.
   `[#injected-behavior]`
 - ADR-0005 (behavior and implementation are separate)
 - ADR-0019 (one arrow `->`; this ADR refines what `:` and `=` each bind)
+- ADR-0072 (a `let` with no parameter list defines a value; what a lambda on the right of `=` means)

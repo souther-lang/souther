@@ -45,7 +45,7 @@ class CompileMapUpsertFoldTest {
                 import List ( fold )
                 data In = { keys: List<String> }
                 data Out = { m: Map<String, Int> }
-                let empty (): Map<String, Int> = Map.empty()
+                let empty : Map<String, Int> = Map.empty()
                 let cur (m: Map<String, Int>, k: String): Int =
                     match Map.get(k, m) with | Some n -> n | None -> 0
                 behavior run : (i: In) -> Out constructs Out

@@ -1324,7 +1324,7 @@ List.all(理由リスト, 妥当か)           // pass by name directly. Same th
 
 A block and a `+let+` may be passed as arguments, and a `+let+` may take one as an argument (<<requirement-propagation>>). *Only placing it in a data field is not allowed.* A function cannot be mapped to an external representation, so placing one would create an exception to decoder / encoder derivation (<<decoder>>, <<encoder>>). This is a representation constraint unrelated to side effects. The spec DSL itself holds a rule it wants to swap not as a function but as data (`+data フィールド定義 = ... AND バリデーションルール?+`).
 
-A block may also be bound to a name with `+let+` and applied (`+let f = (x) -> ...+`, then `+f(a)+`). Like a named `+let+` (<<fn-declaration>>), as long as it does not escape — applied only, never leaving as a value — a block is expanded into its call/apply site and forms no closure. When it escapes — *returning* a function, or choosing at runtime (`+let f = if ... then (x) -> ... else ...+`) — a closure capturing free variables is generated. It is a synthesized class implementing the runtime `+Fn+`, holding the captured variables in fields. Where expandable it is expanded; only where necessary is it a closure. The *cannot place in a data field* constraint above is unchanged by closures: it is a representation constraint, separate from whether a closure exists.
+A block may also be bound to a name by a block's `+let+` and applied (`+let f = (x) -> ...+`, then `+f(a)+`); written at the top level the same line is a definition, and its parameters move to the left of `+=+` (<<fn-declaration>>). Like a named `+let+` (<<fn-declaration>>), as long as it does not escape — applied only, never leaving as a value — a block is expanded into its call/apply site and forms no closure. When it escapes — *returning* a function, or choosing at runtime (`+let f = if ... then (x) -> ... else ...+`) — a closure capturing free variables is generated. It is a synthesized class implementing the runtime `+Fn+`, holding the captured variables in fields. Where expandable it is expanded; only where necessary is it a closure. The *cannot place in a data field* constraint above is unchanged by closures: it is a representation constraint, separate from whether a closure exists.
 
 A bare field access `+.field+` is a getter block: it desugars to `+(x) -> x.field+`, so a field is projected point-free — `+List.map(.value, xs)+` instead of `+List.map(x -> x.value, xs)+`, and with the pipe `+xs |> List.map(.value)+`. It is single-layer (`+.value+`, not `+.a.b+`; reach through a newtype over a newtype with the constructor pattern of <<binding-patterns>> or <<match>>) and works for any field, so a newtype's `+.value+` and a record's `+.a+` read the same way. It is an ordinary second-class block, not a first-class getter value: it may sit in an argument or be bound with `+let+` and applied, but returning or storing it is the same `+block is not a value+` as any block. This is Elm's `+.field+` notation with Scala's `+_.field+` meaning (a lambda shorthand, not a first-class value); it never collides with the in-scope `+value+` an invariant refers to (<<invariant>>), which is a field name, not a getter.
 
@@ -1493,6 +1493,16 @@ A `+let+` is the implementation of a behavior. A behavior is the specification (
 
 A `+let+` is written `+let 名前 (引数) = 本体+`. If a behavior of the same name exists, it implements it.
 
+Parameters go on the left of `+=+`, and a `+let+` written without them defines a *value*. This is the split F# and Elm draw: the parameter list, not the shape of the body, is what tells a function from a value. An empty `+()+` is refused, since it would be a second spelling of the value form.
+
+[,text]
+----
+let 上限 = 金額(100000)                 // a value
+let 超過か (額: 金額) = 額 > 上限        // a function
+----
+
+A value is named where the value it stands for would be written, and it may be spread (`+申請 { ...標準申請, 予定費用 = 金額(50000) }+`). A behavior taking nothing is implemented by a value, since the parameter counts agree.
+
 [,text]
 ----
 behavior 事前承認する : (申請: 事前承認待ち, 承認者ID: 従業員ID) -> 事前承認済み | 承認権限なし
@@ -1525,12 +1535,25 @@ A written return type is a declaration into the body, and it stays one where the
 
 The body is an expression. `+{ ... }+` is a block expression (<<block-expression>>), written to place a `+let+` or `+guard+`. `+let 正の数 (v: Int) = v >= 0+` and `+let 正の数 (v: Int) = { v >= 0 }+` are the same.
 
-`+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow (as in F# and Elm). Binding a lambda to a named definition (`+let f = (x) -> ...+`) is not adopted.
+`+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow (as in F# and Elm). A lambda written on the right of `+=+` is the parameter-list form: `+let f = (x) -> e+` and `+let f (x) = e+` define one thing, and the parameter-list form is what the formatter writes back.
+
+[#fn-value-semantics]
+=== A value is substituted where it is named
+
+A value is not module state. Its expression is elaborated in the module that declares it and substituted at each reference, so nothing is held between references and the module's values come into being in no order.
+
+* Its names are resolved once, where it is written (<<qualified-reference>>). What is substituted is the resolved definition, not text to be read again at the reference.
+* It is evaluated at each reference. A value's body obeys a helper's rules — it cannot call an injected behavior (<<depends-on>>) — so it is pure and total, and re-evaluation is not observable.
+* Two references may yield distinct values. Nothing observes that: there is no reference identity in the language, and comparison is structural (<<newtype-comparison>>).
+* An invariant a value breaks is reported at the value, whether or not anything names it.
+* What a value constructs is constructed by the behavior that names it, and belongs in that behavior's `+constructs+` — the transitive rule a helper's body already follows (<<constructs>>).
 
 [#fn-rules]
 ==== Rules
 
-* A `+let+` with a same-named behavior does not write argument types; the type comes from the behavior. A count mismatch is a compile error.
+* A `+let+` with a same-named behavior does not write argument types; the type comes from the behavior. A count mismatch is a compile error. A behavior whose type takes nothing (`+() -> T+`) is implemented by a value, which writes no parameter list.
+* A `+let+` written with a parameter list defines a function; one written without defines a value. An empty `+()+` is a compile error — a definition taking nothing is the value form. A helper therefore has at least one parameter.
+* A module's `+let+` MUST NOT be named like a data the module declares. A data is written where a value goes — a unit data is one, a newtype is applied to what it wraps, a record is constructed by its name — so the two would be one spelling with two answers. Elm keeps them apart by capitalization and F# lets the later binding shadow the earlier one; identifiers here are Japanese and case carries no meaning (<<unit-data>>), so neither is available and the collision is refused where it is declared. A behavior and a same-named `+let+` are not a collision: they are one thing's declaration and implementation.
 * A helper (a `+let+` with no same-named behavior) states its own argument types, except where its *body* determines them (ADR-0066). A parameter takes the type of the first position the body puts it in that names one: an operand of an operator against a value of known type (`+let 二倍 (n) = n * 2+`), an argument of a call whose parameter type is declared and concrete (a signature with a type variable names no type, so a standard-library combinator's `+List<'a>+` determines nothing), the value of a field in a construction, an `+if+` condition, the value of a binding — its written type where it has one, and otherwise whatever the binding's own body determines, so `+let y = x in y * 2+` types `+x+` through `+y+`. The whole body is read, so a position further down it — or a helper declared further down the file — determines the parameter just as well; written order decides only which of several determining positions wins. Call sites are not read — what a helper means is settled by reading the helper, not by reading its callers. A parameter the body leaves open MUST be annotated: Souther has no user generics, so there is nothing to generalise an open parameter into. A *function-typed* parameter MUST be written: neither applying it nor handing it to a combinator that applies it determines its type. A *recursive* helper is lowered to a method rather than inlined (below) and is typed on its declaration, so it writes all of its argument types.
 * A helper *may recurse* (self- and mutual recursion; ADR-0038). A non-recursive helper is inline-expanded at its call site; a recursive helper is not inlined but lowered to a method — self- and mutual calls become plain method calls. Traversal of self-referential data that `+fold+` cannot write (climbing the manager chain to the root, counting tree depth) is written this way.
 * A recursive helper MUST *declare its return type* (above). Without a declaration it is a compile error.
@@ -1859,6 +1882,21 @@ A behavior with a `+let+` implementation is evaluated (<<fn>>). An injected beha
 
 An input and an expected value are fixtures: literals, newtype applications, and record constructions. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
 
+A row may also *name a value* (<<fn-declaration>>) rather than write the whole input again, and may spread one to vary a field.
+
+[,text]
+----
+let 適格見込客 = 適格見込客 { 会社名 = 会社名("Acme"), 予算確定 = true, ... }
+
+example 変換する
+    | "予算が確定していれば変換できる" : (適格見込客) -> 変換済み
+    | "未確定なら変換できない" : (適格見込客 { ...適格見込客, 予算確定 = false }) -> 変換不可
+----
+
+What a row may name is a property of the value graph, not of one definition's text: a value is *fixture-evaluable* when its body is a literal, a construction, a spread, `+Set.fromList+` / `+Map.fromList+` over one, or a reference to another fixture-evaluable value. So a chain of values holds even though each link names the next, and a value whose body computes — a call to a helper — is not one (<<e1903>>). A value that reaches itself has no fixture to be, and is reported as the cycle it is.
+
+`+Set.fromList+` and `+Map.fromList+` are admitted because a value is ordinary code, where a list literal is a `+List+` whatever the position declares, while a row writes a set as its elements and a map as its entry pairs. They are the forms that notation stands for, so one record serves as both a value and a row.
+
 A collection is written as a list, and its declared type says what the list means: a `+List+` keeps its order and repeats, a `+Set+` drops duplicates on decode (`+labels = [ Label("bug"), Label("bug") ]+` is one label), and a `+Map+` takes its entries as `+(key, value)+` pairs — `+counts = [ ("bug", 2), ("ui", 1) ]+` — the form `+Map.fromList+` takes (<<stdlib-map>>). A `+Date+` / `+DateTime+` takes a written temporal (`+Date("2026-07-25")+`, <<temporal-literal>>). This is what lets a rule over dates, sets, or maps be fixed by its examples rather than only by a hand-written test at the boundary.
 
 This holds wherever a value is written, not only inside a record: a behavior taking `+(明細: List<明細>)+` is exampled with `+([ 明細 { 数量 = 1 } ])+`, one returning a `+Map+` is expected as its pairs, and a fake's value is written the same way. A collection does not need a data wrapped around it to reach an example. A map keyed by a newtype (<<collections>>) writes its keys as they are constructed (`+[ (商品ID("A-1"), 3) ]+`), and each key goes through that type's invariant like any other fixture.
@@ -1907,6 +1945,8 @@ let counted: Map<String, Int> = List.fold((acc, k) -> Map.upsert(k, 1, n -> n + 
 ----
 
 Reassignment is forbidden. A `+let+` is placed inside a block expression (<<block-expression>>). What follows `+let x = v+` is the scope of that binding, nested at desugaring time.
+
+A `+let+` at the top level is a definition (<<fn-declaration>>); a `+let+` inside a block is a binding. Which one a `+let+` is follows from where it is written, not from how it is spelled, and the two are typed from different places. A definition takes its parameter types from its own body and its call sites are not read (<<fn-rules>>). A binding has no declaration to read, so a lambda bound here takes its parameter types from the applications in the body that binds it. A block holds no parameter list — `+let f (x) = …+` is written at the top level — so the two forms never meet in one place.
 
 A binding may carry its type, `+let x: T = v+`. The type is optional — a binding otherwise takes the type of its value — and writing it does two things: the declared type is pushed into the value, so a value only its context can type (an empty `+[]+`, `+Map.empty()+`, `+Set.empty()+`, including one produced by a `+fold+` over such a seed) takes the declared element type instead of staying undetermined (<<algebraic-types>>); and the value is checked against it, so a declared type the value does not have is a compile error rather than an ignored comment. This is the same declaration-into-body direction a helper's declared return type has (<<fn-declaration>>) — it is a declaration, not an extension of inference. As with a helper's return, `+T+` is an ordinary type: a function type belongs only in a helper's parameter position (<<fn-declaration>>), so a binding whose value is a lambda takes no annotation, and neither does a tuple destructure (`+let (a, b) = t+`).
 
@@ -2123,7 +2163,9 @@ An outside-world dependency is declared as a behavior with no implementation, an
 
 The standard library is bundled with the compiler and referenced by short qualifiers — `+List+` (list), `+Map+` (map), `+Set+` (set), `+String+` (string), `+Bool+` (boolean), `+Int+` / `+Decimal+` (numbers), `+Date+` / `+DateTime+` (temporal), `+Option+` (optional). Every function is called through this qualifier: `+List.map(f, xs)+`, `+String.trim(s)+`, `+List.length(xs)+`. There is no automatic import — names are not delivered implicitly. What may be written bare is operators (`+==+` `+<+` `+{plus}{plus}+`, etc.), `+if+` / `+match+`, literals, and the current module's helpers. Argument order follows the convention of <<pipe>> (primary subject last).
 
-To call a name bare, import it explicitly: writing `+import List ( map, filter )+` lets you write `+map(f, xs)+` unqualified thereafter. As in Elm's `+import List exposing (map)+`, qualified access always works, and `+import+` is only sugar to elide the qualifier. Importing the same bare name from two modules is ambiguous, so qualify one of them (e.g. `+String.length+` and `+List.length+` used together in one module; <<imports>>).
+A standard-library function is therefore never a bare name and never crosses what a module writes bare. What a module writes bare in a value position is one of: a binding in force, one of its own `+let+`s, a data of its own written as a value, a behavior it can reach, or a name the language gives (`+None+`, the rounding modes). One spelling means one of these — a `+let+` may not be named like a data (<<fn-rules>>), a name the language gives may not be taken, and a binding in force wins over a declaration.
+
+To call a library name bare, import it explicitly: writing `+import List ( map, filter )+` lets you write `+map(f, xs)+` unqualified thereafter. As in Elm's `+import List exposing (map)+`, qualified access always works, and `+import+` is only sugar to elide the qualifier. Importing the same bare name from two modules is ambiguous, so qualify one of them (e.g. `+String.length+` and `+List.length+` used together in one module; <<imports>>).
 
 Qualifiers such as `+List+` denote a module only in expression position, distinct from the type-position `+List<T>+` (angle brackets), which does not conflict (as in Elm). `+length+` / `+get+` span `+String+` and `+List+`, and `+List+` and `+Map+`, but they become distinct names `+String.length+` / `+List.length+`, `+List.get+` / `+Map.get+`, so they are not overloads but each module's own function.
 

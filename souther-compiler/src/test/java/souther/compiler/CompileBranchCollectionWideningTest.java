@@ -144,7 +144,7 @@ class CompileBranchCollectionWideningTest {
         assertDoesNotThrow(() -> Compiler.compile(makeBuilding("Costly, NoAuthority") + """
                 data Grouped = { groups: List<List<Reason>> }
                 behavior group : () -> Grouped constructs Grouped, Costly, NoAuthority
-                let group () = Grouped { groups = [ [ Costly { threshold = 100 } ], [ NoAuthority ] ] }
+                let group = Grouped { groups = [ [ Costly { threshold = 100 } ], [ NoAuthority ] ] }
                 let make (total) = Reasons { reasons = [ Costly { threshold = 100 }, NoAuthority ] }
                 """));
     }

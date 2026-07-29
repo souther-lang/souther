@@ -29,7 +29,7 @@ class CompileSumParamMatchTest {
                 let use (s: S) : Int = match s with
                     | A a -> a.x
                     | B b -> b.y
-                let caller () : Int = use(A { x = 1 })
+                let caller : Int = use(A { x = 1 })
                 """));
     }
 
@@ -42,7 +42,7 @@ class CompileSumParamMatchTest {
                 let use (s: A | B) : Int = match s with
                     | A a -> a.x
                     | B b -> b.y
-                let caller () : Int = use(A { x = 1 })
+                let caller : Int = use(A { x = 1 })
                 """));
     }
 
@@ -58,7 +58,7 @@ class CompileSumParamMatchTest {
                 let use (s: S) : Int = match s with
                     | A a -> a.x
                     | B b -> b.y
-                let caller () : Int = use(C { z = 1 })
+                let caller : Int = use(C { z = 1 })
                 """));
     }
 

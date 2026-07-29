@@ -372,6 +372,15 @@ public final class AstBuilder {
         }
         SyntaxNode bodyNode = onlyExpr(n);
         Ast.Expr body = expr(bodyNode);
+        // `let f = (x) -> e` is the parameter-list form written the other way round: the parameters
+        // move to the left of `=` and the two spellings settle to one definition. A definition that
+        // already wrote parameters keeps a lambda body as its result.
+        if (params.isEmpty() && body instanceof Ast.Block lambda) {
+            for (String p : lambda.params()) {
+                params.add(new Ast.FnParam(p, null, false, lambda.pos()));
+            }
+            body = lambda.body();
+        }
         // a pattern parameter took a fresh name above; it opens itself at the top of the body, so
         // the helper still takes plain names and nothing downstream sees a pattern
         for (int i = paramPatterns.size() - 1; i >= 0; i--) {

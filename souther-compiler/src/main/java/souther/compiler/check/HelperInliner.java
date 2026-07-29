@@ -562,8 +562,30 @@ public final class HelperInliner {
             case Ast.DecimalLit _ -> e;
             case Ast.StringLit _ -> e;
             case Ast.BoolLit _ -> e;
-            case Ast.Var _ -> e;
+            case Ast.Var v -> valueOf(v);
         };
+    }
+
+    /**
+     * A name that denotes a value — a {@code let} written with no parameter list — expanded to the
+     * expression it was defined as. A value is not module state: its body is elaborated where it was
+     * declared and substituted at each reference, so nothing is held between them and there is no
+     * order in which the module's values come into being.
+     *
+     * <p>A recursive value is left alone here; the recursion check reports it under its own name.
+     * Anything else — a helper handed to a combinator by name, a binding, a unit data — is the name
+     * itself.
+     */
+    private Ast.Expr valueOf(Ast.Var v) {
+        if (!(v.denotes() instanceof ValueName.Helper)) {
+            return v;
+        }
+        Ast.FnDef value = helpers.get(v.name());
+        if (value == null || !value.params().isEmpty() || value.body() == null
+                || recursive.contains(v.name())) {
+            return v;
+        }
+        return inline(value.body());
     }
 
     private List<Ast.Expr> inlineList(List<Ast.Expr> es) {
