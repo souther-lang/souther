@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.InjectionSigs;
 import souther.compiler.check.Lower;
@@ -16,8 +17,11 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -433,50 +437,165 @@ public final class Bodies {
             if (!settled.present()) {
                 return Answer.absent();
             }
-            Map<String, Ast.FnDef> helpers =
-                    new LinkedHashMap<>(HelperInliner.helpersOf(settled.value()));
-            // A value another module publishes is expanded here like one of this module's own: it is
-            // substituted at its references (ADR-0072). What arrives is closed — the value's body with
-            // its own module's definitions already substituted into it — so the only name of the
-            // declaring module that reaches this one is the value's. A body carrying those names
-            // would be read against the definitions here, and a reader that happens to spell one the
-            // same way would change what the value means (ADR-0067).
-            for (Ast.Import imp : settled.value().imports()) {
-                Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
-                if (!from.present()) {
-                    continue;
-                }
-                helpers.putAll(publishedValues(from.value(), imp.names()));
+            Answer<Map<String, Ast.FnDef>> imported = db.ask(new ImportedDefinitions(name));
+            if (!imported.present()) {
+                return Answer.absent();
             }
+            Map<String, Ast.FnDef> helpers = new LinkedHashMap<>(imported.value());
+            helpers.putAll(HelperInliner.helpersOf(settled.value()));
             return Answer.of(helpers);
         }
     }
 
     /**
-     * The values {@code from} publishes among {@code wanted}, each closed over its own module.
+     * What the modules this one imports publish to it, each closed where it was written and named by
+     * the module that declares it.
      *
-     * <p>Closing them there is what keeps a published value meaning what it meant where it was
-     * written. A value is substituted at its references, so a body still naming its module's own
-     * definitions would be read against the reader's, and a reader that spells one the same way would
-     * silently change the value. Expanding it first leaves a body that names nothing of the declaring
-     * module at all.
+     * <p>A definition another module publishes is expanded here like one of this module's own: a value
+     * is substituted at its references (ADR-0072), a helper at its call sites (spec 12.5). What
+     * arrives is closed — the body with its own module's definitions already substituted into it — so
+     * the only name of the declaring module that reaches this one is the definition's own. A body
+     * carrying those names would be read against the definitions here, and a reader that happens to
+     * spell one the same way would change what the definition means (ADR-0067).
+     *
+     * <p>What a published body does not close over is a recursive helper, which is a method rather
+     * than an expression. Those come too, under the name of the module that declares them, and so does
+     * every recursive helper they reach in turn — a mutually-recursive group arrives whole, and one
+     * the reader never imported arrives because the body it was published inside calls it. The reader
+     * emits them as its own methods (see {@link Shapes.Prepared}).
+     *
+     * <p>Read from the imports of the desugared module rather than the settled one, so that settling
+     * can read this: what a module imports is written down and is not something settling decides.
      */
-    public static Map<String, Ast.FnDef> publishedValues(Ast.Module from, List<String> wanted) {
-        Set<String> exposed = new java.util.HashSet<>(from.exposing());
+    public record ImportedDefinitions(String name) implements Key<Map<String, Ast.FnDef>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Ast.FnDef>> compute(Db db) {
+            // A module in a cycle takes a published body from a module that takes one from it. This is
+            // where that would be asked, so this is where it stops; the cycle itself is reported by
+            // Names.InCycle.
+            if (Names.cyclic(db, name)) {
+                return Answer.absent();
+            }
+            Answer<Ast.Module> desugared = db.ask(new Shapes.Desugared(name));
+            if (!desugared.present()) {
+                return Answer.absent();
+            }
+            Map<String, Ast.FnDef> out = new LinkedHashMap<>();
+            for (Ast.Import imp : desugared.value().imports()) {
+                Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
+                // Closed against everything the declaring module can name, not only what it declares:
+                // a published body may call a helper that module imported in turn, and a chain of
+                // three is where a table of its own definitions leaves the middle one unexpanded.
+                Answer<Map<String, Ast.FnDef>> table = db.ask(new Helpers(imp.module()));
+                if (!from.present() || !table.present()) {
+                    continue;
+                }
+                // Two imports reaching one definition reach one definition: the name it is keyed by
+                // is the module that declares it and its own name, so the second arrival is the same
+                // entry rather than a second copy of the method.
+                publishedClosure(from.value(), imp.names(), table.value()).forEach(out::putIfAbsent);
+            }
+            return Answer.of(out);
+        }
+    }
+
+    /**
+     * The values and helpers {@code from} publishes among {@code wanted}, each closed over its own
+     * module.
+     *
+     * <p>Closing them there is what keeps a published definition meaning what it meant where it was
+     * written. It is substituted at its references, so a body still naming its module's own
+     * definitions would be read against the reader's, and a reader that spells one the same way would
+     * silently change it. Expanding it first leaves a body that names nothing of the declaring
+     * module — except a recursive helper, which is a method rather than an expression and so is left
+     * standing as a call under its declaring module's qualified name (see {@link
+     * HelperInliner#closeAcross}); the reader emits that method as its own.
+     *
+     * <p>The value and the helper are told apart by the one predicate that decides it anywhere — a
+     * written parameter list — and not by a second record of the same line. What each becomes in the
+     * reader follows from the same shape: a definition with no parameters is substituted where it is
+     * named, one with parameters is expanded where it is called.
+     */
+    public static Map<String, Ast.FnDef> publishedDefinitions(Ast.Module from, List<String> wanted,
+                                                              Map<String, Ast.FnDef> table) {
         Map<String, Ast.FnDef> out = new LinkedHashMap<>();
-        HelperInliner own = null;
-        // A behavior taking nothing is implemented by a value, and that body is not published: a
-        // reader calls the behavior and never reads what it was given.
-        for (Ast.FnDef fn : HelperInliner.valuesOf(from).values()) {
-            if (fn.body() == null
-                    || !exposed.contains(fn.name()) || !wanted.contains(fn.name())) {
-                continue;
+        HelperInliner inliner = null;
+        for (Ast.FnDef fn : publishable(from, wanted)) {
+            if (inliner == null) {
+                inliner = HelperInliner.forHelpers(table);
             }
-            if (own == null) {
-                own = HelperInliner.forHelpers(HelperInliner.helpersOf(from));
+            Ast.FnDef closed = inliner.closeAcross(fn, from.name());
+            out.put(closed.name(), closed);
+        }
+        return out;
+    }
+
+    /**
+     * The definitions {@code from} publishes among {@code wanted}, together with every recursive
+     * helper of {@code from} they reach.
+     *
+     * <p>Closing a body removes every name of the declaring module from it except a recursive helper's,
+     * which is a method and stays a call. That call has to land on something, so the helper travels
+     * with the body that calls it — and, since a recursive helper may call another, so does everything
+     * it reaches in turn. A mutually-recursive group therefore arrives whole: each member is reached
+     * from the others, so following the calls collects all of them.
+     */
+    public static Map<String, Ast.FnDef> publishedClosure(Ast.Module from, List<String> wanted,
+                                                          Map<String, Ast.FnDef> table) {
+        Map<String, Ast.FnDef> out = publishedDefinitions(from, wanted, table);
+        if (out.isEmpty()) {
+            return out;
+        }
+        HelperInliner inliner = HelperInliner.forHelpers(table);
+        Deque<String> work = new ArrayDeque<>(out.keySet());
+        while (!work.isEmpty()) {
+            for (ValueName.Helper reached : HelperInliner.helpersReached(out.get(work.poll()).body())) {
+                String qualified = HelperInliner.qualified(reached.module(), reached.name());
+                if (out.containsKey(qualified)) {
+                    continue;
+                }
+                // The declaring module decides both how the helper is keyed in {@code from}'s own
+                // table and whether it still has to be closed: one of `from`'s own is written bare
+                // there and closed here, one that reached `from` from further up is already keyed and
+                // closed by the module that declares it, and is passed along as it stands.
+                boolean ownHelper = reached.module().equals(from.name());
+                Ast.FnDef def = table.get(ownHelper ? reached.name() : qualified);
+                if (def == null) {
+                    continue;   // a prelude helper, which every module emits for itself
+                }
+                out.put(qualified, ownHelper ? inliner.closeAcross(def, from.name()) : def);
+                work.add(qualified);
             }
-            out.put(fn.name(), new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), null,
-                    own.inline(fn.body()), fn.partial(), fn.pos()));
+        }
+        return out;
+    }
+
+    /** The bare names {@code from} publishes among {@code wanted} — what a reader writes for them.
+     * Asked on its own where only the names are wanted, so resolving a module's names does not close
+     * every body the modules around it publish. */
+    public static Set<String> publishedNames(Ast.Module from, List<String> wanted) {
+        Set<String> out = new java.util.LinkedHashSet<>();
+        for (Ast.FnDef fn : publishable(from, wanted)) {
+            out.add(fn.name());
+        }
+        return out;
+    }
+
+    /** The definitions {@code from} offers among {@code wanted}: its values and helpers that it
+     * exposes. A behavior's own {@code let} is not among them whatever its shape — it is an
+     * implementation, and what a reader reaches is the behavior, which it calls (ADR-0005). */
+    private static List<Ast.FnDef> publishable(Ast.Module from, List<String> wanted) {
+        Set<String> exposed = new java.util.HashSet<>(from.exposing());
+        List<Ast.FnDef> out = new java.util.ArrayList<>();
+        for (Ast.FnDef fn : HelperInliner.helpersOf(from).values()) {
+            if (fn.body() != null && exposed.contains(fn.name()) && wanted.contains(fn.name())) {
+                out.add(fn);
+            }
         }
         return out;
     }
@@ -628,14 +747,14 @@ public final class Bodies {
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
      * constructions are attributed to the behavior that calls it (spec 12.5). */
     public record RecursiveHelperConstructs(String name)
-            implements Key<Map<String, Map<TypeName, String>>> {
+            implements Key<Map<String, DataChecker.Constructs>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Map<TypeName, String>>> compute(Db db) {
+        public Answer<Map<String, DataChecker.Constructs>> compute(Db db) {
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
@@ -713,7 +832,7 @@ public final class Bodies {
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
-            Answer<Map<String, Map<TypeName, String>>> constructs =
+            Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !helpers.present()
@@ -773,16 +892,17 @@ public final class Bodies {
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
             Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(name));
+            Answer<Map<String, Ast.FnDef>> published = db.ask(new ImportedDefinitions(name));
             if (!lowering.present() || !scope.present() || !imported.present()
                     || !injected.present() || !reqSigs.present() || !sigs.present()
-                    || !calleeSigs.present()) {
+                    || !calleeSigs.present() || !published.present()) {
                 return Answer.absent();
             }
             TypeChecker.Reported reported;
             try {
                 reported = TypeChecker.checkModule(lowering.value().settled(), scope.value(),
                         imported.value(), injected.value(), lowering.value().lowered(),
-                        reqSigs.value(), calleeSigs.value(), sigs.value());
+                        reqSigs.value(), calleeSigs.value(), sigs.value(), published.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

@@ -19,10 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * write it out again, which is what left an import list naming ten types for one fixture (issue
  * #163).
  *
- * <p>What is published is decided by the type, not by the shape of the definition: a value holding a
- * function is not published, and neither is a helper, because neither crosses into another module as
- * a value. A published value's own type must be published; the types its body happens to use are its
- * own business.
+ * <p>A published value's own type must be published; the types its body happens to use are its own
+ * business. What a module publishes besides its values — its helpers — is
+ * {@link CompilePublishedHelperTest}'s.
  */
 class CompileExposedValueTest {
 
@@ -110,30 +109,17 @@ class CompileExposedValueTest {
                 """));
     }
 
+    /** A `let` written as a lambda is a helper, not a value holding a function — the parameter list is
+     * where it is written, not what shape it is written in. Publishing it publishes the helper. */
     @Test
-    void aValueHoldingAFunctionIsNotPublished() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
-                module pricing exposing ( raise )
+    void aLetWrittenAsALambdaIsPublishedAsTheHelperItIs() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module pricing exposing ( Amount, raise )
 
                 data Amount = Int
 
                 let raise = (a) -> a + 1
                 """));
-
-        assertTrue(e.getMessage().contains("raise"), e.getMessage());
-    }
-
-    @Test
-    void aHelperIsStillNotPublished() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
-                module pricing exposing ( Amount, twice )
-
-                data Amount = Int
-
-                let twice (a: Int) = a * 2
-                """));
-
-        assertTrue(e.getMessage().contains("twice"), e.getMessage());
     }
 
     /** A value crosses a project boundary too: what is published is the declaration, read back from
@@ -282,14 +268,11 @@ class CompileExposedValueTest {
         assertTrue(e.getMessage().contains("now"), e.getMessage());
     }
 
-    /**
-     * A published value crosses closed, and a recursive helper is a method rather than an expression,
-     * so a value that reaches one has nothing to close over it. Refused where it is published, rather
-     * than left to fail in the reader as a call to a name that is not there.
-     */
+    /** A published value may reach a recursive helper: what closing leaves standing is a call, and the
+     * helper it calls comes along to be emitted as one of the reader's own methods. */
     @Test
-    void aPublishedValueMayNotReachARecursiveHelper() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void aPublishedValueMayReachARecursiveHelper() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module pricing exposing ( Amount, standard )
 
                 data Amount = Int
@@ -298,42 +281,37 @@ class CompileExposedValueTest {
 
                 let standard = Amount(sumDown(10))
                 """));
-
-        assertTrue(e.getMessage().contains("sumDown"), e.getMessage());
     }
 
-    /** The reader having a helper of that name changes nothing: the value is refused at its own
-     * module, so the two never meet. */
+    /** The reader having a helper of that name changes nothing: what crosses is the declaring
+     * module's, named by that module, so the two never meet. */
     @Test
-    void aPublishedValueReachingARecursiveHelperIsRefusedWhateverTheReaderDeclares() {
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of("""
-                        module pricing exposing ( Amount, standard )
+    void aCarriedRecursiveHelperIsNotTheReadersHelperOfThatName() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, standard )
 
-                        data Amount = Int
+                data Amount = Int
 
-                        partial let sumDown (n: Int) : Int = if n == 0 then 0 else n + sumDown(n - 1)
+                partial let sumDown (n: Int) : Int = if n == 0 then 0 else n + sumDown(n - 1)
 
-                        let standard = Amount(sumDown(10))
-                        """, """
-                        module order exposing ( In, Out, bill )
+                let standard = Amount(sumDown(10))
+                """, """
+                module order exposing ( In, Out, bill )
 
-                        import pricing ( Amount, standard )
+                import pricing ( Amount, standard )
 
-                        data In = { n: Int }
-                        data Out = { v: Int }
+                data In = { n: Int }
+                data Out = { v: Int }
 
-                        partial let sumDown (n: Int) : Int = if n == 0 then 999 else sumDown(n - 1)
+                partial let sumDown (n: Int) : Int = if n == 0 then 999 else sumDown(n - 1)
 
-                        behavior bill : (i: In) -> Out constructs Out
-                        let bill (i) = Out { v = standard.value }
-                        """)));
-
-        assertTrue(e.getMessage().contains("sumDown"), e.getMessage());
+                behavior bill : (i: In) -> Out constructs Out
+                let bill (i) = Out { v = standard.value + sumDown(i.n) }
+                """)));
     }
 
-    /** Which also closes what would otherwise be the way round the surface rule: a recursive helper
-     * is not expanded, so the hidden type it builds was never read. */
+    /** The surface rule reaches through a recursive helper by reading what it returns: the helper is
+     * not expanded, so a construction inside it is not there to be read off. */
     @Test
     void aPublishedValueMayNotStandForAHiddenTypeThroughARecursiveHelper() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
@@ -346,7 +324,8 @@ class CompileExposedValueTest {
                 let published = make(10)
                 """));
 
-        assertTrue(e.getMessage().contains("make"), e.getMessage());
+        assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
+        assertTrue(e.getMessage().contains("published"), e.getMessage());
     }
 
     /** A value another module keeps to itself has no name here, as any unexposed name has. */

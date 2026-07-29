@@ -622,8 +622,25 @@ public interface Ast {
      * binding in force wins over a declaration here as everywhere else, and a reader downstream must
      * not go back to matching the spelling against the module's own definitions.
      */
-    record NewData(Name typeName, List<FieldInit> inits, List<ValueRef> spreads, SourcePos pos)
-            implements Expr {}
+    /**
+     * A construction. {@code publishedBy} is the module whose published value or helper carried it
+     * here, and null where the body being read wrote it.
+     *
+     * <p>Expansion makes the two look alike: a construction spliced in from another module's
+     * published body is the same node the reader's own would be, and the permission check reading
+     * that body would ask the reader to declare `constructs` for a type it may have no name for. So
+     * the construction says where it came from. Every rebuild of this node carries it — the component
+     * has no default, which is what stops a pass from quietly dropping it and turning a carried
+     * construction back into the reader's own.
+     */
+    record NewData(Name typeName, List<FieldInit> inits, List<ValueRef> spreads, String publishedBy,
+                   SourcePos pos) implements Expr {
+
+        /** The same construction, carried into a reader by {@code module}'s published body. */
+        public NewData publishedBy(String module) {
+            return new NewData(typeName, inits, spreads, module, pos);
+        }
+    }
 
     record IntLit(long value, SourcePos pos) implements Expr {}
 
@@ -721,7 +738,7 @@ public interface Ast {
                 for (FieldInit i : nd.inits()) {
                     inits.add(new FieldInit(i.name(), f.apply(i.value()), i.pos()));
                 }
-                yield new NewData(nd.typeName(), inits, nd.spreads(), nd.pos());
+                yield new NewData(nd.typeName(), inits, nd.spreads(), nd.publishedBy(), nd.pos());
             }
             case Match m -> {
                 List<Case> cases = new ArrayList<>();

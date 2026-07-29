@@ -707,14 +707,24 @@ public final class Backend {
     }
 
     /**
-     * The version of what another module reaches across the boundary into a compiled one: the
-     * {@code __construct} descriptors and visibilities, the codecs, a behavior's class and its
-     * methods, an output union's case names, and the runtime types in those signatures. It lives
-     * here because that is all this package's to decide; a change to any of it makes a previously
-     * built jar unusable and has to move this number with it. A change confined to the inside of a
-     * generated method does not touch it.
+     * The version of what another module reaches across the boundary into a compiled one.
+     *
+     * <p>Two things are under it. One is what this package emits: the {@code __construct} descriptors
+     * and visibilities, the codecs, a behavior's class and its methods, an output union's case names,
+     * and the runtime types in those signatures. A change to any of it makes a previously built jar
+     * unusable and has to move this number with it; a change confined to the inside of a generated
+     * method does not touch it.
+     *
+     * <p>The other is the source a jar carries for a reader to compile: a data's invariant, and the
+     * body of every value and helper the module publishes ({@link
+     * souther.compiler.meta.ModuleMetadata}). Those are read back by whichever compiler imports the
+     * module, so what the front end makes of them is a promise the jar carries too — a change to how
+     * one of those bodies is read moves this number as surely as a change to a descriptor does, and
+     * it is the front end's change rather than this package's. {@link
+     * souther.compiler.meta.PublishedModule} refuses a jar that disagrees, so the disagreement is
+     * reported as what it is instead of surfacing as an unresolved name inside a body nobody wrote.
      */
-    public static final int BOUNDARY_VERSION = 2;
+    public static final int BOUNDARY_VERSION = 3;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

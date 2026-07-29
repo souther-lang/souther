@@ -62,9 +62,22 @@ public sealed interface ValueName {
         }
     }
 
-    /** A type written where a value goes: a unit data as a value, or a newtype applied to the value
-     * it wraps. Which of the two is decided by what the type is, not by how the name was written. */
-    record OfType(String name, TypeName type) implements ValueName {
+    /**
+     * A type written where a value goes: a unit data as a value, or a newtype applied to the value
+     * it wraps. Which of the two is decided by what the type is, not by how the name was written.
+     *
+     * <p>{@code publishedBy} is the module whose published value or helper carried this name here,
+     * and null where the body being read wrote it. A unit data is *constructed* by being named, and
+     * a construction says where it came from ({@link souther.compiler.ast.Ast.NewData}) so that the
+     * permission check can tell the reader's own from one it was handed; a unit data has no node of
+     * its own to say it on, so the name says it.
+     */
+    record OfType(String name, TypeName type, String publishedBy) implements ValueName {
+
+        /** The same name, carried into a reader by {@code module}'s published body. */
+        public OfType publishedBy(String module) {
+            return new OfType(name, type, module);
+        }
 
         @Override
         public String toString() {

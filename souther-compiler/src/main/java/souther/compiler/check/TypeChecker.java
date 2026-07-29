@@ -39,6 +39,13 @@ public final class TypeChecker {
     /** The bodies elaborated so far, filled as the check walks them. */
     static final class Elaborated {
         final Map<String, Core> helpers = new LinkedHashMap<>();
+        /** What each of the module's own definitions turned out to be, by name — a value's type and a
+         * helper's return type, settled from the body (ADR-0066). Recorded because the exposed-surface
+         * check asks what a published definition is, and the answer is a type: reading the body for
+         * the constructions in it answers a different question, and misses a definition whose type
+         * names something it does not build. A definition that returns a function has none: there is
+         * no application here to settle the lambda from (spec §blocks). */
+        final Map<String, Type> definitionTypes = new LinkedHashMap<>();
     }
 
     /**
@@ -76,14 +83,15 @@ public final class TypeChecker {
                                        Map<String, Sig> importedSigs, Set<String> importedInjected,
                                        Ast.Module lowered, Map<String, ReqSig> reqSigs,
                                        Map<String, ReqSig> calleeSigs,
-                                       Map<String, Type> recursiveHelperFns) {
+                                       Map<String, Type> recursiveHelperFns,
+                                       Map<String, Ast.FnDef> imported) {
         Elaborated elaborated = new Elaborated();
         List<Unanswerable> abandoned = new ArrayList<>();
         List<CompileException> errors = new ArrayList<>();
         boolean stopped = false;
         try {
             checkRecovering(module, symbols, importedSigs, importedInjected, lowered, calleeSigs, errors,
-                    elaborated, abandoned, reqSigs, recursiveHelperFns);
+                    elaborated, abandoned, reqSigs, recursiveHelperFns, imported);
         } catch (Unanswerable e) {
             abandoned.add(e);
             stopped = true;
@@ -109,7 +117,7 @@ public final class TypeChecker {
                                      Symbols symbols, Map<String, ReqSig> calleeSigs,
                                      Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
-                                     Map<String, Map<TypeName, String>> recHelperConstructs,
+                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                      List<Diagnostic> warnings) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, symbols, calleeSigs, reqSigs,
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
@@ -123,7 +131,7 @@ public final class TypeChecker {
 
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
      * constructions are attributed to the behavior that calls it (spec 12.5). */
-    public static Map<String, Map<TypeName, String>> recursiveHelperConstructs(
+    public static Map<String, DataChecker.Constructs> recursiveHelperConstructs(
             Set<String> names, Map<String, Ast.Expr> loweredBodies, HelperInliner inliner,
             Symbols symbols) {
         return HelperTyping.recursiveHelperConstructs(names, loweredBodies, inliner, symbols);
@@ -177,12 +185,17 @@ public final class TypeChecker {
                                         List<CompileException> errors,
                                         Elaborated elaborated, List<Unanswerable> abandoned,
                                         Map<String, ReqSig> reqSigs,
-                                        Map<String, Type> recursiveHelperFns) {
+                                        Map<String, Type> recursiveHelperFns,
+                                        Map<String, Ast.FnDef> publishedToHere) {
         Map<String, Ast.Expr> loweredBodies = new HashMap<>();
         for (Ast.FnDef fn : lowered.fns()) {
             loweredBodies.put(fn.name(), fn.body());
         }
-        HelperInliner inliner = HelperInliner.forModule(module);
+        // The imported definitions join the table this module's bodies are expanded against: a
+        // published helper is expanded at its call sites here exactly as one of this module's own is,
+        // and it is not one of this module's own — which is what keeps a recursive one of them in
+        // `injectedRecursiveHelpers`, to be emitted here rather than declared here.
+        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere);
         // An invariant runs on every construction and must terminate (spec §invariant-expressions).
         // A total recursive helper does terminate, so it is admissible — including the stdlib fold
         // (`List.foldFrom`) that backs the list quantifiers `List.all`/`any`/`member`/`distinct`,
@@ -275,34 +288,24 @@ public final class TypeChecker {
             // an exposed name must be one of this module's own definitions. An imported name that is
             // merely visible here is not re-exported — importers reach it from its declaring module.
             if (!ownTypes.contains(e) && !allBehaviors.contains(e)) {
-                // A helper of this module is told apart from a name nothing declares. The name is
-                // right there in the file, so "not a data or behavior of this module" sends the
-                // author looking for a typo; what they have to know is that a helper is not part of
-                // the specification and a behavior is how a pure rule is shared (ADR-0005).
-                // A value — a `let` with no parameter list — is part of what the module offers, so it
-                // is published like a data or a behavior. A helper is not: it takes arguments, and a
-                // function does not cross into another module as a value.
-                if (HelperInliner.valuesOf(module).containsKey(e)) {
+                // A value and a helper are both part of what a module offers: a limit a rule is
+                // written against, and the rule itself. A behavior's own `let` is not — what a reader
+                // reaches there is the behavior, which it calls, and the module publishes its
+                // specification rather than the body it was given (ADR-0005).
+                if (HelperInliner.helpersOf(module).containsKey(e)) {
                     exposed.add(e);
                     continue;
                 }
-                boolean helper = module.fns().stream().anyMatch(f -> f.name().equals(e));
-                boolean imported = !helper && symbols.inScope(e);
-                String key = helper ? "check.exposing.helper"
-                        : imported ? "check.exposing.imported" : "check.exposing.notdefined";
-                String why = helper
-                        ? ", which is a helper `let` of this module. A helper is not a specification"
-                          + " statement, so it is not exposed; to share it, declare it as a behavior"
-                        : imported
+                boolean imported = symbols.inScope(e);
+                String key = imported ? "check.exposing.imported" : "check.exposing.notdefined";
+                String why = imported
                         ? " is imported into this module, not defined here; `exposing` lists a"
                           + " module's own definitions and does not re-export imported names"
                         : ", which is not a data or behavior of this module";
-                Diagnostic.Builder d = Diagnostic.of(null, key).title("check.module.title")
-                        .at(module.pos()).args(e);
-                if (helper) {
-                    d = d.hint("check.exposing.helper.hint", e);
-                }
-                throw CompileException.of(d.build(), "`exposing` names `" + e + "`" + why);
+                throw CompileException.of(
+                        Diagnostic.of(null, key).title("check.module.title")
+                                .at(module.pos()).args(e).build(),
+                        "`exposing` names `" + e + "`" + why);
             }
             exposed.add(e);
         }
@@ -380,7 +383,7 @@ public final class TypeChecker {
         // the exposing signature checks: a signature that should not be there at all (E1605), or one
         // that disagrees with the pipeline (E1604), is the more particular thing to say.
         collect(errors, abandoned, () -> SpecChecker.checkExposedSurface(module, injectionTargets,
-                sigs, symbols, exposeAll, exposed));
+                sigs, symbols, exposeAll, exposed, elaborated.definitionTypes));
     }
 
     /** Applies {@code f} to every direct subexpression of {@code e}. Delegates to the one

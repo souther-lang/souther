@@ -15,6 +15,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Expands calls to helper {@code fn}s inline (spec 12.5: a named helper is the same as an inline block).
@@ -52,7 +53,26 @@ public final class HelperInliner {
      * auto-imported prelude helpers (spec §reserved-namespace) join the inlining map so a bare
      * {@code not(x)} expands at any call site; a module-own helper of the same name shadows one. */
     public static HelperInliner forModule(Ast.Module module) {
-        HelperInliner inliner = forHelpers(helpersOf(module));
+        return forModule(module, Map.of());
+    }
+
+    /**
+     * The same, with the definitions other modules publish to this one — each under the qualified name
+     * it is reached by here, and each already closed by the module that declares it.
+     *
+     * <p>They join the inlining map but not {@code own}, which is what makes a recursive one come back
+     * from {@link #injectedRecursiveHelpers} beside the recursive prelude helpers: neither is this
+     * module's to declare, and both are this module's to emit. A module that reaches one only through
+     * another module's body reaches it here too, because the walk that finds them follows calls rather
+     * than imports.
+     */
+    public static HelperInliner forModule(Ast.Module module, Map<String, Ast.FnDef> imported) {
+        Map<String, Ast.FnDef> own = helpersOf(module);
+        Map<String, Ast.FnDef> table = new LinkedHashMap<>(imported);
+        table.putAll(own);
+        HelperInliner inliner = new HelperInliner(withPrelude(table), new LinkedHashMap<>(own));
+        inliner.classifyRecursion();
+        inliner.rejectValueCycles();
         inliner.computeReferencedPreludeRecursive(module);
         return inliner;
     }
@@ -68,17 +88,22 @@ public final class HelperInliner {
      * its own fns has them here like any other helper, so both say the same thing about it.
      */
     public static HelperInliner forHelpers(Map<String, Ast.FnDef> own) {
-        // prelude helpers are keyed by their qualified name (`List.map`); a module's own helpers by
-        // their bare name (`対象明細`). A qualified call resolves to the prelude, a bare call to the
-        // module's own — the standard library has no bare names (spec §stdlib).
-        Map<String, Ast.FnDef> helpers = new HashMap<>(Prelude.helpers());
-        helpers.putAll(own);
         // In the order they are written, so a module with two helpers to complain about complains
         // about the earlier one first.
-        HelperInliner inliner = new HelperInliner(helpers, new LinkedHashMap<>(own));
+        HelperInliner inliner = new HelperInliner(withPrelude(own), new LinkedHashMap<>(own));
         inliner.classifyRecursion();
         inliner.rejectValueCycles();
         return inliner;
+    }
+
+    /** prelude helpers are keyed by their qualified name (`List.map`); a module's own helpers by their
+     * bare name (`対象明細`), and a definition another module publishes by the qualified name it is
+     * reached by here. A qualified call resolves to whichever of the two declared it, a bare call to
+     * the module's own — the standard library has no bare names (spec §stdlib). */
+    private static Map<String, Ast.FnDef> withPrelude(Map<String, Ast.FnDef> helpers) {
+        Map<String, Ast.FnDef> table = new HashMap<>(Prelude.helpers());
+        table.putAll(helpers);
+        return table;
     }
 
     /** A module's helpers: the fns that implement no behavior, keyed by name. */
@@ -94,23 +119,6 @@ public final class HelperInliner {
             }
         }
         return own;
-    }
-
-    /**
-     * A module's values: the {@code let}s that write no parameter list and implement no behavior.
-     *
-     * <p>A behavior taking nothing is implemented by a value too, and that one is not a value of the
-     * module — the behavior is what a reader reaches, and its body is an implementation. Asked here so
-     * that everything deciding what a module's values are asks it the same way.
-     */
-    public static Map<String, Ast.FnDef> valuesOf(Ast.Module module) {
-        Map<String, Ast.FnDef> values = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.FnDef> e : helpersOf(module).entrySet()) {
-            if (e.getValue().params().isEmpty()) {
-                values.put(e.getKey(), e.getValue());
-            }
-        }
-        return values;
     }
 
     /** Prelude recursive helpers this module reaches, by qualified name (`List.foldFrom`). A prelude
@@ -189,6 +197,214 @@ public final class HelperInliner {
      * auto-imported prelude helpers are excluded — they are validated once, on their own. */
     public Map<String, Ast.FnDef> helpers() {
         return own;
+    }
+
+    /**
+     * A definition {@code module} publishes, closed so that it means in a reader what it means here.
+     *
+     * <p>Closing is expansion: the module's own values and non-recursive helpers are substituted into
+     * the body, so no bare name of this module is left for the reader to read against its own
+     * definitions (ADR-0067). A recursive helper is the one thing expansion cannot remove — it is
+     * lowered to a method, so the call stays a call — and it is qualified here instead, under the
+     * module that declares it. The reader emits that method as one of its own, exactly as it already
+     * does for a recursive prelude helper it reaches.
+     *
+     * <p>What comes back is named qualified too. The name is the definition's identity across
+     * modules, and a bare one is only how a reader happens to write it: two modules may publish a
+     * {@code tally}, and a reader may reach one of them without importing it at all — through the
+     * body of something else it imported.
+     */
+    public Ast.FnDef closeAcross(Ast.FnDef fn, String module) {
+        Ast.Expr closed = recursive.contains(fn.name()) ? inlineRecursiveBody(fn) : inline(fn.body());
+        return new Ast.FnDef(qualified(module, fn.name()), fn.params(), fn.declaredReturn(), null,
+                publishedBy(qualifyHelpersOf(closed, module), module), fn.partial(), fn.pos());
+    }
+
+    /**
+     * {@code e} with every construction in it marked as {@code module}'s.
+     *
+     * <p>What a published body builds is built where that body was written, and the reader is handed
+     * the result. Expanding it puts the construction in the reader's body, where the permission check
+     * would ask the reader to declare it — for a type the declaring module may keep to itself, under a
+     * name the reader has none of. The mark is what tells the two apart afterwards, and it names the
+     * module rather than saying only that the construction came from somewhere: a body may build a
+     * type of a third module, and that one is nobody's to hand over (ADR-0059).
+     */
+    private static Ast.Expr publishedBy(Ast.Expr e, String module) {
+        Ast.Expr rebuilt = Ast.mapChildren(e, c -> publishedBy(c, module));
+        return switch (rebuilt) {
+            case Ast.NewData nd -> nd.publishedBy(module);
+            // a unit data is constructed by being named, so the name is where it says where it came
+            // from — there is no construction node to say it on
+            case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
+                    v.denoting(named.publishedBy(module));
+            default -> rebuilt;
+        };
+    }
+
+    /** How a definition of {@code module} is named outside it. */
+    public static String qualified(String module, String name) {
+        return module + "." + name;
+    }
+
+    /**
+     * {@code m} with every name that denotes another module's definition written qualified.
+     *
+     * <p>A reader writes an imported value or helper bare, and the pair (module, name) is what it
+     * denotes. From here on the two agree: the spelling a body carries is the definition's identity,
+     * so everything downstream — the table a call is expanded against, the method a recursive helper
+     * is emitted as — reads the identity by reading the name, and two modules publishing a
+     * {@code tally} stay two definitions. Done once, here, because the spelling travels as far as the
+     * emitted method name; deciding it at each reader is how one of them comes to disagree.
+     */
+    public static Ast.Module qualifyImports(Ast.Module m) {
+        List<Ast.FnDef> fns = new ArrayList<>();
+        for (Ast.FnDef fn : m.fns()) {
+            fns.add(fn.body() == null ? fn
+                    : new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
+                            qualifyForeign(fn.body(), m.name()), fn.partial(), fn.pos()));
+        }
+        List<Ast.Def> defs = new ArrayList<>();
+        for (Ast.Def def : m.defs()) {
+            defs.add(def instanceof Ast.Data d && d.invariant().isPresent()
+                    ? new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
+                            java.util.Optional.of(qualifyForeign(d.invariant().get(), m.name())),
+                            d.decoder(), d.encoder(), d.pos())
+                    : def);
+        }
+        List<Ast.Example> examples = new ArrayList<>();
+        for (Ast.Example ex : m.examples()) {
+            List<Ast.ExampleRow> rows = new ArrayList<>();
+            for (Ast.ExampleRow row : ex.rows()) {
+                List<Ast.Expr> inputs = new ArrayList<>();
+                for (Ast.Expr in : row.inputs()) {
+                    inputs.add(qualifyForeign(in, m.name()));
+                }
+                List<Ast.With> withs = new ArrayList<>();
+                for (Ast.With w : row.withs()) {
+                    withs.add(new Ast.With(w.dep(), qualifyForeign(w.value(), m.name()), w.pos()));
+                }
+                rows.add(new Ast.ExampleRow(row.description(), inputs, withs,
+                        qualifyForeign(row.expected(), m.name()), row.pos()));
+            }
+            examples.add(new Ast.Example(ex.target(), rows, ex.pos()));
+        }
+        List<Ast.Fake> fakes = new ArrayList<>();
+        for (Ast.Fake fake : m.fakes()) {
+            List<Ast.FakeRow> rows = new ArrayList<>();
+            for (Ast.FakeRow row : fake.rows()) {
+                List<Ast.Expr> inputs = null;
+                if (row.inputs() != null) {   // a default row matches anything and writes none
+                    inputs = new ArrayList<>();
+                    for (Ast.Expr in : row.inputs()) {
+                        inputs.add(qualifyForeign(in, m.name()));
+                    }
+                }
+                rows.add(new Ast.FakeRow(inputs, qualifyForeign(row.output(), m.name()),
+                        row.isDefault(), row.pos()));
+            }
+            fakes.add(new Ast.Fake(fake.target(), rows, fake.pos()));
+        }
+        return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
+                m.behaviors(), fns, examples, fakes, m.exampleFileTarget(), m.pos());
+    }
+
+    /** {@code e} with every name denoting a helper of a module other than {@code self} written
+     * qualified. */
+    private static Ast.Expr qualifyForeign(Ast.Expr e, String self) {
+        return qualifyHelpers(e, helper -> !helper.module().equals(self));
+    }
+
+    /** {@code e} with every name still denoting a helper of {@code module} written qualified. Only a
+     * recursive helper survives closing, so this is what those calls become. */
+    private static Ast.Expr qualifyHelpersOf(Ast.Expr e, String module) {
+        return qualifyHelpers(e, helper -> helper.module().equals(module));
+    }
+
+    /**
+     * {@code e} with every name denoting a helper {@code which} accepts written qualified.
+     *
+     * <p>It reads what a name denotes rather than how it is spelled: a binding of the same spelling is
+     * a binding, and a prelude helper belongs to the prelude and keeps the qualified name it already
+     * has. The new spelling is read off the same answer, so running this twice says what running it
+     * once said.
+     */
+    private static Ast.Expr qualifyHelpers(Ast.Expr e, Predicate<ValueName.Helper> which) {
+        Ast.Expr rebuilt = Ast.mapChildren(e, c -> qualifyHelpers(c, which));
+        return switch (rebuilt) {
+            case Ast.Call call when foreign(call.denotes(), which) ->
+                    new Ast.Call(qualifiedName(call.denotes()), call.denotes(), call.args(),
+                            call.pos());
+            case Ast.Var v when foreign(v.denotes(), which) ->
+                    new Ast.Var(qualifiedName(v.denotes()), v.denotes(), v.pos());
+            // a spread names a value the way any other position does, and `mapChildren` does not
+            // reach it — it holds a name rather than an expression
+            case Ast.NewData nd -> {
+                List<Ast.ValueRef> spreads = new ArrayList<>();
+                boolean changed = false;
+                for (Ast.ValueRef spread : nd.spreads()) {
+                    boolean qualify = foreign(spread.denotes(), which);
+                    changed |= qualify;
+                    spreads.add(qualify
+                            ? new Ast.ValueRef(qualifiedName(spread.denotes()), spread.denotes(),
+                                    spread.pos())
+                            : spread);
+                }
+                yield changed
+                        ? new Ast.NewData(nd.typeName(), nd.inits(), spreads,
+                                nd.publishedBy(), nd.pos())
+                        : nd;
+            }
+            default -> rebuilt;
+        };
+    }
+
+    /** Whether {@code denotes} is a helper {@code which} accepts. */
+    private static boolean foreign(ValueName denotes, Predicate<ValueName.Helper> which) {
+        return denotes instanceof ValueName.Helper helper && which.test(helper);
+    }
+
+    /**
+     * The helpers {@code e} still reaches — what a body closed by {@link #closeAcross} could not
+     * expand away, which is the recursive ones.
+     *
+     * <p>Each is given as what it denotes rather than as a spelling, because the two questions a
+     * caller then has differ: which module declares it decides how it is keyed, and a binding that
+     * shares a helper's spelling is not one of these at all.
+     */
+    public static Set<ValueName.Helper> helpersReached(Ast.Expr e) {
+        Set<ValueName.Helper> out = new LinkedHashSet<>();
+        collectHelpersOf(e, out);
+        return out;
+    }
+
+    private static void collectHelpersOf(Ast.Expr e, Set<ValueName.Helper> out) {
+        if (e == null) {
+            return;
+        }
+        ValueName denotes = switch (e) {
+            case Ast.Call call -> call.denotes();
+            case Ast.Var v -> v.denotes();
+            default -> null;
+        };
+        if (denotes instanceof ValueName.Helper helper) {
+            out.add(helper);
+        }
+        if (e instanceof Ast.NewData nd) {
+            for (Ast.ValueRef spread : nd.spreads()) {
+                if (spread.denotes() instanceof ValueName.Helper helper) {
+                    out.add(helper);
+                }
+            }
+        }
+        Ast.forEachChild(e, c -> collectHelpersOf(c, out));
+    }
+
+    /** The name a helper is reached by outside the module that declares it. Read off what the name
+     * denotes, so applying it to a name already written this way answers the same thing. */
+    private static String qualifiedName(ValueName denotes) {
+        ValueName.Helper helper = (ValueName.Helper) denotes;
+        return qualified(helper.module(), helper.name());
     }
 
     /**
@@ -662,7 +878,8 @@ public final class HelperInliner {
             values.add(inline(value.body()));
             spreads.add(Ast.ValueRef.local(name, spread.pos()));
         }
-        Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads, nd.pos());
+        Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
+                nd.publishedBy(), nd.pos());
         for (int i = bound.size() - 1; i >= 0; i--) {
             built = new Ast.LetIn(bound.get(i), values.get(i), null, false, null, built, nd.pos());
         }
@@ -774,7 +991,7 @@ public final class HelperInliner {
                     String renamed = subst.get(s.bare());
                     spreads.add(renamed == null ? s : Ast.ValueRef.local(renamed, at(at, s.pos())));
                 }
-                yield new Ast.NewData(nd.typeName(), inits, spreads, at(at, nd.pos()));
+                yield new Ast.NewData(nd.typeName(), inits, spreads, nd.publishedBy(), at(at, nd.pos()));
             }
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
@@ -930,9 +1147,11 @@ public final class HelperInliner {
         if (!(spread.denotes() instanceof ValueName.Helper)) {
             return null;
         }
-        Ast.FnDef value = own.get(spread.bare());
+        // by the name it is reached by here, which for another module's value is the qualified one
+        String reached = spread.written();
+        Ast.FnDef value = own.get(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
-                || recursive.contains(spread.bare()) ? null : value;
+                || recursive.contains(reached) ? null : value;
     }
 
     /** The names of this module's values that {@code e} reads. A value is written bare, so a
@@ -950,7 +1169,7 @@ public final class HelperInliner {
         if (e instanceof Ast.NewData nd) {
             for (Ast.ValueRef spread : nd.spreads()) {
                 if (valueSpread(spread) != null) {
-                    out.add(spread.bare());   // `...base` reads the value a bare name does
+                    out.add(spread.written());   // `...base` reads the value a bare name does
                 }
             }
         }
