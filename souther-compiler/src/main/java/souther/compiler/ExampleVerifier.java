@@ -222,7 +222,7 @@ public final class ExampleVerifier {
         Object[] args = new Object[ins.size()];
         for (int i = 0; i < ins.size(); i++) {
             try {
-                Object raw = raw(row.inputs().get(i));
+                Object raw = raw(row.inputs().get(i), ins.get(i));
                 args[i] = decode(ins.get(i), raw);
             } catch (FixtureException fe) {
                 out.add(Diagnostic.of("E1903", "check.example.input").title("check.example.title")
@@ -298,7 +298,8 @@ public final class ExampleVerifier {
         for (Ast.With w : row.withs()) {
             if (w.dep().equals(depName)) {
                 try {
-                    Object value = decode(fixtureType(w.value(), outType), raw(w.value()));
+                    Object value = decode(fixtureType(w.value(), outType),
+                            raw(w.value(), fixtureType(w.value(), outType)));
                     return fakeInstance(dep, a -> value, out);   // constant: ignores its inputs
                 } catch (FixtureException fe) {
                     out.add(fakeMissingDiag(target, depName, row,
@@ -340,7 +341,8 @@ public final class ExampleVerifier {
             for (Ast.FakeRow r : fk.rows()) {
                 // A dependency that returns a sum has no single decoder; each row names one case,
                 // so decode the row's output against that case's type (as an expected value is).
-                Object value = decode(fixtureType(r.output(), outType), raw(r.output()));
+                Object value = decode(fixtureType(r.output(), outType),
+                        raw(r.output(), fixtureType(r.output(), outType)));
                 if (r.isDefault()) {
                     hasDefault[0] = true;
                     def[0] = value;
@@ -355,7 +357,7 @@ public final class ExampleVerifier {
                     }
                     Object[] key = new Object[paramTypes.size()];
                     for (int i = 0; i < paramTypes.size(); i++) {
-                        key[i] = decode(paramTypes.get(i), raw(r.inputs().get(i)));
+                        key[i] = decode(paramTypes.get(i), raw(r.inputs().get(i), paramTypes.get(i)));
                     }
                     entries.add(new Object[] {key, value});
                 }
@@ -533,7 +535,8 @@ public final class ExampleVerifier {
     private Object buildExpected(Ast.Expr expected, Type outType) {
         try {
             if (expected instanceof Ast.NewData nd) {
-                return decode(Type.ref(nd.typeName().denotes()), raw(expected));
+                return decode(Type.ref(nd.typeName().denotes()),
+                        raw(expected, Type.ref(nd.typeName().denotes())));
             }
             if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
                 return decode(Type.ref(symbols.resolve(c.fn())), raw(expected));
@@ -542,7 +545,7 @@ public final class ExampleVerifier {
             // output type is what says which of `List`/`Set`/`Map` the written list means and what
             // its elements are — the same decision a collection argument's declared type makes.
             if (isCollection(outType)) {
-                return decode(outType, raw(expected));
+                return decode(outType, raw(expected, outType));
             }
             return raw(expected);   // a literal expected value
         } catch (FixtureException _) {
@@ -762,6 +765,17 @@ public final class ExampleVerifier {
     /** Turns a fixture expression into its neutral (decoder-input) form: a literal to a boxed value,
      * a newtype construction to its inner value, a record construction to a field map. */
     private Object raw(Ast.Expr e) {
+        return raw(e, null);
+    }
+
+    /**
+     * The neutral form of a written fixture value. {@code expected} is the type of the position it is
+     * written in, where the caller knows it: a bare case name travels differently depending on the sum
+     * it is read as, and only the position says which sum that is. It may be null — a fixture whose
+     * position has no declared type — and then the case's own sums decide, which is right whenever
+     * they agree.
+     */
+    private Object raw(Ast.Expr e, Type expected) {
         return switch (e) {
             case Ast.IntLit i -> i.value();
             case Ast.DecimalLit d -> d.value();
@@ -770,21 +784,23 @@ public final class ExampleVerifier {
             case Ast.Neg n -> negate(raw(n.operand()));
             case Ast.Binary bin -> fold(bin);
             case Ast.Call c -> newtypeInner(c);
-            case Ast.Var v -> unitInput(v.name());
+            case Ast.Var v -> unitInput(v.name(), expected);
             case Ast.NewData nd -> record(nd);
             case Ast.ListLit l -> {
+                Type element = elementOf(expected);
                 List<Object> out = new ArrayList<>();
                 for (Ast.Expr el : l.elements()) {
-                    out.add(raw(el));
+                    out.add(raw(el, element));
                 }
                 yield out;
             }
             // a `(key, value)` pair: only a `Map` field's entries are written this way, and `shaped`
             // collects them into the map the decoder reads (a tuple is not a data field type itself).
             case Ast.Tuple t -> {
+                List<Type> parts = entryTypes(expected, t.elements().size());
                 List<Object> out = new ArrayList<>();
-                for (Ast.Expr el : t.elements()) {
-                    out.add(raw(el));
+                for (int i = 0; i < t.elements().size(); i++) {
+                    out.add(raw(t.elements().get(i), parts == null ? null : parts.get(i)));
                 }
                 yield out;
             }
@@ -792,19 +808,50 @@ public final class ExampleVerifier {
         };
     }
 
+    /** What a written list holds, when the position says: a list's or a set's element, or a map's
+     * entry pair. An optional is opened first — writing a value for a `T?` field writes a `T`. */
+    private static Type elementOf(Type expected) {
+        return switch (open(expected)) {
+            case Type.ListOf l -> l.element();
+            case Type.SetOf s -> s.element();
+            case Type.MapOf m -> Type.tuple(List.of(m.key(), m.value()));
+            case null, default -> null;
+        };
+    }
+
+    /** The types of a written tuple's parts, or null when the position does not say. A map's entry is
+     * the pair that carries its key type, which is where an enumeration key is written. */
+    private static List<Type> entryTypes(Type expected, int arity) {
+        Type opened = open(expected);
+        if (opened instanceof Type.MapOf m && arity == 2) {
+            return List.of(m.key(), m.value());
+        }
+        if (opened instanceof Type.TupleOf t && t.elements().size() == arity) {
+            return t.elements();
+        }
+        return null;
+    }
+
+    private static Type open(Type t) {
+        return t instanceof Type.OptionOf o ? open(o.element()) : t;
+    }
+
     /** A bare name in a fixture is only meaningful as a unit case (no fields) or the built-in {@code
      * None}; a unit's decoder ignores the input, so an empty map stands in, and {@code None} maps to
      * a null, which the optional decoder reads as the absent optional (spec 8, absent/null -> None),
      * the same as omitting a `T?` field — mirroring how a `let` body writes an empty optional. */
-    private Object unitInput(String name) {
+    private Object unitInput(String name, Type expected) {
         if (name.equals("None")) {
             return null;
         }
         if (symbols.declaration(name) instanceof Ast.UnitData) {
             TypeName caseName = symbols.resolve(name);
             // A fixture is built in the neutral form the boundary reads, so a case of an enumeration
-            // is written the way that sum travels: its name, bare (issue #161).
-            if (caseName != null && onlyEnumerationsList(caseName)) {
+            // is written the way that sum travels: its name, bare (issue #161). The same unit data may
+            // be a case of an enumeration and of a sum that has a field-bearing case, and those travel
+            // differently — so the position's own type decides, and the case's sums answer only where
+            // the position does not say.
+            if (caseName != null && readsABareName(expected, caseName)) {
                 return caseName.name();
             }
             Map<String, Object> unit = new LinkedHashMap<>();
@@ -814,9 +861,17 @@ public final class ExampleVerifier {
         throw new FixtureException("`" + name + "` is not a value a fixture can name");
     }
 
-    /** Whether every sum that lists this case is an enumeration, so the case's neutral form is its
-     * name wherever it is written. A unit data listed by a sum with field-bearing cases keeps the
-     * tagged object there, and this cannot tell the two apart from a bare name alone. */
+    /** Whether the position this case is written in reads a bare name: it is typed as an enumeration,
+     * or it is untyped here and every sum that lists the case is one. */
+    private boolean readsABareName(Type expected, TypeName caseName) {
+        Type position = open(expected);
+        return position != null
+                ? TypeOps.isUnitOnlySum(position, symbols)
+                : onlyEnumerationsList(caseName);
+    }
+
+    /** Whether every sum that lists this case is an enumeration, so its neutral form is its name
+     * wherever it is written. Asked only where the position has no declared type to read it as. */
     private boolean onlyEnumerationsList(TypeName caseName) {
         boolean listed = false;
         for (Ast.Def def : symbols.visible()) {
@@ -861,7 +916,8 @@ public final class ExampleVerifier {
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe
         return adjacentlyTagged(c.fn(),
-                shaped(raw(c.args().get(0)), shapeOf(newtypeBaseType(c.fn()))));
+                shaped(raw(c.args().get(0), shapeOf(newtypeBaseType(c.fn()))),
+                        shapeOf(newtypeBaseType(c.fn()))));
     }
 
     /**
@@ -888,7 +944,8 @@ public final class ExampleVerifier {
         Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName().denotes());
         Map<String, Object> map = new LinkedHashMap<>();
         for (Ast.FieldInit fi : nd.inits()) {
-            Object v = shaped(raw(fi.value()), shapeOf(declared.get(fi.name())));
+            Object v = shaped(raw(fi.value(), shapeOf(declared.get(fi.name()))),
+                    shapeOf(declared.get(fi.name())));
             // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads
             // it as absent (spec 8, absent -> None), the same neutral form as omitting the field.
             if (v == null) {

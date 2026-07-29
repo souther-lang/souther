@@ -97,6 +97,56 @@ class CompileUnitOnlySumBoundaryTest {
         assertDoesNotThrow(() -> Compiler.compile(src));
     }
 
+    /**
+     * A unit data may be a case of an enumeration and of a sum that has a field-bearing case, and the
+     * two travel differently. Which form a fixture writes is decided by the type of the position it
+     * is written in, not by what other sums happen to list the case.
+     */
+    private static final String OPEN_IN_TWO_SUMS = """
+            module demo
+
+            data Open
+            data Closed
+            data Failed = { reason: String }
+            data State = Open | Closed
+            data Outcome = Open | Failed
+
+            data In = { state: State }
+            data Attempt = { outcome: Outcome }
+            data Out = { ok: Bool }
+
+            behavior run : (i: In) -> Out constructs Out
+
+            let run (i) =
+                Out { ok = match i.state with
+                               | Open -> true
+                               | Closed -> false }
+            """;
+
+    @Test
+    void aFixtureWritesTheFormTheFieldsTypeReads() {
+        String src = OPEN_IN_TWO_SUMS + """
+
+                example run
+                    | "an open state is open" : (In { state = Open }) -> Out { ok = true }
+                    | "a closed one is not" : (In { state = Closed }) -> Out { ok = false }
+                """;
+
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void theSameCaseInASumThatHasAFieldBearingCaseKeepsTheObject() throws Exception {
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(OPEN_IN_TWO_SUMS), getClass().getClassLoader());
+
+        // Outcome has a field-bearing case, so it stays an object with the discriminator; State, whose
+        // cases are all unit data, is the bare name — the same `Open` in both
+        assertInstanceOf(Ok.class,
+                Codecs.decode(loader, "demo.Attempt", Map.of("outcome", Map.of("type", "Open"))));
+        assertInstanceOf(Ok.class, Codecs.decode(loader, "demo.In", Map.of("state", "Open")));
+    }
+
     @Test
     void theJsonDecoderReadsTheSameBareString() throws Exception {
         BytesClassLoader loader =
