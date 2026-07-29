@@ -173,6 +173,54 @@ class FormatterTest {
         assertEquals(expected, Formatter.format(messy));
     }
 
+    /**
+     * The formatter writes both spellings of a keyword back as literal text rather than copying the
+     * tokens, so nothing but a pinned form catches a wrong one. {@code depends on} is the only
+     * two-word keyword, and the {@code on} lexes as an ordinary identifier — read as a name it would
+     * come back as an extra dependency, and dropped it would come back as none.
+     */
+    @Test
+    void canonicalFormOfAGuardAndATwoWordDependsOn() {
+        String messy = "module demo\n"
+                + "data Amount=Int\n  invariant value>=0\n"
+                + "data Paid=Int\ndata Refused\n"
+                + "behavior clock:()->Amount constructs Amount\n"
+                + "behavior audit:(a:Amount)->Amount constructs Amount\n"
+                + "behavior pay:(a:Amount)->Paid|Refused depends on clock,audit constructs Paid,Refused\n"
+                + "let pay (a,clock,audit)={\n"
+                + "guard a.value<=100 else Refused\n"
+                + "guard Amount(a.value-1) as charged else Refused\n"
+                + "Paid(charged.value) }\n";
+        String expected = """
+                module demo
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data Paid = Int
+
+                data Refused
+
+                behavior clock : () -> Amount
+                    constructs Amount
+
+                behavior audit : (a: Amount) -> Amount
+                    constructs Amount
+
+                behavior pay : (a: Amount) -> Paid | Refused
+                    depends on clock, audit
+                    constructs Paid, Refused
+
+                let pay (a, clock, audit) = {
+                    guard a.value <= 100 else Refused
+                    guard Amount(a.value - 1) as charged else Refused
+                    Paid(charged.value)
+                }
+                """;
+        assertEquals(expected, Formatter.format(messy));
+        assertEquals(expected, Formatter.format(expected), "formatting is not idempotent");
+    }
+
     @Test
     void formattingKeepsThePartialModifier() {
         // `partial` is a helper modifier; dropping it flips the helper from opted-out to
