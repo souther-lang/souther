@@ -555,11 +555,18 @@ public final class SpecChecker {
         // itself: a reader would hold a value it has no name for. Only the value's own surface is
         // asked — a type its body reaches for on the way is its own workings, and requiring those
         // would put every inner type back in the reader's import list.
+        HelperInliner values = null;
         for (Ast.FnDef fn : module.fns()) {
             if (!fn.params().isEmpty() || fn.body() == null || !exposed.contains(fn.name())) {
                 continue;
             }
-            for (Ast.Name built : constructedTypes(fn.body())) {
+            if (values == null) {
+                values = HelperInliner.forHelpers(HelperInliner.helpersOf(module));
+            }
+            // Read the body closed. What a value stands for is not what its outermost expression is
+            // spelled as: `let published = privateValue` builds whatever `privateValue` builds, and a
+            // helper call builds whatever the helper does. Expanding first asks the one question.
+            for (Ast.Name built : constructedTypes(values.inline(fn.body()))) {
                 refuseHidden(Type.ref(built.denotes()), "check.surface.value", fn.name(), null,
                         "check.surface.hint", fn.pos(), symbols, exposeAll, exposed);
             }

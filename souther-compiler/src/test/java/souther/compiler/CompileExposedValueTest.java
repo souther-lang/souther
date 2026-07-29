@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -152,6 +153,101 @@ class CompileExposedValueTest {
                 behavior bill : (p: Priced) -> Receipt constructs Receipt, Amount
                 let bill (p) = Receipt { total = Amount(p.total.value + cap.value) }
                 """), path));
+    }
+
+    /**
+     * A published value means what it meant where it was written. Its body's names were resolved
+     * there, and a definition the reader happens to spell the same way is a different definition.
+     */
+    @Test
+    void aPublishedValueKeepsItsOwnDependenciesWhenAReaderSharesTheirNames() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, standard )
+
+                data Amount = Int
+
+                let base = 10
+                let standard = Amount(base)
+                """, """
+                module order exposing ( In, Out, bill )
+
+                import pricing ( Amount, standard )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                let base = 999
+
+                behavior bill : (i: In) -> Out constructs Out, Amount
+                let bill (i) = Out { v = standard.value }
+                """)), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("order.Bill$Impl").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, Codecs.decoded(loader, "order.In", Map.of("n", 1L)));
+
+        assertEquals(10L, ((Map<?, ?>) Codecs.encode(loader, "order.Out", out)).get("v"));
+    }
+
+    /** Two published values, each resting on its own module's `step`. */
+    @Test
+    void twoPublishedValuesKeepTheirOwnDependenciesOfOneName() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module left exposing ( Amount, one )
+                data Amount = Int
+                let step = 1
+                let one = Amount(step)
+                """, """
+                module right exposing ( Count, two )
+                data Count = Int
+                let step = 2
+                let two = Count(step)
+                """, """
+                module app exposing ( In, Out, bill )
+
+                import left ( Amount, one )
+                import right ( Count, two )
+
+                data In = { n: Int }
+                data Out = { v: Int }
+
+                behavior bill : (i: In) -> Out constructs Out, Amount, Count
+                let bill (i) = Out { v = one.value + two.value }
+                """)), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("app.Bill$Impl").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, Codecs.decoded(loader, "app.In", Map.of("n", 1L)));
+
+        assertEquals(3L, ((Map<?, ?>) Codecs.encode(loader, "app.Out", out)).get("v"));
+    }
+
+    /** The rule is about what the value is, so reaching the hidden type through another value does
+     * not get round it. */
+    @Test
+    void aPublishedValueMayNotStandForAHiddenTypeThroughAnotherValue() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( published )
+
+                data Hidden = Int
+
+                let privateValue = Hidden(1000)
+                let published = privateValue
+                """));
+
+        assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
+    }
+
+    @Test
+    void aPublishedValueMayNotStandForAHiddenTypeThroughAHelper() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( published )
+
+                data Hidden = Int
+
+                let make (n: Int) = Hidden(n)
+                let published = make(1000)
+                """));
+
+        assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
     }
 
     /** A value another module keeps to itself has no name here, as any unexposed name has. */

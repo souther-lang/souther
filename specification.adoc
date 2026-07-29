@@ -246,7 +246,7 @@ module example.pipeline exposing ( 交渉中の商談, 商談, ... )
 let 交渉中の商談 = 交渉中 { ... }
 ----
 
-An importer names the value and nothing else: what the value is built out of stays the declaring module's business, and does not join the reader's import list.
+An importer names the value and nothing else: what the value is built out of stays the declaring module's business, and does not join the reader's import list. What arrives is *closed* — the value with its own module's definitions already substituted into it — so a definition the importer happens to spell the same way is a different definition and changes nothing (<<qualified-reference>>).
 
 A *helper* — a `+let+` with parameters — is not published. It takes arguments, and a function does not cross into another module as a value (<<blocks>>). To share a rule, declare it as a behavior; a behavior that depends on nothing is called from a body like any other function (<<calling-a-behavior>>).
 
@@ -257,7 +257,7 @@ A published value is substituted where it is named, exactly as one of the reader
 
 What a module reaches out with SHALL NOT rest on a type it keeps to itself. An exposed data's field types, and an exposed behavior's input and output, are exposed by the module that declares them. A type carried inside a collection counts — `+List<UserId>+` names `+UserId+` as surely as a bare `+UserId+` does.
 
-An exposed value stands for what it builds, so it SHALL NOT build a type the module keeps to itself. Only what the value *is* is asked: a type its body reached for on the way is its own workings, and requiring those would put every inner type back in the reader's import list — which is what publishing the value was for.
+An exposed value stands for what it builds, so it SHALL NOT build a type the module keeps to itself. What it stands for is read from the value closed, not from the shape of what it was written as: naming another value, or calling a helper, builds whatever that builds. Only what the value *is* is asked — a type its body reached for on the way is its own workings, and requiring those would put every inner type back in the reader's import list, which is what publishing the value was for.
 
 The same holds for an injected behavior — one with no `+let+` — whether or not it is in `+exposing+`, because the abstract base it generates is public regardless (<<java-base-class>>) and the implementation writes both types where it overrides `+apply+`.
 

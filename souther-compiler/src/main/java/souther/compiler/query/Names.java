@@ -762,12 +762,7 @@ public final class Names {
             if (from == null) {
                 continue;
             }
-            Set<String> published = new java.util.HashSet<>(from.exposing());
-            for (String value : valueNames(from)) {
-                if (published.contains(value) && imp.names().contains(value)) {
-                    helpers.add(value);
-                }
-            }
+            helpers.addAll(Bodies.publishedValues(from, imp.names()).keySet());
         }
         BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
         return new Resolve.Values(m.name(), helpers,

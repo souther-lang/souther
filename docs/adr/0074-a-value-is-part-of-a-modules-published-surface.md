@@ -14,9 +14,9 @@ ADR-0072 gave a value a name. It stayed module-local, which left the second half
 
 **A published value is substituted where it is named**, in the reading module as in the declaring one. So publishing one adds no class, no field and no method: what travels is the declaration, which is what a jar already carries for a data's invariant. What the value builds is built by the behavior that names it and belongs in that behavior's `constructs` — for another module's type, what ADR-0059 already allows.
 
-**A published value's names are resolved where it was written** (ADR-0067). The reading module need not import the types the value's body mentions, which is the whole point: an importer names the value, not what it is made of.
+**A published value's names are resolved where it was written** (ADR-0067), and what crosses is *closed*: the value's body with its own module's definitions already substituted into it. A body still naming them would be read against the reader's definitions, and a reader that spells one the same way would silently change what the value means — `pricing.standard = Amount(base)` read in a module with its own `base` answered the reader's number. Closing it first leaves the value's own name as the only one that crosses, which is also the point of publishing it: an importer names the value, not what it is made of.
 
-**A published value may not build a type its module keeps to itself.** The exposed-surface rule of issue #187, applied to what a value *is*. What its body reached for on the way is not asked — requiring that would put every inner type back in the reader's import list.
+**A published value may not build a type its module keeps to itself.** The exposed-surface rule of issue #187, applied to what a value *is*. It is read from the value closed rather than from the shape it was written as: `let published = privateValue` builds whatever `privateValue` builds, and a helper call builds whatever the helper does. What its body reached for on the way is not asked — requiring that would put every inner type back in the reader's import list.
 
 ## Consequences
 

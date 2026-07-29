@@ -436,60 +436,47 @@ public final class Bodies {
             Map<String, Ast.FnDef> helpers =
                     new LinkedHashMap<>(HelperInliner.helpersOf(settled.value()));
             // A value another module publishes is expanded here like one of this module's own: it is
-            // substituted at its references (ADR-0072), so what an importer needs is the body, and
-            // what it names is already settled in the module that wrote it (ADR-0067).
+            // substituted at its references (ADR-0072). What arrives is closed — the value's body with
+            // its own module's definitions already substituted into it — so the only name of the
+            // declaring module that reaches this one is the value's. A body carrying those names
+            // would be read against the definitions here, and a reader that happens to spell one the
+            // same way would change what the value means (ADR-0067).
             for (Ast.Import imp : settled.value().imports()) {
                 Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
                 if (!from.present()) {
                     continue;
                 }
-                Set<String> exposed = new java.util.HashSet<>(from.value().exposing());
-                for (Ast.FnDef fn : from.value().fns()) {
-                    if (fn.params().isEmpty() && exposed.contains(fn.name())
-                            && imp.names().contains(fn.name())) {
-                        // and whatever that body reaches for on the way. Those are the published
-                        // value's own workings — the reader never names them, and does not have to
-                        // import them for the value to stand for what it stands for.
-                        reachedValues(from.value(), fn, helpers);
-                    }
-                }
+                helpers.putAll(publishedValues(from.value(), imp.names()));
             }
             return Answer.of(helpers);
         }
     }
 
-    /** Puts {@code value} and every definition of {@code from} its body reaches into {@code out}. */
-    private static void reachedValues(Ast.Module from, Ast.FnDef value, Map<String, Ast.FnDef> out) {
-        if (value.body() == null || out.putIfAbsent(value.name(), value) != null) {
-            return;
-        }
-        Map<String, Ast.FnDef> declared = HelperInliner.helpersOf(from);
-        for (String name : referencedNames(value.body())) {
-            Ast.FnDef next = declared.get(name);
-            if (next != null) {
-                reachedValues(from, next, out);
+    /**
+     * The values {@code from} publishes among {@code wanted}, each closed over its own module.
+     *
+     * <p>Closing them there is what keeps a published value meaning what it meant where it was
+     * written. A value is substituted at its references, so a body still naming its module's own
+     * definitions would be read against the reader's, and a reader that spells one the same way would
+     * silently change the value. Expanding it first leaves a body that names nothing of the declaring
+     * module at all.
+     */
+    public static Map<String, Ast.FnDef> publishedValues(Ast.Module from, List<String> wanted) {
+        Set<String> exposed = new java.util.HashSet<>(from.exposing());
+        Map<String, Ast.FnDef> out = new LinkedHashMap<>();
+        HelperInliner own = null;
+        for (Ast.FnDef fn : from.fns()) {
+            if (!fn.params().isEmpty() || fn.body() == null
+                    || !exposed.contains(fn.name()) || !wanted.contains(fn.name())) {
+                continue;
             }
+            if (own == null) {
+                own = HelperInliner.forHelpers(HelperInliner.helpersOf(from));
+            }
+            out.put(fn.name(), new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), null,
+                    own.inline(fn.body()), fn.partial(), fn.pos()));
         }
-    }
-
-    /** Every name {@code e} writes as a value, a spread or a call, whatever each turns out to be. */
-    private static Set<String> referencedNames(Ast.Expr e) {
-        Set<String> names = new LinkedHashSet<>();
-        collectNames(e, names);
-        return names;
-    }
-
-    private static void collectNames(Ast.Expr e, Set<String> out) {
-        if (e == null) {
-            return;
-        }
-        switch (e) {
-            case Ast.Var v -> out.add(v.name());
-            case Ast.Call c -> out.add(c.fn());
-            case Ast.NewData nd -> nd.spreads().forEach(s -> out.add(s.bare()));
-            default -> { }
-        }
-        Ast.forEachChild(e, c -> collectNames(c, out));
+        return out;
     }
 
     /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec
