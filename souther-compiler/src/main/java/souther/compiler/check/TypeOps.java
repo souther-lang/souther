@@ -976,22 +976,38 @@ public final class TypeOps {
     }
 
     /**
-     * The element of a {@code Set} or the key of a {@code Map} inside {@code t} that cannot be
-     * compared, or null when every one of them can. Walks the whole type, so a set nested in a list
-     * or a map's value is asked the same question as one written on its own.
+     * A collection inside a type that would have to compare something it cannot. Which collection it
+     * is, is part of the answer: a {@code Set} asks whether two elements are equal and a {@code Map}
+     * whether two keys are, and those are different requirements, so a reader that reports one must
+     * not report it as the other.
      */
-    public static Type uncomparableCollection(Type t) {
+    public sealed interface UncomparableIn {
+        Type type();
+
+        record SetElement(Type type) implements UncomparableIn {}
+
+        record MapKey(Type type) implements UncomparableIn {}
+    }
+
+    /**
+     * The {@code Set} element or {@code Map} key inside {@code t} that cannot be compared, or null
+     * when every one of them can. Walks the whole type, so a set nested in a list or under a map's
+     * value is asked the same question as one written on its own.
+     */
+    public static UncomparableIn uncomparableCollection(Type t) {
         return switch (t) {
             case Type.SetOf s -> !supportsEquality(s.element())
-                    ? s.element() : uncomparableCollection(s.element());
+                    ? new UncomparableIn.SetElement(s.element())
+                    : uncomparableCollection(s.element());
             case Type.MapOf m -> !supportsEquality(m.key())
-                    ? m.key() : firstNonNull(uncomparableCollection(m.key()),
+                    ? new UncomparableIn.MapKey(m.key())
+                    : firstNonNull(uncomparableCollection(m.key()),
                             uncomparableCollection(m.value()));
             case Type.ListOf l -> uncomparableCollection(l.element());
             case Type.OptionOf o -> uncomparableCollection(o.element());
             case Type.TupleOf tu -> {
                 for (Type e : tu.elements()) {
-                    Type bad = uncomparableCollection(e);
+                    UncomparableIn bad = uncomparableCollection(e);
                     if (bad != null) {
                         yield bad;
                     }
@@ -1002,7 +1018,7 @@ public final class TypeOps {
         };
     }
 
-    private static Type firstNonNull(Type a, Type b) {
+    private static UncomparableIn firstNonNull(UncomparableIn a, UncomparableIn b) {
         return a != null ? a : b;
     }
 

@@ -71,15 +71,20 @@ public final class Elaborator {
      * elaborated type says what those are.
      */
     private static Core equatableCollections(Core c) {
-        Type bad = TypeOps.uncomparableCollection(c.type());
-        if (bad != null) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.set.function").title("check.boundary.title")
-                            .at(c.pos()).args(Type.show(bad)).build(),
-                    "this collection would have to compare " + Type.show(bad)
-                            + ", and a function has no value to compare");
+        TypeOps.UncomparableIn bad = TypeOps.uncomparableCollection(c.type());
+        if (bad == null) {
+            return c;
         }
-        return c;
+        // which collection asked is part of the answer: a Set asks whether two elements are equal and
+        // a Map whether two keys are, and the report says which of the two it was
+        String key = bad instanceof TypeOps.UncomparableIn.MapKey
+                ? "check.map.key.function" : "check.set.function";
+        String what = bad instanceof TypeOps.UncomparableIn.MapKey ? "key" : "element";
+        throw CompileException.of(
+                Diagnostic.of(null, key).title("check.boundary.title")
+                        .at(c.pos()).args(Type.show(bad.type())).build(),
+                "this collection would have to compare " + Type.show(bad.type()) + " as its " + what
+                        + ", and a function has no value to compare");
     }
 
     private static Core elaborating(Ast.Expr e, Map<String, Type> env, CheckContext ctx,

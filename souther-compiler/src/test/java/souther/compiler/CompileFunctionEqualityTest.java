@@ -86,4 +86,37 @@ class CompileFunctionEqualityTest {
                 """);
         assertEquals("check.set.function", d.messageKey());
     }
+
+    // A Set asks whether two elements are equal and a Map whether two keys are. Those are different
+    // requirements, so a map the checker inferred is not reported as a set.
+    @Test
+    void aMapTheCheckerInfersIsReportedAsAMap() {
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data R = { n: Int }
+                behavior run : (v: Int) -> R
+                    constructs R
+                let run (v) = {
+                    let p: (Int) -> Bool = (x) -> x > v
+                    R { n = Map.size(Map.singleton(p, 1)) }
+                }
+                """);
+        assertEquals("check.map.key.function", d.messageKey());
+    }
+
+    @Test
+    void aMapGroupedByAFunctionKeyIsReportedAsAMap() {
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data Item = { a: Int }
+                data R = { n: Int }
+                behavior run : (xs: List<Item>, v: Int) -> R
+                    constructs R
+                let run (xs, v) = {
+                    let p: (Int) -> Bool = (x) -> x > v
+                    R { n = Map.size(List.groupBy((i) -> p, xs)) }
+                }
+                """);
+        assertEquals("check.map.key.function", d.messageKey());
+    }
 }
