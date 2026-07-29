@@ -799,11 +799,20 @@ public final class Elaborator {
         return out;
     }
 
-    /** Types a function value against inferred parameter types: a lambda binds its parameters and
+    /**
+     * Types a function value against inferred parameter types: a lambda binds its parameters and
      * yields {@code FnOf(params, resultOfBody)}; an {@code if} requires both branches to be the same
-     * function type (spec §blocks). */
+     * function type (spec §blocks).
+     *
+     * <p>A function's body is not the value a {@code ?} field is being given, whatever encloses the
+     * function, so it does not make an optional (ADR-0011): a step handed to {@code List.filterMap}
+     * answers an optional it read. A body is typed with no expected type, which already refuses
+     * {@code None} — this drops the permission as well, so the rule holds here on its own rather than
+     * resting on how an argument happens to be typed elsewhere.
+     */
     static Core elaborateFunctionValue(Ast.Expr value, List<Type> paramTypes, Map<String, Type> env,
-                                          CheckContext ctx) {
+                                          CheckContext outer) {
+        CheckContext ctx = outer.makingAnOptional(false);
         return switch (value) {
             case Ast.Block b -> {
                 if (b.params().size() != paramTypes.size()) {

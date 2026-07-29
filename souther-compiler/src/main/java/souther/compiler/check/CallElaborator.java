@@ -57,7 +57,11 @@ public final class CallElaborator {
             this.args = args;
             this.cores = new Core[args.size()];
             this.env = env;
-            this.ctx = ctx;
+            // An argument is not the value a `?` field is being given, whatever encloses the call, so
+            // it does not make an optional (ADR-0011). An argument is also typed with no expected
+            // type, which already refuses `None`; dropping the permission states the rule here rather
+            // than leaving it to rest on that.
+            this.ctx = ctx.makingAnOptional(false);
         }
 
         /** The type of argument {@code i}, elaborated with no expected type (bottom-up). */

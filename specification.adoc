@@ -569,7 +569,7 @@ A decode-side violation does not abort; Raoh's `+Result+` failure carries it (<<
 
 The mark `+?+` outside a field is written only in the shipped core, as a type variable is (<<stdlib>>, ADR-0028): `+?+` marks where an optional is *made*, and the name says what the type is.
 
-An optional is *made* in one place: a `+?+` field being given its value (<<optional>>). Writing the type does not make one — `+let p: Option<Int> = None+` is <<e1303>> — and neither does declaring it as a helper's return: a helper answers the optional it read. Where a helper's absence is its own to name, that is a case of the model's own sum.
+An optional is *made* in one place: a `+?+` field being given its value (<<optional>>, ADR-0078). Writing the type does not make one — `+let p: Option<Int> = None+` is <<e1303>> — and neither does declaring it as a helper's return: a helper answers the optional it read. Where a helper's absence is its own to name, that is a case of the model's own sum.
 
 [,text]
 ----

@@ -180,6 +180,35 @@ class OptionAsAWrittenTypeTest {
         assertTrue(e.getMessage().contains("E1303"), e.getMessage());
     }
 
+    /**
+     * The field's permission to make an optional does not reach what the value calls or the functions
+     * it hands over. Two things stop it — an argument and a lambda body are typed with no expected
+     * type, and the permission is dropped at both boundaries — and these rows are what would notice if
+     * either stopped being true.
+     */
+    @Test
+    void theFieldsPermissionDoesNotReachWhatItsValueCalls() {
+        String head = """
+                module demo
+
+                data Note = { value: Int? }
+                """;
+        for (String value : new String[] {
+                "Option.withDefault(0, None)",
+                "List.get(0, List.filterMap(x -> None, [ 1, 2, 3 ]))",
+                "List.length(List.map(x -> None, [ 1, 2, 3 ]))",
+                "{ let p = None\n p }",
+                "orZero(None)",
+        }) {
+            CompileException e = err(head + """
+                    behavior write : (n: Int) -> Note
+                        constructs Note
+                    let orZero (o: Option<Int>) : Int = Option.withDefault(0, o)
+                    let write (n) = Note { value = """ + value + " }\n");
+            assertTrue(e.getMessage().contains("E1303"), value + " :: " + e.getMessage());
+        }
+    }
+
     // --- answering one out of a behavior --------------------------------------------------------
 
     @Test
