@@ -941,7 +941,14 @@ public final class TypeOps {
             case "DateTime" -> Type.DATETIME;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec 7.3, 9.4).
             case "List" -> Type.list(typeArg(ref, symbols, "list", 4, "List needs a type argument, e.g. List<Int>"));
-            case "Set" -> Type.set(typeArg(ref, symbols, "set", 3, "Set needs a type argument, e.g. Set<String>"));
+            case "Set" -> {
+                // a set holds no duplicates, which is a question about equality of its elements
+                Type element = typeArg(ref, symbols, "set", 3,
+                        "Set needs a type argument, e.g. Set<String>");
+                requireEquality(element, ref, "check.set.function",
+                        "a Set has no duplicate elements, and a function has no value to compare");
+                yield Type.set(element);
+            }
             case "Option" -> Type.option(typeArg(ref, symbols, "option", 6, "Option needs a type argument"));
             case "Map" -> {
                 // The key is not restricted here: a map that stays inside a behavior body renders
@@ -951,6 +958,8 @@ public final class TypeOps {
                 Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
                 Type key = ref.tupleElems() == null
                         ? Type.STRING : resolveTerm(ref.tupleElems().get(0), symbols);
+                requireEquality(key, ref, "check.map.key.function",
+                        "a Map finds a value by its key, and a function has no value to compare");
                 yield Type.map(key, value);
             }
             default -> {
@@ -964,6 +973,16 @@ public final class TypeOps {
                 throw unknownType(ref, symbols);
             }
         };
+    }
+
+    /** Refuses a collection whose element or key a function makes uncomparable. */
+    private static void requireEquality(Type t, Ast.TypeRef at, String key, String message) {
+        if (!supportsEquality(t)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, key).title("check.boundary.title")
+                            .at(at.pos()).args(Type.show(t)).build(),
+                    message + ": " + Type.show(t));
+        }
     }
 
     /** The single type argument of a built-in constructor, or the error that says it is missing. */
