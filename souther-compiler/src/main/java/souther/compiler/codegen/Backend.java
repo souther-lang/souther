@@ -724,7 +724,7 @@ public final class Backend {
      * souther.compiler.meta.PublishedModule} refuses a jar that disagrees, so the disagreement is
      * reported as what it is instead of surfacing as an unresolved name inside a body nobody wrote.
      */
-    public static final int BOUNDARY_VERSION = 3;
+    public static final int BOUNDARY_VERSION = 4;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {
