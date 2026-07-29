@@ -279,6 +279,14 @@ public final class TypeChecker {
                 // right there in the file, so "not a data or behavior of this module" sends the
                 // author looking for a typo; what they have to know is that a helper is not part of
                 // the specification and a behavior is how a pure rule is shared (ADR-0005).
+                // A value — a `let` with no parameter list — is part of what the module offers, so it
+                // is published like a data or a behavior. A helper is not: it takes arguments, and a
+                // function does not cross into another module as a value.
+                if (module.fns().stream()
+                        .anyMatch(f -> f.name().equals(e) && f.params().isEmpty())) {
+                    exposed.add(e);
+                    continue;
+                }
                 boolean helper = module.fns().stream().anyMatch(f -> f.name().equals(e));
                 boolean imported = !helper && symbols.inScope(e);
                 String key = helper ? "check.exposing.helper"

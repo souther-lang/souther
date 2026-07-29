@@ -430,9 +430,66 @@ public final class Bodies {
         @Override
         public Answer<Map<String, Ast.FnDef>> compute(Db db) {
             Answer<Ast.Module> settled = db.ask(new Settled(name));
-            return settled.present()
-                    ? Answer.of(HelperInliner.helpersOf(settled.value())) : Answer.absent();
+            if (!settled.present()) {
+                return Answer.absent();
+            }
+            Map<String, Ast.FnDef> helpers =
+                    new LinkedHashMap<>(HelperInliner.helpersOf(settled.value()));
+            // A value another module publishes is expanded here like one of this module's own: it is
+            // substituted at its references (ADR-0072), so what an importer needs is the body, and
+            // what it names is already settled in the module that wrote it (ADR-0067).
+            for (Ast.Import imp : settled.value().imports()) {
+                Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
+                if (!from.present()) {
+                    continue;
+                }
+                Set<String> exposed = new java.util.HashSet<>(from.value().exposing());
+                for (Ast.FnDef fn : from.value().fns()) {
+                    if (fn.params().isEmpty() && exposed.contains(fn.name())
+                            && imp.names().contains(fn.name())) {
+                        // and whatever that body reaches for on the way. Those are the published
+                        // value's own workings — the reader never names them, and does not have to
+                        // import them for the value to stand for what it stands for.
+                        reachedValues(from.value(), fn, helpers);
+                    }
+                }
+            }
+            return Answer.of(helpers);
         }
+    }
+
+    /** Puts {@code value} and every definition of {@code from} its body reaches into {@code out}. */
+    private static void reachedValues(Ast.Module from, Ast.FnDef value, Map<String, Ast.FnDef> out) {
+        if (value.body() == null || out.putIfAbsent(value.name(), value) != null) {
+            return;
+        }
+        Map<String, Ast.FnDef> declared = HelperInliner.helpersOf(from);
+        for (String name : referencedNames(value.body())) {
+            Ast.FnDef next = declared.get(name);
+            if (next != null) {
+                reachedValues(from, next, out);
+            }
+        }
+    }
+
+    /** Every name {@code e} writes as a value, a spread or a call, whatever each turns out to be. */
+    private static Set<String> referencedNames(Ast.Expr e) {
+        Set<String> names = new LinkedHashSet<>();
+        collectNames(e, names);
+        return names;
+    }
+
+    private static void collectNames(Ast.Expr e, Set<String> out) {
+        if (e == null) {
+            return;
+        }
+        switch (e) {
+            case Ast.Var v -> out.add(v.name());
+            case Ast.Call c -> out.add(c.fn());
+            case Ast.NewData nd -> nd.spreads().forEach(s -> out.add(s.bare()));
+            default -> { }
+        }
+        Ast.forEachChild(e, c -> collectNames(c, out));
     }
 
     /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec

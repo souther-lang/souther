@@ -551,6 +551,19 @@ public final class SpecChecker {
                         "check.surface.hint", data.pos(), symbols, exposeAll, exposed);
             }
         }
+        // A published value stands for what it builds, so it may not build a type the module keeps to
+        // itself: a reader would hold a value it has no name for. Only the value's own surface is
+        // asked — a type its body reaches for on the way is its own workings, and requiring those
+        // would put every inner type back in the reader's import list.
+        for (Ast.FnDef fn : module.fns()) {
+            if (!fn.params().isEmpty() || fn.body() == null || !exposed.contains(fn.name())) {
+                continue;
+            }
+            for (Ast.Name built : constructedTypes(fn.body())) {
+                refuseHidden(Type.ref(built.denotes()), "check.surface.value", fn.name(), null,
+                        "check.surface.hint", fn.pos(), symbols, exposeAll, exposed);
+            }
+        }
         // Read off the signature map rather than the declarations: a composition's input and output
         // are inferred from its stages, so they are written nowhere, and this is the one place both
         // kinds of behavior answer the same question.
@@ -568,6 +581,34 @@ public final class SpecChecker {
             }
             refuseHidden(sig.out(), outKey, b.name(), null, hint, b.pos(),
                     symbols, exposeAll, exposed);
+        }
+    }
+
+    /**
+     * The types a body yields, read at its surface only: the construction it is, or the ones its
+     * branches are. It does not descend into a field's value — that is what the value was built out
+     * of, not what it is, and a reader never names it.
+     */
+    private static List<Ast.Name> constructedTypes(Ast.Expr e) {
+        List<Ast.Name> out = new ArrayList<>();
+        surfaceTypes(e, out);
+        return out;
+    }
+
+    private static void surfaceTypes(Ast.Expr e, List<Ast.Name> out) {
+        switch (e) {
+            case Ast.NewData nd -> out.add(nd.typeName());
+            case Ast.LetIn li -> surfaceTypes(li.body(), out);
+            case Ast.If iff -> {
+                surfaceTypes(iff.then(), out);
+                surfaceTypes(iff.els(), out);
+            }
+            case Ast.Match m -> {
+                for (Ast.Case c : m.cases()) {
+                    surfaceTypes(c.body(), out);
+                }
+            }
+            default -> { }
         }
     }
 

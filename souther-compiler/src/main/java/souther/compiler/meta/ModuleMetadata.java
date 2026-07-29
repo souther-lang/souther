@@ -158,10 +158,14 @@ public final class ModuleMetadata {
     }
 
     /**
-     * The helper {@code let}s the module's invariants call, transitively, as they were written. An
-     * invariant is part of what a type is, so it has to be readable where the type is imported, and
-     * it cannot be read without the helpers it names. A helper no invariant reaches is not carried:
-     * this publishes what the declarations need, not the module's implementation.
+     * The {@code let}s a reader of this module's declarations needs, as they were written: the
+     * helpers its invariants call, and the values it publishes.
+     *
+     * <p>An invariant is part of what a type is, so it has to be readable where the type is imported,
+     * and it cannot be read without the helpers it names. A published value is the same: it is
+     * substituted where it is named (ADR-0072), so a reader needs its body, and the body's own
+     * workings with it. A {@code let} neither reaches is not carried — this publishes what the
+     * declarations need, not the module's implementation.
      */
     private static List<String> invariantHelpers(Ast.Module module, CstFrontend.Slices slices) {
         Map<String, Ast.FnDef> own = new LinkedHashMap<>();
@@ -172,6 +176,13 @@ public final class ModuleMetadata {
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.Data d && d.invariant().isPresent()) {
                 reach(d.invariant().get(), own, reached);
+            }
+        }
+        Set<String> exposed = new java.util.HashSet<>(module.exposing());
+        for (Ast.FnDef fn : module.fns()) {
+            if (fn.params().isEmpty() && exposed.contains(fn.name()) && fn.body() != null) {
+                reached.add(fn.name());
+                reach(fn.body(), own, reached);
             }
         }
         List<String> texts = new ArrayList<>();
