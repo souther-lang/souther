@@ -178,11 +178,11 @@ public final class Runner {
 
     // --- behavior selection ---------------------------------------------------------------------
 
-    /** The names a behavior requires, as a message lists them. */
-    private static String requiredNames(Ast.SpecBehavior spec) {
+    /** The names a behavior depends on, as a message lists them. */
+    private static String dependencyNames(Ast.SpecBehavior spec) {
         List<String> names = new java.util.ArrayList<>();
-        for (Ast.ValueRef req : spec.dependsOn()) {
-            names.add(req.bare());
+        for (Ast.ValueRef dep : spec.dependsOn()) {
+            names.add(dep.bare());
         }
         return String.join(", ", names);
     }
@@ -249,7 +249,7 @@ public final class Runner {
             }
             Ast.SpecBehavior spec = specs.get(stage);
             if (spec != null && !spec.dependsOn().isEmpty()) {
-                String dependencies = requiredNames(spec);
+                String dependencies = dependencyNames(spec);
                 return new Blocker("run.pipeline.depends",
                         "`" + pipe.name() + "` is a pipeline whose stage `" + stage
                                 + "` depends on injected dependencies (" + dependencies
@@ -288,7 +288,7 @@ public final class Runner {
                                     + "Runnable: " + available + ".", name, available);
                 }
                 if (!spec.dependsOn().isEmpty()) {
-                    String dependencies = requiredNames(spec);
+                    String dependencies = dependencyNames(spec);
                     return fail("run.behavior.depends",
                             "`" + name + "` depends on injected dependencies (" + dependencies
                                     + "), which `run` cannot supply. Runnable: " + available + ".",
