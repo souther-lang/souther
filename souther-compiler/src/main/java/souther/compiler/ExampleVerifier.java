@@ -7,6 +7,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
+import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Messages;
@@ -229,8 +230,47 @@ public final class ExampleVerifier {
 
     // --- one row ------------------------------------------------------------------------------
 
+    /**
+     * One row, evaluated within the budget: building its fixtures, running the helpers they apply,
+     * applying the behavior and comparing the result are one evaluation, so a row cannot buy more time
+     * by applying more helpers (ADR-0077).
+     */
     private void checkRow(String target, Ast.SpecBehavior spec, Sig sig,
                           Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
+        java.util.concurrent.FutureTask<Object> task = new java.util.concurrent.FutureTask<>(() -> {
+            checkRowNow(target, spec, sig, outCases, row, out);
+            return null;
+        });
+        Thread worker = new Thread(task, "souther-example-eval");
+        worker.setDaemon(true);
+        worker.start();
+        try {
+            task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException _) {
+            task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
+            String helper = applying;
+            out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
+                    .at(row.pos()).args("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms"
+                            + (helper == null ? "" : " while calling `" + helper + "`")).build());
+        } catch (java.util.concurrent.ExecutionException ee) {
+            Throwable cause = ee.getCause();
+            if (cause instanceof NonTerminationException nt) {
+                out.add(Diagnostic.of("E1910", "check.example.nonterminating")
+                        .title("check.example.title").at(row.pos()).args(nt.getMessage()).build());
+                return;
+            }
+            if (cause instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new IllegalStateException(cause);
+        } catch (InterruptedException _) {
+            Thread.currentThread().interrupt();
+            out.add(mismatch(row, describeExpected(row.expected(), sig.out()), "aborted: interrupted"));
+        }
+    }
+
+    private void checkRowNow(String target, Ast.SpecBehavior spec, Sig sig,
+                             Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of("E1903", "check.example.arity").title("check.example.title")
@@ -985,7 +1025,188 @@ public final class ExampleVerifier {
             }
             return raw(c.args().get(0), expected);
         }
+        if (!isNewtype(c.fn()) && helperDef(c.fn()) instanceof Ast.FnDef helper) {
+            return applied(c, helper, expected);
+        }
         return newtypeInner(c);
+    }
+
+    /**
+     * The helper a fixture may apply under {@code name}, or null where the name is not one: a
+     * definition written with a parameter list, read from the table that keys every helper this module
+     * reaches — its own, the ones its imports publish, and the prelude's — as the emitted method is
+     * keyed. The types come from there rather than from the written module because that table is
+     * settled (ADR-0066), and an argument is decoded against the parameter's settled type.
+     */
+    private Ast.FnDef helperDef(String name) {
+        Ast.FnDef helper = values.get(name);
+        return helper != null && !helper.params().isEmpty() ? helper : null;
+    }
+
+    /** Whether {@code name} is a function this example cannot run: nothing emitted a method for it.
+     * A helper that has one is applied; the ones that never do are the standard library's intrinsics
+     * and a helper whose body produces a function, and both read as this. */
+    private boolean noMethod(String name) {
+        if (Prelude.hasQualified(name)) {
+            return true;   // a standard-library function: an intrinsic, or one nothing emitted here
+        }
+        for (Ast.FnDef fn : module.fns()) {
+            if (fn.name().equals(name) && !fn.params().isEmpty()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * A helper applied in a fixture (ADR-0077): its arguments are built as fixtures against its
+     * parameter types, it is run as the method its module emits, and the value it returns is
+     * re-materialised into the neutral form a fixture is written in — so what encloses the call goes on
+     * being built the one way, whether the call stands at the top of a position or inside a record.
+     */
+    private Object applied(Ast.Call c, Ast.FnDef helper, Type expected) {
+        if (c.args().size() != helper.params().size()) {
+            throw new FixtureException("`" + c.fn() + "` takes " + helper.params().size()
+                    + " argument(s) but is called with " + c.args().size());
+        }
+        Object[] args = new Object[helper.params().size()];
+        for (int i = 0; i < args.length; i++) {
+            Ast.FnParam p = helper.params().get(i);
+            if (p.type() == null) {
+                throw new FixtureException("`" + c.fn() + "` parameter `" + p.name()
+                        + "` has no type a fixture can be built against");
+            }
+            Type paramType = TypeOps.resolveParamType(p.type(), symbols);
+            args[i] = decode(paramType, raw(c.args().get(i), paramType));
+        }
+        return neutral(run(c.fn(), args), expected, c.fn());
+    }
+
+    /** The helper currently being run, for the row's budget to name when it does not finish. Read from
+     * the thread that is waiting on the row, so it is written where the row is evaluated. */
+    private volatile String applying;
+
+    /**
+     * Runs the helper's emitted method ({@code $Fns}) on the decoded arguments. A helper this module
+     * only expands has no method, which is what an intrinsic implemented in Java and one whose body
+     * produces a function are — a row applying either is refused by that reason rather than by the
+     * general rule about what a fixture may apply.
+     */
+    private Object run(String name, Object[] args) {
+        java.lang.reflect.Method method;
+        try {
+            Class<?> fns = loader.loadClass(module.name() + ".$Fns");
+            Class<?>[] params = new Class<?>[args.length];
+            java.util.Arrays.fill(params, Object.class);
+            method = fns.getDeclaredMethod(Backend.helperMethod(name), params);
+            method.setAccessible(true);
+        } catch (ClassNotFoundException | NoSuchMethodException _) {
+            throw new FixtureException("`" + name + "` cannot be called from an example fixture:"
+                    + " it has no executable helper method");
+        }
+        String outer = applying;
+        applying = name;
+        try {
+            return method.invoke(null, args);
+        } catch (java.lang.reflect.InvocationTargetException ite) {
+            Throwable cause = ite.getCause();
+            if (cause instanceof StackOverflowError) {
+                throw new NonTerminationException("`" + name + "` overflowed the stack");
+            }
+            throw new FixtureException("`" + name + "` did not produce a value: "
+                    + (cause == null ? ite : cause.getMessage()));
+        } catch (ReflectiveOperationException e) {
+            throw new FixtureException("`" + name + "` could not be called: " + e.getMessage());
+        } finally {
+            applying = outer;
+        }
+    }
+
+    /**
+     * A value a helper returned, in the neutral form a fixture is written in.
+     *
+     * <p>Directed by what the value is and by the position it lands in, not by encoding everything: a
+     * scalar and a temporal are already their own neutral form (a `Date` field's is a {@code LocalDate}
+     * while its encoder writes ISO text), a collection is re-materialised element by element, and a
+     * data goes through the derived encoder a mismatch is displayed through — with the discriminator
+     * its sum's decoder reads, as a written record fixture takes. A unit case of an enumeration travels
+     * as its name where the position reads one, which is the same question {@link #unitInput} asks.
+     */
+    private Object neutral(Object live, Type position, String helper) {
+        if (live == null || isScalar(live)) {
+            return live;
+        }
+        Type opened = open(position);
+        if (live instanceof Map<?, ?> m) {
+            Type key = opened instanceof Type.MapOf map ? map.key() : null;
+            Type value = opened instanceof Type.MapOf map ? map.value() : null;
+            Map<Object, Object> out = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> e : m.entrySet()) {
+                out.put(neutral(e.getKey(), key, helper), neutral(e.getValue(), value, helper));
+            }
+            return out;
+        }
+        if (live instanceof Iterable<?> it) {
+            Type element = elementOf(opened);
+            List<Object> out = new ArrayList<>();
+            for (Object e : it) {
+                out.add(neutral(e, element, helper));
+            }
+            return out;
+        }
+        String name = simpleName(live);
+        // An optional field holds an `Option`: `None` is the absent value a fixture writes by leaving
+        // the field out, and `Some` holds what the position's own type reads (spec 8).
+        if (name.equals("Option$None")) {
+            return null;
+        }
+        if (name.equals("Option$Some")) {
+            return neutral(field(live, "value", helper), opened, helper);
+        }
+        TypeName caseName = symbols.resolve(name);
+        if (caseName == null) {
+            throw new FixtureException("`" + helper + "` returned a " + name
+                    + ", which is not a type this example can read");
+        }
+        if (!(symbols.get(caseName) instanceof Ast.Data data)) {
+            // a unit case: its name where the position reads one, else the tag its sum's decoder reads
+            if (readsABareName(position, caseName)) {
+                return caseName.name();
+            }
+            Map<String, Object> unit = new LinkedHashMap<>();
+            tagged(caseName, unit);
+            return unit;
+        }
+        if (data.newtype()) {
+            Type base = shapeOf(newtypeBaseType(caseName));
+            return adjacentlyTagged(name, shaped(neutral(field(live, "value", helper), base, helper),
+                    base));
+        }
+        Map<String, Ast.TypeRef> declared = fieldTypes(caseName);
+        Map<String, Object> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Ast.TypeRef> f : declared.entrySet()) {
+            Type type = shapeOf(f.getValue());
+            Object value = shaped(neutral(field(live, f.getKey(), helper), type, helper), type);
+            // an absent optional is left out, the same neutral form a fixture writes for `None`
+            if (value != null) {
+                out.put(f.getKey(), value);
+            }
+        }
+        tagged(caseName, out);
+        return out;
+    }
+
+    /** One field of a live data, read through the accessor every data has (ADR-0065). Its class may be
+     * package-private, so the declared method is taken and opened, as a codec is. */
+    private Object field(Object live, String name, String helper) {
+        try {
+            java.lang.reflect.Method accessor = live.getClass().getDeclaredMethod(name);
+            accessor.setAccessible(true);
+            return accessor.invoke(live);
+        } catch (ReflectiveOperationException _) {
+            throw new FixtureException("the value `" + helper + "` returned cannot be read back as a"
+                    + " fixture: `" + simpleName(live) + "` has no `" + name + "` to read");
+        }
     }
 
     private Object newtypeInner(Ast.Call c) {
@@ -998,6 +1219,13 @@ public final class ExampleVerifier {
             return CallElaborator.parseTemporal(c.fn(), lit.value(), c.pos());
         }
         if (!isNewtype(c.fn())) {
+            if (noMethod(c.fn())) {
+                // A function this module cannot run: an intrinsic implemented in Java, or a helper
+                // whose body produces a function. Said as that, so the rule that a fixture may apply a
+                // helper does not appear to have exceptions nothing explains (ADR-0077).
+                throw new FixtureException("`" + c.fn() + "` cannot be called from an example fixture:"
+                        + " it has no executable helper method");
+            }
             throw new FixtureException("`" + c.fn() + "` is not a newtype; a fixture cannot call it");
         }
         if (c.args().size() != 1) {
@@ -1374,40 +1602,14 @@ public final class ExampleVerifier {
     }
 
     /**
-     * Evaluates the behavior on a daemon worker thread with a timeout. Recursion is total by default,
-     * so most code cannot loop; a `partial` recursion that does not terminate is the only risk, and
-     * this bounds it — on timeout the row is reported (E1910). A non-terminating recursion that
-     * overflows the stack instead of tail-looping is reported the same way (a non-termination, not a
-     * generic failure). The worker is interrupted best-effort; a pure compute loop has no interrupt
-     * point, so a deterministic step budget is the deferred complete fix.
+     * Applies the behavior. The row it belongs to is what carries the budget ({@link #checkRow}):
+     * recursion is total by default, so most code cannot loop, and a `partial` recursion that does not
+     * terminate is bounded there along with everything else the row runs — on timeout the row is
+     * reported (E1910). A non-terminating recursion that overflows the stack instead of tail-looping is
+     * reported the same way (a non-termination, not a generic failure).
      */
     private Object invoke(Ast.SpecBehavior spec, Object[] args, Object[] fakes) {
-        java.util.concurrent.FutureTask<Object> task =
-                new java.util.concurrent.FutureTask<>(() -> invokeNow(spec, args, fakes));
-        Thread worker = new Thread(task, "souther-example-eval");
-        worker.setDaemon(true);
-        worker.start();
-        try {
-            return task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (java.util.concurrent.TimeoutException _) {
-            task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
-            throw new NonTerminationException("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms");
-        } catch (java.util.concurrent.ExecutionException ee) {
-            Throwable cause = ee.getCause();
-            if (cause instanceof FakeMissException fm) {
-                throw fm;
-            }
-            if (cause instanceof NonTerminationException nt) {
-                throw nt;   // a stack-overflowing `partial` recursion (invokeNow classified it)
-            }
-            if (cause instanceof AbortException ae) {
-                throw ae;
-            }
-            throw new AbortException(cause == null ? "aborted" : String.valueOf(cause.getMessage()));
-        } catch (InterruptedException _) {
-            Thread.currentThread().interrupt();
-            throw new AbortException("interrupted");
-        }
+        return invokeNow(spec, args, fakes);
     }
 
     /** The {@code $Impl}'s constructor, opened. A behavior its module does not expose generates a

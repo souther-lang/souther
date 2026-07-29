@@ -38,7 +38,7 @@ final class CodegenContext {
     final Set<String> exposed;
     /** The module's recursive helpers, lowered to static methods on {@code $Fns} (spec 13.1), keyed
      * by helper name. A call to one is an {@code invokestatic}, not an inlined body. */
-    final Map<String, Ast.FnDef> recursiveHelpers;
+    final Map<String, Ast.FnDef> emittedHelpers;
 
     /** Synthetic {@code Fn} classes generated for escaping lambdas (spec §blocks), merged into the
      * module output once every behavior is generated. */
@@ -156,14 +156,14 @@ final class CodegenContext {
 
     CodegenContext(String pkg, Symbols symbols, Map<String, List<String>> caseToSums,
                    Map<String, String> typePackage, boolean exposeAll, Set<String> exposed,
-                   Map<String, Ast.FnDef> recursiveHelpers) {
+                   Map<String, Ast.FnDef> emittedHelpers) {
         this.pkg = pkg;
         this.symbols = symbols;
         this.caseToSums = caseToSums;
         this.typePackage = typePackage;
         this.exposeAll = exposeAll;
         this.exposed = exposed;
-        this.recursiveHelpers = recursiveHelpers;
+        this.emittedHelpers = emittedHelpers;
     }
 
     /** {@code ACC_PUBLIC} when the name is exposed (or the module exposes all), else 0. */
@@ -230,10 +230,11 @@ final class CodegenContext {
         return behaviorClass(name) + "$Impl";
     }
 
-    /** The {@code $Fns} method name for a recursive helper. A module-own helper keeps its bare name;
-     * a prelude recursive helper reached under a qualified name ({@code List.foldFrom}) has the dot
-     * mangled to {@code $}, since a JVM method name cannot contain a dot. */
-    static String recursiveHelperMethod(String name) {
+    /** The {@code $Fns} method name for a helper the module emits. A module-own helper keeps its bare
+     * name; one reached under a qualified name ({@code List.foldFrom}) has the dot mangled to
+     * {@code $}, since a JVM method name cannot contain a dot. Public because an {@code example} that
+     * applies a helper looks the method up by this name (ADR-0077), and the name is decided here. */
+    public static String helperMethod(String name) {
         return name.replace('.', '$');
     }
 

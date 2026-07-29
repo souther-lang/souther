@@ -7,6 +7,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -127,6 +129,9 @@ public final class HelperInliner {
      * #injectedRecursiveHelpers}). Only the ones actually reached are emitted. */
     private final Set<String> referencedPreludeRecursive = new java.util.LinkedHashSet<>();
 
+    /** The helpers this module's example rows apply, which need a method for that reason alone. */
+    private final Set<String> exampleHelpers = new java.util.LinkedHashSet<>();
+
     /** Walks the module's fn bodies and data invariants, collecting the prelude recursive helpers they
      * reach transitively — those must be emitted as this module's own methods. */
     private void computeReferencedPreludeRecursive(Ast.Module module) {
@@ -140,12 +145,7 @@ public final class HelperInliner {
                 collectHelperCalls(data.invariant().get(), reachable);
             }
         }
-        for (Ast.Example ex : module.examples()) {
-            for (Ast.ExampleRow row : ex.rows()) {
-                row.inputs().forEach(in -> collectHelperCalls(in, reachable));
-                collectHelperCalls(row.expected(), reachable);
-            }
-        }
+        forEachExampleExpr(module, e -> collectHelperCalls(e, reachable));
         work.addAll(reachable);
         while (!work.isEmpty()) {
             Set<String> calls = callsOf.get(work.poll());
@@ -163,6 +163,100 @@ public final class HelperInliner {
                 referencedPreludeRecursive.add(name);
             }
         }
+        exampleHelpers.addAll(exampleHelpers(module, helpers));
+        exampleHelpers.removeAll(referencedPreludeRecursive);
+        exampleHelpers.removeIf(recursive::contains);   // already emitted as a recursive helper
+    }
+
+    /** Every expression an {@code example} or a {@code fake} of {@code module} writes: a row's inputs,
+     * its {@code with} values, its expected result, and a fake table's inputs and outputs. A helper
+     * named in any of them is applied when the row is evaluated, so all of them are read here. */
+    private static void forEachExampleExpr(Ast.Module module, java.util.function.Consumer<Ast.Expr> f) {
+        for (Ast.Example ex : module.examples()) {
+            for (Ast.ExampleRow row : ex.rows()) {
+                row.inputs().forEach(f);
+                for (Ast.With w : row.withs()) {
+                    f.accept(w.value());
+                }
+                f.accept(row.expected());
+            }
+        }
+        for (Ast.Fake fake : module.fakes()) {
+            for (Ast.FakeRow row : fake.rows()) {
+                if (row.inputs() != null) {   // a default row matches anything and writes none
+                    row.inputs().forEach(f);
+                }
+                f.accept(row.output());
+            }
+        }
+    }
+
+    /**
+     * The helpers an {@code example} row of {@code module} applies, keyed as {@code table} keys them.
+     *
+     * <p>A row is a fixture and a helper is run rather than expanded into it (ADR-0077), so each of
+     * these needs a method to apply — which is the one reason a non-recursive helper is emitted. What
+     * such a helper reaches is expanded into it before it is emitted, so this is what a row names and
+     * not its transitive closure; a recursive helper it reaches is a method already.
+     *
+     * <p>A helper with no body to emit is not here: an intrinsic is implemented in Java, and one whose
+     * body produces a function has no value to hand back. A row applying either is refused where it is
+     * evaluated, by that reason.
+     */
+    public static Set<String> exampleHelpers(Ast.Module module, Map<String, Ast.FnDef> table) {
+        Set<String> called = new LinkedHashSet<>();
+        HelperInliner reader = new HelperInliner(table, table);
+        // A row may name a value rather than write the input again (ADR-0072), and that value's body
+        // is read the way the row's own text is — so a helper it applies is applied when the row is
+        // evaluated. The bodies are followed as far as they name each other, which is how a chain of
+        // values holds.
+        Set<String> valuesRead = new LinkedHashSet<>();
+        Deque<Ast.Expr> work = new ArrayDeque<>();
+        forEachExampleExpr(module, work::add);
+        while (!work.isEmpty()) {
+            Ast.Expr e = work.poll();
+            reader.collectHelperCalls(e, called);
+            Set<String> named = new LinkedHashSet<>();
+            reader.collectValueRefs(e, named);
+            for (String value : named) {
+                Ast.FnDef def = table.get(value);
+                if (def != null && def.params().isEmpty() && def.body() != null
+                        && valuesRead.add(value)) {
+                    work.add(def.body());
+                }
+            }
+        }
+        Set<String> out = new LinkedHashSet<>();
+        for (String name : called) {
+            Ast.FnDef helper = table.get(name);
+            if (helper != null && helper.body() != null && helper.intrinsicKey() == null
+                    && !helper.params().isEmpty() && !Elaborator.producesFunction(helper.body())) {
+                out.add(name);
+            }
+        }
+        return out;
+    }
+
+    /** As {@link #exampleHelpers(Ast.Module, Map)}, for the module this inliner reads: the ones it must
+     * emit as methods, without those a recursion already emits. */
+    public Set<String> exampleHelpers() {
+        return exampleHelpers;
+    }
+
+    /** The example-applied helpers this module does not declare — a published one, or a prelude one —
+     * renamed to the qualified name they are reached by, so the module takes them on as its own fns and
+     * emits them beside its own, as it does for a recursive one it reaches. */
+    public Map<String, Ast.FnDef> injectedExampleHelpers() {
+        Map<String, Ast.FnDef> out = new java.util.LinkedHashMap<>();
+        for (String name : exampleHelpers) {
+            if (own.containsKey(name)) {
+                continue;
+            }
+            Ast.FnDef def = helpers.get(name);
+            out.put(name, new Ast.FnDef(name, def.params(), def.declaredReturn(), def.intrinsicKey(),
+                    def.body(), def.partial(), def.pos()));
+        }
+        return out;
     }
 
     /** The recursive helpers this module emits as methods: its own recursive helpers plus the prelude

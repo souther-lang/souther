@@ -14,8 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * to refer to one.
  *
  * <p>What a fixture may name is a property of the value graph, not of one definition's text: a value
- * is fixture-evaluable when it is a literal, a construction, a spread, or a reference to another
- * fixture-evaluable value. So a chain of values holds even though each link names the next.
+ * is fixture-evaluable when it is a literal, a construction, a spread, a helper applied to those, or a
+ * reference to another fixture-evaluable value. So a chain of values holds even though each link names
+ * the next.
  */
 class CompileFixtureNamesAValueTest {
 
@@ -113,15 +114,17 @@ class CompileFixtureNamesAValueTest {
     }
 
     @Test
-    void aValueThatIsNotAFixtureCannotBeNamedByARow() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void aValueWhoseBodyAppliesAHelperIsAFixture() {
+        // The helper is run where the row is evaluated (ADR-0077), so the value states the rule
+        // rather than restating its result: `raise(71)` is 72, and 72 qualifies.
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
 
                 data Lead = { name: String, score: Int }
                 data Accepted
                 data Rejected
 
-                let raise (n) = n + 1
+                let raise (n: Int) = n + 1
                 let acme = Lead { name = "Acme", score = raise(71) }
 
                 behavior qualify : (l: Lead) -> Accepted | Rejected
@@ -130,9 +133,33 @@ class CompileFixtureNamesAValueTest {
                 let qualify (l) = if l.score >= 70 then Accepted else Rejected
 
                 example qualify
-                    | "a computed field is not a fixture" : (acme) -> Accepted
+                    | "a raised score qualifies" : (acme) -> Accepted
+                """));
+    }
+
+    @Test
+    void aValueThatReachesNoRunnableFunctionCannotBeNamedByARow() {
+        // A standard-library intrinsic is implemented in Java and has no helper method to apply, so a
+        // value whose body calls one is not a fixture — and says that rather than being refused for
+        // being a call at all.
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data Lead = { name: String, score: Int }
+                data Accepted
+                data Rejected
+
+                let acme = Lead { name = "Acme", score = String.length("Acme") }
+
+                behavior qualify : (l: Lead) -> Accepted | Rejected
+                    constructs Accepted, Rejected
+
+                let qualify (l) = if l.score >= 70 then Accepted else Rejected
+
+                example qualify
+                    | "an intrinsic is not a fixture" : (acme) -> Rejected
                 """));
 
-        assertTrue(e.getMessage().contains("fixture"), e.getMessage());
+        assertTrue(e.getMessage().contains("no executable helper method"), e.getMessage());
     }
 }

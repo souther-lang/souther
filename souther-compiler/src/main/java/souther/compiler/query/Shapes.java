@@ -183,8 +183,12 @@ public final class Shapes {
             // the name.
             Ast.Module m = HelperInliner.qualifyImports(desugared.value());
             try {
+                HelperInliner inliner = HelperInliner.forModule(m, published);
                 Map<String, Ast.FnDef> injected =
-                        HelperInliner.forModule(m, published).injectedRecursiveHelpers();
+                        new java.util.LinkedHashMap<>(inliner.injectedRecursiveHelpers());
+                // A helper an example row applies is emitted for that reason (ADR-0077); one this
+                // module does not declare is taken on here, as a recursive one it reaches is.
+                inliner.injectedExampleHelpers().forEach(injected::putIfAbsent);
                 if (injected.isEmpty()) {
                     return Answer.of(m);
                 }

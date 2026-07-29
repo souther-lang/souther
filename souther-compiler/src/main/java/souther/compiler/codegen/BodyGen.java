@@ -974,7 +974,7 @@ final class BodyGen {
                     Var fv = env.get(call.fn());
                     if (fv != null && fv.type() instanceof Type.FnOf fnType) {
                         applyFn(call, fnType);
-                    } else if (ctx.recursiveHelpers.containsKey(call.fn())) {
+                    } else if (ctx.emittedHelpers.containsKey(call.fn())) {
                         recursiveHelperCall(call);
                     } else if (reqNames.contains(call.fn())) {
                         requiredCall(call);
@@ -1032,7 +1032,7 @@ final class BodyGen {
         private void invokeRecursiveHelper(Core.Call call) {
             ClassDesc[] params = new ClassDesc[call.args().size()];
             java.util.Arrays.fill(params, CD_Object);
-            code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.recursiveHelperMethod(call.fn()),
+            code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.helperMethod(call.fn()),
                     MethodTypeDesc.of(CD_Object, params));
         }
 
@@ -1385,11 +1385,14 @@ final class BodyGen {
         }
 
         /** {@link #typesEnv} plus the recursive helpers' signatures, so re-typing an expression that
-         * calls one (a nested {@code foldFrom} in a fold's seed) resolves it as a function. */
+         * calls one (a nested {@code foldFrom} in a fold's seed) resolves it as a function. Only a
+         * recursive helper's signature can be read here, and a recursive helper declares its return
+         * type (spec 13.1); an example-applied helper is emitted beside them without declaring one, and
+         * no standing call names it — it is expanded wherever a body calls it. */
         private Map<String, Type> typesEnvWithHelpers() {
             Map<String, Type> t = typesEnv();
-            ctx.recursiveHelpers.forEach((name, h) -> {
-                if (t.containsKey(name)) {
+            ctx.emittedHelpers.forEach((name, h) -> {
+                if (t.containsKey(name) || h.declaredReturn() == null) {
                     return;   // a local of the same name shadows the helper, as it does in the checker
                 }
                 List<Type> params = new ArrayList<>();

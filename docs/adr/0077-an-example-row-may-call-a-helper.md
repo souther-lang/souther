@@ -30,7 +30,11 @@ taxed(Amount(100))
 
 The result never travels as a runtime value into the surrounding build. That is what keeps one path for a call at the top of a position and a call nested inside a record, keeps the existing rules for records, collections and newtypes doing the work they already do, and keeps a helper from putting its internal representation into a fixture.
 
-**Re-materialisation is directed by the position's type**, not by a blanket encode. A scalar or a temporal is its own neutral form — `Date`'s is a `LocalDate`, while its derived encoder writes ISO text, so encoding it would produce something the decoder does not read. A data goes through its derived `encoder()`, the same one a mismatch is displayed through. A collection is re-materialised element by element. A case of a sum takes the discriminator its sum's decoder reads, as a written record fixture does. Two failures are possible and are one diagnostic with the reason under it: a value that cannot be brought to a neutral form, and a neutral form the position cannot read back.
+**Re-materialisation is the inverse of writing the fixture**, and is directed by the declared types rather than by the boundary encoding. A scalar or a temporal is its own neutral form. A collection is re-materialised element by element. A data is read field by field through the accessor every data has (ADR-0065), each field against its declared type, and a case of a sum takes the discriminator its sum's decoder reads — which is what a written record fixture is built as, so one decoder reads both. An empty optional is left out, as writing `None` leaves it out.
+
+Going through the derived `encoder()` instead was measured and does not hold: a `Date`'s neutral form is a `LocalDate` while its encoder writes ISO text, so a newtype over a date came back as text its own decoder refuses. The encoder answers what the boundary reads, which is a different question from what a fixture is written as, and only the second one has a decoder waiting for it here.
+
+A value that cannot be read back is one diagnostic with the reason under it — a field the accessor cannot reach, or a type this module cannot name.
 
 The invariant of the result type is evaluated at the helper's own construction and again when the re-materialised value is decoded. An invariant is pure and total, so there is no difference in meaning; it is counted in the row's time budget, and re-checking a value that has crossed the JVM boundary back into a fixture is consistent with every other fixture being decoded.
 
@@ -48,7 +52,7 @@ The invariant of the result type is evaluated at the helper's own construction a
 
 Issue #200 closes. An example of a behavior that applies a rule states the rule, and a change to the rule reaches the rows that are about it instead of leaving them passing for the wrong reason.
 
-A value whose body calls a helper becomes fixture-evaluable, so ADR-0072's exclusion of it — a value "whose body computes" — is withdrawn. It follows from the row's own rule rather than being a second decision: a value's body is read the way a row's text is.
+A value whose body calls a helper becomes fixture-evaluable, so ADR-0072's exclusion of it — a value "whose body computes" — is withdrawn. It follows from the row's own rule rather than being a second decision: a value's body is read the way a row's text is, so the helpers a row reaches are the ones its own text names *and* the ones the values it names apply, as far as those values name each other.
 
 A row may now fail because of a helper rather than because of the behavior. That is the point — the alternative was a row that could not fail at all when the rule changed — but it puts the helper in the row's failure, so the diagnostic names it.
 
