@@ -32,6 +32,45 @@ public final class TypeOps {
         return successType(t, symbols);
     }
 
+    /**
+     * Whether a value of this type has an external representation — what a boundary requires of it
+     * (ADR-0004). A boundary is where a codec is derived or a value crosses one: a data's field, a
+     * newtype's base, a behavior's input and its output.
+     */
+    public static boolean isBoundaryRepresentable(Type t) {
+        return !carriesFunction(t);
+    }
+
+    /**
+     * Whether values of this type can be compared for equality — what {@code ==} requires, and what
+     * a {@code Set} requires of its element and a {@code Map} of its key (ADR-0009, ADR-0039).
+     */
+    public static boolean supportsEquality(Type t) {
+        return !carriesFunction(t);
+    }
+
+    /** Whether values of this type have an ordering — what {@code sort} and a {@code sortBy} key
+     * require of what they order. */
+    public static boolean supportsOrdering(Type t) {
+        return !carriesFunction(t);
+    }
+
+    /**
+     * The one walk the three capability predicates above share today. They are separate questions
+     * and are asked separately; that a function is the only answer to all three is a fact about the
+     * types there are now, not a statement that the three are one predicate. A type that carried an
+     * external representation but no ordering would split them, and only this method would move.
+     */
+    private static boolean carriesFunction(Type t) {
+        return Type.mentions(t, x -> x instanceof Type.FnOf);
+    }
+
+    /** The type a field's written type stands for. A field whose type is not representable at the
+     * boundary is refused where the data is checked; the type is read the same way either way. */
+    public static Type fieldType(Ast.Field f) {
+        return f.type() instanceof Ast.TypeRef ref ? ref.denotes() : resolveTerm(f.type(), null);
+    }
+
     /** The type one written term stands for. */
     public static Type resolveTerm(Ast.TypeTerm t, Symbols symbols) {
         return switch (t) {
@@ -501,7 +540,7 @@ public final class TypeOps {
             }
         }
         for (Ast.Field f : data.fields()) {
-            if (types.put(f.name(), f.type().denotes()) != null) {
+            if (types.put(f.name(), fieldType(f)) != null) {
                 throw CompileException.of(
                         Diagnostic.of("E1004", "e1004.dup").at(f.pos())
                                 .args(f.name(), data.name()).build(),
@@ -521,7 +560,7 @@ public final class TypeOps {
     public static Type fieldType(Ast.Data data, String field, Symbols symbols) {
         for (Ast.Field f : data.fields()) {
             if (f.name().equals(field)) {
-                return f.type().denotes();
+                return fieldType(f);
             }
         }
         for (Ast.Name inc : data.includes()) {
@@ -640,7 +679,8 @@ public final class TypeOps {
      *  type a {@code Map} admits besides {@code String} itself (ADR-0040). */
     static boolean isStringNewtype(TypeName name, Symbols symbols) {
         return symbols.get(name) instanceof Ast.Data d && d.newtype()
-                && d.fields().size() == 1 && "String".equals(d.fields().get(0).type().name());
+                && d.fields().size() == 1
+                && d.fields().get(0).type() instanceof Ast.TypeRef base && "String".equals(base.name());
     }
 
     /**

@@ -287,7 +287,7 @@ public final class AstBuilder {
 
     private Ast.Field field(SyntaxNode n) {
         String name = firstIdentText(n);
-        Ast.TypeRef type = typeRef(typeChild(n));
+        Ast.TypeTerm type = typeTerm(typeChild(n));
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
             type = new Ast.TypeRef("Option", type, type.pos());   // `T?` → Option<T>
         }
@@ -547,16 +547,19 @@ public final class AstBuilder {
         if (args.isEmpty()) {
             return new Ast.TypeRef(name, null, pos(n));
         }
-        List<Ast.TypeRef> typeArgs = new ArrayList<>();
+        List<Ast.TypeTerm> typeArgs = new ArrayList<>();
         for (SyntaxNode c : args.get().childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                typeArgs.add(typeRef(c));
+            if (isTypeTermKind(c.kind())) {
+                typeArgs.add(typeTerm(c));
             }
+        }
+        if (typeArgs.isEmpty()) {
+            return new Ast.TypeRef(name, null, pos(n));   // the missing argument is reported by name
         }
         if (name.equals("Map")) {
             // carry the value in `arg` and the key in `tupleElems` (ADR-0040)
-            Ast.TypeRef key = typeArgs.get(0);
-            Ast.TypeRef value = typeArgs.get(typeArgs.size() - 1);
+            Ast.TypeTerm key = typeArgs.get(0);
+            Ast.TypeTerm value = typeArgs.get(typeArgs.size() - 1);
             return new Ast.TypeRef("Map", value, List.of(key), pos(n));
         }
         return new Ast.TypeRef(name, typeArgs.get(0), pos(n));   // List<T> / Set<T> / Option<T>
@@ -1170,7 +1173,7 @@ public final class AstBuilder {
 
     private SyntaxNode typeChild(SyntaxNode n) {
         for (SyntaxNode c : n.childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
+            if (isTypeTermKind(c.kind())) {
                 return c;
             }
         }

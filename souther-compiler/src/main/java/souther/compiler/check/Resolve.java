@@ -208,7 +208,7 @@ public final class Resolve {
     private List<Ast.Field> fields(List<Ast.Field> fields) {
         List<Ast.Field> out = new ArrayList<>();
         for (Ast.Field f : fields) {
-            out.add(new Ast.Field(f.name(), typeRef(f.type()), f.pos()));
+            out.add(new Ast.Field(f.name(), typeTerm(f.type()), f.pos()));
         }
         return out;
     }

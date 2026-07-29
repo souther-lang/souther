@@ -320,7 +320,7 @@ public interface Ast {
     record Variant(String tag, Name caseType, SourcePos pos) implements Ast {}
 
     /** A field: a role name and its type. */
-    record Field(String name, TypeRef type, SourcePos pos) implements Ast {}
+    record Field(String name, TypeTerm type, SourcePos pos) implements Ast {}
 
     /**
      * A named type reference, optionally with one type argument (e.g. {@code List<T>}). When

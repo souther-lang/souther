@@ -247,6 +247,7 @@ public final class TypeChecker {
                 specNames.add(b.name());
                 SpecChecker.rejectAnonymousUnionParams(spec);
                 SpecChecker.rejectTupleIO(spec);
+                SpecChecker.rejectFunctionIO(spec, symbols);
                 SpecChecker.rejectNonBoundaryMapKeyIO(spec, symbols);
                 List<String> outputCases = new ArrayList<>();
                 for (Ast.TypeTerm t : spec.ret().cases()) {

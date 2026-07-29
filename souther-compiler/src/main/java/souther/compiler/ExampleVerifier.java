@@ -1111,7 +1111,11 @@ public final class ExampleVerifier {
                 out.putAll(fieldTypes(inc.denotes()));
             }
             for (Ast.Field f : d.fields()) {
-                out.put(f.name(), f.type());
+                // an example builds its input through a decoder, so a field with no external
+                // representation is not one it can state; the data declaration refused it already
+                if (f.type() instanceof Ast.TypeRef ref) {
+                    out.put(f.name(), ref);
+                }
             }
         }
         return out;
@@ -1167,7 +1171,8 @@ public final class ExampleVerifier {
 
     private Ast.TypeRef newtypeBaseType(TypeName name) {
         return name != null && symbols.get(name) instanceof Ast.Data d && d.newtype()
-                && d.fields().size() == 1 ? d.fields().get(0).type() : null;
+                && d.fields().size() == 1 && d.fields().get(0).type() instanceof Ast.TypeRef base
+                ? base : null;
     }
 
     /** The type a newtype wraps ({@code Date} for {@code data 貸出日 = Date}), or null. */
@@ -1180,7 +1185,8 @@ public final class ExampleVerifier {
      * ({@code data 在庫 = Map<商品ID, Int>}) keeps its type arguments. */
     private Ast.TypeRef newtypeBaseType(String name) {
         return symbols.declaration(name) instanceof Ast.Data d && d.newtype() && d.fields().size() == 1
-                ? d.fields().get(0).type()
+                && d.fields().get(0).type() instanceof Ast.TypeRef base
+                ? base
                 : null;
     }
 

@@ -452,6 +452,35 @@ public final class SpecChecker {
         }
     }
 
+    /**
+     * A behavior's input is decoded and its output encoded, so neither may carry a function — at any
+     * depth, since a function hides as easily inside a {@code List} or a {@code Map} as it stands on
+     * its own. Asked of the type rather than of the syntax: what the position requires is an external
+     * representation, and a function has none (ADR-0004).
+     */
+    static void rejectFunctionIO(Ast.SpecBehavior spec, Symbols symbols) {
+        for (Ast.Param p : spec.params()) {
+            Type t = TypeOps.successType(p.type(), symbols);
+            if (!TypeOps.isBoundaryRepresentable(t)) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.param.function").title("check.boundary.title")
+                                .at(p.pos(), p.name().length()).args(p.name(), Type.show(t)).build(),
+                        "parameter `" + p.name() + "` carries a function (" + Type.show(t)
+                                + "); a function has no external representation, so it cannot cross"
+                                + " the boundary into a behavior");
+            }
+        }
+        Type out = TypeOps.successType(spec.ret(), symbols);
+        if (!TypeOps.isBoundaryRepresentable(out)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.output.function").title("check.boundary.title")
+                            .at(spec.pos()).args(spec.name(), Type.show(out)).build(),
+                    "behavior `" + spec.name() + "` outputs a function (" + Type.show(out)
+                            + "); a function has no external representation, so it cannot cross the"
+                            + " boundary out of a behavior");
+        }
+    }
+
     /** A behavior's input and output cross a decoder/encoder, so a map they carry is a JSON object
      * and its keys are strings (ADR-0040). A map that stays inside the body is unrestricted — the
      * same rule, read where it applies. */
