@@ -1,6 +1,7 @@
 package souther.compiler.meta;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.codegen.Backend;
@@ -179,8 +180,10 @@ public final class ModuleMetadata {
             }
         }
         Set<String> exposed = new java.util.HashSet<>(module.exposing());
-        for (Ast.FnDef fn : module.fns()) {
-            if (fn.params().isEmpty() && exposed.contains(fn.name()) && fn.body() != null) {
+        // A behavior's body is not published — a reader has its signature and calls it — so the
+        // value form of a zero-input behavior's implementation is not carried either.
+        for (Ast.FnDef fn : HelperInliner.valuesOf(module).values()) {
+            if (exposed.contains(fn.name()) && fn.body() != null) {
                 reached.add(fn.name());
                 reach(fn.body(), own, reached);
             }

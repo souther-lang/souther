@@ -1071,14 +1071,7 @@ public final class Names {
     /** The values a module declares — a {@code let} with no parameter list. Like a behavior, one is
      * a name in the value namespace and not a data, so an import of it resolves elsewhere. */
     static Set<String> valueNames(Ast.Module m) {
-        Set<String> behaviors = behaviorNames(m);
-        Set<String> names = new LinkedHashSet<>();
-        for (Ast.FnDef fn : m.fns()) {
-            if (fn.params().isEmpty() && !behaviors.contains(fn.name())) {
-                names.add(fn.name());
-            }
-        }
-        return names;
+        return new LinkedHashSet<>(HelperInliner.valuesOf(m).keySet());
     }
 
     static Report unknownModule(Ast.Import imp) {

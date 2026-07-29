@@ -282,8 +282,7 @@ public final class TypeChecker {
                 // A value — a `let` with no parameter list — is part of what the module offers, so it
                 // is published like a data or a behavior. A helper is not: it takes arguments, and a
                 // function does not cross into another module as a value.
-                if (module.fns().stream()
-                        .anyMatch(f -> f.name().equals(e) && f.params().isEmpty())) {
+                if (HelperInliner.valuesOf(module).containsKey(e)) {
                     exposed.add(e);
                     continue;
                 }

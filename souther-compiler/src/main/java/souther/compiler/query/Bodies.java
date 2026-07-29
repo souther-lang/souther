@@ -465,8 +465,10 @@ public final class Bodies {
         Set<String> exposed = new java.util.HashSet<>(from.exposing());
         Map<String, Ast.FnDef> out = new LinkedHashMap<>();
         HelperInliner own = null;
-        for (Ast.FnDef fn : from.fns()) {
-            if (!fn.params().isEmpty() || fn.body() == null
+        // A behavior taking nothing is implemented by a value, and that body is not published: a
+        // reader calls the behavior and never reads what it was given.
+        for (Ast.FnDef fn : HelperInliner.valuesOf(from).values()) {
+            if (fn.body() == null
                     || !exposed.contains(fn.name()) || !wanted.contains(fn.name())) {
                 continue;
             }

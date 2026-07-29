@@ -250,6 +250,10 @@ An importer names the value and nothing else: what the value is built out of sta
 
 A *helper* — a `+let+` with parameters — is not published. It takes arguments, and a function does not cross into another module as a value (<<blocks>>). To share a rule, declare it as a behavior; a behavior that depends on nothing is called from a body like any other function (<<calling-a-behavior>>).
 
+A behavior taking nothing is implemented by a value (<<fn-declaration>>), and that body is not published either. What a reader of the module reaches is the behavior, which it calls; the `+let+` that satisfies it is an implementation, and the module publishes its specification.
+
+An exposed value SHALL NOT reach a *recursive* helper. What crosses is the value closed, and a recursive helper is lowered to a method rather than expanded (<<fn-rules>>), so there is nothing to close it over. Declare what it computes as a behavior the reader can call.
+
 A published value is substituted where it is named, exactly as one of the reader's own is (<<fn-value-semantics>>). So what it builds is built by the behavior that names it, and belongs in that behavior's `+constructs+` — which for another module's type is what <<closed-construction>> already allows.
 
 [#exposed-surface]

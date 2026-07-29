@@ -96,6 +96,23 @@ public final class HelperInliner {
         return own;
     }
 
+    /**
+     * A module's values: the {@code let}s that write no parameter list and implement no behavior.
+     *
+     * <p>A behavior taking nothing is implemented by a value too, and that one is not a value of the
+     * module — the behavior is what a reader reaches, and its body is an implementation. Asked here so
+     * that everything deciding what a module's values are asks it the same way.
+     */
+    public static Map<String, Ast.FnDef> valuesOf(Ast.Module module) {
+        Map<String, Ast.FnDef> values = new LinkedHashMap<>();
+        for (Map.Entry<String, Ast.FnDef> e : helpersOf(module).entrySet()) {
+            if (e.getValue().params().isEmpty()) {
+                values.put(e.getKey(), e.getValue());
+            }
+        }
+        return values;
+    }
+
     /** Prelude recursive helpers this module reaches, by qualified name (`List.foldFrom`). A prelude
      * recursive helper is not inlined (it would expand forever); instead it is emitted as one of this
      * module's own methods, exactly like a module-own recursive helper (see {@link

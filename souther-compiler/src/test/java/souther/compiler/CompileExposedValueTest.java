@@ -250,6 +250,105 @@ class CompileExposedValueTest {
         assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
     }
 
+    /**
+     * A behavior taking nothing is implemented by a value, but the behavior is what is published —
+     * a reader calls it, and never reads the body it was given. Publishing the body would put an
+     * implementation where a specification goes, and let a row name it as a fixture.
+     */
+    @Test
+    void aBehaviorImplementedByAValueDoesNotPublishItsBody() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module clock exposing ( D, now )
+
+                        data D = { v: Int }
+
+                        behavior now : () -> D constructs D
+                        let now = D { v = 1 }
+                        """, """
+                        module app exposing ( Out, go )
+
+                        import clock ( D, now )
+
+                        data Out = { v: Int }
+
+                        behavior go : (d: D) -> Out constructs Out
+                        let go (d) = Out { v = d.v }
+
+                        example go
+                            | "a behavior is not a fixture" : (now) -> Out { v = 1 }
+                        """)));
+
+        assertTrue(e.getMessage().contains("now"), e.getMessage());
+    }
+
+    /**
+     * A published value crosses closed, and a recursive helper is a method rather than an expression,
+     * so a value that reaches one has nothing to close over it. Refused where it is published, rather
+     * than left to fail in the reader as a call to a name that is not there.
+     */
+    @Test
+    void aPublishedValueMayNotReachARecursiveHelper() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( Amount, standard )
+
+                data Amount = Int
+
+                partial let sumDown (n: Int) : Int = if n == 0 then 0 else n + sumDown(n - 1)
+
+                let standard = Amount(sumDown(10))
+                """));
+
+        assertTrue(e.getMessage().contains("sumDown"), e.getMessage());
+    }
+
+    /** The reader having a helper of that name changes nothing: the value is refused at its own
+     * module, so the two never meet. */
+    @Test
+    void aPublishedValueReachingARecursiveHelperIsRefusedWhateverTheReaderDeclares() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module pricing exposing ( Amount, standard )
+
+                        data Amount = Int
+
+                        partial let sumDown (n: Int) : Int = if n == 0 then 0 else n + sumDown(n - 1)
+
+                        let standard = Amount(sumDown(10))
+                        """, """
+                        module order exposing ( In, Out, bill )
+
+                        import pricing ( Amount, standard )
+
+                        data In = { n: Int }
+                        data Out = { v: Int }
+
+                        partial let sumDown (n: Int) : Int = if n == 0 then 999 else sumDown(n - 1)
+
+                        behavior bill : (i: In) -> Out constructs Out
+                        let bill (i) = Out { v = standard.value }
+                        """)));
+
+        assertTrue(e.getMessage().contains("sumDown"), e.getMessage());
+    }
+
+    /** Which also closes what would otherwise be the way round the surface rule: a recursive helper
+     * is not expanded, so the hidden type it builds was never read. */
+    @Test
+    void aPublishedValueMayNotStandForAHiddenTypeThroughARecursiveHelper() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( published )
+
+                data Hidden = Int
+
+                partial let make (n: Int) : Hidden = if n == 0 then Hidden(0) else make(n - 1)
+
+                let published = make(10)
+                """));
+
+        assertTrue(e.getMessage().contains("make"), e.getMessage());
+    }
+
     /** A value another module keeps to itself has no name here, as any unexposed name has. */
     @Test
     void anUnpublishedValueCannotBeImported() {

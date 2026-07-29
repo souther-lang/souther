@@ -55,15 +55,21 @@ public final class ExampleVerifier {
         return check(module, symbols, sigs, classes, ExampleVerifier.class.getClassLoader(), Map.of());
     }
 
-    /** As above, with the values in scope — this module's own and the ones its imports bring in. */
+    /** As above, resolving classes this compile did not generate under {@code parent}. A row may name
+     * only this module's own values; pass the imported ones to the overload below. */
     public static List<Diagnostic> check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                                          Map<String, byte[]> classes, ClassLoader parent) {
         return check(module, symbols, sigs, classes, parent, Map.of());
     }
 
-    /** As {@link #check(Ast.Module, Symbols, Map, Map)}, resolving classes this compile did not
+    /**
+     * As {@link #check(Ast.Module, Symbols, Map, Map)}, resolving classes this compile did not
      * generate under {@code parent} — where an example calls into a module that was compiled by
-     * another project, that is the loader its classes come from. */
+     * another project, that is the loader its classes come from.
+     *
+     * <p>{@code values} are the values a row may name beyond this module's own: the ones its imports
+     * bring in, each already closed over the module that published it (ADR-0074).
+     */
     public static List<Diagnostic> check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                                          Map<String, byte[]> classes, ClassLoader parent,
                                          Map<String, Ast.FnDef> values) {
