@@ -39,8 +39,11 @@ import java.util.Set;
  * expected arm (a bare type name) or value (a construction/literal). A failing example fails the
  * build, exactly as a construction whose constant argument breaks its invariant does.
  *
- * <p>A behavior with a {@code let} body is evaluable; an injected or {@code >->} target is refused
- * ({@code E1902}). A {@code depends on} dependency is satisfied by a fake supplied at the example: a
+ * <p>A behavior with a {@code let} body and a {@code >->} composition are evaluable; an injected
+ * target is refused ({@code E1902}) — you fake one, you do not example it. A composition is applied
+ * as the class its module emits, so the stages run in order and a case that leaves the main line is
+ * what the row sees, with no second implementation of what {@code >->} means.
+ * A {@code depends on} dependency is satisfied by a fake supplied at the example: a
  * {@code with dep = value} on the row (a constant/value dependency) or a {@code fake dep | table}
  * declaration (an input-keyed function dependency). Each fake is a {@code Behavior} proxy passed to
  * the generated behavior's injecting constructor — it produces no run-time class. Inputs, expected
@@ -173,13 +176,27 @@ public final class ExampleVerifier {
      */
     private record ExampleTarget(String name, List<BehaviorRequirement> requirements) {}
 
-    /** The target as something a row can run: a behavior with a {@code let} body, whose
-     * {@code depends on} are satisfied by fakes at the example (checked per row); null when nothing
-     * of that name is evaluable. */
+    /**
+     * The target as something a row can run: a behavior with a {@code let} body, or a {@code >->}
+     * composition; null when nothing of that name is evaluable. The dependencies of either are
+     * satisfied by fakes at the example (checked per row).
+     *
+     * <p>A composition is run by applying the class its module emits, the same class normal execution
+     * applies. Its stages with a body are constructed by it and handed the fields they need, so what
+     * a row has to supply are the injected behaviors the stages reach — which is what its requirement
+     * list holds, in the order its constructor takes them.
+     */
     private ExampleTarget runnableTarget(String name) {
         for (Ast.BehaviorDef b : module.behaviors()) {
-            if (b instanceof Ast.SpecBehavior spec && spec.name().equals(name) && hasFn(name)) {
-                return new ExampleTarget(spec.name(), requirements.getOrDefault(name, List.of()));
+            if (!b.name().equals(name)) {
+                continue;
+            }
+            boolean runnable = switch (b) {
+                case Ast.SpecBehavior _ -> hasFn(name);
+                case Ast.PipeBehavior _ -> true;
+            };
+            if (runnable) {
+                return new ExampleTarget(name, requirements.getOrDefault(name, List.of()));
             }
         }
         return null;
@@ -200,8 +217,8 @@ public final class ExampleVerifier {
         return null;
     }
 
-    /** The diagnostic for a target that cannot be evaluated: unknown (E1901) or present but not a
-     * runnable behavior (E1902), with the reason (injected / pipeline / dependency). */
+    /** The diagnostic for a target that cannot be evaluated: unknown (E1901) or present but with no
+     * body to run (E1902), with the reason (injected / a helper). */
     private Diagnostic notRunnable(Ast.Example ex) {
         String name = ex.target();
         boolean known = false;
@@ -211,9 +228,7 @@ public final class ExampleVerifier {
                 continue;
             }
             known = true;
-            if (b instanceof Ast.PipeBehavior) {
-                reason = "it is a `>->` pipeline";
-            } else if (b instanceof Ast.SpecBehavior && !hasFn(name)) {
+            if (b instanceof Ast.SpecBehavior && !hasFn(name)) {
                 reason = "it is injected from Java (no `let`) — fake it, do not example it";
             }
         }
