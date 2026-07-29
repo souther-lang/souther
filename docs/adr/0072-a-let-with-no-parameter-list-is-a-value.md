@@ -24,7 +24,9 @@ A value is not module state. Its expression is elaborated in the module that dec
 - **It is evaluated at each reference, and that is not observable.** A value's body obeys a helper's rules, so it cannot call an injected behavior and is pure and total.
 - **Identity is not observable.** Two references may yield distinct values; the language has no reference identity and compares structurally (ADR-0047).
 - **An invariant a value breaks is reported at the value**, whether or not anything names it — which is what a construction with a constant argument already does.
-- **What a value constructs belongs in the `constructs` of the behavior that names it**, transitively, exactly as a helper body's constructions do.
+- **What a value constructs belongs in the `constructs` of the behavior that names it**, transitively, exactly as a helper body's constructions do. Spreading a value builds it, so a spread contributes the same way.
+- **A spread is a reference.** `Person { ...base, age = 21 }` reads the same in a behavior's body and in an `example` row. A spread holds a name rather than an expression, so the value is bound ahead of the construction and the spread copies that binding — the shape a spread of a local already has.
+- **A value must not reach itself**, by naming another value, spreading one, or calling a helper that does. A helper on a call cycle is lowered to a method and recurses (ADR-0038); a value has no such form. The value graph is therefore not the call graph, and a cycle through a value is refused with the path it goes round, apart from the recursion check — which would ask for a return type the author never wrote.
 
 If a value's body ever becomes able to touch the outside world, when it is evaluated stops being unobservable and this has to be decided again.
 

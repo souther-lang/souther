@@ -1546,7 +1546,9 @@ A value is not module state. Its expression is elaborated in the module that dec
 * It is evaluated at each reference. A value's body obeys a helper's rules — it cannot call an injected behavior (<<depends-on>>) — so it is pure and total, and re-evaluation is not observable.
 * Two references may yield distinct values. Nothing observes that: there is no reference identity in the language, and comparison is structural (<<newtype-comparison>>).
 * An invariant a value breaks is reported at the value, whether or not anything names it.
-* What a value constructs is constructed by the behavior that names it, and belongs in that behavior's `+constructs+` — the transitive rule a helper's body already follows (<<constructs>>).
+* What a value constructs is constructed by the behavior that names it, and belongs in that behavior's `+constructs+` — the transitive rule a helper's body already follows (<<constructs>>). A spread of a value constructs it too, so it contributes the same way.
+* A spread names a value like any other position: `+申請 { ...標準申請, 予定費用 = 金額(50000) }+` reads the same in a behavior's body and in an `+example+` row.
+* A value MUST NOT reach itself, through naming another value, spreading one, or calling a helper that does. A helper on a call cycle is lowered to a method and recurses (<<fn-rules>>); a value has no such form, so a cycle through one is a compile error naming the path it goes round. This is reported apart from the recursion check, which would ask for a return type the author never wrote.
 
 [#fn-rules]
 ==== Rules

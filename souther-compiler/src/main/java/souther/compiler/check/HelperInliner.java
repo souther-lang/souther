@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -76,6 +77,7 @@ public final class HelperInliner {
         // about the earlier one first.
         HelperInliner inliner = new HelperInliner(helpers, new LinkedHashMap<>(own));
         inliner.classifyRecursion();
+        inliner.rejectValueCycles();
         return inliner;
     }
 
@@ -509,7 +511,7 @@ public final class HelperInliner {
             case Ast.FieldAccess fa -> new Ast.FieldAccess(inline(fa.target()), fa.field(), fa.pos());
             case Ast.Binary bin -> new Ast.Binary(bin.op(), inline(bin.left()), inline(bin.right()), bin.pos());
             case Ast.Neg neg -> new Ast.Neg(inline(neg.operand()), neg.pos());
-            case Ast.NewData nd -> new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), nd.spreads(), nd.pos());
+            case Ast.NewData nd -> newData(nd);
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
                 for (Ast.Case c : m.cases()) {
@@ -586,6 +588,37 @@ public final class HelperInliner {
             return v;
         }
         return inline(value.body());
+    }
+
+    /**
+     * A construction, with any spread of a value bound first.
+     *
+     * <p>A spread names a value the way any other position does, but it holds a name rather than an
+     * expression, so the value cannot be substituted in place. It is bound to a fresh {@code $}-name
+     * ahead of the construction and the spread copies that binding — the shape a spread of a local
+     * already has, so nothing downstream learns a new one.
+     */
+    private Ast.Expr newData(Ast.NewData nd) {
+        List<String> bound = new ArrayList<>();
+        List<Ast.Expr> values = new ArrayList<>();
+        List<String> spreads = new ArrayList<>();
+        for (String spread : nd.spreads()) {
+            Ast.FnDef value = own.get(spread);
+            if (value == null || !value.params().isEmpty() || value.body() == null
+                    || recursive.contains(spread)) {
+                spreads.add(spread);
+                continue;
+            }
+            String name = "$s" + counter++ + "_" + spread;
+            bound.add(name);
+            values.add(inline(value.body()));
+            spreads.add(name);
+        }
+        Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads, nd.pos());
+        for (int i = bound.size() - 1; i >= 0; i--) {
+            built = new Ast.LetIn(bound.get(i), values.get(i), null, false, null, built, nd.pos());
+        }
+        return built;
     }
 
     private List<Ast.Expr> inlineList(List<Ast.Expr> es) {
@@ -777,6 +810,79 @@ public final class HelperInliner {
                 recursive.add(name);
             }
         }
+    }
+
+    /**
+     * A value that reaches itself has nothing to be substituted with, so it is refused here, naming
+     * the path it goes round.
+     *
+     * <p>The value graph is not the call graph. A helper on a call cycle is lowered to a method and
+     * recurses at run time (ADR-0038); a value has no such form, so a cycle that passes through one is
+     * an error however it is closed — by naming a value, or by calling a helper that names it. The two
+     * are reported apart: a value cycle sent through the recursion check would be told to declare a
+     * return type it never wrote.
+     */
+    private void rejectValueCycles() {
+        Map<String, Set<String>> edges = new LinkedHashMap<>();
+        for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
+            Set<String> out = new LinkedHashSet<>(callsOf.getOrDefault(e.getKey(), Set.of()));
+            collectValueRefs(e.getValue().body(), out);
+            edges.put(e.getKey(), out);
+        }
+        for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
+            if (!e.getValue().params().isEmpty()) {
+                continue;   // a helper's own recursion is the call graph's business
+            }
+            List<String> path = new ArrayList<>();
+            if (pathBackTo(e.getKey(), e.getKey(), edges, new LinkedHashSet<>(), path)) {
+                path.add(0, e.getKey());
+                String written = String.join(" -> ", path);
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.value.cycle").title("check.value.cycle.title")
+                                .at(e.getValue().pos(), e.getKey().length())
+                                .args(e.getKey(), written).build(),
+                        "`let " + e.getKey() + "` is defined in terms of itself (" + written + ")");
+            }
+        }
+    }
+
+    /** The names of this module's values that {@code e} reads. A value is written bare, so a
+     * reference to one is a {@code Var} and never reaches the call graph. */
+    private void collectValueRefs(Ast.Expr e, Set<String> out) {
+        if (e == null) {
+            return;
+        }
+        if (e instanceof Ast.Var v) {
+            Ast.FnDef d = own.get(v.name());
+            if (d != null && d.params().isEmpty()) {
+                out.add(v.name());
+            }
+        }
+        if (e instanceof Ast.NewData nd) {
+            for (String spread : nd.spreads()) {
+                Ast.FnDef d = own.get(spread);
+                if (d != null && d.params().isEmpty()) {
+                    out.add(spread);   // `...base` reads the value the same way a bare name does
+                }
+            }
+        }
+        forEachChild(e, c -> collectValueRefs(c, out));
+    }
+
+    /** Records into {@code path} a route from {@code from} back to {@code target}, or answers false. */
+    private boolean pathBackTo(String from, String target, Map<String, Set<String>> edges,
+                               Set<String> seen, List<String> path) {
+        for (String next : edges.getOrDefault(from, Set.of())) {
+            path.add(next);
+            if (next.equals(target)) {
+                return true;
+            }
+            if (seen.add(next) && pathBackTo(next, target, edges, seen, path)) {
+                return true;
+            }
+            path.remove(path.size() - 1);
+        }
+        return false;
     }
 
     /** Which helpers each helper's body calls. Built once, before the cycle search: {@link #reaches}
