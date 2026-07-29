@@ -238,10 +238,15 @@ public final class Output {
             if (rows.examples().isEmpty()) {
                 return Answer.of(Boolean.TRUE);
             }
+            Map<String, List<BehaviorRequirement>> requirements =
+                    db.ask(new Bodies.Requirements(name)).value();
+            if (requirements == null) {
+                return Answer.absent();
+            }
             List<Report> reports = new ArrayList<>();
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
             for (Diagnostic failure : souther.compiler.ExampleVerifier.check(rows, scope.value(),
-                    sigs.value(), classes, loader(db, Map.of()),
+                    sigs.value(), classes, requirements, loader(db, Map.of()),
                     values == null ? Map.of() : values)) {
                 reports.add(Report.of(failure));
             }

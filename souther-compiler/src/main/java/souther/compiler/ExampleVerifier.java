@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
@@ -53,38 +54,31 @@ import java.util.Set;
  */
 public final class ExampleVerifier {
 
-    /** Evaluates every example in {@code module}; returns one diagnostic per failing example row
-     * (empty when all pass). Does not throw for a failed example — the caller aggregates.
-     * A fixture of an imported type decodes against its declaring module's package, which its
-     * {@link TypeName} names (a cross-module example). */
-    public static List<Diagnostic> check(Ast.Module module, Symbols symbols,
-                                         Map<String, Sig> sigs, Map<String, byte[]> classes) {
-        return check(module, symbols, sigs, classes, ExampleVerifier.class.getClassLoader(), Map.of());
-    }
-
-    /** As above, resolving classes this compile did not generate under {@code parent}. A row may name
-     * only this module's own values; pass the imported ones to the overload below. */
-    public static List<Diagnostic> check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
-                                         Map<String, byte[]> classes, ClassLoader parent) {
-        return check(module, symbols, sigs, classes, parent, Map.of());
-    }
-
     /**
-     * As {@link #check(Ast.Module, Symbols, Map, Map)}, resolving classes this compile did not
-     * generate under {@code parent} — where an example calls into a module that was compiled by
-     * another project, that is the loader its classes come from.
+     * Evaluates every example in {@code module}; returns one diagnostic per failing example row
+     * (empty when all pass). Does not throw for a failed example — the caller aggregates. A fixture
+     * of an imported type decodes against its declaring module's package, which its
+     * {@link TypeName} names (a cross-module example).
+     *
+     * <p>Classes this compile did not generate resolve under {@code parent} — where an example calls
+     * into a module that was compiled by another project, that is the loader its classes come from.
+     *
+     * <p>{@code requirements} says what each behavior takes injected and in what order: the fakes a
+     * row supplies are passed to the injecting constructor in that order, which is the same answer
+     * the emitter built that constructor from.
      *
      * <p>{@code values} are the values a row may name beyond this module's own: the ones its imports
      * bring in, each already closed over the module that published it (ADR-0074).
      */
     public static List<Diagnostic> check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
-                                         Map<String, byte[]> classes, ClassLoader parent,
-                                         Map<String, Ast.FnDef> values) {
+                                         Map<String, byte[]> classes,
+                                         Map<String, List<BehaviorRequirement>> requirements,
+                                         ClassLoader parent, Map<String, Ast.FnDef> values) {
         if (module.examples().isEmpty()) {
             return List.of();
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, loader, values);
+        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values);
         List<Diagnostic> failures = new ArrayList<>();
         for (Ast.Example ex : module.examples()) {
             try {
@@ -96,24 +90,6 @@ public final class ExampleVerifier {
             }
         }
         return failures;
-    }
-
-    /** Runs {@link #check} and, if any example failed, fails the build with an aggregated error. */
-    public static void verify(Ast.Module module, Symbols symbols,
-                              Map<String, Sig> sigs, Map<String, byte[]> classes) {
-        List<Diagnostic> failures = check(module, symbols, sigs, classes);
-        if (failures.isEmpty()) {
-            return;
-        }
-        // Every failing row is reported with its own position and reason. Collapsing them into one
-        // count-only diagnostic left the author with a number and no cause, and forced a row to be
-        // commented out to see the next one (issue #98).
-        Diagnostic first = failures.get(0);
-        if (failures.size() == 1) {
-            throw CompileException.of(first, legacyOf(first));
-        }
-        throw CompileException.ofAll(failures,
-                failures.size() + " examples do not hold; " + legacyOf(first));
     }
 
     /** The one-line form for a set of failures gathered across modules: the count, then the first
@@ -146,6 +122,8 @@ public final class ExampleVerifier {
     private final Ast.Module module;
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
+    /** What each behavior of this module takes injected, in the order its constructor takes it. */
+    private final Map<String, List<BehaviorRequirement>> requirements;
     private final MemoryClassLoader loader;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Ast.FnDef> values;
@@ -155,10 +133,12 @@ public final class ExampleVerifier {
     private final NeutralForm neutral;
 
     private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
+                            Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Ast.FnDef> values) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
+        this.requirements = requirements;
         this.loader = loader;
         this.values = values;
         this.helpers = new HelperInvoker(module.name(), loader);
@@ -168,25 +148,38 @@ public final class ExampleVerifier {
     // --- one example (a target and its rows) --------------------------------------------------
 
     private void checkExample(Ast.Example ex, List<Diagnostic> out) {
-        String target = ex.target();
-        Ast.SpecBehavior spec = runnableBehavior(target);
-        if (spec == null) {
+        ExampleTarget target = runnableTarget(ex.target());
+        if (target == null) {
             out.add(notRunnable(ex));
             return;
         }
-        Sig sig = sigs.get(target);
+        Sig sig = sigs.get(target.name());
+        if (sig == null) {
+            throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
+        }
         Set<TypeName> outCases = outCases(sig.out());
         for (Ast.ExampleRow row : ex.rows()) {
-            checkRow(target, spec, sig, outCases, row, out);
+            checkRow(target, sig, outCases, row, out);
         }
     }
 
-    /** The target as an evaluable behavior (a {@code let} body); its {@code depends on} are satisfied
-     * by fakes at the example (checked per row), or null when it has no in-language body. */
-    private Ast.SpecBehavior runnableBehavior(String name) {
+    /**
+     * What a row runs: the behavior's name, and what it takes injected in the order its constructor
+     * takes it.
+     *
+     * <p>Which kind of behavior it is does not survive to here. A row applies the class the module
+     * emitted, and that class is reached the same way whichever way the behavior was written — the
+     * name says which, and the requirements say what to hand it.
+     */
+    private record ExampleTarget(String name, List<BehaviorRequirement> requirements) {}
+
+    /** The target as something a row can run: a behavior with a {@code let} body, whose
+     * {@code depends on} are satisfied by fakes at the example (checked per row); null when nothing
+     * of that name is evaluable. */
+    private ExampleTarget runnableTarget(String name) {
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec && spec.name().equals(name) && hasFn(name)) {
-                return spec;
+                return new ExampleTarget(spec.name(), requirements.getOrDefault(name, List.of()));
             }
         }
         return null;
@@ -256,17 +249,16 @@ public final class ExampleVerifier {
     private static final class RowEvaluation implements java.util.concurrent.Callable<List<Diagnostic>> {
 
         private final ExampleVerifier evaluation;
-        private final String target;
-        private final Ast.SpecBehavior spec;
+        private final ExampleTarget target;
         private final Sig sig;
         private final Set<TypeName> outCases;
         private final Ast.ExampleRow row;
 
-        RowEvaluation(ExampleVerifier of, String target, Ast.SpecBehavior spec, Sig sig,
+        RowEvaluation(ExampleVerifier of, ExampleTarget target, Sig sig,
                       Set<TypeName> outCases, Ast.ExampleRow row) {
-            this.evaluation = new ExampleVerifier(of.module, of.symbols, of.sigs, of.loader, of.values);
+            this.evaluation = new ExampleVerifier(of.module, of.symbols, of.sigs, of.requirements,
+                    of.loader, of.values);
             this.target = target;
-            this.spec = spec;
             this.sig = sig;
             this.outCases = outCases;
             this.row = row;
@@ -275,7 +267,7 @@ public final class ExampleVerifier {
         @Override
         public List<Diagnostic> call() {
             List<Diagnostic> mine = new ArrayList<>();
-            evaluation.checkRowNow(target, spec, sig, outCases, row, mine);
+            evaluation.checkRowNow(target, sig, outCases, row, mine);
             return mine;
         }
 
@@ -291,9 +283,9 @@ public final class ExampleVerifier {
      * by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
      * {@link RowEvaluation} for why the row's own worker must not.
      */
-    private void checkRow(String target, Ast.SpecBehavior spec, Sig sig,
+    private void checkRow(ExampleTarget target, Sig sig,
                           Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
-        RowEvaluation evaluation = new RowEvaluation(this, target, spec, sig, outCases, row);
+        RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
         java.util.concurrent.FutureTask<List<Diagnostic>> task =
                 new java.util.concurrent.FutureTask<>(evaluation);
         Thread worker = new Thread(task, "souther-example-eval");
@@ -327,16 +319,16 @@ public final class ExampleVerifier {
             task.cancel(true);
             Thread.currentThread().interrupt();
             throw new java.util.concurrent.CancellationException(
-                    "interrupted while evaluating an example of `" + target + "`");
+                    "interrupted while evaluating an example of `" + target.name() + "`");
         }
     }
 
-    private void checkRowNow(String target, Ast.SpecBehavior spec, Sig sig,
+    private void checkRowNow(ExampleTarget target, Sig sig,
                              Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of("E1903", "check.example.arity").title("check.example.title")
-                    .at(row.pos()).args(target, ins.size(), row.inputs().size()).build());
+                    .at(row.pos()).args(target.name(), ins.size(), row.inputs().size()).build());
             return;
         }
         Object[] args = new Object[ins.size()];
@@ -346,7 +338,7 @@ public final class ExampleVerifier {
                 args[i] = decode(ins.get(i), raw);
             } catch (FixtureException fe) {
                 out.add(Diagnostic.of("E1903", "check.example.input").title("check.example.title")
-                        .at(row.pos()).args(target, i + 1, fe.getMessage()).build());
+                        .at(row.pos()).args(target.name(), i + 1, fe.getMessage()).build());
                 return;
             }
         }
@@ -361,7 +353,7 @@ public final class ExampleVerifier {
                 names.add(c.name());
             }
             out.add(Diagnostic.of("E1904", "check.example.arm").title("check.example.title")
-                    .at(row.pos()).args(expectedArm, target)
+                    .at(row.pos()).args(expectedArm, target.name())
                     .hint("check.example.arm.hint", String.join(", ", names)).build());
             return;
         }
@@ -374,16 +366,16 @@ public final class ExampleVerifier {
                     : builtExpected(row.expected(), sig.out());
         } catch (FixtureException fe) {
             out.add(Diagnostic.of("E1903", "check.example.expected").title("check.example.title")
-                    .at(row.pos()).args(target, fe.getMessage()).build());
+                    .at(row.pos()).args(target.name(), fe.getMessage()).build());
             return;
         }
-        Object[] fakes = resolveFakes(spec, row, out);
+        Object[] fakes = resolveFakes(target, row, out);
         if (fakes == null) {
             return;   // a fake was missing/invalid; the diagnostic is already reported
         }
         Object result;
         try {
-            result = invoke(spec, args, fakes);
+            result = invoke(target, args, fakes);
         } catch (FakeMissException fm) {
             out.add(Diagnostic.of("E1909", "check.fake.miss").title("check.example.title")
                     .at(row.pos()).args(fm.getMessage()).build());
@@ -403,13 +395,13 @@ public final class ExampleVerifier {
 
     // --- fakes for what a behavior depends on ---------------------------------------------------
 
-    /** Builds a {@code Behavior} proxy for each of {@code spec}'s dependencies, in declared order; null
-     * (with a diagnostic reported) when one is missing or invalid. */
-    private Object[] resolveFakes(Ast.SpecBehavior spec, Ast.ExampleRow row, List<Diagnostic> out) {
-        List<Ast.ValueRef> reqs = spec.dependsOn();
+    /** Builds a {@code Behavior} proxy for each of the target's requirements, in the order its
+     * constructor takes them; null (with a diagnostic reported) when one is missing or invalid. */
+    private Object[] resolveFakes(ExampleTarget target, Ast.ExampleRow row, List<Diagnostic> out) {
+        List<BehaviorRequirement> reqs = target.requirements();
         Object[] proxies = new Object[reqs.size()];
         for (int i = 0; i < reqs.size(); i++) {
-            Object p = resolveFake(spec.name(), reqs.get(i).bare(), row, out);
+            Object p = resolveFake(target.name(), reqs.get(i), row, out);
             if (p == null) {
                 return null;
             }
@@ -418,10 +410,12 @@ public final class ExampleVerifier {
         return proxies;
     }
 
-    private Object resolveFake(String target, String depName, Ast.ExampleRow row, List<Diagnostic> out) {
+    private Object resolveFake(String target, BehaviorRequirement req, Ast.ExampleRow row,
+                               List<Diagnostic> out) {
+        String depName = req.dependency();
         Ast.SpecBehavior dep = injectedSpec(depName);
         if (dep == null) {
-            out.add(fakeMissingDiag(target, depName, row, "`" + depName
+            out.add(fakeMissingDiag(target, req, row, "`" + depName
                     + "` is not an injected behavior of this module"));
             return null;
         }
@@ -448,14 +442,15 @@ public final class ExampleVerifier {
                 return tableProxy(fk, dep, outType, out);
             }
         }
-        out.add(fakeMissingDiag(target, depName, row, "add `with " + depName
+        out.add(fakeMissingDiag(target, req, row, "add `with " + depName
                 + " = ...` on the row, or a `fake " + depName + "` table"));
         return null;
     }
 
-    private Diagnostic fakeMissingDiag(String target, String depName, Ast.ExampleRow row, String detail) {
+    private Diagnostic fakeMissingDiag(String target, BehaviorRequirement req, Ast.ExampleRow row,
+                                       String detail) {
         return Diagnostic.of("E1908", "check.fake.missing").title("check.example.title")
-                .at(row.pos()).args(target, depName)
+                .at(row.pos()).args(target, req.dependency())
                 .hint("check.fake.missing.hint", detail).build();
     }
 
@@ -1321,8 +1316,8 @@ public final class ExampleVerifier {
      * reported (E1910). A non-terminating recursion that overflows the stack instead of tail-looping is
      * reported the same way (a non-termination, not a generic failure).
      */
-    private Object invoke(Ast.SpecBehavior spec, Object[] args, Object[] fakes) {
-        return invokeNow(spec, args, fakes);
+    private Object invoke(ExampleTarget target, Object[] args, Object[] fakes) {
+        return invokeNow(target, args, fakes);
     }
 
     /** The {@code $Impl}'s constructor, opened. A behavior its module does not expose generates a
@@ -1335,14 +1330,14 @@ public final class ExampleVerifier {
         return ctor;
     }
 
-    private Object invokeNow(Ast.SpecBehavior spec, Object[] args, Object[] fakes) {
+    private Object invokeNow(ExampleTarget target, Object[] args, Object[] fakes) {
         // The public name is now an interface; the fields, constructor and erased apply live on its
         // $Impl (spec 19.8). Instantiate and call apply on the $Impl.
-        String className = module.name() + "." + behaviorClass(spec.name()) + "$Impl";
+        String className = module.name() + "." + behaviorClass(target.name()) + "$Impl";
         try {
             Class<?> c = loader.loadClass(className);
             Object instance;
-            if (spec.dependsOn().isEmpty()) {
+            if (target.requirements().isEmpty()) {
                 instance = openCtor(c).newInstance();
             } else {
                 // the injecting constructor takes one param per dependency: the unary Behavior for a
