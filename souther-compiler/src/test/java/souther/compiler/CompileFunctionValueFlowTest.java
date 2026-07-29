@@ -116,4 +116,28 @@ class CompileFunctionValueFlowTest {
         Object order = Codecs.decoded(loader, "demo.Order", Map.of("xs", xs));
         return ((Map<?, ?>) Codecs.encode(loader, "demo.Result", Codecs.apply(check, order))).get("ok");
     }
+
+    // Without a written type the parameter types are read off the applications in this scope, and an
+    // application inside a lambda is not one of them. That is a diagnostic, not an internal name.
+    @Test
+    void anUnannotatedFunctionAppliedOnlyInsideALambdaIsToldToStateItsType() {
+        souther.compiler.diag.CompileException e =
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        souther.compiler.diag.CompileException.class,
+                        () -> Compiler.compile("""
+                                module demo
+
+                                data Order = { xs: List<Int>, spring: Bool }
+                                data Result = { ns: List<Int> }
+
+                                behavior check : (o: Order) -> Result
+                                    constructs Result
+
+                                let check (o) = {
+                                    let f = if o.spring then (x) -> x + 100 else (x) -> x + 1
+                                    Result { ns = List.map(f, o.xs) }
+                                }
+                                """));
+        assertEquals("check.fn.noinfer", e.diagnostic().messageKey());
+    }
 }

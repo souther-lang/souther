@@ -662,10 +662,9 @@ public final class Elaborator {
             throw CompileException.of(
                     Diagnostic.of(null, "check.fn.noinfer").title("check.fn.title")
                             .at(body.pos()).args(name).build(),
-                    "cannot infer the type of the function `" + name + "`: apply it (as `" + name
-                            + "(x)`) at least once so its parameter types are known. A function passed"
-                            + " on rather than applied — e.g. to a combinator — must be written inline"
-                            + " instead (`map(xs, x -> ...)`)");
+                    "cannot infer the type of the function `" + name + "`: write its type (`let "
+                            + name + ": (Int) -> Bool = ...`), or apply it in this scope so the"
+                            + " parameter types can be read off the application");
         }
         List<Type> first = uses.get(0);
         for (List<Type> u : uses) {
@@ -686,11 +685,32 @@ public final class Elaborator {
         if (e instanceof Ast.Call call && call.fn().equals(name)) {
             List<Type> argTypes = new ArrayList<>();
             for (Ast.Expr a : call.args()) {
-                argTypes.add(typeOf(a, env, ctx));
+                Type t = argTypeOrNull(a, env, ctx);
+                if (t == null) {
+                    // An application whose arguments this scope cannot name says nothing about the
+                    // parameter types — it is inside a lambda, whose parameters are bound there and
+                    // not here, which is where a combinator's own expansion puts the application.
+                    // It is not a constraint, and it is not an error either: the annotation says the
+                    // type when no application can.
+                    argTypes = null;
+                    break;
+                }
+                argTypes.add(t);
             }
-            out.add(argTypes);
+            if (argTypes != null) {
+                out.add(argTypes);
+            }
         }
         TypeChecker.forEachChild(e, sub -> collectApplications(name, sub, env, ctx, out));
+    }
+
+    /** The type of an application's argument, or null where this scope cannot type it. */
+    private static Type argTypeOrNull(Ast.Expr a, Map<String, Type> env, CheckContext ctx) {
+        try {
+            return typeOf(a, env, ctx);
+        } catch (CompileException unnameable) {
+            return null;
+        }
     }
 
     /** Types a function value against inferred parameter types: a lambda binds its parameters and
