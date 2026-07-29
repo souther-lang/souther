@@ -263,6 +263,18 @@ public final class ExampleVerifier {
                     .hint("check.example.arm.hint", String.join(", ", names)).build());
             return;
         }
+        // Build the expected value before running: a row whose expectation cannot be built states no
+        // expectation, and comparing a result against a value nothing built reported a mismatch
+        // against an empty expected value — a wrong answer for a row that was right.
+        Object expectedValue;
+        try {
+            expectedValue = row.expected() instanceof Ast.Var ? null
+                    : builtExpected(row.expected(), sig.out());
+        } catch (FixtureException fe) {
+            out.add(Diagnostic.of("E1903", "check.example.expected").title("check.example.title")
+                    .at(row.pos()).args(target, fe.getMessage()).build());
+            return;
+        }
         Object[] fakes = resolveFakes(spec, row, out);
         if (fakes == null) {
             return;   // a fake was missing/invalid; the diagnostic is already reported
@@ -282,7 +294,7 @@ public final class ExampleVerifier {
                     .at(row.pos()).args(nt.getMessage()).build());
             return;
         }
-        if (!matches(row.expected(), result, sig.out())) {
+        if (!matches(row.expected(), result, expectedValue)) {
             out.add(mismatch(row, describeExpected(row.expected(), sig.out()), describeActual(result)));
         }
     }
@@ -320,8 +332,10 @@ public final class ExampleVerifier {
                             raw(w.value(), fixtureType(w.value(), outType)));
                     return fakeInstance(dep, a -> value, out);   // constant: ignores its inputs
                 } catch (FixtureException fe) {
-                    out.add(fakeMissingDiag(target, depName, row,
-                            "the `with " + depName + "` value could not be built: " + fe.getMessage()));
+                    // The row does supply a fake. What failed is building its value, which is a
+                    // different problem from a dependency nothing stands in for.
+                    out.add(Diagnostic.of("E1908", "check.fake.value").title("check.example.title")
+                            .at(w.value().pos()).args(depName, fe.getMessage()).build());
                     return null;
                 }
             }
@@ -539,33 +553,41 @@ public final class ExampleVerifier {
     // --- comparison ---------------------------------------------------------------------------
 
     /** Whether {@code result} matches the row's expected: a bare {@link Ast.Var} asserts only the
-     * arm (the concrete case class); anything else asserts the whole value by structural equality. */
-    private boolean matches(Ast.Expr expected, Object result, Type outType) {
+     * arm (the concrete case class); anything else asserts the whole value, {@code expectedValue}
+     * (built before the behavior ran), by structural equality. */
+    private boolean matches(Ast.Expr expected, Object result, Object expectedValue) {
         if (expected instanceof Ast.Var v) {
             return simpleName(result).equals(v.name());
         }
-        Object expectedValue = buildExpected(expected, outType);
         return expectedValue != null && expectedValue.equals(result);
     }
 
     /** The expected value built the same way as an input, so structural equality compares like with
-     * like: a construction/newtype decodes through its type's decoder; a literal is its raw value. */
-    private Object buildExpected(Ast.Expr expected, Type outType) {
+     * like: a construction/newtype decodes through its type's decoder; a literal is its raw value.
+     * Throws {@link FixtureException} when the row's expectation cannot be built — the caller reports
+     * that as the fixture error it is, rather than comparing against nothing. */
+    private Object builtExpected(Ast.Expr expected, Type outType) {
+        if (expected instanceof Ast.NewData nd) {
+            return decode(Type.ref(nd.typeName().denotes()),
+                    raw(expected, Type.ref(nd.typeName().denotes())));
+        }
+        if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
+            return decode(Type.ref(symbols.resolve(c.fn())), raw(expected));
+        }
+        // A collection output has no case name to decode against, so the behavior's declared
+        // output type is what says which of `List`/`Set`/`Map` the written list means and what
+        // its elements are — the same decision a collection argument's declared type makes.
+        if (isCollection(outType)) {
+            return decode(outType, raw(expected, outType));
+        }
+        return raw(expected);   // a literal expected value
+    }
+
+    /** As above, for the rendering of a failure, where a value that cannot be built is shown as
+     * written rather than reported a second time. */
+    private Object builtExpectedOrNull(Ast.Expr expected, Type outType) {
         try {
-            if (expected instanceof Ast.NewData nd) {
-                return decode(Type.ref(nd.typeName().denotes()),
-                        raw(expected, Type.ref(nd.typeName().denotes())));
-            }
-            if (expected instanceof Ast.Call c && isNewtype(c.fn())) {
-                return decode(Type.ref(symbols.resolve(c.fn())), raw(expected));
-            }
-            // A collection output has no case name to decode against, so the behavior's declared
-            // output type is what says which of `List`/`Set`/`Map` the written list means and what
-            // its elements are — the same decision a collection argument's declared type makes.
-            if (isCollection(outType)) {
-                return decode(outType, raw(expected, outType));
-            }
-            return raw(expected);   // a literal expected value
+            return builtExpected(expected, outType);
         } catch (FixtureException _) {
             return null;
         }
@@ -608,13 +630,13 @@ public final class ExampleVerifier {
             return arm;   // a bare arm asserts only the case, so there is no value to show
         }
         if (isCollection(outType)) {
-            Object built = buildExpected(expected, outType);
+            Object built = builtExpectedOrNull(expected, outType);
             return built == null ? showValue(rawOrNull(expected)) : showAny(built);
         }
         // Render it through the same encoder the actual goes through, so the two sides are written
         // in one notation and can be read against each other; the fixture's own neutral form (which
         // still holds e.g. a LocalDate where the encoder writes its ISO text) is the fallback.
-        Object built = buildExpected(expected, outType);
+        Object built = builtExpectedOrNull(expected, outType);
         Object neutral = built == null || arm == null ? rawOrNull(expected) : encodedOrNull(built, arm);
         if (neutral == null) {
             neutral = rawOrNull(expected);
