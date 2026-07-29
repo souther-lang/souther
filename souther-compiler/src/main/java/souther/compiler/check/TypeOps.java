@@ -658,7 +658,32 @@ public final class TypeOps {
     public static boolean isBoundaryMapKey(Type key, Symbols symbols) {
         return key == Type.STRING || key == Type.DATE || key == Type.DATETIME
                 || key instanceof Type.Var
-                || (key instanceof Type.Ref r && isStringNewtype(r.name(), symbols));
+                || (key instanceof Type.Ref r
+                    && (isStringNewtype(r.name(), symbols) || isUnitOnlySum(key, symbols)));
+    }
+
+    /**
+     * Whether every case of a sum is a unit data — an enumeration, carrying nothing but which case it
+     * is. What holds of every case is a property of the sum: such a sum crosses the boundary as that
+     * case's name, a bare string, so it renders and parses in key position like any other string
+     * (issue #161, ADR-0040). A sum with even one field-bearing case keeps the discriminator object.
+     */
+    public static boolean isUnitOnlySum(Type t, Symbols symbols) {
+        return t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum
+                && isUnitOnlySum(sum, symbols);
+    }
+
+    public static boolean isUnitOnlySum(Ast.SumData sum, Symbols symbols) {
+        List<TypeName> leaves = leafCases(sum, symbols);
+        if (leaves.isEmpty()) {
+            return false;
+        }
+        for (TypeName leaf : leaves) {
+            if (!(symbols.get(leaf) instanceof Ast.UnitData)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when

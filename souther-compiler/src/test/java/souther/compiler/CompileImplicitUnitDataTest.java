@@ -35,7 +35,7 @@ class CompileImplicitUnitDataTest {
                 data Terms = Net15 | Net30 | EndOfNextMonth
                 """);
 
-        Object v = Codecs.decoded(loader, "demo.Terms", Map.of("type", "Net30"));
+        Object v = Codecs.decoded(loader, "demo.Terms", "Net30");   // an enumeration is its name
         assertInstanceOf(loader.loadClass("demo.Net30"), v);
     }
 

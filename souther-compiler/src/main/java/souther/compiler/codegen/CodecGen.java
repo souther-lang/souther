@@ -158,6 +158,15 @@ final class CodecGen {
      *  {@code value()} accessor, for {@code Maps.mapKeys} when encoding a newtype-keyed map. */
     private DynamicCallSiteDesc keyValueCallSite(Ast.EncElem key) {
         return switch (key) {
+            // an enumeration key renders as its case's name, the same string its decoder reads
+            case Ast.DataEnc d when symbols.get(d.typeName().denotes()) instanceof Ast.SumData sum
+                    && TypeOps.isUnitOnlySum(sum, symbols) -> DynamicCallSiteDesc.of(
+                    BSM_METAFACTORY, "apply",
+                    MethodTypeDesc.of(CD_Function),
+                    MethodTypeDesc.of(CD_Object, CD_Object),
+                    MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.INTERFACE_STATIC,
+                            cd(d.typeName().denotes()), TAG_METHOD, MTD_tag),
+                    MTD_tag);
             case Ast.DataEnc d -> {
                 DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                         DirectMethodHandleDesc.Kind.VIRTUAL, cd(d.typeName().denotes()), "value", MTD_value);
@@ -261,6 +270,86 @@ final class CodecGen {
                 code.aload(1);
                 code.aload(2);
                 code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
+                code.areturn();
+            });
+        });
+    }
+
+    /**
+     * Decodes a sum all of whose cases are unit data: the value is its case's name, so it reads a
+     * bare string and answers that case's singleton (issue #161). A name no case answers to fails at
+     * the value's path, the way a newtype's invariant does, rather than being read as some other case.
+     */
+    byte[] generateEnumSumDecoder(Ast.SumData sum, Src src) {
+        ClassDesc cdDec = cd(sum.name() + srcSuffix(src));
+        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
+        return build(cdDec, cb -> {
+            cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withInterfaceSymbols(CD_RDecoder);
+            emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdDec);
+            cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
+                code.invokestatic(srcLeafOwner(src), "string", MTD_leafString);
+                code.invokedynamic(fromNameCallSite(cdDec));
+                code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+                code.aload(1);
+                code.aload(2);
+                code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
+                code.areturn();
+            });
+            emitFromNameHelper(cb, sum.name(), cases);
+        });
+    }
+
+    /** {@code static Result __fromName(String name, Path path)}: the case that name denotes, or the
+     *  failure saying it denotes none of them. */
+    private void emitFromNameHelper(ClassBuilder cb, String sumName, List<TypeName> cases) {
+        cb.withMethodBody("__fromName", MTD_fromName,
+                ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
+            for (TypeName c : cases) {
+                code.loadConstant(c.name());
+                code.aload(0);
+                code.invokevirtual(CD_String, "equals", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
+                Label next = code.newLabel();
+                code.ifeq(next);
+                loadSharedInstance(code, cd(c));
+                code.invokestatic(CD_RResult, "ok", MTD_Rok, true);
+                code.areturn();
+                code.labelBinding(next);
+            }
+            code.aload(1);                                             // path
+            code.loadConstant("invalid_format");
+            code.loadConstant("not a case of " + sumName);
+            code.loadConstant("type");
+            code.loadConstant(sumName);
+            code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
+            code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
+            code.areturn();
+        });
+    }
+
+    private static DynamicCallSiteDesc fromNameCallSite(ClassDesc cdDec) {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, cdDec, "__fromName", MTD_fromName);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "apply",
+                MethodTypeDesc.of(CD_BiFunction),
+                MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),
+                impl,
+                MTD_fromName);
+    }
+
+    /** Encodes an enumeration to its case's name — the same string its decoder reads. */
+    byte[] generateEnumSumEncoder(Ast.SumData sum) {
+        ClassDesc cdEnc = cd(sum.name() + "$Enc");
+        return build(cdEnc, cb -> {
+            cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withInterfaceSymbols(CD_REncoder);
+            emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
+            cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
+                code.aload(1);
+                code.invokestatic(cd(sum.name()), TAG_METHOD, MTD_tag, true);
                 code.areturn();
             });
         });
@@ -422,6 +511,9 @@ final class CodecGen {
     boolean recordCompatible(String typeName) {
         Ast.Def def = symbols.declaration(typeName);
         if (def instanceof Ast.SumData sum) {
+            if (TypeOps.isUnitOnlySum(sum, symbols)) {
+                return false;   // an enumeration is a bare column, not a whole row (issue #161)
+            }
             for (Ast.Name caseName : sum.cases()) {
                 Ast.Def caseDef = symbols.get(caseName.denotes());
                 if (caseDef instanceof Ast.UnitData) continue;
@@ -646,8 +738,9 @@ final class CodecGen {
     }
 
     private boolean isMapInputOf(Ast.Def def) {
-        if (def instanceof Ast.SumData) {
-            return true;
+        if (def instanceof Ast.SumData sum) {
+            // an enumeration arrives as its case's name, a bare string (issue #161)
+            return !TypeOps.isUnitOnlySum(sum, symbols);
         }
         if (def instanceof Ast.Data data) {
             Ast.DecoderDef d = data.decoder().orElse(null);

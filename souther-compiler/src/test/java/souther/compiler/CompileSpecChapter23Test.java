@@ -114,7 +114,7 @@ class CompileSpecChapter23Test {
     @Test
     void theNestedCostSumDecodesALeaf() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(MODULE), getClass().getClassLoader());
-        Object v = Codecs.decoded(loader, "example.businesstrip.費用負担区分", Map.of("type", "会社カード"));
+        Object v = Codecs.decoded(loader, "example.businesstrip.費用負担区分", "会社カード");
         assertEquals("example.businesstrip.会社カード", v.getClass().getName());
     }
 

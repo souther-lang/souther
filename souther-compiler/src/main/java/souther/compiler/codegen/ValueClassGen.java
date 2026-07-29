@@ -155,6 +155,8 @@ final class ValueClassGen {
         for (Ast.Name caseName : sum.cases()) {
             caseCds.add(cd(caseName.denotes()));
         }
+        boolean enumeration = TypeOps.isUnitOnlySum(sum, symbols);
+        List<TypeName> cases = TypeOps.leafCases(sum, symbols);
         out.put(pkg + "." + sum.name(), build(cdX, cb -> {
             cb.withFlags(pub(sum.name()) | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             // A sum may itself be a case of another sum (spec 8.3), and then it carries that sum's
@@ -172,26 +174,57 @@ final class ValueClassGen {
                 cb.withMethod(e.getKey(), MethodTypeDesc.of(jvmType(e.getValue())),
                         ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> { });
             }
+            // An enumeration travels as its case's name (issue #161): one place says which name that
+            // is, and the codecs on both sides read it from here.
+            if (enumeration) {
+                emitTagMethod(cb, cases);
+            }
             sum.decoder().ifPresent(disc -> {
-                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"), CodecGen.decoderSig(cdX, true));
-                if (codec.jsonCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JSON, true);
+                codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"),
+                        CodecGen.decoderSig(cdX, !enumeration));
+                if (codec.jsonCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JSON, !enumeration);
                 if (codec.recordCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JOOQ, true);
             });
             sum.encoder().ifPresent(enc ->
                     codec.emitCodecFactory(cb, "encoder", CD_REncoder, cd(sum.name() + "$Enc"),
-                            CodecGen.encoderSig(cdX, CD_Map)));
+                            CodecGen.encoderSig(cdX, enumeration ? CD_String : CD_Map)));
         }));
         sum.decoder().ifPresent(disc -> {
-            out.put(pkg + "." + sum.name() + "$Dec", codec.generateSumDecoder(sum, disc, CodecGen.Src.NEUTRAL));
+            out.put(pkg + "." + sum.name() + "$Dec", enumeration
+                    ? codec.generateEnumSumDecoder(sum, CodecGen.Src.NEUTRAL)
+                    : codec.generateSumDecoder(sum, disc, CodecGen.Src.NEUTRAL));
             if (codec.jsonCompatible(sum.name())) {
-                out.put(pkg + "." + sum.name() + "$DecJson", codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
+                out.put(pkg + "." + sum.name() + "$DecJson", enumeration
+                        ? codec.generateEnumSumDecoder(sum, CodecGen.Src.JSON)
+                        : codec.generateSumDecoder(sum, disc, CodecGen.Src.JSON));
             }
             if (codec.recordCompatible(sum.name())) {
                 out.put(pkg + "." + sum.name() + "$DecRecord", codec.generateSumDecoder(sum, disc, CodecGen.Src.JOOQ));
             }
         });
-        sum.encoder().ifPresent(enc ->
-                out.put(pkg + "." + sum.name() + "$Enc", codec.generateSumEncoder(sum, enc)));
+        sum.encoder().ifPresent(enc -> out.put(pkg + "." + sum.name() + "$Enc", enumeration
+                ? codec.generateEnumSumEncoder(sum)
+                : codec.generateSumEncoder(sum, enc)));
+    }
+
+    /** Emits {@code static String __tag(Object)}: which case a value of this enumeration is. */
+    private void emitTagMethod(ClassBuilder cb, List<TypeName> cases) {
+        cb.withMethod(TAG_METHOD, MTD_tag, ClassFile.ACC_PUBLIC | ClassFile.ACC_STATIC
+                | ClassFile.ACC_SYNTHETIC, mb -> mb.withCode(code -> {
+            for (TypeName c : cases) {
+                code.aload(0);
+                code.instanceOf(cd(c));
+                Label next = code.newLabel();
+                code.ifeq(next);
+                code.loadConstant(c.name());
+                code.areturn();
+                code.labelBinding(next);
+            }
+            code.new_(CD_IllegalStateException);
+            code.dup();
+            code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
+            code.athrow();
+        }));
     }
 
     void generateUnit(Ast.UnitData unit, Map<String, byte[]> out) {

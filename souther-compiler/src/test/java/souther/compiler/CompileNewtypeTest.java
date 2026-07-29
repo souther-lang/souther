@@ -89,7 +89,7 @@ class CompileNewtypeTest {
 
     @Test
     void newtypeOverASumDelegatesToItsDiscriminator() throws Exception {
-        // spec 8.7: when Y is a sum, X's representation is Y's discriminated form.
+        // spec 8.7: when Y is a sum, X's representation is Y's own — here an enumeration's name.
         String src = """
                 module demo
                 data 管理職
@@ -99,8 +99,8 @@ class CompileNewtypeTest {
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
 
-        Object v = Codecs.decoded(loader, "demo.権限不足", java.util.Map.of("type", "管理職"));
+        Object v = Codecs.decoded(loader, "demo.権限不足", "管理職");
         assertEquals("demo.権限不足", v.getClass().getName());
-        assertEquals(java.util.Map.of("type", "管理職"), Codecs.encode(loader, "demo.権限不足", v));
+        assertEquals("管理職", Codecs.encode(loader, "demo.権限不足", v));
     }
 }
