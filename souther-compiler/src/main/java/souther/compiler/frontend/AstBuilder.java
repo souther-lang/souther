@@ -452,7 +452,7 @@ public final class AstBuilder {
             }
         }
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
-            cases = List.of(optional(typeRefs(cases, pos(n)), pos(n)));
+            cases = List.of(optional(cases, pos(n)));
         }
         return new Ast.RetType(cases, cases.get(0).pos());
     }
@@ -481,20 +481,6 @@ public final class AstBuilder {
         return typeRef(n);
     }
 
-    /** The terms as references, for the one reader that needs them so — {@code T?} wraps what it
-     * marks in an {@code Option}, and a function has no external representation to be absent as. */
-    private List<Ast.TypeRef> typeRefs(List<Ast.TypeTerm> terms, SourcePos at) {
-        List<Ast.TypeRef> refs = new ArrayList<>();
-        for (Ast.TypeTerm t : terms) {
-            if (!(t instanceof Ast.TypeRef ref)) {
-                throw error(at, "parse.optional.function",
-                        "`?` marks a type that may be absent, and a function type is not one");
-            }
-            refs.add(ref);
-        }
-        return refs;
-    }
-
     /**
      * {@code T?} in a signature — a stdlib combinator that consumes an optional says so in its own
      * type ({@code List.filterMap(f: ('a) -> 'b?, …)}). Like a type variable it is written only in the
@@ -502,7 +488,7 @@ public final class AstBuilder {
      * (ADR-0011), so the type stays out of the surface language. A sum cannot take the mark — an
      * absent {@code A | B} has no case to be absent as.
      */
-    private Ast.TypeRef optional(List<Ast.TypeRef> cases, SourcePos pos) {
+    private Ast.TypeRef optional(List<Ast.TypeTerm> cases, SourcePos pos) {
         if (!isReservedNamespace(moduleName)) {
             throw errorWithHint(pos, "parse.optional.core", "parse.optional.core.hint",
                     "an optional type `T?` may be written only on a data field, or in the core (the"
@@ -516,6 +502,8 @@ public final class AstBuilder {
                     "`?` marks a single type optional, but it follows a sum of "
                             + cases.size() + " cases");
         }
+        // `T?` is `Option<T>` for whatever T is: the two spellings are one type, and what may
+        // stand in a position is decided by what the position requires of that type, not here
         return new Ast.TypeRef("Option", cases.get(0), cases.get(0).pos());
     }
 

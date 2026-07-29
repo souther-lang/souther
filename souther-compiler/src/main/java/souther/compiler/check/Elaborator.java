@@ -657,7 +657,7 @@ public final class Elaborator {
     static List<Type> inferFnParamTypes(String name, Ast.Expr body, Map<String, Type> env,
                                                 CheckContext ctx) {
         List<List<Type>> uses = new ArrayList<>();
-        collectApplications(name, body, env, ctx, uses);
+        collectApplications(name, body, env, ctx, uses, Set.of());
         if (uses.isEmpty()) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.fn.noinfer").title("check.fn.title")
@@ -679,38 +679,79 @@ public final class Elaborator {
         return first;
     }
 
-    /** Collects the argument-type lists of every application {@code name(args)} in {@code e}. */
+    /**
+     * Collects the argument-type lists of every application {@code name(args)} in {@code e} that this
+     * scope can read.
+     *
+     * <p>{@code inner} names what a binder below this point has introduced — a lambda's parameters, a
+     * {@code let}, a {@code match} arm's binding. An application whose arguments reach one of those is
+     * not in this scope and says nothing about the parameter types here, which is exactly where a
+     * combinator's own expansion puts the application. It is skipped rather than typed: typing it
+     * would report a name that is bound, only not here, and the report would name what the expansion
+     * renamed it to.
+     *
+     * <p>Every other application is typed against {@code env}, so a mistake inside its arguments is
+     * still reported as the mistake it is.
+     */
     static void collectApplications(String name, Ast.Expr e, Map<String, Type> env,
-                                            CheckContext ctx, List<List<Type>> out) {
-        if (e instanceof Ast.Call call && call.fn().equals(name)) {
+                                            CheckContext ctx, List<List<Type>> out,
+                                            Set<String> inner) {
+        if (e instanceof Ast.Call call && call.fn().equals(name)
+                && call.args().stream().noneMatch(a -> reaches(a, inner))) {
             List<Type> argTypes = new ArrayList<>();
             for (Ast.Expr a : call.args()) {
-                Type t = argTypeOrNull(a, env, ctx);
-                if (t == null) {
-                    // An application whose arguments this scope cannot name says nothing about the
-                    // parameter types — it is inside a lambda, whose parameters are bound there and
-                    // not here, which is where a combinator's own expansion puts the application.
-                    // It is not a constraint, and it is not an error either: the annotation says the
-                    // type when no application can.
-                    argTypes = null;
-                    break;
-                }
-                argTypes.add(t);
+                argTypes.add(typeOf(a, env, ctx));
             }
-            if (argTypes != null) {
-                out.add(argTypes);
-            }
+            out.add(argTypes);
         }
-        TypeChecker.forEachChild(e, sub -> collectApplications(name, sub, env, ctx, out));
+        switch (e) {
+            case Ast.Block b -> collectApplications(name, b.body(), env, ctx, out,
+                    with(inner, b.params()));
+            case Ast.LetIn li -> {
+                collectApplications(name, li.value(), env, ctx, out, inner);
+                collectApplications(name, li.body(), env, ctx, out, with(inner, List.of(li.name())));
+            }
+            case Ast.IfConstructed ic -> {
+                collectApplications(name, ic.construct(), env, ctx, out, inner);
+                collectApplications(name, ic.then(), env, ctx, out,
+                        with(inner, List.of(ic.binder())));
+                collectApplications(name, ic.els(), env, ctx, out, inner);
+            }
+            case Ast.Match m -> {
+                collectApplications(name, m.scrutinee(), env, ctx, out, inner);
+                for (Ast.Case c : m.cases()) {
+                    collectApplications(name, c.body(), env, ctx, out,
+                            c.binding() == null ? inner : with(inner, List.of(c.binding())));
+                }
+            }
+            default -> TypeChecker.forEachChild(e,
+                    sub -> collectApplications(name, sub, env, ctx, out, inner));
+        }
     }
 
-    /** The type of an application's argument, or null where this scope cannot type it. */
-    private static Type argTypeOrNull(Ast.Expr a, Map<String, Type> env, CheckContext ctx) {
-        try {
-            return typeOf(a, env, ctx);
-        } catch (CompileException unnameable) {
-            return null;
+    private static Set<String> with(Set<String> names, List<String> added) {
+        if (added.isEmpty()) {
+            return names;
         }
+        Set<String> out = new HashSet<>(names);
+        out.addAll(added);
+        return out;
+    }
+
+    /** Whether {@code e} reads a name a binder below the inference point introduced. */
+    private static boolean reaches(Ast.Expr e, Set<String> inner) {
+        if (inner.isEmpty()) {
+            return false;
+        }
+        if (e instanceof Ast.Var v && inner.contains(v.name())) {
+            return true;
+        }
+        if (e instanceof Ast.Call c && inner.contains(c.fn())) {
+            return true;
+        }
+        boolean[] found = {false};
+        TypeChecker.forEachChild(e, sub -> found[0] |= reaches(sub, inner));
+        return found[0];
     }
 
     /** Types a function value against inferred parameter types: a lambda binds its parameters and

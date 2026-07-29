@@ -86,4 +86,32 @@ class CompileFunctionTypeGrammarTest {
                 """);
         assertEquals("check.derive.nocodec", d.messageKey());
     }
+
+    // `T?` is `Option<T>` for whatever T is. Where `?` may be written is a rule of its own, and it is
+    // that rule the report names — not one about functions, which would put back the asymmetry this
+    // change removes: two spellings of one type, accepted by which of the two was written.
+    @Test
+    void anOptionalFunctionTypeIsRefusedByTheRuleAboutOptionals() {
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data R = { n: Int }
+                behavior run : (v: Int) -> R
+                    constructs R
+                let run (v) = {
+                    let p: ((Int) -> Bool)? = None
+                    R { n = v }
+                }
+                """);
+        assertEquals("parse.optional.core", d.messageKey());
+    }
+
+    // On a data field, where `?` may be written, the function inside it is what the boundary refuses.
+    @Test
+    void anOptionalFunctionFieldIsRefusedByTheBoundary() {
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data R = { f: ((Int) -> Bool)? }
+                """);
+        assertEquals("check.derive.nocodec", d.messageKey());
+    }
 }

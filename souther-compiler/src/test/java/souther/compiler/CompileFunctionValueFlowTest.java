@@ -140,4 +140,56 @@ class CompileFunctionValueFlowTest {
                                 """));
         assertEquals("check.fn.noinfer", e.diagnostic().messageKey());
     }
+
+    // Reading the applications must not swallow what is wrong inside one. A mistake in an argument is
+    // reported as that mistake, not as a function whose type could not be inferred.
+    @Test
+    void aMistakeInsideAnApplicationIsReportedAsItself() {
+        souther.compiler.diag.CompileException e =
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        souther.compiler.diag.CompileException.class,
+                        () -> Compiler.compile("""
+                                module demo
+
+                                data Item = { a: Int }
+                                data R = { n: Int }
+
+                                behavior run : (i: Item, flip: Bool) -> R
+                                    constructs R
+
+                                let run (i, flip) = {
+                                    let f = if flip then (x) -> x + 1 else (x) -> x + 2
+                                    R { n = f(i.noSuchField) }
+                                }
+                                """));
+        assertEquals("check.access", e.diagnostic().messageKey());
+    }
+
+    // An application whose arguments this scope can read is still a constraint, even inside a lambda:
+    // what puts an application out of reach is a binder below the inference point, not the lambda.
+    @Test
+    @SuppressWarnings("unchecked")
+    void anApplicationInsideALambdaOverOuterNamesStillTypesTheFunction() throws Exception {
+        String src = """
+                module demo
+
+                data Order = { xs: List<Int>, v: Int, spring: Bool }
+                data Result = { ns: List<Int> }
+
+                behavior check : (o: Order) -> Result
+                    constructs Result
+
+                let check (o) = {
+                    let f = if o.spring then (x) -> x + 100 else (x) -> x + 1
+                    Result { ns = List.map((y) -> y + f(o.v), o.xs) }
+                }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+        Object order = Codecs.decoded(loader, "demo.Order",
+                Map.of("xs", List.of(1L, 2L), "v", 5L, "spring", true));
+        assertEquals(List.of(106L, 107L),
+                ((Map<?, ?>) Codecs.encode(loader, "demo.Result",
+                        Codecs.apply(check, order))).get("ns"));
+    }
 }
