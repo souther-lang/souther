@@ -22,9 +22,9 @@ class CompileRailwayTest {
 
             // over 100 leaves the main line as a TooLarge case. `require ... else` mints the
             // TooLarge, so the behavior declares it (spec 12.3).
-            behavior guard : (a: Amount) -> Amount | TooLarge constructs TooLarge
+            behavior capAmount : (a: Amount) -> Amount | TooLarge constructs TooLarge
 
-            let guard (a) = {
+            let capAmount (a) = {
                 require a.value <= 100 else TooLarge { limit = 100 }
                 a
             }
@@ -34,7 +34,7 @@ class CompileRailwayTest {
 
             let toDoubled (a) = Doubled { value = a.value }
 
-            behavior process = guard >-> toDoubled
+            behavior process = capAmount >-> toDoubled
             """;
 
     private BytesClassLoader loader() {
@@ -50,7 +50,7 @@ class CompileRailwayTest {
         BytesClassLoader loader = loader();
         Object process = loader.loadClass("demo.Process" + "$Impl").getConstructor().newInstance();
         Object r = Codecs.apply(process, amount(loader, 42));
-        // 42 <= 100, so guard yields Amount, which toDoubled consumes into a Doubled
+        // 42 <= 100, so capAmount yields Amount, which toDoubled consumes into a Doubled
         assertEquals("demo.Doubled", r.getClass().getName());
     }
 
@@ -59,7 +59,7 @@ class CompileRailwayTest {
         BytesClassLoader loader = loader();
         Object process = loader.loadClass("demo.Process" + "$Impl").getConstructor().newInstance();
         Object r = Codecs.apply(process, amount(loader, 500));
-        // 500 > 100, so guard yields TooLarge, which toDoubled does not accept: it propagates
+        // 500 > 100, so capAmount yields TooLarge, which toDoubled does not accept: it propagates
         assertEquals("demo.TooLarge", r.getClass().getName());
     }
 

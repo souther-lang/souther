@@ -17,8 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  */
 class CompileExposedPipeOutputTest {
 
-    /** {@code guard} retires {@code TooLarge}; {@code toDoubled} yields {@code Doubled}, so
-     * {@code process = guard >-> toDoubled} produces {@code Doubled | TooLarge}. */
+    /** {@code capAmount} retires {@code TooLarge}; {@code toDoubled} yields {@code Doubled}, so
+     * {@code process = capAmount >-> toDoubled} produces {@code Doubled | TooLarge}. */
     private static String mod(String exposing) {
         return """
                 module demo exposing ( Amount, %s )
@@ -27,8 +27,8 @@ class CompileExposedPipeOutputTest {
                 data TooLarge = { limit: Int }
                 data Doubled = Int
 
-                behavior guard : (a: Amount) -> Amount | TooLarge constructs TooLarge
-                let guard (a) = {
+                behavior capAmount : (a: Amount) -> Amount | TooLarge constructs TooLarge
+                let capAmount (a) = {
                     require a.value <= 100 else TooLarge { limit = 100 }
                     a
                 }
@@ -36,7 +36,7 @@ class CompileExposedPipeOutputTest {
                 behavior toDoubled : (a: Amount) -> Doubled constructs Doubled
                 let toDoubled (a) = Doubled { value = a.value }
 
-                behavior process = guard >-> toDoubled
+                behavior process = capAmount >-> toDoubled
                 """.formatted(exposing);
     }
 
@@ -62,7 +62,7 @@ class CompileExposedPipeOutputTest {
     @Test
     void aSignatureOnANonCompositionIsE1605() {
         CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compile(mod("guard : Amount")));
+                () -> Compiler.compile(mod("capAmount : Amount")));
         assertEquals("E1605", e.code());
     }
 
