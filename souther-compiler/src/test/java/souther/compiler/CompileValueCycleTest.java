@@ -139,6 +139,41 @@ class CompileValueCycleTest {
                 """));
     }
 
+    /** Applying a function-typed parameter is not a call to whatever else bears its name. */
+    @Test
+    void aFunctionParameterCallSharingAValuesNameIsNotAValueReference() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                let step = invoke((x) -> x + 1)
+                let invoke (step: (Int) -> Int) = step(1)
+
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = i.n + step }
+                """));
+    }
+
+    /** The same spelling against a helper is not recursion either: a helper whose parameter shares a
+     * helper's name was classified as recursive and told to declare a return type. */
+    @Test
+    void aFunctionParameterCallSharingAHelpersNameIsNotHelperRecursion() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                let g (n: Int) = f((x) -> x + n)
+                let f (g: (Int) -> Int) = g(1)
+
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = g(i.n) }
+                """));
+    }
+
     /** A helper on a call cycle is untouched by this: it is lowered to a method and recurses. */
     @Test
     void aRecursiveHelperIsNotAValueCycle() {
