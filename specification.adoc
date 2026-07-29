@@ -531,6 +531,8 @@ Writing a computation that breaks the invariant of `+値引き済み+` does not 
 
 If the author wants to return the violation, that is a business judgment and MUST be written explicitly with `+require ... else+` (<<require>>). An invariant is a declaration that "a value passing here is always so", not a branch designed to be broken.
 
+That judgment MAY be written by *attempting* the construction (<<attempted-construction>>), which states the rule once instead of restating it in the guard. What the attempt answers is a branch, not a value: no failure value reaches the domain, and the name a business failure gets is still the one the author writes in `+else+`.
+
 A decode-side violation does not abort; Raoh's `+Result+` failure carries it (<<decoder-error>>). The same invariant is handled differently inside and outside the boundary.
 
 ==== How Option appears
@@ -902,7 +904,7 @@ The check is intraprocedural. Within a behavior's `+let+` body it seeds what the
 
 * *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
 * *Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
-* *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+require+`, or reify the relation into a type invariant (below).
+* *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+require+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
 * *Not expressible* — an invariant outside the checked fragment. No diagnostic; the run-time check stands.
 
 [,text]
@@ -919,6 +921,8 @@ let withdraw (req) = {
 ----
 
 The checked fragment is bounded: the decision procedure reasons over intervals and differences (`+value >= c+`, `+a <= b+`, and the like) with no external solver. The set of *flagged* constructions is tied to that fragment, so every flagged construction has a guard the procedure can verify — an invariant it cannot express (a non-linear or otherwise relational one) is left to the run-time check rather than reported as a possible violation no guard could silence.
+
+An *attempted* construction (<<attempted-construction>>) is never possibly violated: a failing invariant takes its `+else+` branch, so there is no abort to warn about. It is what silences the warning for an invariant outside the fragment, where no guard could. A violation the procedure *decides* is still an error there, because with the outcome settled at compile time there was no branch. In the success branch the built value seeds the check with its own invariant, as an input of that type does.
 
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
@@ -1914,6 +1918,8 @@ if condition then expression1 else expression2
 
 `+if+` is an expression. If both branch types agree, its type is that type; if they are different data, it is a sum of both (`+if c then 提出済み{...} else 事前承認待ち{...}+` is `+提出済み | 事前承認待ち+`). A mismatch between primitives is a compile error.
 
+The condition is a `+Bool+`, with one exception: a construction followed by `+as <名前>+`, whose invariant decides the branch and whose value the name carries into the success branch (<<attempted-construction>>).
+
 The widening reaches inside a collection as well, since a collection is element-covariant (<<collections>>): branches giving lists of different cases give a list of both, the same direction `{plus}{plus}` takes on its elements (<<stdlib-list>>). It descends `+List+`, `+Set+`, `+Map+`, `+Option+` and tuples, so an empty collection whose element type nothing has fixed yet takes it from the other branch at any depth, not only at the top. Where the context did fix it — a declared return or field type reaches both branches (<<collections>>) — the two branches merge by the widening like any other pair. `+match+` arms merge by this rule too.
 
 [,text]
@@ -2021,7 +2027,46 @@ require <condition> else <value>
 if <condition> then <rest of the body> else <value>
 ----
 
-Desugaring is done at parse time; later stages (type check, construction-authority check, backend) see only `+if+`. That both branches may have different types (<<if>>) is what makes this desugaring hold.
+Desugaring is done at parse time; later stages (type check, construction-authority check, backend) see only `+if+` or the attempted form below. That both branches may have different types (<<if>>) is what makes this desugaring hold.
+
+[#attempted-construction]
+=== An attempted construction
+
+[,text]
+----
+require DomainName(d) as name else 不正なドメイン
+if DomainName(d) as name then [ name ] else []
+----
+
+Where the condition is a construction followed by `+as <名前>+`, that construction's invariant decides
+the branch. The invariant is run — the type's own and every invariant a `+...+` spread brought in
+(<<invariant-mvp>>, <<field-spread>>). Holding, the value is built and `+<名前>+` names it in the
+success branch; failing, the `+else+` value is taken and no value is built. The invariant runs once.
+
+The name is in scope in the success branch only. *Nothing carries the failure.* There is no value for
+it — no `+Option+`, no `+Result+`, no reason — and the name a business failure gets is the one written
+in `+else+`, which MAY be a value naming nothing (`+else []+`).
+
+`+require+` here is the same sugar for `+if+` (<<require>>), so the `+if+` form is the base one and a
+helper `+let+`, which has no departure case to name, reaches it too.
+
+A construction inside an argument is an ordinary construction and aborts on violation
+(<<violation-destination>>); what is attempted is the outer construction alone.
+
+An attempt builds a value on its success branch, so the enclosing behavior's `+constructs+` MUST name
+the type (<<constructs>>). The type MUST carry an invariant, its own or one a spread brought in:
+without one the `+else+` value could never be reached, so writing it is a compile error rather than a
+branch that is not one.
+
+Writing `+T(v)+` on its own still aborts (<<violation-destination>>). This is the form a writer
+chooses at the site, and it is what lets a rule be stated once — the rule lives in the type's
+`+invariant+`, and a guard restating it can drift from it. Across a module boundary the restatement
+cannot be written at all: a helper `+let+` an invariant names is not exposed (<<exposed-surface>>), and a
+behavior cannot be called from an invariant (<<invariant-expressions>>). The attempt names the type,
+which the declaring module does expose.
+
+Newtype arithmetic (<<newtype-arithmetic>>) re-wraps rather than constructs, so it is not what `+as+`
+takes; write the construction out (`+T(a.value - b.value)+`).
 
 [#block-expression]
 === Block expressions

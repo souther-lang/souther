@@ -488,7 +488,8 @@ public interface Ast {
 
     sealed interface Expr extends Ast
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Call, Binary, Neg,
-                    NewData, Match, If, ListLit, ListComp, LetIn, Block, Tuple, TupleGet {}
+                    NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Block, Tuple,
+                    TupleGet {}
 
     /**
      * {@code x -> expr}, or {@code (acc, x) -> expr} — a block (spec 12.5).
@@ -564,6 +565,27 @@ public interface Ast {
 
     /** {@code if cond then a else b} — both branches must have the same type (spec 16.2). */
     record If(Expr cond, Expr then, Expr els, SourcePos pos) implements Expr {}
+
+    /**
+     * {@code if T(v) as x then a else b} — an attempted construction, and what
+     * {@code require T(v) as x else b} desugars to. {@code construct}'s invariant decides the branch:
+     * holding, the value is built and {@code binder} names it in {@code then}; failing, {@code els} is
+     * taken and no value is built. The binder is scoped to {@code then} alone, which is why this is a
+     * node of its own rather than a condition {@code If} would have to introspect — a plain
+     * {@code If}'s condition never binds.
+     *
+     * <p>A construction here does not abort, so it is exempt from the possible-violation warning
+     * (spec 7.6); a violation the compiler *decides* is still reported, because then no branch was
+     * ever in question.
+     *
+     * <p>{@code construct} is an {@link Expr} rather than a {@link NewData} because the newtype
+     * spelling {@code T(v)} is a {@link Call} until {@link souther.compiler.check.NewtypeDesugar}
+     * rewrites it — the same reason nothing else in the AST can name a construction by type either.
+     * That it is one, and that its type carries an invariant to attempt, are checked once the names
+     * are resolved.
+     */
+    record IfConstructed(Expr construct, String binder, Expr then, Expr els, SourcePos pos)
+            implements Expr {}
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. */
     record Match(Expr scrutinee, List<Case> cases, SourcePos pos) implements Expr {}
@@ -674,6 +696,8 @@ public interface Ast {
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
             case Call c -> new Call(c.fn(), c.denotes(), mapExprs(c.args(), f), c.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
+            case IfConstructed ic -> new IfConstructed(f.apply(ic.construct()), ic.binder(),
+                    f.apply(ic.then()), f.apply(ic.els()), ic.pos());
             case LetIn li -> new LetIn(li.name(), f.apply(li.value()), li.declaredType(), li.annotated(),
                     li.opens(), f.apply(li.body()), li.pos());
             case Block bl -> new Block(bl.params(), f.apply(bl.body()), bl.pos());
@@ -722,6 +746,11 @@ public interface Ast {
                 f.accept(iff.cond());
                 f.accept(iff.then());
                 f.accept(iff.els());
+            }
+            case IfConstructed ic -> {
+                f.accept(ic.construct());
+                f.accept(ic.then());
+                f.accept(ic.els());
             }
             case LetIn li -> {
                 f.accept(li.value());

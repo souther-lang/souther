@@ -641,7 +641,27 @@ public final class AstBuilder {
 
     private Ast.Expr ifExpr(SyntaxNode n) {
         List<SyntaxNode> exprs = exprChildren(n);
-        return new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n));
+        String binder = attemptBinder(n);
+        return binder == null
+                ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n))
+                : new Ast.IfConstructed(expr(exprs.get(0)), binder,
+                        expr(exprs.get(1)), expr(exprs.get(2)), pos(n));
+    }
+
+    /** The {@code x} of an attempted construction's {@code as x}, or {@code null} where none was
+     * written. The binder is the identifier following {@code as} among the form's own tokens; the
+     * condition is a child node, so its identifiers are not among them. */
+    private static String attemptBinder(SyntaxNode n) {
+        boolean afterAs = false;
+        for (SyntaxElement e : n.children()) {
+            if (!(e instanceof SyntaxToken t)) continue;
+            if (t.kind() == SyntaxKind.AS_KW) {
+                afterAs = true;
+            } else if (afterAs && t.kind() == SyntaxKind.IDENT) {
+                return t.text();
+            }
+        }
+        return null;
     }
 
     /** {@code (p, ...) -> body}. A parameter that is more than a name takes a fresh one and opens
@@ -904,8 +924,12 @@ public final class AstBuilder {
             }
             case REQUIRE_STMT -> {
                 List<SyntaxNode> exprs = exprChildren(s);
-                yield new Ast.If(expr(exprs.get(0)), foldStatements(stmts, index + 1, result),
-                        expr(exprs.get(1)), pos);
+                String binder = attemptBinder(s);
+                Ast.Expr rest = foldStatements(stmts, index + 1, result);
+                yield binder == null
+                        ? new Ast.If(expr(exprs.get(0)), rest, expr(exprs.get(1)), pos)
+                        : new Ast.IfConstructed(expr(exprs.get(0)), binder, rest,
+                                expr(exprs.get(1)), pos);
             }
             case LET_DESTRUCTURE -> {
                 SyntaxNode pat = patternChild(s);

@@ -122,6 +122,15 @@ public final class DataChecker {
                 collectConstructs(iff.then(), out, symbols, bound, recConstructs);
                 collectConstructs(iff.els(), out, symbols, bound, recConstructs);
             }
+            // an attempt builds the value on its success branch, so it needs the same permission a
+            // plain construction does — what it does not do is abort when it fails
+            case Ast.IfConstructed ic -> {
+                collectConstructs(ic.construct(), out, symbols, bound, recConstructs);
+                Set<String> inner = new HashSet<>(bound);
+                inner.add(ic.binder());
+                collectConstructs(ic.then(), out, symbols, inner, recConstructs);
+                collectConstructs(ic.els(), out, symbols, bound, recConstructs);
+            }
             case Ast.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, bound, recConstructs));
             case Ast.ListComp comp -> {
                 collectConstructs(comp.element(), out, symbols, bound, recConstructs);

@@ -55,6 +55,16 @@ public sealed interface Core {
 
     record If(Core cond, Core then, Core els, Type type, SourcePos pos) implements Core {}
 
+    /**
+     * An attempted construction: {@code construct}'s invariant decides the branch. It is built and
+     * bound to {@code binder} in {@code then} when the invariant holds, and {@code els} is taken when
+     * it does not. Emitted from the {@code __construct} the plain construction already goes through —
+     * what differs is that the {@code Result} is branched on rather than handed to
+     * {@code ConstraintViolation.orThrow}.
+     */
+    record IfConstructed(NewData construct, String binder, Core then, Core els, Type type,
+                         SourcePos pos) implements Core {}
+
     /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
      * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an
      * empty collection bound here materialises at the written type rather than a bottom (issue #71). */

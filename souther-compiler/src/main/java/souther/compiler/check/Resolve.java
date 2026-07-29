@@ -473,6 +473,11 @@ public final class Resolve {
                     expr(li.body(), bound.and(li.name(), li.pos())), li.pos());
             case Ast.Block b -> new Ast.Block(b.params(),
                     expr(b.body(), bound.andAll(b.params(), b.pos())), b.pos());
+            // an attempt's binder names the value only where there is one to name — the success
+            // branch. The construction and the else value are outside it.
+            case Ast.IfConstructed ic -> new Ast.IfConstructed(expr(ic.construct(), bound),
+                    ic.binder(), expr(ic.then(), bound.and(ic.binder(), ic.pos())),
+                    expr(ic.els(), bound), ic.pos());
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
                 for (Ast.Case c : m.cases()) {

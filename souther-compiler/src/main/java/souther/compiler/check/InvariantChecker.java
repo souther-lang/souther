@@ -94,12 +94,29 @@ final class InvariantChecker {
     // --- the walk ------------------------------------------------------------------------------
 
     private void walk(Ast.Expr e, NumericDomain d, Map<String, Type> types) {
-        checkIfConstruction(e, d, types);
+        checkIfConstruction(e, d, types, false);
         switch (e) {
             case Ast.If iff -> {
                 walk(iff.cond(), d, types);
                 walk(iff.then(), assumeCond(iff.cond(), d, types, true), types);
                 walk(iff.els(), assumeCond(iff.cond(), d, types, false), types);
+            }
+            case Ast.IfConstructed ic -> {
+                // The attempt's own construction cannot abort — a failing invariant is the else
+                // branch — so it is checked for a decided violation and never warned about as a
+                // possible one. Its field values are walked on their own so a construction nested
+                // inside an argument is still an ordinary, aborting one.
+                checkIfConstruction(ic.construct(), d, types, true);
+                Ast.forEachChild(ic.construct(), child -> walk(child, d, types));
+                Map<String, Type> t2 = new HashMap<>(types);
+                NumericDomain d2 = d;
+                Type built = typeExpr(ic.construct(), types);
+                if (built != null) {
+                    t2.put(ic.binder(), built);
+                    d2 = seedParam(ic.binder(), built, d);   // on this branch the invariant holds
+                }
+                walk(ic.then(), d2, t2);
+                walk(ic.els(), d, types);
             }
             case Ast.LetIn li -> {
                 walk(li.value(), d, types);
@@ -156,7 +173,8 @@ final class InvariantChecker {
 
     // --- construction detection & discharge check ----------------------------------------------
 
-    private void checkIfConstruction(Ast.Expr e, NumericDomain d, Map<String, Type> types) {
+    private void checkIfConstruction(Ast.Expr e, NumericDomain d, Map<String, Type> types,
+                                     boolean attempted) {
         switch (e) {
             case Ast.NewData nd when nd.spreads().isEmpty() -> {
                 if (symbols.get(nd.typeName().denotes()) instanceof Ast.Data type) {
@@ -167,7 +185,7 @@ final class InvariantChecker {
                             fields.put(fi.name(), f);
                         }
                     }
-                    check(type, fields::get, d, nd.pos());
+                    check(type, fields::get, d, nd.pos(), attempted);
                 }
             }
             case Ast.Binary bin when isArith(bin.op()) -> {
@@ -175,7 +193,7 @@ final class InvariantChecker {
                         && symbols.get(r.name()) instanceof Ast.Data type && type.newtype()) {
                     LinearForm value = affineOf(bin, types);
                     if (value != null) {
-                        check(type, name -> "value".equals(name) ? value : null, d, bin.pos());
+                        check(type, name -> "value".equals(name) ? value : null, d, bin.pos(), attempted);
                     }
                 }
             }
@@ -185,8 +203,10 @@ final class InvariantChecker {
 
     /** Runs the discharge check for a construction of {@code type} whose field values resolve through
      * {@code resolve}. A definite violation is an error; an unproven one a warning; a fully-discharged
-     * or non-expressible invariant is silent. */
-    private void check(Ast.Data type, Function<String, LinearForm> resolve, NumericDomain d, SourcePos pos) {
+     * or non-expressible invariant is silent. An {@code attempted} construction raises no warning:
+     * what the warning reports is a possible abort, and an attempt takes its else branch instead. */
+    private void check(Ast.Data type, Function<String, LinearForm> resolve, NumericDomain d, SourcePos pos,
+                       boolean attempted) {
         List<Ast.Expr> invs = TypeOps.effectiveInvariants(type, symbols);
         if (invs.isEmpty()) {
             return;
@@ -212,7 +232,7 @@ final class InvariantChecker {
                 possible = true;
             }
         }
-        if (possible) {
+        if (possible && !attempted) {
             warnings.add(
                     Diagnostic.of("E2011", "check.invariant.unproven").title("check.invariant.title")
                             .at(pos).args(type.name()).hint("check.invariant.reify", type.name())

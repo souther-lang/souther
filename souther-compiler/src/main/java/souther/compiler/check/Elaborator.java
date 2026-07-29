@@ -221,6 +221,54 @@ public final class Elaborator {
                                 .build(),
                         "if branches disagree: " + tt + " vs " + et);
             }
+            case Ast.IfConstructed ic -> {
+                Core built = elaborate(ic.construct(), env, ctx);
+                if (!(built instanceof Core.NewData construct)) {
+                    throw CompileException.of(
+                            Diagnostic.of("E2012", "check.attempt.notconstruction")
+                                    .title("check.attempt.title")
+                                    .at(ic.construct().pos(), width(ic.construct()))
+                                    .hint("check.attempt.notconstruction.hint")
+                                    .build(),
+                            "`as` attempts a construction, and this is not one");
+                }
+                // What decides the branch is the invariant, so a type with none has no failing side
+                // and the else value could never be reached. Reported rather than compiled into a
+                // branch that is not one — the same call a unit data's forbidden invariant makes.
+                if (!DataChecker.isInvariantBearing(construct.typeName(), ctx.symbols())) {
+                    throw CompileException.of(
+                            Diagnostic.of("E2013", "check.attempt.noinvariant")
+                                    .title("check.attempt.title")
+                                    .at(ic.construct().pos(), width(ic.construct()))
+                                    .args(construct.typeName().name())
+                                    .hint("check.attempt.noinvariant.hint")
+                                    .build(),
+                            "`" + construct.typeName().name() + "` has no invariant to attempt");
+                }
+                // The binder names the built value, so the success branch reads it at the data's own
+                // type — with the invariant established, which is why the discharge check may seed it.
+                Map<String, Type> inner = new HashMap<>(env);
+                inner.put(ic.binder(), construct.type());
+                Core then = liftIntoOption(elaborate(ic.then(), inner, ctx, expected), expected,
+                        ctx.symbols());
+                Core els = liftIntoOption(elaborate(ic.els(), env, ctx, expected), expected,
+                        ctx.symbols());
+                Type joined = TypeOps.join(then.type(), els.type());
+                if (joined == null) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.if.msg")
+                                    .title("check.if.title")
+                                    .at(ic.pos(), 2)
+                                    .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())),
+                                            "check.if.then", Type.show(then.type()))
+                                    .secondary(Region.ofWidth(ic.els().pos(), width(ic.els())),
+                                            "check.if.else", Type.show(els.type()))
+                                    .hint("check.if.hint")
+                                    .build(),
+                            "if branches disagree: " + then.type() + " vs " + els.type());
+                }
+                yield new Core.IfConstructed(construct, ic.binder(), then, els, joined, ic.pos());
+            }
             case Ast.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
                     // `[]`: element type fixed by context (ADR-0028); adopt an expected list type
