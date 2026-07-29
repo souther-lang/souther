@@ -233,6 +233,19 @@ final class Descriptors {
     static final ClassDesc CD_MapEntry = CD_Map.nested("Entry");
     static final MethodTypeDesc MTD_flatMapWithPath = MethodTypeDesc.of(CD_RDecoder, CD_BiFunction);
     static final MethodTypeDesc MTD_rekey = MethodTypeDesc.of(CD_RResult, CD_Map, CD_RPath);
+    static final MethodTypeDesc MTD_fromName = MethodTypeDesc.of(CD_RResult, CD_String, CD_RPath);
+    /** The synthetic {@code static String __tag(Object)} an enumeration's sealed interface carries:
+     *  which case a value is, as the name its boundary form uses. */
+    static final String TAG_METHOD = "__tag";
+    static final MethodTypeDesc MTD_tag = MethodTypeDesc.of(CD_String, CD_Object);
+    /** {@code static int __order(Object)} / {@code static Comparator __ordering()}: an enumeration's
+     *  declaration order, held by the sum rather than by its case values. */
+    static final String ORDER_METHOD = "__order";
+    static final String ORDERING_METHOD = "__ordering";
+    static final MethodTypeDesc MTD_order = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
+    static final ClassDesc CD_Comparator = ClassDesc.of("java.util.Comparator");
+    static final ClassDesc CD_ToIntFunction = ClassDesc.of("java.util.function.ToIntFunction");
+    static final MethodTypeDesc MTD_ordering = MethodTypeDesc.of(CD_Comparator);
     static final MethodTypeDesc MTD_entrySet = MethodTypeDesc.of(CD_Set);
     static final MethodTypeDesc MTD_iterator = MethodTypeDesc.of(CD_Iterator);
     static final MethodTypeDesc MTD_hasNext = MethodTypeDesc.of(ConstantDescs.CD_boolean);

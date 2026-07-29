@@ -270,6 +270,16 @@ public final class Elaborator {
         }
         List<TypeName> cases = TypeOps.sumCases(target, ctx.symbols());
         if (cases != null) {
+            // A field every case spreads is the sum's own: the sharing is nominal, and the generated
+            // sealed interface declares the accessor its cases already carry (issue #160). Only a
+            // named sum, whose interface this compile emits — an anonymous union's cases are not
+            // written together, so nothing declares their shared part.
+            if (target instanceof Type.Ref ref && ctx.symbols().get(ref.name()) instanceof Ast.SumData) {
+                Type shared = TypeOps.commonSpreadFields(cases, ctx.symbols()).get(fa.field());
+                if (shared != null) {
+                    return new Core.FieldAccess(targetCore, fa.field(), shared, fa.pos());
+                }
+            }
             // A sum carries no fields of its own — its cases do, and which case it is is not known
             // until it is opened. Saying that is the difference between "this value has no such
             // field" and "read it in each case", which is what the author has to write.
@@ -285,6 +295,11 @@ public final class Elaborator {
                     .at(fa.pos(), fa.field().length()).args(fa.field(), Type.show(target));
             if (!without.isEmpty()) {
                 d = d.hint("check.access.sum.missing", fa.field(), String.join(", ", without));
+            } else if (target instanceof Type.Ref) {
+                // Every case has the field and the read still fails, so what is missing is the shared
+                // spread. Without saying so the author reads "a sum has no fields" while looking at
+                // the field in every case.
+                d = d.hint("check.access.sum.unshared", fa.field());
             }
             throw CompileException.of(d.build(),
                     "cannot read a field `" + fa.field() + "` on the sum `" + Type.show(target)

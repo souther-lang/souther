@@ -554,6 +554,61 @@ public final class TypeOps {
         return false;
     }
 
+    /**
+     * The fields a sum exposes: those contributed by a data that every one of its cases spreads,
+     * transitively. What holds of every case is a property of the sum, and a spread is nominal
+     * (ADR-0012), so what makes the fields shared is that the author wrote `...Common` in each case —
+     * not that two cases happen to agree on a field name, which would be the structural reading
+     * ADR-0012 declines. Empty when the cases share no spread, so the read stays the error it is.
+     */
+    public static Map<String, Type> commonSpreadFields(Ast.SumData sum, Symbols symbols) {
+        return commonSpreadFields(leafCases(sum, symbols), symbols);
+    }
+
+    /** As {@link #commonSpreadFields(Ast.SumData, Symbols)}, for cases already flattened to leaves. */
+    public static Map<String, Type> commonSpreadFields(List<TypeName> cases, Symbols symbols) {
+        if (cases == null || cases.isEmpty()) {
+            return Map.of();
+        }
+        Set<TypeName> common = null;
+        for (TypeName c : cases) {
+            Set<TypeName> spreads = symbols.get(c) instanceof Ast.Data d
+                    ? spreadAncestors(d, symbols) : Set.of();
+            if (common == null) {
+                common = new LinkedHashSet<>(spreads);
+            } else {
+                common.retainAll(spreads);
+            }
+            if (common.isEmpty()) {
+                return Map.of();
+            }
+        }
+        Map<String, Type> fields = new LinkedHashMap<>();
+        for (TypeName ancestor : common) {
+            if (symbols.get(ancestor) instanceof Ast.Data d) {
+                fields.putAll(fieldTypes(d, symbols));
+            }
+        }
+        return fields;
+    }
+
+    /** Every data reachable from {@code data} through spreads, transitively — the set two cases are
+     * intersected on. The data itself is not one of them: a case is not its own shared part. */
+    private static Set<TypeName> spreadAncestors(Ast.Data data, Symbols symbols) {
+        Set<TypeName> out = new LinkedHashSet<>();
+        collectSpreadAncestors(data, symbols, out);
+        return out;
+    }
+
+    private static void collectSpreadAncestors(Ast.Data data, Symbols symbols, Set<TypeName> out) {
+        for (Ast.Name inc : data.includes()) {
+            Ast.Data included = spreadTarget(inc, symbols);
+            if (included != null && out.add(inc.denotes())) {
+                collectSpreadAncestors(included, symbols, out);
+            }
+        }
+    }
+
     /** All invariants that apply to a data: included data's invariants first, then its own. */
     public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Symbols symbols) {
         List<Ast.Expr> invs = new ArrayList<>();
@@ -594,7 +649,41 @@ public final class TypeOps {
     public static boolean isBoundaryMapKey(Type key, Symbols symbols) {
         return key == Type.STRING || key == Type.DATE || key == Type.DATETIME
                 || key instanceof Type.Var
-                || (key instanceof Type.Ref r && isStringNewtype(r.name(), symbols));
+                || (key instanceof Type.Ref r
+                    && (isStringNewtype(r.name(), symbols) || isUnitOnlySum(key, symbols)));
+    }
+
+    /**
+     * Whether every case of a sum is a unit data — an enumeration, carrying nothing but which case it
+     * is. What holds of every case is a property of the sum: such a sum crosses the boundary as that
+     * case's name, a bare string, so it renders and parses in key position like any other string
+     * (issue #161, ADR-0040). A sum with even one field-bearing case keeps the discriminator object.
+     */
+    public static boolean isUnitOnlySum(Type t, Symbols symbols) {
+        return t instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.SumData sum
+                && isUnitOnlySum(sum, symbols);
+    }
+
+    public static boolean isUnitOnlySum(Ast.SumData sum, Symbols symbols) {
+        List<TypeName> leaves = leafCases(sum, symbols);
+        if (leaves.isEmpty()) {
+            return false;
+        }
+        for (TypeName leaf : leaves) {
+            if (!(symbols.get(leaf) instanceof Ast.UnitData)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** A sum's leaf cases in declaration order, nested sums flattened where they are written. */
+    public static List<TypeName> leafCases(Ast.SumData sum, Symbols symbols) {
+        Set<TypeName> leaves = new LinkedHashSet<>();
+        for (TypeName c : caseNames(sum)) {
+            leaves.addAll(leafCases(Type.ref(c), symbols));
+        }
+        return List.copyOf(leaves);
     }
 
     /** The key of the first {@code Map} inside {@code t} that cannot cross the boundary, or null when
@@ -631,7 +720,96 @@ public final class TypeOps {
      * operators and the sort family read. The generated wrapper carries that ordering as
      * {@link Comparable}, so the runtime's natural-order compare reaches it. */
     public static boolean isOrderedValue(Type t, Symbols symbols) {
-        return isOrdered(base(t, symbols));
+        return isOrdered(base(t, symbols)) || orderingEnumeration(t, symbols) != null;
+    }
+
+    /**
+     * The enumeration two operands of {@code <}/{@code <=}/{@code >}/{@code >=} are ordered by, or
+     * null when they are not both values of one. Either side may name it: {@code stage < Won}
+     * carries the order on the left, and a case listed by two sums takes the one it is compared with.
+     */
+    public static TypeName comparisonEnumeration(Type lt, Type rt, Symbols symbols) {
+        TypeName named = orderingEnumeration(lt, symbols);
+        if (named == null) {
+            named = orderingEnumeration(rt, symbols);
+        }
+        return named != null && isValueOfEnumeration(lt, named, symbols)
+                && isValueOfEnumeration(rt, named, symbols) ? named : null;
+    }
+
+    /** Whether {@code t} is that enumeration, one of its leaves, or a union of them. */
+    private static boolean isValueOfEnumeration(Type t, TypeName enumeration, Symbols symbols) {
+        if (t instanceof Type.Union union) {
+            for (TypeName member : union.members()) {
+                if (!isValueOfEnumeration(Type.ref(member), enumeration, symbols)) {
+                    return false;
+                }
+            }
+            return !union.members().isEmpty();
+        }
+        return t instanceof Type.Ref ref && (ref.name().equals(enumeration)
+                || (symbols.get(enumeration) instanceof Ast.SumData sum
+                    && leafCases(sum, symbols).contains(ref.name())));
+    }
+
+    /**
+     * The enumeration that orders a value of {@code t} — a sum all of whose cases are unit data,
+     * ordered by the order they are declared in, which is the order a state machine moves through
+     * (F#'s discriminated union, Haskell's derived {@code Ord}, Java's ordinal; issue #161). It is
+     * the type itself when it is one, or the single one that lists it as a case.
+     *
+     * <p>Null when the type is not one and when more than one enumeration lists it: a unit data may
+     * be a case of two sums, which place it differently, so no one order is the value's own. The
+     * order therefore belongs to the sum and not to the case value.
+     */
+    public static TypeName orderingEnumeration(Type t, Symbols symbols) {
+        Set<TypeName> candidates = orderingCandidates(t, symbols);
+        return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
+    }
+
+    /**
+     * Every enumeration that could order a value of {@code t}, or null when it is not a value of one.
+     * A list literal of case values (`[ Negotiation, Prospecting ]`) is typed as the union of their
+     * types, and what orders it is the enumeration that lists all of them — so the candidates are
+     * intersected across the members rather than each member having to name one on its own.
+     */
+    private static Set<TypeName> orderingCandidates(Type t, Symbols symbols) {
+        if (t instanceof Type.Union union) {
+            Set<TypeName> shared = null;
+            for (TypeName member : union.members()) {
+                Set<TypeName> owners = orderingCandidates(Type.ref(member), symbols);
+                if (owners == null) {
+                    return null;
+                }
+                if (shared == null) {
+                    shared = new LinkedHashSet<>(owners);
+                } else {
+                    shared.retainAll(owners);
+                }
+            }
+            return shared;
+        }
+        if (!(t instanceof Type.Ref ref)) {
+            return null;
+        }
+        if (symbols.get(ref.name()) instanceof Ast.SumData sum) {
+            return isUnitOnlySum(sum, symbols) ? Set.of(ref.name()) : null;
+        }
+        if (!(symbols.get(ref.name()) instanceof Ast.UnitData)) {
+            return null;
+        }
+        // A sum and its cases are declared together (a case declared elsewhere cannot join a union
+        // here, E1606), so every enumeration that lists this case is in the case's own module. Asking
+        // that module rather than what is visible keeps the answer the same in every module that
+        // reads the value.
+        Set<TypeName> owners = new LinkedHashSet<>();
+        for (Ast.Def def : symbols.declaredIn(ref.name().module()).values()) {
+            if (def instanceof Ast.SumData s && isUnitOnlySum(s, symbols)
+                    && leafCases(s, symbols).contains(ref.name())) {
+                owners.add(ref.name().sibling(s.name()));
+            }
+        }
+        return owners;
     }
 
     /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —

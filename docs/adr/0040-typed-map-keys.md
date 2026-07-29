@@ -61,6 +61,12 @@ An `Int`-backed newtype key stays out. It meets the letter of "parseable from a 
 spirit: the same value is a JSON number in a field and would be a string in a key, so the type's
 external form would depend on where it appears.
 
+An *enumeration* — a sum every one of whose cases is a unit data — is admitted, and by that same
+rule rather than despite it. Such a sum travels as its case's name in every position, a field
+included (ADR-0069), so a key is the representation it already has: `{"stage": "Won"}` and
+`{"Won": 300}` carry the same string. Its key is decoded by the sum's own decoder, so a name no case
+answers to fails at that key's path, as a newtype's invariant does.
+
 ## Consequences
 
 `Map<商品ID, 在庫>` and `Map<従業員ID, 権限>` are distinct types, and the key of a lookup is checked
@@ -78,6 +84,7 @@ is at stake, so nothing is restricted there.
 
 ## References
 
+- ADR-0069 (what holds of every case is a property of the sum — why an enumeration is a key)
 - ADR-0014 (a newtype is nominal and bare-string represented — why a String-backed newtype is a valid
   key)
 - ADR-0009 (value equality — how a newtype-keyed map matches keys)

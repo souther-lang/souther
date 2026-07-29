@@ -176,7 +176,13 @@ final class BodyGen {
          * (spec 8.5, 19.2).
          */
         private void emitFieldRead(CodeBuilder code, TypeName ownerName, String field, Type ft) {
-            code.invokevirtual(cd(ownerName), field, MethodTypeDesc.of(jvmType(ft)));
+            MethodTypeDesc mtd = MethodTypeDesc.of(jvmType(ft));
+            if (symbols.get(ownerName) instanceof Ast.SumData) {
+                // a field every case spreads is declared on the sum's sealed interface (issue #160)
+                code.invokeinterface(cd(ownerName), field, mtd);
+            } else {
+                code.invokevirtual(cd(ownerName), field, mtd);
+            }
         }
 
         /** Opens a single-value newtype on the stack to its underlying value (recursively, so a
@@ -781,6 +787,18 @@ final class BodyGen {
         }
 
         private void call(Core.Call call, Type expected) {
+            // An enumeration's order lives on its sum, so the sort family takes it as a comparator
+            // rather than reading a Comparable off the value (issue #161).
+            if (call.fn().equals("List.sort")) {
+                TypeName ordering = elementOrdering(call.args().get(0));
+                if (ordering != null) {
+                    code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+                    genExpr(call.args().get(0));
+                    code.invokestatic(CD_Lists, "sort",
+                            MethodTypeDesc.of(CD_List, CD_Comparator, CD_List));
+                    return;
+                }
+            }
             Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(call.fn());
             if (intrinsic != null) {
                 Intrinsics.emit(this, intrinsic.key(), call);
@@ -815,21 +833,35 @@ final class BodyGen {
                             MethodTypeDesc.of(CD_Option, CD_List, ConstantDescs.CD_long));
                 }
                 case "List.max", "List.min" -> {
+                    TypeName ordering = elementOrdering(call.args().get(0));
+                    if (ordering != null) {
+                        code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+                    }
                     genExpr(call.args().get(0));
                     code.invokestatic(CD_Lists, bareOp(call.fn()),   // "max" / "min"
-                            MethodTypeDesc.of(CD_Option, CD_List));
+                            ordering == null
+                                    ? MethodTypeDesc.of(CD_Option, CD_List)
+                                    : MethodTypeDesc.of(CD_Option, CD_Comparator, CD_List));
                 }
                 case "List.find", "List.sortBy" -> {
                     // find(p, xs) / sortBy(key, xs): the function is a value here (not inlined into a
                     // fold), so materialise it as an Fn, then pass the list. The list's element type
                     // gives the function's one parameter type.
                     Type elem = ((Type.ListOf) call.args().get(1).type()).element();
+                    TypeName ordering = call.fn().equals("List.sortBy")
+                            && call.args().get(0).type() instanceof Type.FnOf key
+                            ? TypeOps.orderingEnumeration(key.result(), symbols) : null;
+                    if (ordering != null) {
+                        code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+                    }
                     emitFunctionValue(call.args().get(0), List.of(elem));   // Fn on the stack
                     genExpr(call.args().get(1));                            // then the List
                     if (call.fn().equals("List.find")) {
                         code.invokestatic(CD_Lists, "find", MethodTypeDesc.of(CD_Option, CD_Fn, CD_List));
                     } else {
-                        code.invokestatic(CD_Lists, "sortBy", MethodTypeDesc.of(CD_List, CD_Fn, CD_List));
+                        code.invokestatic(CD_Lists, "sortBy", ordering == null
+                                ? MethodTypeDesc.of(CD_List, CD_Fn, CD_List)
+                                : MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
                     }
                 }
                 case "Option.map" -> {
@@ -1159,6 +1191,17 @@ final class BodyGen {
                     }
                 }
                 default -> {
+                    // An enumeration compares by where its case stands in the declaration, which the
+                    // sum answers for both operands — `stage < Won` pairs a sum with one of its cases.
+                    TypeName enumOf = orderingOf(bin);
+                    if (enumOf != null) {
+                        genExpr(bin.left());
+                        code.invokestatic(cd(enumOf), ORDER_METHOD, MTD_order, true);
+                        genExpr(bin.right());
+                        code.invokestatic(cd(enumOf), ORDER_METHOD, MTD_order, true);
+                        comparisonMaterialize(bin.op(), false);
+                        return;
+                    }
                     // A single-value newtype compares by its underlying value: open each operand to
                     // that value right after it is pushed, then the primitive comparison below applies
                     // (金額 <= 金額, 金額 <= 100 — the checker allows only same newtype or a bare literal).
@@ -1209,6 +1252,25 @@ final class BodyGen {
                     comparisonMaterialize(bin.op(), lt == Type.INT);
                 }
             }
+        }
+
+        /** The enumeration a {@code <}/{@code <=}/{@code >}/{@code >=} orders its operands by, or
+         * null when this is not that comparison. */
+        private TypeName orderingOf(Core.Binary bin) {
+            boolean ordering = switch (bin.op()) {
+                case LT, LE, GT, GE -> true;
+                default -> false;
+            };
+            return ordering
+                    ? TypeOps.comparisonEnumeration(bin.left().type(), bin.right().type(), symbols)
+                    : null;
+        }
+
+        /** The enumeration a list's elements are ordered by, or null when they are ordered otherwise
+         * (an ordered primitive or a newtype over one, which carry their own {@code Comparable}). */
+        private TypeName elementOrdering(Core arg) {
+            return arg.type() instanceof Type.ListOf lo
+                    ? TypeOps.orderingEnumeration(lo.element(), symbols) : null;
         }
 
         private void comparisonMaterialize(Ast.BinOp op, boolean isLong) {

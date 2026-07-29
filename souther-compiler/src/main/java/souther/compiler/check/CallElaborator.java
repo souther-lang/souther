@@ -208,7 +208,8 @@ public final class CallElaborator {
                         && !TypeOps.isOrderedValue(lo.element(), ctx.symbols())) {
                     throw needsOrdered(call.pos(), call.fn(), lo.element(),
                             call.fn() + " needs a list of ordered values (Int, String, Decimal, Date,"
-                                    + " DateTime, or a newtype over one of these), but the element is "
+                                    + " DateTime, a newtype over one of these, or an enumeration), but"
+                                    + " the element is "
                                     + lo.element() + " — compare its ordered field instead");
                 }
                 yield Type.option(lo.element());
@@ -255,7 +256,8 @@ public final class CallElaborator {
                                     .at(call.pos()).args("List.sortBy", Type.show(keyT))
                                     .hint("check.ordered.hint").build(),
                             "List.sortBy's key must be an ordered value (Int, String, Decimal, Date,"
-                                    + " DateTime, or a newtype over one of these), but returns " + keyT);
+                                    + " DateTime, a newtype over one of these, or an enumeration), but"
+                                    + " returns " + keyT);
                 }
                 yield Type.list(lo.element());
             }

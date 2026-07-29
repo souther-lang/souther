@@ -66,8 +66,8 @@ public final class BinaryElaborator {
                             Diagnostic.of(null, "check.compare.ordered").title("check.type.mismatch.title")
                                     .at(bin.pos()).args(Type.show(lt), Type.show(rt)).build(),
                             "operand of comparison must be two ordered values of the same type (Int,"
-                                    + " String, Decimal, Date, DateTime, or a newtype over one of these),"
-                                    + " got " + lt + " and " + rt);
+                                    + " String, Decimal, Date, DateTime, a newtype over one of these, or"
+                                    + " one enumeration), got " + lt + " and " + rt);
                 }
                 yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }
@@ -196,7 +196,9 @@ public final class BinaryElaborator {
                                              Symbols symbols) {
         Type lb = TypeOps.base(lt, symbols);
         if (!TypeOps.isOrdered(lb) || !lb.equals(TypeOps.base(rt, symbols))) {
-            return false;
+            // An enumeration is ordered by its declaration, and a case value is a value of its sum
+            // (spec 8.3), so `stage < Won` compares in the sum both sides belong to (issue #161).
+            return TypeOps.comparisonEnumeration(lt, rt, symbols) != null;
         }
         if (lt.equals(rt)) {
             return true;

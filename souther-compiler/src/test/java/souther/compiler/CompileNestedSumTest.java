@@ -32,14 +32,14 @@ class CompileNestedSumTest {
     }
 
     /**
-     * The derived codec dispatches over the leaves, so a nested case is tagged directly. Tagging
-     * the direct case instead put two levels on one "type" key: the encoder wrote
-     * {@code {type: OwnCompany}}, which lost the leaf and which the decoder then rejected.
+     * The derived codec dispatches over the leaves, so a nested case is named directly. Naming the
+     * direct case instead lost the leaf — {@code OwnCompany} says nothing about which of the three
+     * it is, and the decoder then rejected what the encoder had written.
      */
     @Test
     void aLeafOfANestedSumIsTaggedDirectly() throws Exception {
         BytesClassLoader loader = loader();
-        Object v = Codecs.decoded(loader, "demo.CostBearer", Map.of("type", "Reimbursement"));
+        Object v = Codecs.decoded(loader, "demo.CostBearer", "Reimbursement");
         assertInstanceOf(loader.loadClass("demo.Reimbursement"), v);
     }
 
@@ -59,7 +59,7 @@ class CompileNestedSumTest {
     @Test
     void aDirectCaseOfTheOuterSumStillDecodes() throws Exception {
         BytesClassLoader loader = loader();
-        Object v = Codecs.decoded(loader, "demo.CostBearer", Map.of("type", "Counterparty"));
+        Object v = Codecs.decoded(loader, "demo.CostBearer", "Counterparty");
         assertInstanceOf(loader.loadClass("demo.Counterparty"), v);
     }
 
@@ -127,10 +127,10 @@ class CompileNestedSumTest {
                 """), getClass().getClassLoader());
 
         Object written = Codecs.decoded(loader, "demo.Expense",
-                Map.of("bearer", Map.of("type", "Reimbursement")));
+                Map.of("bearer", "Reimbursement"));
 
         assertInstanceOf(loader.loadClass("demo.Expense"), written);
-        assertEquals(Map.of("bearer", Map.of("type", "Reimbursement")),
+        assertEquals(Map.of("bearer", "Reimbursement"),
                 Codecs.encode(loader, "demo.Expense", written));
     }
 
@@ -143,10 +143,8 @@ class CompileNestedSumTest {
         c.setAccessible(true);
         Object reimbursement = c.newInstance();
 
-        assertEquals("Reimbursement",
-                ((Map<?, ?>) Codecs.encode(loader, "demo.CostBearer", reimbursement)).get("type"));
-        assertEquals("Reimbursement",
-                ((Map<?, ?>) Codecs.encode(loader, "demo.OwnCompany", reimbursement)).get("type"),
-                "both levels tag the leaf, so a value encoded at one decodes at the other");
+        assertEquals("Reimbursement", Codecs.encode(loader, "demo.CostBearer", reimbursement));
+        assertEquals("Reimbursement", Codecs.encode(loader, "demo.OwnCompany", reimbursement),
+                "both levels name the leaf, so a value encoded at one decodes at the other");
     }
 }
