@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -338,6 +340,62 @@ class CompileExampleCompositionTest {
         assertEquals("E1908", e.diagnostic().code());
         assertDoesNotThrow(() -> Compiler.compile(
                 model.replace("-> Rejected", "with bossOf = \"boss-1\" -> Rejected")));
+    }
+
+    /** The missing fake names the stage that wants it, not only the composition. */
+    @Test
+    void aMissingFakeNamesTheStageThatWantsIt() {
+        CompileException e = err("""
+                module example.whichstage
+
+                data A = { v: String }
+                data B = { v: String }
+                data C = { v: String }
+
+                behavior bossOf : (v: String) -> String
+
+                behavior one : (a: A) -> B
+                    constructs B
+
+                let one (a) = B { v = a.v }
+
+                behavior two : (b: B) -> C
+                    constructs C
+                    depends on bossOf
+
+                let two (b, bossOf) = C { v = bossOf(b.v) }
+
+                behavior both = one >-> two
+
+                example both
+                  | (A { v = "in" }) -> C { v = "out" }
+                """);
+        assertEquals("E1908", e.diagnostic().code());
+        assertEquals("check.fake.missing.through", e.diagnostic().messageKey());
+        assertEquals(List.of("both", "bossOf", "`two`"), List.of(e.diagnostic().args()));
+    }
+
+    /** A behavior asking for its own dependency reads as it did: there is no other stage to name. */
+    @Test
+    void aBehaviorsOwnMissingFakeReadsAsBefore() {
+        CompileException e = err("""
+                module example.ownfake
+
+                data A = { v: String }
+                data B = { v: String }
+
+                behavior bossOf : (v: String) -> String
+
+                behavior one : (a: A) -> B
+                    constructs B
+                    depends on bossOf
+
+                let one (a, bossOf) = B { v = bossOf(a.v) }
+
+                example one
+                  | (A { v = "in" }) -> B { v = "out" }
+                """);
+        assertEquals("check.fake.missing", e.diagnostic().messageKey());
     }
 
     /** An injected behavior is still refused: it has nothing to run. */

@@ -462,10 +462,24 @@ public final class ExampleVerifier {
         return null;
     }
 
+    /**
+     * A dependency nothing stands in for. Where the target is not the definition that asked for it —
+     * a composition takes the requirements of its stages — the stage that wants it is named, so the
+     * author is not left to walk the composition to find out which one.
+     */
     private Diagnostic fakeMissingDiag(String target, BehaviorRequirement req, Ast.ExampleRow row,
                                        String detail) {
-        return Diagnostic.of("E1908", "check.fake.missing").title("check.example.title")
-                .at(row.pos()).args(target, req.dependency())
+        List<String> stages = new ArrayList<>();
+        for (String requester : req.requiredBy()) {
+            if (!requester.equals(target)) {
+                stages.add("`" + requester + "`");
+            }
+        }
+        Diagnostic.Builder d = stages.isEmpty()
+                ? Diagnostic.of("E1908", "check.fake.missing").args(target, req.dependency())
+                : Diagnostic.of("E1908", "check.fake.missing.through")
+                        .args(target, req.dependency(), String.join(", ", stages));
+        return d.title("check.example.title").at(row.pos())
                 .hint("check.fake.missing.hint", detail).build();
     }
 
