@@ -101,6 +101,26 @@ class CompileValueDefinitionTest {
         assertEquals(2L, bumped(loader, 1));
     }
 
+    /** Only a written lambda moves its parameters to the left of {@code =}. A `.field` getter is a
+     * block too, but its parameter is synthesized, so lifting it would name a definition's parameter
+     * something the author never wrote; it stays a block and is refused as one. */
+    @Test
+    void aFieldGetterIsNotTheParameterListForm() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                let read = .n
+
+                behavior bump : (i: In) -> Out constructs Out
+                let bump (i) = Out { n = read(i) }
+                """));
+
+        assertTrue(e.getMessage().contains("block is not a value"), e.getMessage());
+    }
+
     @Test
     void anEmptyParameterListIsNotADefinitionForm() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""

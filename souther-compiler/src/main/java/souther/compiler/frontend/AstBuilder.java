@@ -374,8 +374,11 @@ public final class AstBuilder {
         Ast.Expr body = expr(bodyNode);
         // `let f = (x) -> e` is the parameter-list form written the other way round: the parameters
         // move to the left of `=` and the two spellings settle to one definition. A definition that
-        // already wrote parameters keeps a lambda body as its result.
-        if (params.isEmpty() && body instanceof Ast.Block lambda) {
+        // already wrote parameters keeps a lambda body as its result. Only a lambda the source wrote
+        // moves — a `.field` getter is a block too, but its parameter is synthesized, and lifting it
+        // would name a definition's parameter something the author never wrote.
+        if (params.isEmpty() && bodyNode.kind() == SyntaxKind.LAMBDA_EXPR
+                && body instanceof Ast.Block lambda) {
             for (String p : lambda.params()) {
                 params.add(new Ast.FnParam(p, null, false, lambda.pos()));
             }

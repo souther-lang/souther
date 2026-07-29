@@ -833,6 +833,15 @@ public final class HelperInliner {
             if (!e.getValue().params().isEmpty()) {
                 continue;   // a helper's own recursion is the call graph's business
             }
+            // A value stands for a value. A block written as one — a `.field` getter, whose parameter
+            // the compiler synthesizes — is refused where it is written rather than where it is used.
+            if (e.getValue().body() instanceof Ast.Block block) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
+                                .at(block.pos()).build(),
+                        "a block is not a value: `let " + e.getKey() + "` writes no parameters, so it"
+                                + " defines a value, and a block cannot be one (spec 12.5)");
+            }
             List<String> path = new ArrayList<>();
             if (pathBackTo(e.getKey(), e.getKey(), edges, new LinkedHashSet<>(), path)) {
                 path.add(0, e.getKey());

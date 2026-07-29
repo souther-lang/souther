@@ -1535,7 +1535,7 @@ A written return type is a declaration into the body, and it stays one where the
 
 The body is an expression. `+{ ... }+` is a block expression (<<block-expression>>), written to place a `+let+` or `+guard+`. `+let 正の数 (v: Int) = v >= 0+` and `+let 正の数 (v: Int) = { v >= 0 }+` are the same.
 
-`+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow (as in F# and Elm). A lambda written on the right of `+=+` is the parameter-list form: `+let f = (x) -> e+` and `+let f (x) = e+` define one thing, and the parameter-list form is what the formatter writes back.
+`+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow (as in F# and Elm). A lambda written on the right of `+=+` is the parameter-list form: `+let f = (x) -> e+` and `+let f (x) = e+` define one thing, and the parameter-list form is what the formatter writes back. Only a lambda the source wrote moves. A `+.field+` getter is a block too (<<blocks>>), but its parameter is synthesized, so it stays a block — and a block is not a value, which is what a definition writing no parameters would need it to be.
 
 [#fn-value-semantics]
 === A value is substituted where it is named
