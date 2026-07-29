@@ -387,4 +387,53 @@ class CompileAttemptedConstructionTest {
                 Codecs.encode(loader, "demo.Out", Codecs.apply(impl, 200000L)),
                 "a depth this far past the stack only returns if the tail call became a jump");
     }
+
+    /**
+     * A behavior that reports every reason a request was refused, not the first one it meets, builds
+     * the reasons as a list and departs by the case that carries them. What is attempted there is a
+     * record literal rather than a newtype's {@code T(v)}: "at least one reason" is the departure
+     * case's own invariant, so the list needs no named type of its own and no guard restates the
+     * emptiness test beside the construction (issue #165).
+     */
+    @Test
+    void aDepartureCarryingEveryReasonIsAttemptedAsARecordLiteral() throws Exception {
+        String src = """
+                module demo exposing (
+                    convert, Converted, Blocked,
+                    BlockReason, BudgetNotConfirmed, CloseDateInPast
+                )
+
+                data BudgetNotConfirmed
+                data CloseDateInPast
+                data BlockReason = BudgetNotConfirmed | CloseDateInPast
+
+                data Blocked = { reasons: List<BlockReason> }
+                    invariant List.length(reasons) >= 1
+
+                data Converted = { id: Int }
+
+                let blockingReasons (n: Int): List<BlockReason> =
+                       (if n >= 10 then [] else [ BudgetNotConfirmed ])
+                    ++ (if n >= 20 then [] else [ CloseDateInPast ])
+
+                behavior convert : (n: Int) -> Converted | Blocked
+                    constructs Converted, Blocked, BudgetNotConfirmed, CloseDateInPast
+
+                let convert (n) =
+                    if Blocked { reasons = blockingReasons(n) } as blocked
+                    then blocked
+                    else Converted { id = n }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object impl = loader.loadClass("demo.Convert" + "$Impl").getConstructor().newInstance();
+
+        assertEquals("demo.Converted", Codecs.apply(impl, 25L).getClass().getName(),
+                "no reason applies, so the invariant fails and the attempt takes its else branch");
+        assertEquals(Map.of("reasons", List.of("CloseDateInPast")),
+                Codecs.encode(loader, "demo.Blocked", Codecs.apply(impl, 15L)),
+                "one reason applies");
+        assertEquals(Map.of("reasons", List.of("BudgetNotConfirmed", "CloseDateInPast")),
+                Codecs.encode(loader, "demo.Blocked", Codecs.apply(impl, 5L)),
+                "both apply, and both are reported — the departure carries every reason, not the first");
+    }
 }

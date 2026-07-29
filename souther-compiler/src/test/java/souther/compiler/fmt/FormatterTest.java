@@ -121,6 +121,10 @@ class FormatterTest {
                 }
                 let accept (raw: String): List<Code> =
                     if Code(raw) as c then [ c ] else []
+                data Blocked = { reasons: List<Code> }
+                    invariant List.length(reasons) >= 1
+                let report (cs: List<Code>): List<Blocked> =
+                    if Blocked { reasons = cs } as b then [ b ] else []
                 """;
         assertEquals(code(src), code(Formatter.format(src)),
                 "the `as` binder was lost:\n" + Formatter.format(src));
