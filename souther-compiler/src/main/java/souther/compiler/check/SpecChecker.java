@@ -551,6 +551,30 @@ public final class SpecChecker {
                         "check.surface.hint", data.pos(), symbols, exposeAll, exposed);
             }
         }
+        // A published value stands for what it builds, so it may not build a type the module keeps to
+        // itself: a reader would hold a value it has no name for. Only the value's own surface is
+        // asked — a type its body reaches for on the way is its own workings, and requiring those
+        // would put every inner type back in the reader's import list.
+        HelperInliner values = null;
+        // A behavior's input and output are asked below, under its own name; the value form of a
+        // zero-input behavior's implementation is not a value of the module.
+        for (Ast.FnDef fn : HelperInliner.valuesOf(module).values()) {
+            if (fn.body() == null || !exposed.contains(fn.name())) {
+                continue;
+            }
+            if (values == null) {
+                values = HelperInliner.forHelpers(HelperInliner.helpersOf(module));
+            }
+            // Read the body closed. What a value stands for is not what its outermost expression is
+            // spelled as: `let published = privateValue` builds whatever `privateValue` builds, and a
+            // helper call builds whatever the helper does. Expanding first asks the one question.
+            Ast.Expr closed = values.inline(fn.body());
+            refuseRecursiveHelper(fn, closed, values.recursiveHelpers());
+            for (Ast.Name built : constructedTypes(closed)) {
+                refuseHidden(Type.ref(built.denotes()), "check.surface.value", fn.name(), null,
+                        "check.surface.hint", fn.pos(), symbols, exposeAll, exposed);
+            }
+        }
         // Read off the signature map rather than the declarations: a composition's input and output
         // are inferred from its stages, so they are written nowhere, and this is the one place both
         // kinds of behavior answer the same question.
@@ -568,6 +592,79 @@ public final class SpecChecker {
             }
             refuseHidden(sig.out(), outKey, b.name(), null, hint, b.pos(),
                     symbols, exposeAll, exposed);
+        }
+    }
+
+    /**
+     * A published value SHALL NOT reach a recursive helper.
+     *
+     * <p>What crosses a module boundary is the value closed — its body with the module's own
+     * definitions substituted into it — and a recursive helper is not one of them: it is lowered to a
+     * method, so the call stays a call and the method is not the reader's to emit. Refused here, where
+     * the value is published, rather than in the reader, which would meet a call to a name that is not
+     * there and report an arbitrary JVM call against the wrong line.
+     *
+     * <p>It is what closes the surface rule too: a helper that is not expanded is a call and nothing
+     * more, so a hidden type it builds would never be read off the value.
+     */
+    private static void refuseRecursiveHelper(Ast.FnDef value, Ast.Expr closed,
+                                              Set<String> recursive) {
+        for (String called : calledNames(closed)) {
+            if (!recursive.contains(called)) {
+                continue;
+            }
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.surface.value.recursive").title("check.module.title")
+                            .at(value.pos(), value.name().length()).args(value.name(), called)
+                            .hint("check.surface.value.recursive.hint", value.name(), called).build(),
+                    "`" + value.name() + "` is exposed and reaches the recursive helper `" + called
+                            + "`, which is a method rather than an expression, so the value cannot"
+                            + " cross a module boundary closed");
+        }
+    }
+
+    /** Every name applied anywhere in {@code e}. */
+    private static Set<String> calledNames(Ast.Expr e) {
+        Set<String> names = new LinkedHashSet<>();
+        collectCalled(e, names);
+        return names;
+    }
+
+    private static void collectCalled(Ast.Expr e, Set<String> out) {
+        if (e == null) {
+            return;
+        }
+        if (e instanceof Ast.Call c) {
+            out.add(c.fn());
+        }
+        Ast.forEachChild(e, c -> collectCalled(c, out));
+    }
+
+    /**
+     * The types a body yields, read at its surface only: the construction it is, or the ones its
+     * branches are. It does not descend into a field's value — that is what the value was built out
+     * of, not what it is, and a reader never names it.
+     */
+    private static List<Ast.Name> constructedTypes(Ast.Expr e) {
+        List<Ast.Name> out = new ArrayList<>();
+        surfaceTypes(e, out);
+        return out;
+    }
+
+    private static void surfaceTypes(Ast.Expr e, List<Ast.Name> out) {
+        switch (e) {
+            case Ast.NewData nd -> out.add(nd.typeName());
+            case Ast.LetIn li -> surfaceTypes(li.body(), out);
+            case Ast.If iff -> {
+                surfaceTypes(iff.then(), out);
+                surfaceTypes(iff.els(), out);
+            }
+            case Ast.Match m -> {
+                for (Ast.Case c : m.cases()) {
+                    surfaceTypes(c.body(), out);
+                }
+            }
+            default -> { }
         }
     }
 

@@ -430,9 +430,55 @@ public final class Bodies {
         @Override
         public Answer<Map<String, Ast.FnDef>> compute(Db db) {
             Answer<Ast.Module> settled = db.ask(new Settled(name));
-            return settled.present()
-                    ? Answer.of(HelperInliner.helpersOf(settled.value())) : Answer.absent();
+            if (!settled.present()) {
+                return Answer.absent();
+            }
+            Map<String, Ast.FnDef> helpers =
+                    new LinkedHashMap<>(HelperInliner.helpersOf(settled.value()));
+            // A value another module publishes is expanded here like one of this module's own: it is
+            // substituted at its references (ADR-0072). What arrives is closed — the value's body with
+            // its own module's definitions already substituted into it — so the only name of the
+            // declaring module that reaches this one is the value's. A body carrying those names
+            // would be read against the definitions here, and a reader that happens to spell one the
+            // same way would change what the value means (ADR-0067).
+            for (Ast.Import imp : settled.value().imports()) {
+                Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
+                if (!from.present()) {
+                    continue;
+                }
+                helpers.putAll(publishedValues(from.value(), imp.names()));
+            }
+            return Answer.of(helpers);
         }
+    }
+
+    /**
+     * The values {@code from} publishes among {@code wanted}, each closed over its own module.
+     *
+     * <p>Closing them there is what keeps a published value meaning what it meant where it was
+     * written. A value is substituted at its references, so a body still naming its module's own
+     * definitions would be read against the reader's, and a reader that spells one the same way would
+     * silently change the value. Expanding it first leaves a body that names nothing of the declaring
+     * module at all.
+     */
+    public static Map<String, Ast.FnDef> publishedValues(Ast.Module from, List<String> wanted) {
+        Set<String> exposed = new java.util.HashSet<>(from.exposing());
+        Map<String, Ast.FnDef> out = new LinkedHashMap<>();
+        HelperInliner own = null;
+        // A behavior taking nothing is implemented by a value, and that body is not published: a
+        // reader calls the behavior and never reads what it was given.
+        for (Ast.FnDef fn : HelperInliner.valuesOf(from).values()) {
+            if (fn.body() == null
+                    || !exposed.contains(fn.name()) || !wanted.contains(fn.name())) {
+                continue;
+            }
+            if (own == null) {
+                own = HelperInliner.forHelpers(HelperInliner.helpersOf(from));
+            }
+            out.put(fn.name(), new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), null,
+                    own.inline(fn.body()), fn.partial(), fn.pos()));
+        }
+        return out;
     }
 
     /** The helpers a module emits as methods rather than expanding: the ones that recurse (spec

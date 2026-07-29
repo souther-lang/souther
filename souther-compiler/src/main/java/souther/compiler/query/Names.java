@@ -544,7 +544,9 @@ public final class Names {
                     if (registry.declaration(new TypeName(imp.module(), imported)) == null) {
                         // a behavior import is resolved separately; it is not a data Def, so it does
                         // not go into the symbols map.
-                        if (behaviorNames(src).contains(imported)) {
+                        // a behavior import is resolved separately, and so is a value: neither is a
+                        // data Def, so neither goes into the symbols map
+                        if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
                             continue;
                         }
                         reports.add(Report.raised(
@@ -753,6 +755,15 @@ public final class Names {
         // two answers to one question is how a name came to denote a helper here and a behavior
         // there.
         Set<String> helpers = new LinkedHashSet<>(HelperInliner.helpersOf(m).keySet());
+        // A value another module publishes is named here bare, like one of this module's own: it is
+        // substituted at the reference, so nothing else about it has to travel (ADR-0072).
+        for (Ast.Import imp : m.imports()) {
+            Ast.Module from = db.ask(new Front.Available(imp.module())).value();
+            if (from == null) {
+                continue;
+            }
+            helpers.addAll(Bodies.publishedValues(from, imp.names()).keySet());
+        }
         BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
         return new Resolve.Values(m.name(), helpers,
                 behaviors == null ? Map.of() : behaviors.byName());
@@ -1055,6 +1066,12 @@ public final class Names {
             names.add(b.name());
         }
         return names;
+    }
+
+    /** The values a module declares — a {@code let} with no parameter list. Like a behavior, one is
+     * a name in the value namespace and not a data, so an import of it resolves elsewhere. */
+    static Set<String> valueNames(Ast.Module m) {
+        return new LinkedHashSet<>(HelperInliner.valuesOf(m).keySet());
     }
 
     static Report unknownModule(Ast.Import imp) {

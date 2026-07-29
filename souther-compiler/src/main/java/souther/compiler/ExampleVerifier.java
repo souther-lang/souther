@@ -52,19 +52,32 @@ public final class ExampleVerifier {
      * {@link TypeName} names (a cross-module example). */
     public static List<Diagnostic> check(Ast.Module module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes) {
-        return check(module, symbols, sigs, classes, ExampleVerifier.class.getClassLoader());
+        return check(module, symbols, sigs, classes, ExampleVerifier.class.getClassLoader(), Map.of());
     }
 
-    /** As {@link #check(Ast.Module, Symbols, Map, Map)}, resolving classes this compile did not
-     * generate under {@code parent} — where an example calls into a module that was compiled by
-     * another project, that is the loader its classes come from. */
+    /** As above, resolving classes this compile did not generate under {@code parent}. A row may name
+     * only this module's own values; pass the imported ones to the overload below. */
     public static List<Diagnostic> check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                                          Map<String, byte[]> classes, ClassLoader parent) {
+        return check(module, symbols, sigs, classes, parent, Map.of());
+    }
+
+    /**
+     * As {@link #check(Ast.Module, Symbols, Map, Map)}, resolving classes this compile did not
+     * generate under {@code parent} — where an example calls into a module that was compiled by
+     * another project, that is the loader its classes come from.
+     *
+     * <p>{@code values} are the values a row may name beyond this module's own: the ones its imports
+     * bring in, each already closed over the module that published it (ADR-0074).
+     */
+    public static List<Diagnostic> check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
+                                         Map<String, byte[]> classes, ClassLoader parent,
+                                         Map<String, Ast.FnDef> values) {
         if (module.examples().isEmpty()) {
             return List.of();
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, loader);
+        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, loader, values);
         List<Diagnostic> failures = new ArrayList<>();
         for (Ast.Example ex : module.examples()) {
             try {
@@ -127,13 +140,16 @@ public final class ExampleVerifier {
     private final Symbols symbols;
     private final Map<String, Sig> sigs;
     private final MemoryClassLoader loader;
+    /** The values a row may name: this module's own, and the ones its imports bring in. */
+    private final Map<String, Ast.FnDef> values;
 
-    private ExampleVerifier(Ast.Module module, Symbols symbols,
-                            Map<String, Sig> sigs, MemoryClassLoader loader) {
+    private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
+                            MemoryClassLoader loader, Map<String, Ast.FnDef> values) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
         this.loader = loader;
+        this.values = values;
     }
 
     // --- one example (a target and its rows) --------------------------------------------------
@@ -882,7 +898,8 @@ public final class ExampleVerifier {
                 return fn.body();
             }
         }
-        return null;
+        Ast.FnDef imported = values.get(name);
+        return imported != null && imported.params().isEmpty() ? imported.body() : null;
     }
 
     /** The names being expanded, innermost last — a value that reaches itself has no fixture to be. */
@@ -1000,12 +1017,12 @@ public final class ExampleVerifier {
         // `金額(500)` is the record literal `金額 { value = 500 }` written in call form (ADR-0032), and
         // a value's body reaches here already written the second way. Either spelling is the newtype's
         // own neutral form — its inner value — not a field map.
-        String written = nd.typeName().written();
-        if (isNewtype(written) && nd.spreads().isEmpty() && nd.inits().size() == 1
+        TypeName built = nd.typeName().denotes();
+        if (isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
                 && nd.inits().get(0).name().equals("value")) {
-            return adjacentlyTagged(written,
-                    shaped(raw(nd.inits().get(0).value(), shapeOf(newtypeBaseType(written))),
-                            shapeOf(newtypeBaseType(written))));
+            return adjacentlyTagged(nd.typeName().written(),
+                    shaped(raw(nd.inits().get(0).value(), shapeOf(newtypeBaseType(built))),
+                            shapeOf(newtypeBaseType(built))));
         }
         Map<String, Ast.TypeRef> declared = fieldTypes(nd.typeName().denotes());
         Map<String, Object> map = new LinkedHashMap<>();
@@ -1140,6 +1157,17 @@ public final class ExampleVerifier {
 
     private boolean isNewtype(String name) {
         return symbols.declaration(name) instanceof Ast.Data d && d.newtype();
+    }
+
+    /** As above, for a name that has already been resolved — an imported value's body names its own
+     * module's types, which the module reading the row need not have imported. */
+    private boolean isNewtype(TypeName name) {
+        return name != null && symbols.get(name) instanceof Ast.Data d && d.newtype();
+    }
+
+    private Ast.TypeRef newtypeBaseType(TypeName name) {
+        return name != null && symbols.get(name) instanceof Ast.Data d && d.newtype()
+                && d.fields().size() == 1 ? d.fields().get(0).type() : null;
     }
 
     /** The type a newtype wraps ({@code Date} for {@code data 貸出日 = Date}), or null. */

@@ -14,7 +14,7 @@ Internal computation, outside-world dependency, validation, and transformation a
 
 A behavior, as a type, states only the **spec**; a simple behavior has no body. Its implementation is written as a `let` (see the let chapter), or, if none is written, is injected from Java (see ADR-0006). The one exception is `>->` composition: it appears in the spec DSL as composition, yet written out it is itself the implementation.
 
-Only behaviors that appear in the spec DSL are behaviors; implementation helpers stay as `let`. Keeping helpers out of the behavior list means the list of behaviors never diverges from the list in the spec DSL — a helper `let` cannot be placed as a `>->` stage and does not appear in `exposing`.
+Only behaviors that appear in the spec DSL are behaviors; implementation helpers stay as `let`. Keeping helpers out of the behavior list means the list of behaviors never diverges from the list in the spec DSL — a helper `let` cannot be placed as a `>->` stage, and it is not published (ADR-0074, which draws the line on the definition's own shape: a value is published, a helper is not).
 
 ## References
 
