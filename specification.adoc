@@ -565,14 +565,23 @@ A decode-side violation does not abort; Raoh's `+Result+` failure carries it (<<
 
 ==== How Option appears
 
-`+Option<T>+` *cannot be written as a type* either. It appears only through these paths:
+`+Option<T>+` is the name of the type a `+?+` field has, and it MAY be written wherever a model *reads* an optional: a data field (where `+T?+` means the same thing), a behavior's input, a helper's parameter or declared return, a function type's result, and a local binding's annotation. A recursive helper and a function-typed parameter MUST declare their types (<<fn-declaration>>), so for those the name is the only way to say it at all.
 
-* the desugaring of a field `+T?+` (<<optional>>)
-* the return value of a standard library function (`+List.get+` / `+Map.get+` / `+List.find+`; <<stdlib-list>>, <<stdlib-map>>)
-* the argument (and, for `+map+`, the result) of the `+Option+` module's functions (`+Option.map+` / `+Option.withDefault+`; <<stdlib-option>>), which consume an inferred `+Option+` without the caller ever naming the type or building a `+Some+`
-* the step of a standard library function that takes one (`+List.filterMap+`, whose step is written `+('a) -> 'b?+`; <<stdlib-list>>). The mark `+?+` outside a field is written only in the shipped core, as a type variable is (<<stdlib>>, ADR-0028): the caller passes a block that answers with an optional it read, and still never names the type
+The mark `+?+` outside a field is written only in the shipped core, as a type variable is (<<stdlib>>, ADR-0028): `+?+` marks where an optional is *made*, and the name says what the type is.
 
-It MUST NOT be written in a behavior's output. To state "might not be found" as a business result, that is a domain sum (<<unmarked-sum>>).
+An optional is *made* in one place: a `+?+` field being given its value (<<optional>>). Writing the type does not make one — `+let p: Option<Int> = None+` is <<e1303>> — and neither does declaring it as a helper's return: a helper answers the optional it read. Where a helper's absence is its own to name, that is a case of the model's own sum.
+
+[,text]
+----
+partial let firstOver (n: Int, xs: List<Int>) : Option<Int> = {
+    let head = List.get(0, xs)
+    match head with
+        | Some v -> if v > n then head else firstOver(n, List.drop(1, xs))
+        | None -> head                  // the absence it read, passed on
+}
+----
+
+It MUST NOT be written in a behavior's output, whichever way it is written. To state "might not be found" as a business result, that is a domain sum (<<unmarked-sum>>); an optional output is reported as itself rather than as a composition that does not fit (<<e1701>>).
 
 [,text]
 ----
@@ -600,7 +609,7 @@ This desugars to:
 事前承認者: Option<従業員ID>
 ----
 
-To put a value in a `+?+` field, write a `+従業員ID+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. Users never write `+Some(...)+` to construct a value (as in <<algebraic-types>>, this form is built-in only); `+Some(...)+` appears only as a destructuring pattern in `+match+` (<<match>>).
+To put a value in a `+?+` field, write a `+従業員ID+` value directly and it is wrapped in `+Some+`; write `+None+` for empty. This is the only place `+None+` may be written as a value: what puts it there is the field, not the type of the position — a model may name `+Option<T>+` where it reads one (<<algebraic-types>>), and an annotation saying so does not license making one. Users never write `+Some(...)+` to construct a value (as in <<algebraic-types>>, this form is built-in only); `+Some(...)+` appears only as a destructuring pattern in `+match+` (<<match>>).
 
 [,text]
 ----

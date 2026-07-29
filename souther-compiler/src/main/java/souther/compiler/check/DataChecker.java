@@ -600,9 +600,13 @@ public final class DataChecker {
                         "`" + init.name() + "` is not a field of `" + typeName + "`");
             }
             // push the field's declared type into the value expression, so a field initialised from a
-            // fold over an empty-collection seed has its result pinned by the field type (issue #70)
+            // fold over an empty-collection seed has its result pinned by the field type (issue #70).
+            // This is also the one place an optional may be made (ADR-0011), which the context carries
+            // rather than the expected type: a model may write `Option<T>` where it reads one, so an
+            // expected optional no longer means a field asked for it (issue #202).
+            CheckContext making = ctx.makingAnOptional(ft instanceof Type.OptionOf);
             Core value = Elaborator.liftIntoOption(
-                    Elaborator.elaborate(init.value(), env, ctx, ft), ft, ctx.symbols());
+                    Elaborator.elaborate(init.value(), env, making, ft), ft, ctx.symbols());
             elaborated.add(new Core.FieldInit(init.name(), value, init.pos()));
             Type vt = value.type();
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {   // a case value widens to its sum-typed field (spec 8.3)

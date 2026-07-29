@@ -208,10 +208,12 @@ public final class Elaborator {
                         when ctx.symbols().get(named.type()) instanceof Ast.UnitData ->
                         new Core.Var(v.name(), Type.ref(named.type()), v.pos());
                 // `None` where a `?` field is being given a value: the empty optional (spec 7.3).
-                // Only the field's own type puts it here — nothing else expects an optional, because
-                // nothing else can say `T?` (ADR-0011) — so this stays a construction rule.
+                // What puts it here is the field, which the context says (ADR-0011) — not the expected
+                // type, since a model may name `Option<T>` where it reads one and an expectation would
+                // then license making one anywhere the name is written (issue #202).
                 case ValueName.Builtin b when b.name().equals("None")
-                        && expected instanceof Type.OptionOf -> new Core.OptionNone(expected, v.pos());
+                        && ctx.makingAnOptional() && expected instanceof Type.OptionOf ->
+                        new Core.OptionNone(expected, v.pos());
                 default -> throw notAValue(v, env);
             };
             case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
