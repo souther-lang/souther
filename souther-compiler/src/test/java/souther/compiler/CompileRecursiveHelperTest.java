@@ -160,7 +160,7 @@ class CompileRecursiveHelperTest {
                 data Out = Int
 
                 behavior now : () -> N
-                behavior run : (n: N) -> Out requires now constructs Out
+                behavior run : (n: N) -> Out depends on now constructs Out
 
                 partial let loop (n: Int): Int = {
                     let c = now()
@@ -214,14 +214,14 @@ class CompileRecursiveHelperTest {
     @Test
     void aClosurePassedToARecursiveHelperMayCallAnInjectedBehavior() {
         // A recursive helper's own body is pure, but a closure passed to it is behavior code: it may
-        // call an injected behavior, and the requirement is the caller's — `run` declares `requires now`.
+        // call an injected behavior, and the requirement is the caller's — `run` declares `depends on now`.
         // The recursive helper `loopy` stays pure; it only applies the closure it is handed.
         String src = """
                 module demo
                 data N = Int
                 data Out = Int
                 behavior now : () -> N
-                behavior run : (n: N) -> Out requires now constructs Out
+                behavior run : (n: N) -> Out depends on now constructs Out
                 partial let loopy (f: (Int) -> Int, n: Int): Int = if n == 0 then 0 else f(n) + loopy(f, n - 1)
                 let run (n, now) = Out(loopy((x) -> {
                     let c = now()
@@ -234,7 +234,7 @@ class CompileRecursiveHelperTest {
     @Test
     void aClosureCallingAnInjectedBehaviorStillNeedsTheBehaviorToDeclareRequires() {
         // The effect a closure performs is attributed to the behavior that builds it: `run` reaches
-        // `now` through the closure but does not declare `requires now`, so it is E1602 — the same rule
+        // `now` through the closure but does not declare `depends on now`, so it is E1602 — the same rule
         // any injected call in a behavior obeys, not a recursive-helper-specific one.
         String src = """
                 module demo
@@ -249,7 +249,7 @@ class CompileRecursiveHelperTest {
                 }, n.value))
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertTrue(ex.getMessage().contains("now") && ex.getMessage().contains("requires"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("now") && ex.getMessage().contains("depends on"), ex.getMessage());
     }
 
     @Test

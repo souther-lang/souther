@@ -33,7 +33,7 @@ class ASignatureThatDoesNotBuildTest {
             behavior fetch : (a: A) -> Int | A
 
             behavior use : (a: A) -> A
-                requires fetch
+                depends on fetch
             let use (a, fetch) = fetch(a)
             """;
 

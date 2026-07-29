@@ -12,7 +12,7 @@ An invariant is checked on every construction path, so the same check fires at t
 
 **An invariant violation depends on where it happens.** Caught in a decoder (the boundary) it becomes a Raoh `Result` failure carrying an `Issue` (`path` / `code`): malformed input is an expected outcome. Inside a behavior (the domain) it **aborts** — no value, no case, and no place for it in the output type. Same invariant, different treatment, because the two mean different things.
 
-**Preconditions are not Design-by-Contract contracts.** In the DbC tradition a precondition violation is the caller's fault and the routine guarantees nothing — an exception. Souther does not do this. A precondition that can realistically fail is enumerated as an ordinary domain `data` and returned through `require ... else` (a named case in the output sum: `承認権限なし`, `残高不足`, `差額が負`). The failure becomes part of the specification — visible in the output type and impossible to forget — rather than an exception thrown past the model. Only a precondition that is *guaranteed* to hold, whose violation would be a model bug, aborts, and it does so through the invariant of whatever it then constructs; there is no separate precondition-contract construct.
+**Preconditions are not Design-by-Contract contracts.** In the DbC tradition a precondition violation is the caller's fault and the routine guarantees nothing — an exception. Souther does not do this. A precondition that can realistically fail is enumerated as an ordinary domain `data` and returned through `guard ... else` (a named case in the output sum: `承認権限なし`, `残高不足`, `差額が負`). The failure becomes part of the specification — visible in the output type and impossible to forget — rather than an exception thrown past the model. Only a precondition that is *guaranteed* to hold, whose violation would be a model bug, aborts, and it does so through the invariant of whatever it then constructs; there is no separate precondition-contract construct.
 
 **Overflow aborts; zero-division returns a case.** `Int` is 64-bit signed; an operation leaving the range aborts rather than wrapping, because overflow is a model bug, not a business result. Zero-division, by contrast, is a possible input and returns `Int | DivisionByZero`.
 
@@ -26,7 +26,7 @@ This leaves one thing invisible in the types, on purpose. A behavior typed `(金
 
 An abort is not a Souther expression and there is no syntax to catch it, so it cannot drive business flow — the same line `[#out-of-scope]` draws for exceptions: the ban is on controlling business flow, not on aborting for a bug. At the Java boundary the abort surfaces as `souther.runtime.ConstraintViolation` (carrying the violated data name and invariant location), which the boundary may catch and map to a 500 — deliberately distinct from a business failure, which arrives as an output case and maps to a 400.
 
-If a writer genuinely wants to return a value when a rule is not met, that is a business judgment written explicitly with `require ... else` (ADR-0020). An invariant is a declaration that "every value passing here is like this," not a branch anticipating that it is not.
+If a writer genuinely wants to return a value when a rule is not met, that is a business judgment written explicitly with `guard ... else` (ADR-0020). An invariant is a declaration that "every value passing here is like this," not a branch anticipating that it is not.
 
 ## References
 
@@ -34,4 +34,4 @@ If a writer genuinely wants to return a value when a rule is not met, that is a 
 - SMDD book, Design by Contract / totality: preconditions are modeled as sum-type cases so the model stays total, not as contract exceptions
 - Eiffel: Design by Contract (a contract violation is a caller-blamed bug) — Souther keeps invariant violation as a bug but reroutes preconditions to business cases
 - Rust: `Result` vs. `panic!`; array-bounds and integer-overflow panic
-- ADR-0007 (business results are an unmarked sum), ADR-0020 (`require ... else`)
+- ADR-0007 (business results are an unmarked sum), ADR-0020 (`guard ... else`)

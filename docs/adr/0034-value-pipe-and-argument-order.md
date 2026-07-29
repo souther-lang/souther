@@ -28,7 +28,7 @@ Adopt the value pipe `|>`, and change the standard library's argument order to m
   is `f(a, e)`; a bare function name `e |> f` is `f(e)`. It binds looser than everything else
   and is left-associative, so `a |> f |> g` is `g(f(a))`. The right side must be a call or a
   function name — `e |> 3` is a compile error.
-- **It desugars at parse time**, like `require` → `if`, so no later pass sees a pipe node. This
+- **It desugars at parse time**, like `guard` → `if`, so no later pass sees a pipe node. This
   matters concretely: bare stdlib names are rewritten to their qualified form (`sort` →
   `List.sort`) by an early pass, so a pipe surviving into a later stage would leave `|> sort`
   unqualified. Desugaring in the parser turns it into an ordinary call before that pass runs.

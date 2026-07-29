@@ -82,7 +82,7 @@ public final class Names {
 
     /**
      * A source module with every name in the value namespace — a {@code >->} stage, a
-     * {@code requires} — resolved to the behavior it denotes, and the module a qualified one came
+     * {@code depends on} — resolved to the behavior it denotes, and the module a qualified one came
      * from recorded as an import.
      *
      * <p>A behavior's name is a member name in the generated class, so the bare form is what the
@@ -122,12 +122,12 @@ public final class Names {
                                 pipe.pos()));
                     }
                     case Ast.SpecBehavior spec -> {
-                        List<Ast.ValueRef> requires = new ArrayList<>();
-                        for (Ast.ValueRef req : spec.requires()) {
-                            requires.add(binding.required(req, spec.name()));
+                        List<Ast.ValueRef> dependsOn = new ArrayList<>();
+                        for (Ast.ValueRef req : spec.dependsOn()) {
+                            dependsOn.add(binding.required(req, spec.name()));
                         }
                         behaviors.add(new Ast.SpecBehavior(spec.name(), spec.params(), spec.ret(),
-                                spec.constructs(), requires, spec.pos()));
+                                spec.constructs(), dependsOn, spec.pos()));
                     }
                 }
             }
@@ -185,7 +185,7 @@ public final class Names {
     }
 
     /**
-     * Resolving one module's behavior names: which behavior each stage and each {@code requires}
+     * Resolving one module's behavior names: which behavior each stage and each {@code depends on}
      * denotes, and which imports naming them through a module asks for.
      */
     private static final class Binding {
@@ -248,7 +248,7 @@ public final class Names {
         }
 
         /**
-         * A name a {@code requires} clause writes. It must name an injection target, and whether the
+         * A name a {@code depends on} clause writes. It must name an injection target, and whether the
          * behavior it names is one is the check's to say (E1607); that nothing declares the name at
          * all is settled here, in the same message, because it is the same question — what does this
          * name denote — asked of a clause rather than of a stage.
@@ -259,7 +259,7 @@ public final class Names {
                             .at(name.pos(), name.written().length()).args(by, name.written())
                             .suggestion(Suggest.candidate(name.written(), candidates))
                             .hint("e1607.unknown.hint").build(),
-                    "`behavior " + by + "` declares `requires " + name.written() + "`, which is not a"
+                    "`behavior " + by + "` declares `depends on " + name.written() + "`, which is not a"
                             + " behavior in scope" + Suggest.hint(name.written(), candidates)));
         }
 
@@ -733,7 +733,7 @@ public final class Names {
             for (Ast.BehaviorDef b : m.behaviors()) {
                 List<Ast.ValueRef> named = switch (b) {
                     case Ast.PipeBehavior pipe -> pipe.stages();
-                    case Ast.SpecBehavior spec -> spec.requires();
+                    case Ast.SpecBehavior spec -> spec.dependsOn();
                 };
                 for (Ast.ValueRef ref : named) {
                     if (ref.unresolved()) {

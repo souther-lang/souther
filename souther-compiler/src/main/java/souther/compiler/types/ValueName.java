@@ -6,7 +6,7 @@ import souther.compiler.diag.SourcePos;
  * What a name written in the value namespace denotes — the answer {@link TypeName} gives for the
  * type namespace.
  *
- * <p>A behavior is named from a {@code >->} stage and from a {@code requires} clause; a body names a
+ * <p>A behavior is named from a {@code >->} stage and from a {@code depends on} clause; a body names a
  * local, a helper, a library function, an injected behavior, a type used as a value. Whether two
  * spellings mean one thing was a question each consumer used to answer for itself, in the order that
  * consumer happened to try. Resolution answers it once — a behavior name where the module's names are

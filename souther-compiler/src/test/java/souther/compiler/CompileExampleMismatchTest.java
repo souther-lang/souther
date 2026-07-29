@@ -45,7 +45,7 @@ class CompileExampleMismatchTest {
                 data Small
                 behavior size : (i: In) -> Big | Small constructs Big, Small
                 let size (i) = {
-                    require i.n >= 10 else Small
+                    guard i.n >= 10 else Small
                     Big { n = i.n }
                 }
                 example size

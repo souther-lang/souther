@@ -27,7 +27,7 @@ class CompileContainerApplyTest {
                 data R = { z: Int }
                 behavior take : (xs: List<A>, n: Int) -> R
                     constructs R
-                behavior use : (xs: List<A>, n: Int) -> R requires take
+                behavior use : (xs: List<A>, n: Int) -> R depends on take
                 let use (xs, n, take) = take(xs, n)
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
@@ -50,7 +50,7 @@ class CompileContainerApplyTest {
                 data R = { z: Int }
                 behavior sum : (xs: List<A>) -> R
                     constructs R
-                behavior use : (xs: List<A>) -> R requires sum
+                behavior use : (xs: List<A>) -> R depends on sum
                 let use (xs, sum) = sum(xs)
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());

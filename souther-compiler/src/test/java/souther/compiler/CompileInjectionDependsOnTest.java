@@ -9,24 +9,24 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * {@code requires} names what an implementation calls (spec 12.6). An injection target — a behavior
+ * {@code depends on} names what an implementation calls (spec 12.6). An injection target — a behavior
  * with a type but no {@code fn}, implemented from Java (spec 13.2) — has no implementation here, so
- * it cannot declare {@code requires}: the behavior that calls or composes it carries the requirement
+ * it cannot declare {@code depends on}: the behavior that calls or composes it carries the requirement
  * instead. A fn-bearing behavior keeps declaring the behaviors its body calls.
  */
-class CompileInjectionRequiresTest {
+class CompileInjectionDependsOnTest {
 
     @Test
-    void anInjectionTargetCannotDeclareRequires() {
+    void anInjectionTargetCannotDeclareDependsOn() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
                 data N = Int
                 behavior bar : (n: N) -> N
                 let bar (n) = n
-                behavior foo : (n: N) -> N requires bar
+                behavior foo : (n: N) -> N depends on bar
                 """));
         assertTrue(e.getMessage().contains("injection target"), e.getMessage());
-        assertTrue(e.getMessage().contains("requires"), e.getMessage());
+        assertTrue(e.getMessage().contains("depends on"), e.getMessage());
     }
 
     @Test
@@ -35,7 +35,7 @@ class CompileInjectionRequiresTest {
                 module demo
                 data N = Int
                 behavior bar : (n: N) -> N
-                behavior foo : (n: N) -> N requires bar
+                behavior foo : (n: N) -> N depends on bar
                 let foo (n, bar) = bar(n)
                 """));
     }

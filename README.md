@@ -38,7 +38,7 @@ behavior submit : (request: DraftRequest, submittedAt: String) -> Submitted | Re
     constructs Submitted, Rejected
 
 let submit (request, submittedAt) = {
-    require request.plannedCost.value <= 100000 else Rejected { reason = "high_cost" }
+    guard request.plannedCost.value <= 100000 else Rejected { reason = "high_cost" }
     Submitted { ...request, submittedAt = submittedAt }
 }
 ```
@@ -48,7 +48,7 @@ The example introduces Souther's central ideas:
 - `data` represents domain values and states. `|` means alternatives, and `...` composes fields.
 - An `invariant` is checked every time that `data` is constructed by a decoder or behavior.
 - A `behavior` declares its input and possible business outcomes; `constructs` grants it authority to construct those values.
-- `require ... else ...` is a business branch. `Rejected` is an ordinary domain value, not an exception.
+- `guard ... else ...` is a business branch. `Rejected` is an ordinary domain value, not an exception.
 
 The complete runnable example is [`businesstrip`](https://github.com/souther-lang/examples/tree/main/businesstrip), in the [examples repository](https://github.com/souther-lang/examples).
 
@@ -81,7 +81,7 @@ mvn -pl souther-cli -am -DskipTests install
 # => "Hello, world"
 ```
 
-`--behavior` may be omitted when the module holds exactly one runnable behavior, and `--input` when the behavior takes no argument. A multi-argument behavior takes a JSON array (`--input '[3, 7]'`). A behavior is runnable when it has a `let` and no `requires`, or when it is a `>->` pipeline whose stages are all runnable in that same sense; an injected behavior, one that needs injected dependencies, or a pipeline with such a stage is refused with a reason. The runner drives a single self-contained file — stdlib imports resolve, but it cannot link against other user modules.
+`--behavior` may be omitted when the module holds exactly one runnable behavior, and `--input` when the behavior takes no argument. A multi-argument behavior takes a JSON array (`--input '[3, 7]'`). A behavior is runnable when it has a `let` and depends on nothing, or when it is a `>->` pipeline whose stages are all runnable in that same sense; an injected behavior, one with injected dependencies, or a pipeline with such a stage is refused with a reason. The runner drives a single self-contained file — stdlib imports resolve, but it cannot link against other user modules.
 
 The same `souther` binary also compiles to `.class` files (`souther compile hello.sou -d out`). It runs on any Unix shell; on Windows, use it as a plain jar (`java -jar souther-cli/target/souther.jar …`).
 
@@ -138,7 +138,7 @@ Souther does not directly call databases, HTTP services, files, clocks, or ID ge
 behavior currentTime : () -> DateTime
 
 behavior approve : (request: AwaitingApproval) -> Approved
-    requires currentTime
+    depends on currentTime
 ```
 
 Souther cannot call arbitrary Java APIs; Java can use the generated data and behaviors. This asymmetry makes the boundary between pure domain computation and external effects explicit.
@@ -148,8 +148,8 @@ Souther cannot call arbitrary Java APIs; Java can use the generated data and beh
 Souther is deliberately small:
 
 - immutable product / sum / unit data, `List<T>`, `Map<String, T>`, and optional fields (`T?`)
-- `invariant`, `match`, `let`, `if`, `require`, record literals, and field spread
-- `behavior`, Java injection, `requires`, `constructs`, and type-routed `>->` composition
+- `invariant`, `match`, `let`, `if`, `guard`, record literals, and field spread
+- `behavior`, Java injection, `depends on`, `constructs`, and type-routed `>->` composition
 - derived decoders / encoders and explicit modules with `exposing` / `import`
 
 It intentionally does not provide exceptions, `null`, mutable state, asynchronous execution, arbitrary JVM calls, type classes or higher-kinded types, a package manager, or a REPL. These omissions keep construction paths, value constraints, and outside-world dependencies tractable.

@@ -60,10 +60,10 @@ class CompileInvariantBehaviorTest {
     }
 
     /**
-     * Regression: constructing inside {@code require ... else} skipped the invariant check
+     * Regression: constructing inside {@code guard ... else} skipped the invariant check
      * entirely and handed back a value that breaks it. The guard was a statement, and only the
      * result expression was railway-bound, so the else branch emitted a bare constructor call.
-     * {@code require} now desugars to {@code if} (spec 16.4) and both branches are tail, so the
+     * {@code guard} now desugars to {@code if} (spec 16.4) and both branches are tail, so the
      * construction goes through {@code __construct} wherever it sits — and aborts on violation.
      */
     @Test
@@ -78,7 +78,7 @@ class CompileInvariantBehaviorTest {
                     constructs Kept, Adjusted
 
                 let adjust (d) = {
-                    require d.value /= 999 else Adjusted { cost = d.value - 2000 }
+                    guard d.value /= 999 else Adjusted { cost = d.value - 2000 }
                     Kept { v = d.value }
                 }
                 """;
@@ -98,7 +98,7 @@ class CompileInvariantBehaviorTest {
     /** The value a guard returns is constructed, so it needs declaring too (spec 12.3). */
     @Test
     void constructingTheGuardValueWithoutDeclaringItIsE1002() {
-        // the `require ... else Rejected` builds `Rejected`: `Flagged` is declared but `Rejected` is
+        // the `guard ... else Rejected` builds `Rejected`: `Flagged` is declared but `Rejected` is
         // also built, so the undeclared guard value `Rejected` is E1002.
         String src = """
                 module demo
@@ -108,8 +108,8 @@ class CompileInvariantBehaviorTest {
                 behavior adjust : (d: Draft) -> Draft | Rejected | Flagged constructs Flagged
 
                 let adjust (d) = {
-                    require d.cost > 0 else Rejected { why = "nonpositive" }
-                    require d.cost < 1000 else Flagged
+                    guard d.cost > 0 else Rejected { why = "nonpositive" }
+                    guard d.cost < 1000 else Flagged
                     d
                 }
                 """;

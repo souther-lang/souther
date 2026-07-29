@@ -41,8 +41,8 @@ import java.util.stream.Collectors;
  *
  * <p>The runner drives a single self-contained {@code .sou} file: stdlib imports resolve, but it
  * cannot link against other user modules. A behavior is runnable when it has a {@code let} and no
- * {@code requires}, or when it is a {@code >->} pipeline whose stages are all themselves runnable
- * (each has a {@code let} and no {@code requires}) — such a pipeline compiles to a no-arg {@code
+ * {@code depends on}, or when it is a {@code >->} pipeline whose stages are all themselves runnable
+ * (each has a {@code let} and no {@code depends on}) — such a pipeline compiles to a no-arg {@code
  * $Impl} that chains the stages, so it runs like any other behavior. An injected behavior (no
  * implementation), one that needs injected dependencies, or a pipeline with such a stage has nothing
  * for {@code run} to supply; each is refused with a reason.
@@ -178,11 +178,11 @@ public final class Runner {
 
     // --- behavior selection ---------------------------------------------------------------------
 
-    /** The names a behavior requires, as a message lists them. */
-    private static String requiredNames(Ast.SpecBehavior spec) {
+    /** The names a behavior depends on, as a message lists them. */
+    private static String dependencyNames(Ast.SpecBehavior spec) {
         List<String> names = new java.util.ArrayList<>();
-        for (Ast.ValueRef req : spec.requires()) {
-            names.add(req.bare());
+        for (Ast.ValueRef dep : spec.dependsOn()) {
+            names.add(dep.bare());
         }
         return String.join(", ", names);
     }
@@ -194,7 +194,7 @@ public final class Runner {
         Map<String, Ast.BehaviorDef> runnable = new java.util.LinkedHashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec
-                    && implemented.contains(spec.name()) && spec.requires().isEmpty()) {
+                    && implemented.contains(spec.name()) && spec.dependsOn().isEmpty()) {
                 runnable.put(spec.name(), spec);
             } else if (b instanceof Ast.PipeBehavior pipe
                     && pipelineBlocker(module, pipe, implemented, pipeStages) == null) {
@@ -207,7 +207,7 @@ public final class Runner {
             }
             if (runnable.isEmpty()) {
                 throw fail("run.behavior.none", "no runnable behavior in this module. "
-                        + "A runnable behavior has a `let` and no `requires`.");
+                        + "A runnable behavior has a `let` and depends on nothing.");
             }
             String names = String.join(", ", runnable.keySet());
             throw usage("run.behavior.several",
@@ -226,7 +226,7 @@ public final class Runner {
 
     /**
      * Why a {@code >->} pipeline cannot be driven by {@code run}, or null when every stage is
-     * in-language. A pipeline whose flattened stages all have a {@code let} and no {@code requires}
+     * in-language. A pipeline whose flattened stages all have a {@code let} and no {@code depends on}
      * compiles to an {@code $Impl} with a public no-arg constructor, so it runs exactly like a simple
      * behavior. A stage with no implementation (injected from Java) or one that needs its own injected
      * dependencies would make that constructor take those behaviors, which {@code run} cannot supply.
@@ -248,13 +248,13 @@ public final class Runner {
                         pipe.name(), stage);
             }
             Ast.SpecBehavior spec = specs.get(stage);
-            if (spec != null && !spec.requires().isEmpty()) {
-                String requires = requiredNames(spec);
-                return new Blocker("run.pipeline.requires",
+            if (spec != null && !spec.dependsOn().isEmpty()) {
+                String dependencies = dependencyNames(spec);
+                return new Blocker("run.pipeline.depends",
                         "`" + pipe.name() + "` is a pipeline whose stage `" + stage
-                                + "` requires injected dependencies (" + requires
+                                + "` depends on injected dependencies (" + dependencies
                                 + "), which `run` cannot supply.",
-                        pipe.name(), stage, requires);
+                        pipe.name(), stage, dependencies);
             }
         }
         return null;
@@ -287,12 +287,12 @@ public final class Runner {
                             "`" + name + "` has no implementation (it is injected from Java). "
                                     + "Runnable: " + available + ".", name, available);
                 }
-                if (!spec.requires().isEmpty()) {
-                    String requires = requiredNames(spec);
-                    return fail("run.behavior.requires",
-                            "`" + name + "` requires injected dependencies (" + requires
+                if (!spec.dependsOn().isEmpty()) {
+                    String dependencies = dependencyNames(spec);
+                    return fail("run.behavior.depends",
+                            "`" + name + "` depends on injected dependencies (" + dependencies
                                     + "), which `run` cannot supply. Runnable: " + available + ".",
-                            name, requires, available);
+                            name, dependencies, available);
                 }
             }
         }

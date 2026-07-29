@@ -6,7 +6,7 @@ Status: Accepted.
 
 `Ast` carried names as text. A type reference was a `String`, a sum's cases were `List<String>`, a `constructs` clause was `List<String>`, and every check that needed to know what one of them meant called `Symbols.resolve` itself — 60 such calls across the checker, the deriver, codegen and the example runner.
 
-Because each site decided for itself, a capability reached the positions someone wired it to. `constructs` took a bare identifier while `requires` took a qualified one. E1002 and E1006 compared spellings, so a clause naming `up.Amount` and a body building an imported `Amount` disagreed about one type. A spread of a name nothing declared crashed rather than reporting. Issues #101, #113, #124, #132 and #154 are the same defect written five times, and PR #175 fixed three more instances at once.
+Because each site decided for itself, a capability reached the positions someone wired it to. `constructs` took a bare identifier while `depends on` took a qualified one. E1002 and E1006 compared spellings, so a clause naming `up.Amount` and a body building an imported `Amount` disagreed about one type. A spread of a name nothing declared crashed rather than reporting. Issues #101, #113, #124, #132 and #154 are the same defect written five times, and PR #175 fixed three more instances at once.
 
 Text also has no home. A name written inside another module's declaration means what that module says it means, so `Symbols` grew `resolveIn(inModule, written)` and 32 places threaded a `home` argument to say where the text had come from. That argument exists only because resolution happens late.
 

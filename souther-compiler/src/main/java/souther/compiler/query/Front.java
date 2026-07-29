@@ -320,7 +320,7 @@ public final class Front {
     /**
      * The behavior names a module declares.
      *
-     * <p>Read where a {@code >->} stage or a {@code requires} is resolved, which is why it asks
+     * <p>Read where a {@code >->} stage or a {@code depends on} is resolved, which is why it asks
      * {@link Exposed} rather than {@link Available}: binding a module's own stages is what
      * {@link Available} does, and a module whose stage names another module's behavior would
      * otherwise be waiting on itself. Nothing between the two changes which behaviors a module
@@ -522,7 +522,7 @@ public final class Front {
         for (Ast.BehaviorDef b : m.behaviors()) {
             List<Ast.ValueRef> named = switch (b) {
                 case Ast.PipeBehavior pipe -> pipe.stages();
-                case Ast.SpecBehavior spec -> spec.requires();
+                case Ast.SpecBehavior spec -> spec.dependsOn();
             };
             for (Ast.ValueRef ref : named) {
                 written.add(ref.written());

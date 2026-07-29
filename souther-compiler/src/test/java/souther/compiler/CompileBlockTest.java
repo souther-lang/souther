@@ -107,7 +107,7 @@ class CompileBlockTest {
                 data Id = { v: String }
                 data Nm = { v: String }
                 behavior 名前を引く : (id: Id) -> Nm
-                behavior 全部引く : (xs: List<Id>) -> List<Nm> requires 名前を引く
+                behavior 全部引く : (xs: List<Id>) -> List<Nm> depends on 名前を引く
                 let 全部引く (xs, 名前を引く) = map(x -> 名前を引く(x), xs)
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());

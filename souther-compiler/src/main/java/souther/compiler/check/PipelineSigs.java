@@ -43,7 +43,7 @@ public final class PipelineSigs {
             if (b instanceof Ast.SpecBehavior spec) {
                 // A behavior's signature is what it declares, whether a `let` implements it here or the
                 // Java side is injected (spec 13.2): both are named the same way from a `>->` or a
-                // `requires`, and both need the output union's generated interface. Where the arity
+                // `depends on`, and both need the output union's generated interface. Where the arity
                 // rules out a use — every stage after the first takes one input (14.1) — the composition
                 // says so; leaving the name out of this map instead reports it as one that was never
                 // declared (issue #96).

@@ -724,7 +724,7 @@ public final class Analyzer {
     /** Node kinds where an identifier names a type. */
     private static final java.util.Set<SyntaxKind> TYPE_POSITIONS = java.util.Set.of(
             SyntaxKind.TYPE_REF, SyntaxKind.TYPE_ARGS, SyntaxKind.SUM_BODY, SyntaxKind.NEWTYPE_BODY,
-            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.REQUIRES_CLAUSE, SyntaxKind.NEW_DATA_EXPR,
+            SyntaxKind.CONSTRUCTS_CLAUSE, SyntaxKind.DEPENDS_CLAUSE, SyntaxKind.NEW_DATA_EXPR,
             SyntaxKind.PATTERN_CTOR);
 
     /** Node kinds where an identifier binds a value name (a param or a {@code let}). A pattern puts
@@ -1083,8 +1083,12 @@ public final class Analyzer {
         if (parent == SyntaxKind.PATTERN_FIELD) {
             return afterFirstIdent ? T_VARIABLE : T_PROPERTY;
         }
+        // `depends on f`: the `on` lexes as an identifier but is the second word of the keyword
+        if (parent == SyntaxKind.DEPENDS_CLAUSE && !afterFirstIdent) {
+            return T_KEYWORD;
+        }
         return switch (parent) {
-            case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, REQUIRES_CLAUSE,
+            case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE,
                  DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
             case BEHAVIOR_DEF, FN_DEF, STAGE, CALL_EXPR -> T_FUNCTION;
             case PARAM, FN_PARAM, LAMBDA_EXPR -> T_PARAMETER;
@@ -1096,8 +1100,8 @@ public final class Analyzer {
 
     private static boolean isKeyword(SyntaxKind k) {
         return switch (k) {
-            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, REQUIRE_KW,
-                 ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, REQUIRES_KW, CONSTRUCTS_KW,
+            case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, GUARD_KW,
+                 ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
                  MATCH_KW, WITH_KW -> true;
             default -> false;
         };

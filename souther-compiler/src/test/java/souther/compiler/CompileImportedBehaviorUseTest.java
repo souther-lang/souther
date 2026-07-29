@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An imported behavior can be named where a local one can: as a {@code >->} stage and as a
- * {@code requires} dependency (spec 4, 13.2, 14.3). The declaring module's arity is what decides how
+ * {@code depends on} dependency (spec 4, 13.2, 14.3). The declaring module's arity is what decides how
  * it is called, not whether it crossed a module boundary — a multi-input injected behavior is
  * injected and called on its base class either way (issue #96, issue #57).
  */
@@ -100,7 +100,7 @@ class CompileImportedBehaviorUseTest {
 
     @Test
     void anImportedInjectedBehaviorIsARequiresDependencyAndRuns() throws Exception {
-        // issue #96: `requires` never saw imported behaviors, so the call fell through to E1401,
+        // issue #96: `depends on` never saw imported behaviors, so the call fell through to E1401,
         // which told the author to declare a behavior they had already declared and imported.
         String shipping = """
                 module probe.shipping
@@ -109,7 +109,7 @@ class CompileImportedBehaviorUseTest {
                 data Shipped = { sku: Sku, quantity: Quantity }
 
                 behavior ship : (sku: Sku, quantity: Quantity) -> Shipped
-                    requires allocate
+                    depends on allocate
                     constructs Shipped
                 let ship (sku, quantity, allocate) = {
                     let a = allocate(sku, quantity)
@@ -150,7 +150,7 @@ class CompileImportedBehaviorUseTest {
                 import probe.inv1 ( Sku, Allocated, allocate )
                 data Shipped = { sku: Sku }
                 behavior ship : (sku: Sku) -> Shipped
-                    requires allocate
+                    depends on allocate
                     constructs Shipped
                 let ship (sku, allocate) = {
                     let a = allocate(sku)
@@ -204,7 +204,7 @@ class CompileImportedBehaviorUseTest {
                 import probe.inv2 ( Sku, Allocated, Shortage, allocate )
                 data Shipped = { sku: Sku }
                 behavior ship : (sku: Sku, quantity: Int) -> Shipped | Shortage
-                    requires allocate
+                    depends on allocate
                     constructs Shipped
                 let ship (sku, quantity, allocate) =
                     match allocate(sku, quantity) with

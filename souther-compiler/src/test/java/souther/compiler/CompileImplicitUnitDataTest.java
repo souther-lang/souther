@@ -51,7 +51,7 @@ class CompileImplicitUnitDataTest {
                     constructs Priced, EmptyCart
 
                 let quote (c) = {
-                    require c.n >= 1 else EmptyCart
+                    guard c.n >= 1 else EmptyCart
                     Priced { total = c.n }
                 }
                 """);
@@ -94,13 +94,13 @@ class CompileImplicitUnitDataTest {
                 data Amount = Int
                 data Doubled = Int
 
-                behavior guard : (a: Amount) -> Amount
-                let guard (a) = a
+                behavior passAmount : (a: Amount) -> Amount
+                let passAmount (a) = a
 
                 behavior toDoubled : (a: Amount) -> Doubled constructs Doubled
                 let toDoubled (a) = Doubled { value = a.value }
 
-                behavior process = guard >-> toDoubled
+                behavior process = passAmount >-> toDoubled
                 """));
 
         assertEquals("E1604", e.code());

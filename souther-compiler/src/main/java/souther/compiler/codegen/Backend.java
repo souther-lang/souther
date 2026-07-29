@@ -256,7 +256,7 @@ public final class Backend {
         // here) is a requirement too; take its arity from the imported signature so the unary-vs-multi
         // dispatch treats a cross-module multi-input dependency the same as a local one (issue #57).
         // A behavior with an implementation of its own may be a requirement too, when it declares
-        // `requires` (spec [#requires]). Nothing is generated for it here — it has its own $Impl —
+        // `depends on` (spec [#depends-on]). Nothing is generated for it here — it has its own $Impl —
         // but the module that named it holds it as a field, so its arity and output belong in the
         // same maps the unary-vs-multi dispatch reads.
         Map<String, Ast.SpecBehavior> ownSpecs = new HashMap<>();
@@ -269,7 +269,7 @@ public final class Backend {
             if (!(bd instanceof Ast.SpecBehavior spec)) {
                 continue;
             }
-            for (Ast.ValueRef req : spec.requires()) {
+            for (Ast.ValueRef req : spec.dependsOn()) {
                 String name = req.bare();
                 if (requiredNames.contains(name)) {
                     continue;
@@ -303,7 +303,7 @@ public final class Backend {
         // The unary-vs-multi dispatch for required behaviors reads these; set once, so the base class,
         // the $Impl field/ctor, the bind factory, and every call site agree (issue #57).
         b.ctx.setRequiredSignatures(requiredParam, requiredSuccess);
-        // A behavior that requires nothing is called by being built where it is called, so it is not
+        // A behavior that depends on nothing is called by being built where it is called, so it is not
         // in the injection maps above; what a call site needs is the signature it was typed against.
         b.ctx.setCalleeSignatures(calleeSigs);
         Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
@@ -418,7 +418,7 @@ public final class Backend {
 
     /**
      * Emits the static factory a Java caller uses to build a fn/pipe behavior, on its public
-     * interface (spec 19.5). {@code of()} for a behavior with no {@code requires}; {@code bind(<named
+     * interface (spec 19.5). {@code of()} for a behavior with no {@code depends on}; {@code bind(<named
      * required interfaces>)} for one that injects dependencies. Both return the interface type and
      * construct the {@code $Impl}, so the caller never names the implementation class.
      */
@@ -601,7 +601,7 @@ public final class Backend {
      * static {@code of()}/{@code bind(...)} factory that builds the {@code $Impl}.
      */
     private byte[] generateBehaviorInterface(String name, List<Type> paramTypes, Type retType,
-                                             List<String> requires) {
+                                             List<String> dependsOn) {
         ClassDesc cdI = cdBehavior(name);
         ClassDesc cdImpl = cdBehaviorImpl(name);
         boolean single = paramTypes.size() == 1;
@@ -614,7 +614,7 @@ public final class Backend {
                 // no Behavior supertype (it takes one argument): declare the typed apply directly
                 emitAbstractApply(cb, name, paramTypes, retType);
             }
-            emitBehaviorFactory(cb, cdI, cdImpl, requires);
+            emitBehaviorFactory(cb, cdI, cdImpl, dependsOn);
         });
     }
 
@@ -750,7 +750,7 @@ public final class Backend {
 
     /**
      * Generates a behavior implemented by a {@code fn} (spec 13.1). The behavior's inputs are the
-     * {@code apply} arguments; its {@code requires} are injected fields (12.6). The {@code fn}'s
+     * {@code apply} arguments; its {@code depends on} are injected fields (12.6). The {@code fn}'s
      * leading parameters name the inputs (their types come from the behavior); the trailing ones
      * name the injected behaviors and are resolved as inline calls, not bound as locals.
      */
@@ -758,7 +758,7 @@ public final class Backend {
                                   Map<String, Type> requiredSuccess, Map<String, List<Type>> requiredParam) {
         ClassDesc cdB = cdBehaviorImpl(spec.name());   // the $Impl behind the public interface
         int n = spec.params().size();
-        // declared requires, validated to equal what the fn calls (E1602/E1603); the same order is
+        // declared dependencies, validated to equal what the fn calls (E1602/E1603); the same order is
         // used by pipeline callers (requirementSets), so the injected fields line up.
         List<String> injected = requiredBy(spec);
         ClassDesc[] applyParams = new ClassDesc[n];
@@ -839,7 +839,7 @@ public final class Backend {
         LinkedHashSet<String> deps = new LinkedHashSet<>();
         switch (bd) {
             // an injection target short-circuits above, so a SpecBehavior here is fn-implemented:
-            // its dependencies are its declared requires, in that order (spec 12.6, 13.6)
+            // its dependencies are what it declared it depends on, in that order (spec 12.6, 13.6)
             case Ast.SpecBehavior spec -> deps.addAll(requiredBy(spec));
             case Ast.PipeBehavior pipe -> {
                 for (Ast.ValueRef stage : pipe.stages()) {
@@ -869,10 +869,10 @@ public final class Backend {
         return sig;
     }
 
-    /** The behaviors a spec declares it requires, by the name each is reached by. */
+    /** The behaviors a spec declares it depends on, by the name each is reached by. */
     private static List<String> requiredBy(Ast.SpecBehavior spec) {
         List<String> names = new ArrayList<>();
-        for (Ast.ValueRef req : spec.requires()) {
+        for (Ast.ValueRef req : spec.dependsOn()) {
             names.add(req.bare());
         }
         return names;

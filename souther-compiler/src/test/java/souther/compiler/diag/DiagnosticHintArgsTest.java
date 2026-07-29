@@ -80,7 +80,7 @@ class DiagnosticHintArgsTest {
                 let run (id) = load(id)
                 """);
         assertNoPlaceholder(rendered);
-        assertTrue(rendered.contains("requires load"), rendered);
+        assertTrue(rendered.contains("depends on load"), rendered);
     }
 
     @Test
@@ -92,7 +92,7 @@ class DiagnosticHintArgsTest {
                 behavior load : (id: Id) -> Row constructs Row
                 behavior run : (id: Id) -> Row
                     constructs Row
-                    requires load
+                    depends on load
 
                 let run (id, load) = Row { id = id }
                 """);

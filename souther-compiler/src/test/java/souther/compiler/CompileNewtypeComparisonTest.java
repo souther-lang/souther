@@ -45,7 +45,7 @@ class CompileNewtypeComparisonTest {
     void sameNewtypeComparisonReadsTheUnderlyingValue() throws Exception {
         String body = """
                 let 判定 (m) = {
-                    require m.額 <= m.予算 else 予算超過
+                    guard m.額 <= m.予算 else 予算超過
                     予算内
                 }
                 """;
@@ -57,7 +57,7 @@ class CompileNewtypeComparisonTest {
     void bareLiteralIsTakenAsTheNewtype() throws Exception {
         String body = """
                 let 判定 (m) = {
-                    require m.額 <= 100 else 予算超過
+                    guard m.額 <= 100 else 予算超過
                     予算内
                 }
                 """;
@@ -69,7 +69,7 @@ class CompileNewtypeComparisonTest {
     void equalityAcceptsABareLiteral() throws Exception {
         String body = """
                 let 判定 (m) = {
-                    require m.額 == 0 else 予算超過
+                    guard m.額 == 0 else 予算超過
                     予算内
                 }
                 """;
@@ -85,7 +85,7 @@ class CompileNewtypeComparisonTest {
                 behavior 判定 : (d: 明細) -> 予算内 | 予算超過
                     constructs 予算内, 予算超過
                 let 判定 (d) = {
-                    require d.額 <= d.個数 else 予算超過
+                    guard d.額 <= d.個数 else 予算超過
                     予算内
                 }
                 """;
@@ -99,7 +99,7 @@ class CompileNewtypeComparisonTest {
                 behavior 判定 : (m: 見積, 限度: Int) -> 予算内 | 予算超過
                     constructs 予算内, 予算超過
                 let 判定 (m, 限度) = {
-                    require m.額 <= 限度 else 予算超過
+                    guard m.額 <= 限度 else 予算超過
                     予算内
                 }
                 """;
@@ -113,7 +113,7 @@ class CompileNewtypeComparisonTest {
                 behavior 判定 : (m: 見積) -> 予算内 | 予算超過
                     constructs 予算内, 予算超過
                 let 判定 (m) = {
-                    require m.額.value <= 100 else 予算超過
+                    guard m.額.value <= 100 else 予算超過
                     予算内
                 }
                 """;

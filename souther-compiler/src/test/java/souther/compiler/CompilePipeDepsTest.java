@@ -29,7 +29,7 @@ class CompilePipeDepsTest {
             behavior fetch : (input: In) -> Mid
             behavior tag : (m: Mid) -> Mid
 
-            behavior enrich : (m: Mid) -> Out constructs Out requires tag
+            behavior enrich : (m: Mid) -> Out constructs Out depends on tag
 
             let enrich (m, tag) = {
                 let t = tag(m)

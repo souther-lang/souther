@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * On an fn-backed behavior, {@code constructs} is optional (spec 12.3, ADR-0002): its construction
- * permission is internal — invisible to callers, unlike {@code requires} — so with the body visible
+ * permission is internal — invisible to callers, unlike {@code depends on} — so with the body visible
  * the set can be inferred. Omit it and inference stands; declare it and it must match the body
  * exactly (under-declaration E1002, over-declaration E1006). Injected behaviors still declare it.
  */

@@ -121,7 +121,7 @@ class CompileStringCharsTest {
             behavior 検証 : (s: 符号) -> 妥当 | 不正 constructs 妥当, 不正
             let 桁和 (s: String) = fold((acc, ch) -> acc + (String.toCode(ch) - String.toCode("0")), 0, String.toChars(s))
             let 検証 (s) = {
-                require Int.modBy(10, 桁和(s.value)) == 0 else 不正
+                guard Int.modBy(10, 桁和(s.value)) == 0 else 不正
                 妥当
             }
             """;

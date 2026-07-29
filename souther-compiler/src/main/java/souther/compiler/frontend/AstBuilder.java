@@ -21,7 +21,7 @@ import java.util.Optional;
 /**
  * Builds the compiler's {@link Ast} from a concrete syntax tree. This is where the surface forms the
  * parser deliberately kept lossless are lowered to the desugared AST every later stage expects:
- * {@code |>} folds into a call's last argument, {@code require} becomes an {@code if}, {@code let}
+ * {@code |>} folds into a call's last argument, {@code guard} becomes an {@code if}, {@code let}
  * becomes a {@code LetIn}, {@code T?} becomes {@code Option<T>}, and the {@code let}/{@code match}
  * destructurings expand into positional reads. The CST feeds the formatter and the LSP untouched;
  * only the compiler pipeline runs through here.
@@ -310,19 +310,21 @@ public final class AstBuilder {
             });
             Ast.RetType ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
             List<Ast.Name> constructs = new ArrayList<>();
-            List<Ast.ValueRef> requires = new ArrayList<>();
+            List<Ast.ValueRef> dependsOn = new ArrayList<>();
             for (SyntaxNode clause : s.childNodes()) {
                 // either clause may name through a module, so the idents of one name are joined and
                 // a comma starts the next
                 if (clause.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
-                    constructs.addAll(dottedNames(clause));
-                } else if (clause.kind() == SyntaxKind.REQUIRES_CLAUSE) {
-                    for (Ast.Name required : dottedNames(clause)) {
-                        requires.add(Ast.ValueRef.written(required.written(), required.pos()));
+                    constructs.addAll(dottedNames(clause, 0));
+                } else if (clause.kind() == SyntaxKind.DEPENDS_CLAUSE) {
+                    // one ident past the keyword is the `on` of `depends on`, which lexes as an
+                    // ordinary identifier and is no part of the list
+                    for (Ast.Name dep : dottedNames(clause, 1)) {
+                        dependsOn.add(Ast.ValueRef.written(dep.written(), dep.pos()));
                     }
                 }
             }
-            return new Ast.SpecBehavior(name, params, ret, constructs, requires, pos);
+            return new Ast.SpecBehavior(name, params, ret, constructs, dependsOn, pos);
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
         List<Ast.ValueRef> stages = new ArrayList<>();
@@ -762,12 +764,13 @@ public final class AstBuilder {
         return Ast.Name.written(sb.toString(), posOf((SyntaxToken) head));
     }
 
-    /** The comma-separated names of a {@code constructs}/{@code requires} clause, each possibly
-     * qualified by its module. */
-    private List<Ast.Name> dottedNames(SyntaxNode clause) {
+    /** The comma-separated names of a {@code constructs}/{@code depends on} clause, each possibly
+     * qualified by its module. {@code skipIdents} drops the identifiers that belong to the keyword
+     * rather than to the list — the {@code on} of {@code depends on} lexes as one. */
+    private List<Ast.Name> dottedNames(SyntaxNode clause, int skipIdents) {
         List<Ast.Name> out = new ArrayList<>();
         List<SyntaxElement> es = meaningful(clause);
-        int[] at = {1};                           // past the clause keyword
+        int[] at = {1 + skipIdents};              // past the clause keyword
         while (at[0] < es.size()) {
             if (isToken(es.get(at[0]), SyntaxKind.COMMA)) {
                 at[0]++;
@@ -894,13 +897,13 @@ public final class AstBuilder {
         return new Ast.Case(caseTypes, binding, body, unwrapAsserts, casePos);
     }
 
-    /** A brace block: its {@code let}/{@code require} statements folded into the result expression. */
+    /** A brace block: its {@code let}/{@code guard} statements folded into the result expression. */
     private Ast.Expr block(SyntaxNode n) {
         List<SyntaxNode> stmts = new ArrayList<>();
         SyntaxNode result = null;
         for (SyntaxNode c : n.childNodes()) {
             switch (c.kind()) {
-                case LET_STMT, LET_DESTRUCTURE, REQUIRE_STMT -> stmts.add(c);
+                case LET_STMT, LET_DESTRUCTURE, GUARD_STMT -> stmts.add(c);
                 default -> result = c;   // the trailing result expression
             }
         }
@@ -922,7 +925,7 @@ public final class AstBuilder {
                         ? new Ast.LetIn(firstIdentText(s), value, rest, pos)
                         : Ast.LetIn.annotated(firstIdentText(s), value, annotation, rest, pos);
             }
-            case REQUIRE_STMT -> {
+            case GUARD_STMT -> {
                 List<SyntaxNode> exprs = exprChildren(s);
                 String binder = attemptBinder(s);
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);

@@ -34,7 +34,7 @@ class CompileInjectedMultiArgTest {
                 constructs R
 
             behavior use : (a: A, b: B) -> R
-                requires send
+                depends on send
 
             """;
 
@@ -203,7 +203,7 @@ class CompileInjectedMultiArgTest {
                 behavior now : () -> R
                     constructs R
                 behavior use : (r: R) -> R
-                    requires now
+                    depends on now
                     constructs R
                 let use (r, now) = {
                     let n = now()
@@ -236,7 +236,7 @@ class CompileInjectedMultiArgTest {
                 data A = { x: Int }
                 data R = { z: Int }
                 behavior one : (a: A) -> R
-                behavior use : (a: A) -> R requires one
+                behavior use : (a: A) -> R depends on one
                 let use (a, one) = one(a)
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
@@ -261,7 +261,7 @@ class CompileInjectedMultiArgTest {
 
                 behavior stage1 : (s: S) -> R
                     constructs A, B
-                    requires send
+                    depends on send
 
                 let stage1 (s, send) = send(A { x = s.w }, B { y = s.w })
 
@@ -333,7 +333,7 @@ class CompileInjectedMultiArgTest {
                     constructs R
 
                 behavior use : (n: Int, a: A) -> R
-                    requires scale
+                    depends on scale
 
                 let use (n, a, scale) = {
                     let m = scale(n, a)

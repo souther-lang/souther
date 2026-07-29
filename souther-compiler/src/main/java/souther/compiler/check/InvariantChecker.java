@@ -18,7 +18,7 @@ import java.util.function.Function;
 /**
  * The intraprocedural invariant-discharge check (spec §invariant-discharge). It walks a behavior's body threading a
  * {@link NumericDomain} — seeded from the input newtypes' invariants and refined along each
- * {@code require}/{@code if} guard (a {@code require} is already an {@code if} here) — and, at every
+ * {@code guard}/{@code if} guard (a {@code guard} is already an {@code if} here) — and, at every
  * construction whose invariant is expressible in the domain, asks whether the guards
  * <em>discharge</em> it. A construction the domain proves must violate its invariant on a reachable
  * path is a compile error (the path-sensitive generalization of the constant check {@code 金額(-5)});

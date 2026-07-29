@@ -108,7 +108,7 @@ class CompileInvariantDischargeTest {
 
     @Test
     void aRequireGuardDischargesTheSubtraction() {
-        // `require 額 <= 残高` establishes the relation on the mainline, discharging `残高 - 額`
+        // `guard 額 <= 残高` establishes the relation on the mainline, discharging `残高 - 額`
         String m = """
                 module demo
                 data Money = Decimal
@@ -117,12 +117,12 @@ class CompileInvariantDischargeTest {
                 data 引落指示 = { 残高: Money, 額: Money }
                 behavior 差引く : (指示: 引落指示) -> Money | 残高不足
                 let 差引く (指示) = {
-                    require 指示.額 <= 指示.残高
+                    guard 指示.額 <= 指示.残高
                         else 残高不足
                     指示.残高 - 指示.額
                 }
                 """;
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
-                "the require guard discharges the subtraction");
+                "the guard discharges the subtraction");
     }
 }

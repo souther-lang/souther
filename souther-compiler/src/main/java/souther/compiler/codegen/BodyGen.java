@@ -299,7 +299,7 @@ final class BodyGen {
          * invariant and returns a {@code Result}; {@code ConstraintViolation.orThrow} turns that into
          * either the value (returned) or a thrown {@code ConstraintViolation} — an invariant violation
          * aborts rather than riding an output case (spec 7.3, 9.4).
-         * Because a desugared {@code require} (spec 16.4) is an {@code if} whose branches are tail,
+         * Because a desugared {@code guard} (spec 16.4) is an {@code if} whose branches are tail,
          * this is reached for constructions on both sides of a guard — there is no second, unchecked
          * construction path.
          */
@@ -1113,7 +1113,7 @@ final class BodyGen {
         /** Emits an inline call to an injected required behavior, leaving its success value on
          * the stack cast to the success type (spec 12.2, 13). */
         /**
-         * Calls a behavior that requires nothing (spec {@code [#calling-a-behavior]}). It is built
+         * Calls a behavior that depends on nothing (spec {@code [#calling-a-behavior]}). It is built
          * here rather than read out of a field: with an empty requirement set there is nothing to
          * inject, so its {@code $Impl} has a no-argument constructor. This is the same sequence a
          * {@code >->} stage already emits for a behavior it builds, and it reaches an imported one

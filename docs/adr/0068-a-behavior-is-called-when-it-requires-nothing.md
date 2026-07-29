@@ -1,6 +1,6 @@
 # ADR-0068: What a name may be used for does not depend on which module reads it
 
-Status: Accepted
+Status: Accepted (the clause is `depends on` since ADR-0071; it was `requires` when this was decided)
 
 ## Context
 
@@ -18,8 +18,8 @@ Elm, F# and Haskell differ in almost every surface detail of their module system
 
 For a behavior, the deciding question is the requirement set (`[#requirement-propagation]`), not whether an implementation is written:
 
-- An **empty** requirement set: a `let` body calls it by name. Nothing is injected and nothing is written in `requires`.
-- A **non-empty** requirement set — no implementation, or a `let` that declares `requires` — is named in `requires` and called through that name. It arrives bound, as any requirement does.
+- An **empty** requirement set: a `let` body calls it by name. Nothing is injected and nothing is written in `depends on`.
+- A **non-empty** requirement set — no implementation, or a `let` that declares `depends on` — is named in `depends on` and called through that name. It arrives bound, as any requirement does.
 
 E1607 changes accordingly: it reports a name that requires nothing (call it instead), a `>->` composition, or a name that is no behavior in scope. The rule it used to state — an implemented behavior is composed, not injected — is retired.
 
@@ -27,7 +27,7 @@ A call is not a stage. It yields the callee's declared output and the caller ope
 
 Two things follow that were not expressible before, and both need a check.
 
-- **Behaviors do not recurse.** A behavior may not reach itself through calls, `requires`, stages, or a mixture (E1608). A `requires` cycle leaves nothing to build first and a call cycle does not terminate. Recursion stays a property of a named module helper, where it is proven total (ADR-0052).
+- **Behaviors do not recurse.** A behavior may not reach itself through calls, `depends on`, stages, or a mixture (E1608). A `depends on` cycle leaves nothing to build first and a call cycle does not terminate. Recursion stays a property of a named module helper, where it is proven total (ADR-0052).
 One thing this decision does **not** settle. An exposed name may rest on one that is not: a behavior's input or output type, or a data's field type, may be kept to the module while the name resting on it is published. The generated class is public and states the type anyway, so a reader cannot write it — and a field of such a type is read by generated code that cannot reach it, which is an `IllegalAccessError` rather than a diagnostic. F# refuses that shape at the declaration (`FS0410`, measured on dotnet 10.0.302); Elm allows it because inference means a caller never has to write the type, which is not open to a language that writes its signatures. Adopting F#'s rule is right and is not free: twelve of this compiler's own test fixtures expose a name resting on an unexposed one, so unlike the rest of this decision it carries a migration. It is issue #187's to settle.
 
 ## Consequences
@@ -36,7 +36,7 @@ The `>->` stage rule is untouched, and so is ADR-0005: the behavior list still e
 
 Nothing is added to inference. A behavior's signature is written (ADR-0017), so both sides of a call are declared and typing one is strictly easier than typing a call to a helper, whose parameter types come from its body (ADR-0066). No fixpoint and no unification enter.
 
-Nothing is added to what an edit costs. A call reads the callee's declaration — its signature and whether its requirement set is empty — and never its body, so editing a behavior's body does not re-check the behaviors that call it. `requirementSets` already memoises and already detects cycles through stages; the call and `requires` edges join the same walk.
+Nothing is added to what an edit costs. A call reads the callee's declaration — its signature and whether its requirement set is empty — and never its body, so editing a behavior's body does not re-check the behaviors that call it. `requirementSets` already memoises and already detects cycles through stages; the call and `depends on` edges join the same walk.
 
 The invariant rule needed a new reason. It had been justified by the requirement set — a behavior may touch the outside world, so it may not appear in an invariant — and a behavior that requires nothing would now pass that test. The reason is instead that an invariant is part of what a type is and travels to an importing module as source, together with the helper `let`s it names, so it may name only what travels with it. No behavior is callable from an invariant, whatever it requires.
 
@@ -60,7 +60,7 @@ Prior art is the reason this is a correction rather than a design. Elm exposes v
 | Public signature on an unexposed type | allowed (issue #187) | allowed (inference) | `FS0410` | allowed (inference) |
 | A sum over cases from another module | **no (E1606)** | yes | yes | yes |
 | Two same-named imports, told apart by qualifier | types yes, **behaviors no** | yes | yes | yes |
-| Effects/dependencies in the signature | `requires` | none (pure) | none | effect in the type |
+| Effects/dependencies in the signature | `depends on` | none (pure) | none | effect in the type |
 
 Bold marks where Souther is alone. Four of those five are the surface someone coming from the three would notice, and each has a reason of its own:
 
@@ -73,6 +73,6 @@ The first is a consequence of what `exposing` is for; the second widens what is 
 
 ## References
 
-- Specification: `[#modules]`, `[#requires]`, `[#calling-a-behavior]`, `[#requirement-propagation]`, `[#e1607]`, `[#e1608]`
+- Specification: `[#modules]`, `[#depends-on]`, `[#calling-a-behavior]`, `[#requirement-propagation]`, `[#e1607]`, `[#e1608]`
 - Issue #159, issue #187
 - ADR-0005, ADR-0016, ADR-0017, ADR-0052, ADR-0058

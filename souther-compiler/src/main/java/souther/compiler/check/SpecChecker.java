@@ -20,7 +20,7 @@ import java.util.Set;
 
 /**
  * The checks a {@code behavior} and its implementing {@code let} are subject to: that the two agree
- * on inputs and output, that a {@code requires} names something with a requirement of its own, that
+ * on inputs and output, that a {@code depends on} names something with a requirement of its own, that
  * no behavior reaches itself, that a stage takes one input, and that an exposed composition declares
  * the output it actually produces.
  */
@@ -30,8 +30,8 @@ public final class SpecChecker {
 
     /**
      * A behavior does not reach itself (spec {@code [#calling-a-behavior]}, E1608). The edges are
-     * calls, {@code requires} and {@code >->} stages, walked as one graph because a cycle through a
-     * mixture of them is the same cycle: a {@code requires} cycle leaves nothing to build first, and
+     * calls, {@code depends on} and {@code >->} stages, walked as one graph because a cycle through a
+     * mixture of them is the same cycle: a {@code depends on} cycle leaves nothing to build first, and
      * a call cycle does not terminate.
      *
      * <p>Only this module's behaviors are walked. Reaching another module's takes an import, and a
@@ -52,7 +52,7 @@ public final class SpecChecker {
             List<String> out = new ArrayList<>();
             switch (b) {
                 case Ast.SpecBehavior spec -> {
-                    for (Ast.ValueRef req : spec.requires()) {
+                    for (Ast.ValueRef req : spec.dependsOn()) {
                         if (names.contains(req.bare()) && !out.contains(req.bare())) {
                             out.add(req.bare());
                         }
@@ -111,12 +111,12 @@ public final class SpecChecker {
     }
 
     /**
-     * A {@code requires} names a behavior whose requirement set is not empty (spec
-     * {@code [#requires]}): one with no implementation of its own, or one whose {@code let} declares
-     * {@code requires} in turn, here or in a module this one imports.
+     * A {@code depends on} names a behavior whose requirement set is not empty (spec
+     * {@code [#depends-on]}): one with no implementation of its own, or one whose {@code let} declares
+     * {@code depends on} in turn, here or in a module this one imports.
      *
      * <p>Reported where the clause is written, and the three ways it can be wrong are told apart
-     * because the fix differs: a behavior that requires nothing is called instead, a {@code >->}
+     * because the fix differs: a behavior that depends on nothing is called instead, a {@code >->}
      * composition cannot be rested on because its requirements are not written, and a name that is no
      * behavior has to be declared or imported. The body check would see only a call it cannot type
      * and report all three as an arbitrary JVM call (E1401, issue #96).
@@ -127,13 +127,13 @@ public final class SpecChecker {
             if (!(b instanceof Ast.SpecBehavior spec)) {
                 continue;
             }
-            for (Ast.ValueRef required : spec.requires()) {
+            for (Ast.ValueRef required : spec.dependsOn()) {
                 if (required.unresolved() || reqSigs.containsKey(required.bare())) {
                     continue;
                 }
                 String req = required.bare();
                 // Three ways a name can be wrong here, told apart because the fix differs. A
-                // behavior that requires nothing has nothing to inject and is called instead; a
+                // behavior that depends on nothing has nothing to inject and is called instead; a
                 // composition cannot be rested on because its requirements are not written; a name
                 // that is no behavior has to be declared or imported. Which of the three is read off
                 // what the name was resolved to, so an imported composition is the composition case
@@ -148,8 +148,8 @@ public final class SpecChecker {
                                 .args(spec.name(), req)
                                 .hint(key + ".hint", spec.name(), req)
                                 .build(),
-                        "`behavior " + spec.name() + "` declares `requires " + req + "`, which"
-                                + " requires nothing of its own to inject (spec [#requires])");
+                        "`behavior " + spec.name() + "` declares `depends on " + req + "`, which"
+                                + " depends on nothing of its own to inject (spec [#depends-on])");
             }
         }
     }
@@ -223,7 +223,7 @@ public final class SpecChecker {
     /**
      * Checks a behavior's {@code fn} implementation against the behavior's declared signature
      * (spec 13.1). The {@code fn}'s parameters are the behavior's inputs followed by its
-     * {@code requires} (12.6); the trailing ones name the injection targets in declared order and
+     * {@code depends on} (12.6); the trailing ones name the injection targets in declared order and
      * do not bind values — they resolve as inline calls to those behaviors.
      */
     static Core checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
@@ -240,8 +240,8 @@ public final class SpecChecker {
                             + "`, so its return type comes from the behavior — do not declare one"
                             + " (spec 13.1)");
         }
-        for (Ast.ValueRef required : spec.requires()) {
-            // A `requires` naming nothing was reported where it is written. What this fn's trailing
+        for (Ast.ValueRef required : spec.dependsOn()) {
+            // A `depends on` naming nothing was reported where it is written. What this fn's trailing
             // parameters should be called comes from those names, so there is nothing to hold them
             // against — saying they are named wrongly would name the spelling that denotes nothing.
             if (required.unresolved()) {
@@ -249,7 +249,7 @@ public final class SpecChecker {
             }
         }
         int nBusiness = spec.params().size();
-        int nReq = spec.requires().size();
+        int nReq = spec.dependsOn().size();
         if (fn.params().size() != nBusiness + nReq) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.impl.arity").title("check.impl.title")
@@ -257,7 +257,7 @@ public final class SpecChecker {
                             .build(),
                     "`let " + fn.name() + "` takes " + fn.params().size()
                             + " parameter(s) but `behavior " + spec.name() + "` has " + nBusiness
-                            + " input(s)" + (nReq == 0 ? "" : " plus " + nReq + " requires")
+                            + " input(s)" + (nReq == 0 ? "" : " plus " + nReq + " injected")
                             + " (spec 13.1)");
         }
         for (Ast.FnParam p : fn.params()) {
@@ -274,13 +274,13 @@ public final class SpecChecker {
         }
         for (int i = 0; i < nReq; i++) {
             String got = fn.params().get(nBusiness + i).name();
-            String want = spec.requires().get(i).bare();
+            String want = spec.dependsOn().get(i).bare();
             if (!got.equals(want)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.impl.reqorder").title("check.impl.title")
                                 .at(fn.pos()).args(fn.name(), got, want).build(),
                         "`let " + fn.name() + "` parameter `" + got + "` should be `" + want
-                                + "`: the `requires` become the trailing parameters in declared order"
+                                + "`: what `depends on` names becomes the trailing parameters in declared order"
                                 + " (spec 12.6)");
             }
         }
@@ -295,7 +295,7 @@ public final class SpecChecker {
         }
         Type output = TypeOps.successType(spec.ret(), symbols);
         // recursive helpers this behavior calls resolve through their signatures (spec 13.1); merged
-        // only for typing, so construction/requires walks below still see the business params alone.
+        // only for typing, so the construction and dependency walks below still see the business params alone.
         Map<String, Type> tenv = new HashMap<>(env);
         tenv.putAll(recursiveHelperFns);
         // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
@@ -304,7 +304,7 @@ public final class SpecChecker {
         HelperTyping.checkFunctionArgs(fn.body(), tenv, symbols, reqSigs, inliner);
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
-        // behavior's permission and requires — exactly as if the code had been written inline (12.5).
+        // behavior's permission and dependencies — exactly as if the code had been written inline (12.5).
         Ast.Expr body = inlinedBody;
 
         // push the declared output type into the body so a body that is directly an empty collection
@@ -321,15 +321,15 @@ public final class SpecChecker {
         }
 
         // One expression (spec 16.4): this single walk sees every construction, including under a
-        // desugared `require`.
+        // desugared `guard`.
         Map<TypeName, String> constructed = new LinkedHashMap<>();
         DataChecker.collectConstructs(body, constructed, symbols, new HashSet<>(env.keySet()), recHelperConstructs);
         // `constructs` on an fn-backed behavior is optional: its construction permission is internal
-        // (invisible to callers, unlike `requires`), so with the body visible the set can be inferred
+        // (invisible to callers, unlike `depends on`), so with the body visible the set can be inferred
         // (ADR-0002). Omit it and inference stands. Declare it and it must match the body exactly —
         // under-declaration is E1002, over-declaration E1006 — so an explicit clause stays a checkable,
         // readable record of what is newly built versus passed through (spec 12.3), the same exact
-        // match `requires` gets (E1602/E1603). Injected behaviors still declare it: no body to infer
+        // match `depends on` gets (E1602/E1603). Injected behaviors still declare it: no body to infer
         // from, and it drives factory generation (spec 13.3).
         if (!spec.constructs().isEmpty()) {
             // Both sides name types, and a type has one identity however it is written — `up.Amount`
@@ -358,11 +358,11 @@ public final class SpecChecker {
                 }
             }
         }
-        // The requires clause must match what the fn actually calls (spec 12.6): missing -> E1602,
+        // The `depends on` clause must match what the fn actually calls (spec 12.6): missing -> E1602,
         // extra -> E1603.
         List<String> actual = requiredCalls(body, reqSigs.keySet());
         List<String> declared = new ArrayList<>();
-        for (Ast.ValueRef required : spec.requires()) {
+        for (Ast.ValueRef required : spec.dependsOn()) {
             declared.add(required.bare());
         }
         for (String call : actual) {
@@ -371,7 +371,7 @@ public final class SpecChecker {
                         Diagnostic.of("E1602", "e1602.msg").at(spec.pos())
                                 .args(fn.name(), call, spec.name()).hint("e1602.hint").build(),
                         "`let " + fn.name() + "` calls `" + call + "`, which has no implementation, but"
-                                + " `behavior " + spec.name() + "` does not declare `requires " + call + "`.");
+                                + " `behavior " + spec.name() + "` does not declare `depends on " + call + "`.");
             }
         }
         for (String req : declared) {
@@ -379,12 +379,12 @@ public final class SpecChecker {
                 throw CompileException.of(
                         Diagnostic.of("E1603", "e1603.msg").at(spec.pos())
                                 .args(spec.name(), req, fn.name()).hint("e1603.hint").build(),
-                        "`behavior " + spec.name() + "` declares `requires " + req + "`, but `let "
-                                + fn.name() + "` never calls it. Remove it from the `requires` clause.");
+                        "`behavior " + spec.name() + "` declares `depends on " + req + "`, but `let "
+                                + fn.name() + "` never calls it. Remove it from the `depends on` clause.");
             }
         }
         // Intraprocedural invariant discharge: seed from the input
-        // newtypes' invariants, refine along each `require`/`if` guard, and check every construction.
+        // newtypes' invariants, refine along each `guard`/`if` guard, and check every construction.
         // A guard-discharged one is silent; an unproven one is a warning (a possible abort); one the
         // guards prove must fail on a reachable path is an error (the path-sensitive generalization of
         // the constant `金額(-5)` check).

@@ -127,7 +127,7 @@ public interface Ast {
 
     /**
      * {@code fake <injected> | (in) -> out | ...} — a test double for an injected behavior, used to
-     * evaluate an example of a behavior that {@code requires} it. The rows form an input→output
+     * evaluate an example of a behavior that {@code depends on} it. The rows form an input→output
      * table matched by value equality; a {@code _ -> out} row is the default when no input matches
      * (otherwise a miss is an error). A fake produces no run-time class (it is a proxy at evaluation).
      */
@@ -179,18 +179,18 @@ public interface Ast {
     }
 
     /**
-     * {@code behavior name = (p1: T1, ...) -> R constructs A, B requires C, D} — a signature with
+     * {@code behavior name = (p1: T1, ...) -> R constructs A, B depends on C, D} — a signature with
      * no body (spec 12.1). A same-named {@link FnDef} is its implementation (13.1); with none, and
      * not a pipeline, it is a Java-injected behavior (13.2).
      *
-     * <p>{@code requires} lists the implementation-less behaviors the {@code fn} calls; they become
+     * <p>{@code dependsOn} lists the implementation-less behaviors the {@code fn} calls; they become
      * the {@code fn}'s trailing arguments and the injected fields of the generated class (12.6).
      */
     record SpecBehavior(String name,
                         List<Param> params,
                         RetType ret,
                         List<Name> constructs,
-                        List<ValueRef> requires,
+                        List<ValueRef> dependsOn,
                         SourcePos pos) implements BehaviorDef {}
 
     /** A behavior parameter. Its type may be an anonymous union of cases (spec 12.2). */
@@ -210,7 +210,7 @@ public interface Ast {
      * ({@link FnParam#type()} is null, or read off a pattern; {@link FnParam#typeFromPattern()});
      * otherwise it is a helper {@code fn} that writes its own parameter types.
      *
-     * <p>{@code body} is a single expression. The surface forms {@code let} and {@code require} are
+     * <p>{@code body} is a single expression. The surface forms {@code let} and {@code guard} are
      * desugared by the parser into {@link LetIn} and {@link If} (spec 16.4), so every later stage
      * sees one expression tree and has exactly one place where a value can be constructed.
      */
@@ -503,7 +503,7 @@ public interface Ast {
     /**
      * {@code let name = value} followed by {@code body} — what a body's {@code let} desugars to
      * (spec 16.1). Nesting the rest of the body inside keeps {@code value} from being evaluated
-     * when an enclosing {@code if} (a desugared {@code require}) takes the other branch.
+     * when an enclosing {@code if} (a desugared {@code guard}) takes the other branch.
      *
      * <p>{@code declaredType} is the binding's declared type, if any, and {@code annotated} says
      * where it came from. A source annotation ({@code let x: T = e}) is pushed into {@code value}
@@ -568,7 +568,7 @@ public interface Ast {
 
     /**
      * {@code if T(v) as x then a else b} — an attempted construction, and what
-     * {@code require T(v) as x else b} desugars to. {@code construct}'s invariant decides the branch:
+     * {@code guard T(v) as x else b} desugars to. {@code construct}'s invariant decides the branch:
      * holding, the value is built and {@code binder} names it in {@code then}; failing, {@code els} is
      * taken and no value is built. The binder is scoped to {@code then} alone, which is why this is a
      * node of its own rather than a condition {@code If} would have to introspect — a plain

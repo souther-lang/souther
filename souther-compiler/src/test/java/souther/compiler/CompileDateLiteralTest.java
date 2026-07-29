@@ -65,7 +65,7 @@ class CompileDateLiteralTest {
 
                 let check (due, today) = {
                     let late = daysBetween(due.on, today)
-                    require late > 0 else OnTime
+                    guard late > 0 else OnTime
                     Overdue { days = late }
                 }
 

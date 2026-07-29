@@ -240,10 +240,10 @@ public final class TypeChecker {
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 List<String> required = new ArrayList<>();
-                for (Ast.ValueRef req : spec.requires()) {
+                for (Ast.ValueRef req : spec.dependsOn()) {
                     required.add(req.bare());
                 }
-                DataChecker.rejectDuplicateNames(required, "`requires`", spec.pos());
+                DataChecker.rejectDuplicateNames(required, "`depends on`", spec.pos());
                 DataChecker.rejectDuplicateTypes(spec.constructs(), "`constructs`", spec.pos());
             }
         }
@@ -301,7 +301,7 @@ public final class TypeChecker {
         // Injection targets (spec 13.2): a SpecBehavior with no matching fn. Its name and success
         // type let a fn call it inline (spec 12.2); it is the "required" behavior of the old form.
         // An imported injection target is one here too (spec 14.3): the module that names it injects
-        // and binds it, whether it named it as a `>->` stage or as a `requires` dependency. Its
+        // and binds it, whether it named it as a `>->` stage or as a `depends on` dependency. Its
         // signature comes from the module that declared it; a local behavior of the same name wins.
         // The same map is built before the module is lowered, where a helper's parameter type is
         // settled from a call to an injected behavior (issue #178), and read again by every body
@@ -309,23 +309,23 @@ public final class TypeChecker {
         Set<String> injectionTargets = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec && !fns.containsKey(spec.name())) {
-                // `requires` names what an implementation calls (12.6), and an injection target has
-                // no implementation here — the Java side provides it (13.2). Declaring `requires` on
+                // `depends on` names what an implementation calls (12.6), and an injection target has
+                // no implementation here — the Java side provides it (13.2). Declaring `depends on` on
                 // one is meaningless: nothing calls those behaviors, and nothing injects them. The
                 // behavior that composes or calls this one carries the requirement instead (13.2).
-                if (!spec.requires().isEmpty()) {
+                if (!spec.dependsOn().isEmpty()) {
                     throw CompileException.of(
-                            Diagnostic.of(null, "check.inject.requires").title("check.module.title")
+                            Diagnostic.of(null, "check.inject.depends").title("check.module.title")
                                     .at(spec.pos()).args(spec.name()).build(),
                             "behavior `" + spec.name() + "` has no `let`, so it is an injection target"
-                                    + " (spec 13.2); it cannot declare `requires` — the behavior that"
+                                    + " (spec 13.2); it cannot declare `depends on` — the behavior that"
                                     + " calls or composes it does");
                 }
                 SpecChecker.checkInjectionConstructs(spec, symbols, exposeAll, exposed);
                 injectionTargets.add(spec.name());
             }
         }
-        // Fail-fast with the reqSigs it reads: a `requires` that named something else leaves the call
+        // Fail-fast with the reqSigs it reads: a `depends on` that named something else leaves the call
         // untypeable, and the body check would report it as a call to an unknown name (E1401).
         SpecChecker.checkRequiresAreInjectionTargets(module, reqSigs, calleeSigs);
         // Fail-fast too: a behavior reaching itself has no first element to build, and the code that

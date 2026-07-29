@@ -21,9 +21,10 @@ public enum SyntaxKind {
     // --- keywords ---
     // `example` / `examples` / `for` are NOT reserved (they would collide with the `example.*`
     // package/module names): the parser recognizes them by text at top-level position, like the
-    // contextual `intrinsic` / `decoder` / `from`.
-    MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, REQUIRE_KW, ELSE_KW,
-    TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, REQUIRES_KW, CONSTRUCTS_KW, MATCH_KW, WITH_KW,
+    // contextual `intrinsic` / `decoder` / `from`. `on`, the second word of `depends on`, is read
+    // the same way, so a field or parameter may still be named on.
+    MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, GUARD_KW, ELSE_KW,
+    TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW, MATCH_KW, WITH_KW,
 
     // --- literals and identifiers ---
     IDENT, INT_LIT, DECIMAL_LIT, STRING_LIT, TYPEVAR,
@@ -64,7 +65,7 @@ public enum SyntaxKind {
     PARAM_LIST,
     PARAM,
     CONSTRUCTS_CLAUSE,
-    REQUIRES_CLAUSE,
+    DEPENDS_CLAUSE,
     STAGE,
 
     // --- nodes: fn ---
@@ -95,7 +96,7 @@ public enum SyntaxKind {
     // --- nodes: statements inside a behavior body / block ---
     LET_STMT,
     LET_DESTRUCTURE,    // let <pattern> = e
-    REQUIRE_STMT,
+    GUARD_STMT,
 
     // --- nodes: binding patterns (a `let` statement, a helper or lambda parameter) ---
     PATTERN_NAME,       // x
@@ -180,14 +181,14 @@ public enum SyntaxKind {
             case INVARIANT_KW -> "`invariant`";
             case AS_KW -> "`as`";
             case LET_KW -> "`let`";
-            case REQUIRE_KW -> "`require`";
+            case GUARD_KW -> "`guard`";
             case ELSE_KW -> "`else`";
             case TRUE_KW -> "`true`";
             case FALSE_KW -> "`false`";
             case IF_KW -> "`if`";
             case THEN_KW -> "`then`";
             case BEHAVIOR_KW -> "`behavior`";
-            case REQUIRES_KW -> "`requires`";
+            case DEPENDS_KW -> "`depends`";
             case CONSTRUCTS_KW -> "`constructs`";
             case MATCH_KW -> "`match`";
             case WITH_KW -> "`with`";

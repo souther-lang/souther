@@ -36,7 +36,7 @@ public final class HelperTyping {
      * Type-checks every helper fn standalone against its own declared parameter types (spec 13.1).
      * Calls to other helpers in the body are expanded first, so what is left is builtins and
      * injected behaviors, which {@code reqSigs} resolves. The construction-permission and
-     * {@code requires} checks are the caller's (the helper is inlined there), so they are not
+     * {@code depends on} checks are the caller's (the helper is inlined there), so they are not
      * repeated here.
      */
     static void checkHelpers(HelperInliner inliner, Symbols symbols,

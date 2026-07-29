@@ -310,7 +310,7 @@ class UnresolvedNamesTest {
                 "a composition whose stage nobody can name is not emitted");
     }
 
-    /** One mistake in a `requires`, one diagnostic: the fn's trailing parameters are named by the
+    /** One mistake in a `depends on`, one diagnostic: the fn's trailing parameters are named by the
      * clause, so a clause that names nothing leaves nothing to hold them against. */
     @Test
     void aRequiresNamingNothingIsReportedOnceNotTwice() {
@@ -324,7 +324,7 @@ class UnresolvedNamesTest {
                 module m.a exposing ( f )
 
                 behavior f : (n: Int) -> Int
-                    requires m.b.charge
+                    depends on m.b.charge
                 let f (n, charge) = charge(n)
                 """);
         List<Diagnostic> found = Compiler.diagnoseModules(byId, Set.of()).get("a.sou");
