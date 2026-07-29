@@ -76,6 +76,10 @@ public final class NewtypeDesugar {
                             go(li.body(), symbols), li.pos());
             case Ast.If iff ->
                     new Ast.If(go(iff.cond(), symbols), go(iff.then(), symbols), go(iff.els(), symbols), iff.pos());
+            // the attempted construction is written `T(v)` too, so it is a Call until this rewrites it
+            case Ast.IfConstructed ic ->
+                    new Ast.IfConstructed(go(ic.construct(), symbols), ic.binder(),
+                            go(ic.then(), symbols), go(ic.els(), symbols), ic.pos());
             case Ast.Block b -> new Ast.Block(b.params(), go(b.body(), symbols), b.pos());
             case Ast.Tuple tup -> new Ast.Tuple(mapExprs(tup.elements(), symbols), tup.pos());
             case Ast.TupleGet tg -> new Ast.TupleGet(go(tg.tuple(), symbols), tg.index(), tg.arity(), tg.pos());

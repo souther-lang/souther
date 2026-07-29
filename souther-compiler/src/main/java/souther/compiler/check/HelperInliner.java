@@ -518,6 +518,8 @@ public final class HelperInliner {
                 yield new Ast.Match(inline(m.scrutinee()), cases, m.pos());
             }
             case Ast.If iff -> new Ast.If(inline(iff.cond()), inline(iff.then()), inline(iff.els()), iff.pos());
+            case Ast.IfConstructed ic -> new Ast.IfConstructed(inline(ic.construct()), ic.binder(),
+                    inline(ic.then()), inline(ic.els()), ic.pos());
             case Ast.LetIn li when li.value() instanceof Ast.Block lambda -> {
                 // a lambda bound to a local: register it as a scoped helper so each application in
                 // the body expands inline (β-reduction), exactly like a named helper. Its parameters
@@ -668,6 +670,12 @@ public final class HelperInliner {
                 yield new Ast.Match(rename(m.scrutinee(), subst, fnParams, at), cases, at(at, m.pos()));
             }
             case Ast.If iff -> new Ast.If(rename(iff.cond(), subst, fnParams, at), rename(iff.then(), subst, fnParams, at), rename(iff.els(), subst, fnParams, at), at(at, iff.pos()));
+            // the binder shadows in the success branch alone, so it is dropped from the substitution
+            // there and left standing over the construction and the else value
+            case Ast.IfConstructed ic -> new Ast.IfConstructed(
+                    rename(ic.construct(), subst, fnParams, at), ic.binder(),
+                    rename(ic.then(), without(subst, ic.binder()), fnParams, at),
+                    rename(ic.els(), subst, fnParams, at), at(at, ic.pos()));
             case Ast.LetIn li -> {
                 Ast.Expr value = rename(li.value(), subst, fnParams, at);
                 Ast.Expr body = rename(li.body(), without(subst, li.name()), fnParams, at);

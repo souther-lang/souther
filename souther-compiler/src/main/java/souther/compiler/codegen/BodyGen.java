@@ -550,6 +550,39 @@ final class BodyGen {
                     genExpr(iff.els(), expected);
                     code.labelBinding(end);
                 }
+                case Core.IfConstructed ic -> {
+                    // The same `__construct` a plain construction calls; what differs is where its
+                    // Result goes. orThrow would abort here — instead the Err side takes the else
+                    // branch and the Ok side binds the built value for the then branch.
+                    Core.NewData nd = ic.construct();
+                    Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
+                    ClassDesc cdType = cd(nd.typeName());
+                    emitFieldValues(flds, nd.inits(), nd.spreads());
+                    emitLine(ic);
+                    code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
+
+                    int rSlot = slot(Type.STRING);   // a reference slot for the Result
+                    code.astore(rSlot);
+                    code.aload(rSlot);
+                    code.instanceOf(CD_ResultErr);
+                    Label elseL = code.newLabel();
+                    Label end = code.newLabel();
+                    code.ifne(elseL);
+
+                    int bound = slot(nd.type());
+                    code.aload(rSlot);
+                    code.checkcast(CD_ResultOk);
+                    code.invokevirtual(CD_ResultOk, "value", MTD_Object);
+                    code.checkcast(cdType);
+                    store(code, bound, nd.type());
+                    bind(ic.binder(), bound, nd.type());
+                    genExpr(ic.then(), expected);
+                    code.goto_(end);
+
+                    code.labelBinding(elseL);
+                    genExpr(ic.els(), expected);
+                    code.labelBinding(end);
+                }
                 case Core.OptionSome s -> {
                     // `Option.some` takes the value as an Object, so a primitive element boxes here
                     // the way a list element does.
@@ -1453,6 +1486,13 @@ final class BodyGen {
                     collectFree(iff.cond(), bound, free);
                     collectFree(iff.then(), bound, free);
                     collectFree(iff.els(), bound, free);
+                }
+                case Core.IfConstructed ic -> {
+                    collectFree(ic.construct(), bound, free);
+                    Set<String> inner = new HashSet<>(bound);
+                    inner.add(ic.binder());
+                    collectFree(ic.then(), inner, free);
+                    collectFree(ic.els(), bound, free);
                 }
                 case Core.LetIn li -> {
                     collectFree(li.value(), bound, free);

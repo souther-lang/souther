@@ -779,6 +779,7 @@ public final class CstParser {
         start(SyntaxKind.REQUIRE_STMT);
         bump();   // require
         expr();
+        attemptBinder();
         expect(SyntaxKind.ELSE_KW);
         expr();
         finish();
@@ -1004,11 +1005,24 @@ public final class CstParser {
         start(SyntaxKind.IF_EXPR);
         bump();   // if
         expr();
+        attemptBinder();
         expect(SyntaxKind.THEN_KW);
         expr();
         expect(SyntaxKind.ELSE_KW);
         expr();
         finish();
+    }
+
+    /**
+     * The {@code as x} of an attempted construction — {@code if T(v) as x then … else …} and the
+     * {@code require T(v) as x else …} that desugars to it. Only the binder is read here; that what
+     * precedes it is a construction, and that the type has an invariant to attempt, are decided
+     * where the expression is known (the AST is built from a name, not a type).
+     */
+    private void attemptBinder() {
+        if (eat(SyntaxKind.AS_KW)) {
+            expect(SyntaxKind.IDENT);
+        }
     }
 
     /**
