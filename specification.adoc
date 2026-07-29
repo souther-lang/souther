@@ -690,6 +690,22 @@ A case names a data; an inline record MUST NOT be written in a case position. A 
 
 *A case value is a value of its sum.* As in functional languages, a value of a case type (e.g. `+Submitted+`) may be used transparently wherever its sum type (`+BusinessTrip+`) is expected — field assignment, argument, or return value. Only the upward direction (case→sum) is allowed; the downward direction (sum→specific case) requires `+match+`. A nested sum (`+data OwnCompany = Reimbursement | Advance+` being a case of `+CostBearer+`) is decided the same way, folding to the leaf case.
 
+*What holds of every case is a property of the sum.* A sum has no fields of its own, so reading one is an error and the value must be opened with `+match+` — except for a field that *every* case spreads (<<field-spread>>): the sum exposes the fields of a data all of its cases include, and `+d.id+` reads it without opening the value.
+
+[,text]
+----
+data DocumentCommon = { id: String }
+data Draft = { ...DocumentCommon }
+data Sent  = { ...DocumentCommon, at: DateTime }
+data Document = Draft | Sent
+
+let idOf (d: Document): String = d.id
+----
+
+The shared part is what the author wrote: a spread is nominal (<<field-spread>>, ADR-0012), so two cases that happen to declare a field of the same name have not shared it, and reading it stays an error. A spread reached through another spread counts, and a case that is itself a sum contributes its own leaves. When a case stops spreading the common data the field is no longer exposed, and the error appears at the read.
+
+The read is all this gives. A sum is still not assignment-compatible with the data its cases spread, and it is still opened with `+match+` to construct anything from it.
+
 [#unit-data]
 === Unit data
 
@@ -2393,6 +2409,8 @@ A single-value newtype over an ordered type implements `+Comparable+` against it
 === Sum data
 
 Generated as a sealed interface and final implementation classes. If a case is a named data, its final record class implements the sealed interface. A unit data is generated as a record with no components, holding its one value in a shared instance — so a Java `+switch+` deconstructs it as `+case 承認済み()+` next to the product cases (<<jvm-product>>).
+
+A field every case spreads (<<sum-data>>) is declared on the sealed interface as an abstract accessor, which each case record's accessor of the same name implements. Java reads it off the sum the same way Souther does, without a `+switch+`.
 
 A case may itself be a sum (<<sum-data>>), and then its interface extends the outer one. Only that one step is emitted: interface inheritance carries the rest, so a leaf is a value of every sum above it without being named in any of them. The relation has to exist because the rest of the language already reads it that way — the checker folds a nested sum to its leaves to judge a case, and the derived codec dispatches over those same leaves, so a decoder hands back a leaf where the outer sum is what was asked for.
 

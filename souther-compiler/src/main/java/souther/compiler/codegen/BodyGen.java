@@ -176,7 +176,13 @@ final class BodyGen {
          * (spec 8.5, 19.2).
          */
         private void emitFieldRead(CodeBuilder code, TypeName ownerName, String field, Type ft) {
-            code.invokevirtual(cd(ownerName), field, MethodTypeDesc.of(jvmType(ft)));
+            MethodTypeDesc mtd = MethodTypeDesc.of(jvmType(ft));
+            if (symbols.get(ownerName) instanceof Ast.SumData) {
+                // a field every case spreads is declared on the sum's sealed interface (issue #160)
+                code.invokeinterface(cd(ownerName), field, mtd);
+            } else {
+                code.invokevirtual(cd(ownerName), field, mtd);
+            }
         }
 
         /** Opens a single-value newtype on the stack to its underlying value (recursively, so a

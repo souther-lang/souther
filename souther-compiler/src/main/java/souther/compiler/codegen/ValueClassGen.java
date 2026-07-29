@@ -166,6 +166,12 @@ final class ValueClassGen {
                 cb.withInterfaceSymbols(ifaces);
             }
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
+            // A field every case spreads is readable on the sum (issue #160): declared here, and
+            // implemented by each case record's accessor of the same name and descriptor.
+            for (Map.Entry<String, Type> e : TypeOps.commonSpreadFields(sum, symbols).entrySet()) {
+                cb.withMethod(e.getKey(), MethodTypeDesc.of(jvmType(e.getValue())),
+                        ClassFile.ACC_PUBLIC | ClassFile.ACC_ABSTRACT, mb -> { });
+            }
             sum.decoder().ifPresent(disc -> {
                 codec.emitCodecFactory(cb, "decoder", CD_RDecoder, cd(sum.name() + "$Dec"), CodecGen.decoderSig(cdX, true));
                 if (codec.jsonCompatible(sum.name())) codec.emitSourceFactory(cb, sum.name(), CodecGen.Src.JSON, true);

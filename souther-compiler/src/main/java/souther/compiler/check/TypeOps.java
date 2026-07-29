@@ -554,6 +554,70 @@ public final class TypeOps {
         return false;
     }
 
+    /**
+     * The fields a sum exposes: those contributed by a data that every one of its cases spreads,
+     * transitively. What holds of every case is a property of the sum, and a spread is nominal
+     * (ADR-0012), so what makes the fields shared is that the author wrote `...Common` in each case —
+     * not that two cases happen to agree on a field name, which would be the structural reading
+     * ADR-0012 declines. Empty when the cases share no spread, so the read stays the error it is.
+     */
+    public static Map<String, Type> commonSpreadFields(Ast.SumData sum, Symbols symbols) {
+        return commonSpreadFields(leafCases(sum, symbols), symbols);
+    }
+
+    /** As {@link #commonSpreadFields(Ast.SumData, Symbols)}, for cases already flattened to leaves. */
+    public static Map<String, Type> commonSpreadFields(List<TypeName> cases, Symbols symbols) {
+        if (cases == null || cases.isEmpty()) {
+            return Map.of();
+        }
+        Set<TypeName> common = null;
+        for (TypeName c : cases) {
+            Set<TypeName> spreads = symbols.get(c) instanceof Ast.Data d
+                    ? spreadAncestors(d, symbols) : Set.of();
+            if (common == null) {
+                common = new LinkedHashSet<>(spreads);
+            } else {
+                common.retainAll(spreads);
+            }
+            if (common.isEmpty()) {
+                return Map.of();
+            }
+        }
+        Map<String, Type> fields = new LinkedHashMap<>();
+        for (TypeName ancestor : common) {
+            if (symbols.get(ancestor) instanceof Ast.Data d) {
+                fields.putAll(fieldTypes(d, symbols));
+            }
+        }
+        return fields;
+    }
+
+    /** A sum's leaf cases in declaration order, nested sums flattened where they are written. */
+    public static List<TypeName> leafCases(Ast.SumData sum, Symbols symbols) {
+        Set<TypeName> leaves = new LinkedHashSet<>();
+        for (TypeName c : caseNames(sum)) {
+            leaves.addAll(leafCases(Type.ref(c), symbols));
+        }
+        return List.copyOf(leaves);
+    }
+
+    /** Every data reachable from {@code data} through spreads, transitively — the set two cases are
+     * intersected on. The data itself is not one of them: a case is not its own shared part. */
+    private static Set<TypeName> spreadAncestors(Ast.Data data, Symbols symbols) {
+        Set<TypeName> out = new LinkedHashSet<>();
+        collectSpreadAncestors(data, symbols, out);
+        return out;
+    }
+
+    private static void collectSpreadAncestors(Ast.Data data, Symbols symbols, Set<TypeName> out) {
+        for (Ast.Name inc : data.includes()) {
+            Ast.Data included = spreadTarget(inc, symbols);
+            if (included != null && out.add(inc.denotes())) {
+                collectSpreadAncestors(included, symbols, out);
+            }
+        }
+    }
+
     /** All invariants that apply to a data: included data's invariants first, then its own. */
     public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Symbols symbols) {
         List<Ast.Expr> invs = new ArrayList<>();
