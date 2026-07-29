@@ -118,12 +118,19 @@ public final class Elaborator {
                 Type annotation = annotatedType(li, ctx.symbols());
                 Core value;
                 Type bindType;
-                if (isFunctionSelection(li.value())) {
+                if (annotation instanceof Type.FnOf declared && producesFunction(li.value())) {
+                    // the written type says what the function takes, so nothing has to be read off
+                    // the applications — which is what a function passed on rather than applied has
+                    // none of, and what a function applied only inside a lambda cannot give
+                    value = elaborateFunctionValue(li.value(), declared.params(), env, ctx);
+                    checkLetAnnotation(li, declared, value.type(), ctx.symbols());
+                    bindType = declared;
+                } else if (isFunctionSelection(li.value())) {
                     // a lambda bound to a local that could not be inlined (e.g. chosen by an `if`):
                     // it is a first-class function value. Its parameter types are unannotated, so
                     // infer them from how the body applies it (spec §blocks).
                     if (annotation != null) {
-                        throw functionAnnotation(li);   // no ordinary type describes a function value
+                        throw functionAnnotation(li);   // an ordinary type does not describe a function
                     }
                     List<Type> paramTypes = inferFnParamTypes(li.name(), li.body(), env, ctx);
                     value = elaborateFunctionValue(li.value(), paramTypes, env, ctx);
@@ -581,13 +588,29 @@ public final class Elaborator {
                         + " type may be written only in a helper's parameter (spec 13.1)");
     }
 
-    /** Rejects an annotation on a lambda binding, read on the surface body: lowering expands such a
-     * binding away at its applications, so by the time the body is checked the annotation is gone. */
-    static void rejectAnnotatedLambdaBindings(Ast.Expr e) {
-        if (e instanceof Ast.LetIn li && li.annotation() != null && li.value() instanceof Ast.Block) {
-            throw functionAnnotation(li);
+    /**
+     * Checks an annotation on a lambda binding, read on the surface body: lowering expands such a
+     * binding away at its applications, so by the time the body is checked the annotation is gone.
+     * What it states is still held against the lambda here — a function type, of the arity the lambda
+     * binds. An ordinary type does not describe a lambda at all.
+     */
+    static void checkAnnotatedLambdaBindings(Ast.Expr e, Symbols symbols) {
+        if (e instanceof Ast.LetIn li && li.annotation() != null
+                && li.value() instanceof Ast.Block lambda) {
+            Ast.FnType declared = li.annotation().asFn();
+            if (declared == null) {
+                throw functionAnnotation(li);
+            }
+            if (declared.params().size() != lambda.params().size()) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.fn.lambdaarity").title("check.fn.title")
+                                .at(lambda.pos())
+                                .args(lambda.params().size(), declared.params().size()).build(),
+                        "this lambda takes " + lambda.params().size()
+                                + " parameter(s) but its type states " + declared.params().size());
+            }
         }
-        TypeChecker.forEachChild(e, Elaborator::rejectAnnotatedLambdaBindings);
+        TypeChecker.forEachChild(e, sub -> checkAnnotatedLambdaBindings(sub, symbols));
     }
 
     /** A function value that could not be inlined away and so becomes a first-class {@code Fn}: a

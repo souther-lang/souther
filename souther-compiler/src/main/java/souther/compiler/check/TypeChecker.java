@@ -349,7 +349,7 @@ public final class TypeChecker {
         // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {
-            collect(errors, abandoned, () -> Elaborator.rejectAnnotatedLambdaBindings(fn.body()));
+            collect(errors, abandoned, () -> Elaborator.checkAnnotatedLambdaBindings(fn.body(), symbols));
         }
         // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
         // helper is checked standalone against its own parameter types, which its body settles
