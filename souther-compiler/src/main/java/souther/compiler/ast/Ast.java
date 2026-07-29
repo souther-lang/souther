@@ -247,24 +247,34 @@ public interface Ast {
      * carries no type ({@code type} is null). {@code typeFromPattern} marks a type read off a
      * constructor pattern in parameter position rather than written beside the name — a behavior's
      * implementation may write the pattern, and its type still comes from the behavior. */
-    record FnParam(String name, ParamType type, boolean typeFromPattern, SourcePos pos) implements Ast {
+    record FnParam(String name, RetType type, boolean typeFromPattern, SourcePos pos) implements Ast {
         /** A parameter whose type, if any, the author wrote (the common case). */
-        public FnParam(String name, ParamType type, SourcePos pos) {
+        public FnParam(String name, RetType type, SourcePos pos) {
             this(name, type, false, pos);
         }
     }
 
-    /** The written type of a helper {@code fn} parameter: an ordinary type ({@link RetType}) or a
-     * function type {@link FnType}. Function types appear only in {@code fn} parameter position
-     * (spec §fn-declaration); nowhere else in the grammar accepts one. */
-    sealed interface ParamType extends Ast permits RetType, FnType {}
+    /**
+     * One term of a written type: a reference to a named type, or a function type. A type position
+     * admits either, so what a name means does not depend on where it was written; whether a
+     * function may stand in a given position is decided by what that position requires of a type,
+     * not by the grammar.
+     */
+    sealed interface TypeTerm extends Ast permits TypeRef, FnType {}
 
-    /** A function type {@code (A, ...) -> B} written on a helper {@code fn} parameter. The
-     * parameters and result are ordinary types; a nested function type is not written. */
-    record FnType(List<RetType> params, RetType result, SourcePos pos) implements ParamType {}
+    /** A function type {@code (A, ...) -> B}. Its parameters and result are whole types, so a
+     * function may take one and may return one. */
+    record FnType(List<RetType> params, RetType result, SourcePos pos) implements TypeTerm {}
 
-    /** A behavior return type: the output sum — one or more unmarked domain cases (spec 12.2). */
-    record RetType(List<TypeRef> cases, SourcePos pos) implements ParamType {}
+    /** A written type: one term, or the unmarked sum of several (spec 12.2). */
+    record RetType(List<TypeTerm> cases, SourcePos pos) implements Ast {
+
+        /** The function type this stands for, or null when it is not a lone function type. A sum of
+         * a function with anything else is not one, and has no case to be told apart by. */
+        public FnType asFn() {
+            return cases.size() == 1 && cases.get(0) instanceof FnType fn ? fn : null;
+        }
+    }
 
     /** A top-level data definition: product, sum, or unit. */
     sealed interface Def extends Ast permits Data, SumData, UnitData {
@@ -310,7 +320,7 @@ public interface Ast {
     record Variant(String tag, Name caseType, SourcePos pos) implements Ast {}
 
     /** A field: a role name and its type. */
-    record Field(String name, TypeRef type, SourcePos pos) implements Ast {}
+    record Field(String name, TypeTerm type, SourcePos pos) implements Ast {}
 
     /**
      * A named type reference, optionally with one type argument (e.g. {@code List<T>}). When
@@ -324,15 +334,15 @@ public interface Ast {
      * a written type a second time — nor has to know which module the reference was written in, which
      * is what a second resolution needed to get right.
      */
-    record TypeRef(String name, TypeRef arg, List<TypeRef> tupleElems, Type denotes, SourcePos pos)
-            implements Ast {
+    record TypeRef(String name, TypeTerm arg, List<TypeTerm> tupleElems, Type denotes, SourcePos pos)
+            implements TypeTerm {
         /** A reference as the parser read it, before the resolve pass has said what it denotes. */
-        public TypeRef(String name, TypeRef arg, List<TypeRef> tupleElems, SourcePos pos) {
+        public TypeRef(String name, TypeTerm arg, List<TypeTerm> tupleElems, SourcePos pos) {
             this(name, arg, tupleElems, null, pos);
         }
 
         /** An ordinary (non-tuple) reference. */
-        public TypeRef(String name, TypeRef arg, SourcePos pos) {
+        public TypeRef(String name, TypeTerm arg, SourcePos pos) {
             this(name, arg, null, null, pos);
         }
 
@@ -517,7 +527,7 @@ public interface Ast {
      * declared type, bound to the argument at the call site) is not: the argument's own type and
      * the call-site check already cover it.
      */
-    record LetIn(String name, Expr value, ParamType declaredType, boolean annotated, Name opens,
+    record LetIn(String name, Expr value, RetType declaredType, boolean annotated, Name opens,
                  Expr body, SourcePos pos) implements Expr {
         /** An ordinary {@code let x = e}: the bound name takes {@code e}'s inferred type. */
         public LetIn(String name, Expr value, Expr body, SourcePos pos) {
@@ -525,7 +535,7 @@ public interface Ast {
         }
 
         /** A binding carrying an inlined helper parameter's declared type. */
-        public LetIn(String name, Expr value, ParamType declaredType, Expr body, SourcePos pos) {
+        public LetIn(String name, Expr value, RetType declaredType, Expr body, SourcePos pos) {
             this(name, value, declaredType, false, null, body, pos);
         }
 

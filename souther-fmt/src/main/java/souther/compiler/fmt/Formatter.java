@@ -449,14 +449,9 @@ public final class Formatter {
         for (SyntaxNode p : childNodes(n, SyntaxKind.FN_PARAM)) {
             SyntaxNode pat = optionalPatternChild(p);
             Doc d = pat == null ? text(firstIdent(p)) : pattern(pat);
-            var fnType = p.child(SyntaxKind.FN_TYPE);
-            if (fnType.isPresent()) {
-                d = concat(d, text(": "), fnType(fnType.get()));
-            } else {
-                var rt = p.child(SyntaxKind.RET_TYPE);
-                if (rt.isPresent()) {
-                    d = concat(d, text(": "), retType(rt.get()));
-                }
+            var rt = p.child(SyntaxKind.RET_TYPE);
+            if (rt.isPresent()) {
+                d = concat(d, text(": "), retType(rt.get()));
             }
             params.add(d);
         }
@@ -487,7 +482,7 @@ public final class Formatter {
         List<Doc> cases = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
             if (isTypeNode(c.kind())) {
-                cases.add(typeRef(c));
+                cases.add(typeTerm(c));
             }
         }
         Doc d = Doc.join(text(" | "), cases);
@@ -500,7 +495,7 @@ public final class Formatter {
             List<Doc> elems = new ArrayList<>();
             for (SyntaxNode c : n.childNodes()) {
                 if (isTypeNode(c.kind())) {
-                    elems.add(typeRef(c));
+                    elems.add(typeTerm(c));
                 }
             }
             return concat(text("("), Doc.join(text(", "), elems), text(")"));
@@ -517,14 +512,19 @@ public final class Formatter {
         List<Doc> typeArgs = new ArrayList<>();
         for (SyntaxNode c : args.get().childNodes()) {
             if (isTypeNode(c.kind())) {
-                typeArgs.add(typeRef(c));
+                typeArgs.add(typeTerm(c));
             }
         }
         return concat(name, text("<"), Doc.join(text(", "), typeArgs), text(">"));
     }
 
     private static boolean isTypeNode(SyntaxKind k) {
-        return k == SyntaxKind.TYPE_REF || k == SyntaxKind.TUPLE_TYPE;
+        return k == SyntaxKind.TYPE_REF || k == SyntaxKind.TUPLE_TYPE || k == SyntaxKind.FN_TYPE;
+    }
+
+    /** One term of a written type. A function type reads as itself wherever a type goes. */
+    private Doc typeTerm(SyntaxNode n) {
+        return n.kind() == SyntaxKind.FN_TYPE ? fnType(n) : typeRef(n);
     }
 
     // --- expressions ---

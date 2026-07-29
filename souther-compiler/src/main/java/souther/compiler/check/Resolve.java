@@ -208,15 +208,30 @@ public final class Resolve {
     private List<Ast.Field> fields(List<Ast.Field> fields) {
         List<Ast.Field> out = new ArrayList<>();
         for (Ast.Field f : fields) {
-            out.add(new Ast.Field(f.name(), typeRef(f.type()), f.pos()));
+            out.add(new Ast.Field(f.name(), typeTerm(f.type()), f.pos()));
         }
         return out;
     }
 
-    private Ast.ParamType paramType(Ast.ParamType t) {
+    private Ast.RetType paramType(Ast.RetType t) {
+        return retType(t);
+    }
+
+    private Ast.RetType retType(Ast.RetType ret) {
+        if (ret == null) {
+            return null;
+        }
+        List<Ast.TypeTerm> cases = new ArrayList<>();
+        for (Ast.TypeTerm c : ret.cases()) {
+            cases.add(typeTerm(c));
+        }
+        return new Ast.RetType(cases, ret.pos());
+    }
+
+    private Ast.TypeTerm typeTerm(Ast.TypeTerm t) {
         return switch (t) {
             case null -> null;
-            case Ast.RetType rt -> retType(rt);
+            case Ast.TypeRef ref -> typeRef(ref);
             case Ast.FnType ft -> {
                 List<Ast.RetType> ps = new ArrayList<>();
                 for (Ast.RetType p : ft.params()) {
@@ -227,29 +242,18 @@ public final class Resolve {
         };
     }
 
-    private Ast.RetType retType(Ast.RetType ret) {
-        if (ret == null) {
-            return null;
-        }
-        List<Ast.TypeRef> cases = new ArrayList<>();
-        for (Ast.TypeRef c : ret.cases()) {
-            cases.add(typeRef(c));
-        }
-        return new Ast.RetType(cases, ret.pos());
-    }
-
     /** A written type reference, with what it denotes decided here — once, and in the module that
      * wrote it, so no later reader has to know where it was written. */
     private Ast.TypeRef typeRef(Ast.TypeRef ref) {
         if (ref == null || ref.denotes() != null) {
             return ref;
         }
-        Ast.TypeRef arg = typeRef(ref.arg());
-        List<Ast.TypeRef> elems = null;
+        Ast.TypeTerm arg = typeTerm(ref.arg());
+        List<Ast.TypeTerm> elems = null;
         if (ref.tupleElems() != null) {
             elems = new ArrayList<>();
-            for (Ast.TypeRef e : ref.tupleElems()) {
-                elems.add(typeRef(e));
+            for (Ast.TypeTerm e : ref.tupleElems()) {
+                elems.add(typeTerm(e));
             }
         }
         Ast.TypeRef resolved = new Ast.TypeRef(ref.name(), arg, elems, ref.pos());

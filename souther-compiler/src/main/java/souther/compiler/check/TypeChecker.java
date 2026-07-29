@@ -247,10 +247,14 @@ public final class TypeChecker {
                 specNames.add(b.name());
                 SpecChecker.rejectAnonymousUnionParams(spec);
                 SpecChecker.rejectTupleIO(spec);
+                SpecChecker.rejectFunctionIO(spec, symbols);
                 SpecChecker.rejectNonBoundaryMapKeyIO(spec, symbols);
                 List<String> outputCases = new ArrayList<>();
-                for (Ast.TypeRef t : spec.ret().cases()) {
-                    outputCases.add(t.name());
+                for (Ast.TypeTerm t : spec.ret().cases()) {
+                    // a function output is refused as unrepresentable; it names no output case
+                    if (t instanceof Ast.TypeRef ref) {
+                        outputCases.add(ref.name());
+                    }
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 List<String> required = new ArrayList<>();
@@ -345,7 +349,7 @@ public final class TypeChecker {
         // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {
-            collect(errors, abandoned, () -> Elaborator.rejectAnnotatedLambdaBindings(fn.body()));
+            collect(errors, abandoned, () -> Elaborator.checkAnnotatedLambdaBindings(fn.body(), symbols));
         }
         // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
         // helper is checked standalone against its own parameter types, which its body settles

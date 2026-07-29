@@ -466,30 +466,30 @@ public final class CstParser {
         finish();
     }
 
-    /** A helper parameter's type: a function type when it opens a parameter list ending in {@code ->},
-     * else an ordinary type — which may itself be a parenthesised tuple ({@code (String, Int)}, the
-     * entry type of {@code Map.toList}). Both start with {@code (} and read alike up to the closing
-     * paren, so the token after it decides. */
+    /** A helper parameter's type. A function type is an ordinary type form, so this is what every
+     * other type position reads; the name is kept for the one caller that reads a parameter. */
     private void paramType() {
-        if (at(SyntaxKind.LPAREN) && atFnTypeParams()) {
-            start(SyntaxKind.FN_TYPE);
-            expect(SyntaxKind.LPAREN);
-            if (!at(SyntaxKind.RPAREN)) {
-                retType();
-                while (eat(SyntaxKind.COMMA)) {
-                    if (at(SyntaxKind.RPAREN)) {
-                        break;
-                    }
-                    retType();
+        retType();
+    }
+
+    /** A function type {@code (A, B) -> C}. Its result is a whole type, so {@code ->} is
+     * right-associative and {@code (A) -> B | C} keeps reading as {@code (A) -> (B | C)}. */
+    private void fnType() {
+        start(SyntaxKind.FN_TYPE);
+        expect(SyntaxKind.LPAREN);
+        if (!at(SyntaxKind.RPAREN)) {
+            retType();
+            while (eat(SyntaxKind.COMMA)) {
+                if (at(SyntaxKind.RPAREN)) {
+                    break;
                 }
+                retType();
             }
-            expect(SyntaxKind.RPAREN);
-            expect(SyntaxKind.ARROW);
-            retType();
-            finish();
-        } else {
-            retType();
         }
+        expect(SyntaxKind.RPAREN);
+        expect(SyntaxKind.ARROW);
+        retType();
+        finish();
     }
 
     // --- example ---
@@ -610,6 +610,12 @@ public final class CstParser {
     }
 
     private void typeRef() {
+        if (at(SyntaxKind.LPAREN) && atFnTypeParams()) {
+            // A function type and a tuple type both open with `(` and read alike up to the closing
+            // paren, so the token after it decides.
+            fnType();
+            return;
+        }
         if (at(SyntaxKind.LPAREN)) {
             start(SyntaxKind.TUPLE_TYPE);
             bump();   // (

@@ -61,6 +61,34 @@ public final class Elaborator {
      * empty collection has its accumulator pinned by context before the step is checked.
      */
     public static Core elaborate(Ast.Expr e, Map<String, Type> env, CheckContext ctx, Type expected) {
+        return equatableCollections(elaborating(e, env, ctx, expected));
+    }
+
+    /**
+     * Refuses a {@code Set} or a {@code Map} that would have to compare a function. Asked of what
+     * elaboration decided rather than of what was written, because such a collection need not be
+     * written to exist: {@code List.distinct} grows a seen-set of its elements, and only the
+     * elaborated type says what those are.
+     */
+    private static Core equatableCollections(Core c) {
+        TypeOps.UncomparableIn bad = TypeOps.uncomparableCollection(c.type());
+        if (bad == null) {
+            return c;
+        }
+        // which collection asked is part of the answer: a Set asks whether two elements are equal and
+        // a Map whether two keys are, and the report says which of the two it was
+        String key = bad instanceof TypeOps.UncomparableIn.MapKey
+                ? "check.map.key.function" : "check.set.function";
+        String what = bad instanceof TypeOps.UncomparableIn.MapKey ? "key" : "element";
+        throw CompileException.of(
+                Diagnostic.of(null, key).title("check.boundary.title")
+                        .at(c.pos()).args(Type.show(bad.type())).build(),
+                "this collection would have to compare " + Type.show(bad.type()) + " as its " + what
+                        + ", and a function has no value to compare");
+    }
+
+    private static Core elaborating(Ast.Expr e, Map<String, Type> env, CheckContext ctx,
+                                    Type expected) {
         return switch (e) {
             case Ast.IntLit x -> new Core.Int(x.value(), Type.INT, x.pos());
             case Ast.DecimalLit x -> new Core.Decimal(x.value(), Type.DECIMAL, x.pos());
@@ -118,12 +146,19 @@ public final class Elaborator {
                 Type annotation = annotatedType(li, ctx.symbols());
                 Core value;
                 Type bindType;
-                if (isFunctionSelection(li.value())) {
+                if (annotation instanceof Type.FnOf declared && producesFunction(li.value())) {
+                    // the written type says what the function takes, so nothing has to be read off
+                    // the applications — which is what a function passed on rather than applied has
+                    // none of, and what a function applied only inside a lambda cannot give
+                    value = elaborateFunctionValue(li.value(), declared.params(), env, ctx);
+                    checkLetAnnotation(li, declared, value.type(), ctx.symbols());
+                    bindType = declared;
+                } else if (isFunctionSelection(li.value())) {
                     // a lambda bound to a local that could not be inlined (e.g. chosen by an `if`):
                     // it is a first-class function value. Its parameter types are unannotated, so
                     // infer them from how the body applies it (spec §blocks).
                     if (annotation != null) {
-                        throw functionAnnotation(li);   // no ordinary type describes a function value
+                        throw functionAnnotation(li);   // an ordinary type does not describe a function
                     }
                     List<Type> paramTypes = inferFnParamTypes(li.name(), li.body(), env, ctx);
                     value = elaborateFunctionValue(li.value(), paramTypes, env, ctx);
@@ -150,6 +185,10 @@ public final class Elaborator {
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
             // would need a runtime closure (spec 12.5)
+            // a lambda where a function is expected is that function: the context said what it takes,
+            // so nothing has to be read off its applications
+            case Ast.Block block when expected instanceof Type.FnOf want ->
+                    elaborateFunctionValue(block, want.params(), env, ctx);
             case Ast.Block block -> throw CompileException.of(
                     Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
                             .at(block.pos()).build(),
@@ -283,8 +322,11 @@ public final class Elaborator {
                 }
                 List<Core> elements = new ArrayList<>();
                 Type elem = null;
+                // an expected list type reaches each element, so a list of functions says what its
+                // elements take without every one of them being annotated
+                Type want = expected instanceof Type.ListOf le ? le.element() : null;
                 for (Ast.Expr el : lit.elements()) {
-                    Core c = elaborate(el, env, ctx);
+                    Core c = elaborate(el, env, ctx, want);
                     elements.add(c);
                     elem = elem == null ? c.type() : BottomInfer.unifyElem(elem, c.type(), lit.pos());
                 }
@@ -581,13 +623,29 @@ public final class Elaborator {
                         + " type may be written only in a helper's parameter (spec 13.1)");
     }
 
-    /** Rejects an annotation on a lambda binding, read on the surface body: lowering expands such a
-     * binding away at its applications, so by the time the body is checked the annotation is gone. */
-    static void rejectAnnotatedLambdaBindings(Ast.Expr e) {
-        if (e instanceof Ast.LetIn li && li.annotation() != null && li.value() instanceof Ast.Block) {
-            throw functionAnnotation(li);
+    /**
+     * Checks an annotation on a lambda binding, read on the surface body: lowering expands such a
+     * binding away at its applications, so by the time the body is checked the annotation is gone.
+     * What it states is still held against the lambda here — a function type, of the arity the lambda
+     * binds. An ordinary type does not describe a lambda at all.
+     */
+    static void checkAnnotatedLambdaBindings(Ast.Expr e, Symbols symbols) {
+        if (e instanceof Ast.LetIn li && li.annotation() != null
+                && li.value() instanceof Ast.Block lambda) {
+            Ast.FnType declared = li.annotation().asFn();
+            if (declared == null) {
+                throw functionAnnotation(li);
+            }
+            if (declared.params().size() != lambda.params().size()) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.fn.lambdaarity").title("check.fn.title")
+                                .at(lambda.pos())
+                                .args(lambda.params().size(), declared.params().size()).build(),
+                        "this lambda takes " + lambda.params().size()
+                                + " parameter(s) but its type states " + declared.params().size());
+            }
         }
-        TypeChecker.forEachChild(e, Elaborator::rejectAnnotatedLambdaBindings);
+        TypeChecker.forEachChild(e, sub -> checkAnnotatedLambdaBindings(sub, symbols));
     }
 
     /** A function value that could not be inlined away and so becomes a first-class {@code Fn}: a
@@ -604,15 +662,14 @@ public final class Elaborator {
     static List<Type> inferFnParamTypes(String name, Ast.Expr body, Map<String, Type> env,
                                                 CheckContext ctx) {
         List<List<Type>> uses = new ArrayList<>();
-        collectApplications(name, body, env, ctx, uses);
+        collectApplications(name, body, env, ctx, uses, Set.of());
         if (uses.isEmpty()) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.fn.noinfer").title("check.fn.title")
                             .at(body.pos()).args(name).build(),
-                    "cannot infer the type of the function `" + name + "`: apply it (as `" + name
-                            + "(x)`) at least once so its parameter types are known. A function passed"
-                            + " on rather than applied — e.g. to a combinator — must be written inline"
-                            + " instead (`map(xs, x -> ...)`)");
+                    "cannot infer the type of the function `" + name + "`: write its type (`let "
+                            + name + ": (Int) -> Bool = ...`), or apply it in this scope so the"
+                            + " parameter types can be read off the application");
         }
         List<Type> first = uses.get(0);
         for (List<Type> u : uses) {
@@ -627,17 +684,117 @@ public final class Elaborator {
         return first;
     }
 
-    /** Collects the argument-type lists of every application {@code name(args)} in {@code e}. */
+    /**
+     * Collects the argument-type lists of every application {@code name(args)} in {@code e} that this
+     * scope can read.
+     *
+     * <p>{@code inner} names what a binder below this point has introduced — a lambda's parameters, a
+     * {@code let}, a {@code match} arm's binding. An application whose arguments reach one of those is
+     * not in this scope and says nothing about the parameter types here, which is exactly where a
+     * combinator's own expansion puts the application. It is skipped rather than typed: typing it
+     * would report a name that is bound, only not here, and the report would name what the expansion
+     * renamed it to.
+     *
+     * <p>Every other application is typed against {@code env}, so a mistake inside its arguments is
+     * still reported as the mistake it is.
+     */
     static void collectApplications(String name, Ast.Expr e, Map<String, Type> env,
-                                            CheckContext ctx, List<List<Type>> out) {
-        if (e instanceof Ast.Call call && call.fn().equals(name)) {
+                                            CheckContext ctx, List<List<Type>> out,
+                                            Set<String> inner) {
+        if (e instanceof Ast.Call call && call.fn().equals(name)
+                && call.args().stream().noneMatch(a -> reaches(a, inner))) {
             List<Type> argTypes = new ArrayList<>();
             for (Ast.Expr a : call.args()) {
                 argTypes.add(typeOf(a, env, ctx));
             }
             out.add(argTypes);
         }
-        TypeChecker.forEachChild(e, sub -> collectApplications(name, sub, env, ctx, out));
+        switch (e) {
+            case Ast.Block b -> collectApplications(name, b.body(), env, ctx, out,
+                    with(inner, b.params()));
+            case Ast.LetIn li -> {
+                collectApplications(name, li.value(), env, ctx, out, inner);
+                collectApplications(name, li.body(), env, ctx, out, with(inner, List.of(li.name())));
+            }
+            case Ast.IfConstructed ic -> {
+                collectApplications(name, ic.construct(), env, ctx, out, inner);
+                collectApplications(name, ic.then(), env, ctx, out,
+                        with(inner, List.of(ic.binder())));
+                collectApplications(name, ic.els(), env, ctx, out, inner);
+            }
+            case Ast.Match m -> {
+                collectApplications(name, m.scrutinee(), env, ctx, out, inner);
+                for (Ast.Case c : m.cases()) {
+                    collectApplications(name, c.body(), env, ctx, out,
+                            c.binding() == null ? inner : with(inner, List.of(c.binding())));
+                }
+            }
+            default -> TypeChecker.forEachChild(e,
+                    sub -> collectApplications(name, sub, env, ctx, out, inner));
+        }
+    }
+
+    private static Set<String> with(Set<String> names, List<String> added) {
+        if (added.isEmpty()) {
+            return names;
+        }
+        Set<String> out = new HashSet<>(names);
+        out.addAll(added);
+        return out;
+    }
+
+    /**
+     * Whether {@code e} reads a name a binder below the inference point introduced — that is, whether
+     * its <em>free</em> variables meet {@code inner}. A binder inside {@code e} takes its own name off
+     * the set for what it covers, so a name rebound there is that binding's and not the outer one's:
+     * {@code f(match m with | Some y -> y | None -> 0)} does not read an enclosing {@code y}, and
+     * whether the case happens to spell its binding {@code y} or {@code z} decides nothing.
+     */
+    private static boolean reaches(Ast.Expr e, Set<String> inner) {
+        if (inner.isEmpty()) {
+            return false;
+        }
+        if (e instanceof Ast.Var v && inner.contains(v.name())) {
+            return true;
+        }
+        if (e instanceof Ast.Call c && inner.contains(c.fn())) {
+            return true;
+        }
+        return switch (e) {
+            case Ast.Block b -> reaches(b.body(), without(inner, b.params()));
+            case Ast.LetIn li -> reaches(li.value(), inner)
+                    || reaches(li.body(), without(inner, List.of(li.name())));
+            case Ast.IfConstructed ic -> reaches(ic.construct(), inner)
+                    || reaches(ic.then(), without(inner, List.of(ic.binder())))
+                    || reaches(ic.els(), inner);
+            case Ast.Match m -> {
+                if (reaches(m.scrutinee(), inner)) {
+                    yield true;
+                }
+                for (Ast.Case c : m.cases()) {
+                    Set<String> arm = c.binding() == null
+                            ? inner : without(inner, List.of(c.binding()));
+                    if (reaches(c.body(), arm)) {
+                        yield true;
+                    }
+                }
+                yield false;
+            }
+            default -> {
+                boolean[] found = {false};
+                TypeChecker.forEachChild(e, sub -> found[0] |= reaches(sub, inner));
+                yield found[0];
+            }
+        };
+    }
+
+    private static Set<String> without(Set<String> names, List<String> removed) {
+        if (names.isEmpty() || removed.isEmpty()) {
+            return names;
+        }
+        Set<String> out = new HashSet<>(names);
+        out.removeAll(removed);
+        return out;
     }
 
     /** Types a function value against inferred parameter types: a lambda binds its parameters and

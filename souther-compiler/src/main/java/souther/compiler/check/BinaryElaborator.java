@@ -156,6 +156,17 @@ public final class BinaryElaborator {
                 // collections (covariance), which would wrongly let `List<一般社員> == List<役職>` compare;
                 // the exemption is only the direct sum<->case scalar relationship. Unrelated types
                 // (`金額 == 数量`) have disjoint case sets and still fail.
+                // `==` is value equality, and a function value has none: comparing two would fall
+                // back to whether they are the same object, which is not a question the language asks
+                if (!TypeOps.supportsEquality(lt) || !TypeOps.supportsEquality(rt)) {
+                    Type carrier = TypeOps.supportsEquality(lt) ? rt : lt;
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.equality.function")
+                                    .title("check.compare.title")
+                                    .at(bin.pos(), 2).args(Type.show(carrier)).build(),
+                            "a function has no value to compare, so " + Type.show(carrier)
+                                    + " cannot be an operand of `==` or `/=`");
+                }
                 Set<TypeName> lCases = TypeOps.leafCases(lt, ctx.symbols());
                 Set<TypeName> rCases = TypeOps.leafCases(rt, ctx.symbols());
                 boolean caseOfSum = !lCases.isEmpty() && !rCases.isEmpty()

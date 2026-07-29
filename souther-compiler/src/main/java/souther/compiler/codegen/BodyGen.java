@@ -447,7 +447,13 @@ final class BodyGen {
             code.invokespecial(CD_ArrayList, "<init>", MTD_void);
             for (Core el : lit.elements()) {
                 code.dup();
-                box(code, genExpr(el));
+                if (el.type() instanceof Type.FnOf fn) {
+                    // a function held in a list is a value like any other, so it is materialised as
+                    // an Fn here rather than expanded into a call site it does not have
+                    emitFunctionValue(el, fn.params());
+                } else {
+                    box(code, genExpr(el));
+                }
                 code.invokevirtual(CD_ArrayList, "add", MTD_ArrayList_add);
                 code.pop();
             }

@@ -89,8 +89,9 @@ public final class ImplicitUnits {
         if (output == null) {
             return;
         }
-        for (Ast.TypeRef ref : output.cases()) {
-            if (ref.arg() == null && ref.tupleElems() == null) {
+        for (Ast.TypeTerm term : output.cases()) {
+            if (term instanceof Ast.TypeRef ref
+                    && ref.arg() == null && ref.tupleElems() == null) {
                 introduce(ref.name(), ref.pos(), declared, added);
             }
         }

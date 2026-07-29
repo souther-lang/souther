@@ -108,11 +108,11 @@ class CompileLetAnnotationTest {
         assertEquals("Int", d.diff().expectedType());
     }
 
-    // A function type may be written only in a helper's parameter position (spec 13.1), so the grammar
-    // does not admit one after the colon — the annotation is an ordinary type.
+    // A function type is an ordinary type, so it may be written after the colon like any other. The
+    // annotation is what says the lambda's parameter types, which the applications need not.
     @Test
-    void aFunctionTypeCannotBeWrittenOnALocalBinding() {
-        Diagnostic d = diagnosticOf("""
+    void aFunctionTypeMayBeWrittenOnALocalBinding() throws Exception {
+        String src = """
                 module demo
                 data In = { v: Int }
                 data Out = { v: Int }
@@ -121,8 +121,29 @@ class CompileLetAnnotationTest {
                     let f: (Int) -> Int = (x) -> x + 1
                     Out { v = f(i.v) }
                 }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object run = loader.loadClass("demo.Run" + "$Impl").getDeclaredConstructor().newInstance();
+        Object in = Codecs.decoded(loader, "demo.In", java.util.Map.of("v", 41L));
+        assertEquals(42L, ((java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out",
+                Codecs.apply(run, in))).get("v"));
+    }
+
+    // The annotation is checked against the lambda, so a parameter count it does not have is an error
+    // rather than a comment.
+    @Test
+    void anAnnotatedLambdaMustHaveTheParameterCountTheTypeStates() {
+        Diagnostic d = diagnosticOf("""
+                module demo
+                data In = { v: Int }
+                data Out = { v: Int }
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = {
+                    let f: (Int, Int) -> Int = (x) -> x + 1
+                    Out { v = f(i.v) }
+                }
                 """);
-        assertEquals("parse.expected", d.messageKey());
+        assertEquals("check.fn.lambdaarity", d.messageKey());
     }
 
     // The annotated type is the binding's type for everything downstream: the value reaches a helper

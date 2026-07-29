@@ -27,10 +27,54 @@ public final class TypeOps {
 
     private TypeOps() {}
 
-    /** Resolves a helper parameter's written type: an ordinary type or a function type. */
-    public static Type resolveParamType(Ast.ParamType t, Symbols symbols) {
+    /** Resolves a written type. Kept for the readers that name a parameter's type as such. */
+    public static Type resolveParamType(Ast.RetType t, Symbols symbols) {
+        return successType(t, symbols);
+    }
+
+    /**
+     * Whether a value of this type has an external representation — what a boundary requires of it
+     * (ADR-0004). A boundary is where a codec is derived or a value crosses one: a data's field, a
+     * newtype's base, a behavior's input and its output.
+     */
+    public static boolean isBoundaryRepresentable(Type t) {
+        return !carriesFunction(t);
+    }
+
+    /**
+     * Whether values of this type can be compared for equality — what {@code ==} requires, and what
+     * a {@code Set} requires of its element and a {@code Map} of its key (ADR-0009, ADR-0039).
+     */
+    public static boolean supportsEquality(Type t) {
+        return !carriesFunction(t);
+    }
+
+    /** Whether values of this type have an ordering — what {@code sort} and a {@code sortBy} key
+     * require of what they order. */
+    public static boolean supportsOrdering(Type t) {
+        return !carriesFunction(t);
+    }
+
+    /**
+     * The one walk the three capability predicates above share today. They are separate questions
+     * and are asked separately; that a function is the only answer to all three is a fact about the
+     * types there are now, not a statement that the three are one predicate. A type that carried an
+     * external representation but no ordering would split them, and only this method would move.
+     */
+    private static boolean carriesFunction(Type t) {
+        return Type.mentions(t, x -> x instanceof Type.FnOf);
+    }
+
+    /** The type a field's written type stands for. A field whose type is not representable at the
+     * boundary is refused where the data is checked; the type is read the same way either way. */
+    public static Type fieldType(Ast.Field f) {
+        return f.type() instanceof Ast.TypeRef ref ? ref.denotes() : resolveTerm(f.type(), null);
+    }
+
+    /** The type one written term stands for. */
+    public static Type resolveTerm(Ast.TypeTerm t, Symbols symbols) {
         return switch (t) {
-            case Ast.RetType rt -> successType(rt, symbols);
+            case Ast.TypeRef ref -> ref.denotes();
             case Ast.FnType ft -> {
                 List<Type> params = new ArrayList<>();
                 for (Ast.RetType p : ft.params()) {
@@ -44,8 +88,8 @@ public final class TypeOps {
     /** The output type of a behavior return: a single case, or a union of two or more cases. */
     public static Type successType(Ast.RetType ret, Symbols symbols) {
         List<Type> members = new ArrayList<>();
-        for (Ast.TypeRef t : ret.cases()) {
-            members.add(t.denotes());
+        for (Ast.TypeTerm t : ret.cases()) {
+            members.add(resolveTerm(t, symbols));
         }
         if (members.size() == 1) {
             return members.get(0);
@@ -224,12 +268,7 @@ public final class TypeOps {
         }
         for (Ast.FnDef fn : module.fns()) {
             for (Ast.FnParam param : fn.params()) {
-                if (param.type() instanceof Ast.RetType ret && erroneous(ret)) {
-                    return true;
-                }
-                if (param.type() instanceof Ast.FnType fnType
-                        && (fnType.params().stream().anyMatch(TypeOps::erroneous)
-                                || erroneous(fnType.result()))) {
+                if (erroneous(param.type())) {
                     return true;
                 }
             }
@@ -244,17 +283,22 @@ public final class TypeOps {
         return ret != null && ret.cases().stream().anyMatch(TypeOps::erroneous);
     }
 
-    private static boolean erroneous(Ast.TypeRef ref) {
-        if (ref == null) {
-            return false;
-        }
-        if (ref.denotes() instanceof Type.Erroneous) {
-            return true;
-        }
-        if (ref.tupleElems() != null && ref.tupleElems().stream().anyMatch(TypeOps::erroneous)) {
-            return true;
-        }
-        return erroneous(ref.arg());
+    private static boolean erroneous(Ast.TypeTerm term) {
+        return switch (term) {
+            case null -> false;
+            case Ast.FnType ft ->
+                    ft.params().stream().anyMatch(TypeOps::erroneous) || erroneous(ft.result());
+            case Ast.TypeRef ref -> {
+                if (ref.denotes() instanceof Type.Erroneous) {
+                    yield true;
+                }
+                if (ref.tupleElems() != null
+                        && ref.tupleElems().stream().anyMatch(TypeOps::erroneous)) {
+                    yield true;
+                }
+                yield erroneous(ref.arg());
+            }
+        };
     }
 
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
@@ -496,7 +540,7 @@ public final class TypeOps {
             }
         }
         for (Ast.Field f : data.fields()) {
-            if (types.put(f.name(), f.type().denotes()) != null) {
+            if (types.put(f.name(), fieldType(f)) != null) {
                 throw CompileException.of(
                         Diagnostic.of("E1004", "e1004.dup").at(f.pos())
                                 .args(f.name(), data.name()).build(),
@@ -516,7 +560,7 @@ public final class TypeOps {
     public static Type fieldType(Ast.Data data, String field, Symbols symbols) {
         for (Ast.Field f : data.fields()) {
             if (f.name().equals(field)) {
-                return f.type().denotes();
+                return fieldType(f);
             }
         }
         for (Ast.Name inc : data.includes()) {
@@ -635,7 +679,8 @@ public final class TypeOps {
      *  type a {@code Map} admits besides {@code String} itself (ADR-0040). */
     static boolean isStringNewtype(TypeName name, Symbols symbols) {
         return symbols.get(name) instanceof Ast.Data d && d.newtype()
-                && d.fields().size() == 1 && "String".equals(d.fields().get(0).type().name());
+                && d.fields().size() == 1
+                && d.fields().get(0).type() instanceof Ast.TypeRef base && "String".equals(base.name());
     }
 
     /**
@@ -882,8 +927,8 @@ public final class TypeOps {
     static Type denoted(Ast.TypeRef ref, Symbols symbols) {
         if (ref.isTuple()) {
             List<Type> elems = new ArrayList<>();
-            for (Ast.TypeRef e : ref.tupleElems()) {
-                elems.add(e.denotes());
+            for (Ast.TypeTerm e : ref.tupleElems()) {
+                elems.add(resolveTerm(e, symbols));
             }
             return Type.tuple(elems);   // (A, B, ...) — a helper/stdlib signature only (ADR-0036)
         }
@@ -895,16 +940,26 @@ public final class TypeOps {
             case "Date" -> Type.DATE;
             case "DateTime" -> Type.DATETIME;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec 7.3, 9.4).
-            case "List" -> Type.list(typeArg(ref, "list", 4, "List needs a type argument, e.g. List<Int>"));
-            case "Set" -> Type.set(typeArg(ref, "set", 3, "Set needs a type argument, e.g. Set<String>"));
-            case "Option" -> Type.option(typeArg(ref, "option", 6, "Option needs a type argument"));
+            case "List" -> Type.list(typeArg(ref, symbols, "list", 4, "List needs a type argument, e.g. List<Int>"));
+            case "Set" -> {
+                // a set holds no duplicates, which is a question about equality of its elements
+                Type element = typeArg(ref, symbols, "set", 3,
+                        "Set needs a type argument, e.g. Set<String>");
+                requireEquality(element, ref, "check.set.function",
+                        "a Set has no duplicate elements, and a function has no value to compare");
+                yield Type.set(element);
+            }
+            case "Option" -> Type.option(typeArg(ref, symbols, "option", 6, "Option needs a type argument"));
             case "Map" -> {
                 // The key is not restricted here: a map that stays inside a behavior body renders
                 // nothing, so it may be keyed by any value (`List.groupBy` already builds such maps).
                 // What a key must satisfy is the boundary — see #isBoundaryMapKey, checked where a
                 // type is a data field or a behavior's input/output.
-                Type value = typeArg(ref, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
-                Type key = ref.tupleElems() == null ? Type.STRING : ref.tupleElems().get(0).denotes();
+                Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
+                Type key = ref.tupleElems() == null
+                        ? Type.STRING : resolveTerm(ref.tupleElems().get(0), symbols);
+                requireEquality(key, ref, "check.map.key.function",
+                        "a Map finds a value by its key, and a function has no value to compare");
                 yield Type.map(key, value);
             }
             default -> {
@@ -920,15 +975,73 @@ public final class TypeOps {
         };
     }
 
+    /**
+     * A collection inside a type that would have to compare something it cannot. Which collection it
+     * is, is part of the answer: a {@code Set} asks whether two elements are equal and a {@code Map}
+     * whether two keys are, and those are different requirements, so a reader that reports one must
+     * not report it as the other.
+     */
+    public sealed interface UncomparableIn {
+        Type type();
+
+        record SetElement(Type type) implements UncomparableIn {}
+
+        record MapKey(Type type) implements UncomparableIn {}
+    }
+
+    /**
+     * The {@code Set} element or {@code Map} key inside {@code t} that cannot be compared, or null
+     * when every one of them can. Walks the whole type, so a set nested in a list or under a map's
+     * value is asked the same question as one written on its own.
+     */
+    public static UncomparableIn uncomparableCollection(Type t) {
+        return switch (t) {
+            case Type.SetOf s -> !supportsEquality(s.element())
+                    ? new UncomparableIn.SetElement(s.element())
+                    : uncomparableCollection(s.element());
+            case Type.MapOf m -> !supportsEquality(m.key())
+                    ? new UncomparableIn.MapKey(m.key())
+                    : firstNonNull(uncomparableCollection(m.key()),
+                            uncomparableCollection(m.value()));
+            case Type.ListOf l -> uncomparableCollection(l.element());
+            case Type.OptionOf o -> uncomparableCollection(o.element());
+            case Type.TupleOf tu -> {
+                for (Type e : tu.elements()) {
+                    UncomparableIn bad = uncomparableCollection(e);
+                    if (bad != null) {
+                        yield bad;
+                    }
+                }
+                yield null;
+            }
+            default -> null;
+        };
+    }
+
+    private static UncomparableIn firstNonNull(UncomparableIn a, UncomparableIn b) {
+        return a != null ? a : b;
+    }
+
+    /** Refuses a collection whose element or key a function makes uncomparable. */
+    private static void requireEquality(Type t, Ast.TypeRef at, String key, String message) {
+        if (!supportsEquality(t)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, key).title("check.boundary.title")
+                            .at(at.pos()).args(Type.show(t)).build(),
+                    message + ": " + Type.show(t));
+        }
+    }
+
     /** The single type argument of a built-in constructor, or the error that says it is missing. */
-    private static Type typeArg(Ast.TypeRef ref, String key, int width, String message) {
+    private static Type typeArg(Ast.TypeRef ref, Symbols symbols, String key, int width,
+                                String message) {
         if (ref.arg() == null) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.typearg." + key).title("check.typearg.title")
                             .at(ref.pos(), width).build(),
                     message);
         }
-        return ref.arg().denotes();
+        return resolveTerm(ref.arg(), symbols);
     }
 
     /**

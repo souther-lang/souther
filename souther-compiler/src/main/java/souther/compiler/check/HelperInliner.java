@@ -519,9 +519,9 @@ public final class HelperInliner {
 
     /** Whether a written type has a collection anywhere inside it — the types whose element/value type
      * an empty literal leaves open until something declares it. */
-    private static boolean carriesCollection(Ast.TypeRef ref) {
-        if (ref == null) {
-            return false;
+    private static boolean carriesCollection(Ast.TypeTerm term) {
+        if (!(term instanceof Ast.TypeRef ref)) {
+            return false;   // a function type carries no collection a literal could leave open
         }
         if ("List".equals(ref.name()) || "Map".equals(ref.name()) || "Set".equals(ref.name())) {
             return true;
@@ -530,7 +530,7 @@ public final class HelperInliner {
             return true;
         }
         if (ref.tupleElems() != null) {
-            for (Ast.TypeRef e : ref.tupleElems()) {
+            for (Ast.TypeTerm e : ref.tupleElems()) {
                 if (carriesCollection(e)) {
                     return true;
                 }
@@ -542,8 +542,16 @@ public final class HelperInliner {
     /** Whether a written type has a type variable inside it. A generic declared return ({@code
      * Map.upsert}'s {@code Map<'k, 'a>}) says nothing concrete at a call site, so it is not carried —
      * the caller's own arguments are what fix those variables. */
-    private static boolean mentionsTypeVar(Ast.TypeRef ref) {
-        if (ref == null) {
+    private static boolean mentionsRetTypeVar(Ast.RetType ret) {
+        return ret != null && ret.cases().stream().anyMatch(HelperInliner::mentionsTypeVar);
+    }
+
+    private static boolean mentionsTypeVar(Ast.TypeTerm term) {
+        if (term instanceof Ast.FnType fn) {
+            return fn.params().stream().anyMatch(HelperInliner::mentionsRetTypeVar)
+                    || mentionsRetTypeVar(fn.result());
+        }
+        if (!(term instanceof Ast.TypeRef ref)) {
             return false;
         }
         if (ref.name() != null && ref.name().startsWith("'")) {
@@ -553,7 +561,7 @@ public final class HelperInliner {
             return true;
         }
         if (ref.tupleElems() != null) {
-            for (Ast.TypeRef e : ref.tupleElems()) {
+            for (Ast.TypeTerm e : ref.tupleElems()) {
                 if (mentionsTypeVar(e)) {
                     return true;
                 }
@@ -595,14 +603,14 @@ public final class HelperInliner {
         }
         int fnParam = -1;
         for (int i = 0; i < params.size(); i++) {
-            if (params.get(i).type() instanceof Ast.FnType) {
+            if (params.get(i).type() != null && params.get(i).type().asFn() != null) {
                 fnParam = i;
                 break;
             }
         }
         for (int i = 0; i < params.size(); i++) {
-            Ast.ParamType declared = params.get(i).type();
-            if (declared == null || declared instanceof Ast.FnType
+            Ast.RetType declared = params.get(i).type();
+            if (declared == null || declared.asFn() != null
                     || !(call.args().get(i) instanceof Ast.Block lambda) || lambda.params().isEmpty()) {
                 continue;
             }
@@ -698,11 +706,11 @@ public final class HelperInliner {
                 Map<String, Ast.FnDef> scopedLambdas = new HashMap<>();   // lambdas given to fn params
                 List<String> letNames = new ArrayList<>();
                 List<Ast.Expr> letValues = new ArrayList<>();
-                List<Ast.ParamType> letTypes = new ArrayList<>();
+                List<Ast.RetType> letTypes = new ArrayList<>();
                 for (int i = 0; i < helper.params().size(); i++) {
                     Ast.FnParam p = helper.params().get(i);
                     Ast.Expr arg = args.get(i);
-                    if (p.type() instanceof Ast.FnType) {
+                    if (p.type() != null && p.type().asFn() != null) {
                         // a function argument is not a value, so it cannot be bound to a let. A named
                         // function is substituted directly (f(x) becomes inc(x)); a lambda is
                         // registered under a fresh name as a scoped helper, so each application of the
@@ -848,8 +856,26 @@ public final class HelperInliner {
             return v;
         }
         Ast.FnDef value = helpers.get(v.name());
-        if (value == null || !value.params().isEmpty() || value.body() == null
-                || recursive.contains(v.name())) {
+        if (value == null || value.body() == null) {
+            return v;
+        }
+        if (!value.params().isEmpty()) {
+            // A helper named where a value goes is the function it names, written out: a lambda that
+            // takes what the helper takes and applies it. The same value the author would get by
+            // spelling the lambda, so nothing downstream has to know which of the two was written.
+            // A recursive helper eta-expands too — the call inside stays the call it has to be.
+            int k = counter++;
+            List<String> params = new ArrayList<>();
+            List<Ast.Expr> args = new ArrayList<>();
+            for (int i = 0; i < value.params().size(); i++) {
+                String p = "$v" + k + "_" + i;
+                params.add(p);
+                args.add(Ast.Var.local(p, v.pos()));
+            }
+            return inline(new Ast.Block(params,
+                    new Ast.Call(v.name(), v.denotes(), args, v.pos()), v.pos()));
+        }
+        if (recursive.contains(v.name())) {
             return v;
         }
         return inline(value.body());

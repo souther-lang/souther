@@ -412,7 +412,7 @@ public final class SpecChecker {
         for (Ast.Param p : spec.params()) {
             if (p.type().cases().size() > 1) {
                 String union = p.type().cases().stream()
-                        .map(Ast.TypeRef::name)
+                        .map(SpecChecker::termName)
                         .collect(java.util.stream.Collectors.joining(" | "));
                 throw CompileException.of(
                         Diagnostic.of(null, "check.param.union").title("check.boundary.title")
@@ -429,7 +429,7 @@ public final class SpecChecker {
      * a helper/stdlib signature are fine — they never touch a codec. */
     static void rejectTupleIO(Ast.SpecBehavior spec) {
         for (Ast.Param p : spec.params()) {
-            for (Ast.TypeRef c : p.type().cases()) {
+            for (Ast.TypeTerm c : p.type().cases()) {
                 if (refHasTuple(c)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.param.tuple").title("check.boundary.title")
@@ -440,7 +440,7 @@ public final class SpecChecker {
                 }
             }
         }
-        for (Ast.TypeRef c : spec.ret().cases()) {
+        for (Ast.TypeTerm c : spec.ret().cases()) {
             if (refHasTuple(c)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.output.tuple").title("check.boundary.title")
@@ -449,6 +449,35 @@ public final class SpecChecker {
                                 + " boundary, so a behavior's output must be a named data or a sum of"
                                 + " them (ADR-0036)");
             }
+        }
+    }
+
+    /**
+     * A behavior's input is decoded and its output encoded, so neither may carry a function — at any
+     * depth, since a function hides as easily inside a {@code List} or a {@code Map} as it stands on
+     * its own. Asked of the type rather than of the syntax: what the position requires is an external
+     * representation, and a function has none (ADR-0004).
+     */
+    static void rejectFunctionIO(Ast.SpecBehavior spec, Symbols symbols) {
+        for (Ast.Param p : spec.params()) {
+            Type t = TypeOps.successType(p.type(), symbols);
+            if (!TypeOps.isBoundaryRepresentable(t)) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.param.function").title("check.boundary.title")
+                                .at(p.pos(), p.name().length()).args(p.name(), Type.show(t)).build(),
+                        "parameter `" + p.name() + "` carries a function (" + Type.show(t)
+                                + "); a function has no external representation, so it cannot cross"
+                                + " the boundary into a behavior");
+            }
+        }
+        Type out = TypeOps.successType(spec.ret(), symbols);
+        if (!TypeOps.isBoundaryRepresentable(out)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.output.function").title("check.boundary.title")
+                            .at(spec.pos()).args(spec.name(), Type.show(out)).build(),
+                    "behavior `" + spec.name() + "` outputs a function (" + Type.show(out)
+                            + "); a function has no external representation, so it cannot cross the"
+                            + " boundary out of a behavior");
         }
     }
 
@@ -481,8 +510,14 @@ public final class SpecChecker {
         }
     }
 
-    private static boolean refHasTuple(Ast.TypeRef ref) {
-        return ref.isTuple() || (ref.arg() != null && refHasTuple(ref.arg()));
+    private static boolean refHasTuple(Ast.TypeTerm term) {
+        return term instanceof Ast.TypeRef ref
+                && (ref.isTuple() || (ref.arg() != null && refHasTuple(ref.arg())));
+    }
+
+    /** How a written term reads in a diagnostic that quotes the source. */
+    private static String termName(Ast.TypeTerm term) {
+        return term instanceof Ast.TypeRef ref ? ref.name() : "a function";
     }
 
     static boolean containsTuple(Type t) {

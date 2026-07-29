@@ -287,7 +287,7 @@ public final class AstBuilder {
 
     private Ast.Field field(SyntaxNode n) {
         String name = firstIdentText(n);
-        Ast.TypeRef type = typeRef(typeChild(n));
+        Ast.TypeTerm type = typeTerm(typeChild(n));
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
             type = new Ast.TypeRef("Option", type, type.pos());   // `T?` → Option<T>
         }
@@ -400,15 +400,10 @@ public final class AstBuilder {
 
     private Ast.FnParam fnParam(SyntaxNode p, SyntaxNode pat) {
         String name = pat == null ? firstIdentText(p) : "$p" + (patternCounter++);
-        Ast.ParamType type = null;
-        Optional<SyntaxNode> fnType = p.child(SyntaxKind.FN_TYPE);
-        if (fnType.isPresent()) {
-            type = fnType(fnType.get());
-        } else {
-            Optional<SyntaxNode> rt = p.child(SyntaxKind.RET_TYPE);
-            if (rt.isPresent()) {
-                type = retType(rt.get());
-            }
+        Ast.RetType type = null;
+        Optional<SyntaxNode> rt = p.child(SyntaxKind.RET_TYPE);
+        if (rt.isPresent()) {
+            type = retType(rt.get());
         }
         if (type == null && pat != null && pat.kind() == SyntaxKind.PATTERN_CTOR) {
             // `let count (Tags(xs))` says the parameter is a Tags; writing `: Tags` beside it would
@@ -450,16 +445,40 @@ public final class AstBuilder {
     // --- types ---
 
     private Ast.RetType retType(SyntaxNode n) {
-        List<Ast.TypeRef> cases = new ArrayList<>();
+        List<Ast.TypeTerm> cases = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                cases.add(typeRef(c));
+            if (isTypeTermKind(c.kind())) {
+                cases.add(typeTerm(c));
             }
         }
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
             cases = List.of(optional(cases, pos(n)));
         }
         return new Ast.RetType(cases, cases.get(0).pos());
+    }
+
+    private static boolean isTypeTermKind(SyntaxKind k) {
+        return k == SyntaxKind.TYPE_REF || k == SyntaxKind.TUPLE_TYPE || k == SyntaxKind.FN_TYPE;
+    }
+
+    /** One term of a written type: a function type, or a reference. A parenthesised single term is
+     * grouping, so {@code ((Int) -> Bool)} is the function type it wraps rather than a one-tuple. */
+    private Ast.TypeTerm typeTerm(SyntaxNode n) {
+        if (n.kind() == SyntaxKind.FN_TYPE) {
+            return fnType(n);
+        }
+        if (n.kind() == SyntaxKind.TUPLE_TYPE) {
+            List<SyntaxNode> elems = new ArrayList<>();
+            for (SyntaxNode c : n.childNodes()) {
+                if (isTypeTermKind(c.kind())) {
+                    elems.add(c);
+                }
+            }
+            if (elems.size() == 1) {
+                return typeTerm(elems.get(0));
+            }
+        }
+        return typeRef(n);
     }
 
     /**
@@ -469,7 +488,7 @@ public final class AstBuilder {
      * (ADR-0011), so the type stays out of the surface language. A sum cannot take the mark — an
      * absent {@code A | B} has no case to be absent as.
      */
-    private Ast.TypeRef optional(List<Ast.TypeRef> cases, SourcePos pos) {
+    private Ast.TypeRef optional(List<Ast.TypeTerm> cases, SourcePos pos) {
         if (!isReservedNamespace(moduleName)) {
             throw errorWithHint(pos, "parse.optional.core", "parse.optional.core.hint",
                     "an optional type `T?` may be written only on a data field, or in the core (the"
@@ -483,19 +502,21 @@ public final class AstBuilder {
                     "`?` marks a single type optional, but it follows a sum of "
                             + cases.size() + " cases");
         }
+        // `T?` is `Option<T>` for whatever T is: the two spellings are one type, and what may
+        // stand in a position is decided by what the position requires of that type, not here
         return new Ast.TypeRef("Option", cases.get(0), cases.get(0).pos());
     }
 
     private Ast.TypeRef typeRef(SyntaxNode n) {
         if (n.kind() == SyntaxKind.TUPLE_TYPE) {
-            List<Ast.TypeRef> elems = new ArrayList<>();
+            List<Ast.TypeTerm> elems = new ArrayList<>();
             for (SyntaxNode c : n.childNodes()) {
-                if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                    elems.add(typeRef(c));
+                if (isTypeTermKind(c.kind())) {
+                    elems.add(typeTerm(c));
                 }
             }
-            if (elems.size() == 1) {
-                return elems.get(0);   // `(T)` reads as grouping
+            if (elems.size() == 1 && elems.get(0) instanceof Ast.TypeRef only) {
+                return only;   // `(T)` reads as grouping
             }
             return new Ast.TypeRef(null, null, elems, pos(n));
         }
@@ -514,16 +535,19 @@ public final class AstBuilder {
         if (args.isEmpty()) {
             return new Ast.TypeRef(name, null, pos(n));
         }
-        List<Ast.TypeRef> typeArgs = new ArrayList<>();
+        List<Ast.TypeTerm> typeArgs = new ArrayList<>();
         for (SyntaxNode c : args.get().childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                typeArgs.add(typeRef(c));
+            if (isTypeTermKind(c.kind())) {
+                typeArgs.add(typeTerm(c));
             }
+        }
+        if (typeArgs.isEmpty()) {
+            return new Ast.TypeRef(name, null, pos(n));   // the missing argument is reported by name
         }
         if (name.equals("Map")) {
             // carry the value in `arg` and the key in `tupleElems` (ADR-0040)
-            Ast.TypeRef key = typeArgs.get(0);
-            Ast.TypeRef value = typeArgs.get(typeArgs.size() - 1);
+            Ast.TypeTerm key = typeArgs.get(0);
+            Ast.TypeTerm value = typeArgs.get(typeArgs.size() - 1);
             return new Ast.TypeRef("Map", value, List.of(key), pos(n));
         }
         return new Ast.TypeRef(name, typeArgs.get(0), pos(n));   // List<T> / Set<T> / Option<T>
@@ -1137,7 +1161,7 @@ public final class AstBuilder {
 
     private SyntaxNode typeChild(SyntaxNode n) {
         for (SyntaxNode c : n.childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
+            if (isTypeTermKind(c.kind())) {
                 return c;
             }
         }
