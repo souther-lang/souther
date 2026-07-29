@@ -136,8 +136,13 @@ class PublishedModuleTest {
 
         Ast.SpecBehavior checkout = (Ast.SpecBehavior) read.module().behaviors().stream()
                 .filter(b -> b.name().equals("checkout")).findFirst().orElseThrow();
-        assertEquals("shop.pricing.Cart", checkout.params().get(0).type().cases().get(0).name());
-        assertEquals("shop.checkout.Done", checkout.ret().cases().get(0).name());
+        assertEquals("shop.pricing.Cart", refName(checkout.params().get(0).type()));
+        assertEquals("shop.checkout.Done", refName(checkout.ret()));
+    }
+
+    /** The name of a written type's single reference case. */
+    private static String refName(Ast.RetType ret) {
+        return ((Ast.TypeRef) ret.cases().get(0)).name();
     }
 
     /** Every module of a real, layered module set survives the round trip. */

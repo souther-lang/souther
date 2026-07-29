@@ -249,8 +249,11 @@ public final class TypeChecker {
                 SpecChecker.rejectTupleIO(spec);
                 SpecChecker.rejectNonBoundaryMapKeyIO(spec, symbols);
                 List<String> outputCases = new ArrayList<>();
-                for (Ast.TypeRef t : spec.ret().cases()) {
-                    outputCases.add(t.name());
+                for (Ast.TypeTerm t : spec.ret().cases()) {
+                    // a function output is refused as unrepresentable; it names no output case
+                    if (t instanceof Ast.TypeRef ref) {
+                        outputCases.add(ref.name());
+                    }
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 List<String> required = new ArrayList<>();

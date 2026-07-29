@@ -400,15 +400,10 @@ public final class AstBuilder {
 
     private Ast.FnParam fnParam(SyntaxNode p, SyntaxNode pat) {
         String name = pat == null ? firstIdentText(p) : "$p" + (patternCounter++);
-        Ast.ParamType type = null;
-        Optional<SyntaxNode> fnType = p.child(SyntaxKind.FN_TYPE);
-        if (fnType.isPresent()) {
-            type = fnType(fnType.get());
-        } else {
-            Optional<SyntaxNode> rt = p.child(SyntaxKind.RET_TYPE);
-            if (rt.isPresent()) {
-                type = retType(rt.get());
-            }
+        Ast.RetType type = null;
+        Optional<SyntaxNode> rt = p.child(SyntaxKind.RET_TYPE);
+        if (rt.isPresent()) {
+            type = retType(rt.get());
         }
         if (type == null && pat != null && pat.kind() == SyntaxKind.PATTERN_CTOR) {
             // `let count (Tags(xs))` says the parameter is a Tags; writing `: Tags` beside it would
@@ -450,16 +445,54 @@ public final class AstBuilder {
     // --- types ---
 
     private Ast.RetType retType(SyntaxNode n) {
-        List<Ast.TypeRef> cases = new ArrayList<>();
+        List<Ast.TypeTerm> cases = new ArrayList<>();
         for (SyntaxNode c : n.childNodes()) {
-            if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                cases.add(typeRef(c));
+            if (isTypeTermKind(c.kind())) {
+                cases.add(typeTerm(c));
             }
         }
         if (n.token(SyntaxKind.QUESTION).isPresent()) {
-            cases = List.of(optional(cases, pos(n)));
+            cases = List.of(optional(typeRefs(cases, pos(n)), pos(n)));
         }
         return new Ast.RetType(cases, cases.get(0).pos());
+    }
+
+    private static boolean isTypeTermKind(SyntaxKind k) {
+        return k == SyntaxKind.TYPE_REF || k == SyntaxKind.TUPLE_TYPE || k == SyntaxKind.FN_TYPE;
+    }
+
+    /** One term of a written type: a function type, or a reference. A parenthesised single term is
+     * grouping, so {@code ((Int) -> Bool)} is the function type it wraps rather than a one-tuple. */
+    private Ast.TypeTerm typeTerm(SyntaxNode n) {
+        if (n.kind() == SyntaxKind.FN_TYPE) {
+            return fnType(n);
+        }
+        if (n.kind() == SyntaxKind.TUPLE_TYPE) {
+            List<SyntaxNode> elems = new ArrayList<>();
+            for (SyntaxNode c : n.childNodes()) {
+                if (isTypeTermKind(c.kind())) {
+                    elems.add(c);
+                }
+            }
+            if (elems.size() == 1) {
+                return typeTerm(elems.get(0));
+            }
+        }
+        return typeRef(n);
+    }
+
+    /** The terms as references, for the one reader that needs them so — {@code T?} wraps what it
+     * marks in an {@code Option}, and a function has no external representation to be absent as. */
+    private List<Ast.TypeRef> typeRefs(List<Ast.TypeTerm> terms, SourcePos at) {
+        List<Ast.TypeRef> refs = new ArrayList<>();
+        for (Ast.TypeTerm t : terms) {
+            if (!(t instanceof Ast.TypeRef ref)) {
+                throw error(at, "parse.optional.function",
+                        "`?` marks a type that may be absent, and a function type is not one");
+            }
+            refs.add(ref);
+        }
+        return refs;
     }
 
     /**
@@ -488,14 +521,14 @@ public final class AstBuilder {
 
     private Ast.TypeRef typeRef(SyntaxNode n) {
         if (n.kind() == SyntaxKind.TUPLE_TYPE) {
-            List<Ast.TypeRef> elems = new ArrayList<>();
+            List<Ast.TypeTerm> elems = new ArrayList<>();
             for (SyntaxNode c : n.childNodes()) {
-                if (c.kind() == SyntaxKind.TYPE_REF || c.kind() == SyntaxKind.TUPLE_TYPE) {
-                    elems.add(typeRef(c));
+                if (isTypeTermKind(c.kind())) {
+                    elems.add(typeTerm(c));
                 }
             }
-            if (elems.size() == 1) {
-                return elems.get(0);   // `(T)` reads as grouping
+            if (elems.size() == 1 && elems.get(0) instanceof Ast.TypeRef only) {
+                return only;   // `(T)` reads as grouping
             }
             return new Ast.TypeRef(null, null, elems, pos(n));
         }

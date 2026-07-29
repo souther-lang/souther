@@ -1154,12 +1154,7 @@ public final class Names {
         }
         for (Ast.FnDef fn : m.fns()) {
             for (Ast.FnParam p : fn.params()) {
-                if (p.type() instanceof Ast.RetType rt) {
-                    collectRetType(rt, refs);
-                } else if (p.type() instanceof Ast.FnType ft) {
-                    ft.params().forEach(pt -> collectRetType(pt, refs));
-                    collectRetType(ft.result(), refs);
-                }
+                collectRetType(p.type(), refs);
             }
             collectRetType(fn.declaredReturn(), refs);
         }
@@ -1172,8 +1167,13 @@ public final class Names {
         }
     }
 
-    private static void collectTypeRefs(Ast.TypeRef ref, List<Ast.TypeRef> refs) {
-        if (ref == null) {
+    private static void collectTypeRefs(Ast.TypeTerm term, List<Ast.TypeRef> refs) {
+        if (term instanceof Ast.FnType fn) {
+            fn.params().forEach(p -> collectRetType(p, refs));
+            collectRetType(fn.result(), refs);
+            return;
+        }
+        if (!(term instanceof Ast.TypeRef ref)) {
             return;
         }
         if (ref.name() != null) {

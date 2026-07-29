@@ -229,8 +229,8 @@ public final class Backend {
                 // to build it (spec 2.7), and unlike a unit it cannot be told apart from a decoded
                 // pass-through output (会員) by shape alone.
                 List<String> unitCases = new ArrayList<>();
-                for (Ast.TypeRef t : spec.ret().cases()) {
-                    if (t.denotes() instanceof Type.Ref r
+                for (Ast.TypeTerm term : spec.ret().cases()) {
+                    if (term instanceof Ast.TypeRef t && t.denotes() instanceof Type.Ref r
                             && b.symbols.get(r.name()) instanceof Ast.UnitData) {
                         unitCases.add(r.name().name());
                     }

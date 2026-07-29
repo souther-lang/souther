@@ -27,10 +27,15 @@ public final class TypeOps {
 
     private TypeOps() {}
 
-    /** Resolves a helper parameter's written type: an ordinary type or a function type. */
-    public static Type resolveParamType(Ast.ParamType t, Symbols symbols) {
+    /** Resolves a written type. Kept for the readers that name a parameter's type as such. */
+    public static Type resolveParamType(Ast.RetType t, Symbols symbols) {
+        return successType(t, symbols);
+    }
+
+    /** The type one written term stands for. */
+    public static Type resolveTerm(Ast.TypeTerm t, Symbols symbols) {
         return switch (t) {
-            case Ast.RetType rt -> successType(rt, symbols);
+            case Ast.TypeRef ref -> ref.denotes();
             case Ast.FnType ft -> {
                 List<Type> params = new ArrayList<>();
                 for (Ast.RetType p : ft.params()) {
@@ -44,8 +49,8 @@ public final class TypeOps {
     /** The output type of a behavior return: a single case, or a union of two or more cases. */
     public static Type successType(Ast.RetType ret, Symbols symbols) {
         List<Type> members = new ArrayList<>();
-        for (Ast.TypeRef t : ret.cases()) {
-            members.add(t.denotes());
+        for (Ast.TypeTerm t : ret.cases()) {
+            members.add(resolveTerm(t, symbols));
         }
         if (members.size() == 1) {
             return members.get(0);
@@ -224,12 +229,7 @@ public final class TypeOps {
         }
         for (Ast.FnDef fn : module.fns()) {
             for (Ast.FnParam param : fn.params()) {
-                if (param.type() instanceof Ast.RetType ret && erroneous(ret)) {
-                    return true;
-                }
-                if (param.type() instanceof Ast.FnType fnType
-                        && (fnType.params().stream().anyMatch(TypeOps::erroneous)
-                                || erroneous(fnType.result()))) {
+                if (erroneous(param.type())) {
                     return true;
                 }
             }
@@ -244,17 +244,22 @@ public final class TypeOps {
         return ret != null && ret.cases().stream().anyMatch(TypeOps::erroneous);
     }
 
-    private static boolean erroneous(Ast.TypeRef ref) {
-        if (ref == null) {
-            return false;
-        }
-        if (ref.denotes() instanceof Type.Erroneous) {
-            return true;
-        }
-        if (ref.tupleElems() != null && ref.tupleElems().stream().anyMatch(TypeOps::erroneous)) {
-            return true;
-        }
-        return erroneous(ref.arg());
+    private static boolean erroneous(Ast.TypeTerm term) {
+        return switch (term) {
+            case null -> false;
+            case Ast.FnType ft ->
+                    ft.params().stream().anyMatch(TypeOps::erroneous) || erroneous(ft.result());
+            case Ast.TypeRef ref -> {
+                if (ref.denotes() instanceof Type.Erroneous) {
+                    yield true;
+                }
+                if (ref.tupleElems() != null
+                        && ref.tupleElems().stream().anyMatch(TypeOps::erroneous)) {
+                    yield true;
+                }
+                yield erroneous(ref.arg());
+            }
+        };
     }
 
     /** Whether a {@code from} value can be assigned where {@code to} is expected. Lists are
@@ -882,8 +887,8 @@ public final class TypeOps {
     static Type denoted(Ast.TypeRef ref, Symbols symbols) {
         if (ref.isTuple()) {
             List<Type> elems = new ArrayList<>();
-            for (Ast.TypeRef e : ref.tupleElems()) {
-                elems.add(e.denotes());
+            for (Ast.TypeTerm e : ref.tupleElems()) {
+                elems.add(resolveTerm(e, symbols));
             }
             return Type.tuple(elems);   // (A, B, ...) — a helper/stdlib signature only (ADR-0036)
         }
@@ -895,16 +900,17 @@ public final class TypeOps {
             case "Date" -> Type.DATE;
             case "DateTime" -> Type.DATETIME;
             // 制約違反 is no longer a writable case: an invariant violation aborts (spec 7.3, 9.4).
-            case "List" -> Type.list(typeArg(ref, "list", 4, "List needs a type argument, e.g. List<Int>"));
-            case "Set" -> Type.set(typeArg(ref, "set", 3, "Set needs a type argument, e.g. Set<String>"));
-            case "Option" -> Type.option(typeArg(ref, "option", 6, "Option needs a type argument"));
+            case "List" -> Type.list(typeArg(ref, symbols, "list", 4, "List needs a type argument, e.g. List<Int>"));
+            case "Set" -> Type.set(typeArg(ref, symbols, "set", 3, "Set needs a type argument, e.g. Set<String>"));
+            case "Option" -> Type.option(typeArg(ref, symbols, "option", 6, "Option needs a type argument"));
             case "Map" -> {
                 // The key is not restricted here: a map that stays inside a behavior body renders
                 // nothing, so it may be keyed by any value (`List.groupBy` already builds such maps).
                 // What a key must satisfy is the boundary — see #isBoundaryMapKey, checked where a
                 // type is a data field or a behavior's input/output.
-                Type value = typeArg(ref, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
-                Type key = ref.tupleElems() == null ? Type.STRING : ref.tupleElems().get(0).denotes();
+                Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
+                Type key = ref.tupleElems() == null
+                        ? Type.STRING : resolveTerm(ref.tupleElems().get(0), symbols);
                 yield Type.map(key, value);
             }
             default -> {
@@ -921,14 +927,15 @@ public final class TypeOps {
     }
 
     /** The single type argument of a built-in constructor, or the error that says it is missing. */
-    private static Type typeArg(Ast.TypeRef ref, String key, int width, String message) {
+    private static Type typeArg(Ast.TypeRef ref, Symbols symbols, String key, int width,
+                                String message) {
         if (ref.arg() == null) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.typearg." + key).title("check.typearg.title")
                             .at(ref.pos(), width).build(),
                     message);
         }
-        return ref.arg().denotes();
+        return resolveTerm(ref.arg(), symbols);
     }
 
     /**
