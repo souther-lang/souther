@@ -192,4 +192,38 @@ class CompileFunctionValueFlowTest {
                 ((Map<?, ?>) Codecs.encode(loader, "demo.Result",
                         Codecs.apply(check, order))).get("ns"));
     }
+
+    private static String shadowed(String caseBinding) {
+        return """
+                module demo
+
+                data Order = { m: Int?, spring: Bool }
+                data Result = { n: Int }
+
+                behavior check : (o: Order) -> Result
+                    constructs Result
+
+                let check (o) = {
+                    let f = if o.spring then (n) -> n + 1 else (n) -> n + 2
+                    let y = 10
+                    let r = f(match o.m with
+                        | Some %s -> %s
+                        | None -> 0)
+                    Result { n = r + y }
+                }
+                """.formatted(caseBinding, caseBinding);
+    }
+
+    // What puts an application out of reach is a binding, not a spelling. The arm rebinds the name,
+    // so the argument does not read the enclosing `y` — and whether the arm happens to spell its
+    // binding `y` or `z` decides nothing about whether `f` can be typed.
+    @Test
+    void aRebindingInsideAnArgumentIsNotTheEnclosingName() throws Exception {
+        assertEquals(sameShape(Compiler.compile(shadowed("z"))),
+                sameShape(Compiler.compile(shadowed("y"))));
+    }
+
+    private static java.util.Set<String> sameShape(Map<String, byte[]> classes) {
+        return classes.keySet();
+    }
 }

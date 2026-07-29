@@ -738,7 +738,13 @@ public final class Elaborator {
         return out;
     }
 
-    /** Whether {@code e} reads a name a binder below the inference point introduced. */
+    /**
+     * Whether {@code e} reads a name a binder below the inference point introduced — that is, whether
+     * its <em>free</em> variables meet {@code inner}. A binder inside {@code e} takes its own name off
+     * the set for what it covers, so a name rebound there is that binding's and not the outer one's:
+     * {@code f(match m with | Some y -> y | None -> 0)} does not read an enclosing {@code y}, and
+     * whether the case happens to spell its binding {@code y} or {@code z} decides nothing.
+     */
     private static boolean reaches(Ast.Expr e, Set<String> inner) {
         if (inner.isEmpty()) {
             return false;
@@ -749,9 +755,41 @@ public final class Elaborator {
         if (e instanceof Ast.Call c && inner.contains(c.fn())) {
             return true;
         }
-        boolean[] found = {false};
-        TypeChecker.forEachChild(e, sub -> found[0] |= reaches(sub, inner));
-        return found[0];
+        return switch (e) {
+            case Ast.Block b -> reaches(b.body(), without(inner, b.params()));
+            case Ast.LetIn li -> reaches(li.value(), inner)
+                    || reaches(li.body(), without(inner, List.of(li.name())));
+            case Ast.IfConstructed ic -> reaches(ic.construct(), inner)
+                    || reaches(ic.then(), without(inner, List.of(ic.binder())))
+                    || reaches(ic.els(), inner);
+            case Ast.Match m -> {
+                if (reaches(m.scrutinee(), inner)) {
+                    yield true;
+                }
+                for (Ast.Case c : m.cases()) {
+                    Set<String> arm = c.binding() == null
+                            ? inner : without(inner, List.of(c.binding()));
+                    if (reaches(c.body(), arm)) {
+                        yield true;
+                    }
+                }
+                yield false;
+            }
+            default -> {
+                boolean[] found = {false};
+                TypeChecker.forEachChild(e, sub -> found[0] |= reaches(sub, inner));
+                yield found[0];
+            }
+        };
+    }
+
+    private static Set<String> without(Set<String> names, List<String> removed) {
+        if (names.isEmpty() || removed.isEmpty()) {
+            return names;
+        }
+        Set<String> out = new HashSet<>(names);
+        out.removeAll(removed);
+        return out;
     }
 
     /** Types a function value against inferred parameter types: a lambda binds its parameters and
