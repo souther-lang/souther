@@ -52,7 +52,7 @@ domain sense. **Arithmetic was added subsequently**, resolving those questions:
 
 - Closed `+`/`-` stay in the newtype (`金額 - 金額 : 金額`): the operator opens each operand to its
   base, computes, and re-wraps, re-checking the invariant. A `金額 - 金額` that goes negative aborts
-  inside the domain, or is *discharged* at compile time when a `require` guard establishes it (the
+  inside the domain, or is *discharged* at compile time when a `guard` guard establishes it (the
   invariant-discharge check, spec §invariant-discharge).
 - Scalar `*`/`/` by a plain number of the base also stay in the newtype (`金額 * 2`) — the dimension
   is unchanged. A product of *two* newtypes (`単価 * 数量`, a dimension change / units) is not modeled

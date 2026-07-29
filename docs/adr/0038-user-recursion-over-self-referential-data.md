@@ -48,7 +48,7 @@ helpers.
   `ping`/`pong` calling each other work the same as a self-call — the cycle detector already
   identifies the whole group.
 - **A recursive helper is pure.** It is a `static` method with no injected fields, so it cannot
-  call an injected behavior (a `requires`); the effect belongs in the behavior that calls the
+  call an injected behavior (a `depends on`); the effect belongs in the behavior that calls the
   helper. Recursion is for traversing data, not for reaching the outside world.
 - **A recursive helper may construct data**, and its constructions are attributed to the behavior
   that calls it. Because the helper is not inlined, a caller's body shows only a call, not the

@@ -25,7 +25,7 @@ The spec DSL has no `required` word either; a dependency is marked only by a com
 note. Because Souther also uses no keyword, the DSL line survives verbatim — `behavior
 現在時刻 = () -> DateTime` with no `let` is the whole declaration.
 
-Code that uses such a behavior lists its name under `requires`, which then surfaces as an
+Code that uses such a behavior lists its name under `depends on`, which then surfaces as an
 argument of the using `let` (see ADR-0016). The read-only "// 依存" versus mutating
 "// 副作用" distinction is documentation of intent only; it does not affect the value
 composition rules.

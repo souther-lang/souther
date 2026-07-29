@@ -8,7 +8,7 @@ Souther implements the *specification DSL* of specification model driven develop
 
 ## Decision
 
-Souther promotes exactly the three commented-out concerns into `invariant`, closed construction paths (`decoder` / `constructs`), and `requires` + Java injection. One spec DSL definition maps to one Souther definition; nothing else is added, and no intermediate representation stands between them.
+Souther promotes exactly the three commented-out concerns into `invariant`, closed construction paths (`decoder` / `constructs`), and `depends on` + Java injection. One spec DSL definition maps to one Souther definition; nothing else is added, and no intermediate representation stands between them.
 
 ## Consequences
 

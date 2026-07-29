@@ -1,6 +1,6 @@
 # ADR-0070: A construction may be attempted, and what fails is not a value
 
-Status: Accepted (decided 2026-07-29). Answers the in-language half of issue #20, which ADR-0003 left open, and closes issue #162.
+Status: Accepted (decided 2026-07-29; the keyword is `guard` since ADR-0071, and was `require` here). Answers the in-language half of issue #20, which ADR-0003 left open, and closes issue #162.
 
 ## Context
 
@@ -26,16 +26,16 @@ Across a module boundary the guard cannot be written at all. A helper `let` an i
 
 ```
 if T(v) as x then <expr> else <expr>
-require T(v) as x else <case>
+guard T(v) as x else <case>
 ```
 
-The invariant runs — `T`'s own and every invariant a `...` spread brought in. Holding, the value is built and `x` names it in the success branch; failing, the else branch is taken and no value is built. `require` stays sugar for `if` (ADR-0020), so the base form is the `if` and a helper `let` with no departure case reaches it too.
+The invariant runs — `T`'s own and every invariant a `...` spread brought in. Holding, the value is built and `x` names it in the success branch; failing, the else branch is taken and no value is built. `guard` stays sugar for `if` (ADR-0020), so the base form is the `if` and a helper `let` with no departure case reaches it too.
 
 The binder is scoped to the success branch alone. Nothing carries the failure: there is no `Option`, no `Result`, no reason value. The name a business failure gets is the one the writer puts in `else`, and a writer may put none there (`else []`).
 
 An attempt requires `constructs T` like any other construction — it mints a value on its success branch, and that is exactly what `constructs` is for reading (ADR-0002). A type with no invariant may not be attempted: the else branch could not be reached, so it is a compile error rather than a branch that is not one.
 
-`T(v)` on its own still aborts. What is added is a form the writer chooses at the site, which is what ADR-0003 already says about turning an unmet rule into a value — "that is a business judgment written explicitly with `require ... else`". This lets that judgment be written without restating the rule.
+`T(v)` on its own still aborts. What is added is a form the writer chooses at the site, which is what ADR-0003 already says about turning an unmet rule into a value — "that is a business judgment written explicitly with `guard ... else`". This lets that judgment be written without restating the rule.
 
 ## Why the failure carries nothing
 
@@ -45,7 +45,7 @@ None of those languages decides, as a language rule, where a nameless failure go
 
 Ada, the one language in the survey that does decide where a failed constraint goes, is on this side: `X'Valid` yields True when "the predicate of the nominal subtype of X evaluates to True" and is explicitly "not considered to be a read of X; hence, it is not an error to check the validity of invalid data" (RM 13.9.2), and a membership test `X in S` evaluates the subtype's predicate the same way (RM 4.5.2). Clojure's `s/valid?` and Scala refined's `Validate.isValid` sit beside their value-returning siblings for the same reason.
 
-A plain predicate — `holds T(v)` answering a `Bool` — was the first form considered and was dropped. It leaves the test and the construction as two expressions that must agree, which is the duplication this ADR exists to remove, and it makes the compiler tie them back together with a syntactic discharge rule. Binding removes the second mention instead of checking it. `Result`-shaped forms also do not compose with `require`: `require` takes a condition, so an attempt answering a value would nest, and a behavior with six guards (`buildQuote` in the `crm` example) would become six nested matches instead of six flat lines. The binding form keeps the flat sequence.
+A plain predicate — `holds T(v)` answering a `Bool` — was the first form considered and was dropped. It leaves the test and the construction as two expressions that must agree, which is the duplication this ADR exists to remove, and it makes the compiler tie them back together with a syntactic discharge rule. Binding removes the second mention instead of checking it. `Result`-shaped forms also do not compose with `guard`: `guard` takes a condition, so an attempt answering a value would nest, and a behavior with six guards (`buildQuote` in the `crm` example) would become six nested matches instead of six flat lines. The binding form keeps the flat sequence.
 
 ## Consequences
 
@@ -63,8 +63,8 @@ Newtype arithmetic (`a - b` re-wrapping into a newtype) is not a construction ex
 
 ## References
 
-- Specification: `[#attempted-construction]`, `[#require]`, `[#if]`, `[#invariant-discharge]`, `[#violation-destination]`
-- ADR-0002 (construction permission), ADR-0003 (invariant violations abort), ADR-0007 (business results are an unmarked sum), ADR-0011 (Option is not a surface type), ADR-0020 (`require` desugars to `if`)
+- Specification: `[#attempted-construction]`, `[#guard]`, `[#if]`, `[#invariant-discharge]`, `[#violation-destination]`
+- ADR-0002 (construction permission), ADR-0003 (invariant violations abort), ADR-0007 (business results are an unmarked sum), ADR-0011 (Option is not a surface type), ADR-0020 (`guard` desugars to `if`)
 - Ada RM 13.9.2 (`'Valid`), Ada RM 4.5.2 (membership tests) — a predicate asked without the assignment that would raise
 - Clojure `spec` (`valid?` / `conform` / `explain`), Scala `refined` (`Validate.isValid`)
 - Swift failable initializers, Rust `TryFrom`, F# `tryCreate`, Elm `fromString` — the value-returning majority this diverges from

@@ -37,7 +37,7 @@ Option's payload binding to the positional F#/Elm form.
   construction, so the name always means the Option case.
 - **Fields bind identifiers only.** A field pattern names a variable (or shorthand); it does not match
   a literal (`{ email = "x" }` is not a pattern). `match` dispatches on the case; value conditions go
-  in the body or a `require`, since Souther has no `_` wildcard or `when` guard to fall through on
+  in the body or a `guard`, since Souther has no `_` wildcard or `when` guard to fall through on
   (Elm's stance). Nested destructuring is one level — to go deeper, bind the field and `match` it
   again, matching the nested-sum rule (each sum level is matched independently, spec `[#match]`).
 

@@ -66,7 +66,7 @@ see the implementation note above.)
    happens, once: helper inlining, the remaining desugars,
    `match` lowering, closure conversion, intrinsic lowering, and — when it lands —
    monomorphization of generic helpers. It precedes the body check because a behavior's
-   permission and `requires` are defined on the inlined body (`[#blocks]`), so the check is
+   permission and `depends on` are defined on the inlined body (`[#blocks]`), so the check is
    defined on the lowered form.
 5. **TypeCheck** — type, requirement, and construction-permission checking. It consumes
    the lowered bodies for the body check and does not rewrite. Surface checks (data,

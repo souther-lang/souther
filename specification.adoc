@@ -22,7 +22,7 @@ Souther's role is to make those three executable.
 
 | The invariant "this value has been validated" | Confinement of construction paths (`+decoder+` / `+constructs+`)
 
-| `+// 依存: 製品カタログ+` / `+// 副作用: メール送信+` | A `+behavior+` with no `+let+` at a leaf; `+requires+` (an injected Java implementation) at the call site
+| `+// 依存: 製品カタログ+` / `+// 副作用: メール送信+` | A `+behavior+` with no `+let+` at a leaf; `+depends on+` (an injected Java implementation) at the call site
 
 |===
 
@@ -55,7 +55,7 @@ Each construct of the spec DSL maps to Souther as follows.
 
 | `+// 依存+` / `+// 副作用+` | A `+behavior+` with no `+let+`
 
-| `+// 事前条件+` | `+require ... else+`
+| `+// 事前条件+` | `+guard ... else+` (a business branch, not a contract; <<violation-destination>>)
 
 |===
 
@@ -130,7 +130,7 @@ Outside-world dependencies — DB, HTTP, files, clock, ID generation — MUST NO
 behavior findMember : (id: MemberId) -> Member | FindMemberError    // no let
 ----
 
-The implementation is injected from Java. Writing no implementation (`+let+`) is what "provided from outside" means (<<injected-behavior>>). A caller writes that name in its `+requires+` (<<requires>>). The distinction between dependency (only reads the outside) and side effect (changes the outside) is documentation of intent; it does not affect the rules of value composition.
+The implementation is injected from Java. Writing no implementation (`+let+`) is what "provided from outside" means (<<injected-behavior>>). A caller writes that name in its `+depends on+` (<<depends-on>>). The distinction between dependency (only reads the outside) and side effect (changes the outside) is documentation of intent; it does not affect the rules of value composition.
 
 [#unmarked-sum]
 === Business results are expressed as bare sums
@@ -329,13 +329,13 @@ data 明細 =
 
 Both parts of an `+import+` are optional: `+import example.pricing as Pricing+` only renames, and `+import example.pricing+` only writes the dependency down. What a qualified reference reaches is still what the declaring module exposes — qualifying a name that module keeps to itself is a compile error, as is qualifying with a name that is no module of this compilation.
 
-A behavior of another module is named the same way, as a `+>->+` stage and as a `+requires+`. What the qualifier says is which module the behavior comes from, which is what an `+import+` says, so a qualified stage or requirement needs no import line either.
+A behavior of another module is named the same way, as a `+>->+` stage and as a `+depends on+`. What the qualifier says is which module the behavior comes from, which is what an `+import+` says, so a qualified stage or requirement needs no import line either.
 
 [,text]
 ----
 behavior 出荷する = inventory.引き当てる >-> 送り状を作る
 behavior 通知する : (注文: 確定注文) -> 通知済み constructs 通知済み
-    requires messaging.メールを送る
+    depends on messaging.メールを送る
 ----
 
 Unlike a type, a behavior's name is also a member name in what is generated: an injected behavior is a field of the implementing class, and its name is that field's name (<<jvm-behavior>>). So one module cannot reach two behaviors of the same name, whether written bare or qualified — qualifying them does not separate the fields. Naming both is a compile error.
@@ -359,10 +359,10 @@ A dependency is a dependency however it is written, so a cycle closed by a quali
 ----
 module   import    exposing
 data     invariant
-behavior constructs requires
+behavior constructs depends on
 match    with      as
 let      if        then     else
-require
+guard
 true     false
 ----
 
@@ -376,6 +376,8 @@ Lists: `+[+` `+]+` (literal and guard comprehension), `{plus}{plus}` (concatenat
 
 `+->+` is the arrow. It joins types — in a behavior declaration (<<behavior>>) and in the function type of a `+let+` argument (<<fn-declaration>>) — and it introduces an anonymous body — in a `+match+` case (<<match>>) and a lambda (<<blocks>>). As in F# and Elm, there is one kind of arrow. `+=+` binds a name to a right-hand side (whether the right-hand side is a type or a term is decided by the rules of <<behavior>>).
 
+`+depends on+` is two words, and the `+on+` is not a reserved word. It is read as the second word of the keyword only where it follows `+depends+`, as the `+for+` of `+examples for+` is read after `+examples+` (<<example-placement>>), so a field, a parameter or a behavior MAY still be named `+on+`.
+
 `+decoder+` / `+encoder+` / `+discriminate+` are not reserved words: the mapping to external representation is not syntax but is derived from a data's shape (<<decoder>>, <<encoder>>). `+error+` / `+success+` / `+failure+` are not reserved words either: a *business* failure is neither a special type nor syntax but ordinary domain data, and whether it departs from the mainline is decided by composition (<<unmarked-sum>>, <<behavior>>, <<composition>>).
 
 There is no type name that carries an invariant violation. A violation inside the domain aborts, so no value needs to be carried (<<algebraic-types>>, <<violation-destination>>).
@@ -386,8 +388,8 @@ There is no type name that carries an invariant violation. A violation inside th
 The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and precedence needed for reading and writing are fixed here.
 
 * Both `+data+` declaration fields and record-literal `+型名 { ... }+` fields are `+,+`-separated (<<product-data>>, <<record-literal>>). A declaration gives a type, so `+名前: 型+`; a literal binds a value, so `+名前 = 値+` (`+:+` = has this type, `+=+` = is defined as this; ADR-0026). A `+...+` spread is an element that composes types but appears in the same comma sequence as fields (<<field-spread>>, ADR-0012, ADR-0030). An `+invariant+` is a clause placed after the type body (`+{ ... }+` or `+= Y+`) and is not part of the field list (<<invariant>>, ADR-0031).
-* Argument lists and the enumerations in `+constructs+` / `+requires+` are `+,+`-separated (<<behavior-io>>, <<constructs>>, <<requires>>).
-* Every `+,+`-separated list — declaration and record-literal fields, parameter and argument lists, tuple elements, list literals, and the `+constructs+` / `+requires+` name lists — MAY carry a single trailing `+,+` before its closing delimiter. It is optional and has no meaning; it accommodates writers coming from Go or TypeScript. The sample code in this spec keeps a leading-comma layout instead (the `+,+` opens each continuation line, as in Elm) and writes no trailing comma.
+* Argument lists and the enumerations in `+constructs+` / `+depends on+` are `+,+`-separated (<<behavior-io>>, <<constructs>>, <<depends-on>>).
+* Every `+,+`-separated list — declaration and record-literal fields, parameter and argument lists, tuple elements, list literals, and the `+constructs+` / `+depends on+` name lists — MAY carry a single trailing `+,+` before its closing delimiter. It is optional and has no meaning; it accommodates writers coming from Go or TypeScript. The sample code in this spec keeps a leading-comma layout instead (the `+,+` opens each continuation line, as in Elm) and writes no trailing comma.
 * `+|+` is the case separator of a sum and binds more loosely than `+->+`. `+(x: T) -> A | B+` reads as `+(x: T) -> (A | B)+` (the whole output is a sum). An anonymous `+|+` MUST NOT be written on input (<<union-intersection>>).
 * `+>->+` is the stage separator of a pipeline: not a binary operator but a flat n-ary sequence. It is associative (<<type-routing>>). Only a behavior name MAY appear in a stage position; parentheses such as `+(f >-> g)+` MUST NOT be written.
 * `+|>+` is the value pipe, binding most loosely and left-associatively. `+a |> f |> g+` reads as `+g(f(a))+`. The left side enters the last argument of the right-hand call and is expanded to a call at parse time (<<pipe>>). This is distinct from the `+>->+` that composes behaviors; it threads the value of an expression.
@@ -433,7 +435,7 @@ An integer literal is written as `+500+` and is `+Int+`. A `+Decimal+` literal t
 
 [,text]
 ----
-require 承認者ID == 申請.申請者.上長ID      // two 従業員ID built separately are equal if their values are equal
+guard 承認者ID == 申請.申請者.上長ID      // two 従業員ID built separately are equal if their values are equal
 ----
 
 * primitives compare values
@@ -475,7 +477,7 @@ The `+hashCode+` of a data containing `+Decimal+` is computed after dropping sca
 [#newtype-arithmetic]
 ===== Arithmetic on a newtype
 
-A single-value newtype over `+Int+` or `+Decimal+` supports `+{plus}+` and `+-+`, and the result stays in the newtype: `+Money {plus} Money+` and `+Money - Money+` are `+Money+`. The operator opens each operand to its wrapped value, computes on the base, and re-wraps the result — so the result's invariant is re-checked at construction, exactly as any other construction is (<<invariant-mvp>>). A subtraction that leaves the invariant (a non-negative `+Money+` going below zero) *aborts* inside the domain (<<violation-destination>>). To make that a business result, guard it with `+require ... else+` (<<require>>); the compiler then confirms the guard discharges the construction (<<invariant-discharge>>).
+A single-value newtype over `+Int+` or `+Decimal+` supports `+{plus}+` and `+-+`, and the result stays in the newtype: `+Money {plus} Money+` and `+Money - Money+` are `+Money+`. The operator opens each operand to its wrapped value, computes on the base, and re-wraps the result — so the result's invariant is re-checked at construction, exactly as any other construction is (<<invariant-mvp>>). A subtraction that leaves the invariant (a non-negative `+Money+` going below zero) *aborts* inside the domain (<<violation-destination>>). To make that a business result, guard it with `+guard ... else+` (<<guard>>); the compiler then confirms the guard discharges the construction (<<invariant-discharge>>).
 
 Operand pairing is the same as comparison (<<newtype-comparison>>): the *same* newtype, or a newtype with a bare literal of its base (`+Money {plus} 100+`, the `+100+` taken as `+Money+`). Two *different* newtypes do not combine — `+Money - Quantity+` is a compile error even though both wrap `+Int+` — and a non-literal value of the wrapped type is not taken implicitly.
 
@@ -529,7 +531,7 @@ behavior 値引きする : (d: 見積) -> 値引き済み
 
 Writing a computation that breaks the invariant of `+値引き済み+` does not change the output type; breaking it aborts. An abort is not a Souther expression and has no catching syntax, so it cannot control business flow (<<out-of-scope>>). At the boundary (<<java-example>>), Java catches it and maps it to 500, distinct from a business failure (400).
 
-If the author wants to return the violation, that is a business judgment and MUST be written explicitly with `+require ... else+` (<<require>>). An invariant is a declaration that "a value passing here is always so", not a branch designed to be broken.
+If the author wants to return the violation, that is a business judgment and MUST be written explicitly with `+guard ... else+` (<<guard>>). An invariant is a declaration that "a value passing here is always so", not a branch designed to be broken.
 
 That judgment MAY be written by *attempting* the construction (<<attempted-construction>>), which states the rule once instead of restating it in the guard. What the attempt answers is a branch, not a value: no failure value reaches the domain, and the name a business failure gets is still the one the author writes in `+else+`.
 
@@ -738,7 +740,7 @@ data OwnCompany = Reimbursement | Advance | CorporateCard
 behavior quote : (c: Cart) -> PricedCart | EmptyCart     // EmptyCart is a unit
 ----
 
-Everywhere else a type is *referred to*, and a name nothing declares is unknown there and reported: a parameter type, a field's type, `+constructs+`, `+requires+`, a `+match+` arm, a codec variant, a `+let+`'s declared return type.
+Everywhere else a type is *referred to*, and a name nothing declares is unknown there and reported: a parameter type, a field's type, `+constructs+`, `+depends on+`, a `+match+` arm, a codec variant, a `+let+`'s declared return type.
 
 Whether a name is declared is answered within the module — its own declarations and the names its `+import+` lines list. A qualified name (`+inventory.InsufficientStock+`) names another module's declaration, so it is a reference wherever it is written. A sum's case is module-local in any event (<<e1606>>).
 
@@ -861,15 +863,15 @@ data 金額 = Int  invariant 正の数(value)
 data カゴ = { items: List<明細> } invariant List.all(x -> 正の数(x.数量), items)
 ----
 
-What may be called is a `+let+`, not a behavior (<<fn>>). An invariant is part of what a type is: it travels to an importing module as the source it was written as, together with the helper `+let+`s it names (<<published-modules>>). It names only what travels with it, so a behavior MUST NOT be called from an invariant whatever its requirement set — including one that requires nothing and is callable from a `+let+` body (<<calling-a-behavior>>). To name a business rule, use a `+let+`.
+What may be called is a `+let+`, not a behavior (<<fn>>). An invariant is part of what a type is: it travels to an importing module as the source it was written as, together with the helper `+let+`s it names (<<published-modules>>). It names only what travels with it, so a behavior MUST NOT be called from an invariant whatever its requirement set — including one that depends on nothing and is callable from a `+let+` body (<<calling-a-behavior>>). To name a business rule, use a `+let+`.
 
 A `+let+` may be called from an invariant when it satisfies all of the following, all statically decidable.
 
-* the requirement set is empty (the corresponding behavior writes no `+requires+`; <<requires>>)
+* the requirement set is empty (the corresponding behavior writes no `+depends on+`; <<depends-on>>)
 * it constructs no data (the construction set of any helper `+let+` it calls is also empty; <<blocks>>)
 * it is not `+partial+`
 
-The first is decided by reading the declaration. `+let 事前承認する+` does not touch the outside world directly and so is pure in the sense of <<purity>>, but `+behavior 事前承認する+` writes `+requires 現在時刻+`, so its requirement set is non-empty and that `+let+` MUST NOT be called from an invariant.
+The first is decided by reading the declaration. `+let 事前承認する+` does not touch the outside world directly and so is pure in the sense of <<purity>>, but `+behavior 事前承認する+` writes `+depends on 現在時刻+`, so its requirement set is non-empty and that `+let+` MUST NOT be called from an invariant.
 
 A helper `+let+` always satisfies the first and second. To touch the outside world it can only receive a function as an argument (<<fn-declaration>>), and an invariant has no way to pass one. The third is about termination: an invariant is checked on every construction and must terminate. A `+partial+` helper disclaims totality and may loop, so it cannot appear in an invariant. A *total* helper is admissible even when it recurses — the compiler has proven it terminates (<<fn-declaration>>, ADR-0052). This is what lets the list quantifiers `+List.all+` / `+List.any+` / `+List.member+` and the uniqueness checks `+List.distinct+` / `+List.allUniqueBy+` appear in an invariant: each derives from the total stdlib fold `+List.foldFrom+`, which is bounded by the finite list (ADR-0051, ADR-0052). Only a `+partial+` helper in an invariant is a compile error.
 
@@ -893,18 +895,18 @@ behavior 値引きする : (d: 見積) -> 値引き済み          // no violati
 
 *A behavior's output needs no slot for the violation.* Constructing an invariant-bearing data does not change the output type.
 
-If the business decides "return a different result when the amount is negative", that is not an invariant violation but a business judgment and MUST be written explicitly with `+require ... else+` (<<require>>). These are different: an invariant declares "a value passing here is always so", while `+require+` is a business branch of "if not so, return this". The former breaking is a bug; the latter not holding is an expected result.
+If the business decides "return a different result when the amount is negative", that is not an invariant violation but a business judgment and MUST be written explicitly with `+guard ... else+` (<<guard>>). These are different: an invariant declares "a value passing here is always so", while `+guard+` is a business branch of "if not so, return this". The former breaking is a bug; the latter not holding is an expected result.
 
 [#invariant-discharge]
 === Discharging an invariant at compile time
 
 An invariant is checked at run time on every construction (<<invariant-mvp>>), and inside the domain a violation aborts (<<violation-destination>>). The compiler *also* checks, per behavior, whether each construction's invariant is *established* where the value is built — so a construction that must abort is caught at compile time, and one a guard makes safe is confirmed.
 
-The check is intraprocedural. Within a behavior's `+let+` body it seeds what the input types guarantee — a newtype's own invariant, a product data's invariant over its fields — which is sound because an input of type `+T+` was built through `+T+`'s checked construction. It refines that along each `+require+` / `+if+` guard (<<require>>, <<if>>), and at every construction asks whether the guards prove its invariant.
+The check is intraprocedural. Within a behavior's `+let+` body it seeds what the input types guarantee — a newtype's own invariant, a product data's invariant over its fields — which is sound because an input of type `+T+` was built through `+T+`'s checked construction. It refines that along each `+guard+` / `+if+` guard (<<guard>>, <<if>>), and at every construction asks whether the guards prove its invariant.
 
 * *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
 * *Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
-* *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+require+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
+* *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
 * *Not expressible* — an invariant outside the checked fragment. No diagnostic; the run-time check stands.
 
 [,text]
@@ -914,7 +916,7 @@ data WithdrawRequest = { balance: Money, amount: Money }
 
 behavior withdraw : (req: WithdrawRequest) -> Money | InsufficientBalance
 let withdraw (req) = {
-    require req.amount <= req.balance
+    guard req.amount <= req.balance
         else InsufficientBalance
     req.balance - req.amount          // discharged: the guard proves balance - amount >= 0
 }
@@ -927,7 +929,7 @@ An *attempted* construction (<<attempted-construction>>) is never possibly viola
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 
-The check does not cross behaviors: a relation established in one behavior is not assumed in another (<<sequential-composition>>). Inferring such a precondition would be an implicit cross-unit contract, which the language declines — `+requires+` and an exposed composition's output are always declared, not inferred (<<requires>>, ADR-0017, ADR-0024). The consistent way to carry a relation is to *reify it as a type invariant*, which the seeding then assumes downstream for free.
+The check does not cross behaviors: a relation established in one behavior is not assumed in another (<<sequential-composition>>). Inferring such a precondition would be an implicit cross-unit contract, which the language declines — `+depends on+` and an exposed composition's output are always declared, not inferred (<<depends-on>>, ADR-0017, ADR-0024). The consistent way to carry a relation is to *reify it as a type invariant*, which the seeding then assumes downstream for free.
 
 [,text]
 ----
@@ -1225,7 +1227,7 @@ An anonymous union appears only in a behavior's *output* (<<union-intersection>>
 [#constructs]
 === Data construction authority (constructs)
 
-A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+requires+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body (too few = E1002, too many = E1006). An injected behavior has no body, and its declaration is the input to factory generation, so it MUST always write it (<<java-base-class>>).
+A behavior that constructs data MAY write the constructed type in `+constructs+`. This is an internal construction authority; unlike a dependency (`+depends on+`), it is invisible to callers. So for a behavior with a `+let+` implementation it is *optional* — omit it and it is inferred from the body. If written, it MUST *exactly match* the body (too few = E1002, too many = E1006). An injected behavior has no body, and its declaration is the input to factory generation, so it MUST always write it (<<java-base-class>>).
 
 [,text]
 ----
@@ -1241,7 +1243,7 @@ The following count as data construction: a record literal (`+型名 { ... }+`),
 
 The built-in `+Some+` / `+None+` (<<algebraic-types>>) do not count as data construction. Option is not domain data but an auxiliary type and has no invariant, so <<invariant-on-construct>> has nothing to guard. So `+constructs+` is not required to put a value in a `+?+` field (<<optional>>) — and since Option cannot be written as a type, there is no way to declare `+constructs Some+` anyway (<<algebraic-types>>).
 
-*If you write `+constructs+`, you may not omit anything the implementation constructs.* The departure value of `+require ... else+` (<<require>>) is the same: `+else 承認権限なし+` constructs one unit data, so if declaring, include it in `+constructs 承認権限なし+` (omitting it is E1002). Being a failure case is no exception — what <<closed-construction>> closes is construction, regardless of success or failure.
+*If you write `+constructs+`, you may not omit anything the implementation constructs.* The departure value of `+guard ... else+` (<<guard>>) is the same: `+else 承認権限なし+` constructs one unit data, so if declaring, include it in `+constructs 承認権限なし+` (omitting it is E1002). Being a failure case is no exception — what <<closed-construction>> closes is construction, regardless of success or failure.
 
 ==== What constructs is for
 
@@ -1262,7 +1264,7 @@ Creating a type that does not appear in the output also shows here. The `+constr
 
 A helper `+let+` (with no corresponding behavior) may also construct data, but a helper `+let+` is not a specification statement and does not declare its own `+constructs+`. Its *construction set is inferred transitively* (folding in any helper `+let+` it calls). If the calling behavior writes `+constructs+`, it MUST include that set (E1002 if it does not); if omitted, that set is folded into the inference. A block is the same, constructing under the enclosing behavior's authority (<<blocks>>).
 
-A dependency (`+requires+`) is different and MUST *always* be written (<<requires>>). `+requires+` is an outward contract to the caller and injector; leaving it to inference would let the contract change silently. `+constructs+` is an internal authority invisible to callers, so they diverge here. Thus `+requires+` is a declaration and `+constructs+` (for a behavior with a `+let+` implementation) is optional. A `+>->+` composition infers both output and requirements (<<composition-with-requirements>>).
+A dependency (`+depends on+`) is different and MUST *always* be written (<<depends-on>>). `+depends on+` is an outward contract to the caller and injector; leaving it to inference would let the contract change silently. `+constructs+` is an internal authority invisible to callers, so they diverge here. Thus `+depends on+` is a declaration and `+constructs+` (for a behavior with a `+let+` implementation) is optional. A `+>->+` composition infers both output and requirements (<<composition-with-requirements>>).
 
 [#record-literal]
 === Record literals and spread
@@ -1354,27 +1356,27 @@ Outside `+match+` the name a constructor pattern writes is also checked against 
 
 A helper's parameter written as a constructor pattern needs no type beside it — `+let 個数 (タグ集合(ts))+` already says the parameter is a `+タグ集合+`. A tuple or record pattern names no type, so a helper whose parameter type its body does not determine still annotates it (`+let 二倍 ({ 数量 }: 明細)+`).
 
-On a behavior's implementation the pattern is not a type either way: the parameter types come from the behavior (<<fn-declaration>>), and a pattern only opens the input the behavior has already typed. The name the pattern writes is checked against that input, so `+behavior 総数 : (集合: タグ集合) -> Int+` implemented as `+let 総数 (ラベル集合(ts))+` is refused. A `+requires+` parameter names an injected behavior, so it takes a name, not a pattern.
+On a behavior's implementation the pattern is not a type either way: the parameter types come from the behavior (<<fn-declaration>>), and a pattern only opens the input the behavior has already typed. The name the pattern writes is checked against that input, so `+behavior 総数 : (集合: タグ集合) -> Int+` implemented as `+let 総数 (ラベル集合(ts))+` is refused. A `+depends on+` parameter names an injected behavior, so it takes a name, not a pattern.
 
 A lambda's `+(a, b) -> ...+` is its parameter list, not a tuple pattern (ADR-0036); a single tuple parameter is `+((a, b)) -> ...+`.
 
-[#requires]
-=== Dependencies (requires)
+[#depends-on]
+=== Dependencies (depends on)
 
-A behavior that touches the outside world writes what it requires in `+requires+`.
+A behavior that touches the outside world writes what it depends on in `+depends on+`.
 
 [,text]
 ----
 behavior 事前承認する : (申請: 事前承認待ち, 承認者ID: 従業員ID) -> 事前承認済み | 承認権限なし
-    requires 現在時刻
+    depends on 現在時刻
     constructs 事前承認済み, 承認権限なし
 ----
 
-What is written is the name of a behavior whose *requirement set is not empty* (<<requirement-propagation>>) — one with no implementation (<<injected-behavior>>), or one whose own `+let+` declares `+requires+` — declared in this module or imported from another (<<modules>>). Write it if the `+let+` uses that name. Even when used indirectly by passing it to a helper `+let+`, the one passing is you, so you write it.
+What is written is the name of a behavior whose *requirement set is not empty* (<<requirement-propagation>>) — one with no implementation (<<injected-behavior>>), or one whose own `+let+` declares `+depends on+` — declared in this module or imported from another (<<modules>>). Write it if the `+let+` uses that name. Even when used indirectly by passing it to a helper `+let+`, the one passing is you, so you write it.
 
-A behavior with an empty requirement set is not written here. It depends on nothing, so there is nothing to inject, and it is called directly (<<calling-a-behavior>>). Writing one in `+requires+` is rejected where the clause is written (<<e1607>>), as is a `+>->+` composition — whose requirements are inferred from its stages and are not written, so requiring one would make a caller declare a set that changes when an upstream stage changes — and as is a name that is no behavior in scope.
+A behavior with an empty requirement set is not written here. It depends on nothing, so there is nothing to inject, and it is called directly (<<calling-a-behavior>>). Writing one in `+depends on+` is rejected where the clause is written (<<e1607>>), as is a `+>->+` composition — whose requirements are inferred from its stages and are not written, so requiring one would make a caller declare a set that changes when an upstream stage changes — and as is a name that is no behavior in scope.
 
-Only a simple behavior with a `+let+` may have `+requires+`. A behavior with no implementation does not write it: it is the leaf of the dependency, and its name being listed is itself the statement of dependency. A `+>->+` composition does not write it either: it is decided by the union over stages, readable from the stages (<<composition-with-requirements>>).
+Only a simple behavior with a `+let+` may have `+depends on+`. A behavior with no implementation does not write it: it is the leaf of the dependency, and its name being listed is itself the statement of dependency. A `+>->+` composition does not write it either: it is decided by the union over stages, readable from the stages (<<composition-with-requirements>>).
 
 ==== Correspondence to the spec DSL
 
@@ -1388,18 +1390,18 @@ The DSL attaches `+// 依存:+` / `+// 副作用:+` to a *leaf*.
 behavior 出張申請を保存する = 未検証出張申請 AND 事前承認要否 -> 保存済み出張申請
 ----
 
-In Souther this becomes a behavior with no implementation, so no `+requires+` is needed. The same as the DSL attaching no note to a composition: it is readable from the stages.
+In Souther this becomes a behavior with no implementation, so no `+depends on+` is needed. The same as the DSL attaching no note to a composition: it is readable from the stages.
 
-The DSL holds only these two because it places side effects at the ends of a workflow. The form "use the outside world once in the middle of a pure computation" does not appear in a specification model. Souther allows it, so a position with no source in the DSL — a behavior with a `+let+` — arises. `+requires+` lets the DSL's note be written on a non-leaf behavior too. The positions increase, but the content is the same "what it depends on" as the DSL; no lines are added.
+The DSL holds only these two because it places side effects at the ends of a workflow. The form "use the outside world once in the middle of a pure computation" does not appear in a specification model. Souther allows it, so a position with no source in the DSL — a behavior with a `+let+` — arises. `+depends on+` lets the DSL's note be written on a non-leaf behavior too. The positions increase, but the content is the same "what it depends on" as the DSL; no lines are added.
 
-==== requires becomes a let argument
+==== depends on becomes a let argument
 
-What is written in `+requires+` appears as a `+let+` argument, after the business inputs, in declaration order.
+What is written in `+depends on+` appears as a `+let+` argument, after the business inputs, in declaration order.
 
 [,text]
 ----
 let 事前承認する (申請, 承認者ID, 現在時刻) = {
-    require 承認者ID == 申請.申請者.上長ID
+    guard 承認者ID == 申請.申請者.上長ID
         else 承認権限なし
 
     事前承認済み { ...申請, 事前承認日時 = 現在時刻(), 事前承認者 = 承認者ID }
@@ -1415,9 +1417,9 @@ bind:     fix 現在時刻                                  f_a(x) = f(x, a)
 behavior: (申請, 承認者ID)          -> 事前承認済み | 承認権限なし
 ----
 
-`+Handle.bind(new JdbcClock())+` (<<jvm-behavior>>) is this partial application. What remains after binding is the behavior's declared type, and Java calls `+apply(申請, 承認者ID)+` with 2 arguments. `+requires+` does not appear in the caller's arguments.
+`+Handle.bind(new JdbcClock())+` (<<jvm-behavior>>) is this partial application. What remains after binding is the behavior's declared type, and Java calls `+apply(申請, 承認者ID)+` with 2 arguments. `+depends on+` does not appear in the caller's arguments.
 
-This merely surfaces the "requirements are constructor arguments" of the end of <<blocks>>. In the `+let+`, `+現在時刻+` is just an argument, not an effect or a special type. So the `+let+` side needs no place to write `+requires+`.
+This merely surfaces the "requirements are constructor arguments" of the end of <<blocks>>. In the `+let+`, `+現在時刻+` is just an argument, not an effect or a special type. So the `+let+` side needs no place to write `+depends on+`.
 
 A helper `+let+` (with no corresponding behavior) fits the same form. To touch the outside world, it receives a function as an argument — a helper writes its own type (<<fn-declaration>>), so it writes it there.
 
@@ -1426,11 +1428,11 @@ A helper `+let+` (with no corresponding behavior) fits the same form. To touch t
 let 記録する (x: Int, 現在時刻: () -> DateTime) = ...       // helper. Receives it as an argument
 ----
 
-The `+現在時刻+` appearing inside a `+let+` is an argument in either case. There is no path to call a behavior with no implementation directly as a top-level name. So a helper `+let+` having no place to write `+requires+` is not a restriction. The passer writes it in its own `+requires+` and passes it as an argument.
+The `+現在時刻+` appearing inside a `+let+` is an argument in either case. There is no path to call a behavior with no implementation directly as a top-level name. So a helper `+let+` having no place to write `+depends on+` is not a restriction. The passer writes it in its own `+depends on+` and passes it as an argument.
 
 ==== Checking
 
-The set of behaviors with a non-empty requirement set that a `+let+` uses and the set written in `+requires+` MUST match. Too few is E1602, too many is E1603 (<<e1602>>, <<e1603>>). An over-declaration erring on the safe side is not admitted either.
+The set of behaviors with a non-empty requirement set that a `+let+` uses and the set written in `+depends on+` MUST match. Too few is E1602, too many is E1603 (<<e1602>>, <<e1603>>). An over-declaration erring on the safe side is not admitted either.
 
 [#calling-a-behavior]
 === Calling a behavior
@@ -1439,16 +1441,16 @@ A behavior's `+let+` may call a behavior. Which ones it may call is decided by o
 
 A helper `+let+` may not. A helper is expanded into what calls it, and an invariant that names one carries it to an importing module as source (<<published-modules>>); it names only what travels with it, which is what keeps an invariant's rule a single question about the requirement set rather than a second one about where a name came from. A behavior a helper wanted is called from the behavior's own `+let+` and its result passed in.
 
-* An *empty* requirement set: call it by name. Nothing is injected and nothing is written in `+requires+`.
-* A *non-empty* requirement set: write it in `+requires+` and call it through that name (<<requires>>). It arrives already bound, as any requirement does.
+* An *empty* requirement set: call it by name. Nothing is injected and nothing is written in `+depends on+`.
+* A *non-empty* requirement set: write it in `+depends on+` and call it through that name (<<depends-on>>). It arrives already bound, as any requirement does.
 
 [,text]
 ----
 behavior 事前承認する : (申請: 事前承認待ち) -> 事前承認済み | 承認権限なし
-    requires 現在時刻
+    depends on 現在時刻
 
 behavior 却下して通知する : (申請: 事前承認待ち) -> 通知済み | 承認権限なし
-    requires 事前承認する
+    depends on 事前承認する
 let 却下して通知する (申請, 事前承認する) = match 事前承認する(申請) with
     | 事前承認済み 済 -> 通知済み { 宛先 = 済.申請者 }
     | 承認権限なし 拒 -> 拒
@@ -1458,7 +1460,7 @@ A call yields the behavior's declared output. Where that output is a sum, the ca
 
 A behavior's `+constructs+` is its own and adds nothing to its caller's. A helper `+let+` is different — it is not a specification statement and declares no authority, so its construction set folds into the behavior that calls it (<<constructs>>).
 
-Behaviors do not recurse. A behavior MUST NOT reach itself, through calls, through `+requires+`, or through a mixture of the two (<<e1608>>). Recursion is a property of a named module helper (<<fn-rules>>).
+Behaviors do not recurse. A behavior MUST NOT reach itself, through calls, through `+depends on+`, or through a mixture of the two (<<e1608>>). Recursion is a property of a named module helper (<<fn-rules>>).
 
 [#tuple]
 == Tuples
@@ -1494,11 +1496,11 @@ A `+let+` is written `+let 名前 (引数) = 本体+`. If a behavior of the same
 [,text]
 ----
 behavior 事前承認する : (申請: 事前承認待ち, 承認者ID: 従業員ID) -> 事前承認済み | 承認権限なし
-    requires 現在時刻
+    depends on 現在時刻
     constructs 事前承認済み, 承認権限なし
 
 let 事前承認する (申請, 承認者ID, 現在時刻) = {
-    require 承認者ID == 申請.申請者.上長ID
+    guard 承認者ID == 申請.申請者.上長ID
         else 承認権限なし
 
     事前承認済み { ...申請, 事前承認日時 = 現在時刻(), 事前承認者 = 承認者ID }
@@ -1507,7 +1509,7 @@ let 事前承認する (申請, 承認者ID, 現在時刻) = {
 
 The type comes from the behavior. The `+let+` side only names its arguments, corresponding by position. The behavior-side names are for the reader; what binds is the `+let+`-side names. `+constructs+` is on the behavior, so it is not written on the `+let+` (<<constructs>>).
 
-Arguments are the behavior's argument list followed by `+requires+` in declaration order. A `+let+` is the pre-injection function and a behavior's type is the post-injection type, so a `+let+` has as many more arguments as there are `+requires+` (<<requires>>). If `+requires+` is empty, both have the same arguments.
+Arguments are the behavior's argument list followed by `+depends on+` in declaration order. A `+let+` is the pre-injection function and a behavior's type is the post-injection type, so a `+let+` has as many more arguments as there are `+depends on+` (<<depends-on>>). If `+depends on+` is empty, both have the same arguments.
 
 A `+let+` with no corresponding behavior is a *helper*. Not being a domain behavior, it does not pollute the behavior list, cannot be placed in a `+>->+` stage, and does not appear in `+exposing+`. It states its own type, though a parameter whose type its body determines may leave it unwritten (below).
 
@@ -1521,7 +1523,7 @@ The return type is inferred. However, a *recursive helper* MUST declare its retu
 
 A written return type is a declaration into the body, and it stays one where the helper is expanded: it is pushed into the body at each call site, so a value only its context can type — an empty `+[]+` / `+Map.empty()+` / `+Set.empty()+`, or a `+fold+` over one — takes the declared element type even where the call site itself expects nothing concrete (a generic parameter such as `+Map.toList+`'s). This is the same direction a binding's `+let x: T = v+` has (<<block-expression>>).
 
-The body is an expression. `+{ ... }+` is a block expression (<<block-expression>>), written to place a `+let+` or `+require+`. `+let 正の数 (v: Int) = v >= 0+` and `+let 正の数 (v: Int) = { v >= 0 }+` are the same.
+The body is an expression. `+{ ... }+` is a block expression (<<block-expression>>), written to place a `+let+` or `+guard+`. `+let 正の数 (v: Int) = v >= 0+` and `+let 正の数 (v: Int) = { v >= 0 }+` are the same.
 
 `+=+` introduces a named definition. The bodies of an anonymous block (<<blocks>>) and a `+match+` case are introduced by `+->+` — the same symbol as the type arrow (as in F# and Elm). Binding a lambda to a named definition (`+let f = (x) -> ...+`) is not adopted.
 
@@ -1532,7 +1534,7 @@ The body is an expression. `+{ ... }+` is a block expression (<<block-expression
 * A helper (a `+let+` with no same-named behavior) states its own argument types, except where its *body* determines them (ADR-0066). A parameter takes the type of the first position the body puts it in that names one: an operand of an operator against a value of known type (`+let 二倍 (n) = n * 2+`), an argument of a call whose parameter type is declared and concrete (a signature with a type variable names no type, so a standard-library combinator's `+List<'a>+` determines nothing), the value of a field in a construction, an `+if+` condition, the value of a binding — its written type where it has one, and otherwise whatever the binding's own body determines, so `+let y = x in y * 2+` types `+x+` through `+y+`. The whole body is read, so a position further down it — or a helper declared further down the file — determines the parameter just as well; written order decides only which of several determining positions wins. Call sites are not read — what a helper means is settled by reading the helper, not by reading its callers. A parameter the body leaves open MUST be annotated: Souther has no user generics, so there is nothing to generalise an open parameter into. A *function-typed* parameter MUST be written: neither applying it nor handing it to a combinator that applies it determines its type. A *recursive* helper is lowered to a method rather than inlined (below) and is typed on its declaration, so it writes all of its argument types.
 * A helper *may recurse* (self- and mutual recursion; ADR-0038). A non-recursive helper is inline-expanded at its call site; a recursive helper is not inlined but lowered to a method — self- and mutual calls become plain method calls. Traversal of self-referential data that `+fold+` cannot write (climbing the manager chain to the root, counting tree depth) is written this way.
 * A recursive helper MUST *declare its return type* (above). Without a declaration it is a compile error.
-* A recursive helper MUST be *pure*: its own body MUST NOT call an injected behavior (`+requires+`). It MAY apply a function argument that does — the effect is then the caller's, declared in the caller's `+requires+` and carried in by the closure (<<blocks>>). An effect touching the outside world is placed on the behavior that calls the helper, or on the function it is handed.
+* A recursive helper MUST be *pure*: its own body MUST NOT call an injected behavior (`+depends on+`). It MAY apply a function argument that does — the effect is then the caller's, declared in the caller's `+depends on+` and carried in by the closure (<<blocks>>). An effect touching the outside world is placed on the behavior that calls the helper, or on the function it is handed.
 * Recursion is *total by default* (ADR-0052). A recursive helper — or a group of mutually-recursive helpers — MUST terminate, proven by *size-change termination*: each recursive call relates caller parameters to callee arguments, an argument that is a strictly smaller part of a parameter is a strict decrease and one passed through unchanged is non-increasing, and every recursive cycle MUST strictly decrease some parameter. A strictly smaller part comes from a `+match+` on a field or a case (`+match s.上司 with | Some b -> 深さ(b)+` passes the unwrapped `+社員+` — an org chart, or a two-`+Option+`-field binary tree), or from a value handed to a standard-library container combinator's closure over a container that is part of a parameter — a list element (`+List.fold((acc, c) -> acc + 深さ(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total), or an `+Option+`'s unwrapped `+Some+` payload (`+s.上司 |> Option.map(b -> 深さ(b) + 1)+` — the payload of `+s.上司+` is a smaller `+社員+` than `+s+`, so `+Option.map+` recursion over a manager chain is total, exactly as the equivalent `+match+` is). Either way it bottoms out on the finite self-referential data. This one check covers self-recursion, mutual recursion, and structural lexicographic recursion (different calls decreasing different positions). A helper or group that cannot be shown to terminate is a compile error (E2001). Write `+partial let f ...+` to opt out: a `+partial+` helper is not checked and may not terminate, and a `+partial+` member opts its whole mutually-recursive group out. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` is trusted total. An `+example+` is evaluated within a time budget, so a `+partial+` recursion that does not terminate is reported rather than hanging the compiler.
 * A local lambda (`+let f = (x) -> ...+`) cannot recurse. Recursion is a property of a named module helper.
 * Two `+let+`s MUST NOT be written for one behavior.
@@ -1566,7 +1568,7 @@ No keyword is needed. Having no implementation is what "provided from outside" m
 
 Typical uses: DB query, HTTP call, file I/O, clock, ID generation, message sending. The concrete APIs are not brought into the language core. The distinction between dependency (only reads) and side effect (changes) is documentation of intent and does not affect value composition.
 
-Forgetting to write an implementation is not an error; that behavior simply becomes subject to injection. But a caller MUST write that name in `+requires+` (<<requires>>), and doing so surfaces it in a `+bind+` argument (<<jvm-behavior>>). If there is no caller, it is not caught within the `+.sou+`.
+Forgetting to write an implementation is not an error; that behavior simply becomes subject to injection. But a caller MUST write that name in `+depends on+` (<<depends-on>>), and doing so surfaces it in a `+bind+` argument (<<jvm-behavior>>). If there is no caller, it is not caught within the `+.sou+`.
 
 Which behaviors get a `+let+` and which are injected is not decided mechanically from the DSL. The spec DSL's `+// 依存:+` is a note, not an obligation, so its absence does not mean an internal implementation. The 1:1 of <<non-functional>> is a declaration correspondence: one DSL behavior line maps to one Souther behavior declaration. It does not decide the implementation form (`+let+` / injection / `+>->+` composition). The model author chooses the form using the DSL's `+// 依存:+` and `+// 副作用:+` as cues: a note suggests injection, an internal computation a `+let+`, a chain of state transitions a `+>->+`.
 
@@ -1646,14 +1648,14 @@ behavior 同一申請者の申請を読む : (申請者: 従業員ID) -> List<�
 
 Anything referencing a behavior with no implementation inherits its requirement. Requirements accumulate outward, toward the side that wrote the name. If a `+let+` calls a behavior with no implementation, it becomes the requirement of the behavior holding that `+let+`. It accumulates further onto a composition placing that behavior in a stage.
 
-At the destination, whether to write or infer diverges (<<requires>>).
+At the destination, whether to write or infer diverges (<<depends-on>>).
 
-* a simple behavior with a `+let+`: *write* in `+requires+`; receive it as a `+let+` argument
+* a simple behavior with a `+let+`: *write* in `+depends on+`; receive it as a `+let+` argument
 * a `+>->+` composition: *infer*; decided by the union of the stages' requirement sets
 
 [,text]
 ----
-behavior loadAndConvert = findMember >-> toView      // requires not written
+behavior loadAndConvert = findMember >-> toView      // depends on not written
 ----
 
 This requires the implementation of `+findMember+`. Composing several gives a union. A composition is not made to write it, because it is readable from the stage declarations; the spec DSL also attaches no `+// 依存:+` to a composition.
@@ -1773,14 +1775,14 @@ g : Behavior<R2, B, O_g>        // I_g = B receives cases of O_f
 f >-> g : Behavior<R1 ∪ R2, A, (O_g) | (sum of O_f minus the consumed part)>
 ----
 
-`+R1+` and `+R2+` are what the stages declared (<<requires>>). The composition's `+R1 ∪ R2+` is inferred by the composition; a composition does not write `+requires+`. Whether an implementation is internal or Java-side does not affect value composition. `+Requirements+` (dependencies needed) and `+Output+` (the sum of results produced) are composed independently: the former by set union, the latter by consumption / propagation.
+`+R1+` and `+R2+` are what the stages declared (<<depends-on>>). The composition's `+R1 ∪ R2+` is inferred by the composition; a composition does not write `+depends on+`. Whether an implementation is internal or Java-side does not affect value composition. `+Requirements+` (dependencies needed) and `+Output+` (the sum of results produced) are composed independently: the former by set union, the latter by consumption / propagation.
 
 `+Output+` consumption / propagation splits into the *mainline* passing downstream and the cases that departed unconsumed. The composition carries this split, so, like the `+R1 ∪ R2+` set union, `+>->+` is associative (<<type-routing>>). The mainline / departed split stays in the composition plumbing and folds back into a sum when it exits as `+Output+`. The internal representation needs no fourth slot for failure.
 
 [#single-case-composition]
 === Composition of single-case output
 
-A behavior with a single-case output (`+-> A+`) can be seen as having no passed-through case (an empty failure row, `+Never+`). If a downstream stage receives `+A+`, it flows through. The user need not wrap it in anything. If `+require ... else+` returned another case early, that case propagates as `+R+` of <<type-routing>>.
+A behavior with a single-case output (`+-> A+`) can be seen as having no passed-through case (an empty failure row, `+Never+`). If a downstream stage receives `+A+`, it flows through. The user need not wrap it in anything. If `+guard ... else+` returned another case early, that case propagates as `+R+` of <<type-routing>>.
 
 [#declared-composition-output]
 === Declaring and reconciling a composition's output
@@ -1799,7 +1801,7 @@ behavior 注文を確定する = 注文を検証する >-> 価格を記載する
 
 `+-> 確定注文 | 在庫不足+` is the composition's declaration, not the output of the last stage `+在庫を引き当てる+`. Because a stage is a behavior reference (name only), the trailing `+->+` reads unambiguously as the composition's. Writing this line makes an error appear here when an upstream stage adds a case, so it does not grow silently downstream.
 
-Input is not declared. A pipeline is point-free, and the input is decided by the first stage (<<sequential-composition>>). Only the output may be declared. A dependency (`+requires+`) has the same distant-change risk, but a composition leaves it inferred (<<requires>>).
+Input is not declared. A pipeline is point-free, and the input is decided by the first stage (<<sequential-composition>>). Only the output may be declared. A dependency (`+depends on+`) has the same distant-change risk, but a composition leaves it inferred (<<depends-on>>).
 
 For an internal composition this declaration is optional. But for a composition exposed with `+exposing+` it is *required*, written not on the definition line but in the exposing list as `+name : cases+` (<<modules>>). Leaving a public boundary to inference means that when an upstream stage adds a case, it reaches another compilation unit (another module, or a non-exhaustive Java switch or JSON serialization) silently, and the definition site has nothing to signal it. Placing a signature in `+exposing+` makes the composition's definition error (E1604) the moment a case is added, and the author chooses to handle the case or update the signature. If no signature exists, it is E1605. A non-composition behavior writes its type at the definition, so it MUST NOT write a signature in `+exposing+` (doing so is E1605). This division corresponds to ADR-0024.
 
@@ -1853,7 +1855,7 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 [#example-evaluable]
 === What can carry an example
 
-A behavior with a `+let+` implementation is evaluated (<<fn>>). An injected behavior (no `+let+`, <<injected-behavior>>) or a `+>->+` composition cannot be — you fake an injected behavior, you do not example it (<<e1902>>). A behavior's `+requires+` dependencies are supplied by fakes at the example (<<example-fakes>>).
+A behavior with a `+let+` implementation is evaluated (<<fn>>). An injected behavior (no `+let+`, <<injected-behavior>>) or a `+>->+` composition cannot be — you fake an injected behavior, you do not example it (<<e1902>>). A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
 An input and an expected value are fixtures: literals, newtype applications, and record constructions. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
 
@@ -1864,9 +1866,9 @@ This holds wherever a value is written, not only inside a record: a behavior tak
 When a row does not hold, the diagnostic (<<e1905>>) shows what the behavior produced against what the row expects, both encoded through the data's derived Encoder (<<encoder>>) so the two read against each other.
 
 [#example-fakes]
-=== Faking a requires dependency
+=== Faking a dependency
 
-To evaluate a behavior that `+requires+` an injected dependency (<<requires>>), the example supplies a fake for it. Best is to need none: an outside-world value written as an *input* rather than an injected behavior keeps the behavior example-able with no fake (<<purity>>). When a dependency stays injected, a fake stands in, scoped to the example and never shipped (no run-time class is produced).
+To evaluate a behavior that `+depends on+` an injected dependency (<<depends-on>>), the example supplies a fake for it. Best is to need none: an outside-world value written as an *input* rather than an injected behavior keeps the behavior example-able with no fake (<<purity>>). When a dependency stays injected, a fake stands in, scoped to the example and never shipped (no run-time class is produced).
 
 A *value dependency* — one whose faked result is a constant — is given on the row with `+with+`:
 
@@ -1885,7 +1887,7 @@ fake 上長を探す
     | _               -> 従業員ID("unknown")
 ----
 
-Each requires dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file, and is local to its module. `+fake+` is a contextual keyword.
+Each dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file, and is local to its module. `+fake+` is a contextual keyword.
 
 [#example-placement]
 === Inline or an attached file
@@ -2003,22 +2005,22 @@ let 承認者の表示 (c: 出張完了) =
 
 A match on sum data MUST be exhaustive. Exhaustiveness is decided over the direct cases the sum declared. A nested sum (`+自社負担+` of `+data 費用負担区分 = 自社負担 | 先方負担+` being further `+立替 | 仮払い | 会社カード+`) does not flatten leaf cases; receive `+自社負担+` and split with a nested `+match+`. Exhaustiveness is checked independently per layer, so cases never overlap. Case→sum assignment (<<sum-data>>) folds to the leaf; match is the reverse, descending the layers.
 
-[#require]
-=== require
+[#guard]
+=== guard
 
 [,text]
 ----
-require amount <= balance
+guard amount <= balance
     else 残高不足
 ----
 
-`+require+` is used inside the implementation (`+let+`) of a behavior whose output has a departure case. If the condition is false, it returns the `+else+` value and ends on the spot. The `+else+` value is one of the output sum's cases (just data). The implementation only places the value of the case it wants to return as the last expression. No special wrapping.
+`+guard+` is used inside the implementation (`+let+`) of a behavior whose output has a departure case. If the condition is false, it returns the `+else+` value and ends on the spot. The `+else+` value is one of the output sum's cases (just data). The implementation only places the value of the case it wants to return as the last expression. No special wrapping.
 
-`+require+` is sugar for `+if+`. The following two mean the same.
+`+guard+` is sugar for `+if+`. The following two mean the same.
 
 [,text]
 ----
-require <condition> else <value>
+guard <condition> else <value>
 <rest of the body>
 ----
 
@@ -2034,7 +2036,7 @@ Desugaring is done at parse time; later stages (type check, construction-authori
 
 [,text]
 ----
-require DomainName(d) as name else 不正なドメイン
+guard DomainName(d) as name else 不正なドメイン
 if DomainName(d) as name then [ name ] else []
 ----
 
@@ -2062,7 +2064,7 @@ The name is in scope in the success branch only. *Nothing carries the failure.* 
 it — no `+Option+`, no `+Result+`, no reason — and the name a business failure gets is the one written
 in `+else+`, which MAY be a value naming nothing (`+else []+`).
 
-`+require+` here is the same sugar for `+if+` (<<require>>), so the `+if+` form is the base one and a
+`+guard+` here is the same sugar for `+if+` (<<guard>>), so the `+if+` form is the base one and a
 helper `+let+`, which has no departure case to name, reaches it too.
 
 A construction inside an argument is an ordinary construction and aborts on violation
@@ -2086,12 +2088,12 @@ takes; write the construction out (`+T(a.value - b.value)+`).
 [#block-expression]
 === Block expressions
 
-`+{ ... }+` is an expression. Place `+let+`s and `+require+`s, then put the result expression last.
+`+{ ... }+` is an expression. Place `+let+`s and `+guard+`s, then put the result expression last.
 
 [,text]
 ----
 let 事前承認する (申請, 承認者ID) = {
-    require 承認者ID == 申請.申請者.上長ID
+    guard 承認者ID == 申請.申請者.上長ID
         else 承認権限なし
 
     事前承認済み { ...申請, 事前承認日時 = 現在時刻(), 事前承認者 = 承認者ID }
@@ -2100,7 +2102,7 @@ let 事前承認する (申請, 承認者ID) = {
 
 If only the result expression is placed, no block is needed. `+let 正の数 (v: Int) = v >= 0+` and `+let 正の数 (v: Int) = { v >= 0 }+` are the same.
 
-A block is an expression, so it may be written anywhere an expression may (`+if c then { let x = f(a)  g(x) } else h+`). Its contents desugar per the rules of <<let>> and <<require>> and appear in the AST as bindings and `+if+`. A bare `+{+` resolves to a block expression; a record literal is preceded by a type name (<<record-literal>>), so there is no confusion.
+A block is an expression, so it may be written anywhere an expression may (`+if c then { let x = f(a)  g(x) } else h+`). Its contents desugar per the rules of <<let>> and <<guard>> and appear in the AST as bindings and `+if+`. A bare `+{+` resolves to a block expression; a record literal is preceded by a type name (<<record-literal>>), so there is no confusion.
 
 [#purity]
 == Purity
@@ -2109,7 +2111,7 @@ Souther code *does not touch the outside world directly*. The following are forb
 
 Mutable variables, field assignment, static mutable fields, random, current time, environment variables, files, network, threads, exceptions, reflection.
 
-An outside-world dependency is declared as a behavior with no implementation, and its implementation is injected from the Java side (<<injected-behavior>>). A `+let+` may receive one as an argument and call it, so a `+let+`'s result may depend on the outside world. But the way it touches must go through a call to the injected thing, and that fact is written in `+requires+` (<<requires>>). This corresponds to the conclusion of SMDD's DDD trilemma — purity is not layer separation but making explicit which functions have side effects (<<set-invariant>>). *Souther made this "explicit" literal.* Left to inference, which functions have side effects cannot be read from the declarations.
+An outside-world dependency is declared as a behavior with no implementation, and its implementation is injected from the Java side (<<injected-behavior>>). A `+let+` may receive one as an argument and call it, so a `+let+`'s result may depend on the outside world. But the way it touches must go through a call to the injected thing, and that fact is written in `+depends on+` (<<depends-on>>). This corresponds to the conclusion of SMDD's DDD trilemma — purity is not layer separation but making explicit which functions have side effects (<<set-invariant>>). *Souther made this "explicit" literal.* Left to inference, which functions have side effects cannot be read from the declarations.
 
 *"The requirement set is empty" is stronger than this sense of purity.* This chapter's sense is "does not touch directly", which every `+let+` satisfies. An empty requirement set means receiving nothing injected, which only some `+let+`s satisfy. What may be called from an invariant is the latter (<<invariant-expressions>>). To avoid conflating the two, the latter is henceforth called "empty requirement set" and not "pure".
 
@@ -2171,7 +2173,7 @@ To thread a value through functions, write `+|>+` left to right. `+e |> f(a)+` i
 
 Standard library arguments are set to F#'s and Elm's order to match — *the primary subject (collection, string, Map) last, functions, separators, and keys first*: `+List.map(f, xs)+`, `+List.filter(p, xs)+`, `+List.fold(step, seed, xs)+`, `+String.split(sep, s)+`, `+Map.get(key, m)+`. So the left value drops into the last argument and the pipe flows top to bottom. A `+fold+`'s folding block stays in `+(acc, x)+` order (F#'s `+List.fold+`).
 
-The right side admits only a function call or a function name; `+e |> 3+` is a compile error. A bare field getter is not a pipe target either — write `+e.field+` for a single value, or use the getter inside a call (`+xs |> List.map(.field)+`), not `+e |> .field+` (<<blocks>>). `+|>+` is expanded to a call at parse time, so no later stage sees `+|>+` — the same pure syntactic sugar as `+require+` expanding to `+if+`. It is distinct from the `+>->+` that composes behavior stages (<<composition>>); that connects behaviors, this threads expression values.
+The right side admits only a function call or a function name; `+e |> 3+` is a compile error. A bare field getter is not a pipe target either — write `+e.field+` for a single value, or use the getter inside a call (`+xs |> List.map(.field)+`), not `+e |> .field+` (<<blocks>>). `+|>+` is expanded to a call at parse time, so no later stage sees `+|>+` — the same pure syntactic sugar as `+guard+` expanding to `+if+`. It is distinct from the `+>->+` that composes behavior stages (<<composition>>); that connects behaviors, this threads expression values.
 
 [#stdlib-string]
 === String
@@ -2310,7 +2312,7 @@ map(x -> 明細を直す(x), xs)
 all(r -> 軽微か(r), 理由リスト)
 ----
 
-If an injected thing is called from within a block, its requirement appears in the enclosing behavior's `+requires+` (<<requires>>).
+If an injected thing is called from within a block, its requirement appears in the enclosing behavior's `+depends on+` (<<depends-on>>).
 
 None of these is a compiler primitive. `+List.fold+` is a recursive `+let+` in `+souther.list+`: it walks the list with `+List.get+`, threads an accumulator, and takes its step as a function value (<<blocks>>). Its tail-recursive self-call is compiled to a loop, so it reads as a loop would — as `+fold+` is written in Elm or F# (<<stdlib>>, ADR-0051). `+map+` / `+filter+` / `+all+` / `+any+` are `+let+`s derived from it, expanded at the call site: `+map+` / `+filter+` seed with an empty list `+[]+` and grow it, `+all+` / `+any+` fold a `+Bool+`. `+indexedMap(f, xs)+` is `+map+` that also hands `+f+` the element's 0-based index (Elm's `+List.indexedMap+`): `+fold+` carries no index, so it threads one in a pair accumulator `+(i, ys)+` and drops the counter at the end — the caller writes a weighted sum or positional transform (`+indexedMap((i, c) -> w(i) * d(c)) |> sum+`) without hand-rolling that `+(i, acc)+` fold. `+List.length+` / `+String.length+` and `+List.get+` / `+Map.get+` are separate module functions, reached by their qualifier.
 
@@ -2586,7 +2588,7 @@ Behavior definition nodes are two, corresponding to the two right-hand sides of 
 
 `+FnDef+` holds argument names and a body. If a same-named `+SpecBehavior+` exists the type comes from it; otherwise it is a helper `+let+` and holds its own argument types, except for a parameter its body determines (<<fn-declaration>>).
 
-A `+SumData+` case holds only a reference to a named data (<<sum-data>>). A `+...+` spread inherits taken-in fields and invariants flatly. `+DecoderDef+` / `+EncoderDef+` are filled by derivation from a data's shape (<<decoder>>, <<encoder>>). `+require+` and `+let+` are desugared, so they do not appear in the AST; they appear as an `+if+` and as block bindings (<<require>>, <<block-expression>>).
+A `+SumData+` case holds only a reference to a named data (<<sum-data>>). A `+...+` spread inherits taken-in fields and invariants flatly. `+DecoderDef+` / `+EncoderDef+` are filled by derivation from a data's shape (<<decoder>>, <<encoder>>). `+guard+` and `+let+` are desugared, so they do not appear in the AST; they appear as an `+if+` and as block bindings (<<guard>>, <<block-expression>>).
 
 [#ast-behavior-info]
 === Information tracked about a behavior
@@ -2596,7 +2598,7 @@ A `+SumData+` case holds only a reference to a named data (<<sum-data>>). A `+..
 input type  output type (sum of possible business results)  requirement set  construction authority (constructs)
 ----
 
-The output type is a single type or a sum. `+SpecBehavior+` takes these four from the declaration — the requirement set is also taken from `+requires+` and reconciled with the set inferred from the `+let+` (<<requires>>). `+PipeBehavior+` computes input and output types from the stage sequence (<<type-routing>>) and infers the requirement set as the union over stages (<<composition-with-requirements>>).
+The output type is a single type or a sum. `+SpecBehavior+` takes these four from the declaration — the requirement set is also taken from `+depends on+` and reconciled with the set inferred from the `+let+` (<<depends-on>>). `+PipeBehavior+` computes input and output types from the stage sequence (<<type-routing>>) and infers the requirement set as the union over stages (<<composition-with-requirements>>).
 
 The body is not here. A behavior has no body; the `+FnDef+` holds it (<<behavior>>, <<ast-nodes>>). The backend combines this behavior-side information with the `+FnDef+`'s body, lowered to Core (<<compiler-pipeline>>), to generate bytecode.
 
@@ -2640,7 +2642,7 @@ but never builds 金額 — it passes an existing value through.
 Remove it from the `constructs` clause.
 ----
 
-If `+constructs+` is written, it MUST NOT list something not constructed. Paired with E1002 (too few), it keeps the declaration exactly matching the construction set, so the declaration correctly reads "creates new / passes through" (<<constructs>>). Same position as the `+requires+` over-declaration E1603.
+If `+constructs+` is written, it MUST NOT list something not constructed. Paired with E1002 (too few), it keeps the declaration exactly matching the construction set, so the declaration correctly reads "creates new / passes through" (<<constructs>>). Same position as the `+depends on+` over-declaration E1603.
 
 [#e1003-removed]
 === (retired)
@@ -2780,26 +2782,26 @@ Right input:  FindMemberRequest
 ----
 
 [#e1602]
-=== Missing requires declaration
+=== Missing depends on declaration
 
 [,text]
 ----
 error E1602:
 `let 事前承認する` calls `現在時刻`, which has no implementation,
-but `behavior 事前承認する` does not declare `requires 現在時刻`.
+but `behavior 事前承認する` does not declare `depends on 現在時刻`.
 ----
 
 [#e1603]
-=== Over-declaration of requires
+=== Over-declaration of depends on
 
 [,text]
 ----
 error E1603:
-`behavior 事前承認する` declares `requires 採番`, but `let 事前承認する`
-never calls it. Remove it from the `requires` clause.
+`behavior 事前承認する` declares `depends on 採番`, but `let 事前承認する`
+never calls it. Remove it from the `depends on` clause.
 ----
 
-It requires declaration and implementation to match, and does not admit an over-declaration erring on the safe side (<<requires>>).
+It requires declaration and implementation to match, and does not admit an over-declaration erring on the safe side (<<depends-on>>).
 
 [#e1604]
 === Composition output declaration and inference mismatch
@@ -2844,16 +2846,16 @@ A behavior's output union is generated as a sealed interface its leaf cases impl
 The move is to translate: match the imported behavior's result and return a case of this module. A module boundary is where another context's vocabulary is restated in this one's.
 
 [#e1607]
-=== requires does not name a dependency
+=== depends on does not name a dependency
 
 [,text]
 ----
 error E1607:
-`behavior 出荷する` declares `requires 引き当てる`, but `引き当てる` requires
+`behavior 出荷する` declares `depends on 引き当てる`, but `引き当てる` depends on
 nothing, so there is nothing to inject. Call it directly.
 ----
 
-`+requires+` names a behavior whose requirement set is not empty, declared here or imported (<<requires>>). A behavior that requires nothing is E1607 — call it instead (<<calling-a-behavior>>) — and so is a `+>->+` composition, whose requirements are inferred from its stages rather than written, and so is a name that is no behavior in scope. All three are reported at the clause, where the name was written.
+`+depends on+` names a behavior whose requirement set is not empty, declared here or imported (<<depends-on>>). A behavior that depends on nothing is E1607 — call it instead (<<calling-a-behavior>>) — and so is a `+>->+` composition, whose requirements are inferred from its stages rather than written, and so is a name that is no behavior in scope. All three are reported at the clause, where the name was written.
 
 [#e1608]
 === A behavior reaches itself
@@ -2865,7 +2867,7 @@ error E1608:
 A behavior does not recurse; write the recursion as a helper `let`.
 ----
 
-The cycle is reported wherever it closes, and the edges may be calls, `+requires+`, `+>->+` stages, or a mixture of them (<<calling-a-behavior>>). A `+requires+` cycle leaves nothing to build first, and a call cycle does not terminate. Recursion belongs to a named module helper, where it is proven total (<<fn-rules>>, ADR-0052).
+The cycle is reported wherever it closes, and the edges may be calls, `+depends on+`, `+>->+` stages, or a mixture of them (<<calling-a-behavior>>). A `+depends on+` cycle leaves nothing to build first, and a call cycle does not terminate. Recursion belongs to a named module helper, where it is proven total (<<fn-rules>>, ADR-0052).
 
 [#e1305]
 === An injected behavior constructs an uncreatable data
@@ -2899,10 +2901,10 @@ Emitted when an `+example+` names a target that is not a behavior of the module 
 ----
 error E1902:
 `事前承認する` cannot be evaluated as an example.
-hint: an example runs a behavior with a `let` body and no `requires`; here it requires injected dependencies (現在時刻).
+hint: an example runs a behavior with a `let` body that depends on nothing; here it depends on injected dependencies (現在時刻).
 ----
 
-Emitted when an `+example+` targets a behavior that has no in-language implementation to evaluate: an injected behavior or a `+>->+` composition (<<example-evaluable>>). A `+requires+` dependency is not a reason — it is supplied by a fake (<<example-fakes>>).
+Emitted when an `+example+` targets a behavior that has no in-language implementation to evaluate: an injected behavior or a `+>->+` composition (<<example-evaluable>>). A `+depends on+` dependency is not a reason — it is supplied by a fake (<<example-fakes>>).
 
 [#e1903]
 === Example input cannot be built
@@ -2963,16 +2965,16 @@ error E1907:
 Emitted when an attached `+examples for <module>+` file names a target module that is not among the compiled modules (<<example-placement>>).
 
 [#e1908]
-=== A requires dependency has no fake
+=== A dependency has no fake
 
 [,text]
 ----
 error E1908:
-`事前承認する` requires `現在時刻`, but no fake was supplied for it.
+`事前承認する` depends on `現在時刻`, but no fake was supplied for it.
 hint: add `with 現在時刻 = ...` on the row, or a `fake 現在時刻` table
 ----
 
-Emitted when an example targets a behavior whose `+requires+` dependency has neither a `+with+` on the row nor a `+fake+` declaration (<<example-fakes>>).
+Emitted when an example targets a behavior whose `+depends on+` dependency has neither a `+with+` on the row nor a `+fake+` declaration (<<example-fakes>>).
 
 [#e1909]
 === A fake has no output for an input
@@ -3092,12 +3094,12 @@ behavior 出張申請を提出する : (申請: 申請準備中) -> 提出済み
     constructs 提出済み, 事前承認待ち
 
 // behavior 事前承認する = 事前承認待ち AND 承認者ID -> 事前承認済み OR 承認権限なし (a failure is a case too)
-// 依存: 時刻取得 → write it in requires
+// 依存: 時刻取得 → write it in depends on
 behavior 事前承認する : (
     申請:    事前承認待ち,
     承認者ID: 従業員ID
 ) -> 事前承認済み | 承認権限なし
-    requires 現在時刻
+    depends on 現在時刻
     constructs 事前承認済み, 承認権限なし
 
 // --- implementations ---
@@ -3107,9 +3109,9 @@ let 事前承認要否を判定する (予定費用, 申請者, 費用負担区�
 let 出張申請を提出する (申請) = { ... }
 
 // precondition: 承認者ID equals the applicant's 上長ID
-// requires 現在時刻 appears as the last argument (§12.6)
+// depends on 現在時刻 appears as the last argument (§12.6)
 let 事前承認する (申請, 承認者ID, 現在時刻) = {
-    require 承認者ID == 申請.申請者.上長ID
+    guard 承認者ID == 申請.申請者.上長ID
         else 承認権限なし
 
     事前承認済み { ...申請, 事前承認日時 = 現在時刻(), 事前承認者 = 承認者ID }
@@ -3124,7 +3126,7 @@ The type of `+事前承認する+`:
     Behavior<{現在時刻}, (事前承認待ち, 従業員ID), 事前承認済み | 承認権限なし>
 ----
 
-All three of `+Behavior+` come from the declaration: `+{現在時刻}+` is `+requires+`, the input is the argument list, the output is the right of `+->+`. The `+let+` has 3 arguments because it is pre-injection; when `+Handle.bind(clock)+` fixes the last argument, it becomes the declared 2-argument type (<<requires>>).
+All three of `+Behavior+` come from the declaration: `+{現在時刻}+` is `+depends on+`, the input is the argument list, the output is the right of `+->+`. The `+let+` has 3 arguments because it is pre-injection; when `+Handle.bind(clock)+` fixes the last argument, it becomes the declared 2-argument type (<<depends-on>>).
 
 `+...申請+` copies the common items and `+提出日時+` of `+事前承認待ち+` by name, ignores `+事前承認理由リスト+` (not in `+事前承認済み+`), and adds `+事前承認日時+` and `+事前承認者+` to construct.
 
@@ -3237,8 +3239,8 @@ g : Behavior<R2, B, O_g>
 f >-> g : Behavior<R1 ∪ R2, A, (O_g) | (sum of O_f minus the consumed part)>
 ----
 
-This rule is Souther's central composition semantics. Output corresponds to the spec DSL's `+-> 出力 OR ...+`, and the requirement set to `+// 依存+` / `+// 副作用+`. What the author states explicitly is input, output (a bare sum), dependencies (`+requires+`), and construction authority (`+constructs+`). On the same line as the spec DSL writing `+// 依存:+` at a leaf but not on a composition, only a composition is left to inference (<<requires>>, <<composition-with-requirements>>).
+This rule is Souther's central composition semantics. Output corresponds to the spec DSL's `+-> 出力 OR ...+`, and the requirement set to `+// 依存+` / `+// 副作用+`. What the author states explicitly is input, output (a bare sum), dependencies (`+depends on+`), and construction authority (`+constructs+`). On the same line as the spec DSL writing `+// 依存:+` at a leaf but not on a composition, only a composition is left to inference (<<depends-on>>, <<composition-with-requirements>>).
 
-`+Requirements+` is an argument fixed by injection, not a dynamically handled effect. So on the `+let+` side it appears as an ordinary argument, and `+bind+` partially applies it (<<requires>>). `+Behavior<R, I, O>+` can be read as `+(I, R) -> O+` closed over `+R+`. That is why no variable enters the requirement set, and that keeps the whole system simple.
+`+Requirements+` is an argument fixed by injection, not a dynamically handled effect. So on the `+let+` side it appears as an ordinary argument, and `+bind+` partially applies it (<<depends-on>>). `+Behavior<R, I, O>+` can be read as `+(I, R) -> O+` closed over `+R+`. That is why no variable enters the requirement set, and that keeps the whole system simple.
 
-Souther maps a specification model to an implementation model with minimal translation by promoting the value constraints, construction paths, and outside-world dependencies the spec DSL left in comments to invariants, confinement of construction paths, and `+requires+` with injection.
+Souther maps a specification model to an implementation model with minimal translation by promoting the value constraints, construction paths, and outside-world dependencies the spec DSL left in comments to invariants, confinement of construction paths, and `+depends on+` with injection.

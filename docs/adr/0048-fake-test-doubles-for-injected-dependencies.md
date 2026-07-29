@@ -5,7 +5,7 @@ Status: Accepted
 ## Context
 
 `example` (ADR-0046) evaluates a behavior at compile time, but only if the compiler can run it.
-A behavior that `requires` an injected dependency (`事前承認する requires 現在時刻`; ADR-0029) could not
+A behavior that `depends on` an injected dependency (`事前承認する depends on 現在時刻`; ADR-0029) could not
 be evaluated: the dependency has no in-language implementation (it is provided from Java at the
 boundary). Yet behaviors that depend on time, id generation, or an external lookup are most of a real
 domain. The injected dependency itself needs no test (it is boundary code), but the behavior that
@@ -22,7 +22,7 @@ double is more naturally *data* than a function.
 
 ## Decision
 
-An example supplies a fake for each `requires` dependency of its target, at the example (never
+An example supplies a fake for each `depends on` dependency of its target, at the example (never
 global), reusing the behavior's existing injecting constructor (`bind`; the constructor takes one
 `Behavior` per requirement). A fake is a `Behavior` proxy built at evaluation — it produces no
 run-time class, so it never ships (like an example, zero Jar footprint).
@@ -49,7 +49,7 @@ latter is a sign the dependency should become an input.
 
 ## Consequences
 
-- An example can now evaluate a behavior that `requires` an injected dependency, extending compile-
+- An example can now evaluate a behavior that `depends on` an injected dependency, extending compile-
   time example checking to the effectful core of a domain — while the injected behavior's real
   implementation stays Java at the boundary.
 - The function-dependency fake is data (a lookup table), which fits a function value not being

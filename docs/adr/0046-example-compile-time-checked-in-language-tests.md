@@ -54,7 +54,7 @@ part of the target module and sees its names directly), and does not open module
 question of which file owns `exposing`. General multi-file modules were considered and rejected for this
 change; a module's identity is header-derived, so the merge stays local to `compileModules`.
 
-Evaluation. Only a behavior with a `let` body and no `requires` is evaluable — the same runnable set the
+Evaluation. Only a behavior with a `let` body and no `depends on` is evaluable — the same runnable set the
 CLI `run` uses; an injected, `>->`, or dependency-taking target is refused with a reason (`E1902`). The
 evaluator reuses the existing boundary machinery rather than emitting new code: it turns each fixture
 expression into its neutral form, decodes it into the parameter type through the derived decoder, applies

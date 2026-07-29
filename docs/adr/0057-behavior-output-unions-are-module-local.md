@@ -41,5 +41,5 @@ A module that consumes another's failure case translates it: match the imported 
 ## Consequences
 
 - E1606 stays, with its message and hint stating the settled-at-generation reason and the translation to perform.
-- Naming an imported behavior is unaffected: it composes as a `>->` stage and is injected as a `requires` dependency (issue #96), including across a module boundary. Only mixing an imported case into a union declared here is refused.
+- Naming an imported behavior is unaffected: it composes as a `>->` stage and is injected as a `depends on` dependency (issue #96), including across a module boundary. Only mixing an imported case into a union declared here is refused.
 - A module's generated classes remain a function of its own source. Resolving an import from a published jar stays open as a future direction.
