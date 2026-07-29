@@ -763,16 +763,29 @@ public final class TypeOps {
      * order therefore belongs to the sum and not to the case value.
      */
     public static TypeName orderingEnumeration(Type t, Symbols symbols) {
+        Set<TypeName> candidates = orderingCandidates(t, symbols);
+        return candidates != null && candidates.size() == 1 ? candidates.iterator().next() : null;
+    }
+
+    /**
+     * Every enumeration that could order a value of {@code t}, or null when it is not a value of one.
+     * A list literal of case values (`[ Negotiation, Prospecting ]`) is typed as the union of their
+     * types, and what orders it is the enumeration that lists all of them — so the candidates are
+     * intersected across the members rather than each member having to name one on its own.
+     */
+    private static Set<TypeName> orderingCandidates(Type t, Symbols symbols) {
         if (t instanceof Type.Union union) {
-            // a list literal of case values (`[ Lost, Won ]`) is typed as the union of their types,
-            // and they are ordered when they all come from the one enumeration
-            TypeName shared = null;
+            Set<TypeName> shared = null;
             for (TypeName member : union.members()) {
-                TypeName owner = orderingEnumeration(Type.ref(member), symbols);
-                if (owner == null || (shared != null && !shared.equals(owner))) {
+                Set<TypeName> owners = orderingCandidates(Type.ref(member), symbols);
+                if (owners == null) {
                     return null;
                 }
-                shared = owner;
+                if (shared == null) {
+                    shared = new LinkedHashSet<>(owners);
+                } else {
+                    shared.retainAll(owners);
+                }
             }
             return shared;
         }
@@ -780,22 +793,23 @@ public final class TypeOps {
             return null;
         }
         if (symbols.get(ref.name()) instanceof Ast.SumData sum) {
-            return isUnitOnlySum(sum, symbols) ? ref.name() : null;
+            return isUnitOnlySum(sum, symbols) ? Set.of(ref.name()) : null;
         }
         if (!(symbols.get(ref.name()) instanceof Ast.UnitData)) {
             return null;
         }
-        TypeName found = null;
-        for (TypeName name : symbols.visibleNames()) {
-            if (symbols.get(name) instanceof Ast.SumData s && isUnitOnlySum(s, symbols)
+        // A sum and its cases are declared together (a case declared elsewhere cannot join a union
+        // here, E1606), so every enumeration that lists this case is in the case's own module. Asking
+        // that module rather than what is visible keeps the answer the same in every module that
+        // reads the value.
+        Set<TypeName> owners = new LinkedHashSet<>();
+        for (Ast.Def def : symbols.declaredIn(ref.name().module()).values()) {
+            if (def instanceof Ast.SumData s && isUnitOnlySum(s, symbols)
                     && leafCases(s, symbols).contains(ref.name())) {
-                if (found != null) {
-                    return null;
-                }
-                found = name;
+                owners.add(ref.name().sibling(s.name()));
             }
         }
-        return found;
+        return owners;
     }
 
     /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —

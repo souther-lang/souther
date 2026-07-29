@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -41,7 +42,7 @@ class CompileUnitOnlySumBoundaryTest {
     }
 
     @Test
-    void aUnitOnlySumIsAFieldsBareString() throws Exception {
+    void aUnitOnlySumInAFieldIsABareString() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(STAGE_FIELD), getClass().getClassLoader());
 
@@ -67,6 +68,33 @@ class CompileUnitOnlySumBoundaryTest {
 
         assertEquals(Map.of("byStage", Map.of("Won", 3L)),
                 run(loader, "demo.In", "demo.Out", Map.of("n", 3L)));
+    }
+
+    @Test
+    void anExampleWritesAnEnumerationCaseByName() {
+        String src = """
+                module demo
+
+                data Stage = Prospecting | Won | Lost
+                data In = { stage: Stage }
+                data Out = { won: Bool }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) =
+                    Out { won = match i.stage with
+                                    | Won -> true
+                                    | Prospecting -> false
+                                    | Lost -> false }
+
+                example run
+                    | "a won deal is won" : (In { stage = Won }) -> Out { won = true }
+                    | "a lost deal is not" : (In { stage = Lost }) -> Out { won = false }
+                """;
+
+        // the fixture is built through the same neutral form the boundary uses, so a unit case that
+        // belongs to an enumeration has to be written there as its name, not as a tagged object
+        assertDoesNotThrow(() -> Compiler.compile(src));
     }
 
     @Test

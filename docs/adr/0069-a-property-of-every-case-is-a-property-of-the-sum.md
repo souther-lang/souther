@@ -23,6 +23,13 @@ Both are the same gap: the cases carry a property in common, and the sum does no
 
 **What holds of every case is a property of the sum.** Three properties follow from it.
 
+"Property" is not "any fact that happens to be true of every case". It is a capability the complete
+case set *determines*, and that stays the same for every value of the sum. Each of the three below is
+derived from the case set alone and answers the same way whichever case the value turns out to be; a
+fact that held of every case today and would be settled differently by adding one — or that the sum
+has no single answer to — is not one of these. So this rule does not say that a sum inherits an
+annotation, an interface, or an operation because every case has one.
+
 **A field every case spreads is read on the sum.** When every case (folded to leaves) spreads the
 same data, the sum exposes that data's fields, and `d.id` reads one without opening the value. The
 sharing is nominal: two cases that happen to declare a field of the same name have not shared it,

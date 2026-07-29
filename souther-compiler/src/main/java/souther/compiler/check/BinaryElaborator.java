@@ -66,8 +66,8 @@ public final class BinaryElaborator {
                             Diagnostic.of(null, "check.compare.ordered").title("check.type.mismatch.title")
                                     .at(bin.pos()).args(Type.show(lt), Type.show(rt)).build(),
                             "operand of comparison must be two ordered values of the same type (Int,"
-                                    + " String, Decimal, Date, DateTime, or a newtype over one of these),"
-                                    + " got " + lt + " and " + rt);
+                                    + " String, Decimal, Date, DateTime, a newtype over one of these, or"
+                                    + " one enumeration), got " + lt + " and " + rt);
                 }
                 yield new Core.Binary(bin.op(), left, right, Type.BOOL, bin.pos());
             }

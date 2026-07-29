@@ -1,11 +1,18 @@
 package souther.compiler;
 
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.SourceContext;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A sum every one of whose cases is a unit data is ordered by the order its cases are declared —
@@ -22,6 +29,55 @@ class CompileEnumerationOrderTest {
         Object in = Codecs.decoded(loader, "demo.In", Map.of("n", 1L));
         Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
         return Codecs.encode(loader, outType, Codecs.apply(behavior, in));
+    }
+
+    private static String rendered(String src) {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        return new HumanRenderer(false)
+                .render(e.diagnostic(), new SourceContext("demo.sou", src), Locale.ENGLISH);
+    }
+
+    /**
+     * The set of ordered values grew, so the reports that name it have to name the new member too —
+     * otherwise a reader comparing two enumerations is told only primitives and newtypes are ordered,
+     * which is no longer what the compiler believes.
+     */
+    @Test
+    void theComparisonReportNamesTheEnumerationAndWhatMakesTwoOfThemComparable() {
+        String src = """
+                module demo
+
+                data Stage = Prospecting | Won
+                data Tier = Gold | Silver
+                data In = { n: Int }
+                data Out = { b: Bool }
+
+                behavior run : (i: In) -> Out constructs Out, Prospecting, Gold
+
+                let run (i) = Out { b = Prospecting < Gold }
+                """;
+        String out = rendered(src);
+
+        assertTrue(out.contains("enumeration"), out);
+        assertTrue(out.contains("the same"), out);   // two enumerations do not compare with each other
+    }
+
+    @Test
+    void theSortReportNamesTheEnumeration() {
+        String src = """
+                module demo
+
+                data Row = { n: Int }
+                data In = { rows: List<Row> }
+                data Out = { rows: List<Row> }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { rows = List.sort(i.rows) }
+                """;
+        String out = rendered(src);
+
+        assertTrue(out.contains("enumeration"), out);
     }
 
     @Test
@@ -81,6 +137,50 @@ class CompileEnumerationOrderTest {
                 """;
 
         assertEquals(Map.of("early", true), run(src, "demo.Out"));
+    }
+
+    /**
+     * A list of case values is typed as the union of their types, and what orders it is the one
+     * enumeration that lists all of them — not one that each of them, on its own, belongs to alone.
+     * {@code Prospecting} is a case of two sums and carries no order by itself; together with
+     * {@code Negotiation}, which only {@code Stage} lists, the pair has exactly one.
+     */
+    @Test
+    void aUnionIsOrderedByTheOneEnumerationThatListsAllOfIt() throws Exception {
+        String src = """
+                module demo
+
+                data Stage = Prospecting | Negotiation | Won
+                data Entry = Prospecting | Won
+                data In = { n: Int }
+                data Out = { stages: List<Stage> }
+
+                behavior run : (i: In) -> Out constructs Out, Prospecting, Negotiation
+
+                let run (i) = Out { stages = List.sort([ Negotiation, Prospecting ]) }
+                """;
+
+        assertEquals(Map.of("stages", List.of("Prospecting", "Negotiation")), run(src, "demo.Out"));
+    }
+
+    @Test
+    void aUnionTwoEnumerationsBothListIsNotOrdered() {
+        String src = """
+                module demo
+
+                data Stage = Prospecting | Won
+                data Entry = Prospecting | Won
+                data In = { n: Int }
+                data Out = { stages: List<Stage> }
+
+                behavior run : (i: In) -> Out constructs Out, Prospecting, Won
+
+                let run (i) = Out { stages = List.sort([ Won, Prospecting ]) }
+                """;
+        String out = rendered(src);
+
+        // two enumerations list both cases, so neither one is the order this list has
+        assertTrue(out.contains("ordered"), out);
     }
 
     @Test

@@ -801,11 +801,38 @@ public final class ExampleVerifier {
             return null;
         }
         if (symbols.declaration(name) instanceof Ast.UnitData) {
+            TypeName caseName = symbols.resolve(name);
+            // A fixture is built in the neutral form the boundary reads, so a case of an enumeration
+            // is written the way that sum travels: its name, bare (issue #161).
+            if (caseName != null && onlyEnumerationsList(caseName)) {
+                return caseName.name();
+            }
             Map<String, Object> unit = new LinkedHashMap<>();
             tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
             return unit;
         }
         throw new FixtureException("`" + name + "` is not a value a fixture can name");
+    }
+
+    /** Whether every sum that lists this case is an enumeration, so the case's neutral form is its
+     * name wherever it is written. A unit data listed by a sum with field-bearing cases keeps the
+     * tagged object there, and this cannot tell the two apart from a bare name alone. */
+    private boolean onlyEnumerationsList(TypeName caseName) {
+        boolean listed = false;
+        for (Ast.Def def : symbols.visible()) {
+            if (!(def instanceof Ast.SumData sum) || sum.decoder().isEmpty()) {
+                continue;
+            }
+            for (Ast.Variant variant : sum.decoder().get().variants()) {
+                if (caseName.equals(variant.caseType().denotes())) {
+                    if (!TypeOps.isUnitOnlySum(sum, symbols)) {
+                        return false;
+                    }
+                    listed = true;
+                }
+            }
+        }
+        return listed;
     }
 
     private Object newtypeInner(Ast.Call c) {
