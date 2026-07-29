@@ -72,6 +72,91 @@ class CompilePublishedHelperTest {
                 """)));
     }
 
+    /** A recursive helper is not expanded, so what it builds reaches the caller through its
+     * construction set rather than through its body — and it has to reach it as the kind it is, or a
+     * reader that declares a carried construction is told it builds nothing. */
+    @Test
+    void declaringAConstructionCarriedByARecursiveHelperIsNotOverDeclaration() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( Amount, make )
+
+                data Amount = Int
+
+                partial let make (n: Int) : Amount =
+                    if n == 0 then Amount(0) else make(n - 1)
+                """, """
+                module order exposing ( Receipt, bill )
+
+                import pricing ( Amount, make )
+
+                data Receipt = { total: Amount }
+
+                behavior bill : (n: Int) -> Receipt constructs Receipt, Amount
+                let bill (n) = Receipt { total = make(n) }
+                """)));
+    }
+
+    /** A unit data is constructed by being named, so a published body that builds one carries that
+     * the same way — the reader has no `constructs` to write for a type it cannot name. */
+    @Test
+    void aUnitDataAPublishedBodyBuildsIsCarriedToo() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( doubled )
+
+                data Marker
+
+                let doubled (n: Int) = if Marker == Marker then n * 2 else n
+                """, """
+                module order exposing ( Out, bill )
+
+                import pricing ( doubled )
+
+                data Out = { v: Int }
+
+                behavior bill : (n: Int) -> Out constructs Out
+                let bill (n) = Out { v = doubled(n) }
+                """)));
+    }
+
+    /** And it stays the unit it is: a reader declaring one of the same spelling declares a different
+     * type, which the carried construction is neither attributed to nor emitted as. */
+    @Test
+    void aCarriedUnitDataIsNotTheReadersUnitOfThatName() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module pricing exposing ( doubled )
+
+                data Marker
+
+                let doubled (n: Int) = if Marker == Marker then n * 2 else n
+                """, """
+                module order exposing ( Marker, Out, bill )
+
+                import pricing ( doubled )
+
+                data Marker
+                data Out = { v: Int }
+
+                behavior bill : (n: Int) -> Out constructs Out
+                let bill (n) = Out { v = doubled(n) }
+                """)));
+    }
+
+    /** The reader's own unit data is still the reader's to declare. */
+    @Test
+    void theReadersOwnUnitDataIsStillItsToDeclare() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module order exposing ( Marker, Out, bill )
+
+                data Marker
+                data Out = { v: Int }
+
+                behavior bill : (n: Int) -> Out constructs Out
+                let bill (n) = Out { v = if Marker == Marker then n else 0 }
+                """));
+
+        assertTrue(e.getMessage().contains("Marker"), e.getMessage());
+    }
+
     /** A type of a third module is neither the reader's nor the publisher's to hand over, so it stays
      * the reader's to declare — which it can, because the module that declares it exposed it. */
     @Test
@@ -358,6 +443,50 @@ class CompilePublishedHelperTest {
                 """));
 
         assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
+    }
+
+    /** What a published definition stands for is its type, not the constructions its body makes: a
+     * return type may name a type the body never builds, and reading the body for constructions
+     * answers about a different thing. */
+    @Test
+    void aPublishedHelperMayNotReturnAHiddenTypeItDoesNotBuild() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( published )
+
+                data Hidden = Int
+
+                let published (n: Int) : List<Hidden> = []
+                """));
+
+        assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
+    }
+
+    /** The same holds of a value, which is the definition with no parameter list. */
+    @Test
+    void aPublishedValueMayNotStandForAHiddenTypeItDoesNotBuild() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( published )
+
+                data Hidden = Int
+
+                let published : List<Hidden> = []
+                """));
+
+        assertTrue(e.getMessage().contains("Hidden"), e.getMessage());
+    }
+
+    /** And of a hidden unit data, which a definition stands for by naming it. */
+    @Test
+    void aPublishedHelperMayNotReturnAHiddenUnitData() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module pricing exposing ( published )
+
+                data Marker
+
+                let published (n: Int) = Marker
+                """));
+
+        assertTrue(e.getMessage().contains("Marker"), e.getMessage());
     }
 
     /** The same for a recursive one, read off the return type it is required to declare. */

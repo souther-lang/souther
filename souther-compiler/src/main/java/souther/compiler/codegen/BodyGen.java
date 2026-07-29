@@ -532,10 +532,15 @@ final class BodyGen {
                     Var var = env.get(v.name());
                     if (var != null) {
                         load(code, var.slot(), var.type());
-                    } else if (symbols.declaration(v.name()) instanceof Ast.UnitData) {
+                    } else if (v.type() instanceof Type.Ref ref
+                            && symbols.get(ref.name()) instanceof Ast.UnitData) {
                         // A unit data name in an expression constructs it (spec §unit-data), and a
-                        // unit type has exactly one value.
-                        loadSharedInstance(code, cd(v.name()));
+                        // unit type has exactly one value. Which unit is read off the type the name
+                        // was given rather than resolved again from its spelling: a body expanded in
+                        // from another module's published helper names that module's unit, which this
+                        // module need not declare at all — and, if it declares one spelled the same,
+                        // is not the same unit.
+                        loadSharedInstance(code, cd(ref.name()));
                     } else {
                         throw new CompileException(v.pos(), "unbound identifier `" + v.name() + "`");
                     }

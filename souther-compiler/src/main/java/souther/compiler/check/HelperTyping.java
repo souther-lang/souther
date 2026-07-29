@@ -111,6 +111,7 @@ public final class HelperTyping {
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn(), symbols);
             Core elaboratedBody = Elaborator.elaborate(body, tenv, new CheckContext(symbols, null, reqSigs), declaredReturn);
             Type bodyType = elaboratedBody.type();
+            elaborated.definitionTypes.put(h.name(), bodyType);
             if (recursive) {
                 elaborated.helpers.put(h.name(), elaboratedBody);   // the backend emits this
             }
@@ -419,10 +420,10 @@ public final class HelperTyping {
      * closure follows recursive-helper calls: a helper's set includes what the recursive helpers it
      * calls construct. Non-recursive helper calls are already inlined into the bodies here.
      */
-    static Map<String, Map<TypeName, String>> recursiveHelperConstructs(
+    static Map<String, DataChecker.Constructs> recursiveHelperConstructs(
             Set<String> recursive, Map<String, Ast.Expr> loweredBodies,
             HelperInliner inliner, Symbols symbols) {
-        Map<String, Map<TypeName, String>> own = new HashMap<>();
+        Map<String, DataChecker.Constructs> own = new HashMap<>();
         Map<String, Set<String>> calls = new HashMap<>();
         for (String h : recursive) {
             Ast.Expr body = loweredBodies.get(h);
@@ -430,29 +431,28 @@ public final class HelperTyping {
             for (Ast.FnParam p : inliner.helper(h).params()) {
                 bound.add(p.name());
             }
-            Map<TypeName, String> c = new LinkedHashMap<>();
+            DataChecker.Constructs c = DataChecker.Constructs.empty();
             DataChecker.collectConstructs(body, c, symbols, bound, Map.of());   // recursive calls opaque here
             own.put(h, c);
             Set<String> callees = new LinkedHashSet<>();
             collectCalls(body, callees, recursive);
             calls.put(h, callees);
         }
-        Map<String, Map<TypeName, String>> full = new HashMap<>();
+        Map<String, DataChecker.Constructs> full = new HashMap<>();
         for (String h : recursive) {
-            full.put(h, new LinkedHashMap<>(own.get(h)));
+            full.put(h, own.get(h).copy());
         }
         // fixpoint: propagate each callee's constructions until nothing new is added (handles mutual
-        // recursion, whose call graph has cycles).
+        // recursion, whose call graph has cycles). The two kinds travel apart the whole way: a
+        // construction another module's published body carried into this helper is still that
+        // module's where the behavior calling the helper reads it, and merging them here is how a
+        // reader came to be told it declares a construction it does not make.
         boolean changed = true;
         while (changed) {
             changed = false;
             for (String h : recursive) {
                 for (String g : calls.get(h)) {
-                    for (Map.Entry<TypeName, String> c : full.get(g).entrySet()) {
-                        if (full.get(h).putIfAbsent(c.getKey(), c.getValue()) == null) {
-                            changed = true;
-                        }
-                    }
+                    changed |= full.get(h).absorb(full.get(g));
                 }
             }
         }

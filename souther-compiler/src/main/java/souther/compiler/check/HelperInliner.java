@@ -232,7 +232,14 @@ public final class HelperInliner {
      */
     private static Ast.Expr publishedBy(Ast.Expr e, String module) {
         Ast.Expr rebuilt = Ast.mapChildren(e, c -> publishedBy(c, module));
-        return rebuilt instanceof Ast.NewData nd ? nd.publishedBy(module) : rebuilt;
+        return switch (rebuilt) {
+            case Ast.NewData nd -> nd.publishedBy(module);
+            // a unit data is constructed by being named, so the name is where it says where it came
+            // from — there is no construction node to say it on
+            case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
+                    v.denoting(named.publishedBy(module));
+            default -> rebuilt;
+        };
     }
 
     /** How a definition of {@code module} is named outside it. */

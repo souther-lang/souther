@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.InjectionSigs;
 import souther.compiler.check.Lower;
@@ -746,14 +747,14 @@ public final class Bodies {
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
      * constructions are attributed to the behavior that calls it (spec 12.5). */
     public record RecursiveHelperConstructs(String name)
-            implements Key<Map<String, Map<TypeName, String>>> {
+            implements Key<Map<String, DataChecker.Constructs>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<String, Map<TypeName, String>>> compute(Db db) {
+        public Answer<Map<String, DataChecker.Constructs>> compute(Db db) {
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
@@ -831,7 +832,7 @@ public final class Bodies {
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
-            Answer<Map<String, Map<TypeName, String>>> constructs =
+            Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !helpers.present()

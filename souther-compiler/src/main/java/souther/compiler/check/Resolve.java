@@ -531,7 +531,7 @@ public final class Resolve {
         }
         TypeName type = symbols.resolve(written);
         if (type != null && !type.isUnresolved()) {
-            return new ValueName.OfType(written, type);
+            return new ValueName.OfType(written, type, null);
         }
         // a helper or a behavior named without being applied — handed to a combinator by name,
         // which the inliner expands into a block that applies it
@@ -574,7 +574,7 @@ public final class Resolve {
         }
         TypeName type = symbols.resolve(written);
         if (type != null && !type.isUnresolved()) {
-            return new ValueName.OfType(written, type);   // a newtype applied to what it wraps
+            return new ValueName.OfType(written, type, null);   // a newtype applied to what it wraps
         }
         return nothing(written, call.pos(), notCallable(written, call.pos(), bound));
     }

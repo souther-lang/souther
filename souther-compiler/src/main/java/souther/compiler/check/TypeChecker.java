@@ -39,6 +39,13 @@ public final class TypeChecker {
     /** The bodies elaborated so far, filled as the check walks them. */
     static final class Elaborated {
         final Map<String, Core> helpers = new LinkedHashMap<>();
+        /** What each of the module's own definitions turned out to be, by name — a value's type and a
+         * helper's return type, settled from the body (ADR-0066). Recorded because the exposed-surface
+         * check asks what a published definition is, and the answer is a type: reading the body for
+         * the constructions in it answers a different question, and misses a definition whose type
+         * names something it does not build. A definition that returns a function has none: there is
+         * no application here to settle the lambda from (spec §blocks). */
+        final Map<String, Type> definitionTypes = new LinkedHashMap<>();
     }
 
     /**
@@ -110,7 +117,7 @@ public final class TypeChecker {
                                      Symbols symbols, Map<String, ReqSig> calleeSigs,
                                      Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
-                                     Map<String, Map<TypeName, String>> recHelperConstructs,
+                                     Map<String, DataChecker.Constructs> recHelperConstructs,
                                      List<Diagnostic> warnings) {
         return SpecChecker.checkSpecFn(spec, fn, loweredBody, symbols, calleeSigs, reqSigs,
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
@@ -124,7 +131,7 @@ public final class TypeChecker {
 
     /** What each recursive helper constructs, transitively. A recursive helper is not inlined, so its
      * constructions are attributed to the behavior that calls it (spec 12.5). */
-    public static Map<String, Map<TypeName, String>> recursiveHelperConstructs(
+    public static Map<String, DataChecker.Constructs> recursiveHelperConstructs(
             Set<String> names, Map<String, Ast.Expr> loweredBodies, HelperInliner inliner,
             Symbols symbols) {
         return HelperTyping.recursiveHelperConstructs(names, loweredBodies, inliner, symbols);
@@ -376,7 +383,7 @@ public final class TypeChecker {
         // the exposing signature checks: a signature that should not be there at all (E1605), or one
         // that disagrees with the pipeline (E1604), is the more particular thing to say.
         collect(errors, abandoned, () -> SpecChecker.checkExposedSurface(module, injectionTargets,
-                sigs, symbols, exposeAll, exposed));
+                sigs, symbols, exposeAll, exposed, elaborated.definitionTypes));
     }
 
     /** Applies {@code f} to every direct subexpression of {@code e}. Delegates to the one
