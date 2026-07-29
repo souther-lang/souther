@@ -29,7 +29,7 @@ class CompileExposedPipeOutputTest {
 
                 behavior capAmount : (a: Amount) -> Amount | TooLarge constructs TooLarge
                 let capAmount (a) = {
-                    require a.value <= 100 else TooLarge { limit = 100 }
+                    guard a.value <= 100 else TooLarge { limit = 100 }
                     a
                 }
 

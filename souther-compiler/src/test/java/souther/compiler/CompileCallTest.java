@@ -29,7 +29,7 @@ class CompileCallTest {
 
             behavior handle : (id: Id) -> Resp
                 constructs Resp
-                requires findMember
+                depends on findMember
 
             let handle (id, findMember) = {
                 let m = findMember(id)

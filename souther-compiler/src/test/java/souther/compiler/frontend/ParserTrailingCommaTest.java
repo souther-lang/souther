@@ -69,7 +69,7 @@ class ParserTrailingCommaTest {
                 data B = Int
                 behavior f : (x: A) -> B
                     constructs A, B,
-                    requires g,
+                    depends on g,
                 """));
     }
 

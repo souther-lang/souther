@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A {@code requires} clause names injection targets (spec 12.6, 13.2). A name that is not one is
+ * A {@code depends on} clause names injection targets (spec 12.6, 13.2). A name that is not one is
  * reported where it was written, saying which rule it broke — not left to the call site, where it
  * used to surface as an arbitrary JVM call (E1401), advice for a problem the author did not have
  * (issue #96).
@@ -34,7 +34,7 @@ class CompileRequiresClauseTest {
                 let helper (a) = R { z = a.x }
 
                 behavior use : (a: A) -> R
-                    requires helper
+                    depends on helper
                 let use (a, helper) = helper(a)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
@@ -45,7 +45,7 @@ class CompileRequiresClauseTest {
     @Test
     void requiresNamingACompositionIsReportedWithoutAdvisingToRemoveALet() {
         // a `>->` composition is its own implementation and has no `let` to remove, so the advice has
-        // to be the one that holds for every implementation: take the name out of `requires`
+        // to be the one that holds for every implementation: take the name out of `depends on`
         String src = """
                 module demo
                 data A = { x: Int }
@@ -62,14 +62,14 @@ class CompileRequiresClauseTest {
                 behavior chain = one >-> two
 
                 behavior use : (a: A) -> R
-                    requires chain
+                    depends on chain
                 let use (a, chain) = chain(a)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("E1607", e.code(), e.getMessage());
         String hint = new HumanRenderer(false).render(e.diagnostic(),
                 new SourceContext("demo.sou", src), Locale.ENGLISH);
-        assertTrue(hint.contains("Remove `chain` from `requires`"), hint);
+        assertTrue(hint.contains("Remove `chain` from `depends on`"), hint);
         assertFalse(hint.contains("`let`"), "a composition has no `let` to remove: " + hint);
     }
 
@@ -81,7 +81,7 @@ class CompileRequiresClauseTest {
                 data R = { z: Int }
 
                 behavior use : (a: A) -> R
-                    requires nosuch
+                    depends on nosuch
                 let use (a, nosuch) = nosuch(a)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
@@ -105,7 +105,7 @@ class CompileRequiresClauseTest {
                 module demo.app
                 import demo.lib ( A, R, price )
                 behavior use : (a: A) -> R
-                    requires price
+                    depends on price
                 let use (a, price) = price(a)
                 """;
         CompileException e = assertThrows(CompileException.class,
@@ -128,7 +128,7 @@ class CompileRequiresClauseTest {
     }
 
     /**
-     * Both ways a `requires` can be wrong are reported at the name it writes: one clause, one place
+     * Both ways a `depends on` can be wrong are reported at the name it writes: one clause, one place
      * to look. The unknown one is answered where the module's names are resolved and the implemented
      * one where the injection targets are known, so the two would otherwise drift apart.
      */
@@ -143,19 +143,19 @@ class CompileRequiresClauseTest {
                 let one (a) = R { z = a.x }
 
                 behavior use : (a: A) -> R
-                    requires one
+                    depends on one
                 let use (a, one) = one(a)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(implemented));
         assertEquals("E1607", e.code(), e.getMessage());
-        assertTrue(e.getMessage().startsWith("9:14 "),
-                "at the `one` of `requires one`: " + e.getMessage());
+        assertTrue(e.getMessage().startsWith("9:16 "),
+                "at the `one` of `depends on one`: " + e.getMessage());
 
-        String unknown = implemented.replace("requires one", "requires nosuch")
+        String unknown = implemented.replace("depends on one", "depends on nosuch")
                 .replace("let use (a, one) = one(a)", "let use (a, nosuch) = nosuch(a)");
         CompileException absent = assertThrows(CompileException.class, () -> Compiler.compile(unknown));
         assertEquals("E1607", absent.code(), absent.getMessage());
-        assertTrue(absent.getMessage().startsWith("9:14 "),
-                "and at the `nosuch` of `requires nosuch`: " + absent.getMessage());
+        assertTrue(absent.getMessage().startsWith("9:16 "),
+                "and at the `nosuch` of `depends on nosuch`: " + absent.getMessage());
     }
 }

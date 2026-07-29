@@ -13,7 +13,7 @@ import java.util.Set;
  * {@link InvariantChecker}). Constants are {@link BigDecimal}; {@code null} bounds are ±infinity.
  *
  * <p>This is the decision procedure the invariant-discharge check runs on: {@link #assume} tightens
- * the domain along a {@code require}/{@code if} guard or an input newtype's invariant, and
+ * the domain along a {@code guard}/{@code if} guard or an input newtype's invariant, and
  * {@link #entails} / {@link #refutes} answer whether a construction's invariant is discharged or is
  * definitely violated on the current path. It is deliberately bounded to interval + difference-bound;
  * an invariant the checker cannot express here is left opaque (its runtime check stays), so the set of

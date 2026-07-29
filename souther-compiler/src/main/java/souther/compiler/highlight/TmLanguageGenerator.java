@@ -46,7 +46,7 @@ public final class TmLanguageGenerator {
 
     /** Control and clause keywords. */
     private static final Set<String> CONTROL =
-            Set.of("if", "then", "else", "match", "with", "require", "constructs", "requires",
+            Set.of("if", "then", "else", "match", "with", "guard", "constructs", "depends",
                     "as", "invariant");
 
     /** Boolean literals (scoped as language constants, not keywords). */
@@ -84,6 +84,9 @@ public final class TmLanguageGenerator {
         repository.put("booleans", match("constant.language.boolean.souther", wordAlternation(BOOLEANS)));
         repository.put("declaration-keywords",
                 match("keyword.declaration.souther", wordAlternation(DECLARATION)));
+        // `on` is not reserved, so it is not in CONTROL; matched here it is highlighted only where
+        // it is the second word of `depends on`, and stays an ordinary name everywhere else.
+        repository.put("depends-on", match("keyword.control.souther", "\\bdepends\\s+on\\b"));
         repository.put("control-keywords",
                 match("keyword.control.souther", wordAlternation(CONTROL)));
         repository.put("type-variable", match("variable.other.generic.souther", "'[A-Za-z][A-Za-z0-9_]*"));
@@ -93,7 +96,8 @@ public final class TmLanguageGenerator {
 
         List<Object> patterns = List.of(
                 include("#comments"), include("#strings"), include("#decimal"), include("#integer"),
-                include("#booleans"), include("#declaration-keywords"), include("#control-keywords"),
+                include("#booleans"), include("#declaration-keywords"), include("#depends-on"),
+                include("#control-keywords"),
                 include("#type-variable"), include("#qualifiers"), include("#operators"));
 
         Map<String, Object> grammar = new LinkedHashMap<>();

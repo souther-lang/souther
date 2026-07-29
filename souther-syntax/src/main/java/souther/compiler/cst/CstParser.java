@@ -11,7 +11,7 @@ import java.util.List;
  * best-effort tree, and stray tokens are wrapped in {@code ERROR_TOKEN}-bearing nodes rather than
  * dropped, so the tree always covers the whole source.
  *
- * <p>The parser does no desugaring — {@code |>}, {@code require}, {@code let}, {@code ?}, and the
+ * <p>The parser does no desugaring — {@code |>}, {@code guard}, {@code let}, {@code ?}, and the
  * match destructuring stay as surface nodes. Lowering those to the compiler's {@code Ast} happens
  * in a later CST→AST pass, so this one tree serves the compiler, the formatter, and the LSP.
  */
@@ -304,8 +304,8 @@ public final class CstParser {
         while (more) {
             if (at(SyntaxKind.CONSTRUCTS_KW)) {
                 nameClause(SyntaxKind.CONSTRUCTS_CLAUSE);
-            } else if (at(SyntaxKind.REQUIRES_KW)) {
-                nameClause(SyntaxKind.REQUIRES_CLAUSE);
+            } else if (at(SyntaxKind.DEPENDS_KW)) {
+                dependsClause();
             } else {
                 more = false;
             }
@@ -337,13 +337,33 @@ public final class CstParser {
         finish();
     }
 
-    /** A {@code constructs}/{@code requires} clause: the keyword then a bare comma list of names,
-     * tolerating a trailing comma (which has no closing bracket to bound it). Either clause names
-     * through a module, so a behavior declares what it builds and what it needs the same way it
-     * writes any other name. */
+    /** A {@code constructs} clause: the keyword then a bare comma list of names, tolerating a
+     * trailing comma (which has no closing bracket to bound it). Either clause names through a
+     * module, so a behavior declares what it builds and what it depends on the same way it writes
+     * any other name. */
     private void nameClause(SyntaxKind kind) {
         start(kind);
-        bump();   // constructs / requires
+        bump();   // constructs
+        nameList();
+        finish();
+    }
+
+    /** A {@code depends on} clause. {@code on} is a contextual soft-keyword (a bare identifier), so
+     * a field or a parameter may still be named on; only the position right after {@code depends}
+     * reads it as the second half of the keyword. */
+    private void dependsClause() {
+        start(SyntaxKind.DEPENDS_CLAUSE);
+        bump();   // depends
+        if (atContextual("on")) {
+            bump();   // on
+        } else {
+            error("parse.depends.on", "expected `on` after `depends`");
+        }
+        nameList();
+        finish();
+    }
+
+    private void nameList() {
         expect(SyntaxKind.IDENT);
         dottedTail();
         while (eat(SyntaxKind.COMMA)) {
@@ -353,7 +373,6 @@ public final class CstParser {
             bump();   // ident
             dottedTail();
         }
-        finish();
     }
 
     private void pipeBehavior() {
@@ -505,14 +524,14 @@ public final class CstParser {
         }
         argList();   // the input tuple, reusing ARG_LIST
         if (at(SyntaxKind.WITH_KW)) {
-            withClause();   // supplies fakes for the target's requires (value dependencies)
+            withClause();   // supplies fakes for what the target depends on (value dependencies)
         }
         expect(SyntaxKind.ARROW);
         expr();      // expected
         finish();
     }
 
-    /** {@code with <dep> = <expr> (, <dep> = <expr>)*} — value fakes for a behavior's requires. */
+    /** {@code with <dep> = <expr> (, <dep> = <expr>)*} — value fakes for what a behavior depends on. */
     private void withClause() {
         start(SyntaxKind.WITH_CLAUSE);
         bump();   // with
@@ -628,7 +647,7 @@ public final class CstParser {
 
     // --- behavior body / block ---
 
-    /** A brace-delimited block: {@code let}/{@code require} statements then a result expression. */
+    /** A brace-delimited block: {@code let}/{@code guard} statements then a result expression. */
     private void blockExpr() {
         start(SyntaxKind.BLOCK_EXPR);
         expect(SyntaxKind.LBRACE);
@@ -637,7 +656,7 @@ public final class CstParser {
         finish();
     }
 
-    /** The statement sequence a behavior body is: {@code let}/{@code require} lines then one result. */
+    /** The statement sequence a behavior body is: {@code let}/{@code guard} lines then one result. */
     private void blockStatements() {
         while (true) {
             if (at(SyntaxKind.LET_KW)) {
@@ -646,8 +665,8 @@ public final class CstParser {
                 } else {
                     letStmt();
                 }
-            } else if (at(SyntaxKind.REQUIRE_KW)) {
-                requireStmt();
+            } else if (at(SyntaxKind.GUARD_KW)) {
+                guardStmt();
             } else {
                 break;
             }
@@ -775,9 +794,9 @@ public final class CstParser {
         finish();
     }
 
-    private void requireStmt() {
-        start(SyntaxKind.REQUIRE_STMT);
-        bump();   // require
+    private void guardStmt() {
+        start(SyntaxKind.GUARD_STMT);
+        bump();   // guard
         expr();
         attemptBinder();
         expect(SyntaxKind.ELSE_KW);
@@ -1015,7 +1034,7 @@ public final class CstParser {
 
     /**
      * The {@code as x} of an attempted construction — {@code if T(v) as x then … else …} and the
-     * {@code require T(v) as x else …} that desugars to it. Only the binder is read here; that what
+     * {@code guard T(v) as x else …} that desugars to it. Only the binder is read here; that what
      * precedes it is a construction, and that the type has an invariant to attempt, are decided
      * where the expression is known (the AST is built from a name, not a type).
      */

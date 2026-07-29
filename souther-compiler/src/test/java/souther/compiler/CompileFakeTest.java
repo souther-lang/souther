@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A {@code fake} supplies a test double for an injected {@code requires} dependency so an example can
+ * A {@code fake} supplies a test double for an injected {@code depends on} dependency so an example can
  * evaluate a behavior that depends on it: a {@code with dep = value} on the row (a value dependency)
  * or a {@code fake dep | table} declaration (a function dependency). A missing fake, a table miss,
  * and examples of an injected behavior itself are diagnosed.
@@ -31,7 +31,7 @@ class CompileFakeTest {
             behavior 現在時刻 : () -> String
 
             behavior 受け付ける : (a: 申請) -> 受理
-                requires 現在時刻
+                depends on 現在時刻
                 constructs 受理
 
             let 受け付ける (a, 現在時刻) = 受理 { 時刻 = 現在時刻() }
@@ -99,7 +99,7 @@ class CompileFakeTest {
             behavior 上長を探す : (id: 従業員ID) -> 従業員ID
 
             behavior 承認者を決める : (申請者: 従業員ID) -> 決定
-                requires 上長を探す
+                depends on 上長を探す
                 constructs 決定
 
             let 承認者を決める (申請者, 上長を探す) = 決定 { 承認者 = 上長を探す(申請者) }
@@ -173,7 +173,7 @@ class CompileFakeTest {
             behavior reserve : (id: OrderId) -> Confirmed | OutOfStock
 
             behavior place : (id: OrderId) -> Confirmed | OutOfStock
-                requires reserve
+                depends on reserve
 
             let place (id, reserve) = reserve(id)
             """;

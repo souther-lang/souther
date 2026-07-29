@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * End-to-end test for {@code require ... else} and type-routed {@code >->} composition: a case
+ * End-to-end test for {@code guard ... else} and type-routed {@code >->} composition: a case
  * the next stage does not accept propagates through unchanged (spec 12.2, 14.2).
  */
 class CompileRailwayTest {
@@ -20,12 +20,12 @@ class CompileRailwayTest {
             data TooLarge = { limit: Int }
             data Doubled = Int
 
-            // over 100 leaves the main line as a TooLarge case. `require ... else` mints the
+            // over 100 leaves the main line as a TooLarge case. `guard ... else` mints the
             // TooLarge, so the behavior declares it (spec 12.3).
             behavior capAmount : (a: Amount) -> Amount | TooLarge constructs TooLarge
 
             let capAmount (a) = {
-                require a.value <= 100 else TooLarge { limit = 100 }
+                guard a.value <= 100 else TooLarge { limit = 100 }
                 a
             }
 
@@ -83,7 +83,7 @@ class CompileRailwayTest {
                 // over 100 leaves as Off
                 behavior 判定 : (i: In) -> Mid | Off constructs Mid, Off
                 let 判定 (i) = {
-                    require i.value <= 100 else Off { v = i.value }
+                    guard i.value <= 100 else Off { v = i.value }
                     Mid { v = i.value }
                 }
                 // takes Mid only — Off passes it by
@@ -116,7 +116,7 @@ class CompileRailwayTest {
                 behavior bad : (a: A, other: B) -> A
 
                 let bad (a, other) = {
-                    require a.value <= 1 else other
+                    guard a.value <= 1 else other
                     a
                 }
                 """;

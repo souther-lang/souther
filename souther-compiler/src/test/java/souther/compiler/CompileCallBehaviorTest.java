@@ -95,7 +95,7 @@ class CompileCallBehaviorTest {
                 """));
     }
 
-    /** A behavior that requires something is reached through `requires`, not by name. */
+    /** A behavior that depends on something is reached through `depends on`, not by name. */
     @Test
     void aBehaviorThatRequiresSomethingIsNotCallableByName() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
@@ -108,7 +108,7 @@ class CompileCallBehaviorTest {
                 behavior now : (i: In) -> Stamp
 
                 behavior stamp : (i: In) -> Out
-                    requires now
+                    depends on now
                     constructs Out
                 let stamp (i, now) = Out { o = i.n }
 
@@ -137,7 +137,7 @@ class CompileCallBehaviorTest {
                     constructs Row, Missing
 
                 behavior fetch : (id: Id) -> Person | Missing
-                    requires load
+                    depends on load
                     constructs Person, Missing
                 let fetch (id, load) = match load(id) with
                     | Row r -> if r.active then Person { id = r.id, name = r.name }
@@ -153,7 +153,7 @@ class CompileCallBehaviorTest {
                 data Unknown = { by: Id }
 
                 behavior place : (o: Order) -> Placed | Unknown
-                    requires fetch
+                    depends on fetch
                     constructs Placed, Unknown
                 let place (o, fetch) = match fetch(o.by) with
                     | Person p -> Placed { by = p.id, name = p.name }
@@ -168,7 +168,7 @@ class CompileCallBehaviorTest {
                 data NoSuch = { to: Id }
 
                 behavior issue : (i: Invoice) -> Issued | NoSuch
-                    requires fetch
+                    depends on fetch
                     constructs Issued, NoSuch
                 let issue (i, fetch) = match fetch(i.to) with
                     | Person p -> Issued { to = p.id, name = p.name }
@@ -219,7 +219,7 @@ class CompileCallBehaviorTest {
         assertTrue(e.getMessage().contains("`loop` is a behavior"), e.getMessage());
     }
 
-    /** A composition is composed with, not called — from a body as well as from `requires`. */
+    /** A composition is composed with, not called — from a body as well as from `depends on`. */
     @Test
     void aCompositionCannotBeCalledFromABody() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
@@ -244,7 +244,7 @@ class CompileCallBehaviorTest {
         assertTrue(e.getMessage().contains("`chain` is a behavior"), e.getMessage());
     }
 
-    /** A behavior does not recurse, whether the loop is calls or `requires` (E1608). */
+    /** A behavior does not recurse, whether the loop is calls or `depends on` (E1608). */
     @Test
     void aBehaviorThatReachesItselfThroughCallsIsRejected() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
@@ -273,11 +273,11 @@ class CompileCallBehaviorTest {
                 data R = { z: Int }
 
                 behavior p : (a: A) -> R
-                    requires q
+                    depends on q
                 let p (a, q) = q(a)
 
                 behavior q : (a: A) -> R
-                    requires p
+                    depends on p
                 let q (a, p) = p(a)
                 """));
         assertEquals("E1608", e.code(), e.getMessage());

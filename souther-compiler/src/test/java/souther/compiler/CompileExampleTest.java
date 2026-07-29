@@ -46,7 +46,7 @@ class CompileExampleTest {
                 constructs 提出済み, 却下
 
             let 提出する (申請, 提出日時) = {
-                require 申請.予定費用.value <= 100000 else 却下 { 理由 = "high_cost" }
+                guard 申請.予定費用.value <= 100000 else 却下 { 理由 = "high_cost" }
                 提出済み { ...申請, 提出日時 = 提出日時 }
             }
             """;

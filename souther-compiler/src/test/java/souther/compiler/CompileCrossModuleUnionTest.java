@@ -69,7 +69,7 @@ class CompileCrossModuleUnionTest {
                 import inv ( Sku, Allocated, Shortage, allocate )
                 data Shipped = { sku: Sku }
                 behavior ship : (sku: Sku) -> Shipped | Shortage
-                    requires allocate
+                    depends on allocate
                     constructs Shipped
                 let ship (sku, allocate) =
                     match allocate(sku) with
@@ -89,7 +89,7 @@ class CompileCrossModuleUnionTest {
                 data Shipped = { sku: Sku }
                 data NotShipped = { sku: Sku }
                 behavior ship : (sku: Sku) -> Shipped | NotShipped
-                    requires allocate
+                    depends on allocate
                     constructs Shipped, NotShipped
                 let ship (sku, allocate) =
                     match allocate(sku) with

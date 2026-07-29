@@ -23,7 +23,7 @@ import java.util.Set;
  * {@code h(a, b)} is rewritten to {@code let $k_p1 = a in let $k_p2 = b in <body>}, with the
  * helper's parameters α-renamed to fresh {@code $}-prefixed names so they cannot capture a caller
  * local (a source identifier never starts with {@code $}). Because the body is spliced into the
- * caller, the caller's construction-permission check, {@code requires} inference, and codegen all
+ * caller, the caller's construction-permission check, {@code depends on} inference, and codegen all
  * see the helper's constructions and injected calls directly — exactly as if the code had been
  * written inline (spec 12.5). Helpers must not recurse (directly or indirectly), which keeps the
  * expansion finite; a cycle is rejected up front.

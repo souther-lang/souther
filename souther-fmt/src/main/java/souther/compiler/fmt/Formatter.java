@@ -317,9 +317,9 @@ public final class Formatter {
             List<Doc> clauses = new ArrayList<>();
             for (SyntaxNode c : s.childNodes()) {
                 if (c.kind() == SyntaxKind.CONSTRUCTS_CLAUSE) {
-                    clauses.add(concat(HARDLINE, text("constructs "), nameList(c)));
-                } else if (c.kind() == SyntaxKind.REQUIRES_CLAUSE) {
-                    clauses.add(concat(HARDLINE, text("requires "), nameList(c)));
+                    clauses.add(concat(HARDLINE, text("constructs "), nameList(c, 0)));
+                } else if (c.kind() == SyntaxKind.DEPENDS_CLAUSE) {
+                    clauses.add(concat(HARDLINE, text("depends on "), nameList(c, 1)));
                 }
             }
             return concat(text("behavior "), text(name), text(" : "), params, text(" -> "), ret,
@@ -357,13 +357,21 @@ public final class Formatter {
         return text(sb.toString());
     }
 
-    private Doc nameList(SyntaxNode clause) {
+    /** The names a {@code constructs} / {@code depends on} clause lists. {@code skipIdents} drops
+     * the leading identifiers that belong to the keyword rather than the list — the {@code on} of
+     * {@code depends on}, which lexes as an ordinary identifier. */
+    private Doc nameList(SyntaxNode clause, int skipIdents) {
         // an entry may name through a module, so the dots of one name are kept and only a comma
         // starts the next
         List<Doc> names = new ArrayList<>();
         StringBuilder current = new StringBuilder();
+        int skipped = 0;
         for (SyntaxElement e : meaningful(clause)) {
             if (!(e instanceof SyntaxToken t)) {
+                continue;
+            }
+            if (t.kind() == SyntaxKind.IDENT && skipped < skipIdents) {
+                skipped++;
                 continue;
             }
             switch (t.kind()) {
@@ -373,7 +381,7 @@ public final class Formatter {
                     names.add(text(current.toString()));
                     current.setLength(0);
                 }
-                default -> { }   // the `constructs` / `requires` keyword
+                default -> { }   // the `constructs` / `depends` keyword
             }
         }
         if (current.length() > 0) {
@@ -706,7 +714,7 @@ public final class Formatter {
                         text(" = "), expr(onlyExpr(c)));
                 case LET_DESTRUCTURE -> concat(text("let "), pattern(patternChild(c)),
                         text(" = "), expr(onlyExpr(c)));
-                case REQUIRE_STMT -> requireStmt(c);
+                case GUARD_STMT -> guardStmt(c);
                 default -> expr(c);   // the result expression
             };
             lines.add(concat(HARDLINE, d));
@@ -774,9 +782,9 @@ public final class Formatter {
         return null;
     }
 
-    private Doc requireStmt(SyntaxNode n) {
+    private Doc guardStmt(SyntaxNode n) {
         List<SyntaxNode> exprs = exprChildren(n);
-        return concat(text("require "), expr(exprs.get(0)), attemptBinder(n),
+        return concat(text("guard "), expr(exprs.get(0)), attemptBinder(n),
                 text(" else "), expr(exprs.get(1)));
     }
 

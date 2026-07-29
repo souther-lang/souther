@@ -186,7 +186,7 @@ class CompileHelperBodyTypingTest {
                 data Customer = { name: String }
                 data Out = { name: String }
                 behavior findCustomer : (id: CustomerId) -> Customer
-                behavior show : (id: CustomerId) -> Out requires findCustomer constructs Out
+                behavior show : (id: CustomerId) -> Out depends on findCustomer constructs Out
                 let nameOf (id) = findCustomer(id).name
                 let show (id, findCustomer) = Out { name = nameOf(id) }
                 """;

@@ -27,7 +27,7 @@ class CompileClosureInjectedTest {
             behavior dep : (i: In) -> Out
 
             behavior check : (o: In) -> Out
-                requires dep
+                depends on dep
 
             let check (o, dep) = {
                 let f = if o.flag then (x) -> dep(x) else (x) -> dep(x)

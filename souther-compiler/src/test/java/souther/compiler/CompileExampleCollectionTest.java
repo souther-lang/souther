@@ -182,7 +182,7 @@ class CompileExampleCollectionTest {
                 behavior fetch : (n: Int) -> List<Line>
 
                 behavior count : (n: Int) -> Total
-                    requires fetch
+                    depends on fetch
                     constructs Total
                 let count (n, fetch) = Total { n = List.length(fetch(n)) }
 
@@ -200,7 +200,7 @@ class CompileExampleCollectionTest {
                 behavior sum : (ns: List<Int>) -> Total
 
                 behavior report : (ns: List<Int>) -> Total
-                    requires sum
+                    depends on sum
                 let report (ns, sum) = sum(ns)
 
                 fake sum

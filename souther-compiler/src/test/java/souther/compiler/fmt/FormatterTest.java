@@ -116,7 +116,7 @@ class FormatterTest {
                 behavior take : (raw: String) -> Kept | Skipped
                     constructs Kept, Code, Skipped
                 let take (raw) = {
-                    require Code(raw) as c else Skipped
+                    guard Code(raw) as c else Skipped
                     Kept { code = c }
                 }
                 let accept (raw: String): List<Code> =
@@ -300,7 +300,7 @@ class FormatterTest {
         String messy = "module demo\n"
                 + "data R={ x:Int }\n"
                 + "behavior clock:()->String\n"
-                + "behavior f:(r:R)->R requires clock constructs R\n"
+                + "behavior f:(r:R)->R depends on clock constructs R\n"
                 + "let f (r,clock)=r\n"
                 + "fake lookup\n|(R{x=1})->R{x=2}\n| _ ->R{x=0}\n"
                 + "example f\n|(R{x=1}) with clock=\"t\" ->R{x=1}\n";
@@ -314,7 +314,7 @@ class FormatterTest {
                 behavior clock : () -> String
 
                 behavior f : (r: R) -> R
-                    requires clock
+                    depends on clock
                     constructs R
 
                 let f (r, clock) = r

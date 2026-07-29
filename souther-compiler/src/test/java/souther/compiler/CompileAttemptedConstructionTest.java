@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * An attempted construction — {@code require X(v) as n else C}, and the {@code if X(v) as n then A
+ * An attempted construction — {@code guard X(v) as n else C}, and the {@code if X(v) as n then A
  * else B} it desugars to. The construction's invariant decides the branch: it holds, the value is
  * built and bound to {@code n}; it does not, the else value is taken and no value is built. A plain
  * {@code X(v)} still aborts (spec 7.3), so this is the one form that answers a rule the writer
@@ -34,7 +34,7 @@ class CompileAttemptedConstructionTest {
                 constructs Accepted, Code, Rejected
 
             let take (raw) = {
-                require Code(raw) as c else Rejected
+                guard Code(raw) as c else Rejected
 
                 Accepted { code = c }
             }
@@ -64,7 +64,7 @@ class CompileAttemptedConstructionTest {
 
     /**
      * The {@code if} form is the base one: a helper {@code let} has no departure case to name, so
-     * {@code require} does not reach here. Dropping a value the invariant rejects is what
+     * {@code guard} does not reach here. Dropping a value the invariant rejects is what
      * {@code domainOf} does with the domain part of an address.
      */
     @Test
@@ -152,7 +152,7 @@ class CompileAttemptedConstructionTest {
                     constructs Kept, Code, Skipped
 
                 let take (raw) = {
-                    require Code(raw) as c else Skipped
+                    guard Code(raw) as c else Skipped
 
                     Kept { code = c }
                 }
@@ -179,7 +179,7 @@ class CompileAttemptedConstructionTest {
                     constructs Money, TooSmall
 
                 let diff (p) = {
-                    require Money(p.a.value - p.b.value) as d else TooSmall
+                    guard Money(p.a.value - p.b.value) as d else TooSmall
 
                     d
                 }
@@ -207,7 +207,7 @@ class CompileAttemptedConstructionTest {
                     constructs Money, TooSmall
 
                 let calc (x) = {
-                    require Money(-1m) as m else TooSmall
+                    guard Money(-1m) as m else TooSmall
 
                     m
                 }
@@ -231,7 +231,7 @@ class CompileAttemptedConstructionTest {
                     constructs Kept, Skipped
 
                 let take (raw) = {
-                    require Code(raw) as c else Skipped
+                    guard Code(raw) as c else Skipped
 
                     Kept { code = c }
                 }
@@ -258,7 +258,7 @@ class CompileAttemptedConstructionTest {
                     constructs Accepted, Code, Rejected
 
                 let take (raw) = {
-                    require Code(raw) as c else Rejected
+                    guard Code(raw) as c else Rejected
 
                     Accepted { code = c }
                 }
@@ -283,7 +283,7 @@ class CompileAttemptedConstructionTest {
                     constructs Kept, Skipped
 
                 let take (n) = {
-                    require n > 0 as c else Skipped
+                    guard n > 0 as c else Skipped
 
                     Kept { n = c }
                 }

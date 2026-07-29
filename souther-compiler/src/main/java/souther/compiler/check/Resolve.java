@@ -140,7 +140,7 @@ public final class Resolve {
         for (Ast.BehaviorDef b : m.behaviors()) {
             behaviors.add(switch (b) {
                 case Ast.SpecBehavior spec -> new Ast.SpecBehavior(spec.name(), r.params(spec.params()),
-                        r.retType(spec.ret()), r.names(spec.constructs()), spec.requires(), spec.pos());
+                        r.retType(spec.ret()), r.names(spec.constructs()), spec.dependsOn(), spec.pos());
                 case Ast.PipeBehavior pipe -> new Ast.PipeBehavior(pipe.name(), pipe.stages(),
                         r.retType(pipe.declaredOut()), pipe.pos());
             });

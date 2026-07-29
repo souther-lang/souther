@@ -166,11 +166,11 @@ class ResolvedValueNamesTest {
                 behavior rate : (n: Int) -> Int
 
                 behavior f : (n: Int) -> Int
-                    requires rate
+                    depends on rate
                 let f (n, rate) = rate(n)
                 """;
 
-        // the trailing `requires` parameter binds the name in the body (spec 12.6)
+        // the trailing `depends on` parameter binds the name in the body (spec 12.6)
         assertInstanceOf(ValueName.Local.class, denotationOf(source, "rate"));
     }
 

@@ -31,7 +31,7 @@ public final class InjectionSigs {
         Set<String> own = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec
-                    && (isInjectionTarget(module, spec) || !spec.requires().isEmpty())) {
+                    && (isInjectionTarget(module, spec) || !spec.dependsOn().isEmpty())) {
                 own.add(spec.name());
             }
         }
@@ -50,7 +50,7 @@ public final class InjectionSigs {
     }
 
     /**
-     * The signatures of the behaviors a {@code requires} clause may name — the ones whose
+     * The signatures of the behaviors a {@code depends on} clause may name — the ones whose
      * requirement set is not empty. {@code dependencies} names this module's own, computed by the
      * caller so a module read from the path, which publishes no {@code let}, is decided the same way
      * as one being compiled.

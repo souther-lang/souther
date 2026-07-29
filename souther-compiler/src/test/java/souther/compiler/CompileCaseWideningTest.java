@@ -50,7 +50,7 @@ class CompileCaseWideningTest {
                 data AB = A | B
                 data Stored = { it: AB }
                 behavior store : (ab: AB) -> Stored
-                behavior use : (a: A) -> Stored requires store
+                behavior use : (a: A) -> Stored depends on store
                 let use (a, store) = store(a)
                 """;
         assertDoesNotThrow(() -> Compiler.compile(src));

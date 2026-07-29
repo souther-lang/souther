@@ -23,7 +23,7 @@ class CompilePipeAssocTest {
 
             behavior split : (i: In) -> Mid | Off constructs Mid, Off
             let split (i) = {
-                require i.value <= 100 else Off { value = i.value }
+                guard i.value <= 100 else Off { value = i.value }
                 Mid { value = i.value }
             }
 

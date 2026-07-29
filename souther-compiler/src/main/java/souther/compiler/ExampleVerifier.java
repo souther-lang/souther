@@ -36,7 +36,7 @@ import java.util.Set;
  * build, exactly as a construction whose constant argument breaks its invariant does.
  *
  * <p>A behavior with a {@code let} body is evaluable; an injected or {@code >->} target is refused
- * ({@code E1902}). A {@code requires} dependency is satisfied by a fake supplied at the example: a
+ * ({@code E1902}). A {@code depends on} dependency is satisfied by a fake supplied at the example: a
  * {@code with dep = value} on the row (a constant/value dependency) or a {@code fake dep | table}
  * declaration (an input-keyed function dependency). Each fake is a {@code Behavior} proxy passed to
  * the generated behavior's injecting constructor — it produces no run-time class. Inputs, expected
@@ -150,7 +150,7 @@ public final class ExampleVerifier {
         }
     }
 
-    /** The target as an evaluable behavior (a {@code let} body); its {@code requires} are satisfied
+    /** The target as an evaluable behavior (a {@code let} body); its {@code depends on} are satisfied
      * by fakes at the example (checked per row), or null when it has no in-language body. */
     private Ast.SpecBehavior runnableBehavior(String name) {
         for (Ast.BehaviorDef b : module.behaviors()) {
@@ -177,7 +177,7 @@ public final class ExampleVerifier {
     }
 
     /** The diagnostic for a target that cannot be evaluated: unknown (E1901) or present but not a
-     * runnable behavior (E1902), with the reason (injected / pipeline / requires). */
+     * runnable behavior (E1902), with the reason (injected / pipeline / dependency). */
     private Diagnostic notRunnable(Ast.Example ex) {
         String name = ex.target();
         boolean known = false;
@@ -269,12 +269,12 @@ public final class ExampleVerifier {
         }
     }
 
-    // --- fakes for a behavior's requires ------------------------------------------------------
+    // --- fakes for what a behavior depends on ---------------------------------------------------
 
-    /** Builds a {@code Behavior} proxy for each of {@code spec}'s requires, in declared order; null
+    /** Builds a {@code Behavior} proxy for each of {@code spec}'s dependencies, in declared order; null
      * (with a diagnostic reported) when one is missing or invalid. */
     private Object[] resolveFakes(Ast.SpecBehavior spec, Ast.ExampleRow row, List<Diagnostic> out) {
-        List<Ast.ValueRef> reqs = spec.requires();
+        List<Ast.ValueRef> reqs = spec.dependsOn();
         Object[] proxies = new Object[reqs.size()];
         for (int i = 0; i < reqs.size(); i++) {
             Object p = resolveFake(spec.name(), reqs.get(i).bare(), row, out);
@@ -1287,10 +1287,10 @@ public final class ExampleVerifier {
         try {
             Class<?> c = loader.loadClass(className);
             Object instance;
-            if (spec.requires().isEmpty()) {
+            if (spec.dependsOn().isEmpty()) {
                 instance = openCtor(c).newInstance();
             } else {
-                // the injecting constructor takes one param per requires: the unary Behavior for a
+                // the injecting constructor takes one param per dependency: the unary Behavior for a
                 // single-input dep (a Proxy), or the dep's own base class for a multi-input dep (a
                 // generated subclass) — issue #57. The fake's runtime type tells the two apart.
                 Class<?> behaviorIface = loader.loadClass("souther.runtime.Behavior");

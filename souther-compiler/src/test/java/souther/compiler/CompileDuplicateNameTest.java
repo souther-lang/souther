@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
- * A name listed twice in a declaration — a sum's cases, a behavior's output union, {@code requires},
+ * A name listed twice in a declaration — a sum's cases, a behavior's output union, {@code depends on},
  * or {@code constructs} — is a meaningless duplicate that, left to codegen, produces a duplicate JVM
  * member (a malformed class file). The checker rejects it at compile time instead.
  */
@@ -41,7 +41,7 @@ class CompileDuplicateNameTest {
                 data Out = { n: Int }
                 data In = { x: Int }
                 behavior dep : (i: In) -> Out constructs Out
-                behavior use : (i: In) -> Out requires dep, dep
+                behavior use : (i: In) -> Out depends on dep, dep
                 let use (i, dep, dep) = dep(i)
                 """));
     }

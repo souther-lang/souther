@@ -27,14 +27,16 @@ public final class CstLexer {
             // decoder / encoder / from / intrinsic are not reserved: they lex as identifiers.
             Map.entry("as", SyntaxKind.AS_KW),
             Map.entry("let", SyntaxKind.LET_KW),
-            Map.entry("require", SyntaxKind.REQUIRE_KW),
+            Map.entry("guard", SyntaxKind.GUARD_KW),
             Map.entry("else", SyntaxKind.ELSE_KW),
             Map.entry("true", SyntaxKind.TRUE_KW),
             Map.entry("false", SyntaxKind.FALSE_KW),
             Map.entry("if", SyntaxKind.IF_KW),
             Map.entry("then", SyntaxKind.THEN_KW),
             Map.entry("behavior", SyntaxKind.BEHAVIOR_KW),
-            Map.entry("requires", SyntaxKind.REQUIRES_KW),
+            // `on` is not reserved: it is read as a contextual word after `depends`, the way
+            // `for` is after `examples`, so an ordinary field or parameter may still be named on.
+            Map.entry("depends", SyntaxKind.DEPENDS_KW),
             Map.entry("constructs", SyntaxKind.CONSTRUCTS_KW),
             Map.entry("match", SyntaxKind.MATCH_KW),
             Map.entry("with", SyntaxKind.WITH_KW));

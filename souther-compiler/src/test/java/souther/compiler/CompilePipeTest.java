@@ -119,7 +119,7 @@ class CompilePipeTest {
                     constructs Rejected, NoRight
 
                 let reject (p, by) = {
-                    require by == p.boss else NoRight
+                    guard by == p.boss else NoRight
                     Rejected { v = 1 }
                 }
                 behavior sendBack : (r: Rejected) -> Draft constructs Draft

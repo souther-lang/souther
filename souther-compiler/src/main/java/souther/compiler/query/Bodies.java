@@ -69,16 +69,16 @@ public final class Bodies {
     /**
      * The behaviors of a module a body may call by name: the ones whose requirement set is empty
      * (spec {@code [#calling-a-behavior]}). Those are the behaviors written with a {@code let} and
-     * no {@code requires} — an injection target requires itself, and one that declares
-     * {@code requires} is reached through that clause instead.
+     * no {@code depends on} — an injection target requires itself, and one that writes the clause is
+     * reached through that clause instead.
      *
      * <p>A composition is not here. Its requirements are inferred from its stages rather than
      * written, so a caller resting on one would take on a set that changes when an upstream stage
-     * changes — the reason a composition may not be named in {@code requires} either.
+     * changes — the reason a composition may not be named in {@code depends on} either.
      *
      * <p>A module read from the path published no {@code let}, so which of its behaviors are
      * injection targets is asked of {@link Injected} rather than read off the fns, exactly as that
-     * key does. What it did publish is the declaration, so its {@code requires} is here to read.
+     * key does. What it did publish is the declaration, so its {@code depends on} is here to read.
      */
     public record Callable(String name) implements Key<Set<String>> {
         @Override
@@ -97,7 +97,7 @@ public final class Bodies {
             for (Ast.BehaviorDef b : m.behaviors()) {
                 if (b instanceof Ast.SpecBehavior spec
                         && (injected == null || !injected.contains(spec.name()))
-                        && spec.requires().isEmpty()) {
+                        && spec.dependsOn().isEmpty()) {
                     callable.add(spec.name());
                 }
             }
@@ -106,9 +106,9 @@ public final class Bodies {
     }
 
     /**
-     * The behaviors of a module whose requirement set is not empty — what a {@code requires} clause
-     * may name (spec {@code [#requires]}). An injection target is one because it requires itself; a
-     * behavior written with a {@code let} is one when it declares {@code requires} of its own.
+     * The behaviors of a module whose requirement set is not empty — what a {@code depends on} clause
+     * may name (spec {@code [#depends-on]}). An injection target is one because it requires itself; a
+     * behavior written with a {@code let} is one when it writes a {@code depends on} of its own.
      *
      * <p>A composition is not here. Its requirements are inferred from its stages rather than
      * written, so a caller resting on one would take on a set that changes when an upstream stage
@@ -133,7 +133,7 @@ public final class Bodies {
                     continue;
                 }
                 if ((injected != null && injected.contains(spec.name()))
-                        || !spec.requires().isEmpty()) {
+                        || !spec.dependsOn().isEmpty()) {
                     result.add(spec.name());
                 }
             }

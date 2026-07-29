@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A behavior of another module is named through that module, the same way a type is — as a
- * {@code >->} stage and as a {@code requires}. What the qualifier says is which module the behavior
+ * {@code >->} stage and as a {@code depends on}. What the qualifier says is which module the behavior
  * comes from, which is what an import says, so it needs no import line.
  *
  * <p>Unlike a type, a behavior's name is also a member name in the generated class (an injected
@@ -77,7 +77,7 @@ class CompileQualifiedBehaviorRefTest {
         Map<String, byte[]> classes = Compiler.compileModules(List.of(LOOKUP, """
                 module d exposing ( Out, run )
                 data Out = { n: Int }
-                behavior run : (i: up2.In) -> Out constructs Out requires up2.lookup
+                behavior run : (i: up2.In) -> Out constructs Out depends on up2.lookup
                 let run (i, lookup) = {
                     let m = lookup(i)
                     Out { n = m.n }

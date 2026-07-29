@@ -194,7 +194,7 @@ class CompileDestructuringTest {
 
     @Test
     void aBehaviorImplementationsPatternLeavesTheRequiresParametersAlone() {
-        // the pattern takes a fresh name for itself; the `requires` still arrive as the trailing
+        // the pattern takes a fresh name for itself; the `depends on` still arrive as the trailing
         // parameters, under the names the behavior declared
         Compiler.compile("""
                 module demo
@@ -203,7 +203,7 @@ class CompileDestructuringTest {
 
                 behavior size : (t: Tags) -> Int
 
-                behavior countTags : (t: Tags) -> Int requires size
+                behavior countTags : (t: Tags) -> Int depends on size
                 let countTags (Tags(xs), size) = size(Tags(xs)) + length(xs)
                 """);
     }

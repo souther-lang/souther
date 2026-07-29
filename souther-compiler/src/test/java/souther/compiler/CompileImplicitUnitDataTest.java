@@ -51,7 +51,7 @@ class CompileImplicitUnitDataTest {
                     constructs Priced, EmptyCart
 
                 let quote (c) = {
-                    require c.n >= 1 else EmptyCart
+                    guard c.n >= 1 else EmptyCart
                     Priced { total = c.n }
                 }
                 """);

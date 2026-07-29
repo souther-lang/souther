@@ -65,7 +65,7 @@ class RunnerTest {
                 data Minor = { age: Int }
                 behavior classify : (age: Int) -> Adult | Minor constructs Adult, Minor
                 let classify (age) = {
-                    require age >= 18 else Minor { age = age }
+                    guard age >= 18 else Minor { age = age }
                     Adult { name = "adult" }
                 }
                 """);
@@ -104,13 +104,13 @@ class RunnerTest {
                 data Stamped = { at: String }
                 behavior now : () -> String
                 behavior stamp : (x: String) -> Stamped
-                    requires now
+                    depends on now
                     constructs Stamped
                 let stamp (x, now) = Stamped { at = now() }
                 """);
         Runner.RunException e = assertThrows(Runner.RunException.class,
                 () -> Runner.run(file, "stamp", "\"x\""));
-        assertTrue(e.getMessage().contains("requires injected dependencies"), e.getMessage());
+        assertTrue(e.getMessage().contains("depends on injected dependencies"), e.getMessage());
     }
 
     @Test
@@ -147,14 +147,14 @@ class RunnerTest {
                 data Out = { at: String }
                 behavior now : () -> String
                 behavior stamp : (i: In) -> Out
-                    requires now
+                    depends on now
                     constructs Out
                 let stamp (i, now) = Out { at = now() }
                 behavior flow = stamp
                 """);
         Runner.RunException e = assertThrows(Runner.RunException.class,
                 () -> Runner.run(file, "flow", "{\"v\": 1}"));
-        assertTrue(e.getMessage().contains("requires injected dependencies"), e.getMessage());
+        assertTrue(e.getMessage().contains("depends on injected dependencies"), e.getMessage());
         assertTrue(e.getMessage().contains("stamp"), e.getMessage());
     }
 

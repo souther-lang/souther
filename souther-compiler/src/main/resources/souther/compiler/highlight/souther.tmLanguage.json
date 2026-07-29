@@ -16,6 +16,8 @@
   }, {
     "include" : "#declaration-keywords"
   }, {
+    "include" : "#depends-on"
+  }, {
     "include" : "#control-keywords"
   }, {
     "include" : "#type-variable"
@@ -54,9 +56,13 @@
       "name" : "keyword.declaration.souther",
       "match" : "\\b(behavior|data|exposing|import|let|module)\\b"
     },
+    "depends-on" : {
+      "name" : "keyword.control.souther",
+      "match" : "\\bdepends\\s+on\\b"
+    },
     "control-keywords" : {
       "name" : "keyword.control.souther",
-      "match" : "\\b(as|constructs|else|if|invariant|match|require|requires|then|with)\\b"
+      "match" : "\\b(as|constructs|depends|else|guard|if|invariant|match|then|with)\\b"
     },
     "type-variable" : {
       "name" : "variable.other.generic.souther",

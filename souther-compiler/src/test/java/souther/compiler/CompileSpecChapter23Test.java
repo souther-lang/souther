@@ -92,10 +92,10 @@ class CompileSpecChapter23Test {
                 承認者ID: 従業員ID
             ) -> 事前承認済み | 承認権限なし
                 constructs 事前承認済み, 承認権限なし
-                requires 現在時刻
+                depends on 現在時刻
 
             let 事前承認する (申請, 承認者ID, 現在時刻) = {
-                require 承認者ID == 申請.申請者.上長ID
+                guard 承認者ID == 申請.申請者.上長ID
                     else 承認権限なし
 
                 事前承認済み { ...申請, 事前承認日時 = 現在時刻(), 事前承認者 = 承認者ID }
