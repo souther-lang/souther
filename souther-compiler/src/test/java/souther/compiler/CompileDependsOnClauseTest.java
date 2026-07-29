@@ -20,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * used to surface as an arbitrary JVM call (E1401), advice for a problem the author did not have
  * (issue #96).
  */
-class CompileRequiresClauseTest {
+class CompileDependsOnClauseTest {
 
     @Test
-    void requiresNamingAnImplementedBehaviorIsReportedAtTheClause() {
+    void dependsOnNamingAnImplementedBehaviorIsReportedAtTheClause() {
         String src = """
                 module demo
                 data A = { x: Int }
@@ -43,7 +43,7 @@ class CompileRequiresClauseTest {
     }
 
     @Test
-    void requiresNamingACompositionIsReportedWithoutAdvisingToRemoveALet() {
+    void dependsOnNamingACompositionIsReportedWithoutAdvisingToRemoveALet() {
         // a `>->` composition is its own implementation and has no `let` to remove, so the advice has
         // to be the one that holds for every implementation: take the name out of `depends on`
         String src = """
@@ -74,7 +74,7 @@ class CompileRequiresClauseTest {
     }
 
     @Test
-    void requiresNamingAnUnknownBehaviorIsReportedAtTheClause() {
+    void dependsOnNamingAnUnknownBehaviorIsReportedAtTheClause() {
         String src = """
                 module demo
                 data A = { x: Int }
@@ -90,7 +90,7 @@ class CompileRequiresClauseTest {
     }
 
     @Test
-    void requiresNamingAnImportedImplementedBehaviorIsReportedAtTheClause() {
+    void dependsOnNamingAnImportedImplementedBehaviorIsReportedAtTheClause() {
         // an imported behavior with a `let` in its own module is an implementation, not an injection
         // target: it is composed with `>->`, not injected.
         String lib = """
@@ -114,7 +114,7 @@ class CompileRequiresClauseTest {
     }
 
     @Test
-    void anArbitraryCallWithNoRequiresClauseIsStillE1401() {
+    void anArbitraryCallWithNoDependsOnClauseIsStillE1401() {
         String src = """
                 module demo
                 data A = { x: Int }
@@ -133,7 +133,7 @@ class CompileRequiresClauseTest {
      * one where the injection targets are known, so the two would otherwise drift apart.
      */
     @Test
-    void bothKindsOfBadRequiresArePointedAtTheName() {
+    void bothKindsOfBadDependsOnArePointedAtTheName() {
         String implemented = """
                 module demo
                 data A = { x: Int }

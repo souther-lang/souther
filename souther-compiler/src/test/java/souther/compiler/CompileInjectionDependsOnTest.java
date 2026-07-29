@@ -14,10 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * it cannot declare {@code depends on}: the behavior that calls or composes it carries the requirement
  * instead. A fn-bearing behavior keeps declaring the behaviors its body calls.
  */
-class CompileInjectionRequiresTest {
+class CompileInjectionDependsOnTest {
 
     @Test
-    void anInjectionTargetCannotDeclareRequires() {
+    void anInjectionTargetCannotDeclareDependsOn() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
                 data N = Int
