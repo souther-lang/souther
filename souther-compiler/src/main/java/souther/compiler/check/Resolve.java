@@ -58,12 +58,15 @@ public final class Resolve {
      * <p>The behaviors come from outside — an import brings one in — so they are given rather than
      * read off the module. A module resolved on its own reaches only what it declares.
      */
-    public record Values(String module, Set<String> helpers,
+    public record Values(String module, Map<String, ValueName.Helper> helpers,
                          Map<String, ValueName.Behavior> behaviors) {
 
         /** What a module reaches when nothing else is in sight. */
         public static Values of(Ast.Module m) {
-            Set<String> helpers = new LinkedHashSet<>(HelperInliner.helpersOf(m).keySet());
+            Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
+            for (String helper : HelperInliner.helpersOf(m).keySet()) {
+                helpers.put(helper, new ValueName.Helper(m.name(), helper));
+            }
             Map<String, ValueName.Behavior> behaviors = new LinkedHashMap<>();
             for (Ast.BehaviorDef b : m.behaviors()) {
                 behaviors.put(b.name(), new ValueName.Behavior(m.name(), b.name()));
@@ -470,7 +473,7 @@ public final class Resolve {
                     spreads.add(s.denotes() != null ? s : s.denoting(
                             answered(s.written(), s.pos(), valueName(s.written(), s.pos(), bound))));
                 }
-                yield new Ast.NewData(type(nd.typeName()), inits, spreads, nd.pos());
+                yield new Ast.NewData(type(nd.typeName()), inits, spreads, nd.publishedBy(), nd.pos());
             }
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
@@ -532,8 +535,9 @@ public final class Resolve {
         }
         // a helper or a behavior named without being applied — handed to a combinator by name,
         // which the inliner expands into a block that applies it
-        if (values.helpers().contains(written)) {
-            return new ValueName.Helper(values.module(), written);
+        ValueName.Helper helper = values.helpers().get(written);
+        if (helper != null) {
+            return helper;
         }
         ValueName.Behavior behavior = values.behaviors().get(written);
         if (behavior != null) {
@@ -560,8 +564,9 @@ public final class Resolve {
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             return new ValueName.Stdlib(written);
         }
-        if (values.helpers().contains(written)) {
-            return new ValueName.Helper(values.module(), written);
+        ValueName.Helper helper = values.helpers().get(written);
+        if (helper != null) {
+            return helper;
         }
         ValueName.Behavior behavior = values.behaviors().get(written);
         if (behavior != null) {
@@ -602,7 +607,7 @@ public final class Resolve {
     /** The names a body could have written where it wrote one nothing answers to. */
     private List<String> reachable(Bindings bound) {
         List<String> names = new ArrayList<>(bound.byName().keySet());
-        names.addAll(values.helpers());
+        names.addAll(values.helpers().keySet());
         names.addAll(values.behaviors().keySet());
         return names;
     }

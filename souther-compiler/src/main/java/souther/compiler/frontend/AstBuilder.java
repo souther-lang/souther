@@ -746,7 +746,7 @@ public final class AstBuilder {
                 inits.add(new Ast.FieldInit(field, v, pos(c)));
             }
         }
-        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, pos(n));
+        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, null, pos(n));
         for (int i = pathNames.size() - 1; i >= 0; i--) {
             built = new Ast.LetIn(pathNames.get(i), pathValues.get(i), built, pos(n));
         }

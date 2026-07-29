@@ -542,10 +542,8 @@ public final class Names {
                     // asked one name at a time: what else that module declares is not what this
                     // import is about, and reading it would make this module depend on it
                     if (registry.declaration(new TypeName(imp.module(), imported)) == null) {
-                        // a behavior import is resolved separately; it is not a data Def, so it does
-                        // not go into the symbols map.
-                        // a behavior import is resolved separately, and so is a value: neither is a
-                        // data Def, so neither goes into the symbols map
+                        // a behavior import is resolved separately, and so is a value or a helper:
+                        // none of them is a data Def, so none goes into the symbols map
                         if (behaviorNames(src).contains(imported) || valueNames(src).contains(imported)) {
                             continue;
                         }
@@ -754,15 +752,23 @@ public final class Names {
         // behavior. Asked the same way as HelperInliner.helpersOf, which decides what is expanded —
         // two answers to one question is how a name came to denote a helper here and a behavior
         // there.
-        Set<String> helpers = new LinkedHashSet<>(HelperInliner.helpersOf(m).keySet());
-        // A value another module publishes is named here bare, like one of this module's own: it is
-        // substituted at the reference, so nothing else about it has to travel (ADR-0072).
+        Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
+        for (String helper : HelperInliner.helpersOf(m).keySet()) {
+            helpers.put(helper, new ValueName.Helper(m.name(), helper));
+        }
+        // A definition another module publishes is written here bare, like one of this module's own —
+        // a value substituted at its reference, a helper expanded at its call (ADR-0072). What it
+        // denotes is the module that declares it: the bare spelling is this module's way of writing
+        // it, and the pair (module, name) is what the definition is. A reader that spells one of its
+        // own the same way is a name clash, which the import check reports.
         for (Ast.Import imp : m.imports()) {
             Ast.Module from = db.ask(new Front.Available(imp.module())).value();
             if (from == null) {
                 continue;
             }
-            helpers.addAll(Bodies.publishedValues(from, imp.names()).keySet());
+            for (String published : Bodies.publishedNames(from, imp.names())) {
+                helpers.putIfAbsent(published, new ValueName.Helper(from.name(), published));
+            }
         }
         BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
         return new Resolve.Values(m.name(), helpers,
@@ -1068,10 +1074,11 @@ public final class Names {
         return names;
     }
 
-    /** The values a module declares — a {@code let} with no parameter list. Like a behavior, one is
-     * a name in the value namespace and not a data, so an import of it resolves elsewhere. */
+    /** The definitions a module declares in the value namespace — its values and its helpers. Like a
+     * behavior, one is a name in that namespace and not a data, so an import of it resolves
+     * elsewhere. */
     static Set<String> valueNames(Ast.Module m) {
-        return new LinkedHashSet<>(HelperInliner.valuesOf(m).keySet());
+        return new LinkedHashSet<>(HelperInliner.helpersOf(m).keySet());
     }
 
     static Report unknownModule(Ast.Import imp) {

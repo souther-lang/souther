@@ -53,7 +53,7 @@ public final class NewtypeDesugar {
                     yield new Ast.NewData(
                             new Ast.Name(call.fn(), built, call.pos()),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
-                            List.of(), call.pos());
+                            List.of(), null, call.pos());
                 }
                 yield new Ast.Call(call.fn(), call.denotes(), args, call.pos());
             }
@@ -62,7 +62,7 @@ public final class NewtypeDesugar {
                 for (Ast.FieldInit fi : nd.inits()) {
                     inits.add(new Ast.FieldInit(fi.name(), go(fi.value(), symbols), fi.pos()));
                 }
-                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.pos());
+                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.publishedBy(), nd.pos());
             }
             case Ast.Neg neg -> new Ast.Neg(go(neg.operand(), symbols), neg.pos());
             case Ast.Binary bin ->

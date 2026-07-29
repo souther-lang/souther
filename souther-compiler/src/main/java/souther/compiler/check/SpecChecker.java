@@ -322,7 +322,7 @@ public final class SpecChecker {
 
         // One expression (spec 16.4): this single walk sees every construction, including under a
         // desugared `guard`.
-        Map<TypeName, String> constructed = new LinkedHashMap<>();
+        DataChecker.Constructs constructed = DataChecker.Constructs.empty();
         DataChecker.collectConstructs(body, constructed, symbols, new HashSet<>(env.keySet()), recHelperConstructs);
         // `constructs` on an fn-backed behavior is optional: its construction permission is internal
         // (invisible to callers, unlike `depends on`), so with the body visible the set can be inferred
@@ -336,7 +336,7 @@ public final class SpecChecker {
             // and an `Amount` an import brings in are the same one. Each side keeps its own spelling
             // in whatever it has to report.
             Set<TypeName> declared = new HashSet<>(MatchElaborator.denoted(spec.constructs()));
-            for (Map.Entry<TypeName, String> built : constructed.entrySet()) {
+            for (Map.Entry<TypeName, String> built : constructed.originated().entrySet()) {
                 if (!declared.contains(built.getKey())) {
                     String c = built.getValue();
                     throw CompileException.of(
@@ -348,7 +348,7 @@ public final class SpecChecker {
             }
             for (Ast.Name declaredName : spec.constructs()) {
                 String name = declaredName.written();
-                if (!constructed.containsKey(declaredName.denotes())) {
+                if (!constructed.builds(declaredName.denotes())) {
                     throw CompileException.of(
                             Diagnostic.of("E1006", "e1006.msg").at(spec.pos())
                                     .args(spec.name(), name).hint("e1006.hint").build(),
@@ -552,27 +552,56 @@ public final class SpecChecker {
             }
         }
         // A published value stands for what it builds, so it may not build a type the module keeps to
-        // itself: a reader would hold a value it has no name for. Only the value's own surface is
+        // itself: a reader would hold a value it has no name for. Only the definition's own surface is
         // asked — a type its body reaches for on the way is its own workings, and requiring those
         // would put every inner type back in the reader's import list.
-        HelperInliner values = null;
-        // A behavior's input and output are asked below, under its own name; the value form of a
-        // zero-input behavior's implementation is not a value of the module.
-        for (Ast.FnDef fn : HelperInliner.valuesOf(module).values()) {
+        //
+        // A published helper is asked the same question about what it returns, and one more about
+        // what it takes: a reader has to write the arguments, so it has to be able to name their
+        // types. Those types are settled from the body (ADR-0066) and read here as settled.
+        HelperInliner definitions = null;
+        // A behavior's input and output are asked below, under its own name; a behavior's own `let` is
+        // an implementation and not one of the module's definitions.
+        for (Ast.FnDef fn : HelperInliner.helpersOf(module).values()) {
             if (fn.body() == null || !exposed.contains(fn.name())) {
                 continue;
             }
-            if (values == null) {
-                values = HelperInliner.forHelpers(HelperInliner.helpersOf(module));
+            if (definitions == null) {
+                definitions = HelperInliner.forHelpers(HelperInliner.helpersOf(module));
             }
-            // Read the body closed. What a value stands for is not what its outermost expression is
-            // spelled as: `let published = privateValue` builds whatever `privateValue` builds, and a
-            // helper call builds whatever the helper does. Expanding first asks the one question.
-            Ast.Expr closed = values.inline(fn.body());
-            refuseRecursiveHelper(fn, closed, values.recursiveHelpers());
+            for (Ast.FnParam p : fn.params()) {
+                refuseHidden(TypeOps.resolveParamType(p.type(), symbols), "check.surface.param",
+                        fn.name(), p.name(), "check.surface.hint", fn.pos(), symbols, exposeAll,
+                        exposed);
+            }
+            // Read the body closed. What a definition stands for is not what its outermost expression
+            // is spelled as: `let published = privateValue` builds whatever `privateValue` builds, and
+            // a helper call builds whatever the helper does. Expanding first asks the one question.
+            // A recursive helper is not expanded, so what it returns is read off its declaration —
+            // which it is required to write (spec 13.1).
+            if (definitions.recursiveHelpers().contains(fn.name())) {
+                refuseHidden(TypeOps.successType(fn.declaredReturn(), symbols),
+                        "check.surface.value", fn.name(), null, "check.surface.hint", fn.pos(),
+                        symbols, exposeAll, exposed);
+                continue;
+            }
+            Ast.Expr closed = definitions.inline(fn.body());
             for (Ast.Name built : constructedTypes(closed)) {
                 refuseHidden(Type.ref(built.denotes()), "check.surface.value", fn.name(), null,
                         "check.surface.hint", fn.pos(), symbols, exposeAll, exposed);
+            }
+            // A recursive helper is not expanded, so a construction inside it is not there to read.
+            // What the definition stands for is what that helper returns, which it is required to
+            // declare (spec 13.1) — otherwise `let published = make(10)` would carry out a `Hidden`
+            // under a rule that had only ever looked at constructions.
+            for (String called : calledNames(closed)) {
+                Ast.FnDef recursive = definitions.recursiveHelpers().contains(called)
+                        ? definitions.helper(called) : null;
+                if (recursive != null && recursive.declaredReturn() != null) {
+                    refuseHidden(TypeOps.successType(recursive.declaredReturn(), symbols),
+                            "check.surface.value", fn.name(), null, "check.surface.hint", fn.pos(),
+                            symbols, exposeAll, exposed);
+                }
             }
         }
         // Read off the signature map rather than the declarations: a composition's input and output
@@ -592,34 +621,6 @@ public final class SpecChecker {
             }
             refuseHidden(sig.out(), outKey, b.name(), null, hint, b.pos(),
                     symbols, exposeAll, exposed);
-        }
-    }
-
-    /**
-     * A published value SHALL NOT reach a recursive helper.
-     *
-     * <p>What crosses a module boundary is the value closed — its body with the module's own
-     * definitions substituted into it — and a recursive helper is not one of them: it is lowered to a
-     * method, so the call stays a call and the method is not the reader's to emit. Refused here, where
-     * the value is published, rather than in the reader, which would meet a call to a name that is not
-     * there and report an arbitrary JVM call against the wrong line.
-     *
-     * <p>It is what closes the surface rule too: a helper that is not expanded is a call and nothing
-     * more, so a hidden type it builds would never be read off the value.
-     */
-    private static void refuseRecursiveHelper(Ast.FnDef value, Ast.Expr closed,
-                                              Set<String> recursive) {
-        for (String called : calledNames(closed)) {
-            if (!recursive.contains(called)) {
-                continue;
-            }
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.surface.value.recursive").title("check.module.title")
-                            .at(value.pos(), value.name().length()).args(value.name(), called)
-                            .hint("check.surface.value.recursive.hint", value.name(), called).build(),
-                    "`" + value.name() + "` is exposed and reaches the recursive helper `" + called
-                            + "`, which is a method rather than an expression, so the value cannot"
-                            + " cross a module boundary closed");
         }
     }
 

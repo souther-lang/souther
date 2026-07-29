@@ -130,7 +130,7 @@ public final class Exposing {
                 for (Ast.FieldInit fi : nd.inits()) {
                     inits.add(new Ast.FieldInit(fi.name(), rw(fi.value()), fi.pos()));
                 }
-                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.pos());
+                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.publishedBy(), nd.pos());
             }
             case Ast.LetIn li -> new Ast.LetIn(li.name(), rw(li.value()), li.declaredType(), li.annotated(), li.opens(),
                     rw(li.body()), li.pos());

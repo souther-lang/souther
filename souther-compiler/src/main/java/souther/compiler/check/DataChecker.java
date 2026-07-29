@@ -12,6 +12,7 @@ import souther.compiler.types.TypeName;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -68,6 +69,29 @@ public final class DataChecker {
     }
 
     /**
+     * What a body builds, in the two kinds a permission check tells apart: {@code originated} is what
+     * this body is answerable for, {@code carried} what another module's published value or helper
+     * built and this body was handed. Each maps the type to the spelling it was written with, so a
+     * report quotes the source.
+     *
+     * <p>The split is what makes the carried ones invisible to the requirement and still visible to
+     * the redundancy check: a behavior does not have to declare `constructs` for a construction that
+     * came in with a published body — it may have no name for the type — and a behavior that declares
+     * one anyway is not told it builds nothing.
+     */
+    public record Constructs(Map<TypeName, String> originated, Map<TypeName, String> carried) {
+
+        public static Constructs empty() {
+            return new Constructs(new LinkedHashMap<>(), new LinkedHashMap<>());
+        }
+
+        /** Whether {@code built} is built here at all, however it got here. */
+        public boolean builds(TypeName built) {
+            return originated.containsKey(built) || carried.containsKey(built);
+        }
+    }
+
+    /**
      * The data types {@code e} constructs.
      *
      * <p>{@code bound} carries the names in scope, because a bare identifier is a unit data's
@@ -75,6 +99,20 @@ public final class DataChecker {
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
     static void collectConstructs(Ast.Expr e, Map<TypeName, String> out, Symbols symbols,
+                                  Set<String> bound,
+                                  Map<String, Map<TypeName, String>> recConstructs) {
+        Constructs all = Constructs.empty();
+        collectConstructs(e, all, symbols, bound, recConstructs);
+        out.putAll(all.originated());
+    }
+
+    /** Whether {@code nd} was carried here by a published body of the module that declares
+     * {@code built} — the one case where the origination is already stated elsewhere. */
+    private static boolean declaredBy(Ast.NewData nd, TypeName built) {
+        return nd.publishedBy() != null && nd.publishedBy().equals(built.module());
+    }
+
+    static void collectConstructs(Ast.Expr e, Constructs out, Symbols symbols,
                                           Set<String> bound,
                                           Map<String, Map<TypeName, String>> recConstructs) {
         switch (e) {
@@ -85,7 +123,15 @@ public final class DataChecker {
                 collectConstructs(li.body(), out, symbols, inner, recConstructs);
             }
             case Ast.NewData nd -> {
-                out.putIfAbsent(nd.typeName().denotes(), nd.typeName().written());
+                // A construction carried in by a module's published value or helper is that module's,
+                // not this body's: publishing the definition is what states the origination, and the
+                // reader has no name to declare a type the module keeps to itself by. What the mark
+                // does not cover is a type of some *other* module the published body happened to
+                // build — that origination is neither the reader's nor the publisher's to state, so it
+                // stays this behavior's to declare, which it can (ADR-0059).
+                Map<TypeName, String> side = declaredBy(nd, nd.typeName().denotes())
+                        ? out.carried() : out.originated();
+                side.putIfAbsent(nd.typeName().denotes(), nd.typeName().written());
                 for (Ast.FieldInit init : nd.inits()) {
                     collectConstructs(init.value(), out, symbols, bound, recConstructs);
                 }
@@ -98,7 +144,7 @@ public final class DataChecker {
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be.
                 Map<TypeName, String> viaHelper = recConstructs.get(call.fn());
                 if (viaHelper != null) {
-                    viaHelper.forEach(out::putIfAbsent);
+                    viaHelper.forEach(out.originated()::putIfAbsent);
                 }
                 call.args().forEach(a -> collectConstructs(a, out, symbols, bound, recConstructs));
             }
@@ -145,7 +191,7 @@ public final class DataChecker {
             // a bare name that resolves to a unit data is that unit's construction (spec 8.4)
             case Ast.Var v when !bound.contains(v.name())
                     && symbols.declaration(v.name()) instanceof Ast.UnitData ->
-                    out.putIfAbsent(symbols.resolve(v.name()), v.name());
+                    out.originated().putIfAbsent(symbols.resolve(v.name()), v.name());
             case Ast.IntLit _ -> { }
             case Ast.DecimalLit _ -> { }
             case Ast.StringLit _ -> { }

@@ -160,13 +160,17 @@ public final class ModuleMetadata {
 
     /**
      * The {@code let}s a reader of this module's declarations needs, as they were written: the
-     * helpers its invariants call, and the values it publishes.
+     * helpers its invariants call, and the definitions it publishes.
      *
      * <p>An invariant is part of what a type is, so it has to be readable where the type is imported,
-     * and it cannot be read without the helpers it names. A published value is the same: it is
-     * substituted where it is named (ADR-0072), so a reader needs its body, and the body's own
-     * workings with it. A {@code let} neither reaches is not carried — this publishes what the
-     * declarations need, not the module's implementation.
+     * and it cannot be read without the helpers it names. A published value or helper is the same: a
+     * value is substituted where it is named and a helper expanded where it is called (ADR-0072), so
+     * a reader needs the body, and the body's own workings with it. A {@code let} neither reaches is
+     * not carried — this publishes what the declarations need, not the module's implementation.
+     *
+     * <p>What travels is the source as written, which the reader's compiler reads back. That makes
+     * the meaning of a carried body part of what a jar promises, and it is {@link
+     * Backend#BOUNDARY_VERSION} that the promise is recorded under.
      */
     private static List<String> invariantHelpers(Ast.Module module, CstFrontend.Slices slices) {
         Map<String, Ast.FnDef> own = new LinkedHashMap<>();
@@ -180,9 +184,9 @@ public final class ModuleMetadata {
             }
         }
         Set<String> exposed = new java.util.HashSet<>(module.exposing());
-        // A behavior's body is not published — a reader has its signature and calls it — so the
-        // value form of a zero-input behavior's implementation is not carried either.
-        for (Ast.FnDef fn : HelperInliner.valuesOf(module).values()) {
+        // A behavior's body is not published — a reader has its signature and calls it — so a
+        // behavior's own `let` is not carried whatever its shape.
+        for (Ast.FnDef fn : HelperInliner.helpersOf(module).values()) {
             if (exposed.contains(fn.name()) && fn.body() != null) {
                 reached.add(fn.name());
                 reach(fn.body(), own, reached);

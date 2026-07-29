@@ -149,12 +149,17 @@ public final class Shapes {
     }
 
     /**
-     * The module a check and a codegen actually run over: the desugared one, plus the recursive
-     * prelude helpers it reaches, as its own fns under their qualified names.
+     * The module a check and a codegen actually run over: the desugared one with every imported name
+     * written as the definition it denotes, plus the recursive helpers it reaches, as its own fns
+     * under those names.
      *
-     * <p>A recursive prelude helper cannot be inlined — it would expand forever — so it is emitted
-     * as one of the module's methods, the same as a module-own recursive helper. Only the reached
-     * ones are added; a module that never folds gets none.
+     * <p>A recursive helper cannot be inlined — it would expand forever — so it is emitted as one of
+     * this module's methods. That holds whoever declared it: a prelude {@code List.foldFrom}, and a
+     * helper another module published or published something else that calls. The declaring module is
+     * the helper's identity and not where the method goes; the method goes on the {@code $Fns} of
+     * whichever module is being compiled, which is what keeps that class package-private and leaves no
+     * new way to reach a construction from Java. Only the reached ones are added; a module that never
+     * folds gets none.
      */
     public record Prepared(String name) implements Key<Ast.Module> {
         @Override
@@ -165,13 +170,21 @@ public final class Shapes {
         @Override
         public Answer<Ast.Module> compute(Db db) {
             Answer<Ast.Module> desugared = db.ask(new Desugared(name));
+            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
             if (!desugared.present()) {
                 return Answer.absent();
             }
-            Ast.Module m = desugared.value();
+            // A module whose imports form a cycle takes nothing from them — the cycle is reported
+            // where it is found, and this module is not compiled either way.
+            Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
+            // An imported definition is written here bare and denotes the module that declares it.
+            // Spelling it that way, once, is what lets everything downstream — the table a call
+            // expands against, the method a recursive helper becomes — read the identity by reading
+            // the name.
+            Ast.Module m = HelperInliner.qualifyImports(desugared.value());
             try {
                 Map<String, Ast.FnDef> injected =
-                        HelperInliner.forModule(m).injectedRecursiveHelpers();
+                        HelperInliner.forModule(m, published).injectedRecursiveHelpers();
                 if (injected.isEmpty()) {
                     return Answer.of(m);
                 }

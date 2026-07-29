@@ -235,33 +235,36 @@ module example.order exposing (
 `+exposing+` is the module's interface description: implementations are inferred, only the boundary is stated explicitly. This is the same position as OCaml's `+.mli+`, F#'s `+.fsi+`, and TypeScript's `+.d.ts+`.
 
 [#exposed-values]
-==== A value is published; a helper is not
+==== A value and a helper are published
 
-`+exposing+` MAY name a *value* — a `+let+` with no parameter list (<<fn-declaration>>) — alongside the module's data and behaviors. A limit a rule is written against, or the representative record its examples are stated with, is part of what the module offers, and a reader names it instead of writing it out again.
+`+exposing+` MAY name a *value* — a `+let+` with no parameter list (<<fn-declaration>>) — and a *helper* — a `+let+` with them — alongside the module's data and behaviors. A limit a rule is written against, the representative record its examples are stated with, and the rule itself are part of what the module offers, and a reader names them instead of writing them out again.
 
 [,text]
 ----
-module example.pipeline exposing ( 交渉中の商談, 商談, ... )
+module example.pipeline exposing ( 交渉中の商談, 税込, 商談, ... )
 
 let 交渉中の商談 = 交渉中 { ... }
+let 税込 (金額: 金額) = 金額(金額.value * 110 / 100)
 ----
 
-An importer names the value and nothing else: what the value is built out of stays the declaring module's business, and does not join the reader's import list. What arrives is *closed* — the value with its own module's definitions already substituted into it — so a definition the importer happens to spell the same way is a different definition and changes nothing (<<qualified-reference>>).
+An importer names the definition and nothing else: what it is built out of stays the declaring module's business, and does not join the reader's import list. What arrives is *closed* — the body with its own module's definitions already substituted into it — so a definition the importer happens to spell the same way is a different definition and changes nothing (<<qualified-reference>>).
 
-A *helper* — a `+let+` with parameters — is not published. It takes arguments, and a function does not cross into another module as a value (<<blocks>>). To share a rule, declare it as a behavior; a behavior that depends on nothing is called from a body like any other function (<<calling-a-behavior>>).
+A behavior's own `+let+` is not published, whatever its shape. What a reader of the module reaches is the behavior, which it calls; the `+let+` that satisfies it is an implementation, and the module publishes its specification.
 
-A behavior taking nothing is implemented by a value (<<fn-declaration>>), and that body is not published either. What a reader of the module reaches is the behavior, which it calls; the `+let+` that satisfies it is an implementation, and the module publishes its specification.
+A published definition MAY reach a *recursive* helper. Closing cannot remove one — it is lowered to a method rather than expanded (<<fn-rules>>) — so the helper travels with the body that calls it, under the name of the module that declares it, and so does every recursive helper it reaches in turn. The importing module emits them as its own methods, exactly as it does for a recursive standard-library helper it reaches. Which module declared a helper is its identity and not where its method goes: two modules may declare a recursive helper of one name, and one importer may end up emitting both.
 
-An exposed value SHALL NOT reach a *recursive* helper. What crosses is the value closed, and a recursive helper is lowered to a method rather than expanded (<<fn-rules>>), so there is nothing to close it over. Declare what it computes as a behavior the reader can call.
+A published value is substituted where it is named and a published helper expanded where it is called, exactly as one of the reader's own is (<<fn-value-semantics>>, <<fn-rules>>). What such a body builds is *not* the reader's to declare in `+constructs+`: publishing the definition is what states that origination, and the reader may have no name for the type. A type of some *third* module that the body happens to build is neither the reader's nor the publisher's to hand over, so that one stays the reader's to declare — which it can, since the module declaring it exposed it (<<closed-construction>>).
 
-A published value is substituted where it is named, exactly as one of the reader's own is (<<fn-value-semantics>>). So what it builds is built by the behavior that names it, and belongs in that behavior's `+constructs+` — which for another module's type is what <<closed-construction>> already allows.
+A published body's source travels in the jar and is read back by the importing compiler (<<published-modules>>). What that source means is therefore part of what a compiled module promises, and is recorded under the same boundary version as the rest of it.
 
 [#exposed-surface]
 ==== What reaches out may not rest on what is kept
 
 What a module reaches out with SHALL NOT rest on a type it keeps to itself. An exposed data's field types, and an exposed behavior's input and output, are exposed by the module that declares them. A type carried inside a collection counts — `+List<UserId>+` names `+UserId+` as surely as a bare `+UserId+` does.
 
-An exposed value stands for what it builds, so it SHALL NOT build a type the module keeps to itself. What it stands for is read from the value closed, not from the shape of what it was written as: naming another value, or calling a helper, builds whatever that builds. Only what the value *is* is asked — a type its body reached for on the way is its own workings, and requiring those would put every inner type back in the reader's import list, which is what publishing the value was for.
+An exposed value stands for what it builds, so it SHALL NOT build a type the module keeps to itself. What it stands for is read from the value closed, not from the shape of what it was written as: naming another value, or calling a helper, builds whatever that builds; a recursive helper is not expanded, so what it stands for is read from the return type that helper declares. Only what the value *is* is asked — a type its body reached for on the way is its own workings, and requiring those would put every inner type back in the reader's import list, which is what publishing the value was for.
+
+An exposed helper is asked the same about what it returns, and one more thing about what it takes: its argument types SHALL NOT be types the module keeps to itself, since a reader has to write the arguments. Those types are settled from the body (<<fn-rules>>) and read as settled.
 
 The same holds for an injected behavior — one with no `+let+` — whether or not it is in `+exposing+`, because the abstract base it generates is public regardless (<<java-base-class>>) and the implementation writes both types where it overrides `+apply+`.
 
@@ -1588,7 +1591,7 @@ A value is not module state. Its expression is elaborated in the module that dec
 * A local lambda (`+let f = (x) -> ...+`) cannot recurse. Recursion is a property of a named module helper.
 * Two `+let+`s MUST NOT be written for one behavior.
 * A `+let+` may implement a behavior only when both are in the *same module*. A behavior of another module may be imported and called, but its implementation MUST NOT be given by a `+let+` in another module. This is the line that keeps the name-binding rule from conflicting with separate compilation.
-* A helper `+let+` may construct data, but its construction set is inferred transitively and MUST be included in the calling behavior's `+constructs+` (<<constructs>>, <<blocks>>). It cannot be placed in a `+>->+` stage or written in `+exposing+`, because it does not appear in the spec DSL.
+* A helper `+let+` may construct data, but its construction set is inferred transitively and MUST be included in the calling behavior's `+constructs+` (<<constructs>>, <<blocks>>) — except for what another module's published body carried in, which that module already stated (<<exposed-values>>). A helper cannot be placed in a `+>->+` stage, because it does not appear in the spec DSL. It may be written in `+exposing+`: what a module offers is not only its list of behaviors.
 * A function type (`+(A) -> B+`) may be written only in a `+let+` argument position. It MUST NOT be written in a data field (<<blocks>>) or a behavior output. A behavior output is a sum of business results, and a function is not a business result.
 * A `+let+` may return a function (`+let adder (n: Int) = (x) -> x + n+`). An escaping function — a return value or a runtime choice — becomes a closure capturing free variables (<<blocks>>). If only passed or applied on the spot, it is expandable and no closure is needed. The return type is inferred, so no type is written even when returning a function. A lambda argument type is not written either — it is inferred from how it is applied (a local rule, distinct from global type inference, which the declarative design does not do — a behavior takes its type from the specification and a helper states its own, <<fn-declaration>>).
 

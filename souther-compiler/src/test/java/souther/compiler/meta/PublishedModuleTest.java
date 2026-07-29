@@ -227,6 +227,39 @@ class PublishedModuleTest {
         assertTrue(e.getMessage().contains("0.0.1-old"), e.getMessage());
     }
 
+    /** A published helper's body travels as source and is compiled by whoever imports it, so what
+     * that source means is part of the same boundary. A jar that disagrees is refused as a version
+     * disagreement, rather than read and reported as an unresolved name inside a body nobody wrote. */
+    @Test
+    void aModuleCarryingAPublishedHelperIsRefusedAtADifferentBoundary() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shared.money exposing ( Amount, taxed )
+                data Amount = Int
+                let taxed (a: Amount) = Amount(a.value * 110 / 100)
+                """);
+        assertEquals(List.of("taxed"),
+                readBack("shared.money", classes).module().fns().stream()
+                        .map(Ast.FnDef::name).toList());
+
+        PublishedModule.Classes stale = binaryName -> {
+            PublishedModule.Declarations d =
+                    new ClassFileDeclarations(classes::get).of(binaryName);
+            if (d == null || d.module() == null) {
+                return d;
+            }
+            PublishedModule.SoutherModuleView m = d.module();
+            return new PublishedModule.Declarations(
+                    new PublishedModule.SoutherModuleView(m.compat() + 1, "0.0.1-old", m.name(),
+                            m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
+                    d.data(), d.behaviorSignature(), d.behaviorInjected());
+        };
+
+        CompileException e = assertThrows(CompileException.class,
+                () -> PublishedModule.read("shared.money", stale));
+
+        assertTrue(e.getMessage().contains("0.0.1-old"), e.getMessage());
+    }
+
     private static List<String> names(List<Ast.Def> defs) {
         return defs.stream().map(Ast.Def::name).toList();
     }
