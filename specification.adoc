@@ -2043,6 +2043,21 @@ the branch. The invariant is run — the type's own and every invariant a `+...+
 (<<invariant-mvp>>, <<field-spread>>). Holding, the value is built and `+<名前>+` names it in the
 success branch; failing, the `+else+` value is taken and no value is built. The invariant runs once.
 
+A construction is either spelling — a newtype's `+T(v)+` or a record literal `+T { ... }+`
+(<<record-literal>>). A behavior that reports every business failure rather than the first one it meets
+builds the reasons as a list and attempts the case that carries them, so "at least one reason" is that
+case's own invariant rather than a guard written beside it.
+
+[,text]
+----
+data 変換不可 = { 理由: List<変換不可理由> }
+    invariant List.length(理由) >= 1
+
+if 変換不可 { 理由 = 阻害理由(見込客, 依頼) } as 不可
+    then 不可
+    else 変換済み { ... }
+----
+
 The name is in scope in the success branch only. *Nothing carries the failure.* There is no value for
 it — no `+Option+`, no `+Result+`, no reason — and the name a business failure gets is the one written
 in `+else+`, which MAY be a value naming nothing (`+else []+`).
