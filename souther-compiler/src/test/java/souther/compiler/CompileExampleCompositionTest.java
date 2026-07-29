@@ -413,9 +413,9 @@ class CompileExampleCompositionTest {
                 """).diagnostic().code());
     }
 
-    /** E1902's reason no longer names a composition. */
+    /** E1902 has one reason left: the target is injected. */
     @Test
-    void theRefusalDoesNotMentionAComposition() {
+    void theRefusalReasonIsTheInjection() {
         CompileException e = err("""
                 module example.injectedreason
 
