@@ -62,6 +62,53 @@ class CompileValueSpreadTest {
         assertEquals(22L, aged(loader));
     }
 
+    /** A binding in force wins over a declaration, in a spread as anywhere else. */
+    @Test
+    void aParameterSpreadShadowsASameNamedTopLevelValue() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data Person = { name: String, age: Int }
+
+                let base = Person { name = "global", age = 10 }
+
+                behavior update : (base: Person) -> Person constructs Person
+                let update (base) = Person { ...base, age = 20 }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Update$Impl").getConstructor().newInstance();
+        Object in = Codecs.decoded(loader, "demo.Person", Map.of("name", "argument", "age", 1L));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Person",
+                Codecs.apply(behavior, in));
+
+        assertEquals("argument", out.get("name"));
+    }
+
+    @Test
+    void aLocalSpreadShadowsASameNamedTopLevelValue() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data In = { name: String }
+                data Person = { name: String, age: Int }
+
+                let base = Person { name = "global", age = 10 }
+
+                behavior update : (i: In) -> Person constructs Person
+                let update (i) = {
+                    let base = Person { name = i.name, age = 1 }
+                    Person { ...base, age = 20 }
+                }
+                """), getClass().getClassLoader());
+
+        Object behavior = loader.loadClass("demo.Update$Impl").getConstructor().newInstance();
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("name", "local"));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Person",
+                Codecs.apply(behavior, in));
+
+        assertEquals("local", out.get("name"));
+    }
+
     /** A spread builds the value it copies, so what the value constructs is constructed here. */
     @Test
     void aValueSpreadContributesItsConstructions() {

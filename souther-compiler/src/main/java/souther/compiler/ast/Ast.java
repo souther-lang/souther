@@ -74,6 +74,11 @@ public interface Ast {
             return new ValueRef(written, null, pos);
         }
 
+        /** A name a pass introduced, bound where it put it — the counterpart of {@link Var#local}. */
+        public static ValueRef local(String name, SourcePos pos) {
+            return new ValueRef(name, new ValueName.Local(name, pos), pos);
+        }
+
         /** The same name, resolved to what it denotes. */
         public ValueRef denoting(ValueName resolved) {
             return new ValueRef(written, resolved, pos);
@@ -610,8 +615,14 @@ public interface Ast {
         }
     }
 
-    /** {@code TypeName { ..src, field: expr, ... }} used as an expression (construction in a behavior). */
-    record NewData(Name typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
+    /**
+     * {@code TypeName { ..src, field: expr, ... }} used as an expression (construction in a behavior).
+     *
+     * <p>A spread names a value like any other position, so it carries what that name resolves to: a
+     * binding in force wins over a declaration here as everywhere else, and a reader downstream must
+     * not go back to matching the spelling against the module's own definitions.
+     */
+    record NewData(Name typeName, List<FieldInit> inits, List<ValueRef> spreads, SourcePos pos)
             implements Expr {}
 
     record IntLit(long value, SourcePos pos) implements Expr {}

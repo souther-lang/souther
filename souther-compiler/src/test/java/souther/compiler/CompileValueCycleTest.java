@@ -4,6 +4,7 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -99,6 +100,43 @@ class CompileValueCycleTest {
                 """);
 
         assertTrue(e.getMessage().contains("step"), e.getMessage());
+    }
+
+    /** A parameter that happens to share a value's spelling is not a reference to that value, so it
+     * contributes no edge and closes no cycle. */
+    @Test
+    void aParameterSharingAValuesNameIsNotAReferenceToIt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                let step = twice(10)
+                let twice (step: Int) = step * 2
+
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = i.n + step }
+                """));
+    }
+
+    /** Nor does a binding inside a body. */
+    @Test
+    void aBindingSharingAValuesNameIsNotAReferenceToIt() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                let step = 10
+
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = {
+                    let step = i.n + 1
+                    Out { n = step }
+                }
+                """));
     }
 
     /** A helper on a call cycle is untouched by this: it is lowered to a method and recurses. */

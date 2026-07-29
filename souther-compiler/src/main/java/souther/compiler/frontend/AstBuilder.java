@@ -716,7 +716,7 @@ public final class AstBuilder {
         SyntaxToken head = identTokens(n).get(0);
         Ast.Name typeName = Ast.Name.written(head.text(), posOf(head));
         List<Ast.FieldInit> inits = new ArrayList<>();
-        List<String> spreads = new ArrayList<>();
+        List<Ast.ValueRef> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction
         // itself still spreads a plain local: `let $s0 = c.address in Address { ...$s0, ... }`
         List<String> pathNames = new ArrayList<>();
@@ -725,7 +725,7 @@ public final class AstBuilder {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
                 List<SyntaxToken> path = identTokens(c);
                 if (path.size() == 1) {
-                    spreads.add(path.get(0).text());
+                    spreads.add(Ast.ValueRef.written(path.get(0).text(), posOf(path.get(0))));
                 } else {
                     String bound = "$s" + (spreadCounter++);
                     Ast.Expr value = new Ast.Var(path.get(0).text(), posOf(path.get(0)));
@@ -734,7 +734,8 @@ public final class AstBuilder {
                     }
                     pathNames.add(bound);
                     pathValues.add(value);
-                    spreads.add(bound);
+                    // the path was bound just above, so what the construction spreads is that binding
+                    spreads.add(Ast.ValueRef.local(bound, posOf(path.get(0))));
                 }
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 String field = firstIdentText(c);

@@ -1011,7 +1011,8 @@ public final class ExampleVerifier {
         Map<String, Object> map = new LinkedHashMap<>();
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought. Only a value can be spread here: a row has no bindings to read from.
-        for (String spread : nd.spreads()) {
+        for (Ast.ValueRef ref : nd.spreads()) {
+            String spread = ref.bare();
             Ast.Expr value = valueBody(spread);
             if (value == null) {
                 throw new FixtureException("`" + spread

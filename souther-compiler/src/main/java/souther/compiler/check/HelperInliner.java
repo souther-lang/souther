@@ -601,18 +601,17 @@ public final class HelperInliner {
     private Ast.Expr newData(Ast.NewData nd) {
         List<String> bound = new ArrayList<>();
         List<Ast.Expr> values = new ArrayList<>();
-        List<String> spreads = new ArrayList<>();
-        for (String spread : nd.spreads()) {
-            Ast.FnDef value = own.get(spread);
-            if (value == null || !value.params().isEmpty() || value.body() == null
-                    || recursive.contains(spread)) {
+        List<Ast.ValueRef> spreads = new ArrayList<>();
+        for (Ast.ValueRef spread : nd.spreads()) {
+            Ast.FnDef value = valueSpread(spread);
+            if (value == null) {
                 spreads.add(spread);
                 continue;
             }
-            String name = "$s" + counter++ + "_" + spread;
+            String name = "$s" + counter++ + "_" + spread.bare();
             bound.add(name);
             values.add(inline(value.body()));
-            spreads.add(name);
+            spreads.add(Ast.ValueRef.local(name, spread.pos()));
         }
         Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads, nd.pos());
         for (int i = bound.size() - 1; i >= 0; i--) {
@@ -709,9 +708,11 @@ public final class HelperInliner {
                 for (Ast.FieldInit i : nd.inits()) {
                     inits.add(new Ast.FieldInit(i.name(), rename(i.value(), subst, fnParams, at), at(at, i.pos())));
                 }
-                List<String> spreads = new ArrayList<>();
-                for (String s : nd.spreads()) {
-                    spreads.add(subst.getOrDefault(s, s));   // `..param` copies the renamed binding
+                List<Ast.ValueRef> spreads = new ArrayList<>();
+                for (Ast.ValueRef s : nd.spreads()) {
+                    // `..param` copies the renamed binding, and stays the binding it now names
+                    String renamed = subst.get(s.bare());
+                    spreads.add(renamed == null ? s : Ast.ValueRef.local(renamed, at(at, s.pos())));
                 }
                 yield new Ast.NewData(nd.typeName(), inits, spreads, at(at, nd.pos()));
             }
@@ -855,23 +856,39 @@ public final class HelperInliner {
         }
     }
 
+    /**
+     * The value a spread copies, or null where it copies something else — a parameter, a binding, or
+     * a name that merely shares a value's spelling.
+     *
+     * <p>The spread carries what it resolved to, so this asks that rather than matching the spelling
+     * against the module's definitions: a binding in force wins over a declaration, and a spread is
+     * no exception.
+     */
+    private Ast.FnDef valueSpread(Ast.ValueRef spread) {
+        if (!(spread.denotes() instanceof ValueName.Helper)) {
+            return null;
+        }
+        Ast.FnDef value = own.get(spread.bare());
+        return value == null || !value.params().isEmpty() || value.body() == null
+                || recursive.contains(spread.bare()) ? null : value;
+    }
+
     /** The names of this module's values that {@code e} reads. A value is written bare, so a
      * reference to one is a {@code Var} and never reaches the call graph. */
     private void collectValueRefs(Ast.Expr e, Set<String> out) {
         if (e == null) {
             return;
         }
-        if (e instanceof Ast.Var v) {
+        if (e instanceof Ast.Var v && v.denotes() instanceof ValueName.Helper) {
             Ast.FnDef d = own.get(v.name());
             if (d != null && d.params().isEmpty()) {
                 out.add(v.name());
             }
         }
         if (e instanceof Ast.NewData nd) {
-            for (String spread : nd.spreads()) {
-                Ast.FnDef d = own.get(spread);
-                if (d != null && d.params().isEmpty()) {
-                    out.add(spread);   // `...base` reads the value the same way a bare name does
+            for (Ast.ValueRef spread : nd.spreads()) {
+                if (valueSpread(spread) != null) {
+                    out.add(spread.bare());   // `...base` reads the value a bare name does
                 }
             }
         }
