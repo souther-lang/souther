@@ -47,4 +47,73 @@ class CompileFunctionValueFlowTest {
         assertEquals(List.of(110L, 120L), run(loader, check, List.of(10L, 20L), true));
         assertEquals(List.of(11L, 21L), run(loader, check, List.of(10L, 20L), false));
     }
+
+    private static final String BY_NAME = """
+            module demo
+
+            data Order = { xs: List<Int> }
+            data Result = { ns: List<Int> }
+
+            let bump (n: Int) = n + 1
+
+            behavior check : (o: Order) -> Result
+                constructs Result
+
+            let check (o) = {
+                let f: (Int) -> Int = bump
+                Result { ns = List.map(f, o.xs) }
+            }
+            """;
+
+    // A helper's name in a value position is the function it names — the same value a lambda spelling
+    // it out would be. What it denotes does not depend on which of the two the author wrote.
+    @Test
+    @SuppressWarnings("unchecked")
+    void aHelperNamedAsAValueIsTheFunctionItNames() throws Exception {
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(BY_NAME), getClass().getClassLoader());
+        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+        Object order = Codecs.decoded(loader, "demo.Order", Map.of("xs", List.of(10L, 20L)));
+        Object r = Codecs.apply(check, order);
+        assertEquals(List.of(11L, 21L),
+                ((Map<?, ?>) Codecs.encode(loader, "demo.Result", r)).get("ns"));
+    }
+
+    private static final String OUT_OF_A_LIST = """
+            module demo
+
+            data Order = { xs: List<Int> }
+            data Result = { ok: Bool }
+
+            let positive (n: Int) = n > 0
+            let negative (n: Int) = n < 0
+
+            behavior check : (o: Order) -> Result
+                constructs Result
+
+            let check (o) = {
+                let fs: List<(Int) -> Bool> = [positive, negative]
+                let picked = match List.get(1, fs) with
+                    | Some f -> List.all(f, o.xs)
+                    | None -> false
+                Result { ok = picked }
+            }
+            """;
+
+    // The function applied here was never named at the application: it came out of a list, which is
+    // the position issue #198 opens. It runs, so the value in the list is the function itself.
+    @Test
+    void aFunctionTakenOutOfAListIsApplied() throws Exception {
+        BytesClassLoader loader =
+                new BytesClassLoader(Compiler.compile(OUT_OF_A_LIST), getClass().getClassLoader());
+        Object check = loader.loadClass("demo.Check" + "$Impl").getDeclaredConstructor().newInstance();
+
+        assertEquals(true, ok(loader, check, List.of(-1L, -2L)));   // all negative
+        assertEquals(false, ok(loader, check, List.of(-1L, 2L)));
+    }
+
+    private Object ok(BytesClassLoader loader, Object check, List<Long> xs) throws Exception {
+        Object order = Codecs.decoded(loader, "demo.Order", Map.of("xs", xs));
+        return ((Map<?, ?>) Codecs.encode(loader, "demo.Result", Codecs.apply(check, order))).get("ok");
+    }
 }

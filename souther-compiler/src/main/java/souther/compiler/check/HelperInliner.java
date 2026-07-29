@@ -856,8 +856,26 @@ public final class HelperInliner {
             return v;
         }
         Ast.FnDef value = helpers.get(v.name());
-        if (value == null || !value.params().isEmpty() || value.body() == null
-                || recursive.contains(v.name())) {
+        if (value == null || value.body() == null) {
+            return v;
+        }
+        if (!value.params().isEmpty()) {
+            // A helper named where a value goes is the function it names, written out: a lambda that
+            // takes what the helper takes and applies it. The same value the author would get by
+            // spelling the lambda, so nothing downstream has to know which of the two was written.
+            // A recursive helper eta-expands too — the call inside stays the call it has to be.
+            int k = counter++;
+            List<String> params = new ArrayList<>();
+            List<Ast.Expr> args = new ArrayList<>();
+            for (int i = 0; i < value.params().size(); i++) {
+                String p = "$v" + k + "_" + i;
+                params.add(p);
+                args.add(Ast.Var.local(p, v.pos()));
+            }
+            return inline(new Ast.Block(params,
+                    new Ast.Call(v.name(), v.denotes(), args, v.pos()), v.pos()));
+        }
+        if (recursive.contains(v.name())) {
             return v;
         }
         return inline(value.body());

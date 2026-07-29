@@ -180,6 +180,10 @@ public final class Elaborator {
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
             // would need a runtime closure (spec 12.5)
+            // a lambda where a function is expected is that function: the context said what it takes,
+            // so nothing has to be read off its applications
+            case Ast.Block block when expected instanceof Type.FnOf want ->
+                    elaborateFunctionValue(block, want.params(), env, ctx);
             case Ast.Block block -> throw CompileException.of(
                     Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
                             .at(block.pos()).build(),
@@ -313,8 +317,11 @@ public final class Elaborator {
                 }
                 List<Core> elements = new ArrayList<>();
                 Type elem = null;
+                // an expected list type reaches each element, so a list of functions says what its
+                // elements take without every one of them being annotated
+                Type want = expected instanceof Type.ListOf le ? le.element() : null;
                 for (Ast.Expr el : lit.elements()) {
-                    Core c = elaborate(el, env, ctx);
+                    Core c = elaborate(el, env, ctx, want);
                     elements.add(c);
                     elem = elem == null ? c.type() : BottomInfer.unifyElem(elem, c.type(), lit.pos());
                 }
