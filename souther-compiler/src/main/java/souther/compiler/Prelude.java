@@ -113,6 +113,12 @@ public final class Prelude {
      *  xs, 0)} (the walk from the head). */
     private static final Set<String> SUGARED = Set.of("List.fold");
 
+    /** Whether {@code qualifiedName} is one of those — a name no tree holds after the rewrite, so a
+     *  rule keyed by it can never be looked up (see {@code InvariantChecker}'s combinator table). */
+    public static boolean sugared(String qualifiedName) {
+        return SUGARED.contains(qualifiedName);
+    }
+
     /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function —
      *  a prelude helper, a prelude intrinsic, a checker built-in, or a sugar for one. */
     public static boolean hasQualified(String qualifiedName) {

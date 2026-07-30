@@ -989,6 +989,8 @@ The check reads a behavior's body and the invariants around it at the level the 
 
 An invariant that arrives from another module arrives expanded (<<published-modules>>), so a clause of an imported type is read as the computation it became rather than as the operations it was written as. Such a clause is outside the statically dischargeable fragment even where the same clause written here would be inside it.
 
+An operation the rules name is named as the call that survives to here, which is not every spelling an author can write: `+List.fold+` is the walk `+List.foldFrom+` from the head (<<stdlib-list>>) and is rewritten to it before any of this, so it is the second name the rules are written against. A rule under a name nothing here holds could not be reached, which is why the compiler's own tests hold each rule to a program that fires it.
+
 [#invariant-discharge-preservation]
 ==== What an operation keeps of what it was built from
 
