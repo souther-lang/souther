@@ -39,6 +39,11 @@ public final class Shapes {
      * <p>The two go together because settling reads the spread source through the same symbols the
      * derive produced: an invariant that arrives by spread is part of the declaration from here on,
      * and a later pass that read the declaration before settling would read a type without it.
+     *
+     * <p>Settling substitutes what the modules this one imports publish to it, as lowering a body
+     * does. The dependency runs the other way from the rest of this file — a shape reaching into
+     * bodies — and it is the imported module's bodies it reaches, never this one's: what a module
+     * imports is read off its resolved form, so nothing here is asked through itself.
      */
     public record Derived(String name) implements Key<Ast.Module> {
         @Override
@@ -56,10 +61,16 @@ public final class Shapes {
             if (!scope.present()) {
                 return Answer.absent();
             }
+            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            // A module whose imports form a cycle takes nothing from them. The cycle is reported where
+            // it is found; an invariant naming an imported definition is left unsettled and reported
+            // as the unknown name it then is, which is the same answer every other stage gives there.
+            Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
                 Ast.Module declared = onlyWhatItDeclares(resolved.value());
                 Ast.Module derived = Deriver.derive(declared, scope.value());
-                return Answer.of(HelperInliner.withSettledInvariants(derived, scope.value()));
+                return Answer.of(
+                        HelperInliner.withSettledInvariants(derived, scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -242,9 +253,15 @@ public final class Shapes {
             if (!resolved.present() || !scope.present()) {
                 return Answer.absent();
             }
+            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
+            // What the clause says is what the check reads, so an imported bound is substituted here
+            // as it is where the invariant is settled. A clause left naming it would be classified as
+            // a rule this analysis cannot read, and a construction the bound rejects would compile.
+            Ast.Module declaring = HelperInliner.withQualifiedInvariants(resolved.value());
             try {
                 Map<TypeName, List<ClauseDischarge>> out = new LinkedHashMap<>();
-                for (Ast.Def def : resolved.value().defs()) {
+                for (Ast.Def def : declaring.defs()) {
                     if (!(def instanceof Ast.Data data) || data.invariants().isEmpty()) {
                         continue;
                     }
@@ -252,7 +269,7 @@ public final class Shapes {
                     // the position it is written — an expansion carries positions of its own, and the
                     // author is looking at the source.
                     HelperInliner inliner = HelperInliner.forHelpers(
-                            HelperInliner.helpersOf(resolved.value()), InliningPolicy.DISCHARGE);
+                            HelperInliner.helpersOf(declaring), published, InliningPolicy.DISCHARGE);
                     List<ClauseDischarge> clauses = new ArrayList<>();
                     // A declared clause is one rule to depart by and may still be several conjuncts to
                     // discharge, so `a && b` under one name is classified twice under that name: what
@@ -294,9 +311,11 @@ public final class Shapes {
      * reads ({@link souther.compiler.check.InliningPolicy#DISCHARGE}) — beside the settled form that
      * every other stage sees on the declaration itself.
      *
-     * <p>Only this module's own. What another module publishes arrives settled, which is what makes
-     * an imported clause fall outside the statically dischargeable fragment: the analysis reads what
-     * it is given, and there the operations have already become the folds they are.
+     * <p>Only the clauses this module declares. What another module publishes arrives settled, which
+     * is what makes an imported clause fall outside the statically dischargeable fragment: the
+     * analysis reads what it is given, and there the operations have already become the folds they
+     * are. A clause declared here that names an imported definition is this module's clause and stays
+     * inside the fragment — the definition is substituted, as it is everywhere the invariant is read.
      */
     public record InvariantsForDischarge(String name)
             implements Key<Map<TypeName, List<Ast.InvariantClause>>> {
@@ -312,8 +331,11 @@ public final class Shapes {
             if (!resolved.present() || !scope.present()) {
                 return Answer.absent();
             }
+            Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
+            Map<String, Ast.FnDef> published = imported.present() ? imported.value() : Map.of();
             try {
-                return Answer.of(HelperInliner.invariantsForDischarge(resolved.value(), scope.value()));
+                return Answer.of(HelperInliner.invariantsForDischarge(
+                        resolved.value(), scope.value(), published));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

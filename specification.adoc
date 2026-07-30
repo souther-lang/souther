@@ -918,6 +918,27 @@ data カゴ = { items: List<明細> } invariant List.all(x -> 正の数(x.数量
 
 What may be called is a `+let+`, not a behavior (<<fn>>). An invariant is part of what a type is: it travels to an importing module as the source it was written as, together with the helper `+let+`s it names (<<published-modules>>). It names only what travels with it, so a behavior MUST NOT be called from an invariant whatever its requirement set — including one that depends on nothing and is callable from a `+let+` body (<<calling-a-behavior>>). To name a business rule, use a `+let+`.
 
+A value or a helper another module publishes travels with it, so an invariant MAY name one, as a `+let+` body may (<<exposed-values>>). A limit or a format several modules' types are written against is therefore written once, in the module that owns it.
+
+[,text]
+----
+module limits exposing ( 最大文字数 )
+
+let 最大文字数 = 20
+----
+
+[,text]
+----
+module 会員 exposing ( 会員名 )
+
+import limits ( 最大文字数 )
+
+data 会員名 = String
+    invariant String.length(value) <= 最大文字数
+----
+
+The value is substituted and the helper expanded where they are named, closed by the module that declares them (<<exposed-values>>), so what the rule says does not change with where it is read. A project importing `+会員名+` from a jar reads the invariant as it was written and resolves `+最大文字数+` against `+limits+`, which is why that module is on its class path (<<published-modules>>).
+
 A `+let+` may be called from an invariant when it satisfies all of the following, all statically decidable.
 
 * the requirement set is empty (the corresponding behavior writes no `+depends on+`; <<depends-on>>)
@@ -1003,9 +1024,9 @@ A size taken of a container built by an operation is read through that operation
 [#invariant-discharge-representation]
 ==== What the check reads
 
-The check reads a behavior's body and the invariants around it at the level the rules above are written at: the standard library's operations are operations, and a module's own `+let+`s are expanded into the body that called them (spec 12.5). The two go together. The language defines what `+List.map+` does to a length, and every module has that definition, so a call to it says something on its own. A `+let+` carries no such definition and does not travel to an importing module either, so what it says is its body.
+The check reads a behavior's body and the invariants around it at the level the rules above are written at: the standard library's operations are operations, and the `+let+`s a body or an invariant names are expanded into it (spec 12.5). The two go together. The language defines what `+List.map+` does to a length, and every module has that definition, so a call to it says something on its own. A `+let+` carries no such definition, so what it says is its body — the one another module published as readily as the one written here.
 
-An invariant that arrives from another module arrives expanded (<<published-modules>>), so a clause of an imported type is read as the computation it became rather than as the operations it was written as. Such a clause is outside the statically dischargeable fragment even where the same clause written here would be inside it.
+An invariant that arrives from another module arrives expanded (<<published-modules>>), so a clause of an imported type is read as the computation it became rather than as the operations it was written as. Such a clause is outside the statically dischargeable fragment even where the same clause written here would be inside it. A clause written here is inside it whatever it names: an imported value or helper is substituted before the check reads the clause (<<invariant-expressions>>), so the rule the check reads is the rule the author wrote.
 
 An operation the rules name is named as the call that survives to here, which is not every spelling an author can write: `+List.fold+` is the walk `+List.foldFrom+` from the head (<<stdlib-list>>) and is rewritten to it before any of this, so it is the second name the rules are written against. A rule under a name nothing here holds could not be reached, which is why the compiler's own tests hold each rule to a program that fires it.
 
