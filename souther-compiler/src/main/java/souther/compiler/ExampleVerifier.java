@@ -1300,7 +1300,11 @@ public final class ExampleVerifier {
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought.
         for (Ast.ValueRef ref : nd.spreads()) {
-            String spread = ref.bare();
+            // The name as this row spells it, which is what the values a fixture may name are keyed by:
+            // a definition of this module by its own name, one another module published by that module's
+            // name and its own. `bare()` is the name it was *declared* under, which is not that key for
+            // an imported value — so a row could name one but not spread it (issue #212).
+            String spread = ref.written();
             Ast.Expr value = valueBody(spread);
             if (value == null) {
                 throw new FixtureException("`" + spread
