@@ -200,6 +200,92 @@ public final class InvariantChecker {
         }
     }
 
+    /**
+     * How a clause of {@code data}'s invariant can be discharged, read on its own — the construction
+     * is assumed to name what it is given, so what is left is the clause's own shape. {@code at} is
+     * where the clause is written, which is the pre-expansion position; {@code clause} is that clause
+     * in the representation the check reads.
+     */
+    public static ClauseDischarge capabilityOf(Ast.Expr clause, SourcePos at, Ast.Data data,
+                                               Symbols symbols) {
+        InvariantChecker c = new InvariantChecker(symbols, Map.of());
+        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+        Bindings binds = Bindings.ofPaths(
+                name -> fields.containsKey(name) ? LinearForm.atom(name) : null,
+                name -> fields.containsKey(name) ? name : null, fields);
+        List<Clause> owed;
+        try {
+            owed = c.obligations(clause, binds);
+        } catch (RuntimeException _) {
+            owed = null;   // fail-open, as the walk is
+        }
+        if (owed == null || owed.isEmpty()) {
+            return ClauseDischarge.runtimeOnly(at, c.whyUnreadable(clause, binds));
+        }
+        for (Clause owe : owed) {
+            if (owe.numeric() != null) {
+                return ClauseDischarge.derivable(at);
+            }
+        }
+        return ClauseDischarge.exactMatch(at);
+    }
+
+    /** What in {@code clause} the check cannot read, said so an author can act on it. */
+    private String whyUnreadable(Ast.Expr clause, Bindings binds) {
+        Ast.Expr blocked = unreadable(clause);
+        if (blocked instanceof Ast.Call call) {
+            return "it calls `" + call.fn() + "`, which the check reads as a value and not as a term";
+        }
+        if (blocked != null) {
+            return "it is not one of the shapes the check reads";
+        }
+        String name = unnamed(clause, binds, Set.of());
+        if (name != null) {
+            return "it reads `" + name + "`, and a clause is read through the fields the construction"
+                    + " fills";
+        }
+        return "it names a term the check cannot name";
+    }
+
+    /** A name the clause reads that is neither a field of the declaration nor bound inside the clause,
+     * or {@code null} if it reads none. */
+    private String unnamed(Ast.Expr e, Bindings binds, Set<String> bound) {
+        if (e instanceof Ast.Var v) {
+            return bound.contains(v.name()) || binds.path().apply(v.name()) != null ? null : v.name();
+        }
+        Set<String> inner = bound;
+        if (e instanceof Ast.Block b && !b.params().isEmpty()) {
+            inner = new java.util.HashSet<>(bound);
+            inner.addAll(b.params());
+        } else if (e instanceof Ast.LetIn li) {
+            inner = new java.util.HashSet<>(bound);
+            inner.add(li.name());
+        }
+        Set<String> scope = inner;
+        String[] found = {null};
+        Ast.forEachChild(e, child -> {
+            if (found[0] == null) {
+                found[0] = unnamed(child, binds, scope);
+            }
+        });
+        return found[0];
+    }
+
+    /** The innermost part of {@code e} the term grammar cannot read, or {@code null} if it reads all
+     * of it. Every location is granted, so what is left is the shape. */
+    private Ast.Expr unreadable(Ast.Expr e) {
+        Ast.Expr[] found = {null};
+        Ast.forEachChild(e, child -> {
+            if (found[0] == null) {
+                found[0] = unreadable(child);
+            }
+        });
+        if (found[0] != null) {
+            return found[0];
+        }
+        return termKey(e, x -> rootName(x) != null ? "?" : null, Map.of(), 0) == null ? e : null;
+    }
+
     /** Analyzes one behavior body against its input types. Never throws. A {@code null} source is a
      * body the analysis representation could not be built for, and is not analyzed at all. */
     static Findings analyze(Source source, Map<String, Type> params, Symbols symbols) {
@@ -398,10 +484,12 @@ public final class InvariantChecker {
         List<Clause> owed = new ArrayList<>();
         for (Ast.Expr inv : invs) {
             List<Clause> o = obligations(inv, binds);
-            if (o == null) {
-                return;   // some part is not expressible — leave the whole invariant opaque
+            if (o != null) {
+                owed.addAll(o);
             }
-            owed.addAll(o);
+        }
+        if (owed.isEmpty()) {
+            return;   // nothing here is expressible — the run-time check stands for all of it
         }
         NumericDomain dom = k.numbers();
         for (Clause c : owed) {
@@ -492,13 +580,15 @@ public final class InvariantChecker {
     private List<Clause> obligations(Ast.Expr rawInv, Bindings binds, boolean positive) {
         Ast.Expr inv = asSizeComparison(rawInv);
         if (inv instanceof Ast.Binary b && b.op() == Ast.BinOp.AND && positive) {
+            // Each conjunct on its own: an invariant is a set of things that hold, and one the check
+            // cannot read leaves its own run-time check standing without costing the others theirs.
             List<Clause> l = obligations(b.left(), binds, true);
             List<Clause> r = obligations(b.right(), binds, true);
-            if (l == null || r == null) {
+            if (l == null && r == null) {
                 return null;
             }
-            List<Clause> both = new ArrayList<>(l);
-            both.addAll(r);
+            List<Clause> both = new ArrayList<>(l == null ? List.of() : l);
+            both.addAll(r == null ? List.of() : r);
             return both;
         }
         Ast.Expr under = negated(inv);
@@ -640,27 +730,23 @@ public final class InvariantChecker {
                 },
                 resolvePath, fields);
         Known out = k;
-        // Each conjunct on its own: an input's invariant is a set of things that hold, and one the
-        // check cannot express does not cost it the others.
         for (Ast.Expr inv : invariantsOf(ref.name(), data)) {
-            for (Ast.Expr conjunct : conjuncts(inv)) {
-                List<Clause> o = obligations(conjunct, binds);
-                if (o == null) {
-                    continue;
+            List<Clause> o = obligations(inv, binds);
+            if (o == null) {
+                continue;
+            }
+            for (Clause c : o) {
+                for (Constraint known : c.known()) {
+                    out = out.with(out.numbers().assume(known.form(), known.rel()));
                 }
-                for (Clause c : o) {
-                    for (Constraint known : c.known()) {
-                        out = out.with(out.numbers().assume(known.form(), known.rel()));
-                    }
-                    if (c.numeric() != null) {
-                        out = out.with(out.numbers().assume(c.numeric().form(), c.numeric().rel()));
-                    }
-                    if (c.fact() != null) {
-                        // What an input's type guarantees is guaranteed of the term as written; a
-                        // container built from it is another term, and reads the rules where it is
-                        // constructed rather than here.
-                        out = out.with(out.facts().assume(c.fact().keys().get(0), c.fact().positive()));
-                    }
+                if (c.numeric() != null) {
+                    out = out.with(out.numbers().assume(c.numeric().form(), c.numeric().rel()));
+                }
+                if (c.fact() != null) {
+                    // What an input's type guarantees is guaranteed of the term as written; a
+                    // container built from it is another term, and reads the rules where it is
+                    // constructed rather than here.
+                    out = out.with(out.facts().assume(c.fact().keys().get(0), c.fact().positive()));
                 }
             }
         }

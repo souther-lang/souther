@@ -1,15 +1,20 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.ClauseDischarge;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.InliningPolicy;
+import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.NewtypeDesugar;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.Symbols;
 import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -214,6 +219,69 @@ public final class Shapes {
         public Answer<Symbols> compute(Db db) {
             return Names.symbols(db, name, Names.Stage.DERIVED);
         }
+    }
+
+    /**
+     * How each clause of each invariant this module declares can be discharged at compile time (spec
+     * §invariant-discharge-capability), in the order the clauses are written.
+     *
+     * <p>Only this module's own declarations. The classification is the clause's, and a clause is
+     * written where its type is declared; a reader in another module asks that module.
+     */
+    public record InvariantCapabilities(String name)
+            implements Key<Map<TypeName, List<ClauseDischarge>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeName, List<ClauseDischarge>>> compute(Db db) {
+            Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
+            Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
+            if (!resolved.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            try {
+                Map<TypeName, List<ClauseDischarge>> out = new LinkedHashMap<>();
+                for (Ast.Def def : resolved.value().defs()) {
+                    if (!(def instanceof Ast.Data data) || data.invariant().isEmpty()) {
+                        continue;
+                    }
+                    // The clause is classified in the representation the check reads, and reported at
+                    // the position it is written — an expansion carries positions of its own, and the
+                    // author is looking at the source.
+                    HelperInliner inliner = HelperInliner.forHelpers(
+                            HelperInliner.helpersOf(resolved.value()), InliningPolicy.DISCHARGE);
+                    List<ClauseDischarge> clauses = new ArrayList<>();
+                    for (Ast.Expr written : HelperInliner.conjunctsOf(data.invariant().get())) {
+                        clauses.add(InvariantChecker.capabilityOf(inliner.inline(written),
+                                leftmost(written), data, scope.value()));
+                    }
+                    out.put(new TypeName(name, data.name()), List.copyOf(clauses));
+                }
+                return Answer.of(Map.copyOf(out));
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+        }
+    }
+
+    /** Where a clause begins: the earliest position anything in it carries. A node's own position is
+     * where its operator is written, and a reader points at the clause. */
+    private static SourcePos leftmost(Ast.Expr e) {
+        SourcePos[] found = {e.pos()};
+        Ast.forEachChild(e, child -> {
+            SourcePos inner = leftmost(child);
+            if (inner != null && (found[0] == null || earlier(inner, found[0]))) {
+                found[0] = inner;
+            }
+        });
+        return found[0];
+    }
+
+    private static boolean earlier(SourcePos a, SourcePos b) {
+        return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
     }
 
     /**

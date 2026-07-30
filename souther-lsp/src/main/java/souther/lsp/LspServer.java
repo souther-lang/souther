@@ -213,7 +213,8 @@ public final class LspServer {
         if (text == null) {
             return null;
         }
-        Hover h = analyzer.hover(text, p.position()).orElse(null);
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        Hover h = analyzer.hover(p.uri(), text, p.position(), graph).orElse(null);
         if (h == null) {
             return null;
         }

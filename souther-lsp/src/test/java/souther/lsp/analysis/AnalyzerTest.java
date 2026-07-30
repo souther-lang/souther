@@ -185,6 +185,45 @@ class AnalyzerTest {
         assertTrue(hover.get().contents().contains("id: String"), hover.get().contents());
     }
 
+    /** `data`, `invariant` on the next line, one clause per line so a position picks one out. */
+    private static final String CLAUSES_SRC = """
+            module demo
+            data Money = Int
+                invariant value >= 0
+            data Code = String
+                invariant String.matches("[A-Z]{2}", value)
+            data Sum = Int
+                invariant Int.sum([value]) >= 0
+            """;
+
+    private Optional<Hover> clauseHover(int line, int character) {
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///demo.sou", CLAUSES_SRC));
+        return analyzer.hover("file:///demo.sou", CLAUSES_SRC, new Position(line, character), graph);
+    }
+
+    @Test
+    void hoverOnANumericClauseSaysItIsDerivable() {
+        // `value >= 0` — a relation the domain reasons over, so any guard implying it discharges
+        Optional<Hover> hover = clauseHover(2, 18);
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("derivable"), hover.get().contents());
+    }
+
+    @Test
+    void hoverOnAPatternClauseSaysItTakesAnExactMatch() {
+        // `String.matches(...)` — nameable but not a relation, so only the same guard discharges it
+        Optional<Hover> hover = clauseHover(4, 20);
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("exact match"), hover.get().contents());
+    }
+
+    @Test
+    void hoverOutsideAnInvariantStillShowsTheSignature() {
+        Optional<Hover> hover = clauseHover(1, 5);   // over `Money`
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("data Money"), hover.get().contents());
+    }
+
     @Test
     void diagnosticsAcrossModulesLandOnTheOwningFile() {
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";

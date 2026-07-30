@@ -942,7 +942,7 @@ The check is intraprocedural. Within a behavior's `+let+` body it seeds what the
 * *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
 * *Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
 * *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
-* *Not expressible* — an invariant outside the checked fragment. No diagnostic; the run-time check stands.
+* *Not expressible* — a clause outside the checked fragment. No diagnostic for it; the run-time check stands. The other clauses of the same invariant are answered on their own, so writing one the check cannot read beside one it can does not cost the second its report (<<invariant-discharge-capability>>).
 
 Guards that cannot all hold describe a path the behavior does not take, and a construction standing on one is neither of the middle two: nothing is built there, so nothing is reported. That the guards contradict is itself derived over the same fragment — `+a <= b+` with `+b <= 0+` bounds `+a+` above without a word about `+a+` — so a path is dead whenever the relations say so, whatever order they were written in.
 
@@ -1082,6 +1082,24 @@ let build (rows) = {
 Two clauses are one thing exactly when they are the same expression over the same terms. Nothing relates two different ones — uniqueness by `+.product+` says nothing about uniqueness by `+.sku+`, and one pattern says nothing about another. What a binding is *called* is not part of the expression, so `+r -> r.product+`, `+row -> row.product+` and `+.product+` state one thing; a name the closure reads from outside it is part of the expression, so bounding by one field is not bounding by another. Which of the six comparisons an author reached for is not part of it either: `+a /= b+` is `+a == b+` denied, `+a >= b+` is `+a < b+` denied, and which side of an equality a term is written on says nothing — so a `+guard+` on `+a == b+` discharges a clause reading `+b /= a+` where it departs.
 
 This is what a clause outside the derived fragment falls back to, whatever its shape. A comparison over a value the procedure cannot name is settled the same way, which is why `+guard+`-ing it verbatim discharges the construction.
+
+[#invariant-discharge-capability]
+==== A clause says how it can be discharged
+
+Some clauses are statically dischargeable and others are not, and the same `+invariant+` keyword is written for both. Left implicit, an author believes there is a static guarantee where there is none. So the compiler answers, per clause, how that clause can be discharged. It is a query rather than a diagnostic — a correct program would carry one on every declaration, which is noise — and the LSP surfaces it on the clause.
+
+[cols="1,3"]
+|===
+| | what discharges it
+
+| *derivable* | a relation the procedure reasons over. Any guard that *implies* it discharges the construction: `+guard amount >= 10+` discharges `+invariant value >= 0+`.
+| *exact match* | a term the procedure can name but not reason about. Only a guard establishing *the same* property discharges it, and nothing weaker: `+invariant List.allUniqueBy(.product, value)+` takes `+guard List.allUniqueBy(.product, lines)+`.
+| *runtime only* | not representable as a static obligation. No guard discharges it, and the run-time check on construction is the whole of its enforcement.
+|===
+
+The first two are the *statically dischargeable* ones, and they are separate because they admit different guards — which is what an author needs to know before writing one. The third carries a reason, because there is more than one way to be outside the fragment and which one it is decides what can be done about it.
+
+The classification is the clause's own, read with the construction assumed to name what it is given. A construction that names nothing the procedure can name discharges nothing whatever its clauses say (<<invariant-discharge-terms>>); that is a fact about the construction and not about the clause.
 
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
