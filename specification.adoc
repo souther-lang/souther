@@ -1932,7 +1932,7 @@ example 受注する
 
 An input and an expected value are fixtures: literals, newtype applications, record constructions, and helpers applied to those. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
 
-A row may also *name a value* (<<fn-declaration>>) rather than write the whole input again, and may spread one to vary a field. A spread copies the fields of the value it names, and the case is the one the construction writing it names; a name on its own stands for the case the value it denotes constructs. So a fixture in a position typed by a sum says which case it is however it is written.
+A row may also *name a value* (<<fn-declaration>>) rather than write the whole input again, and may spread one to vary a field. A spread copies the fields of the value it names — one another module published as readily as one of this module's own, since a published value crosses closed — and the case is the one the construction writing it names; a name on its own stands for the case the value it denotes constructs. So a fixture in a position typed by a sum says which case it is however it is written.
 
 [,text]
 ----
