@@ -1036,6 +1036,32 @@ let build (rows) = {
 
 An operation not in the table keeps nothing that can be relied on, and a clause over what it built is left to the run-time check.
 
+[#invariant-discharge-projection]
+===== A projection the closure copied
+
+A mapping keeps no property of its elements in general, but a clause stated over a *projection* is a clause about one field, and a closure that copies that field across keeps it. Two mapped elements differ at a copied field exactly when the two they came from did, so uniqueness by that field carries.
+
+[,text]
+----
+data QuoteLines = List<QuoteLine> invariant List.allUniqueBy(.product, value)
+
+let toLine (r: LineRequest): QuoteLine =
+    QuoteLine { product = r.product, quantity = Quantity(r.quantity), ... }
+
+behavior buildQuote : (lines: List<LineRequest>, ...) -> Quote | DuplicateProduct | NoLines
+let buildQuote (lines, ...) = {
+    guard List.length(lines) >= 1
+        else NoLines
+    guard List.allUniqueBy(.product, lines)
+        else DuplicateProduct
+    Quote { lines = QuoteLines(List.map(toLine, lines)), ... }   // both clauses discharged
+}
+----
+
+The field the closure copied need not be the one the clause names: when the closure writes `+code = r.sku+`, uniqueness of the result by `+.code+` is uniqueness of the input by `+.sku+`, and that is the guard to write.
+
+This is bounded to a field *copied*. A field the closure computes from others — `+code = String.concat([r.sku, r.name])+` — is not this: two rows that differ can land on one value, and nothing about the result follows.
+
 [#invariant-discharge-facts]
 ==== A clause that states no relation is settled, not derived
 

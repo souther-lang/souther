@@ -139,6 +139,11 @@ public final class InvariantChecker {
      * neither survives a mapping — what a mapped element is, is #226's question. */
     private record Carried(int container, Set<Shape> through) {}
 
+    /** Where a predicate reads the projection it is stated over. A mapping keeps a projection when
+     * the closure copies that field from the element unchanged, so the predicate holds of the mapped
+     * list exactly when it holds of what was mapped, over the field it came from. */
+    private static final Map<String, Integer> PROJECTION_OF = Map.of("List.allUniqueBy", 0);
+
     private static final Map<String, Carried> CARRIED = Map.of(
             "List.all", new Carried(1, Set.of(Shape.PERMUTES, Shape.SUBSET)),
             "List.allUniqueBy", new Carried(1, Set.of(Shape.PERMUTES, Shape.SUBSET)),
@@ -934,10 +939,14 @@ public final class InvariantChecker {
         // rule and the two meet in the key.
         Named named = resolve(call.args().get(carried.container()), binds, false);
         Ast.Expr container = named.term();
+        Ast.Call stated = call;
         while (container instanceof Ast.Call inner) {
             Built built = BUILT_FROM.get(inner.fn());
-            if (built == null || !carried.through().contains(built.shape())
-                    || built.from() >= inner.args().size()) {
+            if (built == null || built.from() >= inner.args().size()) {
+                break;
+            }
+            Ast.Call next = carries(stated, carried, inner, built);
+            if (next == null) {
                 break;
             }
             Ast.Expr source = inner.args().get(built.from());
@@ -945,15 +954,144 @@ public final class InvariantChecker {
             if (inside == null) {
                 break;
             }
-            String key = termKey(call, spliced(call.args().get(carried.container()), inside, binds),
+            String key = termKey(next, spliced(call.args().get(carried.container()), inside, binds),
                     Map.of(), 0);
             if (key == null) {
                 break;
             }
             keys.add(key);
+            stated = next;
             container = source;
         }
         return keys;
+    }
+
+    /**
+     * The predicate as it applies to what {@code inner} was built from, or {@code null} when it does
+     * not apply there. A construction the shape carries leaves the predicate as it was. A mapping
+     * carries nothing on its own, but a predicate stated over a projection carries when the closure
+     * copied that field across, over the field it came from.
+     */
+    private Ast.Call carries(Ast.Call stated, Carried carried, Ast.Call inner, Built built) {
+        if (carried.through().contains(built.shape())) {
+            return stated;
+        }
+        Integer at = PROJECTION_OF.get(stated.fn());
+        if (built.shape() != Shape.MAPS || at == null || at >= stated.args().size()) {
+            return null;
+        }
+        // Where the mapping's closure is written is already stated once, by the table that says which
+        // argument each combinator hands its elements to.
+        Combinator combo = COMBINATORS.get(inner.fn());
+        if (combo == null || combo.closureArg() >= inner.args().size()) {
+            return null;
+        }
+        Ast.Expr traced = projectionThrough(stated.args().get(at), inner.args().get(combo.closureArg()));
+        return traced == null ? null : withArg(stated, at, traced);
+    }
+
+    /**
+     * The projection over an element that a projection over a mapped list reduces to, or
+     * {@code null}.
+     *
+     * <p>{@code .product} over {@code List.map(r -> Line { product = r.product, ... }, xs)} is
+     * {@code .product} over {@code xs}: the closure copied that field across, so two mapped elements
+     * differ there exactly when the two they came from did. Bounded deliberately — a field a closure
+     * computes from others is not this.
+     */
+    private Ast.Expr projectionThrough(Ast.Expr projection, Ast.Expr closure) {
+        if (!(projection instanceof Ast.Block proj) || proj.params().size() != 1
+                || !(closure instanceof Ast.Block step) || step.params().size() != 1) {
+            return null;
+        }
+        String element = step.params().get(0);
+        List<String> read = new Reads(proj.params().get(0)).chain(proj.body());
+        if (read == null) {
+            return null;
+        }
+        Reads reads = new Reads(element);
+        Ast.Expr made = reads.produced(step.body());
+        List<String> traced;
+        if (read.isEmpty()) {
+            traced = reads.chain(made);   // the closure hands the element straight back
+        } else {
+            if (!(made instanceof Ast.NewData nd) || !nd.spreads().isEmpty()) {
+                return null;
+            }
+            List<String> copied = null;
+            for (Ast.FieldInit fi : nd.inits()) {
+                if (fi.name().equals(read.get(0))) {
+                    copied = reads.chain(fi.value());
+                }
+            }
+            if (copied == null) {
+                return null;
+            }
+            traced = new ArrayList<>(copied);
+            traced.addAll(read.subList(1, read.size()));
+        }
+        if (traced == null) {
+            return null;
+        }
+        Ast.Expr on = Ast.Var.local(element, step.pos());
+        for (String field : traced) {
+            on = new Ast.FieldAccess(on, field, step.pos());
+        }
+        return new Ast.Block(List.of(element), on, step.pos());
+    }
+
+    /**
+     * What the names in a closure read off the element it is handed: a field chain, or nothing this
+     * trace can follow. A binding introduces what it reads <em>where it is written</em> — an expansion
+     * splices {@code let $0_r = r in ...} into a closure, and the closure may bind over its own
+     * parameter or over a name an earlier binding read — so what a name denotes is settled against the
+     * bindings before it and not reread later. Keeping the expression instead and substituting by
+     * spelling cannot say that: {@code let r = r} would stand for itself, which is the identity here
+     * and an endless walk there.
+     */
+    private static final class Reads {
+
+        private final String element;
+        private final Map<String, List<String>> chains = new HashMap<>();
+
+        private Reads(String element) {
+            this.element = element;
+        }
+
+        /** The expression the body produces, with what the bindings on the way there read taken in. */
+        Ast.Expr produced(Ast.Expr body) {
+            Ast.Expr cur = body;
+            while (cur instanceof Ast.LetIn li) {
+                List<String> read = chain(li.value());
+                chains.put(li.name(), read);
+                cur = li.body();
+            }
+            return cur;
+        }
+
+        /** The chain {@code e} reads off the element, or {@code null} if it reads anything else. */
+        List<String> chain(Ast.Expr e) {
+            return switch (e) {
+                case Ast.LetIn li -> {
+                    Reads inner = new Reads(element);
+                    inner.chains.putAll(chains);
+                    inner.chains.put(li.name(), chain(li.value()));
+                    yield inner.chain(li.body());
+                }
+                case Ast.FieldAccess fa -> {
+                    List<String> head = chain(fa.target());
+                    if (head == null) {
+                        yield null;
+                    }
+                    List<String> out = new ArrayList<>(head);
+                    out.add(fa.field());
+                    yield out;
+                }
+                case Ast.Var v when chains.containsKey(v.name()) -> chains.get(v.name());
+                case Ast.Var v -> v.name().equals(element) ? List.of() : null;
+                default -> null;
+            };
+        }
     }
 
     /** The clause's naming rule with one argument already named: what lets a key hold a term of the
@@ -1037,6 +1175,22 @@ public final class InvariantChecker {
                 Map<String, String> inner = binding(bound, List.of(li.name()), depth);
                 String body = termKey(li.body(), site, inner, depth + 1);
                 yield value == null || body == null ? null : "let(" + value + ", " + body + ")";
+            }
+            // A construction is a pure function of its fields, and a closure that builds one is what a
+            // mapping usually is. Fields are keyed in name order, so two sites writing them in
+            // different orders write one term.
+            case Ast.NewData nd when nd.spreads().isEmpty() -> {
+                List<Ast.FieldInit> inits = new ArrayList<>(nd.inits());
+                inits.sort(java.util.Comparator.comparing(Ast.FieldInit::name));
+                StringBuilder sb = new StringBuilder(nd.typeName().denotes().toString()).append('{');
+                for (int i = 0; i < inits.size(); i++) {
+                    String v = termKey(inits.get(i).value(), site, bound, depth);
+                    if (v == null) {
+                        yield null;
+                    }
+                    sb.append(i == 0 ? "" : ", ").append(inits.get(i).name()).append('=').append(v);
+                }
+                yield sb.append('}').toString();
             }
             // Only the library's own functions: they are pure, so one written call is one value.
             case Ast.Call c when Prelude.hasQualified(c.fn()) ->
