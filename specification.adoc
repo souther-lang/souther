@@ -980,6 +980,27 @@ let build (xs) = {
 
 A size taken of anything else — `+List.length(List.map(f, xs))+` — is not a term, and a clause needing it is left to the run-time check.
 
+[#invariant-discharge-facts]
+==== A clause that states no relation is settled, not derived
+
+Not every invariant is a comparison. `+List.allUniqueBy(.product, value)+`, `+List.member(value, codes)+` and `+String.matches("[A-Z]{2}-[0-9]{4}", value)+` state something about a value that no arithmetic relates to anything else. Such a clause is *settled* by a guard rather than derived: a `+guard+` states its condition where it does not depart and denies it where it does, and a construction under a guard stating the clause is discharged, one under a guard denying it a violation.
+
+[,text]
+----
+data Lines = List<Line> invariant List.allUniqueBy(.product, value)
+
+behavior build : (rows: List<Line>) -> Lines | DuplicateProduct
+let build (rows) = {
+    guard List.allUniqueBy(.product, rows)
+        else DuplicateProduct
+    Lines(rows)                       // discharged: the guard states the clause
+}
+----
+
+Two clauses are one thing exactly when they are the same expression over the same terms. Nothing relates two different ones — uniqueness by `+.product+` says nothing about uniqueness by `+.sku+`, and one pattern says nothing about another. What a binding is *called* is not part of the expression, so `+r -> r.product+`, `+row -> row.product+` and `+.product+` state one thing; a name the closure reads from outside it is part of the expression, so bounding by one field is not bounding by another.
+
+This is what a clause outside the derived fragment falls back to, whatever its shape. A comparison over a value the procedure cannot name is settled the same way, which is why `+guard+`-ing it verbatim discharges the construction.
+
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 

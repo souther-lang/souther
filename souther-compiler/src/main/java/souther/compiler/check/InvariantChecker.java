@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.NumericDomain.LinearForm;
 import souther.compiler.check.NumericDomain.Rel;
@@ -17,15 +18,16 @@ import java.util.Set;
 import java.util.function.Function;
 
 /**
- * The intraprocedural invariant-discharge check (spec §invariant-discharge). It walks a behavior's body threading a
- * {@link NumericDomain} — seeded from the input newtypes' invariants and refined along each
- * {@code guard}/{@code if} guard (a {@code guard} is already an {@code if} here) — and, at every
- * construction whose invariant is expressible in the domain, asks whether the guards
- * <em>discharge</em> it. A construction the domain proves must violate its invariant on a reachable
- * path is a compile error (the path-sensitive generalization of the constant check {@code 金額(-5)});
- * one it cannot prove is a warning (a possible abort — guard it, or reify the relation into a type
- * invariant). An invariant it cannot express is left opaque (no diagnostic; the run-time check stays),
- * so every flagged construction has a guard the domain can verify.
+ * The intraprocedural invariant-discharge check (spec §invariant-discharge). It walks a behavior's
+ * body threading what the guards have settled — a {@link NumericDomain} of relations and a
+ * {@link PredicateFacts} of everything that states no relation — seeded from the input types'
+ * invariants and refined along each {@code guard}/{@code if} guard (a {@code guard} is already an
+ * {@code if} here). At every construction whose invariant it can carry, it asks whether the guards
+ * <em>discharge</em> it. A construction proven to violate its invariant on a reachable path is a
+ * compile error (the path-sensitive generalization of the constant check {@code 金額(-5)}); one it
+ * cannot prove is a warning (a possible abort — guard it, or reify the relation into a type
+ * invariant). An invariant naming something it cannot name is left opaque (no diagnostic; the
+ * run-time check stays), so every flagged construction has a guard that discharges it.
  *
  * <p>The walk mirrors {@link TotalityChecker}: a {@code switch} over {@code Ast.Expr} threading an
  * immutable environment. It is fail-open — any internal error is swallowed so an analysis bug can
@@ -85,15 +87,36 @@ final class InvariantChecker {
         this.symbols = symbols;
     }
 
+    /** What the guards have settled on the current path: numeric relations, and predicates known to
+     * hold or to fail. Threaded functionally through the walk, as the domain alone once was. */
+    private record Known(NumericDomain numbers, PredicateFacts facts) {
+
+        static Known top() {
+            return new Known(NumericDomain.top(), PredicateFacts.none());
+        }
+
+        Known with(NumericDomain n) {
+            return new Known(n, facts);
+        }
+
+        Known with(PredicateFacts f) {
+            return new Known(numbers, f);
+        }
+
+        Known forgetIf(java.util.function.Predicate<String> drop) {
+            return new Known(numbers.forgetIf(drop), facts.forgetIf(drop));
+        }
+    }
+
     /** Analyzes one behavior body against its input types. Never throws. */
     static Findings analyze(Ast.Expr body, Map<String, Type> params, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols);
         try {
-            NumericDomain d = NumericDomain.top();
+            Known k = Known.top();
             for (Map.Entry<String, Type> p : params.entrySet()) {
-                d = c.seedParam(p.getKey(), p.getValue(), d);
+                k = c.seedParam(p.getKey(), p.getValue(), k);
             }
-            c.walk(body, d, new HashMap<>(params));
+            c.walk(body, k, new HashMap<>(params));
         } catch (RuntimeException _) {
             // fail-open: the run-time invariant check remains the backstop
         }
@@ -102,52 +125,52 @@ final class InvariantChecker {
 
     // --- the walk ------------------------------------------------------------------------------
 
-    private void walk(Ast.Expr e, NumericDomain d, Map<String, Type> types) {
-        checkIfConstruction(e, d, types, false);
+    private void walk(Ast.Expr e, Known k, Map<String, Type> types) {
+        checkIfConstruction(e, k, types, false);
         switch (e) {
             case Ast.If iff -> {
-                walk(iff.cond(), d, types);
-                walk(iff.then(), assumeCond(iff.cond(), d, types, true), types);
-                walk(iff.els(), assumeCond(iff.cond(), d, types, false), types);
+                walk(iff.cond(), k, types);
+                walk(iff.then(), assumeCond(iff.cond(), k, types, true), types);
+                walk(iff.els(), assumeCond(iff.cond(), k, types, false), types);
             }
             case Ast.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else
                 // branch — so it is checked for a decided violation and never warned about as a
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
-                checkIfConstruction(ic.construct(), d, types, true);
-                Ast.forEachChild(ic.construct(), child -> walk(child, d, types));
+                checkIfConstruction(ic.construct(), k, types, true);
+                Ast.forEachChild(ic.construct(), child -> walk(child, k, types));
                 Map<String, Type> t2 = new HashMap<>(types);
-                NumericDomain d2 = rebind(d, ic.binder());
+                Known k2 = rebind(k, ic.binder());
                 Type built = typeExpr(ic.construct(), types);
                 if (built != null) {
                     t2.put(ic.binder(), built);
-                    d2 = seedParam(ic.binder(), built, d2);   // on this branch the invariant holds
+                    k2 = seedParam(ic.binder(), built, k2);   // on this branch the invariant holds
                 }
-                walk(ic.then(), d2, t2);
-                walk(ic.els(), d, types);
+                walk(ic.then(), k2, t2);
+                walk(ic.els(), k, types);
             }
             case Ast.LetIn li -> {
-                walk(li.value(), d, types);
+                walk(li.value(), k, types);
                 Map<String, Type> t2 = new HashMap<>(types);
                 Type vt = typeExpr(li.value(), types);
                 if (vt != null) {
                     t2.put(li.name(), vt);
                 }
                 LinearForm vf = affineOf(li.value(), types);
-                NumericDomain d2 = rebind(d, li.name());
+                Known k2 = rebind(k, li.name());
                 if (isNumeric(vt) && vf != null) {
-                    d2 = d2.assign(li.name(), vf);
+                    k2 = k2.with(k2.numbers().assign(li.name(), vf));
                 }
-                walk(li.body(), d2, t2);
+                walk(li.body(), k2, t2);
             }
             case Ast.Match m -> {
-                walk(m.scrutinee(), d, types);
+                walk(m.scrutinee(), k, types);
                 for (Ast.Case c : m.cases()) {
                     Map<String, Type> t2 = new HashMap<>(types);
-                    NumericDomain d2 = d;
+                    Known k2 = k;
                     if (c.binding() != null) {
-                        d2 = rebind(d, c.binding());
+                        k2 = rebind(k, c.binding());
                         if (c.caseTypes().size() == 1) {
                             Type bound = MatchElaborator.caseBindType(c.caseTypes().get(0).denotes());
                             if (bound != null) {
@@ -155,17 +178,17 @@ final class InvariantChecker {
                             }
                         }
                     }
-                    walk(c.body(), d2, t2);
+                    walk(c.body(), k2, t2);
                 }
             }
-            case Ast.Call call -> walkCall(call, d, types);
-            default -> Ast.forEachChild(e, child -> walk(child, d, types));
+            case Ast.Call call -> walkCall(call, k, types);
+            default -> Ast.forEachChild(e, child -> walk(child, k, types));
         }
     }
 
     /** Walks a call, binding a combinator closure's element parameter to the list's element type (and
      * seeding its invariant) so a construction inside the closure is analyzed rather than left opaque. */
-    private void walkCall(Ast.Call call, NumericDomain d, Map<String, Type> types) {
+    private void walkCall(Ast.Call call, Known k, Map<String, Type> types) {
         Combinator combo = COMBINATORS.get(call.fn());
         for (int i = 0; i < call.args().size(); i++) {
             Ast.Expr arg = call.args().get(i);
@@ -175,21 +198,21 @@ final class InvariantChecker {
                 Type elem = elementType(typeExpr(call.args().get(combo.listArg()), types));
                 Map<String, Type> t2 = new HashMap<>(types);
                 String p = step.params().get(combo.elementParam());
-                NumericDomain d2 = rebind(d, p);
+                Known k2 = rebind(k, p);
                 if (elem != null) {
                     t2.put(p, elem);
-                    d2 = seedParam(p, elem, d2);   // the element carries its type's invariant
+                    k2 = seedParam(p, elem, k2);   // the element carries its type's invariant
                 }
-                walk(step.body(), d2, t2);
+                walk(step.body(), k2, t2);
             } else {
-                walk(arg, d, types);
+                walk(arg, k, types);
             }
         }
     }
 
     // --- construction detection & discharge check ----------------------------------------------
 
-    private void checkIfConstruction(Ast.Expr e, NumericDomain d, Map<String, Type> types,
+    private void checkIfConstruction(Ast.Expr e, Known k, Map<String, Type> types,
                                      boolean attempted) {
         switch (e) {
             case Ast.NewData nd when nd.spreads().isEmpty() -> {
@@ -206,7 +229,7 @@ final class InvariantChecker {
                             paths.put(fi.name(), p);
                         }
                     }
-                    check(type, new Bindings(forms::get, paths::get), d, nd.pos(), attempted);
+                    check(type, new Bindings(forms::get, paths::get), k, nd.pos(), attempted);
                 }
             }
             case Ast.Binary bin when isArith(bin.op()) -> {
@@ -216,7 +239,7 @@ final class InvariantChecker {
                     if (value != null) {
                         // an arithmetic result is a form, not a location, so it names no path
                         check(type, new Bindings(name -> "value".equals(name) ? value : null, _ -> null),
-                                d, bin.pos(), attempted);
+                                k, bin.pos(), attempted);
                     }
                 }
             }
@@ -233,31 +256,36 @@ final class InvariantChecker {
      * {@code binds}. A definite violation is an error; an unproven one a warning; a fully-discharged
      * or non-expressible invariant is silent. An {@code attempted} construction raises no warning:
      * what the warning reports is a possible abort, and an attempt takes its else branch instead. */
-    private void check(Ast.Data type, Bindings binds, NumericDomain d, SourcePos pos,
-                       boolean attempted) {
+    private void check(Ast.Data type, Bindings binds, Known k, SourcePos pos, boolean attempted) {
         List<Ast.Expr> invs = TypeOps.effectiveInvariants(type, symbols);
         if (invs.isEmpty()) {
             return;
         }
-        List<Constraint> constraints = new ArrayList<>();
+        Obligations owed = Obligations.none();
         for (Ast.Expr inv : invs) {
-            List<Constraint> cs = invConstraints(inv, binds);
-            if (cs == null) {
-                return;   // some part is not expressible in the domain — leave the whole opaque
+            Obligations o = obligations(inv, binds);
+            if (o == null) {
+                return;   // some part is not expressible — leave the whole invariant opaque
             }
-            constraints.addAll(cs);
+            owed = owed.and(o);
         }
-        NumericDomain dom = withSizeBounds(d, constraints);
+        NumericDomain dom = withSizeBounds(k.numbers(), owed.numeric());
         boolean possible = false;
-        for (Constraint c : constraints) {
+        for (Constraint c : owed.numeric()) {
             if (dom.refutes(c.form(), c.rel())) {
-                errors.add(CompileException.of(
-                        Diagnostic.of("E2010", "check.invariant.violation").title("check.invariant.title")
-                                .at(pos).args(type.name()).build(),
-                        "constructing `" + type.name() + "` here violates its invariant on a reachable path"));
+                reportViolation(type, pos);
                 return;
             }
             if (!dom.entails(c.form(), c.rel())) {
+                possible = true;
+            }
+        }
+        for (Fact f : owed.predicates()) {
+            if (k.facts().refutes(f.key(), f.positive())) {
+                reportViolation(type, pos);
+                return;
+            }
+            if (!k.facts().entails(f.key(), f.positive())) {
                 possible = true;
             }
         }
@@ -269,32 +297,76 @@ final class InvariantChecker {
         }
     }
 
+    private void reportViolation(Ast.Data type, SourcePos pos) {
+        errors.add(CompileException.of(
+                Diagnostic.of("E2010", "check.invariant.violation").title("check.invariant.title")
+                        .at(pos).args(type.name()).build(),
+                "constructing `" + type.name() + "` here violates its invariant on a reachable path"));
+    }
+
     // --- invariant / condition -> constraints --------------------------------------------------
 
     private record Constraint(LinearForm form, Rel rel) {}
 
-    /** The constraints an invariant expression contributes under {@code binds} (field/{@code value}
-     * name -> what it is being given), or {@code null} if any part is not expressible. */
-    private List<Constraint> invConstraints(Ast.Expr inv, Bindings binds) {
-        if (inv instanceof Ast.Binary b && b.op() == Ast.BinOp.AND) {
-            List<Constraint> l = invConstraints(b.left(), binds);
-            List<Constraint> r = invConstraints(b.right(), binds);
-            if (l == null || r == null) {
-                return null;
-            }
-            List<Constraint> both = new ArrayList<>(l);
-            both.addAll(r);
-            return both;
+    /** A predicate stated of a term, by the term's canonical key. {@code positive} is false for a
+     * clause written under {@code Bool.not}. */
+    private record Fact(String key, boolean positive) {}
+
+    /** What a construction owes: numeric relations the domain must prove, and predicates the guards
+     * must have settled. */
+    private record Obligations(List<Constraint> numeric, List<Fact> predicates) {
+
+        private static final Obligations NONE = new Obligations(List.of(), List.of());
+
+        static Obligations none() {
+            return NONE;
         }
-        if (inv instanceof Ast.Binary b) {
-            Rel rel = relOf(b.op());
-            if (rel != null) {
-                LinearForm la = affine(b.left(), resolveLeaf(binds));
-                LinearForm ra = affine(b.right(), resolveLeaf(binds));
-                return la == null || ra == null ? null : List.of(new Constraint(la.minus(ra), rel));
+
+        static Obligations of(Constraint c) {
+            return new Obligations(List.of(c), List.of());
+        }
+
+        static Obligations of(Fact f) {
+            return new Obligations(List.of(), List.of(f));
+        }
+
+        Obligations and(Obligations o) {
+            List<Constraint> n = new ArrayList<>(numeric);
+            n.addAll(o.numeric);
+            List<Fact> p = new ArrayList<>(predicates);
+            p.addAll(o.predicates);
+            return new Obligations(n, p);
+        }
+    }
+
+    /** What an invariant expression owes under {@code binds} (field/{@code value} name -> what it is
+     * being given), or {@code null} if it names nothing this check can carry. A comparison the domain
+     * can express is owed to the domain; anything else is owed as a fact, which a guard stating the
+     * same thing of the same term settles. */
+    private Obligations obligations(Ast.Expr inv, Bindings binds) {
+        return obligations(inv, binds, true);
+    }
+
+    private Obligations obligations(Ast.Expr inv, Bindings binds, boolean positive) {
+        if (inv instanceof Ast.Binary b && b.op() == Ast.BinOp.AND && positive) {
+            Obligations l = obligations(b.left(), binds, true);
+            Obligations r = obligations(b.right(), binds, true);
+            return l == null || r == null ? null : l.and(r);
+        }
+        if (inv instanceof Ast.Binary b && relOf(b.op()) != null) {
+            Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
+            LinearForm la = eff == null ? null : affine(b.left(), resolveLeaf(binds));
+            LinearForm ra = eff == null ? null : affine(b.right(), resolveLeaf(binds));
+            if (la != null && ra != null) {
+                return Obligations.of(new Constraint(la.minus(ra), eff));
             }
         }
-        return null;
+        Ast.Expr under = negated(inv);
+        if (under != null) {
+            return obligations(under, binds, !positive);
+        }
+        String key = termKey(inv, e -> invPath(e, binds), Map.of(), 0);
+        return key == null ? null : Obligations.of(new Fact(key, positive));
     }
 
     /** The domain told that every size atom the constraints name is non-negative. The atom enters the
@@ -312,39 +384,61 @@ final class InvariantChecker {
         return out;
     }
 
-    /** Refines {@code d} by asserting {@code cond} (or its negation). Non-comparison conditions and
-     * non-affine operands leave the domain unchanged (sound). */
-    private NumericDomain assumeCond(Ast.Expr cond, NumericDomain d, Map<String, Type> types, boolean positive) {
-        if (cond instanceof Ast.Binary b && b.op() == Ast.BinOp.AND && positive) {
-            return assumeCond(b.right(), assumeCond(b.left(), d, types, true), types, true);
+    /** Refines {@code k} by asserting {@code cond} (or its negation): a comparison tightens the
+     * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
+     * outside the affine fragment, leave {@code k} unchanged (sound). */
+    private Known assumeCond(Ast.Expr cond, Known k, Map<String, Type> types, boolean positive) {
+        // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
+        if (cond instanceof Ast.Binary b
+                && (b.op() == Ast.BinOp.AND && positive || b.op() == Ast.BinOp.OR && !positive)) {
+            return assumeCond(b.right(), assumeCond(b.left(), k, types, positive), types, positive);
         }
         if (cond instanceof Ast.Binary b) {
             Rel rel = relOf(b.op());
-            if (rel != null) {
+            Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
+            if (eff != null) {
                 LinearForm la = affineOf(b.left(), types);
                 LinearForm ra = affineOf(b.right(), types);
-                Rel eff = positive ? rel : negateRel(rel);
-                if (la != null && ra != null && eff != null) {
-                    return d.assume(la.minus(ra), eff);
+                if (la != null && ra != null) {
+                    return k.with(k.numbers().assume(la.minus(ra), eff));
                 }
             }
         }
-        return d;
+        Ast.Expr under = negated(cond);
+        if (under != null) {
+            return assumeCond(under, k, types, !positive);
+        }
+        String key = termKey(cond, e -> pathKey(e, types), Map.of(), 0);
+        return key == null ? k : k.with(k.facts().assume(key, positive));
+    }
+
+    /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an
+     * ordinary helper, so by here it is the body it expands to — {@code if b then false else true},
+     * over a binding holding the argument. */
+    private static Ast.Expr negated(Ast.Expr e) {
+        if (e instanceof Ast.LetIn li) {
+            Ast.Expr inner = negated(li.body());
+            return inner instanceof Ast.Var v && v.name().equals(li.name()) ? li.value() : null;
+        }
+        return e instanceof Ast.If iff
+                && iff.then() instanceof Ast.BoolLit t && !t.value()
+                && iff.els() instanceof Ast.BoolLit f && f.value()
+                ? iff.cond() : null;
     }
 
     // --- seeding -------------------------------------------------------------------------------
 
-    /** Seeds the domain with what a parameter's type guarantees: a numeric newtype's own invariant on
-     * its value, or a product data's invariant over its fields (and one level of numeric-newtype
-     * fields), each substituted onto the parameter's atom(s). Sound by closed construction — an input
-     * of type T was built through T's checked constructor. */
-    private NumericDomain seedParam(String name, Type t, NumericDomain d) {
-        return seedAt(name, t, d, 0);
+    /** Seeds the check with what a parameter's type guarantees: a numeric newtype's own invariant on
+     * its value, a predicate its invariant states of it, or a product data's invariant over its fields
+     * (and one level of fields), each substituted onto the parameter's own term. Sound by closed
+     * construction — an input of type T was built through T's checked constructor. */
+    private Known seedParam(String name, Type t, Known k) {
+        return seedAt(name, t, k, 0);
     }
 
-    private NumericDomain seedAt(String path, Type t, NumericDomain d, int depth) {
+    private Known seedAt(String path, Type t, Known k, int depth) {
         if (depth > 2 || !(t instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)) {
-            return d;
+            return k;
         }
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
         Function<String, String> resolvePath = fieldName -> {
@@ -359,12 +453,20 @@ final class InvariantChecker {
                     return p == null ? null : LinearForm.atom(p);
                 },
                 resolvePath);
-        NumericDomain out = d;
+        Known out = k;
+        // Each conjunct on its own: an input's invariant is a set of things that hold, and one the
+        // check cannot express does not cost it the others.
         for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
-            List<Constraint> cs = invConstraints(inv, binds);
-            if (cs != null) {
-                for (Constraint c : cs) {
-                    out = out.assume(c.form(), c.rel());
+            for (Ast.Expr conjunct : conjuncts(inv)) {
+                Obligations o = obligations(conjunct, binds);
+                if (o == null) {
+                    continue;
+                }
+                for (Constraint c : o.numeric()) {
+                    out = out.with(out.numbers().assume(c.form(), c.rel()));
+                }
+                for (Fact f : o.predicates()) {
+                    out = out.with(out.facts().assume(f.key(), f.positive()));
                 }
             }
         }
@@ -479,6 +581,109 @@ final class InvariantChecker {
         return arg == null ? null : call.fn() + "(" + arg + ")";
     }
 
+    /** The conjuncts of an invariant expression, flattened. */
+    private static List<Ast.Expr> conjuncts(Ast.Expr e) {
+        if (e instanceof Ast.Binary b && b.op() == Ast.BinOp.AND) {
+            List<Ast.Expr> out = new ArrayList<>(conjuncts(b.left()));
+            out.addAll(conjuncts(b.right()));
+            return out;
+        }
+        return List.of(e);
+    }
+
+    /**
+     * The canonical key of an expression as a term, or {@code null} when nothing here can be named.
+     * Two expressions with one key compute one value, which is the whole of what the fact set knows:
+     * a guard and an invariant clause state the same predicate exactly when their calls key alike.
+     *
+     * <p>A location is asked of {@code site} — the body's path rule, or the invariant's rule for what
+     * a field is being given — so the two sides meet on the construction's own names. A closure
+     * parameter is keyed by where it is bound rather than by its spelling, so {@code r -> r.a} and
+     * {@code row -> row.a} are one term while a free name inside the closure is still resolved
+     * through {@code site} and so is part of the term. Anything outside this grammar keys as
+     * {@code null}, and the clause reading it is left opaque.
+     */
+    private String termKey(Ast.Expr e, Function<Ast.Expr, String> site, Map<String, String> bound,
+                           int depth) {
+        String root = rootName(e);
+        if (root != null) {
+            String at = bound.get(root);
+            return at != null ? chainOn(at, e) : site.apply(e);
+        }
+        return switch (e) {
+            case Ast.IntLit i -> Long.toString(i.value());
+            case Ast.DecimalLit d -> d.value().toPlainString() + "m";
+            case Ast.StringLit s -> "\"" + s.value() + "\"";
+            case Ast.BoolLit b -> Boolean.toString(b.value());
+            case Ast.Neg n -> wrap("-", termKey(n.operand(), site, bound, depth));
+            case Ast.Binary b -> {
+                String l = termKey(b.left(), site, bound, depth);
+                String r = termKey(b.right(), site, bound, depth);
+                yield l == null || r == null ? null : "(" + l + " " + b.op() + " " + r + ")";
+            }
+            case Ast.ListLit l -> elementsKey("[", l.elements(), site, bound, depth, "]");
+            case Ast.Tuple t -> elementsKey("(", t.elements(), site, bound, depth, ")");
+            case Ast.TupleGet g -> wrap("." + g.index(), termKey(g.tuple(), site, bound, depth));
+            case Ast.If iff -> elementsKey("if(", List.of(iff.cond(), iff.then(), iff.els()),
+                    site, bound, depth, ")");
+            case Ast.Block b -> {
+                Map<String, String> inner = binding(bound, b.params(), depth);
+                yield wrap("\\" + b.params().size(), termKey(b.body(), site, inner, depth + 1));
+            }
+            case Ast.LetIn li -> {
+                String value = termKey(li.value(), site, bound, depth);
+                Map<String, String> inner = binding(bound, List.of(li.name()), depth);
+                String body = termKey(li.body(), site, inner, depth + 1);
+                yield value == null || body == null ? null : "let(" + value + ", " + body + ")";
+            }
+            // Only the library's own functions: they are pure, so one written call is one value.
+            case Ast.Call c when Prelude.hasQualified(c.fn()) ->
+                    elementsKey(c.fn() + "(", c.args(), site, bound, depth, ")");
+            default -> null;
+        };
+    }
+
+    /** {@code bound} with each of {@code names} keyed by where it is bound rather than by its
+     * spelling, so two expressions that differ only in what they called a binding are one term. */
+    private static Map<String, String> binding(Map<String, String> bound, List<String> names, int depth) {
+        Map<String, String> inner = new HashMap<>(bound);
+        for (int i = 0; i < names.size(); i++) {
+            inner.put(names.get(i), "#" + depth + "." + i);
+        }
+        return inner;
+    }
+
+    private String elementsKey(String open, List<Ast.Expr> parts, Function<Ast.Expr, String> site,
+                               Map<String, String> bound, int depth, String close) {
+        StringBuilder sb = new StringBuilder(open);
+        for (int i = 0; i < parts.size(); i++) {
+            String part = termKey(parts.get(i), site, bound, depth);
+            if (part == null) {
+                return null;
+            }
+            sb.append(i == 0 ? "" : ", ").append(part);
+        }
+        return sb.append(close).toString();
+    }
+
+    private static String wrap(String prefix, String inner) {
+        return inner == null ? null : prefix + "(" + inner + ")";
+    }
+
+    /** The name at the head of a {@code x}/{@code x.a.b} chain, or {@code null} if {@code e} is not one. */
+    private static String rootName(Ast.Expr e) {
+        return switch (e) {
+            case Ast.Var v -> v.name();
+            case Ast.FieldAccess fa -> rootName(fa.target());
+            default -> null;
+        };
+    }
+
+    /** The field chain of {@code e} rebuilt on {@code head}. */
+    private static String chainOn(String head, Ast.Expr e) {
+        return e instanceof Ast.FieldAccess fa ? chainOn(head, fa.target()) + "." + fa.field() : head;
+    }
+
     private static boolean isSizeAtom(String atom) {
         int open = atom.indexOf('(');
         return open > 0 && atom.endsWith(")") && SIZE_CALLS.contains(atom.substring(0, open));
@@ -499,15 +704,25 @@ final class InvariantChecker {
         };
     }
 
-    /** The domain with every fact rooted at {@code name} dropped, because a binding of that name makes
-     * it denote something else. An atom is rooted at a name when it is the name, a field chain from
-     * it, or a size call over one. */
-    private static NumericDomain rebind(NumericDomain d, String name) {
-        return d.forgetIf(atom -> {
-            int open = atom.indexOf('(');
-            String path = isSizeAtom(atom) ? atom.substring(open + 1, atom.length() - 1) : atom;
-            return path.equals(name) || path.startsWith(name + ".");
-        });
+    /** What is known after a binding takes over {@code name}: everything that mentioned it is dropped,
+     * because the name now denotes something else. The test is on the key's text and errs towards
+     * dropping — a term that merely reads like it mentions the name loses a fact it could have kept,
+     * which costs precision and never soundness. */
+    private static Known rebind(Known k, String name) {
+        return k.forgetIf(key -> mentions(key, name));
+    }
+
+    /** Whether {@code key} contains {@code name} as a whole identifier. */
+    private static boolean mentions(String key, String name) {
+        for (int i = key.indexOf(name); i >= 0; i = key.indexOf(name, i + 1)) {
+            int end = i + name.length();
+            boolean left = i == 0 || !Character.isUnicodeIdentifierPart(key.charAt(i - 1));
+            boolean right = end == key.length() || !Character.isUnicodeIdentifierPart(key.charAt(end));
+            if (left && right) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // --- a minimal local typer (enough for atom/affine detection) ------------------------------
