@@ -247,15 +247,25 @@ final class NumericDomain {
     }
 
     private NumericDomain forget(String atom) {
+        return forgetIf(atom::equals);
+    }
+
+    /** The domain with every fact about a matching atom dropped. A binding that rebinds a name
+     * invalidates each atom rooted at it — the name now denotes something else — and the caller,
+     * which owns the atom-key syntax, decides which those are. */
+    NumericDomain forgetIf(java.util.function.Predicate<String> drop) {
+        if (bottom) {
+            return this;
+        }
         Map<String, BigDecimal> nlo = new HashMap<>(lo);
         Map<String, BigDecimal> nhi = new HashMap<>(hi);
-        nlo.remove(atom);
-        nhi.remove(atom);
+        nlo.keySet().removeIf(drop);
+        nhi.keySet().removeIf(drop);
         Map<String, Map<String, BigDecimal>> nd = new HashMap<>();
         diff.forEach((a, row) -> {
-            if (!a.equals(atom)) {
+            if (!drop.test(a)) {
                 Map<String, BigDecimal> nr = new HashMap<>(row);
-                nr.remove(atom);
+                nr.keySet().removeIf(drop);
                 if (!nr.isEmpty()) {
                     nd.put(a, nr);
                 }

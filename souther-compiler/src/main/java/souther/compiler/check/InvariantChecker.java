@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 
 /**
@@ -68,6 +69,14 @@ final class InvariantChecker {
             Map.entry("Set.partition", new Combinator(0, 0, 1)),
             Map.entry("Option.map", new Combinator(0, 0, 1)));
 
+    /** The pure, total stdlib calls whose result is a number the domain can name: the size of a
+     * container or a string. Each becomes an atom keyed by the call written over its argument's path
+     * — {@code List.length(b.items)} — so an invariant clause and a guard naming the same container
+     * name the same atom, and the guard discharges the clause. The argument must be a nameable path:
+     * {@code List.length(List.map(f, xs))} is not this atom, and nothing relates the two. */
+    private static final Set<String> SIZE_CALLS =
+            Set.of("List.length", "String.length", "Set.size", "Map.size");
+
     private final Symbols symbols;
     private final List<CompileException> errors = new ArrayList<>();
     private final List<Diagnostic> warnings = new ArrayList<>();
@@ -109,11 +118,11 @@ final class InvariantChecker {
                 checkIfConstruction(ic.construct(), d, types, true);
                 Ast.forEachChild(ic.construct(), child -> walk(child, d, types));
                 Map<String, Type> t2 = new HashMap<>(types);
-                NumericDomain d2 = d;
+                NumericDomain d2 = rebind(d, ic.binder());
                 Type built = typeExpr(ic.construct(), types);
                 if (built != null) {
                     t2.put(ic.binder(), built);
-                    d2 = seedParam(ic.binder(), built, d);   // on this branch the invariant holds
+                    d2 = seedParam(ic.binder(), built, d2);   // on this branch the invariant holds
                 }
                 walk(ic.then(), d2, t2);
                 walk(ic.els(), d, types);
@@ -126,20 +135,27 @@ final class InvariantChecker {
                     t2.put(li.name(), vt);
                 }
                 LinearForm vf = affineOf(li.value(), types);
-                NumericDomain d2 = isNumeric(vt) && vf != null ? d.assign(li.name(), vf) : d;
+                NumericDomain d2 = rebind(d, li.name());
+                if (isNumeric(vt) && vf != null) {
+                    d2 = d2.assign(li.name(), vf);
+                }
                 walk(li.body(), d2, t2);
             }
             case Ast.Match m -> {
                 walk(m.scrutinee(), d, types);
                 for (Ast.Case c : m.cases()) {
                     Map<String, Type> t2 = new HashMap<>(types);
-                    if (c.binding() != null && c.caseTypes().size() == 1) {
-                        Type bound = MatchElaborator.caseBindType(c.caseTypes().get(0).denotes());
-                        if (bound != null) {
-                            t2.put(c.binding(), bound);
+                    NumericDomain d2 = d;
+                    if (c.binding() != null) {
+                        d2 = rebind(d, c.binding());
+                        if (c.caseTypes().size() == 1) {
+                            Type bound = MatchElaborator.caseBindType(c.caseTypes().get(0).denotes());
+                            if (bound != null) {
+                                t2.put(c.binding(), bound);
+                            }
                         }
                     }
-                    walk(c.body(), d, t2);
+                    walk(c.body(), d2, t2);
                 }
             }
             case Ast.Call call -> walkCall(call, d, types);
@@ -158,11 +174,11 @@ final class InvariantChecker {
                     && combo.listArg() < call.args().size()) {
                 Type elem = elementType(typeExpr(call.args().get(combo.listArg()), types));
                 Map<String, Type> t2 = new HashMap<>(types);
-                NumericDomain d2 = d;
+                String p = step.params().get(combo.elementParam());
+                NumericDomain d2 = rebind(d, p);
                 if (elem != null) {
-                    String p = step.params().get(combo.elementParam());
                     t2.put(p, elem);
-                    d2 = seedParam(p, elem, d);   // the element carries its type's invariant
+                    d2 = seedParam(p, elem, d2);   // the element carries its type's invariant
                 }
                 walk(step.body(), d2, t2);
             } else {
@@ -178,14 +194,19 @@ final class InvariantChecker {
         switch (e) {
             case Ast.NewData nd when nd.spreads().isEmpty() -> {
                 if (symbols.get(nd.typeName().denotes()) instanceof Ast.Data type) {
-                    Map<String, LinearForm> fields = new HashMap<>();
+                    Map<String, LinearForm> forms = new HashMap<>();
+                    Map<String, String> paths = new HashMap<>();
                     for (Ast.FieldInit fi : nd.inits()) {
                         LinearForm f = affineOf(fi.value(), types);
                         if (f != null) {
-                            fields.put(fi.name(), f);
+                            forms.put(fi.name(), f);
+                        }
+                        String p = pathKey(fi.value(), types);
+                        if (p != null) {
+                            paths.put(fi.name(), p);
                         }
                     }
-                    check(type, fields::get, d, nd.pos(), attempted);
+                    check(type, new Bindings(forms::get, paths::get), d, nd.pos(), attempted);
                 }
             }
             case Ast.Binary bin when isArith(bin.op()) -> {
@@ -193,7 +214,9 @@ final class InvariantChecker {
                         && symbols.get(r.name()) instanceof Ast.Data type && type.newtype()) {
                     LinearForm value = affineOf(bin, types);
                     if (value != null) {
-                        check(type, name -> "value".equals(name) ? value : null, d, bin.pos(), attempted);
+                        // an arithmetic result is a form, not a location, so it names no path
+                        check(type, new Bindings(name -> "value".equals(name) ? value : null, _ -> null),
+                                d, bin.pos(), attempted);
                     }
                 }
             }
@@ -201,11 +224,16 @@ final class InvariantChecker {
         }
     }
 
+    /** How an invariant's leaf names resolve at a construction site: to the affine form of what the
+     * field is being given, and to that value's canonical path — so a size call over the field names
+     * the same atom the body names when it calls the same function on the same container. */
+    private record Bindings(Function<String, LinearForm> form, Function<String, String> path) {}
+
     /** Runs the discharge check for a construction of {@code type} whose field values resolve through
-     * {@code resolve}. A definite violation is an error; an unproven one a warning; a fully-discharged
+     * {@code binds}. A definite violation is an error; an unproven one a warning; a fully-discharged
      * or non-expressible invariant is silent. An {@code attempted} construction raises no warning:
      * what the warning reports is a possible abort, and an attempt takes its else branch instead. */
-    private void check(Ast.Data type, Function<String, LinearForm> resolve, NumericDomain d, SourcePos pos,
+    private void check(Ast.Data type, Bindings binds, NumericDomain d, SourcePos pos,
                        boolean attempted) {
         List<Ast.Expr> invs = TypeOps.effectiveInvariants(type, symbols);
         if (invs.isEmpty()) {
@@ -213,22 +241,23 @@ final class InvariantChecker {
         }
         List<Constraint> constraints = new ArrayList<>();
         for (Ast.Expr inv : invs) {
-            List<Constraint> cs = invConstraints(inv, resolve);
+            List<Constraint> cs = invConstraints(inv, binds);
             if (cs == null) {
                 return;   // some part is not expressible in the domain — leave the whole opaque
             }
             constraints.addAll(cs);
         }
+        NumericDomain dom = withSizeBounds(d, constraints);
         boolean possible = false;
         for (Constraint c : constraints) {
-            if (d.refutes(c.form(), c.rel())) {
+            if (dom.refutes(c.form(), c.rel())) {
                 errors.add(CompileException.of(
                         Diagnostic.of("E2010", "check.invariant.violation").title("check.invariant.title")
                                 .at(pos).args(type.name()).build(),
                         "constructing `" + type.name() + "` here violates its invariant on a reachable path"));
                 return;
             }
-            if (!d.entails(c.form(), c.rel())) {
+            if (!dom.entails(c.form(), c.rel())) {
                 possible = true;
             }
         }
@@ -244,12 +273,12 @@ final class InvariantChecker {
 
     private record Constraint(LinearForm form, Rel rel) {}
 
-    /** The constraints an invariant expression contributes under {@code resolve} (field/{@code value}
-     * name -> its affine form), or {@code null} if any part is not expressible. */
-    private List<Constraint> invConstraints(Ast.Expr inv, Function<String, LinearForm> resolve) {
+    /** The constraints an invariant expression contributes under {@code binds} (field/{@code value}
+     * name -> what it is being given), or {@code null} if any part is not expressible. */
+    private List<Constraint> invConstraints(Ast.Expr inv, Bindings binds) {
         if (inv instanceof Ast.Binary b && b.op() == Ast.BinOp.AND) {
-            List<Constraint> l = invConstraints(b.left(), resolve);
-            List<Constraint> r = invConstraints(b.right(), resolve);
+            List<Constraint> l = invConstraints(b.left(), binds);
+            List<Constraint> r = invConstraints(b.right(), binds);
             if (l == null || r == null) {
                 return null;
             }
@@ -260,12 +289,27 @@ final class InvariantChecker {
         if (inv instanceof Ast.Binary b) {
             Rel rel = relOf(b.op());
             if (rel != null) {
-                LinearForm la = affine(b.left(), resolveLeaf(resolve));
-                LinearForm ra = affine(b.right(), resolveLeaf(resolve));
+                LinearForm la = affine(b.left(), resolveLeaf(binds));
+                LinearForm ra = affine(b.right(), resolveLeaf(binds));
                 return la == null || ra == null ? null : List.of(new Constraint(la.minus(ra), rel));
             }
         }
         return null;
+    }
+
+    /** The domain told that every size atom the constraints name is non-negative. The atom enters the
+     * domain only through the clause naming it, so without this the fact a container's size is never
+     * negative is not available to discharge a clause that asks only for that. */
+    private static NumericDomain withSizeBounds(NumericDomain d, List<Constraint> constraints) {
+        NumericDomain out = d;
+        for (Constraint c : constraints) {
+            for (String atom : c.form().coefs().keySet()) {
+                if (isSizeAtom(atom)) {
+                    out = out.assume(LinearForm.atom(atom), Rel.GE);
+                }
+            }
+        }
+        return out;
     }
 
     /** Refines {@code d} by asserting {@code cond} (or its negation). Non-comparison conditions and
@@ -303,15 +347,21 @@ final class InvariantChecker {
             return d;
         }
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
-        Function<String, LinearForm> resolve = fieldName -> {
+        Function<String, String> resolvePath = fieldName -> {
             if (data.newtype() && fieldName.equals("value")) {
-                return LinearForm.atom(path);
+                return path;
             }
-            return fields.containsKey(fieldName) ? LinearForm.atom(path + "." + fieldName) : null;
+            return fields.containsKey(fieldName) ? path + "." + fieldName : null;
         };
+        Bindings binds = new Bindings(
+                fieldName -> {
+                    String p = resolvePath.apply(fieldName);
+                    return p == null ? null : LinearForm.atom(p);
+                },
+                resolvePath);
         NumericDomain out = d;
         for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
-            List<Constraint> cs = invConstraints(inv, resolve);
+            List<Constraint> cs = invConstraints(inv, binds);
             if (cs != null) {
                 for (Constraint c : cs) {
                     out = out.assume(c.form(), c.rel());
@@ -373,9 +423,29 @@ final class InvariantChecker {
         });
     }
 
-    /** The leaf rule for an invariant expression: a bare name resolves to its field/{@code value}. */
-    private static Function<Ast.Expr, LinearForm> resolveLeaf(Function<String, LinearForm> resolve) {
-        return n -> n instanceof Ast.Var v ? resolve.apply(v.name()) : null;
+    /** The leaf rule for an invariant expression: a bare name resolves to its field/{@code value}, and
+     * a size call over one to that container's size atom. */
+    private static Function<Ast.Expr, LinearForm> resolveLeaf(Bindings binds) {
+        return n -> {
+            String size = sizeAtom(n, arg -> invPath(arg, binds));
+            if (size != null) {
+                return LinearForm.atom(size);
+            }
+            return n instanceof Ast.Var v ? binds.form().apply(v.name()) : null;
+        };
+    }
+
+    /** The path an invariant expression names at the construction site: a bare field name through the
+     * bindings, then plain field steps. */
+    private static String invPath(Ast.Expr e, Bindings binds) {
+        return switch (e) {
+            case Ast.Var v -> binds.path().apply(v.name());
+            case Ast.FieldAccess fa -> {
+                String base = invPath(fa.target(), binds);
+                yield base == null ? null : base + "." + fa.field();
+            }
+            default -> null;
+        };
     }
 
     private static LinearForm negate(LinearForm f) {
@@ -389,24 +459,55 @@ final class InvariantChecker {
         return subtract ? a.minus(b) : a.plus(b);
     }
 
-    /** The canonical atom key of a numeric location ({@code x}, {@code p.a}, a newtype's value), or
-     * {@code null} if {@code e} is not one. */
+    /** The canonical atom key of a numeric location ({@code x}, {@code p.a}, a newtype's value) or of
+     * a size call over a nameable container, or {@code null} if {@code e} is neither. */
     private String atomOf(Ast.Expr e, Map<String, Type> types) {
+        String size = sizeAtom(e, arg -> pathKey(arg, types));
+        if (size != null) {
+            return size;
+        }
         return isNumeric(typeExpr(e, types)) ? pathKey(e, types) : null;
+    }
+
+    /** The atom key of {@code SIZE_CALL(container)} when {@code path} can name the container, else
+     * {@code null}. */
+    private static String sizeAtom(Ast.Expr e, Function<Ast.Expr, String> path) {
+        if (!(e instanceof Ast.Call call) || !SIZE_CALLS.contains(call.fn()) || call.args().size() != 1) {
+            return null;
+        }
+        String arg = path.apply(call.args().get(0));
+        return arg == null ? null : call.fn() + "(" + arg + ")";
+    }
+
+    private static boolean isSizeAtom(String atom) {
+        int open = atom.indexOf('(');
+        return open > 0 && atom.endsWith(")") && SIZE_CALLS.contains(atom.substring(0, open));
     }
 
     private String pathKey(Ast.Expr e, Map<String, Type> types) {
         return switch (e) {
             case Ast.Var v -> v.name();
             case Ast.FieldAccess fa -> {
-                if (fa.field().equals("value") && numericNewtype(typeExpr(fa.target(), types))) {
-                    yield pathKey(fa.target(), types);   // a newtype's .value is the same atom
+                Type owner = typeExpr(fa.target(), types);
+                if (fa.field().equals("value") && TypeOps.isSingleValueNewtype(owner, symbols)) {
+                    yield pathKey(fa.target(), types);   // a newtype's .value is the same location
                 }
                 String base = pathKey(fa.target(), types);
                 yield base == null ? null : base + "." + fa.field();
             }
             default -> null;
         };
+    }
+
+    /** The domain with every fact rooted at {@code name} dropped, because a binding of that name makes
+     * it denote something else. An atom is rooted at a name when it is the name, a field chain from
+     * it, or a size call over one. */
+    private static NumericDomain rebind(NumericDomain d, String name) {
+        return d.forgetIf(atom -> {
+            int open = atom.indexOf('(');
+            String path = isSizeAtom(atom) ? atom.substring(open + 1, atom.length() - 1) : atom;
+            return path.equals(name) || path.startsWith(name + ".");
+        });
     }
 
     // --- a minimal local typer (enough for atom/affine detection) ------------------------------

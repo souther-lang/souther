@@ -107,6 +107,180 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void anUnguardedListLengthConstructionIsAPossibleViolationWarning() {
+        // `List.length(xs)` is a term the domain can name, so an invariant over it is expressible and
+        // the unguarded construction is flagged rather than left silent
+        String m = """
+                module demo
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines constructs Lines
+                let build (xs) = Lines(xs)
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "an unguarded length invariant should warn (E2011)");
+    }
+
+    @Test
+    void aGuardOnTheLengthDischargesTheConstruction() {
+        // the guard and the invariant name the same list, so they name the same atom
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoItems
+                    Lines(xs)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the guard discharges the length invariant");
+    }
+
+    @Test
+    void aGuardOnAnotherListDoesNotDischarge() {
+        // the atom is keyed by the container the call names — guarding `ys` says nothing about `xs`
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>, ys: List<Int>) -> Lines | NoItems
+                    constructs Lines, NoItems
+                let build (xs, ys) = {
+                    guard List.length(ys) >= 1
+                        else NoItems
+                    Lines(xs)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a guard on another list should not discharge");
+    }
+
+    @Test
+    void aGuardOnAStringLengthDischargesTheConstruction() {
+        String m = """
+                module demo
+                data TooShort
+                data Name = String
+                    invariant String.length(value) >= 3
+                behavior build : (s: String) -> Name | TooShort constructs Name, TooShort
+                let build (s) = {
+                    guard String.length(s) >= 3
+                        else TooShort
+                    Name(s)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the guard discharges the string-length invariant");
+    }
+
+    @Test
+    void anUnguardedStringLengthConstructionIsAPossibleViolationWarning() {
+        String m = """
+                module demo
+                data Name = String
+                    invariant String.length(value) >= 3
+                behavior build : (s: String) -> Name constructs Name
+                let build (s) = Name(s)
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "an unguarded string-length invariant should warn (E2011)");
+    }
+
+    @Test
+    void aGuardOnASetSizeDischargesTheConstruction() {
+        String m = """
+                module demo
+                data Empty
+                data Tags = Set<String>
+                    invariant Set.size(value) >= 1
+                behavior build : (s: Set<String>) -> Tags | Empty constructs Tags, Empty
+                let build (s) = {
+                    guard Set.size(s) >= 1
+                        else Empty
+                    Tags(s)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the guard discharges the set-size invariant");
+    }
+
+    @Test
+    void aGuardOnAMapSizeDischargesTheConstruction() {
+        String m = """
+                module demo
+                data Empty
+                data Index = Map<String, Int>
+                    invariant Map.size(value) >= 1
+                behavior build : (m: Map<String, Int>) -> Index | Empty constructs Index, Empty
+                let build (m) = {
+                    guard Map.size(m) >= 1
+                        else Empty
+                    Index(m)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the guard discharges the map-size invariant");
+    }
+
+    @Test
+    void anInputTypesLengthInvariantIsSeeded() {
+        // `l: Lines` was built through Lines' checked construction, so its length is known here
+        String m = """
+                module demo
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                data Batch = List<Int>
+                    invariant List.length(value) >= 1
+                behavior rewrap : (l: Lines) -> Batch constructs Batch
+                let rewrap (l) = Batch(l.value)
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the input newtype's length invariant discharges the re-wrap");
+    }
+
+    @Test
+    void aLengthInvariantOverAMappedListStaysOpaque() {
+        // `List.length(List.map(f, xs))` is not the same atom as `List.length(xs)` at this increment,
+        // so the clause is not expressible here and the run-time check stands — no warning no guard
+        // written over the mapped list could silence
+        String m = """
+                module demo
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines constructs Lines
+                let build (xs) = Lines(List.map(x -> x + 1, xs))
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "an unnameable container leaves the clause opaque");
+    }
+
+    @Test
+    void aRebindingOfTheGuardedNameDropsTheFact() {
+        // `xs` is rebound between the guard and the construction, so the guard's fact no longer holds
+        // of what `Lines` is built from
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoItems
+                    let xs = List.filter(x -> x > 0, xs)
+                    Lines(xs)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a rebinding invalidates the guard's fact about that name");
+    }
+
+    @Test
     void aRequireGuardDischargesTheSubtraction() {
         // `guard 額 <= 残高` establishes the relation on the mainline, discharging `残高 - 額`
         String m = """

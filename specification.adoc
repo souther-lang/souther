@@ -961,6 +961,25 @@ The checked fragment is bounded: the decision procedure reasons over intervals a
 
 An *attempted* construction (<<attempted-construction>>) is never possibly violated: a failing invariant takes its `+else+` branch, so there is no abort to warn about. It is what silences the warning for an invariant outside the fragment, where no guard could. A violation the procedure *decides* is still an error there, because with the outcome settled at compile time there was no branch. In the success branch the built value seeds the check with its own invariant, as an input of that type does.
 
+[#invariant-discharge-terms]
+==== What the procedure can name
+
+A term it compares is the numeric content of a location — a parameter, a field chain, a newtype's wrapped value — or the size of a container or a string: `+List.length+`, `+String.length+`, `+Set.size+`, `+Map.size+` applied to such a location. A size is named by the location it is taken of, so a guard and an invariant clause mean the same term exactly when they take the size of the same one. The size of a container is never negative, and the procedure knows that much without being told.
+
+[,text]
+----
+data Lines = List<Int> invariant List.length(value) >= 1
+
+behavior build : (xs: List<Int>) -> Lines | NoItems
+let build (xs) = {
+    guard List.length(xs) >= 1
+        else NoItems
+    Lines(xs)                         // discharged: the guard sizes the same list
+}
+----
+
+A size taken of anything else — `+List.length(List.map(f, xs))+` — is not a term, and a clause needing it is left to the run-time check.
+
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 
