@@ -14,6 +14,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * The type-level questions the checker asks, independent of any expression being checked: resolving
@@ -655,14 +656,32 @@ public final class TypeOps {
 
     /** All invariants that apply to a data: included data's invariants first, then its own. */
     public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Symbols symbols) {
+        return effectiveInvariants(null, data, symbols, _ -> null);
+    }
+
+    /**
+     * The same, reading each declaration's invariant through {@code form} rather than off the
+     * declaration.
+     *
+     * <p>An analysis that reads a representation other than the settled one asks for it by the
+     * declaration's name, and gets the settled one wherever {@code form} has nothing to say — which
+     * is every declaration another module made, since what travels is the settled form.
+     */
+    public static List<Ast.Expr> effectiveInvariants(TypeName named, Ast.Data data, Symbols symbols,
+                                                     Function<TypeName, Ast.Expr> form) {
         List<Ast.Expr> invs = new ArrayList<>();
         for (Ast.Name inc : data.includes()) {
             Ast.Data id = spreadTarget(inc, symbols);
             if (id != null) {
-                invs.addAll(effectiveInvariants(id, symbols));
+                invs.addAll(effectiveInvariants(inc.denotes(), id, symbols, form));
             }
         }
-        data.invariant().ifPresent(invs::add);
+        Ast.Expr own = named == null ? null : form.apply(named);
+        if (own != null) {
+            invs.add(own);
+        } else {
+            data.invariant().ifPresent(invs::add);
+        }
         return invs;
     }
 

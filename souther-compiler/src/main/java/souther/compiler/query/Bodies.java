@@ -5,6 +5,8 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.InjectionSigs;
+import souther.compiler.check.InliningPolicy;
+import souther.compiler.check.InvariantChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ReqSig;
@@ -729,6 +731,35 @@ public final class Bodies {
     }
 
     /**
+     * One body as the invariant-discharge analysis reads it: the module's own helpers expanded, the
+     * language's own operations left standing ({@link InliningPolicy#DISCHARGE}).
+     *
+     * <p>Not the tree the backend emits. That one has been expanded until nothing it cannot emit is
+     * left, and reading it is reading algorithms — a {@code List.map} is a fold there, and a rule
+     * about what {@code List.map} does to a length has nothing to match. This is the same body at the
+     * level the rules are written at.
+     */
+    public record BodyForInvariantDischarge(String module, String fn) implements Key<Ast.FnDef> {
+
+        @Override
+        public Answer<Ast.FnDef> compute(Db db) {
+            Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
+            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
+            Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
+            if (!def.present() || !helpers.present() || !recursive.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(Lower.body(def.value(),
+                        HelperInliner.forHelpers(helpers.value(), InliningPolicy.DISCHARGE),
+                        recursive.value().contains(fn)));
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+        }
+    }
+
+    /**
      * A module with every helper call expanded into the body that called it, and with the parameter
      * types those expansions settled written back into the declarations.
      *
@@ -896,15 +927,25 @@ public final class Bodies {
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
+            Answer<Ast.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
+            Answer<Map<TypeName, Ast.Expr>> dischargeInvariants =
+                    db.ask(new Shapes.InvariantsForDischarge(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !helpers.present()
                     || !sigs.present() || !constructs.present()) {
                 return Answer.absent();
             }
+            // The invariant-discharge analysis reads its own representation of the body and of the
+            // invariants (spec §invariant-discharge). Where it is not available the check is skipped
+            // rather than run against the emitted tree, whose operations are no longer operations.
+            InvariantChecker.Source dischargeSource = discharge.present()
+                    ? new InvariantChecker.Source(discharge.value().body(),
+                            dischargeInvariants.present() ? dischargeInvariants.value() : Map.of())
+                    : null;
             List<Diagnostic> warnings = new ArrayList<>();
             try {
                 Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().body(),
-                        scope.value(), calleeSigs.value(), reqSigs.value(),
+                        dischargeSource, scope.value(), calleeSigs.value(), reqSigs.value(),
                         HelperInliner.forHelpers(helpers.value()), sigs.value(), constructs.value(),
                         warnings);
                 List<Report> reports = new ArrayList<>();

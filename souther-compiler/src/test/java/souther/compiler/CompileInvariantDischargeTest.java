@@ -90,6 +90,46 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void emptinessAndItsSizeComparisonAreOneStatement() {
+        // `Set.isEmpty(s)` and `Set.size(s) == 0` say one thing, so which the author reached for does
+        // not decide whether the construction discharges
+        String m = """
+                module demo
+                data Empty
+                data Tags = Set<String>
+                    invariant Bool.not(Set.isEmpty(value))
+                behavior build : (s: Set<String>) -> Tags | Empty constructs Tags, Empty
+                let build (s) = {
+                    guard Set.size(s) >= 1
+                        else Empty
+                    Tags(s)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the size guard discharges the emptiness invariant");
+    }
+
+    @Test
+    void theElementAMapHandsItsClosureCarriesItsOwnInvariant() {
+        // The combinator rule for `List.map` binds the closure's parameter to the list's element type
+        // and seeds that type's invariant, so `x >= 0` is known here and the re-wrap discharges. This
+        // only happens if the analysis reads a representation where `List.map` is still `List.map`:
+        // against the tree the backend emits it is a fold, and the rule has nothing to match.
+        String m = """
+                module demo
+                data Money = Decimal
+                    invariant value >= 0m
+                data Positive = Decimal
+                    invariant value >= 0m
+                data Bag = { items: List<Money> }
+                behavior copy : (b: Bag) -> List<Positive> constructs Positive
+                let copy (b) = List.map(x -> Positive(x.value), b.items)
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the element's own invariant discharges the re-wrap");
+    }
+
+    @Test
     void aConstructionInsideAMapClosureIsAnalyzed() {
         // the closure element x: Money carries x >= 0; `x - Money(1m)` can go negative, so it is a
         // possible violation. Without binding the combinator's element parameter the construction
@@ -244,10 +284,8 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
-    void aLengthInvariantOverAMappedListStaysOpaque() {
-        // `List.length(List.map(f, xs))` is not the same atom as `List.length(xs)` at this increment,
-        // so the clause is not expressible here and the run-time check stands — no warning no guard
-        // written over the mapped list could silence
+    void anUnguardedConstructionFromAMappedListIsReported() {
+        // the length of the mapped list is the length of `xs`, and nothing here says what that is
         String m = """
                 module demo
                 data Lines = List<Int>
@@ -255,8 +293,8 @@ class CompileInvariantDischargeTest {
                 behavior build : (xs: List<Int>) -> Lines constructs Lines
                 let build (xs) = Lines(List.map(x -> x + 1, xs))
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
-                "an unnameable container leaves the clause opaque");
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "the length of the mapped list is the length of what was mapped");
     }
 
     @Test
@@ -687,6 +725,158 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aMappingKeepsTheLengthOfWhatItMapped() {
+        // the crm case: guard the input's length, build from the mapped list. How the elements are
+        // made has no bearing on how many there are.
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoItems
+                    Lines(List.map(x -> x + 1, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a mapping keeps the length");
+    }
+
+    @Test
+    void aReorderingKeepsTheLength() {
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoItems
+                    Lines(List.reverse(List.sort(xs)))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "reversing and sorting keep the length");
+    }
+
+    @Test
+    void aSelectionOnlyBoundsTheLength() {
+        // filtering can drop everything, so guarding the input says nothing about the result
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoItems
+                    Lines(List.filter(x -> x > 0, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a selection does not keep the length");
+    }
+
+    @Test
+    void aSelectionBoundsTheLengthFromAbove() {
+        // the other direction is known: no more came out than went in, so a cap on the input caps
+        // the result
+        String m = """
+                module demo
+                data TooMany
+                data Lines = List<Int>
+                    invariant List.length(value) <= 10
+                behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines, TooMany
+                let build (xs) = {
+                    guard List.length(xs) <= 10
+                        else TooMany
+                    Lines(List.filter(x -> x > 0, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "no more came out of the filter than went in");
+    }
+
+    @Test
+    void aReorderingCarriesUniqueness() {
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { a: Int }
+                data Rows = List<Row>
+                    invariant List.allUniqueBy(r -> r.a, value)
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(r -> r.a, xs)
+                        else Duplicate
+                    Rows(List.sortBy(r -> r.a, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "sorting keeps the elements, so it keeps their distinctness");
+    }
+
+    @Test
+    void aSelectionCarriesAPropertyOfEveryElement() {
+        String m = """
+                module demo
+                data OutOfRange
+                data Row = { a: Int }
+                data Rows = List<Row>
+                    invariant List.all(r -> r.a >= 1, value)
+                behavior build : (xs: List<Row>) -> Rows | OutOfRange constructs Rows, OutOfRange
+                let build (xs) = {
+                    guard List.all(r -> r.a >= 1, xs)
+                        else OutOfRange
+                    Rows(List.filter(r -> r.a > 5, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "nothing new is in a sublist, so what held of every element still holds");
+    }
+
+    @Test
+    void aSelectionDoesNotCarryMembership() {
+        String m = """
+                module demo
+                data Missing
+                data Rows = List<Int>
+                    invariant List.member(1, value)
+                behavior build : (xs: List<Int>) -> Rows | Missing constructs Rows, Missing
+                let build (xs) = {
+                    guard List.member(1, xs)
+                        else Missing
+                    Rows(List.filter(x -> x > 5, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a filter may drop the very element that was there");
+    }
+
+    @Test
+    void aMappingDoesNotCarryUniqueness() {
+        // distinct elements can map to one — that a projection survives a map is #226's question
+        String m = """
+                module demo
+                data Duplicate
+                data Rows = List<Int>
+                    invariant List.allUniqueBy(x -> x, value)
+                behavior build : (xs: List<Int>) -> Rows | Duplicate constructs Rows, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(x -> x, xs)
+                        else Duplicate
+                    Rows(List.map(x -> x * 0, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a mapping says nothing about what the elements became");
+    }
+
+    @Test
     void aRequireGuardDischargesTheSubtraction() {
         // `guard 額 <= 残高` establishes the relation on the mainline, discharging `残高 - 額`
         String m = """
@@ -704,5 +894,82 @@ class CompileInvariantDischargeTest {
                 """;
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
                 "the guard discharges the subtraction");
+    }
+
+    @Test
+    void guardsThatCannotAllHoldLeaveNothingToReport() {
+        // `a <= b`, `b <= 0` and `a >= 1` cannot hold together, so the construction is not reached and
+        // says nothing about the invariant — the bound on `a` is only derivable through the difference
+        String m = """
+                module demo
+                data Ok
+                data AtLeastTwo = Int
+                    invariant value >= 2
+                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo, Ok
+                let build (a, b) = {
+                    guard a <= b
+                        else Ok
+                    guard b <= 0
+                        else Ok
+                    guard a >= 1
+                        else Ok
+                    AtLeastTwo(a)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "an unreachable construction is neither violated nor possibly violated");
+    }
+
+    @Test
+    void theOrderTheContradictingGuardsAreWrittenDoesNotMatter() {
+        String m = """
+                module demo
+                data Ok
+                data AtLeastTwo = Int
+                    invariant value >= 2
+                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo, Ok
+                let build (a, b) = {
+                    guard a >= 1
+                        else Ok
+                    guard b <= 0
+                        else Ok
+                    guard a <= b
+                        else Ok
+                    AtLeastTwo(a)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the difference asserted last closes the same contradiction");
+    }
+
+    @Test
+    void aComparisonAndItsDenialAreOneFact() {
+        // the else branch of `a == b` is where `a /= b` holds
+        String m = """
+                module demo
+                data Ok
+                data Pair = { left: Int, right: Int }
+                    invariant left /= right
+                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair, Ok
+                let build (a, b) =
+                    if a == b then Ok else Pair { left = a, right = b }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "denying the equality states the inequality");
+    }
+
+    @Test
+    void anEqualityIsOneFactWhicheverSideIsWrittenFirst() {
+        String m = """
+                module demo
+                data Ok
+                data Pair = { left: Int, right: Int }
+                    invariant right /= left
+                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair, Ok
+                let build (a, b) =
+                    if a == b then Ok else Pair { left = a, right = b }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "which side of an equality a term is written on is not part of what it says");
     }
 }

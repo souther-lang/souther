@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -90,9 +91,22 @@ public final class HelperInliner {
      * its own fns has them here like any other helper, so both say the same thing about it.
      */
     public static HelperInliner forHelpers(Map<String, Ast.FnDef> own) {
+        return forHelpers(own, InliningPolicy.FULL);
+    }
+
+    /**
+     * The same, resolving only what {@code policy} says to resolve.
+     *
+     * <p>{@link InliningPolicy#DISCHARGE} leaves the standard library out of the table, so a call to
+     * one of its operations is not a helper call here and survives as written. Nothing else changes:
+     * a module's own helper is expanded, and a recursive call is left standing, by the same rules.
+     */
+    public static HelperInliner forHelpers(Map<String, Ast.FnDef> own, InliningPolicy policy) {
         // In the order they are written, so a module with two helpers to complain about complains
         // about the earlier one first.
-        HelperInliner inliner = new HelperInliner(withPrelude(own), new LinkedHashMap<>(own));
+        Map<String, Ast.FnDef> table = policy == InliningPolicy.FULL
+                ? withPrelude(own) : new LinkedHashMap<>(own);
+        HelperInliner inliner = new HelperInliner(table, new LinkedHashMap<>(own));
         inliner.classifyRecursion();
         inliner.rejectValueCycles();
         return inliner;
@@ -525,6 +539,29 @@ public final class HelperInliner {
      * (e.g. {@code invariant 正の数(value)}) expands to its body before the invariant is type-checked
      * or emitted — the same lowering a behavior body gets (spec 12.5, §invariant-expressions).
      */
+    /**
+     * Each declaration's invariant in the representation the invariant-discharge analysis reads: the
+     * module's own helpers expanded, the language's own operations left standing
+     * ({@link InliningPolicy#DISCHARGE}). Keyed by the declaration's name in {@code m}.
+     *
+     * <p>This is the same settling {@link #withSettledInvariants} does, stopped one step earlier. The
+     * settled form is what travels to an importer and what the backend emits; an importer therefore
+     * reads an imported invariant in the settled form and finds nothing here for it, which is where
+     * an imported clause falls outside the statically dischargeable fragment (spec
+     * §invariant-discharge).
+     */
+    public static Map<TypeName, Ast.Expr> invariantsForDischarge(Ast.Module m, Symbols symbols) {
+        Ast.Module settled = HelperParams.settle(m, symbols, Map.of());
+        HelperInliner inliner = forHelpers(helpersOf(settled), InliningPolicy.DISCHARGE);
+        Map<TypeName, Ast.Expr> out = new LinkedHashMap<>();
+        for (Ast.Def def : settled.defs()) {
+            if (def instanceof Ast.Data d && d.invariant().isPresent()) {
+                out.put(new TypeName(m.name(), d.name()), inliner.inline(d.invariant().get()));
+            }
+        }
+        return out;
+    }
+
     Ast.Module withInlinedInvariants(Ast.Module m) {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {

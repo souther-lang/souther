@@ -944,6 +944,8 @@ The check is intraprocedural. Within a behavior's `+let+` body it seeds what the
 * *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
 * *Not expressible* — an invariant outside the checked fragment. No diagnostic; the run-time check stands.
 
+Guards that cannot all hold describe a path the behavior does not take, and a construction standing on one is neither of the middle two: nothing is built there, so nothing is reported. That the guards contradict is itself derived over the same fragment — `+a <= b+` with `+b <= 0+` bounds `+a+` above without a word about `+a+` — so a path is dead whenever the relations say so, whatever order they were written in.
+
 [,text]
 ----
 data Money = Decimal invariant value >= 0m
@@ -978,7 +980,61 @@ let build (xs) = {
 }
 ----
 
-A size taken of anything else — `+List.length(List.map(f, xs))+` — is not a term, and a clause needing it is left to the run-time check.
+A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a `+let+` returned, of a string joined from parts — is not a term, and a clause needing it is left to the run-time check.
+
+[#invariant-discharge-representation]
+==== What the check reads
+
+The check reads a behavior's body and the invariants around it at the level the rules above are written at: the standard library's operations are operations, and a module's own `+let+`s are expanded into the body that called them (spec 12.5). The two go together. The language defines what `+List.map+` does to a length, and every module has that definition, so a call to it says something on its own. A `+let+` carries no such definition and does not travel to an importing module either, so what it says is its body.
+
+An invariant that arrives from another module arrives expanded (<<published-modules>>), so a clause of an imported type is read as the computation it became rather than as the operations it was written as. Such a clause is outside the statically dischargeable fragment even where the same clause written here would be inside it.
+
+[#invariant-discharge-preservation]
+==== What an operation keeps of what it was built from
+
+An invariant is stated of a value, and a value is often built from another by a standard-library operation. Whether the clause carries across that operation is a property of the operation, and is stated here rather than left to the checker: an author predicts which constructions are judged safe by reading this table.
+
+Four shapes cover the operations.
+
+[cols="1,3"]
+|===
+| shape | what the result is
+
+| *permutes* | the same elements in another order — `+List.reverse+`, `+List.sort+`, `+List.sortBy+`
+| *subset* | some of the same elements — `+List.filter+`, `+List.distinct+`, `+List.take+`, `+List.drop+`, `+Set.filter+`, `+Map.filter+`
+| *maps* | one new element for each — `+List.map+`, `+List.indexedMap+`, `+Map.map+`
+| *collapses* | at most one new element for each — `+List.filterMap+`, `+Set.map+`
+|===
+
+What each keeps:
+
+[cols="1,1,1,1"]
+|===
+| shape | size | a property of every element | a particular element
+
+| *permutes* | the same | kept | kept
+| *subset* | no greater | kept | not kept
+| *maps* | the same | not kept | not kept
+| *collapses* | no greater | not kept | not kept
+|===
+
+So `+List.length(List.map(f, xs))+` *is* `+List.length(xs)+` — how the elements are made has no bearing on how many there are — and a guard on the length of `+xs+` discharges a construction from the mapped list. `+List.length(List.filter(p, xs))+` is its own term, no greater than `+List.length(xs)+`: an upper bound on the input bounds the result, and a lower bound on the input says nothing.
+
+[,text]
+----
+data Lines = List<Line> invariant List.length(value) >= 1
+
+behavior build : (rows: List<Row>) -> Lines | NoRows
+let build (rows) = {
+    guard List.length(rows) >= 1
+        else NoRows
+    Lines(List.map(toLine, rows))     // discharged: a mapping keeps the length
+}
+----
+
+"A property of every element" is a clause like `+List.all(p, value)+` or `+List.allUniqueBy(f, value)+`: nothing new is in a sublist, so what held of every element still holds. "A particular element" is `+List.member(x, value)+` or `+Set.contains(x, value)+`, which a selection may drop.
+
+An operation not in the table keeps nothing that can be relied on, and a clause over what it built is left to the run-time check.
 
 [#invariant-discharge-facts]
 ==== A clause that states no relation is settled, not derived
@@ -997,7 +1053,7 @@ let build (rows) = {
 }
 ----
 
-Two clauses are one thing exactly when they are the same expression over the same terms. Nothing relates two different ones — uniqueness by `+.product+` says nothing about uniqueness by `+.sku+`, and one pattern says nothing about another. What a binding is *called* is not part of the expression, so `+r -> r.product+`, `+row -> row.product+` and `+.product+` state one thing; a name the closure reads from outside it is part of the expression, so bounding by one field is not bounding by another.
+Two clauses are one thing exactly when they are the same expression over the same terms. Nothing relates two different ones — uniqueness by `+.product+` says nothing about uniqueness by `+.sku+`, and one pattern says nothing about another. What a binding is *called* is not part of the expression, so `+r -> r.product+`, `+row -> row.product+` and `+.product+` state one thing; a name the closure reads from outside it is part of the expression, so bounding by one field is not bounding by another. Which of the six comparisons an author reached for is not part of it either: `+a /= b+` is `+a == b+` denied, `+a >= b+` is `+a < b+` denied, and which side of an equality a term is written on says nothing — so a `+guard+` on `+a == b+` discharges a clause reading `+b /= a+` where it departs.
 
 This is what a clause outside the derived fragment falls back to, whatever its shape. A comparison over a value the procedure cannot name is settled the same way, which is why `+guard+`-ing it verbatim discharges the construction.
 

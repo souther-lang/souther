@@ -227,6 +227,7 @@ public final class SpecChecker {
      * do not bind values — they resolve as inline calls to those behaviors.
      */
     static Core checkSpecFn(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr inlinedBody,
+                                    InvariantChecker.Source discharge,
                                     Symbols symbols, Map<String, ReqSig> calleeSigs,
                                     Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                     Map<String, Type> recursiveHelperFns,
@@ -388,7 +389,7 @@ public final class SpecChecker {
         // A guard-discharged one is silent; an unproven one is a warning (a possible abort); one the
         // guards prove must fail on a reachable path is an error (the path-sensitive generalization of
         // the constant `金額(-5)` check).
-        InvariantChecker.Findings inv = InvariantChecker.analyze(body, env, symbols);
+        InvariantChecker.Findings inv = InvariantChecker.analyze(discharge, env, symbols);
         warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);
