@@ -109,7 +109,7 @@ class CompileBottomJoinTest {
                     let (positives, _) = fold((acc, x) -> {
                         let (ps, ns) = acc
                         match Int.remainder(x, 2) with
-                            | Int r -> (ps ++ [r], ns)
+                            | Int as r -> (ps ++ [r], ns)
                             | DivisionByZero -> (ps, ns ++ [x])
                     }, ([], []), i.xs)
                     Out { ys = positives }

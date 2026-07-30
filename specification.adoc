@@ -1672,8 +1672,8 @@ behavior 事前承認する : (申請: 事前承認待ち) -> 事前承認済み
 behavior 却下して通知する : (申請: 事前承認待ち) -> 通知済み | 承認権限なし
     depends on 事前承認する
 let 却下して通知する (申請, 事前承認する) = match 事前承認する(申請) with
-    | 事前承認済み 済 -> 通知済み { 宛先 = 済.申請者 }
-    | 承認権限なし 拒 -> 拒
+    | 事前承認済み as 済 -> 通知済み { 宛先 = 済.申請者 }
+    | 承認権限なし as 拒 -> 拒
 ----
 
 A call yields the behavior's declared output. Where that output is a sum, the caller opens it with `+match+`, and a case it does not handle is its own to declare in its output. Nothing departs on its own: departure is what `+>->+` does (<<type-routing>>), and a call is not a stage.
@@ -2250,7 +2250,7 @@ match 精算 with
 
 Nothing else reads indentation, and a misplaced arm cannot silently change meaning: a case is a named data (<<sum-data>>), and a name belongs to one data, so an arm that lands on the wrong match is a compile error naming the case and the sum. Where the two matches are on one line, the columns cannot separate them — write the inner one in a block (`+-> { match … }+`), which ends it explicitly.
 
-A case value is bound with `+as+` (the `+s+` in `+| 提出済み as s+` is 提出済み, read as `+s.提出日時+`). `+as+` binds the whole matched value.
+A case value is bound with `+as+` (the `+s+` in `+| 提出済み as s+` is 提出済み, read as `+s.提出日時+`). `+as+` binds the whole matched value. A bare identifier beside the case name is not a second spelling of it: `+| 提出済み s+` is a compile error naming the `+as+` form to write instead. A case is a reference to a named data (<<sum-data>>), so it carries no payload to bind positionally; the one case that does is Option's `+Some+`, and the positional form is written only there (below).
 
 Fields may be bound directly with a destructuring pattern, the inverse of construction. It uses the same `+{ }+`, `+,+`, `+=+` as construction `+会員 { id = x }+`, and `+{ id }+` is shorthand for binding to a same-named variable (paired with <<record-literal>>). Write only the fields used. Destructuring is possible only for a single named case; an or-pattern (below) binds to a sum type and has no fields. It may be combined with `+as+`: `+| 会員 { id } as 全体+` binds both fields and the whole.
 
@@ -2269,6 +2269,20 @@ match m with
     | アクティベート済み(メールアドレス(s)) -> s   // s is the base String, two layers opened
     | 未アクティベート(a)                 -> a.value   // a is メールアドレス, one layer opened
 ----
+
+[#primitive-arm]
+An arm may name a primitive type. A standard-library function that answers a value or a failure returns a union headed by a primitive — `+Int.divide+` / `+Int.remainder+` return `+Int | DivisionByZero+` (<<stdlib-int>>), `+Decimal.divide+` returns `+Decimal | DivisionByZero+` (<<stdlib-decimal>>), `+String.toInt+` / `+String.toDecimal+` return `+Int | NotANumber+` / `+Decimal | NotANumber+` (<<stdlib-string>>) — and the arm that takes the value names that primitive. Nothing wraps it: the matched value is the number itself, so `+as+` binds it as it binds any other case.
+
+[,text]
+----
+match Int.divide(i.分子, i.分母) with
+    | DivisionByZero -> 0
+    | Int as n       -> n
+----
+
+`+| Int(n)+` is rejected: the parens open a newtype (above) and a primitive is not one, so the message names the `+as+` form instead. `+| n -> n+` is not a fallthrough either — Souther has no `+_+` wildcard, every arm names a case, and `+n+` is looked up as a type name and not found. F# draws the same line for its type-test pattern, which also binds with `+as+`: `+| :? int as n+` is written, `+| :? int n+` does not parse.
+
+Where the model has already ruled the failure out — a `+require+` (<<attempted-construction>>) or the divisor type's own invariant keeps the divisor away from zero — the union need not arise: the operator `+/+` divides, and its abort on zero (<<stdlib-int>>) cannot be reached. The arm is for the divisor the model admits as an input.
 
 To route multiple cases to the same processing, list `+|+` within a case, `+| A | B -> ...+` (an or-pattern). It writes "these states are treated the same" for a state-machine sum in one line. The case-separator `+|+` and the or-pattern `+|+` are the same symbol, but `+->+` ends a case's pattern part, so they do not conflict.
 
@@ -2536,7 +2550,7 @@ The middle row is the core of Elm's String module expressible in Souther's types
 
 `+fromDecimal(d)+` renders a `+Decimal+` in plain notation, never in exponent form, keeping the scale the value carries: `+1000.00m+` is `+"1000.00"+`. Scale is incidental to the number (<<primitives>>) but not to how it is written, so a caller wanting a fixed number of places sets it first with `+Decimal.round(d, scale, mode)+` and names the rounding there. Grouping separators and a currency symbol are presentation and stay outside the domain. `+toDecimal(s)+` parses back, returning `+Decimal | NotANumber+` — the sibling of `+toInt+`, and a compiler built-in for the same reason.
 
-The bottom row gives character access without a `+Char+` type — a character is a length-1 `+String+`. `+toChars(s)+` is Elm's `+String.toList+`: the characters of `+s+`, one per Unicode code point, as single-character strings (`+toChars("a12")+` is `+["a", "1", "2"]+`), so `+List.fold+` can walk them. `+toCode(ch)+` is Elm's `+Char.toCode+` on such a character — its first code point, `+-1+` for the empty string. `+toInt(s)+` is Elm's `+String.toInt+`, returning `+Int | NotANumber+` in place of `+Maybe+`: a named case, since `+Maybe+` has no surface form (ADR-0011) — the same case-return the `+/+` operator and `+Int.divide+` draw between abort and case. `+toInt("007")+` is `+7+` (leading zeros kept, unlike a numeric parse-and-reformat); `+toInt("12x")+` is `+NotANumber+`. Because `+toInt+` returns a primitive-headed union it is a compiler built-in, not a core declaration (ADR-0053); `+toChars+` / `+toCode+` are ordinary intrinsics.
+The bottom row gives character access without a `+Char+` type — a character is a length-1 `+String+`. `+toChars(s)+` is Elm's `+String.toList+`: the characters of `+s+`, one per Unicode code point, as single-character strings (`+toChars("a12")+` is `+["a", "1", "2"]+`), so `+List.fold+` can walk them. `+toCode(ch)+` is Elm's `+Char.toCode+` on such a character — its first code point, `+-1+` for the empty string. `+toInt(s)+` is Elm's `+String.toInt+`, returning `+Int | NotANumber+` in place of `+Maybe+`: a named case, since `+Maybe+` has no surface form (ADR-0011) — the same case-return the `+/+` operator and `+Int.divide+` draw between abort and case. `+toInt("007")+` is `+7+` (leading zeros kept, unlike a numeric parse-and-reformat); `+toInt("12x")+` is `+NotANumber+`, and the parsed value is taken out with `+| Int as n+` (<<primitive-arm>>). Because `+toInt+` returns a primitive-headed union it is a compiler built-in, not a core declaration (ADR-0053); `+toChars+` / `+toCode+` are ordinary intrinsics.
 
 Together these make a checksum (Luhn, EAN, a mod-10 check digit) a plain `+let+` over `+List.fold+` in a behavior: validate the digits with `+matches("[0-9]+", value)+` in the type's invariant, read each digit as `+toCode(ch) - toCode("0")+` (total, because the invariant proved every character is a digit), and take the remainder with `+Int.modBy+`. A checksum is *not* an invariant — it folds, and an invariant may not recurse (<<invariant-expressions>>) — so it lives in a behavior, but a short one.
 
@@ -2551,7 +2565,7 @@ abs  min  max  clamp
 
 `+Int+` is signed 64-bit (<<primitives>>). If an operation exceeds that range it *aborts* — it does not wrap. Overflow is a model bug, not a business result, so like an invariant violation it throws `+ConstraintViolation+` (<<algebraic-types>>, <<violation-destination>>, <<jvm-abort>>).
 
-Division by zero returns `+Int | DivisionByZero+`. This is a possible input on the business flow (a divisor of 0), so it is returned as a case rather than aborting.
+Division by zero returns `+Int | DivisionByZero+`. This is a possible input on the business flow (a divisor of 0), so it is returned as a case rather than aborting. The arm that takes the quotient names the primitive and binds it with `+as+` — `+| Int as n+` (<<primitive-arm>>).
 
 The four operations may also be written with the operators `{plus}` `+-+` `+*+` `+/+` (the symbol table of <<primitives>>). `+/+` is truncating division and *aborts* on division by zero (like overflow). To receive `+Int | DivisionByZero+` as a case, use the functions `+divide+` / `+remainder+` — operator = casual and aborting, function = safe with a case.
 
@@ -2575,7 +2589,7 @@ Division makes the rounding scale and mode explicit as arguments. `+Decimal.divi
 HALF_UP  HALF_EVEN  HALF_DOWN  UP  DOWN  CEILING  FLOOR
 ----
 
-These correspond to `+java.math.RoundingMode+`. `+Decimal.divide(a, b)+` without scale and mode cannot be written — to surface rounding as a domain decision, the same position as "scale is incidental" in <<primitives>>. Division by zero returns `+Decimal | DivisionByZero+`.
+These correspond to `+java.math.RoundingMode+`. `+Decimal.divide(a, b)+` without scale and mode cannot be written — to surface rounding as a domain decision, the same position as "scale is incidental" in <<primitives>>. Division by zero returns `+Decimal | DivisionByZero+`, opened by `+| Decimal as d+` (<<primitive-arm>>).
 
 `+Int+` and `+Decimal+` meet only where the conversion is written. `+Decimal.fromInt(n)+` widens an `+Int+`; it is exact, so nothing has to be stated. `+Decimal.toInt(d, mode)+` narrows back, and because that drops a fraction it names the rounding at the call, as `+divide+` does. There is no implicit widening: an arithmetic operator takes two operands of one type (<<primitives>>), so a rate applied to an amount in yen reads `+Decimal.fromInt(税抜) * 税率+` — the conversion sits where the value stops being an amount. This is F#'s position for operators (`+n * 0.1m+` does not compile; `+decimal n * 0.1m+` does). A `+Decimal+` too large for an `+Int+` aborts, as an `+Int+` overflow does (<<primitives>>).
 

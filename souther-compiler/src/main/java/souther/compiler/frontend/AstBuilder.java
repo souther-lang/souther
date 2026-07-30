@@ -948,11 +948,22 @@ public final class AstBuilder {
             }
             i = at[0];
         }
+        boolean isSome = caseTypes.size() == 1 && caseTypes.get(0).written().equals("Some");
         // Option's positional binding `Some v`: a bare identifier before `{` / `as` / `->`. It never
         // follows a constructor destructure, so a trailing ident after the parens is not consumed here.
+        // Option is the one case with a payload to reach, so every other case binds its value with
+        // `as` and a bare identifier beside its name binds nothing.
         String someBinding = null;
         if (unwrapNames.isEmpty() && i < es.size() && isToken(es.get(i), SyntaxKind.IDENT)) {
-            someBinding = tokenText(es.get(i++));
+            String ident = tokenText(es.get(i));
+            if (!isSome) {
+                throw error(posOf((SyntaxToken) es.get(i)), "parse.case.positional",
+                        "a case value is bound with `as`: write `| " + caseTypes.get(caseTypes.size() - 1).written()
+                                + " as " + ident + "`",
+                        caseTypes.get(caseTypes.size() - 1).written(), ident);
+            }
+            someBinding = ident;
+            i++;
         }
         // field destructuring `{ field [= var], ... }`
         List<String> fieldNames = new ArrayList<>();
@@ -982,7 +993,6 @@ public final class AstBuilder {
             i++;
             asBinding = tokenText(es.get(i++));
         }
-        boolean isSome = caseTypes.size() == 1 && caseTypes.get(0).written().equals("Some");
         if (isSome && asBinding != null) {
             throw error(casePos, "parse.option.positional",
                     "Option's wrapped value is bound positionally: write `| Some v`, not `| Some as v`");
