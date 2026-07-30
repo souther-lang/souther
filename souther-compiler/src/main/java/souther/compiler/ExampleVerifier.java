@@ -780,8 +780,16 @@ public final class ExampleVerifier {
         return constructedCase(e, new LinkedHashSet<>());
     }
 
-    /** As above; {@code followed} are the names already followed, so a value defined in terms of itself
-     * stops here and is reported as the cycle it is where the fixture is built. */
+    /**
+     * As above; {@code followed} are the names already followed, so a value defined in terms of itself
+     * stops here and is reported as the cycle it is where the fixture is built.
+     *
+     * <p>The binding a closed body carries is not read here, and does not need to be: a value is
+     * substituted where it is named, so the only name closing leaves standing in a fixture is the one a
+     * spread holds — a spread cannot hold an expression — and that name is read where the spread is
+     * copied. A closed body therefore ends in the construction, whether it was published itself or
+     * named by another value that was.
+     */
     private TypeName constructedCase(Ast.Expr e, Set<String> followed) {
         return switch (e) {
             case Ast.NewData nd -> nd.typeName().denotes();

@@ -119,6 +119,57 @@ class ExampleSpreadFixtureTest {
     }
 
     @Test
+    void anImportedNameForAValueBuiltByASpreadKeepsItsCaseHoweverManyNamesItPassedThrough() {
+        // A value is substituted where it is named, so a name for a value built by a spread — and a name
+        // for that name — is closed to the same construction with the spread's own binding around it.
+        // Both the fixture and the case it stands for are read off that, so a chain of names across the
+        // import boundary says what one name says.
+        String deals = """
+                module deals exposing ( Common, Open, Closed, Deal, spreadClosed, named, namedTwice )
+
+                data Common = { id: String }
+                data Open   = { ...Common }
+                data Closed = { ...Common, closedOn: Date }
+                data Deal   = Open | Closed
+
+                let openDeal     = Open { id = "d-1" }
+                let spreadClosed = Closed { ...openDeal, closedOn = Date("2026-07-30") }
+                let named        = spreadClosed
+                let namedTwice   = named
+                """;
+        // The expected side is where the case a name stands for decides what is compared, rather than a
+        // decoder dispatching on a tag, so the chain is read there too.
+        String app = """
+                module app
+                import deals ( Deal, Open, Closed, spreadClosed, named, namedTwice )
+
+                data Answer = { label: String }
+
+                behavior labelOf : (deal: Deal) -> Answer
+                    constructs Answer
+
+                let labelOf (deal) =
+                    match deal with
+                        | Open   -> Answer { label = "open" }
+                        | Closed -> Answer { label = "closed" }
+
+                behavior pass : (deal: Closed) -> Closed
+
+                let pass (deal) = deal
+
+                example labelOf
+                    | "a name for a spread-built value" : (named)      -> Answer { label = "closed" }
+                    | "a name for that name"            : (namedTwice) -> Answer { label = "closed" }
+
+                example pass
+                    | "the value itself, expected"   : (spreadClosed) -> spreadClosed
+                    | "a name for it, expected"      : (spreadClosed) -> named
+                    | "a name for that name"         : (spreadClosed) -> namedTwice
+                """;
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(deals, app)));
+    }
+
+    @Test
     void aSpreadFixtureStillHasToHold() {
         // The case a spread fixture keeps is not a way past the check: a row asserting the other case
         // fails, and it is the row that is wrong rather than the fixture.
