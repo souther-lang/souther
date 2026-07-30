@@ -215,4 +215,34 @@ public final class Shapes {
             return Names.symbols(db, name, Names.Stage.DERIVED);
         }
     }
+
+    /**
+     * The invariants this module declares, in the representation the invariant-discharge analysis
+     * reads ({@link souther.compiler.check.InliningPolicy#DISCHARGE}) — beside the settled form that
+     * every other stage sees on the declaration itself.
+     *
+     * <p>Only this module's own. What another module publishes arrives settled, which is what makes
+     * an imported clause fall outside the statically dischargeable fragment: the analysis reads what
+     * it is given, and there the operations have already become the folds they are.
+     */
+    public record InvariantsForDischarge(String name) implements Key<Map<TypeName, Ast.Expr>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<TypeName, Ast.Expr>> compute(Db db) {
+            Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
+            Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
+            if (!resolved.present() || !scope.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(HelperInliner.invariantsForDischarge(resolved.value(), scope.value()));
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+        }
+    }
 }

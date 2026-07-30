@@ -26,7 +26,7 @@ import java.util.Set;
 final class NumericDomain {
 
     /** A comparison of a {@link LinearForm} against zero. */
-    enum Rel { GE, GT, LE, LT, EQ }
+    enum Rel { GE, GT, LE, LT, EQ, NE }
 
     /** An affine form {@code const + Σ coef·atom} over the domain's atoms. */
     record LinearForm(BigDecimal constant, Map<String, BigDecimal> coefs) {
@@ -97,7 +97,9 @@ final class NumericDomain {
 
     /** The domain refined by asserting {@code f rel 0}. */
     NumericDomain assume(LinearForm f, Rel rel) {
-        if (bottom) {
+        if (bottom || rel == Rel.NE) {
+            // `f != 0` is a disjunction, and the domain holds conjunctions of bounds. Nothing to
+            // record; what settles such a guard is the fact keyed on the comparison itself.
             return this;
         }
         if (rel == Rel.EQ) {
@@ -182,6 +184,9 @@ final class NumericDomain {
         if (rel == Rel.EQ) {
             return proveLe(f, false) && proveLe(f.negate(), false);
         }
+        if (rel == Rel.NE) {
+            return proveLe(f, true) || proveLe(f.negate(), true);   // f < 0, or f > 0
+        }
         return proveLe(negOf(rel) ? f.negate() : f, strictOf(rel));
     }
 
@@ -191,6 +196,9 @@ final class NumericDomain {
     boolean refutes(LinearForm f, Rel rel) {
         if (bottom || rel == Rel.EQ) {
             return false;   // an unreachable path violates nothing; equality is never refuted here
+        }
+        if (rel == Rel.NE) {
+            return entails(f, Rel.EQ);   // proving it equal is proving it not unequal
         }
         return proveLe(negOf(rel) ? f : f.negate(), !strictOf(rel));
     }

@@ -8,6 +8,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -33,9 +34,20 @@ import java.util.function.Function;
  * immutable environment. It is fail-open — any internal error is swallowed so an analysis bug can
  * never reject a valid program.
  */
-final class InvariantChecker {
+public final class InvariantChecker {
 
     record Findings(List<CompileException> errors, List<Diagnostic> warnings) {}
+
+    /**
+     * What this check reads: one behavior's body and the invariants of the types around it, both in
+     * the representation the rules are written at ({@link InliningPolicy#DISCHARGE}) rather than the
+     * one the backend emits from.
+     *
+     * <p>{@code invariants} holds the declarations of the module being checked. A type another module
+     * declares is absent, and its clause is read off the declaration in the settled form — where the
+     * operations have already become the folds they are, so it falls outside the fragment.
+     */
+    public record Source(Ast.Expr body, Map<TypeName, Ast.Expr> invariants) {}
 
     /** A stdlib combinator whose closure (argument {@code closureArg}) is handed each element of its
      * container argument ({@code listArg}) as closure parameter {@code elementParam} — mirrors
@@ -79,12 +91,31 @@ final class InvariantChecker {
     private static final Set<String> SIZE_CALLS =
             Set.of("List.length", "String.length", "Set.size", "Map.size");
 
+    /** Emptiness, by the size call it means. This is not a rule about what an operation does to a
+     * property (spec §invariant-discharge-preservation) but about what a predicate <em>says</em>:
+     * {@code List.isEmpty(xs)} and {@code List.length(xs) == 0} are one statement, so a guard writing
+     * either discharges a clause writing the other. Without it the two would be unrelated, which is
+     * an accident of which one the author reached for. */
+    private static final Map<String, String> EMPTINESS = Map.of(
+            "List.isEmpty", "List.length",
+            "Set.isEmpty", "Set.size",
+            "Map.isEmpty", "Map.size",
+            "String.isEmpty", "String.length");
+
     private final Symbols symbols;
+    private final Map<TypeName, Ast.Expr> dischargeInvariants;
     private final List<CompileException> errors = new ArrayList<>();
     private final List<Diagnostic> warnings = new ArrayList<>();
 
-    private InvariantChecker(Symbols symbols) {
+    private InvariantChecker(Symbols symbols, Map<TypeName, Ast.Expr> dischargeInvariants) {
         this.symbols = symbols;
+        this.dischargeInvariants = dischargeInvariants;
+    }
+
+    /** Every invariant that applies to {@code named}, each in the analysis representation where this
+     * module declares it. */
+    private List<Ast.Expr> invariantsOf(TypeName named, Ast.Data data) {
+        return TypeOps.effectiveInvariants(named, data, symbols, dischargeInvariants::get);
     }
 
     /** What the guards have settled on the current path: numeric relations, and predicates known to
@@ -108,15 +139,19 @@ final class InvariantChecker {
         }
     }
 
-    /** Analyzes one behavior body against its input types. Never throws. */
-    static Findings analyze(Ast.Expr body, Map<String, Type> params, Symbols symbols) {
-        InvariantChecker c = new InvariantChecker(symbols);
+    /** Analyzes one behavior body against its input types. Never throws. A {@code null} source is a
+     * body the analysis representation could not be built for, and is not analyzed at all. */
+    static Findings analyze(Source source, Map<String, Type> params, Symbols symbols) {
+        InvariantChecker c = new InvariantChecker(symbols, source == null ? Map.of() : source.invariants());
+        if (source == null) {
+            return new Findings(c.errors, c.warnings);
+        }
         try {
             Known k = Known.top();
             for (Map.Entry<String, Type> p : params.entrySet()) {
                 k = c.seedParam(p.getKey(), p.getValue(), k);
             }
-            c.walk(body, k, new HashMap<>(params));
+            c.walk(source.body(), k, new HashMap<>(params));
         } catch (RuntimeException _) {
             // fail-open: the run-time invariant check remains the backstop
         }
@@ -229,7 +264,8 @@ final class InvariantChecker {
                             paths.put(fi.name(), p);
                         }
                     }
-                    check(type, new Bindings(forms::get, paths::get), k, nd.pos(), attempted);
+                    check(nd.typeName().denotes(), type, new Bindings(forms::get, paths::get), k,
+                            nd.pos(), attempted);
                 }
             }
             case Ast.Binary bin when isArith(bin.op()) -> {
@@ -238,7 +274,8 @@ final class InvariantChecker {
                     LinearForm value = affineOf(bin, types);
                     if (value != null) {
                         // an arithmetic result is a form, not a location, so it names no path
-                        check(type, new Bindings(name -> "value".equals(name) ? value : null, _ -> null),
+                        check(r.name(), type,
+                                new Bindings(name -> "value".equals(name) ? value : null, _ -> null),
                                 k, bin.pos(), attempted);
                     }
                 }
@@ -256,38 +293,31 @@ final class InvariantChecker {
      * {@code binds}. A definite violation is an error; an unproven one a warning; a fully-discharged
      * or non-expressible invariant is silent. An {@code attempted} construction raises no warning:
      * what the warning reports is a possible abort, and an attempt takes its else branch instead. */
-    private void check(Ast.Data type, Bindings binds, Known k, SourcePos pos, boolean attempted) {
-        List<Ast.Expr> invs = TypeOps.effectiveInvariants(type, symbols);
+    private void check(TypeName named, Ast.Data type, Bindings binds, Known k, SourcePos pos,
+                       boolean attempted) {
+        List<Ast.Expr> invs = invariantsOf(named, type);
         if (invs.isEmpty()) {
             return;
         }
-        Obligations owed = Obligations.none();
+        List<Clause> owed = new ArrayList<>();
         for (Ast.Expr inv : invs) {
-            Obligations o = obligations(inv, binds);
+            List<Clause> o = obligations(inv, binds);
             if (o == null) {
                 return;   // some part is not expressible — leave the whole invariant opaque
             }
-            owed = owed.and(o);
+            owed.addAll(o);
         }
-        NumericDomain dom = withSizeBounds(k.numbers(), owed.numeric());
+        NumericDomain dom = withSizeBounds(k.numbers(), owed);
         boolean possible = false;
-        for (Constraint c : owed.numeric()) {
-            if (dom.refutes(c.form(), c.rel())) {
+        for (Clause c : owed) {
+            if (c.dischargedBy(dom, k.facts())) {
+                continue;
+            }
+            if (c.refutedBy(dom, k.facts())) {
                 reportViolation(type, pos);
                 return;
             }
-            if (!dom.entails(c.form(), c.rel())) {
-                possible = true;
-            }
-        }
-        for (Fact f : owed.predicates()) {
-            if (k.facts().refutes(f.key(), f.positive())) {
-                reportViolation(type, pos);
-                return;
-            }
-            if (!k.facts().entails(f.key(), f.positive())) {
-                possible = true;
-            }
+            possible = true;
         }
         if (possible && !attempted) {
             warnings.add(
@@ -312,30 +342,22 @@ final class InvariantChecker {
      * clause written under {@code Bool.not}. */
     private record Fact(String key, boolean positive) {}
 
-    /** What a construction owes: numeric relations the domain must prove, and predicates the guards
-     * must have settled. */
-    private record Obligations(List<Constraint> numeric, List<Fact> predicates) {
+    /**
+     * One clause of an invariant, and the two ways it can come out: a relation for the domain to
+     * prove, and the key a guard restating it settles. Either may be absent, and where both are
+     * present either one discharging the clause is enough — a guard is written one way and a clause
+     * another, and which of the two routes carries it is not the author's concern.
+     */
+    private record Clause(Constraint numeric, Fact fact) {
 
-        private static final Obligations NONE = new Obligations(List.of(), List.of());
-
-        static Obligations none() {
-            return NONE;
+        boolean dischargedBy(NumericDomain d, PredicateFacts facts) {
+            return numeric != null && d.entails(numeric.form(), numeric.rel())
+                    || fact != null && facts.entails(fact.key(), fact.positive());
         }
 
-        static Obligations of(Constraint c) {
-            return new Obligations(List.of(c), List.of());
-        }
-
-        static Obligations of(Fact f) {
-            return new Obligations(List.of(), List.of(f));
-        }
-
-        Obligations and(Obligations o) {
-            List<Constraint> n = new ArrayList<>(numeric);
-            n.addAll(o.numeric);
-            List<Fact> p = new ArrayList<>(predicates);
-            p.addAll(o.predicates);
-            return new Obligations(n, p);
+        boolean refutedBy(NumericDomain d, PredicateFacts facts) {
+            return numeric != null && d.refutes(numeric.form(), numeric.rel())
+                    || fact != null && facts.refutes(fact.key(), fact.positive());
         }
     }
 
@@ -343,39 +365,50 @@ final class InvariantChecker {
      * being given), or {@code null} if it names nothing this check can carry. A comparison the domain
      * can express is owed to the domain; anything else is owed as a fact, which a guard stating the
      * same thing of the same term settles. */
-    private Obligations obligations(Ast.Expr inv, Bindings binds) {
+    private List<Clause> obligations(Ast.Expr inv, Bindings binds) {
         return obligations(inv, binds, true);
     }
 
-    private Obligations obligations(Ast.Expr inv, Bindings binds, boolean positive) {
+    private List<Clause> obligations(Ast.Expr rawInv, Bindings binds, boolean positive) {
+        Ast.Expr inv = asSizeComparison(rawInv);
         if (inv instanceof Ast.Binary b && b.op() == Ast.BinOp.AND && positive) {
-            Obligations l = obligations(b.left(), binds, true);
-            Obligations r = obligations(b.right(), binds, true);
-            return l == null || r == null ? null : l.and(r);
-        }
-        if (inv instanceof Ast.Binary b && relOf(b.op()) != null) {
-            Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
-            LinearForm la = eff == null ? null : affine(b.left(), resolveLeaf(binds));
-            LinearForm ra = eff == null ? null : affine(b.right(), resolveLeaf(binds));
-            if (la != null && ra != null) {
-                return Obligations.of(new Constraint(la.minus(ra), eff));
+            List<Clause> l = obligations(b.left(), binds, true);
+            List<Clause> r = obligations(b.right(), binds, true);
+            if (l == null || r == null) {
+                return null;
             }
+            List<Clause> both = new ArrayList<>(l);
+            both.addAll(r);
+            return both;
         }
         Ast.Expr under = negated(inv);
         if (under != null) {
             return obligations(under, binds, !positive);
         }
+        Constraint numeric = null;
+        if (inv instanceof Ast.Binary b && relOf(b.op()) != null) {
+            Rel eff = positive ? relOf(b.op()) : negateRel(relOf(b.op()));
+            LinearForm la = eff == null ? null : affine(b.left(), resolveLeaf(binds));
+            LinearForm ra = eff == null ? null : affine(b.right(), resolveLeaf(binds));
+            if (la != null && ra != null) {
+                numeric = new Constraint(la.minus(ra), eff);
+            }
+        }
         String key = termKey(inv, e -> invPath(e, binds), Map.of(), 0);
-        return key == null ? null : Obligations.of(new Fact(key, positive));
+        Fact fact = key == null ? null : new Fact(key, positive);
+        return numeric == null && fact == null ? null : List.of(new Clause(numeric, fact));
     }
 
     /** The domain told that every size atom the constraints name is non-negative. The atom enters the
      * domain only through the clause naming it, so without this the fact a container's size is never
      * negative is not available to discharge a clause that asks only for that. */
-    private static NumericDomain withSizeBounds(NumericDomain d, List<Constraint> constraints) {
+    private static NumericDomain withSizeBounds(NumericDomain d, List<Clause> clauses) {
         NumericDomain out = d;
-        for (Constraint c : constraints) {
-            for (String atom : c.form().coefs().keySet()) {
+        for (Clause clause : clauses) {
+            if (clause.numeric() == null) {
+                continue;
+            }
+            for (String atom : clause.numeric().form().coefs().keySet()) {
                 if (isSizeAtom(atom)) {
                     out = out.assume(LinearForm.atom(atom), Rel.GE);
                 }
@@ -387,35 +420,41 @@ final class InvariantChecker {
     /** Refines {@code k} by asserting {@code cond} (or its negation): a comparison tightens the
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
-    private Known assumeCond(Ast.Expr cond, Known k, Map<String, Type> types, boolean positive) {
+    private Known assumeCond(Ast.Expr rawCond, Known k, Map<String, Type> types, boolean positive) {
+        Ast.Expr cond = asSizeComparison(rawCond);
         // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
         if (cond instanceof Ast.Binary b
                 && (b.op() == Ast.BinOp.AND && positive || b.op() == Ast.BinOp.OR && !positive)) {
             return assumeCond(b.right(), assumeCond(b.left(), k, types, positive), types, positive);
         }
-        if (cond instanceof Ast.Binary b) {
-            Rel rel = relOf(b.op());
-            Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
-            if (eff != null) {
-                LinearForm la = affineOf(b.left(), types);
-                LinearForm ra = affineOf(b.right(), types);
-                if (la != null && ra != null) {
-                    return k.with(k.numbers().assume(la.minus(ra), eff));
-                }
-            }
-        }
         Ast.Expr under = negated(cond);
         if (under != null) {
             return assumeCond(under, k, types, !positive);
         }
+        Known out = k;
+        if (cond instanceof Ast.Binary b) {
+            Rel rel = relOf(b.op());
+            Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
+            LinearForm la = eff == null ? null : affineOf(b.left(), types);
+            LinearForm ra = eff == null ? null : affineOf(b.right(), types);
+            if (la != null && ra != null) {
+                out = out.with(out.numbers().assume(la.minus(ra), eff));
+            }
+        }
+        // Both routes, always: which one carries a clause is decided where the clause is read, and a
+        // guard does not know which that will be.
         String key = termKey(cond, e -> pathKey(e, types), Map.of(), 0);
-        return key == null ? k : k.with(k.facts().assume(key, positive));
+        return key == null ? out : out.with(out.facts().assume(key, positive));
     }
 
     /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an
-     * ordinary helper, so by here it is the body it expands to — {@code if b then false else true},
-     * over a binding holding the argument. */
+     * ordinary helper: the analysis representation keeps it as a call, and a clause read off an
+     * imported declaration is the body it expands to — {@code if b then false else true} over a
+     * binding holding the argument. Both are read. */
     private static Ast.Expr negated(Ast.Expr e) {
+        if (e instanceof Ast.Call call && call.fn().equals("Bool.not") && call.args().size() == 1) {
+            return call.args().get(0);
+        }
         if (e instanceof Ast.LetIn li) {
             Ast.Expr inner = negated(li.body());
             return inner instanceof Ast.Var v && v.name().equals(li.name()) ? li.value() : null;
@@ -456,17 +495,19 @@ final class InvariantChecker {
         Known out = k;
         // Each conjunct on its own: an input's invariant is a set of things that hold, and one the
         // check cannot express does not cost it the others.
-        for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
+        for (Ast.Expr inv : invariantsOf(ref.name(), data)) {
             for (Ast.Expr conjunct : conjuncts(inv)) {
-                Obligations o = obligations(conjunct, binds);
+                List<Clause> o = obligations(conjunct, binds);
                 if (o == null) {
                     continue;
                 }
-                for (Constraint c : o.numeric()) {
-                    out = out.with(out.numbers().assume(c.form(), c.rel()));
-                }
-                for (Fact f : o.predicates()) {
-                    out = out.with(out.facts().assume(f.key(), f.positive()));
+                for (Clause c : o) {
+                    if (c.numeric() != null) {
+                        out = out.with(out.numbers().assume(c.numeric().form(), c.numeric().rel()));
+                    }
+                    if (c.fact() != null) {
+                        out = out.with(out.facts().assume(c.fact().key(), c.fact().positive()));
+                    }
                 }
             }
         }
@@ -579,6 +620,17 @@ final class InvariantChecker {
         }
         String arg = path.apply(call.args().get(0));
         return arg == null ? null : call.fn() + "(" + arg + ")";
+    }
+
+    /** An emptiness check as the comparison it means, or {@code e} unchanged. */
+    private static Ast.Expr asSizeComparison(Ast.Expr e) {
+        if (e instanceof Ast.Call call && call.args().size() == 1
+                && EMPTINESS.containsKey(call.fn())) {
+            Ast.Call size = new Ast.Call(EMPTINESS.get(call.fn()), call.denotes(), call.args(),
+                    call.pos());
+            return new Ast.Binary(Ast.BinOp.EQ, size, new Ast.IntLit(0, call.pos()), call.pos());
+        }
+        return e;
     }
 
     /** The conjuncts of an invariant expression, flattened. */
@@ -802,6 +854,7 @@ final class InvariantChecker {
             case LE -> Rel.LE;
             case LT -> Rel.LT;
             case EQ -> Rel.EQ;
+            case NE -> Rel.NE;
             default -> null;
         };
     }
@@ -812,7 +865,8 @@ final class InvariantChecker {
             case GT -> Rel.LE;
             case LE -> Rel.GT;
             case LT -> Rel.GE;
-            case EQ -> null;
+            case EQ -> Rel.NE;
+            case NE -> Rel.EQ;
         };
     }
 }

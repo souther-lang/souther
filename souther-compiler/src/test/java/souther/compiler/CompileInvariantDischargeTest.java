@@ -90,6 +90,46 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void emptinessAndItsSizeComparisonAreOneStatement() {
+        // `Set.isEmpty(s)` and `Set.size(s) == 0` say one thing, so which the author reached for does
+        // not decide whether the construction discharges
+        String m = """
+                module demo
+                data Empty
+                data Tags = Set<String>
+                    invariant Bool.not(Set.isEmpty(value))
+                behavior build : (s: Set<String>) -> Tags | Empty constructs Tags, Empty
+                let build (s) = {
+                    guard Set.size(s) >= 1
+                        else Empty
+                    Tags(s)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the size guard discharges the emptiness invariant");
+    }
+
+    @Test
+    void theElementAMapHandsItsClosureCarriesItsOwnInvariant() {
+        // The combinator rule for `List.map` binds the closure's parameter to the list's element type
+        // and seeds that type's invariant, so `x >= 0` is known here and the re-wrap discharges. This
+        // only happens if the analysis reads a representation where `List.map` is still `List.map`:
+        // against the tree the backend emits it is a fold, and the rule has nothing to match.
+        String m = """
+                module demo
+                data Money = Decimal
+                    invariant value >= 0m
+                data Positive = Decimal
+                    invariant value >= 0m
+                data Bag = { items: List<Money> }
+                behavior copy : (b: Bag) -> List<Positive> constructs Positive
+                let copy (b) = List.map(x -> Positive(x.value), b.items)
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the element's own invariant discharges the re-wrap");
+    }
+
+    @Test
     void aConstructionInsideAMapClosureIsAnalyzed() {
         // the closure element x: Money carries x >= 0; `x - Money(1m)` can go negative, so it is a
         // possible violation. Without binding the combinator's element parameter the construction

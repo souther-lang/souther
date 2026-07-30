@@ -114,12 +114,13 @@ public final class TypeChecker {
      * around it means — never another body.
      */
     public static Core checkBehavior(Ast.SpecBehavior spec, Ast.FnDef fn, Ast.Expr loweredBody,
+                                     InvariantChecker.Source discharge,
                                      Symbols symbols, Map<String, ReqSig> calleeSigs,
                                      Map<String, ReqSig> reqSigs, HelperInliner inliner,
                                      Map<String, Type> recursiveHelperFns,
                                      Map<String, DataChecker.Constructs> recHelperConstructs,
                                      List<Diagnostic> warnings) {
-        return SpecChecker.checkSpecFn(spec, fn, loweredBody, symbols, calleeSigs, reqSigs,
+        return SpecChecker.checkSpecFn(spec, fn, loweredBody, discharge, symbols, calleeSigs, reqSigs,
                 inliner, recursiveHelperFns, recHelperConstructs, warnings);
     }
 

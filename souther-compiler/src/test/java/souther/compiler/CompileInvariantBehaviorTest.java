@@ -65,6 +65,11 @@ class CompileInvariantBehaviorTest {
      * result expression was railway-bound, so the else branch emitted a bare constructor call.
      * {@code guard} now desugars to {@code if} (spec 16.4) and both branches are tail, so the
      * construction goes through {@code __construct} wherever it sits — and aborts on violation.
+     *
+     * <p>The guard reads the digit count rather than the number, so what the else branch knows says
+     * nothing about {@code cost}. Guarding on the number itself makes the violation decided at
+     * compile time (E2010, spec §invariant-discharge), and there is then no run-time abort left to
+     * pin.
      */
     @Test
     void invariantIsCheckedForAConstructionInsideAGuardElse() throws Exception {
@@ -78,7 +83,8 @@ class CompileInvariantBehaviorTest {
                     constructs Kept, Adjusted
 
                 let adjust (d) = {
-                    guard d.value /= 999 else Adjusted { cost = d.value - 2000 }
+                    guard String.length(String.fromInt(d.value)) /= 3
+                        else Adjusted { cost = d.value - 2000 }
                     Kept { v = d.value }
                 }
                 """;
