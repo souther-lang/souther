@@ -561,6 +561,43 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aLiteralHoldingTheKeysOwnPunctuationIsAnotherTerm() {
+        // one element whose value is `a", "b` is not the two elements `a` and `b`
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a\\", \\"b"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a", "b"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "another list is another fact however its elements are spelled");
+    }
+
+    @Test
+    void aNewlineAndTheTwoCharactersSpellingItAreDifferentTerms() {
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a\\nb"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a\\\\nb"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a newline is not the backslash and the n that spell it");
+    }
+
+    @Test
     void aGuardOnAPatternMatchDischargesTheConstruction() {
         String m = """
                 module demo
@@ -995,5 +1032,82 @@ class CompileInvariantDischargeTest {
                 """;
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
                 "the guard discharges the subtraction");
+    }
+
+    @Test
+    void guardsThatCannotAllHoldLeaveNothingToReport() {
+        // `a <= b`, `b <= 0` and `a >= 1` cannot hold together, so the construction is not reached and
+        // says nothing about the invariant — the bound on `a` is only derivable through the difference
+        String m = """
+                module demo
+                data Ok
+                data AtLeastTwo = Int
+                    invariant value >= 2
+                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo, Ok
+                let build (a, b) = {
+                    guard a <= b
+                        else Ok
+                    guard b <= 0
+                        else Ok
+                    guard a >= 1
+                        else Ok
+                    AtLeastTwo(a)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "an unreachable construction is neither violated nor possibly violated");
+    }
+
+    @Test
+    void theOrderTheContradictingGuardsAreWrittenDoesNotMatter() {
+        String m = """
+                module demo
+                data Ok
+                data AtLeastTwo = Int
+                    invariant value >= 2
+                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo, Ok
+                let build (a, b) = {
+                    guard a >= 1
+                        else Ok
+                    guard b <= 0
+                        else Ok
+                    guard a <= b
+                        else Ok
+                    AtLeastTwo(a)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the difference asserted last closes the same contradiction");
+    }
+
+    @Test
+    void aComparisonAndItsDenialAreOneFact() {
+        // the else branch of `a == b` is where `a /= b` holds
+        String m = """
+                module demo
+                data Ok
+                data Pair = { left: Int, right: Int }
+                    invariant left /= right
+                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair, Ok
+                let build (a, b) =
+                    if a == b then Ok else Pair { left = a, right = b }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "denying the equality states the inequality");
+    }
+
+    @Test
+    void anEqualityIsOneFactWhicheverSideIsWrittenFirst() {
+        String m = """
+                module demo
+                data Ok
+                data Pair = { left: Int, right: Int }
+                    invariant right /= left
+                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair, Ok
+                let build (a, b) =
+                    if a == b then Ok else Pair { left = a, right = b }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "which side of an equality a term is written on is not part of what it says");
     }
 }
