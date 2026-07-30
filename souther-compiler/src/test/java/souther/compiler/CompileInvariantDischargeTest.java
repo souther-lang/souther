@@ -561,6 +561,43 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aLiteralHoldingTheKeysOwnPunctuationIsAnotherTerm() {
+        // one element whose value is `a", "b` is not the two elements `a` and `b`
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a\\", \\"b"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a", "b"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "another list is another fact however its elements are spelled");
+    }
+
+    @Test
+    void aNewlineAndTheTwoCharactersSpellingItAreDifferentTerms() {
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a\\nb"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a\\\\nb"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a newline is not the backslash and the n that spell it");
+    }
+
+    @Test
     void aGuardOnAPatternMatchDischargesTheConstruction() {
         String m = """
                 module demo
@@ -865,6 +902,58 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aClosureBindingOverItsOwnParameterStillCopiesTheField() {
+        // `let r = r` is the identity, so the field is still copied from the element
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { sku: String }
+                data Line = { code: String }
+                data Lines = List<Line>
+                    invariant List.allUniqueBy(.code, value)
+                behavior build : (xs: List<Row>) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(.sku, xs)
+                        else Duplicate
+                    Lines(List.map(r -> {
+                        let r = r
+                        Line { code = r.sku }
+                    }, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "binding a name to itself is the identity, not a name standing for itself");
+    }
+
+    @Test
+    void aFieldReadBeforeTheNameWasReboundIsNotTheElements() {
+        // `a` reads the argument, and the later binding of that name does not reach back into it, so
+        // nothing says the built field came from the element
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { sku: String }
+                data Line = { code: String }
+                data Lines = List<Line>
+                    invariant List.allUniqueBy(.code, value)
+                behavior build : (xs: List<Row>, spare: Row) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs, spare) = {
+                    guard List.allUniqueBy(.sku, xs)
+                        else Duplicate
+                    Lines(List.map(r -> {
+                        let a = spare
+                        let spare = r
+                        Line { code = a.sku }
+                    }, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "the field was copied from the argument, not from the element");
+    }
+
+    @Test
     void aProjectionCarriesToTheFieldItWasCopiedFrom() {
         // the closure renames the field, so uniqueness of the result by `.code` is uniqueness of the
         // input by `.sku`
@@ -995,5 +1084,82 @@ class CompileInvariantDischargeTest {
                 """;
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
                 "the guard discharges the subtraction");
+    }
+
+    @Test
+    void guardsThatCannotAllHoldLeaveNothingToReport() {
+        // `a <= b`, `b <= 0` and `a >= 1` cannot hold together, so the construction is not reached and
+        // says nothing about the invariant — the bound on `a` is only derivable through the difference
+        String m = """
+                module demo
+                data Ok
+                data AtLeastTwo = Int
+                    invariant value >= 2
+                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo, Ok
+                let build (a, b) = {
+                    guard a <= b
+                        else Ok
+                    guard b <= 0
+                        else Ok
+                    guard a >= 1
+                        else Ok
+                    AtLeastTwo(a)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "an unreachable construction is neither violated nor possibly violated");
+    }
+
+    @Test
+    void theOrderTheContradictingGuardsAreWrittenDoesNotMatter() {
+        String m = """
+                module demo
+                data Ok
+                data AtLeastTwo = Int
+                    invariant value >= 2
+                behavior build : (a: Int, b: Int) -> AtLeastTwo | Ok constructs AtLeastTwo, Ok
+                let build (a, b) = {
+                    guard a >= 1
+                        else Ok
+                    guard b <= 0
+                        else Ok
+                    guard a <= b
+                        else Ok
+                    AtLeastTwo(a)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the difference asserted last closes the same contradiction");
+    }
+
+    @Test
+    void aComparisonAndItsDenialAreOneFact() {
+        // the else branch of `a == b` is where `a /= b` holds
+        String m = """
+                module demo
+                data Ok
+                data Pair = { left: Int, right: Int }
+                    invariant left /= right
+                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair, Ok
+                let build (a, b) =
+                    if a == b then Ok else Pair { left = a, right = b }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "denying the equality states the inequality");
+    }
+
+    @Test
+    void anEqualityIsOneFactWhicheverSideIsWrittenFirst() {
+        String m = """
+                module demo
+                data Ok
+                data Pair = { left: Int, right: Int }
+                    invariant right /= left
+                behavior build : (a: Int, b: Int) -> Pair | Ok constructs Pair, Ok
+                let build (a, b) =
+                    if a == b then Ok else Pair { left = a, right = b }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "which side of an equality a term is written on is not part of what it says");
     }
 }

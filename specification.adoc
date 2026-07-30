@@ -944,6 +944,8 @@ The check is intraprocedural. Within a behavior's `+let+` body it seeds what the
 * *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
 * *Not expressible* — an invariant outside the checked fragment. No diagnostic; the run-time check stands.
 
+Guards that cannot all hold describe a path the behavior does not take, and a construction standing on one is neither of the middle two: nothing is built there, so nothing is reported. That the guards contradict is itself derived over the same fragment — `+a <= b+` with `+b <= 0+` bounds `+a+` above without a word about `+a+` — so a path is dead whenever the relations say so, whatever order they were written in.
+
 [,text]
 ----
 data Money = Decimal invariant value >= 0m
@@ -1077,7 +1079,7 @@ let build (rows) = {
 }
 ----
 
-Two clauses are one thing exactly when they are the same expression over the same terms. Nothing relates two different ones — uniqueness by `+.product+` says nothing about uniqueness by `+.sku+`, and one pattern says nothing about another. What a binding is *called* is not part of the expression, so `+r -> r.product+`, `+row -> row.product+` and `+.product+` state one thing; a name the closure reads from outside it is part of the expression, so bounding by one field is not bounding by another.
+Two clauses are one thing exactly when they are the same expression over the same terms. Nothing relates two different ones — uniqueness by `+.product+` says nothing about uniqueness by `+.sku+`, and one pattern says nothing about another. What a binding is *called* is not part of the expression, so `+r -> r.product+`, `+row -> row.product+` and `+.product+` state one thing; a name the closure reads from outside it is part of the expression, so bounding by one field is not bounding by another. Which of the six comparisons an author reached for is not part of it either: `+a /= b+` is `+a == b+` denied, `+a >= b+` is `+a < b+` denied, and which side of an equality a term is written on says nothing — so a `+guard+` on `+a == b+` discharges a clause reading `+b /= a+` where it departs.
 
 This is what a clause outside the derived fragment falls back to, whatever its shape. A comparison over a value the procedure cannot name is settled the same way, which is why `+guard+`-ing it verbatim discharges the construction.
 

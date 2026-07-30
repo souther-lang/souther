@@ -600,8 +600,10 @@ public final class InvariantChecker {
                 numeric = new Constraint(la.minus(ra), eff);
             }
         }
-        List<String> keys = factKeys(inv, binds);
-        Fact fact = keys.isEmpty() ? null : new Fact(positive ? keys : firstOnly(keys), positive);
+        Polar polar = polar(inv, positive);
+        List<String> keys = factKeys(polar.expr(), binds);
+        boolean stated = polar.positive();
+        Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
         if (numeric == null && fact == null) {
             return null;
         }
@@ -646,8 +648,36 @@ public final class InvariantChecker {
         }
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
-        String key = bodyKey(cond, types);
-        return key == null ? out : out.with(out.facts().assume(key, positive));
+        Polar polar = polar(cond, positive);
+        String key = bodyKey(polar.expr(), types);
+        return key == null ? out : out.with(out.facts().assume(key, polar.positive()));
+    }
+
+    /** A predicate as one of {@code ==}/{@code <} states it, and whether it is being stated or denied. */
+    private record Polar(Ast.Expr expr, boolean positive) {}
+
+    /**
+     * {@code e}, asserted with polarity {@code positive}, as the comparison of {@code ==} or {@code <}
+     * that says the same thing: {@code a /= b} is {@code a == b} denied, {@code a >= b} is
+     * {@code a < b} denied, and {@code a > b} is {@code b < a}. A fact is settled by key equality, so
+     * without this the six ways to compare two terms are six facts, and a guard written one way would
+     * leave a clause written the other unsettled.
+     */
+    private static Polar polar(Ast.Expr e, boolean positive) {
+        if (!(e instanceof Ast.Binary b) || relOf(b.op()) == null) {
+            return new Polar(e, positive);
+        }
+        return switch (b.op()) {
+            case NE -> new Polar(comparison(Ast.BinOp.EQ, b.left(), b.right(), b), !positive);
+            case GE -> new Polar(comparison(Ast.BinOp.LT, b.left(), b.right(), b), !positive);
+            case GT -> new Polar(comparison(Ast.BinOp.LT, b.right(), b.left(), b), positive);
+            case LE -> new Polar(comparison(Ast.BinOp.LT, b.right(), b.left(), b), !positive);
+            default -> new Polar(e, positive);
+        };
+    }
+
+    private static Ast.Binary comparison(Ast.BinOp op, Ast.Expr left, Ast.Expr right, Ast.Binary of) {
+        return new Ast.Binary(op, left, right, of.pos());
     }
 
     /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an
@@ -1036,8 +1066,13 @@ public final class InvariantChecker {
         if (built.shape() != Shape.MAPS || at == null || at >= stated.args().size()) {
             return null;
         }
-        Ast.Expr closure = inner.args().size() > 1 - built.from() ? inner.args().get(1 - built.from()) : null;
-        Ast.Expr traced = closure == null ? null : projectionThrough(stated.args().get(at), closure);
+        // Where the mapping's closure is written is already stated once, by the table that says which
+        // argument each combinator hands its elements to.
+        Combinator combo = COMBINATORS.get(inner.fn());
+        if (combo == null || combo.closureArg() >= inner.args().size()) {
+            return null;
+        }
+        Ast.Expr traced = projectionThrough(stated.args().get(at), inner.args().get(combo.closureArg()));
         return traced == null ? null : withArg(stated, at, traced);
     }
 
@@ -1055,16 +1090,16 @@ public final class InvariantChecker {
                 || !(closure instanceof Ast.Block step) || step.params().size() != 1) {
             return null;
         }
-        Map<String, Ast.Expr> bound = new HashMap<>();
         String element = step.params().get(0);
-        List<String> read = chain(proj.body(), proj.params().get(0), new HashMap<>());
+        List<String> read = new Reads(proj.params().get(0)).chain(proj.body());
         if (read == null) {
             return null;
         }
-        Ast.Expr made = through(step.body(), bound);
+        Reads reads = new Reads(element);
+        Ast.Expr made = reads.produced(step.body());
         List<String> traced;
         if (read.isEmpty()) {
-            traced = chain(made, element, bound);   // the closure hands the element straight back
+            traced = reads.chain(made);   // the closure hands the element straight back
         } else {
             if (!(made instanceof Ast.NewData nd) || !nd.spreads().isEmpty()) {
                 return null;
@@ -1072,7 +1107,7 @@ public final class InvariantChecker {
             List<String> copied = null;
             for (Ast.FieldInit fi : nd.inits()) {
                 if (fi.name().equals(read.get(0))) {
-                    copied = chain(fi.value(), element, bound);
+                    copied = reads.chain(fi.value());
                 }
             }
             if (copied == null) {
@@ -1091,29 +1126,58 @@ public final class InvariantChecker {
         return new Ast.Block(List.of(element), on, step.pos());
     }
 
-    /** {@code e} with the bindings an expansion introduced read through — a helper spliced into a
-     * closure is {@code let $0_r = r in ...}, and what it builds is inside that. */
-    private static Ast.Expr through(Ast.Expr e, Map<String, Ast.Expr> bound) {
-        Ast.Expr cur = e;
-        while (cur instanceof Ast.LetIn li) {
-            bound.put(li.name(), li.value());
-            cur = li.body();
-        }
-        if (cur instanceof Ast.Var v && bound.containsKey(v.name())) {
-            return through(bound.get(v.name()), bound);
-        }
-        return cur;
-    }
+    /**
+     * What the names in a closure read off the element it is handed: a field chain, or nothing this
+     * trace can follow. A binding introduces what it reads <em>where it is written</em> — an expansion
+     * splices {@code let $0_r = r in ...} into a closure, and the closure may bind over its own
+     * parameter or over a name an earlier binding read — so what a name denotes is settled against the
+     * bindings before it and not reread later. Keeping the expression instead and substituting by
+     * spelling cannot say that: {@code let r = r} would stand for itself, which is the identity here
+     * and an endless walk there.
+     */
+    private static final class Reads {
 
-    /** The field chain {@code e} reads off {@code root}, or {@code null} if it reads anything else. */
-    private static List<String> chain(Ast.Expr e, String root, Map<String, Ast.Expr> bound) {
-        List<String> fields = new ArrayList<>();
-        Ast.Expr cur = through(e, bound);
-        while (cur instanceof Ast.FieldAccess fa) {
-            fields.add(0, fa.field());
-            cur = through(fa.target(), bound);
+        private final String element;
+        private final Map<String, List<String>> chains = new HashMap<>();
+
+        private Reads(String element) {
+            this.element = element;
         }
-        return cur instanceof Ast.Var v && v.name().equals(root) ? fields : null;
+
+        /** The expression the body produces, with what the bindings on the way there read taken in. */
+        Ast.Expr produced(Ast.Expr body) {
+            Ast.Expr cur = body;
+            while (cur instanceof Ast.LetIn li) {
+                List<String> read = chain(li.value());
+                chains.put(li.name(), read);
+                cur = li.body();
+            }
+            return cur;
+        }
+
+        /** The chain {@code e} reads off the element, or {@code null} if it reads anything else. */
+        List<String> chain(Ast.Expr e) {
+            return switch (e) {
+                case Ast.LetIn li -> {
+                    Reads inner = new Reads(element);
+                    inner.chains.putAll(chains);
+                    inner.chains.put(li.name(), chain(li.value()));
+                    yield inner.chain(li.body());
+                }
+                case Ast.FieldAccess fa -> {
+                    List<String> head = chain(fa.target());
+                    if (head == null) {
+                        yield null;
+                    }
+                    List<String> out = new ArrayList<>(head);
+                    out.add(fa.field());
+                    yield out;
+                }
+                case Ast.Var v when chains.containsKey(v.name()) -> chains.get(v.name());
+                case Ast.Var v -> v.name().equals(element) ? List.of() : null;
+                default -> null;
+            };
+        }
     }
 
     /** The clause's naming rule with one argument already named: what lets a key hold a term of the
@@ -1175,13 +1239,13 @@ public final class InvariantChecker {
         return switch (e) {
             case Ast.IntLit i -> Long.toString(i.value());
             case Ast.DecimalLit d -> d.value().toPlainString() + "m";
-            case Ast.StringLit s -> "\"" + s.value() + "\"";
+            case Ast.StringLit s -> quoted(s.value());
             case Ast.BoolLit b -> Boolean.toString(b.value());
             case Ast.Neg n -> wrap("-", termKey(n.operand(), site, bound, depth));
             case Ast.Binary b -> {
                 String l = termKey(b.left(), site, bound, depth);
                 String r = termKey(b.right(), site, bound, depth);
-                yield l == null || r == null ? null : "(" + l + " " + b.op() + " " + r + ")";
+                yield l == null || r == null ? null : binaryKey(b.op(), l, r);
             }
             case Ast.ListLit l -> elementsKey("[", l.elements(), site, bound, depth, "]");
             case Ast.Tuple t -> elementsKey("(", t.elements(), site, bound, depth, ")");
@@ -1242,6 +1306,35 @@ public final class InvariantChecker {
             sb.append(i == 0 ? "" : ", ").append(part);
         }
         return sb.append(close).toString();
+    }
+
+    /**
+     * A binary as a key. The six comparisons are two: {@code ==} over the pair in a settled order,
+     * since which side is written first is not part of what it says, and {@code <}, with the other
+     * three written as one of those denied. Two clauses comparing the same two terms are then one term
+     * however the author reached for it — which matters wherever the comparison is not the whole
+     * condition, since only there can the denial not be carried by the polarity instead.
+     */
+    private static String binaryKey(Ast.BinOp op, String l, String r) {
+        return switch (op) {
+            case EQ -> l.compareTo(r) <= 0 ? cmp("EQ", l, r) : cmp("EQ", r, l);
+            case NE -> "!" + binaryKey(Ast.BinOp.EQ, l, r);
+            case LT -> cmp("LT", l, r);
+            case GT -> cmp("LT", r, l);
+            case GE -> "!" + cmp("LT", l, r);
+            case LE -> "!" + cmp("LT", r, l);
+            default -> cmp(op.toString(), l, r);
+        };
+    }
+
+    private static String cmp(String op, String l, String r) {
+        return "(" + l + " " + op + " " + r + ")";
+    }
+
+    /** A string value written into a key with the punctuation the key itself uses escaped, so a value
+     * holding a quote or a comma cannot be read back as a different expression. */
+    private static String quoted(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     private static String wrap(String prefix, String inner) {
