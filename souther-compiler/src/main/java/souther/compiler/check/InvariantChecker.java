@@ -212,7 +212,7 @@ public final class InvariantChecker {
         Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
         Bindings binds = Bindings.ofPaths(
                 name -> fields.containsKey(name) ? LinearForm.atom(name) : null,
-                name -> fields.containsKey(name) ? name : null);
+                name -> fields.containsKey(name) ? name : null, fields);
         List<Clause> owed;
         try {
             owed = c.obligations(clause, binds);
