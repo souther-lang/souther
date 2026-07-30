@@ -503,8 +503,10 @@ public final class Bodies {
      * the reader never imported arrives because the body it was published inside calls it. The reader
      * emits them as its own methods (see {@link Shapes.Prepared}).
      *
-     * <p>Read from the imports of the desugared module rather than the settled one, so that settling
-     * can read this: what a module imports is written down and is not something settling decides.
+     * <p>Read from the imports of the resolved module, which is the earliest answer carrying them.
+     * What a module imports is written down and is not something desugaring or settling decides, so
+     * reading it there is what leaves every later stage free to read this — {@link Shapes.Derived}
+     * among them, which settles the invariants and would ask through itself for any answer below it.
      */
     public record ImportedDefinitions(String name) implements Key<Map<String, Ast.FnDef>> {
         @Override
@@ -520,12 +522,12 @@ public final class Bodies {
             if (Names.cyclic(db, name)) {
                 return Answer.absent();
             }
-            Answer<Ast.Module> desugared = db.ask(new Shapes.Desugared(name));
-            if (!desugared.present()) {
+            Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
+            if (!resolved.present()) {
                 return Answer.absent();
             }
             Map<String, Ast.FnDef> out = new LinkedHashMap<>();
-            for (Ast.Import imp : desugared.value().imports()) {
+            for (Ast.Import imp : resolved.value().imports()) {
                 Answer<Ast.Module> from = db.ask(new Settled(imp.module()));
                 // Closed against everything the declaring module can name, not only what it declares:
                 // a published body may call a helper that module imported in turn, and a chain of

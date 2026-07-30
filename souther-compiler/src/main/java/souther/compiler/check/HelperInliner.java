@@ -102,10 +102,23 @@ public final class HelperInliner {
      * a module's own helper is expanded, and a recursive call is left standing, by the same rules.
      */
     public static HelperInliner forHelpers(Map<String, Ast.FnDef> own, InliningPolicy policy) {
+        return forHelpers(own, Map.of(), policy);
+    }
+
+    /**
+     * The same, with the definitions other modules publish to this one joining the table.
+     *
+     * <p>They are in the table and not in {@code own}, as they are for {@link #forModule}: an imported
+     * definition is one this module expands and not one it declares.
+     */
+    public static HelperInliner forHelpers(Map<String, Ast.FnDef> own,
+                                           Map<String, Ast.FnDef> imported, InliningPolicy policy) {
         // In the order they are written, so a module with two helpers to complain about complains
         // about the earlier one first.
+        Map<String, Ast.FnDef> joined = new LinkedHashMap<>(imported);
+        joined.putAll(own);
         Map<String, Ast.FnDef> table = policy == InliningPolicy.FULL
-                ? withPrelude(own) : new LinkedHashMap<>(own);
+                ? withPrelude(joined) : joined;
         HelperInliner inliner = new HelperInliner(table, new LinkedHashMap<>(own));
         inliner.classifyRecursion();
         inliner.rejectValueCycles();
@@ -374,14 +387,7 @@ public final class HelperInliner {
                     : new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
                             qualifyForeign(fn.body(), m.name()), fn.partial(), fn.pos()));
         }
-        List<Ast.Def> defs = new ArrayList<>();
-        for (Ast.Def def : m.defs()) {
-            defs.add(def instanceof Ast.Data d && !d.invariants().isEmpty()
-                    ? new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
-                            Ast.mapClauses(d.invariants(), inv -> qualifyForeign(inv, m.name())),
-                            d.decoder(), d.encoder(), d.pos())
-                    : def);
-        }
+        List<Ast.Def> defs = qualifiedInvariants(m);
         List<Ast.Example> examples = new ArrayList<>();
         for (Ast.Example ex : m.examples()) {
             List<Ast.ExampleRow> rows = new ArrayList<>();
@@ -417,6 +423,31 @@ public final class HelperInliner {
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
                 m.behaviors(), fns, examples, fakes, m.exampleFileTarget(), m.pos());
+    }
+
+    /** {@code m} with the foreign names in its invariants written qualified, and nothing else
+     * changed. An invariant is read before the bodies are — settled here, classified for discharge
+     * there — so this is the part of {@link #qualifyImports} that has to be available on its own. */
+    public static Ast.Module withQualifiedInvariants(Ast.Module m) {
+        List<Ast.Def> defs = qualifiedInvariants(m);
+        return defs.equals(m.defs()) ? m
+                : new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), defs,
+                        m.behaviors(), m.fns(), m.examples(), m.fakes(), m.exampleFileTarget(),
+                        m.pos());
+    }
+
+    /** {@code m}'s declarations with every name in an invariant that denotes another module's
+     * definition written qualified. */
+    private static List<Ast.Def> qualifiedInvariants(Ast.Module m) {
+        List<Ast.Def> defs = new ArrayList<>();
+        for (Ast.Def def : m.defs()) {
+            defs.add(def instanceof Ast.Data d && !d.invariants().isEmpty()
+                    ? new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
+                            Ast.mapClauses(d.invariants(), inv -> qualifyForeign(inv, m.name())),
+                            d.decoder(), d.encoder(), d.pos())
+                    : def);
+        }
+        return defs;
     }
 
     /** {@code e} with every name denoting a helper of a module other than {@code self} written
@@ -530,10 +561,18 @@ public final class HelperInliner {
      *
      * <p>An invariant is pure and cannot call an injected behavior (spec §invariant-expressions), so
      * nothing here needs the injected signatures to settle the helpers an invariant reaches.
+     *
+     * <p>{@code published} is what the modules this one imports offer it. An invariant names what is
+     * in scope where it is written, and an imported definition is in scope there as it is in a body; it
+     * is substituted here for the reason a body's is, so what the invariant carries afterwards names
+     * nothing of the module that declared it. The names are written qualified first, because that is
+     * the spelling the table is keyed by — {@link #qualifyImports} does it again for the bodies below,
+     * and says the same thing both times.
      */
-    public static Ast.Module withSettledInvariants(Ast.Module m, Symbols symbols) {
-        Ast.Module settled = HelperParams.settle(m, symbols, Map.of());
-        return forModule(settled).withInlinedInvariants(settled);
+    public static Ast.Module withSettledInvariants(Ast.Module m, Symbols symbols,
+                                                   Map<String, Ast.FnDef> published) {
+        Ast.Module settled = withQualifiedInvariants(HelperParams.settle(m, symbols, Map.of()));
+        return forModule(settled, published).withInlinedInvariants(settled);
     }
 
     /**
@@ -543,19 +582,21 @@ public final class HelperInliner {
      */
     /**
      * Each declaration's invariant in the representation the invariant-discharge analysis reads: the
-     * module's own helpers expanded, the language's own operations left standing
+     * helpers it can name expanded, the language's own operations left standing
      * ({@link InliningPolicy#DISCHARGE}). Keyed by the declaration's name in {@code m}.
      *
-     * <p>This is the same settling {@link #withSettledInvariants} does, stopped one step earlier. The
-     * settled form is what travels to an importer and what the backend emits; an importer therefore
-     * reads an imported invariant in the settled form and finds nothing here for it, which is where
-     * an imported clause falls outside the statically dischargeable fragment (spec
+     * <p>This is the same settling {@link #withSettledInvariants} does, stopped one step earlier, and
+     * it reads the same table: what the clause names is substituted whether this module declared it or
+     * imported it. The settled form is what travels to an importer and what the backend emits; an
+     * importer therefore reads an imported invariant in the settled form and finds nothing here for
+     * it, which is where an imported clause falls outside the statically dischargeable fragment (spec
      * §invariant-discharge).
      */
     public static Map<TypeName, List<Ast.InvariantClause>> invariantsForDischarge(
-            Ast.Module m, Symbols symbols) {
-        Ast.Module settled = HelperParams.settle(m, symbols, Map.of());
-        HelperInliner inliner = forHelpers(helpersOf(settled), InliningPolicy.DISCHARGE);
+            Ast.Module m, Symbols symbols, Map<String, Ast.FnDef> published) {
+        Ast.Module settled = withQualifiedInvariants(HelperParams.settle(m, symbols, Map.of()));
+        HelperInliner inliner =
+                forHelpers(helpersOf(settled), published, InliningPolicy.DISCHARGE);
         Map<TypeName, List<Ast.InvariantClause>> out = new LinkedHashMap<>();
         for (Ast.Def def : settled.defs()) {
             if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
