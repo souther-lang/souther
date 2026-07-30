@@ -17,11 +17,29 @@ import java.util.Optional;
  * behavior's tail) because CTFE either passes it or rejects it as a compile error.
  *
  * <p>The supported fragment covers constant arguments and simple sub-expressions: literals,
- * arithmetic, negation, comparison, logic, and {@code String.length} / {@code contains}. Anything
- * outside it folds to empty, which the caller treats as "not a compile-time constant".
+ * arithmetic, negation, comparison, logic, string concatenation, and {@code String.length} /
+ * {@code contains}. Anything outside it folds to empty, which the caller treats as "not a
+ * compile-time constant".
+ *
+ * <p>This is where "known at compile time" is decided, for every position that demands it — a
+ * {@code String.matches} pattern is one, and both the check that compiles the regex and the codec
+ * derivation that carries it to the boundary ask here rather than each recognising its own set of
+ * expressions (issue #208).
+ *
+ * <p>It folds a tree; it does not resolve names. A name reaches here already standing for what it
+ * denotes — a module's value is substituted by {@link HelperInliner} before an invariant or a body is
+ * read — so a {@code let} whose body is constant folds, and a parameter or a field read does not.
  */
-final class ConstEval {
+public final class ConstEval {
     private ConstEval() {}
+
+    /**
+     * The string {@code e} evaluates to at compile time, or empty when it does not evaluate to one:
+     * what a position accepting a written string but not a computed one is asking about.
+     */
+    public static Optional<String> evalString(Ast.Expr e) {
+        return eval(e).filter(String.class::isInstance).map(String.class::cast);
+    }
 
     /** Folds {@code e} to its constant value, or empty when it is not a compile-time constant. */
     static Optional<Object> eval(Ast.Expr e) {
@@ -64,9 +82,12 @@ final class ConstEval {
             case NE -> Optional.of(!a.equals(b));
             case LT, LE, GT, GE -> compare(bin.op(), a, b);
             case ADD, SUB, MUL -> arith(bin.op(), a, b);
-            // `/` is left to the run-time check (it aborts on a zero divisor, and Decimal `/` rounds);
-            // lists are not folded either.
-            case DIV, CONCAT -> Optional.empty();
+            // `++` appends two strings or two lists (spec 18.1); the string case folds, and a list is
+            // not a constant here to begin with.
+            case CONCAT -> a instanceof String x && b instanceof String y
+                    ? Optional.of(x + y) : Optional.empty();
+            // `/` is left to the run-time check (it aborts on a zero divisor, and Decimal `/` rounds).
+            case DIV -> Optional.empty();
         };
     }
 
