@@ -1,8 +1,10 @@
 package souther.compiler.check;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -15,11 +17,11 @@ import java.util.Set;
  * <p>This is the decision procedure the invariant-discharge check runs on: {@link #assume} tightens
  * the domain along a {@code guard}/{@code if} guard or an input newtype's invariant, and
  * {@link #entails} / {@link #refutes} answer whether a construction's invariant is discharged or is
- * definitely violated on the current path. It is deliberately bounded to interval + difference-bound;
- * an invariant the checker cannot express here is left opaque (its runtime check stays), so the set of
- * facts it can prove is exactly the set of guards a user can write to discharge them (spec
- * §invariant-discharge). Instances are immutable — each operation returns a fresh domain, threaded
- * functionally like {@code TotalityChecker}'s scope map.
+ * definitely violated on the current path. What it derives is bounded to interval + difference-bound;
+ * a form of neither shape is kept as it was written, so a guard restating an invariant still
+ * discharges it even where nothing can be derived from the two together (spec §invariant-discharge).
+ * Instances are immutable — each operation returns a fresh domain, threaded functionally like
+ * {@code TotalityChecker}'s scope map.
  */
 final class NumericDomain {
 
@@ -64,21 +66,27 @@ final class NumericDomain {
         }
     }
 
+    /** A form asserted {@code f <= 0} (or {@code f < 0}) and kept as written, because its shape is
+     * neither an interval nor a difference. */
+    private record Asserted(LinearForm f, boolean strict) {}
+
     private final boolean bottom;                              // an infeasible path (guards contradict)
     private final Map<String, BigDecimal> lo;                  // atom -> lower bound (null key absent = -inf)
     private final Map<String, BigDecimal> hi;                  // atom -> upper bound (absent = +inf)
     private final Map<String, Map<String, BigDecimal>> diff;   // diff[a][b] = tightest known (a - b)
+    private final List<Asserted> kept;                         // forms outside both shapes, as written
 
     private NumericDomain(boolean bottom, Map<String, BigDecimal> lo, Map<String, BigDecimal> hi,
-                          Map<String, Map<String, BigDecimal>> diff) {
+                          Map<String, Map<String, BigDecimal>> diff, List<Asserted> kept) {
         this.bottom = bottom;
         this.lo = lo;
         this.hi = hi;
         this.diff = diff;
+        this.kept = kept;
     }
 
     static NumericDomain top() {
-        return new NumericDomain(false, Map.of(), Map.of(), Map.of());
+        return new NumericDomain(false, Map.of(), Map.of(), Map.of(), List.of());
     }
 
     boolean isBottom() {
@@ -87,8 +95,7 @@ final class NumericDomain {
 
     // --- assume: tighten along `f rel 0` -------------------------------------------------------
 
-    /** The domain refined by asserting {@code f rel 0}. Non-difference, non-interval forms are not
-     * representable and leave the domain unchanged (sound: it stays weaker, never wrongly tighter). */
+    /** The domain refined by asserting {@code f rel 0}. */
     NumericDomain assume(LinearForm f, Rel rel) {
         if (bottom) {
             return this;
@@ -100,10 +107,10 @@ final class NumericDomain {
         return addLe(negOf(rel) ? f.negate() : f, strictOf(rel));
     }
 
-    /** Assert {@code g <= 0} (or {@code g < 0} when strict), updating an interval or a difference. A
-     * form outside the interval/difference fragment is not representable and leaves the domain
-     * unchanged (sound). Strictness only sharpens the constant case; for an interval or difference a
-     * strict {@code < 0} is recorded as {@code <= 0} (weaker, so still sound). */
+    /** Assert {@code g <= 0} (or {@code g < 0} when strict), updating an interval or a difference, or
+     * keeping the form as written when it is neither. Strictness only sharpens the constant case; for
+     * an interval or difference a strict {@code < 0} is recorded as {@code <= 0} (weaker, so still
+     * sound). */
     private NumericDomain addLe(LinearForm g, boolean strict) {
         Map<String, BigDecimal> c = g.coefs();
         if (c.isEmpty()) {
@@ -128,7 +135,11 @@ final class NumericDomain {
         if (ab != null) {
             return withDiff(ab[0], ab[1], g.constant().negate());   // a - b <= -const
         }
-        return this;   // not representable — leave unchanged (sound)
+        // Neither shape holds it — a sum of two lengths, say. Keeping the form as written is what lets
+        // a guard restating an invariant discharge it, which is the promise the flagging rests on.
+        List<Asserted> next = new ArrayList<>(kept);
+        next.add(new Asserted(g, strict));
+        return new NumericDomain(false, lo, hi, diff, List.copyOf(next));
     }
 
     /** The two atoms of a unit difference {@code {a:+1, b:-1}} as {@code {a, b}}, or {@code null} if
@@ -204,6 +215,18 @@ final class NumericDomain {
                 }
             }
         }
+        // A form kept as written proves `g <= 0` when g is that form plus a constant no greater than
+        // zero: asserting `f <= 0` gives `f + c <= 0` for every `c <= 0`.
+        for (Asserted a : kept) {
+            LinearForm slack = g.minus(a.f());
+            if (!slack.coefs().isEmpty()) {
+                continue;
+            }
+            int s = slack.constant().signum();
+            if (s < 0 || (s == 0 && (!strict || a.strict()))) {
+                return true;
+            }
+        }
         return false;
     }
 
@@ -247,40 +270,52 @@ final class NumericDomain {
     }
 
     private NumericDomain forget(String atom) {
+        return forgetIf(atom::equals);
+    }
+
+    /** The domain with every fact about a matching atom dropped. A binding that rebinds a name
+     * invalidates each atom rooted at it — the name now denotes something else — and the caller,
+     * which owns the atom-key syntax, decides which those are. */
+    NumericDomain forgetIf(java.util.function.Predicate<String> drop) {
+        if (bottom) {
+            return this;
+        }
         Map<String, BigDecimal> nlo = new HashMap<>(lo);
         Map<String, BigDecimal> nhi = new HashMap<>(hi);
-        nlo.remove(atom);
-        nhi.remove(atom);
+        nlo.keySet().removeIf(drop);
+        nhi.keySet().removeIf(drop);
         Map<String, Map<String, BigDecimal>> nd = new HashMap<>();
         diff.forEach((a, row) -> {
-            if (!a.equals(atom)) {
+            if (!drop.test(a)) {
                 Map<String, BigDecimal> nr = new HashMap<>(row);
-                nr.remove(atom);
+                nr.keySet().removeIf(drop);
                 if (!nr.isEmpty()) {
                     nd.put(a, nr);
                 }
             }
         });
-        return new NumericDomain(false, nlo, nhi, nd);
+        List<Asserted> nk = new ArrayList<>(kept);
+        nk.removeIf(a -> a.f().coefs().keySet().stream().anyMatch(drop));
+        return new NumericDomain(false, nlo, nhi, nd, List.copyOf(nk));
     }
 
     // --- immutable updates ---------------------------------------------------------------------
 
     private NumericDomain bottom() {
-        return new NumericDomain(true, Map.of(), Map.of(), Map.of());
+        return new NumericDomain(true, Map.of(), Map.of(), Map.of(), List.of());
     }
 
     private NumericDomain withHi(String a, BigDecimal bound) {
         Map<String, BigDecimal> nhi = new HashMap<>(hi);
         nhi.merge(a, bound, NumericDomain::min);
-        NumericDomain d = new NumericDomain(false, lo, nhi, diff);
+        NumericDomain d = new NumericDomain(false, lo, nhi, diff, kept);
         return d.feasible(a) ? d : bottom();
     }
 
     private NumericDomain withLo(String a, BigDecimal bound) {
         Map<String, BigDecimal> nlo = new HashMap<>(lo);
         nlo.merge(a, bound, NumericDomain::max);
-        NumericDomain d = new NumericDomain(false, nlo, hi, diff);
+        NumericDomain d = new NumericDomain(false, nlo, hi, diff, kept);
         return d.feasible(a) ? d : bottom();
     }
 
@@ -288,7 +323,7 @@ final class NumericDomain {
         Map<String, Map<String, BigDecimal>> nd = new HashMap<>();
         diff.forEach((k, v) -> nd.put(k, new HashMap<>(v)));
         nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, NumericDomain::min);
-        NumericDomain d = new NumericDomain(false, lo, hi, nd);
+        NumericDomain d = new NumericDomain(false, lo, hi, nd, kept);
         // Contradictory guards make the path infeasible: with a - b <= bound now recorded, if the
         // difference facts also prove b - a <= back and bound + back < 0, then 0 <= bound + back < 0.
         // Mark it bottom so entails discharges everything and refutes fires nothing — no false E2010
