@@ -1945,7 +1945,7 @@ example 変換する
 
 What a row may name is a property of the value graph, not of one definition's text: a value is *fixture-evaluable* when its body is a literal, a construction, a spread, `+Set.fromList+` / `+Map.fromList+` over one, a helper applied to those, or a reference to another fixture-evaluable value. So a chain of values holds even though each link names the next. A value that reaches itself has no fixture to be, and is reported as the cycle it is.
 
-A row may also *apply a helper* — the rule the row is about — wherever a fixture value is written: an input, an expected result, a `+with+` value, a `+fake+` table's inputs and outputs, a record field, a list element, a map key or value, and an argument of another helper application. The helper is *run*, as the module that compiled it runs it, and the value it returns is read back into the form a fixture is written in, so what encloses the application is built the one way. Its arguments are fixtures like any others, so a fixture that breaks the argument type's invariant is <<e1903>>.
+A row may also *apply a helper* — the rule the row is about — wherever a fixture value is written: an input, an expected result, a `+with+` value, a `+fake+` table's inputs and outputs, a record field, a list element, a map key or value, and an argument of another helper application. The helper is *run*, as the module that compiled it runs it, and the value it returns is read back into the form a fixture is written in, so what encloses the application is built the one way. Where nothing encloses it — the application is the whole of an expected result, or the whole of a value the row names — the row asserts the value the helper answered with, and which case that is comes from the value rather than from the text. Its arguments are fixtures like any others, so a fixture that breaks the argument type's invariant is <<e1903>>.
 
 [,text]
 ----
@@ -3037,7 +3037,7 @@ error E1904:
 hint: expected one of: 提出済み, 却下
 ----
 
-Emitted when a row's expected arm is not one of the target behavior's output cases (<<example-expected>>).
+Emitted when a row's expected arm is not one of the target behavior's output cases (<<example-expected>>). An expectation whose case is not written — a helper's answer — has no arm to hold against them and is compared as the value it is; a row expecting the wrong case is then <<e1905>>.
 
 [#e1905]
 === Example does not hold

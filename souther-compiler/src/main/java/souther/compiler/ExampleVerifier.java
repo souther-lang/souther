@@ -359,17 +359,18 @@ public final class ExampleVerifier {
         }
         // validate the expected arm/value against the output cases before running. Which case the row
         // asserts is read through what it names, so a row may name a value where it may name a case.
-        String expectedArm = expectedArm(row.expected());
+        // Only where that answers is there an arm to hold against the target's: a helper answers with a
+        // case nothing here can read off the text, and reporting that as an arm the target cannot produce
+        // refused a row whose expectation was right (issue #214).
         TypeName named = constructedCase(row.expected());
-        // a name nothing here denotes is not an arm of the target either, and says so the same way
-        if (expectedArm != null && !outCases.isEmpty()
-                && (named == null || !outCases.contains(named))) {
+        if (named != null && !outCases.isEmpty() && !outCases.contains(named)) {
+            String expectedArm = expectedArm(row.expected());
             List<String> names = new ArrayList<>();
             for (TypeName c : outCases) {
                 names.add(c.name());
             }
             out.add(Diagnostic.of("E1904", "check.example.arm").title("check.example.title")
-                    .at(row.pos()).args(expectedArm, target.name())
+                    .at(row.pos()).args(expectedArm != null ? expectedArm : named.name(), target.name())
                     .hint("check.example.arm.hint", String.join(", ", names)).build());
             return;
         }
@@ -718,6 +719,10 @@ public final class ExampleVerifier {
         if (asserted != null) {
             return decode(Type.ref(asserted), raw(expected, Type.ref(asserted)));
         }
+        Object answer = helperAnswer(expected, new LinkedHashSet<>());
+        if (answer != null) {
+            return answer;
+        }
         // A collection output has no case name to decode against, so the behavior's declared
         // output type is what says which of `List`/`Set`/`Map` the written list means and what
         // its elements are — the same decision a collection argument's declared type makes.
@@ -725,6 +730,30 @@ public final class ExampleVerifier {
             return decode(outType, raw(expected, outType));
         }
         return raw(expected);   // a literal expected value
+    }
+
+    /**
+     * The value a helper answered with, where a helper answered the whole expectation — written as the
+     * application, or named through the values that stand for it. Null where none did.
+     *
+     * <p>The value itself, not that value read back into the neutral form a fixture is written in. The
+     * neutral form is for what encloses a fixture, and nothing encloses this one: reading it back only to
+     * decode it again asks a decoder to recover what the helper already built, and which case the answer
+     * is — the thing a written construction says and an application does not — is in the value rather
+     * than in the text. So a newtype, a record and a case of a union answered by a helper were all
+     * compared against their own neutral form, and a row that was right was reported as a mismatch
+     * (issue #214).
+     */
+    private Object helperAnswer(Ast.Expr e, Set<String> followed) {
+        return switch (e) {
+            case Ast.Call c when appliedHelper(c) instanceof Ast.FnDef helper -> answered(c, helper);
+            case Ast.LetIn let -> helperAnswer(let.body(), followed);
+            case Ast.Var v when symbols.resolveCase(v.name()) == null -> {
+                Ast.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
+                yield body == null ? null : helperAnswer(body, followed);
+            }
+            case null, default -> null;
+        };
     }
 
     /** As above, for the rendering of a failure, where a value that cannot be built is shown as
@@ -819,27 +848,22 @@ public final class ExampleVerifier {
         if (only != null) {
             return only;   // a bare case asserts only that, so there is no value to show
         }
-        if (isCollection(outType)) {
-            Object built = builtExpectedOrNull(expected, outType);
+        TypeName asserted = constructedCase(expected);
+        Object built = builtExpectedOrNull(expected, outType);
+        if (asserted == null) {
+            // Nothing here names a case: a literal, a collection, or a value a helper answered with.
+            // What was built is a value, so it is shown the way the result is — which is what puts the
+            // two sides of a mismatch in one notation.
             return built == null ? showValue(rawOrNull(expected)) : showAny(built);
         }
         // Render it through the same encoder the actual goes through, so the two sides are written
         // in one notation and can be read against each other; the fixture's own neutral form (which
         // still holds e.g. a LocalDate where the encoder writes its ISO text) is the fallback.
-        TypeName asserted = constructedCase(expected);
-        // The case it constructs, and nothing where it constructs none: a name standing for a literal
-        // has no case to write around the value, and writing the name there rendered `answer(42)`.
-        String arm = asserted != null ? asserted.name() : null;
-        Object built = builtExpectedOrNull(expected, outType);
-        Object neutral = built == null || asserted == null
-                ? rawOrNull(expected) : encodedOrNull(built, asserted);
+        Object neutral = built == null ? rawOrNull(expected) : encodedOrNull(built, asserted);
         if (neutral == null) {
             neutral = rawOrNull(expected);
         }
-        if (neutral == null) {
-            return arm != null ? arm : "?";
-        }
-        return arm != null ? show(arm, neutral) : showValue(neutral);
+        return neutral == null ? asserted.name() : show(asserted.name(), neutral);
     }
 
     /** What actually came out, in the same notation: the case name plus the value the derived encoder
@@ -1147,10 +1171,22 @@ public final class ExampleVerifier {
             }
             return raw(c.args().get(0), expected);
         }
-        if (!neutral.isNewtype(c.fn()) && helperDef(c.fn()) instanceof Ast.FnDef helper) {
+        if (appliedHelper(c) instanceof Ast.FnDef helper) {
             return applied(c, helper, expected);
         }
         return newtypeInner(c);
+    }
+
+    /** The helper an application applies, or null where the call is not one: a {@code fromList} is the
+     * fixture's own notation for a collection and a newtype application is a construction, so neither is
+     * a helper however it is spelled. Asked wherever an application has to be told from a construction,
+     * so the two readers of a call cannot come to different answers. */
+    private Ast.FnDef appliedHelper(Ast.Call c) {
+        if (c.fn().equals("Set.fromList") || c.fn().equals("Map.fromList")
+                || neutral.isNewtype(c.fn())) {
+            return null;
+        }
+        return helperDef(c.fn());
     }
 
     /**
@@ -1181,12 +1217,19 @@ public final class ExampleVerifier {
     }
 
     /**
-     * A helper applied in a fixture (ADR-0077): its arguments are built as fixtures against its
-     * parameter types, it is run as the method its module emits, and the value it returns is
-     * re-materialised into the neutral form a fixture is written in — so what encloses the call goes on
-     * being built the one way, whether the call stands at the top of a position or inside a record.
+     * A helper applied inside a fixture: it is run, and the value it returns is re-materialised into the
+     * neutral form a fixture is written in — so what encloses the call goes on being built the one way,
+     * a field of a record and an element of a list alike. An application that encloses nothing is
+     * {@link #helperAnswer}: there the value itself is what the row asserts.
      */
     private Object applied(Ast.Call c, Ast.FnDef helper, Type expected) {
+        return neutral.of(answered(c, helper), expected, c.fn());
+    }
+
+    /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
+     * built against its parameter types, so an argument breaking one of those types' invariants is
+     * reported as the fixture it is. */
+    private Object answered(Ast.Call c, Ast.FnDef helper) {
         if (c.args().size() != helper.params().size()) {
             throw new FixtureException("`" + c.fn() + "` takes " + helper.params().size()
                     + " argument(s) but is called with " + c.args().size());
@@ -1201,7 +1244,7 @@ public final class ExampleVerifier {
             Type paramType = TypeOps.resolveParamType(p.type(), symbols);
             args[i] = decode(paramType, raw(c.args().get(i), paramType));
         }
-        return neutral.of(helpers.invoke(c.fn(), args), expected, c.fn());
+        return helpers.invoke(c.fn(), args);
     }
 
     private Object newtypeInner(Ast.Call c) {
