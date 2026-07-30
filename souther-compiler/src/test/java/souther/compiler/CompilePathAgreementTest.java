@@ -51,6 +51,12 @@ class CompilePathAgreementTest {
                         data Tags = List<String>
                             invariant isEmpty(value) == false
                         """),
+                arguments("an invariant whose pattern is composed", """
+                        module demo exposing ( Postal )
+                        let 接頭辞 = "[0-9]{3}"
+                        data Postal = String
+                            invariant String.matches(接頭辞 ++ "-[0-9]{4}", value)
+                        """),
                 arguments("a let opening a newtype", """
                         module demo exposing ( Tags, countTags )
                         import List ( length )

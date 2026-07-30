@@ -15,9 +15,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * {@code String.matches(pattern, s)} — whole-string regex match (Java Pattern flavour), for
- * format-constrained values in an invariant (spec §stdlib-string). The pattern must be a string
- * literal, validated at compile time, so a malformed regex is a compile error and the call reads as
- * a plain Bool. Declared in {@code souther.string}, backed by the {@code Strings.matches} kernel.
+ * format-constrained values in an invariant (spec §stdlib-string). The pattern must evaluate to a
+ * string at compile time, where it is validated, so a malformed regex is a compile error and the
+ * call reads as a plain Bool. Declared in {@code souther.string}, backed by the
+ * {@code Strings.matches} kernel. A pattern written as a composition is
+ * {@link CompileComposedPatternTest}'s.
  */
 class CompileStringMatchesTest {
 

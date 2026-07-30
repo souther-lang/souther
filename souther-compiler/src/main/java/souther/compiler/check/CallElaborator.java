@@ -510,19 +510,24 @@ public final class CallElaborator {
         }
     }
 
-    /** The pattern of {@code String.matches} must be a string literal, so it is validated (and can be
-     * compiled) at compile time: a malformed regex is a compile error, not a runtime exception, and
-     * the value it constrains is proven at construction (spec §stdlib-string). */
+    /** The pattern of {@code String.matches} must evaluate to a string at compile time, so it is
+     * validated (and can be compiled) there: a malformed regex is a compile error, not a runtime
+     * exception, and the value it constrains is proven at construction (spec §stdlib-string). A
+     * literal is one such expression and so is a {@code ++} of literals and of a module's values,
+     * which is what lets several formats share a part (issue #208). What is validated is the string
+     * the whole expression composes to, not the pieces it was written in. */
     static void validateRegexPattern(Ast.Expr e) {
-        if (!(e instanceof Ast.StringLit lit)) {
+        String pattern = ConstEval.evalString(e).orElse(null);
+        if (pattern == null) {
             throw CompileException.of(
-                    Diagnostic.of(null, "check.matches.literal").title("check.type.mismatch.title")
+                    Diagnostic.of(null, "check.matches.constant").title("check.type.mismatch.title")
                             .at(e.pos()).build(),
-                    "the pattern of `String.matches` must be a string literal, so it can be validated"
-                            + " at compile time");
+                    "the pattern of `String.matches` must evaluate to a string at compile time — a"
+                            + " string literal, or literals and values named by a top-level `let`"
+                            + " joined with `++`");
         }
         try {
-            java.util.regex.Pattern.compile(lit.value());
+            java.util.regex.Pattern.compile(pattern);
         } catch (java.util.regex.PatternSyntaxException ex) {
             // getDescription() is the one-line reason ("Unclosed character class near index 3");
             // getMessage() would also dump the pattern and a caret, which the source region already shows.

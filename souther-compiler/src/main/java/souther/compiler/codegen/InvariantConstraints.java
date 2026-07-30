@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.ConstEval;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
@@ -114,12 +115,13 @@ final class InvariantConstraints {
 
     private static Optional<Constraint> ofCall(Ast.Call call, Type base) {
         // `String.matches(p, value)` is whole-string anchored (Strings.matches), and so is Raoh's
-        // pattern (Matcher.matches), so the two accept the same strings. The regex is a literal —
-        // the checker has already rejected a computed one — and it has been compiled once at check
-        // time, so it is known well-formed here.
+        // pattern (Matcher.matches), so the two accept the same strings. The regex is asked for the
+        // same way the check asks — one reading of which expressions are compile-time strings and of
+        // what one composes to, so a pattern the check accepted cannot arrive here unrecognised and
+        // lose its constraint. It has been compiled once at check time, so it is known well-formed.
         if (base == Type.STRING && call.fn().equals("String.matches") && call.args().size() == 2
-                && call.args().get(0) instanceof Ast.StringLit regex && isValue(call.args().get(1))) {
-            return Optional.of(new Pattern(regex.value()));
+                && isValue(call.args().get(1))) {
+            return ConstEval.evalString(call.args().get(0)).map(Pattern::new);
         }
         return Optional.empty();
     }
