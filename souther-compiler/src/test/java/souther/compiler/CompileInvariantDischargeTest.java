@@ -747,6 +747,144 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aProjectionTheClosureCopiesCarriesThroughTheMap() {
+        // the crm case: guard uniqueness of the input by `.product`, build from the mapped list. The
+        // closure copies `product` across, so two mapped rows differ there exactly when the two they
+        // came from did.
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { product: String, note: String }
+                data Line = { product: String, label: String }
+                data Lines = List<Line>
+                    invariant List.allUniqueBy(.product, value)
+                let toLine (r: Row): Line = Line { product = r.product, label = r.note }
+                behavior build : (xs: List<Row>) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(.product, xs)
+                        else Duplicate
+                    Lines(List.map(r -> toLine(r), xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a copied field carries uniqueness through the map");
+    }
+
+    @Test
+    void aProjectionCarriesToTheFieldItWasCopiedFrom() {
+        // the closure renames the field, so uniqueness of the result by `.code` is uniqueness of the
+        // input by `.sku`
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { sku: String }
+                data Line = { code: String }
+                data Lines = List<Line>
+                    invariant List.allUniqueBy(.code, value)
+                behavior build : (xs: List<Row>) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(.sku, xs)
+                        else Duplicate
+                    Lines(List.map(r -> Line { code = r.sku }, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the projection carries to the field it was copied from");
+    }
+
+    @Test
+    void guardingTheWrongFieldDoesNotCarry() {
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { sku: String, name: String }
+                data Line = { code: String }
+                data Lines = List<Line>
+                    invariant List.allUniqueBy(.code, value)
+                behavior build : (xs: List<Row>) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(.name, xs)
+                        else Duplicate
+                    Lines(List.map(r -> Line { code = r.sku }, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "uniqueness by one field says nothing about another");
+    }
+
+    @Test
+    void aComputedFieldDoesNotCarryAProjection() {
+        // `code` is built rather than copied, so two rows that differ can still land on one code
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { sku: String, name: String }
+                data Line = { code: String }
+                data Lines = List<Line>
+                    invariant List.allUniqueBy(.code, value)
+                behavior build : (xs: List<Row>) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(.sku, xs)
+                        else Duplicate
+                    Lines(List.map(r -> Line { code = String.concat([r.sku, r.name]) }, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a computed field is not a copied one");
+    }
+
+    @Test
+    void bothClausesOfAMappedConstructionDischargeTogether() {
+        // #222's target shape: a length clause and a uniqueness clause over the same mapped list,
+        // each discharged by its own guard
+        String m = """
+                module demo
+                data Duplicate
+                data NoLines
+                data Row = { product: String }
+                data Line = { product: String }
+                data Lines = List<Line>
+                    invariant List.length(value) >= 1 && List.allUniqueBy(.product, value)
+                behavior build : (xs: List<Row>) -> Lines | Duplicate | NoLines
+                    constructs Lines, Line, Duplicate, NoLines
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoLines
+                    guard List.allUniqueBy(.product, xs)
+                        else Duplicate
+                    Lines(List.map(r -> Line { product = r.product }, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "both clauses discharge");
+    }
+
+    @Test
+    void removingOneOfTheTwoGuardsIsReported() {
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { product: String }
+                data Line = { product: String }
+                data Lines = List<Line>
+                    invariant List.length(value) >= 1 && List.allUniqueBy(.product, value)
+                behavior build : (xs: List<Row>) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(.product, xs)
+                        else Duplicate
+                    Lines(List.map(r -> Line { product = r.product }, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "the length clause is no longer established");
+    }
+
+    @Test
     void aRequireGuardDischargesTheSubtraction() {
         // `guard 額 <= 残高` establishes the relation on the mainline, discharging `残高 - 額`
         String m = """
