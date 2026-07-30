@@ -51,8 +51,9 @@ public final class InvariantChecker {
 
     /** A stdlib combinator whose closure (argument {@code closureArg}) is handed each element of its
      * container argument ({@code listArg}) as closure parameter {@code elementParam} — mirrors
-     * {@link TotalityChecker}'s table, so a construction inside a {@code List.map}/{@code fold} closure
-     * is analyzed with the element bound to the container's element type ({@link #elementType}).
+     * {@link TotalityChecker}'s table, so a construction inside a {@code List.map} or
+     * {@code List.foldFrom} closure is analyzed with the element bound to the container's element type
+     * ({@link #elementType}).
      *
      * <p>A rule is keyed by the name a call still has when this tree is read, which is not every name
      * an author can write: {@code List.fold} is rewritten to {@code List.foldFrom} before any of this,

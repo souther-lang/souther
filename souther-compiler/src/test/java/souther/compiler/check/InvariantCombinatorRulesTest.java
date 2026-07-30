@@ -244,7 +244,7 @@ class InvariantCombinatorRulesTest {
     }
 
     @Test
-    void theElementCarriesItsInvariantIntoEveryCombinatorsClosure() {
+    void theElementCarriesItsInvariantIntoEachClosure() {
         for (Fires f : FIRES) {
             Compiler.Compiled c = Compiler.compileWithWarnings(PREAMBLE + f.body());
             long warnings = c.warnings().stream()
