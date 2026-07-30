@@ -104,4 +104,50 @@ class CompileCrossModuleUnionTest {
                 "the union is this module's cases, and each of them implements it");
         assertTrue(union.isAssignableFrom(loader.loadClass("ship.NotShipped")));
     }
+
+    @Test
+    void anOperationSpanningTwoModulesIsOneBehavior() throws Exception {
+        // What a cross-module `>->` would have been: the imported stage runs, its departure is
+        // answered with a case declared here, and its mainline goes on to a stage of this module —
+        // one that has a requirement of its own, so it is received rather than built (ADR-0068).
+        String inventory = INVENTORY + """
+                let allocate (sku) =
+                    if String.length(sku.value) > 0 then Allocated { sku = sku } else Shortage { sku = sku }
+                """;
+        String shipping = """
+                module ship
+                import inv ( Sku, Allocated, Shortage, allocate )
+                data Label = { text: String }
+                data Shipped = { sku: Sku, label: Label }
+                data NoLabel
+                data NotAllocated = { sku: Sku }
+                behavior printLabel : (sku: Sku) -> Label
+                    constructs Label
+                behavior instruct : (a: Allocated) -> Shipped | NoLabel
+                    depends on printLabel
+                    constructs Shipped, NoLabel
+                let instruct (a, printLabel) =
+                    if String.length(a.sku.value) > 0
+                    then Shipped { sku = a.sku, label = printLabel(a.sku) }
+                    else NoLabel
+                behavior allocateAndShip : (sku: Sku) -> Shipped | NoLabel | NotAllocated
+                    depends on instruct
+                    constructs NotAllocated
+                let allocateAndShip (sku, instruct) =
+                    match allocate(sku) with
+                    | Allocated as a -> instruct(a)
+                    | Shortage as s -> NotAllocated { sku = s.sku }
+                """;
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Class<?> union = loader.loadClass("ship.AllocateAndShipResult");
+        assertEquals(List.of(loader.loadClass("ship.NoLabel"), loader.loadClass("ship.NotAllocated"),
+                        loader.loadClass("ship.Shipped")),
+                Arrays.asList(union.getPermittedSubclasses()),
+                "both stages' outcomes reach one union, all of them declared here");
+        // a stage this module implements is received, so the boundary binds it rather than its leaves
+        assertEquals(List.of(loader.loadClass("ship.Instruct")),
+                Arrays.asList(loader.loadClass("ship.AllocateAndShip")
+                        .getMethod("bind", loader.loadClass("ship.Instruct")).getParameterTypes()));
+    }
 }
