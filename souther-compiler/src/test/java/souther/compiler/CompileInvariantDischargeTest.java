@@ -300,6 +300,99 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aNewtypeFieldsValueIsTheSameLocationOnBothSides() {
+        // `n` was built through `Name`'s checked construction, so its length is known here — and the
+        // clause names the very location the input's own invariant is about
+        String m = """
+                module demo
+                data Name = String
+                    invariant String.length(value) >= 3
+                data Person = { name: Name }
+                    invariant String.length(name.value) >= 3
+                behavior build : (n: Name) -> Person constructs Person
+                let build (n) = Person { name = n }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a newtype's `.value` is one location whichever side names it");
+    }
+
+    @Test
+    void aGuardOnANewtypeFieldsValueDischarges() {
+        String m = """
+                module demo
+                data TooShort
+                data Name = String
+                data Person = { name: Name }
+                    invariant String.length(name.value) >= 3
+                behavior build : (n: Name) -> Person | TooShort constructs Person, TooShort
+                let build (n) = {
+                    guard String.length(n.value) >= 3
+                        else TooShort
+                    Person { name = n }
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the guard sizes the same location the clause does");
+    }
+
+    @Test
+    void aGuardThroughTwoNewtypesDischarges() {
+        // the guard writes both `.value`s and the clause writes both, and each is the same location
+        String m = """
+                module demo
+                data TooShort
+                data Inner = String
+                data Outer = Inner
+                data Box = { held: Outer }
+                    invariant String.length(held.value.value) >= 3
+                behavior build : (o: Outer) -> Box | TooShort constructs Box, TooShort
+                let build (o) = {
+                    guard String.length(o.value.value) >= 3
+                        else TooShort
+                    Box { held = o }
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "each `.value` of a single-value newtype is the same location");
+    }
+
+    @Test
+    void aNewtypeOverANewtypeIsStillOneLocation() {
+        String m = """
+                module demo
+                data Inner = String
+                    invariant String.length(value) >= 3
+                data Outer = Inner
+                data Box = { held: Outer }
+                    invariant String.length(held.value.value) >= 3
+                behavior build : (o: Outer) -> Box constructs Box
+                let build (o) = Box { held = o }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "each `.value` of a single-value newtype is the same location");
+    }
+
+    @Test
+    void aGuardOnAnotherNewtypesValueDoesNotDischarge() {
+        String m = """
+                module demo
+                data TooShort
+                data Name = String
+                data Person = { name: Name }
+                    invariant String.length(name.value) >= 3
+                behavior build : (n: Name, other: Name) -> Person | TooShort
+                    constructs Person, TooShort
+                let build (n, other) = {
+                    guard String.length(other.value) >= 3
+                        else TooShort
+                    Person { name = n }
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "collapsing `.value` does not collapse two different newtypes into one");
+    }
+
+    @Test
     void aRebindingOfTheGuardedNameDropsTheFact() {
         // `xs` is rebound between the guard and the construction, so the guard's fact no longer holds
         // of what `Lines` is built from
