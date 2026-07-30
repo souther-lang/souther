@@ -52,11 +52,16 @@ public final class InvariantChecker {
     /** A stdlib combinator whose closure (argument {@code closureArg}) is handed each element of its
      * container argument ({@code listArg}) as closure parameter {@code elementParam} — mirrors
      * {@link TotalityChecker}'s table, so a construction inside a {@code List.map}/{@code fold} closure
-     * is analyzed with the element bound to the container's element type ({@link #elementType}). */
+     * is analyzed with the element bound to the container's element type ({@link #elementType}).
+     *
+     * <p>A rule is keyed by the name a call still has when this tree is read, which is not every name
+     * an author can write: {@code List.fold} is rewritten to {@code List.foldFrom} before any of this,
+     * so a rule under that name could not be looked up. {@code InvariantCombinatorRulesTest} holds the
+     * table to both halves of that — every name survives the rewrite, and every name has a program
+     * that fires it. */
     private record Combinator(int closureArg, int elementParam, int listArg) {}
 
     private static final Map<String, Combinator> COMBINATORS = Map.ofEntries(
-            Map.entry("List.fold", new Combinator(0, 1, 2)),
             Map.entry("List.foldFrom", new Combinator(0, 1, 2)),
             Map.entry("List.foldr", new Combinator(0, 1, 2)),
             Map.entry("List.map", new Combinator(0, 0, 1)),
@@ -82,6 +87,11 @@ public final class InvariantChecker {
             Map.entry("Set.filter", new Combinator(0, 0, 1)),
             Map.entry("Set.partition", new Combinator(0, 0, 1)),
             Map.entry("Option.map", new Combinator(0, 0, 1)));
+
+    /** The operations the table has a rule for, for the test that holds it to being reachable. */
+    static Set<String> combinatorNames() {
+        return COMBINATORS.keySet();
+    }
 
     /** The pure, total stdlib calls whose result is a number the domain can name: the size of a
      * container or a string. Each becomes an atom keyed by the call written over its argument's path
