@@ -260,6 +260,46 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aGuardRestatingASumOfTwoLengthsDischarges() {
+        // the guard is the invariant written over the arguments. A sum of two atoms is outside the
+        // interval/difference shapes, so what discharges it is the form itself being assumed.
+        String m = """
+                module demo
+                data Empty
+                data Matches = { accounts: List<Int>, contacts: List<Int> }
+                    invariant List.length(accounts) + List.length(contacts) >= 1
+                behavior build : (xs: List<Int>, ys: List<Int>) -> Matches | Empty
+                    constructs Matches, Empty
+                let build (xs, ys) = {
+                    guard List.length(xs) + List.length(ys) >= 1
+                        else Empty
+                    Matches { accounts = xs, contacts = ys }
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a guard restating the invariant discharges it");
+    }
+
+    @Test
+    void aGuardWeakerThanTheInvariantDoesNotDischarge() {
+        String m = """
+                module demo
+                data Empty
+                data Matches = { accounts: List<Int>, contacts: List<Int> }
+                    invariant List.length(accounts) + List.length(contacts) >= 2
+                behavior build : (xs: List<Int>, ys: List<Int>) -> Matches | Empty
+                    constructs Matches, Empty
+                let build (xs, ys) = {
+                    guard List.length(xs) + List.length(ys) >= 1
+                        else Empty
+                    Matches { accounts = xs, contacts = ys }
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a guard that establishes less should not discharge");
+    }
+
+    @Test
     void aRebindingOfTheGuardedNameDropsTheFact() {
         // `xs` is rebound between the guard and the construction, so the guard's fact no longer holds
         // of what `Lines` is built from
