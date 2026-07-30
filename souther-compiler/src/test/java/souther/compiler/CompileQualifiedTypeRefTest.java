@@ -147,8 +147,8 @@ class CompileQualifiedTypeRefTest {
                 behavior read : (v: probe.sum.Verdict) -> Out constructs Out
                 let read (v) =
                     match v with
-                    | probe.sum.Good g -> Out { n = g.n }
-                    | probe.sum.Bad b -> Out { n = 0 }
+                    | probe.sum.Good as g -> Out { n = g.n }
+                    | probe.sum.Bad as b -> Out { n = 0 }
                 """));
     }
 

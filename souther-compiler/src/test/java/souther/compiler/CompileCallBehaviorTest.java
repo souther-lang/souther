@@ -90,8 +90,8 @@ class CompileCallBehaviorTest {
                 behavior use : (i: In) -> Out | Refused
                     constructs Out
                 let use (i) = match classify(i) with
-                    | Ok o -> Out { o = o.n }
-                    | Refused r -> r
+                    | Ok as o -> Out { o = o.n }
+                    | Refused as r -> r
                 """));
     }
 
@@ -140,9 +140,9 @@ class CompileCallBehaviorTest {
                     depends on load
                     constructs Person, Missing
                 let fetch (id, load) = match load(id) with
-                    | Row r -> if r.active then Person { id = r.id, name = r.name }
+                    | Row as r -> if r.active then Person { id = r.id, name = r.name }
                                else Missing { id = id }
-                    | Missing m -> m
+                    | Missing as m -> m
                 """, """
                 module orders exposing ( Order, Placed, Unknown, place )
 
@@ -156,8 +156,8 @@ class CompileCallBehaviorTest {
                     depends on fetch
                     constructs Placed, Unknown
                 let place (o, fetch) = match fetch(o.by) with
-                    | Person p -> Placed { by = p.id, name = p.name }
-                    | Missing m -> Unknown { by = o.by }
+                    | Person as p -> Placed { by = p.id, name = p.name }
+                    | Missing as m -> Unknown { by = o.by }
                 """, """
                 module billing exposing ( Invoice, Issued, NoSuch, issue )
 
@@ -171,8 +171,8 @@ class CompileCallBehaviorTest {
                     depends on fetch
                     constructs Issued, NoSuch
                 let issue (i, fetch) = match fetch(i.to) with
-                    | Person p -> Issued { to = p.id, name = p.name }
-                    | Missing m -> NoSuch { to = i.to }
+                    | Person as p -> Issued { to = p.id, name = p.name }
+                    | Missing as m -> NoSuch { to = i.to }
                 """)));
     }
 
