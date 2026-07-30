@@ -70,6 +70,26 @@ public final class DataChecker {
     }
 
     /**
+     * No two clauses that apply to a data share a name. A spread carries the clauses of what it takes
+     * in, names included, so the clash this reports is between a clause written here and one arriving
+     * by spread as often as between two written here — and either way an arm naming it would answer
+     * neither rule in particular.
+     */
+    private static void checkClauseNames(Ast.Data data, Symbols symbols) {
+        Set<String> seen = new HashSet<>();
+        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+            String name = clause.name().orElse(null);
+            if (name != null && !seen.add(name)) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.invariant.duplicate")
+                                .title("check.invariant.invalid.title")
+                                .at(clause.pos()).args(name, data.name()).build(),
+                        "two invariant clauses of `" + data.name() + "` are named `" + name + "`");
+            }
+        }
+    }
+
+    /**
      * What a body builds, in the two kinds a permission check tells apart: {@code originated} is what
      * this body is answerable for, {@code carried} what another module's published value or helper
      * built and this body was handed. Each maps the type to the spelling it was written with, so a
@@ -195,7 +215,8 @@ public final class DataChecker {
                 Set<String> inner = new HashSet<>(bound);
                 inner.add(ic.binder());
                 collectConstructs(ic.then(), out, symbols, inner, recConstructs);
-                collectConstructs(ic.els(), out, symbols, bound, recConstructs);
+                ic.els().forEach(arm ->
+                        collectConstructs(arm.body(), out, symbols, bound, recConstructs));
             }
             case Ast.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, bound, recConstructs));
             case Ast.ListComp comp -> {
@@ -497,19 +518,21 @@ public final class DataChecker {
             }
         }
 
-        ctx.data().invariant().ifPresent(expr -> {
+        for (Ast.InvariantClause clause : ctx.data().invariants()) {
             // A total recursive helper — the stdlib fold behind the list quantifiers, or a user helper
             // proven total — is callable from an invariant, so its signature must be in scope here. A
             // field of the same name as a helper wins: a bare name in an invariant is a field reference.
             Map<String, Type> invEnv = new HashMap<>(recursiveHelperFns);
             invEnv.putAll(fields);
-            Type t = Elaborator.typeOf(expr, invEnv, ctx);
+            Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx);
             if (t != Type.BOOL) {
                 throw CompileException.of(
-                        Diagnostic.of("E1101", "e1101.msg").at(expr.pos()).args(Type.show(t)).build(),
+                        Diagnostic.of("E1101", "e1101.msg").at(clause.expr().pos())
+                                .args(Type.show(t)).build(),
                         "Invariant expression must have type Bool. Found: " + t);
             }
-        });
+        }
+        checkClauseNames(ctx.data(), ctx.symbols());
 
         ctx.data().decoder().ifPresent(dec -> checkDecoder(dec, ctx, fields));
         ctx.data().encoder().ifPresent(enc -> checkEncoder(enc, ctx));

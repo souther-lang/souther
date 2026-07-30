@@ -95,9 +95,9 @@ public final class Exposing {
     }
 
     private Ast.Def rewriteDef(Ast.Def def) {
-        if (def instanceof Ast.Data d && d.invariant().isPresent()) {
+        if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
             return new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
-                    Optional.of(rw(d.invariant().get())), d.decoder(), d.encoder(), d.pos());
+                    Ast.mapClauses(d.invariants(), this::rw), d.decoder(), d.encoder(), d.pos());
         }
         return def;
     }

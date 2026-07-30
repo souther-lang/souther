@@ -108,6 +108,16 @@ final class Descriptors {
             MethodTypeDesc.of(ClassDesc.of("java.lang.Object"), ClassDesc.of("java.lang.Object").arrayType());
     static final ClassDesc CD_ConstraintViolation =
             ClassDesc.of("souther.runtime.ConstraintViolation");
+    /** The failure side of {@code __construct}: which clause of which type did not hold. */
+    static final ClassDesc CD_InvariantFailure = ClassDesc.of("souther.runtime.InvariantFailure");
+    static final MethodTypeDesc MTD_failureOf =
+            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String, CD_String);
+    static final MethodTypeDesc MTD_failureUnnamed =
+            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String);
+    /** {@code clause()}: the failing clause's name, or null where it was declared without one. */
+    static final MethodTypeDesc MTD_failureClause = MethodTypeDesc.of(CD_String);
+    /** {@code meta()}: the rejecting type, and the clause where it has a name. */
+    static final MethodTypeDesc MTD_failureMeta = MethodTypeDesc.of(CD_Map);
     static final ClassDesc CD_IntMath = ClassDesc.of("souther.runtime.IntMath");
     /** {@code (long, long) -> long}: overflow-checked Int arithmetic (spec 18.2). */
     static final MethodTypeDesc MTD_intExact =
@@ -272,10 +282,21 @@ final class Descriptors {
     static final MethodTypeDesc MTD_longSign = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_decBound = MethodTypeDesc.of(CD_DecimalDecoder, CD_BigDecimal);
     static final MethodTypeDesc MTD_decSign = MethodTypeDesc.of(CD_DecimalDecoder);
+    /** A list's element-count bound ({@code minSize}/{@code maxSize}/{@code fixedSize}) and its
+     *  argument-free constraints ({@code nonempty}/{@code unique}). */
+    static final MethodTypeDesc MTD_listSizeBound =
+            MethodTypeDesc.of(CD_ListDecoder, ConstantDescs.CD_int);
+    static final MethodTypeDesc MTD_listSign = MethodTypeDesc.of(CD_ListDecoder);
+    /** A map's entry-count bound: Raoh decodes a map as a record of its values. */
+    static final MethodTypeDesc MTD_recordSizeBound =
+            MethodTypeDesc.of(CD_RecordDecoder, ConstantDescs.CD_int);
     /** {@code Decoder.refine(Predicate, BiFunction)}: the failure is built by the caller, so it is a
      *  {@code Result.fail} (resolvable) rather than the {@code failCustom} the message overload makes. */
     static final MethodTypeDesc MTD_Rrefine = MethodTypeDesc.of(CD_RDecoder, CD_Predicate, CD_BiFunction);
     static final MethodTypeDesc MTD_invariantFailure = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
+    /** The same helper with the failing clause's name captured ahead of the two SAM arguments. */
+    static final MethodTypeDesc MTD_invariantFailureNamed =
+            MethodTypeDesc.of(CD_RResult, CD_String, CD_Object, CD_RPath);
     static final MethodTypeDesc MTD_Rfail4 =
             MethodTypeDesc.of(CD_RResult, CD_RPath, CD_String, CD_String, CD_Map);
     static final MethodTypeDesc MTD_ctfeCheckObject = MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
@@ -319,6 +340,9 @@ final class Descriptors {
     static final MethodTypeDesc MTD_BD_strip = MethodTypeDesc.of(CD_BigDecimal);
     static final MethodTypeDesc MTD_Objects_equals =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object, CD_Object);
+    /** {@code Object.equals(Object)} — a constant receiver compares against a value that may be null. */
+    static final MethodTypeDesc MTD_equalsObject =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     static final MethodTypeDesc MTD_Objects_hashCode =
             MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
     static final MethodTypeDesc MTD_Long_hashCode =

@@ -59,6 +59,27 @@ final class CodegenContext {
         this.reqSuccess = success;
     }
 
+    /**
+     * This module's declarations' invariant clauses in the representation the language's own operations
+     * survive in ({@link souther.compiler.check.InliningPolicy#DISCHARGE}), keyed by declaration. The
+     * constraint mapping a derived decoder does is written against those operations, so it reads this
+     * rather than the settled form the rest of the backend emits from.
+     */
+    private Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants = Map.of();
+
+    void setDischargeInvariants(Map<TypeName, List<Ast.InvariantClause>> clauses) {
+        this.dischargeInvariants = clauses;
+    }
+
+    Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants() {
+        return dischargeInvariants;
+    }
+
+    /** The module being generated. Module is package (spec 4), so this is also {@link #pkg}. */
+    String module() {
+        return pkg;
+    }
+
     /** The behaviors a body may call by name — the ones whose requirement set is empty (spec
      * {@code [#calling-a-behavior]}). A call to one is built where it is called rather than read out
      * of a field, so it needs no injection; what is kept is the signature the call was typed against,

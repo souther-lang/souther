@@ -243,7 +243,10 @@ public final class Formatter {
         String name = firstIdent(n);
         List<Doc> invariants = new ArrayList<>();
         for (SyntaxNode inv : childNodes(n, SyntaxKind.INVARIANT_CLAUSE)) {
-            invariants.add(concat(HARDLINE, text("invariant "), expr(onlyExpr(inv))));
+            // A named clause keeps its name: it is what an attempt's arm and a boundary issue call it.
+            String label = inv.token(SyntaxKind.ASSIGN).isPresent()
+                    ? firstIdent(inv) + " = " : "";
+            invariants.add(concat(HARDLINE, text("invariant " + label), expr(onlyExpr(inv))));
         }
 
         var product = n.child(SyntaxKind.PRODUCT_BODY);
@@ -624,10 +627,27 @@ public final class Formatter {
 
     private Doc ifExpr(SyntaxNode n) {
         List<SyntaxNode> parts = exprChildren(n);
+        Doc departures = elseArms(n);
         return group(concat(text("if "), expr(parts.get(0)), attemptBinder(n), text(" then"),
                 nest(INDENT, concat(LINE, expr(parts.get(1)))),
                 LINE, text("else"),
-                nest(INDENT, concat(LINE, expr(parts.get(2))))));
+                departures != Doc.NIL
+                        ? departures
+                        : nest(INDENT, concat(LINE, expr(parts.get(2))))));
+    }
+
+    /** An attempt's per-clause departures, one to a line under the {@code else}, or nothing where the
+     * {@code else} took one expression. */
+    private Doc elseArms(SyntaxNode n) {
+        var arms = n.child(SyntaxKind.ELSE_ARMS);
+        if (arms.isEmpty()) {
+            return Doc.NIL;
+        }
+        List<Doc> lines = new ArrayList<>();
+        for (SyntaxNode arm : childNodes(arms.get(), SyntaxKind.ELSE_ARM)) {
+            lines.add(concat(HARDLINE, text("| " + firstIdent(arm) + " -> "), expr(onlyExpr(arm))));
+        }
+        return nest(INDENT, concat(lines));
     }
 
     /** The {@code as x} of an attempted construction, or nothing where none was written. It sits
@@ -812,6 +832,11 @@ public final class Formatter {
 
     private Doc guardStmt(SyntaxNode n) {
         List<SyntaxNode> exprs = exprChildren(n);
+        Doc departures = elseArms(n);
+        if (departures != Doc.NIL) {
+            return concat(text("guard "), expr(exprs.get(0)), attemptBinder(n), text(" else"),
+                    departures);
+        }
         return concat(text("guard "), expr(exprs.get(0)), attemptBinder(n),
                 text(" else "), expr(exprs.get(1)));
     }

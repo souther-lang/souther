@@ -18,7 +18,20 @@ import java.util.Optional;
  * A construction that names nothing the check can name discharges nothing whatever its clauses say —
  * that is a fact about the construction, and belongs where the construction is.
  */
-public record ClauseDischarge(SourcePos clause, Kind kind, Optional<String> reason) {
+public record ClauseDischarge(SourcePos clause, Kind kind, Optional<String> reason,
+                             Optional<String> name) {
+
+    /** A classification not yet attributed to a declared clause: the capability is read off the
+     * expression, and the name is attached where the declaration is. */
+    public ClauseDischarge(SourcePos clause, Kind kind, Optional<String> reason) {
+        this(clause, kind, reason, Optional.empty());
+    }
+
+    /** The same classification under the name the clause was declared with, which is what an attempt's
+     * departure arm and a boundary issue call it. */
+    public ClauseDischarge named(Optional<String> declared) {
+        return new ClauseDischarge(clause, kind, reason, declared);
+    }
 
     /** What can discharge a clause. The first two are the statically dischargeable ones, and they are
      * separate because they admit different guards: a relation the domain reasons over is discharged

@@ -14,9 +14,11 @@ import souther.compiler.diag.SourcePos;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Builds the compiler's {@link Ast} from a concrete syntax tree. This is where the surface forms the
@@ -237,7 +239,7 @@ public final class AstBuilder {
     private Ast.Def dataDef(SyntaxNode n) {
         String name = firstIdentText(n);
         SourcePos pos = pos(n);
-        Optional<Ast.Expr> invariant = invariant(n);
+        List<Ast.InvariantClause> clauses = invariants(n, name);
 
         Optional<SyntaxNode> product = n.child(SyntaxKind.PRODUCT_BODY);
         if (product.isPresent()) {
@@ -261,7 +263,7 @@ public final class AstBuilder {
                                 .hint("check.data.emptybody.hint", name).build(),
                         "data `" + name + "` has an empty body");
             }
-            return new Ast.Data(name, false, includes, fields, invariant,
+            return new Ast.Data(name, false, includes, fields, clauses,
                     Optional.empty(), Optional.empty(), pos);
         }
         Optional<SyntaxNode> sum = n.child(SyntaxKind.SUM_BODY);
@@ -280,7 +282,7 @@ public final class AstBuilder {
                 innerType = new Ast.TypeRef("Option", innerType, innerType.pos());   // `Y?` → Option<Y>
             }
             List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, pos(inner)));
-            return new Ast.Data(name, true, List.of(), fields, invariant,
+            return new Ast.Data(name, true, List.of(), fields, clauses,
                     Optional.empty(), Optional.empty(), pos);
         }
         // No body of any kind: a unit data, which has no fields for an invariant to observe (spec
@@ -296,16 +298,45 @@ public final class AstBuilder {
         return new Ast.UnitData(name, pos);
     }
 
-    /** Conjoins every {@code invariant} clause under {@code &&}; each line must hold. */
-    private Optional<Ast.Expr> invariant(SyntaxNode dataDef) {
-        Optional<Ast.Expr> acc = Optional.empty();
+    /**
+     * Every {@code invariant} clause in the order it is written; each must hold. A clause keeps the
+     * name written for it, which is what an attempt's departure arm and a boundary issue read.
+     *
+     * <p>The name is the clause's own identifier, so two clauses of one declaration cannot share one:
+     * an arm naming it would answer neither rule in particular.
+     */
+    private List<Ast.InvariantClause> invariants(SyntaxNode dataDef, String typeName) {
+        List<Ast.InvariantClause> out = new ArrayList<>();
+        Set<String> named = new HashSet<>();
         for (SyntaxNode clause : childNodes(dataDef, SyntaxKind.INVARIANT_CLAUSE)) {
-            Ast.Expr next = expr(onlyExpr(clause));
-            acc = Optional.of(acc.map(prev -> (Ast.Expr)
-                            new Ast.Binary(Ast.BinOp.AND, prev, next, next.pos()))
-                    .orElse(next));
+            Ast.Expr expr = expr(onlyExpr(clause));
+            Optional<String> name = Optional.empty();
+            if (clause.token(SyntaxKind.ASSIGN).isPresent()) {
+                SyntaxToken label = identTokens(clause).get(0);
+                // `_` is what an attempt writes for the clauses that carry no name, so a clause named
+                // `_` could not be answered by name at all: the arm reading it would be that wildcard.
+                // Refused here rather than left to be discovered at the attempt.
+                if (label.text().equals("_")) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.invariant.underscore")
+                                    .title("check.invariant.invalid.title")
+                                    .at(posOf(label)).args(typeName)
+                                    .hint("check.invariant.underscore.hint").build(),
+                            "`_` cannot name an invariant clause");
+                }
+                if (!named.add(label.text())) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.invariant.duplicate")
+                                    .title("check.invariant.invalid.title")
+                                    .at(posOf(label)).args(label.text(), typeName).build(),
+                            "`" + typeName + "` declares two invariant clauses named `"
+                                    + label.text() + "`");
+                }
+                name = Optional.of(label.text());
+            }
+            out.add(new Ast.InvariantClause(name, expr, pos(clause)));
         }
-        return acc;
+        return out;
     }
 
     private Ast.Field field(SyntaxNode n) {
@@ -703,10 +734,50 @@ public final class AstBuilder {
     private Ast.Expr ifExpr(SyntaxNode n) {
         List<SyntaxNode> exprs = exprChildren(n);
         String binder = attemptBinder(n);
+        List<Ast.ElseArm> arms = elseArms(n, binder);
+        if (arms != null) {
+            return new Ast.IfConstructed(expr(exprs.get(0)), binder, expr(exprs.get(1)), arms, pos(n));
+        }
         return binder == null
                 ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n))
                 : new Ast.IfConstructed(expr(exprs.get(0)), binder,
                         expr(exprs.get(1)), expr(exprs.get(2)), pos(n));
+    }
+
+    /**
+     * The per-clause departures of an attempted construction, or null where the {@code else} took one
+     * expression. Only an attempt has clauses to answer, so arms without a binder are refused here
+     * rather than reaching a plain {@code If} that has no room for them.
+     */
+    private List<Ast.ElseArm> elseArms(SyntaxNode form, String binder) {
+        Optional<SyntaxNode> node = form.child(SyntaxKind.ELSE_ARMS);
+        if (node.isEmpty()) {
+            return null;
+        }
+        if (binder == null) {
+            throw CompileException.of(
+                    Diagnostic.of("E2018", "check.attempt.armswithoutattempt")
+                            .title("check.attempt.title").at(pos(node.get()))
+                            .hint("check.attempt.armswithoutattempt.hint").build(),
+                    "departure arms need an attempted construction to answer for");
+        }
+        List<Ast.ElseArm> arms = new ArrayList<>();
+        Set<String> answered = new HashSet<>();
+        for (SyntaxNode arm : childNodes(node.get(), SyntaxKind.ELSE_ARM)) {
+            SyntaxToken label = identTokens(arm).get(0);
+            if (!answered.add(label.text())) {
+                throw CompileException.of(
+                        Diagnostic.of("E2019", "check.attempt.armtwice")
+                                .title("check.attempt.title").at(posOf(label))
+                                .args(label.text()).build(),
+                        "the arm `" + label.text() + "` is written twice");
+            }
+            Ast.Expr body = expr(onlyExpr(arm));
+            arms.add(label.text().equals("_")
+                    ? Ast.ElseArm.any(body)
+                    : new Ast.ElseArm(Optional.of(label.text()), body, posOf(label)));
+        }
+        return arms;
     }
 
     /** The {@code x} of an attempted construction's {@code as x}, or {@code null} where none was
@@ -989,6 +1060,10 @@ public final class AstBuilder {
                 List<SyntaxNode> exprs = exprChildren(s);
                 String binder = attemptBinder(s);
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
+                List<Ast.ElseArm> arms = elseArms(s, binder);
+                if (arms != null) {
+                    yield new Ast.IfConstructed(expr(exprs.get(0)), binder, rest, arms, pos);
+                }
                 yield binder == null
                         ? new Ast.If(expr(exprs.get(0)), rest, expr(exprs.get(1)), pos)
                         : new Ast.IfConstructed(expr(exprs.get(0)), binder, rest,

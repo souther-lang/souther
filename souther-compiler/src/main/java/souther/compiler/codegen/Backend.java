@@ -86,7 +86,7 @@ public final class Backend {
 
     public static Map<String, byte[]> generate(Ast.Module module, TypeChecker.Checked checked) {
         return generate(module, TypeChecker.symbols(module), Map.of(), Map.of(), Set.of(), Map.of(),
-                Requirements.of(module, Set.of()), checked);
+                Requirements.of(module, Set.of()), checked, Map.of());
     }
 
     /** Generates a module's classes. {@code symbols} covers own plus imported definitions;
@@ -97,14 +97,17 @@ public final class Backend {
      * {@code requirements} says what each behavior takes injected and in what order — the answer the
      * example verifier reads too, so a fake reaches the parameter this constructor binds it to;
      * {@code checked} carries the type checker's elaborated bodies, which is what the emitter reads
-     * instead of inferring types again (issue #81). */
+     * instead of inferring types again (issue #81); {@code dischargeInvariants} carries this module's
+     * invariant clauses in the representation the language's own operations survive in, which is what a
+     * derived decoder's constraint mapping reads (spec §decoder-error). */
     public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
                                                Map<String, Sig> importedSigs,
                                                Set<String> importedInjected,
                                                Map<String, ReqSig> calleeSigs,
                                                Map<String, List<BehaviorRequirement>> requirements,
-                                               TypeChecker.Checked checked) {
+                                               TypeChecker.Checked checked,
+                                               Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants) {
         Map<String, List<String>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
@@ -131,6 +134,7 @@ public final class Backend {
         }
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers);
+        ctx.setDischargeInvariants(dischargeInvariants);
         Backend b = new Backend(ctx, checked);
         // A behavior's class capitalizes its first letter (spec 19.5). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
@@ -360,6 +364,13 @@ public final class Backend {
      * decided in one place. */
     public static String helperMethod(String helper) {
         return CodegenContext.helperMethod(helper);
+    }
+
+    /** The {@code $Ctfe} method checking the clause declared {@code i}th, for a caller outside this
+     * package: the compile-time check of a constant construction asks one clause at a time, so that a
+     * constant the compiler rejects names the rule it broke. */
+    public static String clauseCheck(int index) {
+        return ValueClassGen.ctfeClauseCheck(index);
     }
 
     /**

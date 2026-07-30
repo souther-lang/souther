@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -71,7 +72,7 @@ class PublishedModuleTest {
 
         Ast.Data amount = (Ast.Data) read.module().defs().get(0);
         assertTrue(amount.newtype());
-        assertTrue(amount.invariant().isPresent(), "the invariant did not come back");
+        assertFalse(amount.invariants().isEmpty(), "the invariant did not come back");
     }
 
     /** An import comes back when a declaration names what it brings in, and not otherwise: the

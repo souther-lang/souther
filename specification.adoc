@@ -412,7 +412,7 @@ There is no type name that carries an invariant violation. A violation inside th
 
 The full formal grammar (BNF) is deferred (<<future-work>>). The delimiters and precedence needed for reading and writing are fixed here.
 
-* Both `+data+` declaration fields and record-literal `+型名 { ... }+` fields are `+,+`-separated (<<product-data>>, <<record-literal>>). A declaration gives a type, so `+名前: 型+`; a literal binds a value, so `+名前 = 値+` (`+:+` = has this type, `+=+` = is defined as this; ADR-0026). A `+...+` spread is an element that composes types but appears in the same comma sequence as fields (<<field-spread>>, ADR-0012, ADR-0030). An `+invariant+` is a clause placed after the type body (`+{ ... }+` or `+= Y+`) and is not part of the field list (<<invariant>>, ADR-0031).
+* Both `+data+` declaration fields and record-literal `+型名 { ... }+` fields are `+,+`-separated (<<product-data>>, <<record-literal>>). A declaration gives a type, so `+名前: 型+`; a literal binds a value, so `+名前 = 値+` (`+:+` = has this type, `+=+` = is defined as this; ADR-0026). A `+...+` spread is an element that composes types but appears in the same comma sequence as fields (<<field-spread>>, ADR-0012, ADR-0030). An `+invariant+` is a clause placed after the type body (`+{ ... }+` or `+= Y+`) and is not part of the field list (<<invariant>>, ADR-0031). A clause's name follows the same rule as everything else named with `+=+` — it is defined as that rule, so `+invariant nonEmpty = List.length(value) >= 1+` (<<invariant-clause-name>>, ADR-0080).
 * Argument lists and the enumerations in `+constructs+` / `+depends on+` are `+,+`-separated (<<behavior-io>>, <<constructs>>, <<depends-on>>).
 * Every `+,+`-separated list — declaration and record-literal fields, parameter and argument lists, tuple elements, list literals, and the `+constructs+` / `+depends on+` name lists — MAY carry a single trailing `+,+` before its closing delimiter. It is optional and has no meaning; it accommodates writers coming from Go or TypeScript. The sample code in this spec keeps a leading-comma layout instead (the `+,+` opens each continuation line, as in Elm) and writes no trailing comma.
 * `+|+` is the case separator of a sum and binds more loosely than `+->+`. `+(x: T) -> A | B+` reads as `+(x: T) -> (A | B)+` (the whole output is a sum). An anonymous `+|+` MUST NOT be written on input (<<union-intersection>>).
@@ -880,10 +880,28 @@ data DateRange =
     invariant start <= end
 ----
 
+[#invariant-clause-name]
+=== A clause MAY be named
+
+A clause MAY be given a name, which is what tells it apart from the type's other clauses: `+invariant <名前> = <式>+`. An attempted construction departs by the named clause that did not hold (<<attempted-construction>>), and a decode failure reports the name (<<decoder-error>>).
+
+[,text]
+----
+data QuoteLines = List<QuoteLine>
+    invariant nonEmpty = List.length(value) >= 1
+    invariant uniqueProducts = List.allUniqueBy(.product, value)
+----
+
+Two clauses that apply to one data MUST NOT share a name, a `+...+` spread's included clauses among them: a name that answered two rules would answer neither in particular. A clause MUST NOT be named `+_+`: that is what an attempt writes for the clauses carrying no name, so a clause named so could never be answered by name. A clause a spread takes in keeps the name its own declaration gave it.
+
+A clause written without a name is enforced exactly as before one could be named: nothing tells it apart from the type's other unnamed clauses, so it aborts inside the domain and fails the decode outside it without saying which rule it was, and no arm can name it.
+
 [#invariant-mvp]
 === Checking on construction
 
 Invariants are checked at runtime. The compiler inserts an invariant check on every path that constructs a data. Invariants taken in by a `+...+` spread are checked on the same path.
+
+The clauses are checked in the order they are declared — a `+...+` spread's first, then the declaration's own — and the first that does not hold is the one the failure names. Where several clauses fail, only the first is reported, so reordering the clauses of a published type changes what a caller is told and is a breaking change (ADR-0080).
 
 [#invariant-expressions]
 === Expressions allowed / forbidden in an invariant
@@ -1103,6 +1121,8 @@ The first two are the *statically dischargeable* ones, and they are separate bec
 
 The classification is the clause's own, read with the construction assumed to name what it is given. A construction that names nothing the procedure can name discharges nothing whatever its clauses say (<<invariant-discharge-terms>>); that is a fact about the construction and not about the clause.
 
+The answer carries the clause's name where it has one (<<invariant-clause-name>>), so what the LSP shows on a clause says both how it can be discharged and what an attempt departs by. The unit is the conjunct, as it is for the rest of the check, so a named clause written as `+a && b+` is classified twice under that one name — what discharges each half is what an author acts on, and the name is what a caller reads.
+
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 
@@ -1235,9 +1255,11 @@ At the boundary (HTTP, etc.), the `+Result+` failure is received and mapped to a
 
 ==== Codes an invariant produces
 
-A newtype's invariant reaches the boundary as the Raoh constraint that states the same rule, so the failure carries that constraint's `+code+` and metadata: `+String.length(value) >= 1+` fails as `+too_short+` with `+min+`, `+String.matches(p, value)+` as `+invalid_format+`, and a numeric bound as `+out_of_range+` with `+min+` / `+max+`. The vocabulary is Raoh's, so a `+MessageResolver+` keyed on the standard codes resolves and localises these without Souther supplying message text. Which type rejected the value is told by `+path+`, as for any other decode failure.
+A newtype's invariant reaches the boundary as the Raoh constraint that states the same rule, so the failure carries that constraint's `+code+` and metadata: `+String.length(value) >= 1+` fails as `+too_short+` with `+min+`, `+String.matches(p, value)+` as `+invalid_format+`, a numeric bound as `+out_of_range+` with `+min+` / `+max+`, `+List.length(value) >= 1+` as `+too_small+` with `+min+` / `+actual+`, and `+List.allUniqueBy(x -> x, value)+` as `+duplicate_element+` with the duplicates it found. The vocabulary is Raoh's, so a `+MessageResolver+` keyed on the standard codes resolves and localises these without Souther supplying message text. Which type rejected the value is told by `+path+`, as for any other decode failure.
 
-Only a rule with an exact Raoh equivalent is mapped this way. Anything else — a quantifier over a list, a check across two fields, an object's invariant — runs as the invariant it is and fails with the code `+invariant_violation+`, carrying the rejecting type's name in the metadata as `+type+`. A mapped rule is checked before an unmapped one, and construction re-checks every invariant regardless (<<violation-destination>>): the constraints are how a failure is *reported*, not what makes a value valid.
+Only a rule with an exact Raoh equivalent is mapped this way. Anything else — a quantifier over a list, a uniqueness under a projection, a check across two fields, an object's invariant — runs as the rule it is and fails with the code `+invariant_violation+`, carrying the rejecting type in the metadata — its declaring module as `+module+` and its name as `+type+` — and, where the clause was named (<<invariant-clause-name>>), that name as `+clause+`. The module is its own entry because a type is its module and its name (<<modules>>): two modules may each declare an `+Id+`, and a resolver keyed on the name alone would answer for either. So a boundary failure says which rule was broken and not only that the value was rejected. A clause's name never becomes the `+code+`: the code stays the shared one, so a resolver keyed on Raoh's vocabulary keeps working and the metadata is what it switches on.
+
+The clauses are checked in the order they are declared, which is the order construction decides in (<<invariant-mvp>>) — so the boundary and an attempted construction name the same clause for the same value. A mapped clause declared after an unmapped one gives up its Raoh code to keep that order: Raoh answers a plain `+Decoder+` once a rule of its own has been chained on, and a typed constraint cannot follow. Construction re-checks every clause regardless (<<violation-destination>>): the constraints are how a failure is *reported*, not what makes a value valid.
 
 [#codec-generation]
 === Generation method and Raoh
@@ -2316,6 +2338,39 @@ in `+else+`, which MAY be a value naming nothing (`+else []+`).
 
 `+guard+` here is the same sugar for `+if+` (<<guard>>), so the `+if+` form is the base one and a
 helper `+let+`, which has no departure case to name, reaches it too.
+
+[#attempt-departures]
+==== Departing per clause
+
+The `+else+` MAY instead answer each invariant clause the type names (<<invariant-clause-name>>), so a
+behavior that departs differently per rule states the rules once rather than restating them as guards.
+
+[,text]
+----
+guard QuoteLines(List.map(r -> toLine(r), lines)) as ls else
+    | nonEmpty       -> NoLines
+    | uniqueProducts -> DuplicateProduct
+----
+
+What an arm answers is which rule failed. The name a business failure gets is still the one the arm
+writes, and no value crosses from the failure into the arm.
+
+Which arm is taken is decided by the clause that failed, so the order the arms are written in has no
+effect; which clause failed is decided by the order the clauses are declared in (<<invariant-mvp>>).
+
+The arms MUST cover what can fail, so that no failure reaches a branch that is not there:
+
+* every named clause of the type MUST have an arm, and an arm MUST name a clause the type has;
+* `+| _ -> …+` MUST be written when the type has a clause carrying no name, and MUST NOT be written when
+  it has none — it answers the clauses that cannot be named, and there being none to answer is worth
+  saying.
+
+Adding an unnamed clause to a type whose clauses are all named is therefore a compile error at every
+mapping site, which is what adding a rule to a published type should be: today it shows up only as more
+aborts and more decode failures.
+
+The `+else <値>+` form keeps its meaning — one value for any failure — so naming a clause does not
+disturb a site that does not care which rule broke.
 
 A construction inside an argument is an ordinary construction and aborts on violation
 (<<violation-destination>>); what is attempted is the outer construction alone.

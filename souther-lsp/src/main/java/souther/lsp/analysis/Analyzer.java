@@ -936,7 +936,12 @@ public final class Analyzer {
                     + "This clause cannot be represented by the static checker and is enforced only "
                     + "at construction time. No guard discharges it.";
         };
-        return clause.reason().map(why -> head + "\n\n" + why + ".").orElse(head);
+        String body = clause.reason().map(why -> head + "\n\n" + why + ".").orElse(head);
+        // What the clause is called is what an attempted construction's arm and a boundary issue read,
+        // so it belongs beside how the clause discharges.
+        return clause.name()
+                .map(n -> body + "\n\nDeparted from by name: `| " + n + " -> ...`.")
+                .orElse(body);
     }
 
     /** The innermost node of {@code kind} whose span contains {@code offset}, or null. */

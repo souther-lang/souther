@@ -74,8 +74,10 @@ class CompileNullMarkedTest {
     @Test
     void constructHandsBackATypedResult() {
         // `__construct` is public for an exposed type and is the path another module's `constructs`
-        // takes; a raw `Result` there is a platform type again to a Kotlin caller
-        assertEquals("(Ldemo/Amount;)Lsouther/runtime/Result<Ldemo/Receipt;Ljava/lang/String;>;",
+        // takes; a raw `Result` there is a platform type again to a Kotlin caller. Its failure side
+        // names the clause that did not hold.
+        assertEquals("(Ldemo/Amount;)Lsouther/runtime/Result<Ldemo/Receipt;"
+                        + "Lsouther/runtime/InvariantFailure;>;",
                 methodSignature(Compiler.compile(SRC).get("demo.Receipt"), "__construct"));
     }
 

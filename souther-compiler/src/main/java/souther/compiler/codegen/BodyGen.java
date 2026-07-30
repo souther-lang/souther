@@ -27,6 +27,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 
 import static souther.compiler.codegen.Descriptors.*;
 import static souther.compiler.codegen.JvmTypes.*;
@@ -358,7 +359,11 @@ final class BodyGen {
                     emitTail(ic.then(), cdB, requiredNames, requiredSuccess, expected);
                     restore(ic.binder(), shadowed);
                     code.labelBinding(a.elseLabel());
-                    emitTail(ic.els(), cdB, requiredNames, requiredSuccess, expected);
+                    // Each departure is in tail position too, so it returns on its own and needs no
+                    // jump past the ones emitted after it.
+                    emitDepartures(ic, a,
+                            body -> emitTail(body, cdB, requiredNames, requiredSuccess, expected),
+                            null);
                 }
                 case Core.Match m -> emitTailMatch(m, cdB, requiredNames, requiredSuccess, expected);
                 case Core.Call call when tcoName != null && call.fn().equals(tcoName)
@@ -583,7 +588,7 @@ final class BodyGen {
                     code.goto_(end);
 
                     code.labelBinding(a.elseLabel());
-                    genExpr(ic.els(), expected);
+                    emitDepartures(ic, a, body -> genExpr(body, expected), end);
                     code.labelBinding(end);
                 }
                 case Core.OptionSome s -> {
@@ -759,7 +764,7 @@ final class BodyGen {
         /** Where an attempt's failing side continues, and the slot holding the value its success side
          * names. The binder is the caller's to scope, because how far the success branch reaches
          * differs between value and tail position. */
-        private record Attempt(Label elseLabel, int slot) {}
+        private record Attempt(Label elseLabel, int slot, int resultSlot) {}
 
         /**
          * Emits an attempted construction up to its branch: the same {@code __construct} a plain
@@ -789,7 +794,67 @@ final class BodyGen {
             code.invokevirtual(CD_ResultOk, "value", MTD_Object);
             code.checkcast(cdType);
             store(code, bound, nd.type());
-            return new Attempt(elseL, bound);
+            return new Attempt(elseL, bound, rSlot);
+        }
+
+        /**
+         * Emits an attempt's departures at its else label. One departure naming no clause is the whole
+         * of it — any failure is that value. Several are a lookup on the clause the {@code Result}
+         * carries: the arms are compared in turn and one is left to fall through, so nothing is emitted
+         * for the case where no clause matches. The checker has established there is none — every named
+         * clause has an arm, and {@code | _ ->} is there exactly when clauses carry no name.
+         *
+         * <p>{@code end} is where a departure jumps once its value is built, or null in tail position,
+         * where each departure returns instead.
+         */
+        private void emitDepartures(Core.IfConstructed ic, Attempt a, Consumer<Core> emit, Label end) {
+            List<Core.ElseArm> arms = ic.els();
+            if (arms.size() == 1 && arms.get(0).clause().isEmpty()) {
+                emit.accept(arms.get(0).body());
+                return;
+            }
+            code.aload(a.resultSlot());
+            code.checkcast(CD_ResultErr);
+            code.invokevirtual(CD_ResultErr, "error", MTD_Object);
+            code.checkcast(CD_InvariantFailure);
+            code.invokevirtual(CD_InvariantFailure, "clause", MTD_failureClause);
+            int cSlot = slot(Type.STRING);
+            code.astore(cSlot);
+            // One arm is left to fall through, so it needs no comparison: the `| _ ->` where there is
+            // one, and otherwise the last arm — with every clause named and answered, a failure that
+            // matched none of the others is that one.
+            int fallthrough = arms.size() - 1;
+            for (int i = 0; i < arms.size(); i++) {
+                if (arms.get(i).clause().isEmpty()) {
+                    fallthrough = i;
+                }
+            }
+            List<Label> labels = new ArrayList<>();
+            for (int i = 0; i < arms.size(); i++) {
+                if (i == fallthrough) {
+                    labels.add(null);
+                    continue;
+                }
+                Label armL = code.newLabel();
+                labels.add(armL);
+                // The clause is null for a rule declared without a name, so the constant is the
+                // receiver of the comparison and the read value the argument.
+                code.loadConstant(arms.get(i).clause().get());
+                code.aload(cSlot);
+                code.invokevirtual(CD_String, "equals", MTD_equalsObject);
+                code.ifne(armL);
+            }
+            emit.accept(arms.get(fallthrough).body());
+            for (int i = 0; i < arms.size(); i++) {
+                if (i == fallthrough) {
+                    continue;
+                }
+                if (end != null) {
+                    code.goto_(end);
+                }
+                code.labelBinding(labels.get(i));
+                emit.accept(arms.get(i).body());
+            }
         }
 
         /** Emits the checked-construction tail — {@code __construct(fields) -> Result}, {@code orThrow}
@@ -1534,7 +1599,7 @@ final class BodyGen {
                     Set<String> inner = new HashSet<>(bound);
                     inner.add(ic.binder());
                     collectFree(ic.then(), inner, free);
-                    collectFree(ic.els(), bound, free);
+                    ic.els().forEach(arm -> collectFree(arm.body(), bound, free));
                 }
                 case Core.LetIn li -> {
                     collectFree(li.value(), bound, free);

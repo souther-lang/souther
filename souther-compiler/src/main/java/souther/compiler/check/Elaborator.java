@@ -13,6 +13,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -292,29 +293,36 @@ public final class Elaborator {
                                     .build(),
                             "`" + construct.typeName().name() + "` has no invariant to attempt");
                 }
+                checkArmsAnswerClauses(ic, construct.typeName(), ctx.symbols());
                 // The binder names the built value, so the success branch reads it at the data's own
                 // type — with the invariant established, which is why the discharge check may seed it.
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(ic.binder(), construct.type());
                 Core then = liftIntoOption(elaborate(ic.then(), inner, ctx, expected), expected,
                         ctx.symbols());
-                Core els = liftIntoOption(elaborate(ic.els(), env, ctx, expected), expected,
-                        ctx.symbols());
-                Type joined = TypeOps.join(then.type(), els.type());
-                if (joined == null) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.if.msg")
-                                    .title("check.if.title")
-                                    .at(ic.pos(), 2)
-                                    .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())),
-                                            "check.if.then", Type.show(then.type()))
-                                    .secondary(Region.ofWidth(ic.els().pos(), width(ic.els())),
-                                            "check.if.else", Type.show(els.type()))
-                                    .hint("check.if.hint")
-                                    .build(),
-                            "if branches disagree: " + then.type() + " vs " + els.type());
+                List<Core.ElseArm> arms = new ArrayList<>();
+                Type joined = then.type();
+                for (Ast.ElseArm arm : ic.els()) {
+                    Core body = liftIntoOption(elaborate(arm.body(), env, ctx, expected), expected,
+                            ctx.symbols());
+                    arms.add(new Core.ElseArm(arm.clause(), body));
+                    Type next = TypeOps.join(joined, body.type());
+                    if (next == null) {
+                        throw CompileException.of(
+                                Diagnostic.of(null, "check.if.msg")
+                                        .title("check.if.title")
+                                        .at(ic.pos(), 2)
+                                        .secondary(Region.ofWidth(ic.then().pos(), width(ic.then())),
+                                                "check.if.then", Type.show(then.type()))
+                                        .secondary(Region.ofWidth(arm.body().pos(), width(arm.body())),
+                                                "check.if.else", Type.show(body.type()))
+                                        .hint("check.if.hint")
+                                        .build(),
+                                "if branches disagree: " + joined + " vs " + body.type());
+                    }
+                    joined = next;
                 }
-                yield new Core.IfConstructed(construct, ic.binder(), then, els, joined, ic.pos());
+                yield new Core.IfConstructed(construct, ic.binder(), then, arms, joined, ic.pos());
             }
             case Ast.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
@@ -722,7 +730,9 @@ public final class Elaborator {
                 collectApplications(name, ic.construct(), env, ctx, out, inner);
                 collectApplications(name, ic.then(), env, ctx, out,
                         with(inner, List.of(ic.binder())));
-                collectApplications(name, ic.els(), env, ctx, out, inner);
+                for (Ast.ElseArm arm : ic.els()) {
+                    collectApplications(name, arm.body(), env, ctx, out, inner);
+                }
             }
             case Ast.Match m -> {
                 collectApplications(name, m.scrutinee(), env, ctx, out, inner);
@@ -768,7 +778,7 @@ public final class Elaborator {
                     || reaches(li.body(), without(inner, List.of(li.name())));
             case Ast.IfConstructed ic -> reaches(ic.construct(), inner)
                     || reaches(ic.then(), without(inner, List.of(ic.binder())))
-                    || reaches(ic.els(), inner);
+                    || ic.els().stream().anyMatch(arm -> reaches(arm.body(), inner));
             case Ast.Match m -> {
                 if (reaches(m.scrutinee(), inner)) {
                     yield true;
@@ -1000,6 +1010,87 @@ public final class Elaborator {
                                 + " sum. Absence of that kind does not reach `List.filterMap`, whose"
                                 + " step has to answer an optional: use `List.concatMap` over a step"
                                 + " answering a list of nought or one.");
+    }
+
+    /**
+     * That an attempt's departure arms answer the clauses of the type being attempted, and answer all
+     * of them. A failure reaches exactly one arm, so the arms have to be total over what can fail:
+     * every named clause is answered by name, and {@code | _ -> …} answers the clauses carrying no
+     * name — required when there are such clauses and refused when there are none, so that reading an
+     * arm says which rule it is for and reading {@code _} says there are rules it cannot name.
+     *
+     * <p>Nothing is checked for the {@code else e} form: it already answers any failure.
+     */
+    private static void checkArmsAnswerClauses(Ast.IfConstructed ic, TypeName typeName, Symbols symbols) {
+        if (!ic.mapsClauses()) {
+            return;
+        }
+        List<Ast.InvariantClause> clauses = symbols.get(typeName) instanceof Ast.Data data
+                ? TypeOps.effectiveInvariants(data, symbols) : List.of();
+        LinkedHashSet<String> named = new LinkedHashSet<>();
+        boolean unnamed = false;
+        for (Ast.InvariantClause clause : clauses) {
+            if (clause.name().isPresent()) {
+                named.add(clause.name().get());
+            } else {
+                unnamed = true;
+            }
+        }
+        boolean wildcard = false;
+        Set<String> answered = new HashSet<>();
+        for (Ast.ElseArm arm : ic.els()) {
+            if (arm.clause().isEmpty()) {
+                wildcard = true;
+                continue;
+            }
+            String name = arm.clause().get();
+            answered.add(name);
+            if (!named.contains(name)) {
+                throw CompileException.of(
+                        Diagnostic.of("E2014", "check.attempt.unknownclause")
+                                .title("check.attempt.title")
+                                .at(arm.pos(), name.length())
+                                .args(name, typeName.name())
+                                .hint("check.attempt.unknownclause.hint",
+                                        named.isEmpty() ? "-" : String.join(", ", named))
+                                .build(),
+                        "`" + typeName.name() + "` has no invariant clause named `" + name + "`");
+            }
+        }
+        List<String> missing = new ArrayList<>(named);
+        missing.removeAll(answered);
+        if (!missing.isEmpty()) {
+            throw CompileException.of(
+                    Diagnostic.of("E2015", "check.attempt.clauseunanswered")
+                            .title("check.attempt.title")
+                            .at(ic.pos(), 2)
+                            .args(String.join(", ", missing), typeName.name())
+                            .hint("check.attempt.clauseunanswered.hint")
+                            .build(),
+                    "these clauses of `" + typeName.name() + "` have no arm: "
+                            + String.join(", ", missing));
+        }
+        if (unnamed && !wildcard) {
+            throw CompileException.of(
+                    Diagnostic.of("E2016", "check.attempt.unnamedunanswered")
+                            .title("check.attempt.title")
+                            .at(ic.pos(), 2)
+                            .args(typeName.name())
+                            .hint("check.attempt.unnamedunanswered.hint")
+                            .build(),
+                    "`" + typeName.name() + "` has clauses carrying no name, and no `| _ ->` answers"
+                            + " them");
+        }
+        if (!unnamed && wildcard) {
+            throw CompileException.of(
+                    Diagnostic.of("E2017", "check.attempt.nothingunnamed")
+                            .title("check.attempt.title")
+                            .at(ic.pos(), 2)
+                            .args(typeName.name())
+                            .hint("check.attempt.nothingunnamed.hint")
+                            .build(),
+                    "every clause of `" + typeName.name() + "` is named, so `| _ ->` answers nothing");
+        }
     }
 
     /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source

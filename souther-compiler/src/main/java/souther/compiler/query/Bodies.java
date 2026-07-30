@@ -928,7 +928,7 @@ public final class Bodies {
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
             Answer<Ast.FnDef> discharge = db.ask(new BodyForInvariantDischarge(module, behavior));
-            Answer<Map<TypeName, Ast.Expr>> dischargeInvariants =
+            Answer<Map<TypeName, List<Ast.InvariantClause>>> dischargeInvariants =
                     db.ask(new Shapes.InvariantsForDischarge(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
                     || !calleeSigs.present() || !reqSigs.present() || !helpers.present()

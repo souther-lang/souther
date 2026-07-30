@@ -245,7 +245,7 @@ public final class Shapes {
             try {
                 Map<TypeName, List<ClauseDischarge>> out = new LinkedHashMap<>();
                 for (Ast.Def def : resolved.value().defs()) {
-                    if (!(def instanceof Ast.Data data) || data.invariant().isEmpty()) {
+                    if (!(def instanceof Ast.Data data) || data.invariants().isEmpty()) {
                         continue;
                     }
                     // The clause is classified in the representation the check reads, and reported at
@@ -254,9 +254,14 @@ public final class Shapes {
                     HelperInliner inliner = HelperInliner.forHelpers(
                             HelperInliner.helpersOf(resolved.value()), InliningPolicy.DISCHARGE);
                     List<ClauseDischarge> clauses = new ArrayList<>();
-                    for (Ast.Expr written : HelperInliner.conjunctsOf(data.invariant().get())) {
-                        clauses.add(InvariantChecker.capabilityOf(inliner.inline(written),
-                                leftmost(written), data, scope.value()));
+                    // A declared clause is one rule to depart by and may still be several conjuncts to
+                    // discharge, so `a && b` under one name is classified twice under that name: what
+                    // discharges each half is what an author needs, and the name is what a caller reads.
+                    for (Ast.InvariantClause declared : data.invariants()) {
+                        for (Ast.Expr written : HelperInliner.conjunctsOf(declared.expr())) {
+                            clauses.add(InvariantChecker.capabilityOf(inliner.inline(written),
+                                    leftmost(written), data, scope.value()).named(declared.name()));
+                        }
                     }
                     out.put(new TypeName(name, data.name()), List.copyOf(clauses));
                 }
@@ -293,14 +298,15 @@ public final class Shapes {
      * an imported clause fall outside the statically dischargeable fragment: the analysis reads what
      * it is given, and there the operations have already become the folds they are.
      */
-    public record InvariantsForDischarge(String name) implements Key<Map<TypeName, Ast.Expr>> {
+    public record InvariantsForDischarge(String name)
+            implements Key<Map<TypeName, List<Ast.InvariantClause>>> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Map<TypeName, Ast.Expr>> compute(Db db) {
+        public Answer<Map<TypeName, List<Ast.InvariantClause>>> compute(Db db) {
             Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!resolved.present() || !scope.present()) {
