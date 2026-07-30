@@ -75,6 +75,7 @@ final class NumericDomain {
     private final Map<String, BigDecimal> hi;                  // atom -> upper bound (absent = +inf)
     private final Map<String, Map<String, BigDecimal>> diff;   // diff[a][b] = tightest known (a - b)
     private final List<Asserted> kept;                         // forms outside both shapes, as written
+    private Map<String, Map<String, BigDecimal>> closed;       // diff closed transitively, on first ask
 
     private NumericDomain(boolean bottom, Map<String, BigDecimal> lo, Map<String, BigDecimal> hi,
                           Map<String, Map<String, BigDecimal>> diff, List<Asserted> kept) {
@@ -354,14 +355,14 @@ final class NumericDomain {
         Map<String, BigDecimal> nhi = new HashMap<>(hi);
         nhi.merge(a, bound, NumericDomain::min);
         NumericDomain d = new NumericDomain(false, lo, nhi, diff, kept);
-        return d.feasible(a) ? d : bottom();
+        return d.feasible() ? d : bottom();
     }
 
     private NumericDomain withLo(String a, BigDecimal bound) {
         Map<String, BigDecimal> nlo = new HashMap<>(lo);
         nlo.merge(a, bound, NumericDomain::max);
         NumericDomain d = new NumericDomain(false, nlo, hi, diff, kept);
-        return d.feasible(a) ? d : bottom();
+        return d.feasible() ? d : bottom();
     }
 
     private NumericDomain withDiff(String a, String b, BigDecimal bound) {
@@ -369,55 +370,90 @@ final class NumericDomain {
         diff.forEach((k, v) -> nd.put(k, new HashMap<>(v)));
         nd.computeIfAbsent(a, k -> new HashMap<>()).merge(b, bound, NumericDomain::min);
         NumericDomain d = new NumericDomain(false, lo, hi, nd, kept);
-        // Contradictory guards make the path infeasible: with a - b <= bound now recorded, if the
-        // difference facts also prove b - a <= back and bound + back < 0, then 0 <= bound + back < 0.
-        // Mark it bottom so entails discharges everything and refutes fires nothing — no false E2010
-        // on a dead path.
-        BigDecimal back = d.closedDiff(b, a);
-        if (back != null && bound.add(back).signum() < 0) {
-            return bottom();
+        return d.feasible() ? d : bottom();
+    }
+
+    /**
+     * Whether the bounds and the differences can hold at once. Guards that contradict make the path
+     * infeasible, and the domain must say so: {@link #entails} then discharges everything and
+     * {@link #refutes} fires nothing, so nothing is reported at a construction that is not reached.
+     *
+     * <p>A bound is an edge to or from zero, so the two ways a contradiction shows up are one thing
+     * seen twice: a difference cycle whose sum is negative, and a lower bound above an upper one once
+     * the differences between them are closed. Deriving a bound through a difference is what made the
+     * second reachable — {@code a <= b} and {@code b <= 0} bound {@code a} without recording anything
+     * about {@code a} — so both are asked here rather than at the atom the assertion happened to name.
+     */
+    private boolean feasible() {
+        for (Map.Entry<String, Map<String, BigDecimal>> row : closed().entrySet()) {
+            BigDecimal cycle = row.getValue().get(row.getKey());
+            if (cycle != null && cycle.signum() < 0) {
+                return false;
+            }
         }
-        return d;
+        for (String a : lo.keySet()) {
+            BigDecimal l = bestLo(a);
+            BigDecimal h = bestHi(a);
+            if (l != null && h != null && l.compareTo(h) > 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
-    private boolean feasible(String a) {
-        BigDecimal l = lo.get(a);
-        BigDecimal h = hi.get(a);
-        return l == null || h == null || l.compareTo(h) <= 0;
-    }
-
-    /** The tightest proven upper bound on {@code a - b}, closing difference facts transitively over a
-     * bounded number of hops, or {@code null} if none is known. */
+    /** The tightest proven upper bound on {@code a - b}, or {@code null} if none is known. */
     private BigDecimal closedDiff(String a, String b) {
         if (a.equals(b)) {
             return BigDecimal.ZERO;
         }
-        // Bellman-Ford style relaxation of `a - x <= c` edges to reach `a - b`.
-        Map<String, BigDecimal> best = new HashMap<>();
-        best.put(a, BigDecimal.ZERO);
+        Map<String, BigDecimal> row = closed().get(a);
+        return row == null ? null : row.get(b);
+    }
+
+    /** The difference facts closed transitively — {@code a - b <= c} with {@code b - d <= e} gives
+     * {@code a - d <= c + e} — computed once for the domain and read by every query it answers, since
+     * a bound on one atom is derived through the differences to every other. */
+    private Map<String, Map<String, BigDecimal>> closed() {
+        if (closed == null) {
+            closed = close(diff);
+        }
+        return closed;
+    }
+
+    private static Map<String, Map<String, BigDecimal>> close(Map<String, Map<String, BigDecimal>> diff) {
         Set<String> atoms = new HashSet<>(diff.keySet());
         diff.values().forEach(r -> atoms.addAll(r.keySet()));
-        for (int i = 0; i < atoms.size() + 1; i++) {
-            boolean changed = false;
-            for (Map.Entry<String, Map<String, BigDecimal>> row : diff.entrySet()) {
-                BigDecimal du = best.get(row.getKey());
-                if (du == null) {
+        Map<String, Map<String, BigDecimal>> d = new HashMap<>();
+        diff.forEach((a, row) -> d.put(a, new HashMap<>(row)));
+        for (String through : atoms) {
+            Map<String, BigDecimal> from = d.get(through);
+            if (from == null) {
+                continue;
+            }
+            List<Map.Entry<String, BigDecimal>> hops = List.copyOf(from.entrySet());
+            for (String a : atoms) {
+                if (a.equals(through)) {
+                    continue;   // a hop from an atom to itself only repeats a cycle already recorded
+                }
+                BigDecimal toThrough = edge(d, a, through);
+                if (toThrough == null) {
                     continue;
                 }
-                for (Map.Entry<String, BigDecimal> edge : row.getValue().entrySet()) {
-                    BigDecimal cand = du.add(edge.getValue());
-                    BigDecimal cur = best.get(edge.getKey());
-                    if (cur == null || cand.compareTo(cur) < 0) {
-                        best.put(edge.getKey(), cand);
-                        changed = true;
+                for (Map.Entry<String, BigDecimal> hop : hops) {
+                    BigDecimal candidate = toThrough.add(hop.getValue());
+                    BigDecimal known = edge(d, a, hop.getKey());
+                    if (known == null || candidate.compareTo(known) < 0) {
+                        d.computeIfAbsent(a, k -> new HashMap<>()).put(hop.getKey(), candidate);
                     }
                 }
             }
-            if (!changed) {
-                break;
-            }
         }
-        return best.get(b);
+        return d;
+    }
+
+    private static BigDecimal edge(Map<String, Map<String, BigDecimal>> d, String a, String b) {
+        Map<String, BigDecimal> row = d.get(a);
+        return row == null ? null : row.get(b);
     }
 
     private static BigDecimal min(BigDecimal x, BigDecimal y) {

@@ -509,8 +509,10 @@ public final class InvariantChecker {
                 numeric = new Constraint(la.minus(ra), eff);
             }
         }
-        List<String> keys = factKeys(inv, binds);
-        Fact fact = keys.isEmpty() ? null : new Fact(positive ? keys : firstOnly(keys), positive);
+        Polar polar = polar(inv, positive);
+        List<String> keys = factKeys(polar.expr(), binds);
+        boolean stated = polar.positive();
+        Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
         if (numeric == null && fact == null) {
             return null;
         }
@@ -555,8 +557,36 @@ public final class InvariantChecker {
         }
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
-        String key = bodyKey(cond, types);
-        return key == null ? out : out.with(out.facts().assume(key, positive));
+        Polar polar = polar(cond, positive);
+        String key = bodyKey(polar.expr(), types);
+        return key == null ? out : out.with(out.facts().assume(key, polar.positive()));
+    }
+
+    /** A predicate as one of {@code ==}/{@code <} states it, and whether it is being stated or denied. */
+    private record Polar(Ast.Expr expr, boolean positive) {}
+
+    /**
+     * {@code e}, asserted with polarity {@code positive}, as the comparison of {@code ==} or {@code <}
+     * that says the same thing: {@code a /= b} is {@code a == b} denied, {@code a >= b} is
+     * {@code a < b} denied, and {@code a > b} is {@code b < a}. A fact is settled by key equality, so
+     * without this the six ways to compare two terms are six facts, and a guard written one way would
+     * leave a clause written the other unsettled.
+     */
+    private static Polar polar(Ast.Expr e, boolean positive) {
+        if (!(e instanceof Ast.Binary b) || relOf(b.op()) == null) {
+            return new Polar(e, positive);
+        }
+        return switch (b.op()) {
+            case NE -> new Polar(comparison(Ast.BinOp.EQ, b.left(), b.right(), b), !positive);
+            case GE -> new Polar(comparison(Ast.BinOp.LT, b.left(), b.right(), b), !positive);
+            case GT -> new Polar(comparison(Ast.BinOp.LT, b.right(), b.left(), b), positive);
+            case LE -> new Polar(comparison(Ast.BinOp.LT, b.right(), b.left(), b), !positive);
+            default -> new Polar(e, positive);
+        };
+    }
+
+    private static Ast.Binary comparison(Ast.BinOp op, Ast.Expr left, Ast.Expr right, Ast.Binary of) {
+        return new Ast.Binary(op, left, right, of.pos());
     }
 
     /** What a negation is applied to, or {@code null} if {@code e} is not one. {@code Bool.not} is an
@@ -991,7 +1021,7 @@ public final class InvariantChecker {
             case Ast.Binary b -> {
                 String l = termKey(b.left(), site, bound, depth);
                 String r = termKey(b.right(), site, bound, depth);
-                yield l == null || r == null ? null : "(" + l + " " + b.op() + " " + r + ")";
+                yield l == null || r == null ? null : binaryKey(b.op(), l, r);
             }
             case Ast.ListLit l -> elementsKey("[", l.elements(), site, bound, depth, "]");
             case Ast.Tuple t -> elementsKey("(", t.elements(), site, bound, depth, ")");
@@ -1036,6 +1066,29 @@ public final class InvariantChecker {
             sb.append(i == 0 ? "" : ", ").append(part);
         }
         return sb.append(close).toString();
+    }
+
+    /**
+     * A binary as a key. The six comparisons are two: {@code ==} over the pair in a settled order,
+     * since which side is written first is not part of what it says, and {@code <}, with the other
+     * three written as one of those denied. Two clauses comparing the same two terms are then one term
+     * however the author reached for it — which matters wherever the comparison is not the whole
+     * condition, since only there can the denial not be carried by the polarity instead.
+     */
+    private static String binaryKey(Ast.BinOp op, String l, String r) {
+        return switch (op) {
+            case EQ -> l.compareTo(r) <= 0 ? cmp("EQ", l, r) : cmp("EQ", r, l);
+            case NE -> "!" + binaryKey(Ast.BinOp.EQ, l, r);
+            case LT -> cmp("LT", l, r);
+            case GT -> cmp("LT", r, l);
+            case GE -> "!" + cmp("LT", l, r);
+            case LE -> "!" + cmp("LT", r, l);
+            default -> cmp(op.toString(), l, r);
+        };
+    }
+
+    private static String cmp(String op, String l, String r) {
+        return "(" + l + " " + op + " " + r + ")";
     }
 
     /** A string value written into a key with the punctuation the key itself uses escaped, so a value
