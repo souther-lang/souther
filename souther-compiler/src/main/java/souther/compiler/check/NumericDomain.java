@@ -243,13 +243,50 @@ final class NumericDomain {
         BigDecimal acc = f.constant();
         for (Map.Entry<String, BigDecimal> e : f.coefs().entrySet()) {
             BigDecimal k = e.getValue();
-            BigDecimal b = k.signum() > 0 ? hi.get(e.getKey()) : lo.get(e.getKey());
+            BigDecimal b = k.signum() > 0 ? bestHi(e.getKey()) : bestLo(e.getKey());
             if (b == null) {
                 return null;   // unbounded in the contributing direction
             }
             acc = acc.add(k.multiply(b));
         }
         return acc;
+    }
+
+    /** The tightest upper bound on an atom: its own, or one reached through a difference —
+     * {@code a - b <= d} and {@code b <= c} give {@code a <= c + d}, which is what relates the size of
+     * a filtered list to a bound on the list it came from. */
+    private BigDecimal bestHi(String a) {
+        BigDecimal best = hi.get(a);
+        for (Map.Entry<String, BigDecimal> b : hi.entrySet()) {
+            if (b.getKey().equals(a)) {
+                continue;
+            }
+            BigDecimal d = closedDiff(a, b.getKey());
+            if (d == null) {
+                continue;
+            }
+            BigDecimal through = b.getValue().add(d);
+            best = best == null ? through : min(best, through);
+        }
+        return best;
+    }
+
+    /** The tightest lower bound on an atom, the same way: {@code b - a <= d} and {@code b >= c} give
+     * {@code a >= c - d}. */
+    private BigDecimal bestLo(String a) {
+        BigDecimal best = lo.get(a);
+        for (Map.Entry<String, BigDecimal> b : lo.entrySet()) {
+            if (b.getKey().equals(a)) {
+                continue;
+            }
+            BigDecimal d = closedDiff(b.getKey(), a);
+            if (d == null) {
+                continue;
+            }
+            BigDecimal through = b.getValue().subtract(d);
+            best = best == null ? through : max(best, through);
+        }
+        return best;
     }
 
     // --- assignment ----------------------------------------------------------------------------

@@ -284,10 +284,8 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
-    void aLengthInvariantOverAMappedListStaysOpaque() {
-        // `List.length(List.map(f, xs))` is not the same atom as `List.length(xs)` at this increment,
-        // so the clause is not expressible here and the run-time check stands — no warning no guard
-        // written over the mapped list could silence
+    void anUnguardedConstructionFromAMappedListIsReported() {
+        // the length of the mapped list is the length of `xs`, and nothing here says what that is
         String m = """
                 module demo
                 data Lines = List<Int>
@@ -295,8 +293,8 @@ class CompileInvariantDischargeTest {
                 behavior build : (xs: List<Int>) -> Lines constructs Lines
                 let build (xs) = Lines(List.map(x -> x + 1, xs))
                 """;
-        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
-                "an unnameable container leaves the clause opaque");
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "the length of the mapped list is the length of what was mapped");
     }
 
     @Test
@@ -594,6 +592,158 @@ class CompileInvariantDischargeTest {
                 """;
         assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
                 "a rebinding invalidates the guard's fact about that name");
+    }
+
+    @Test
+    void aMappingKeepsTheLengthOfWhatItMapped() {
+        // the crm case: guard the input's length, build from the mapped list. How the elements are
+        // made has no bearing on how many there are.
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoItems
+                    Lines(List.map(x -> x + 1, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a mapping keeps the length");
+    }
+
+    @Test
+    void aReorderingKeepsTheLength() {
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoItems
+                    Lines(List.reverse(List.sort(xs)))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "reversing and sorting keep the length");
+    }
+
+    @Test
+    void aSelectionOnlyBoundsTheLength() {
+        // filtering can drop everything, so guarding the input says nothing about the result
+        String m = """
+                module demo
+                data NoItems
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                behavior build : (xs: List<Int>) -> Lines | NoItems constructs Lines, NoItems
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else NoItems
+                    Lines(List.filter(x -> x > 0, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a selection does not keep the length");
+    }
+
+    @Test
+    void aSelectionBoundsTheLengthFromAbove() {
+        // the other direction is known: no more came out than went in, so a cap on the input caps
+        // the result
+        String m = """
+                module demo
+                data TooMany
+                data Lines = List<Int>
+                    invariant List.length(value) <= 10
+                behavior build : (xs: List<Int>) -> Lines | TooMany constructs Lines, TooMany
+                let build (xs) = {
+                    guard List.length(xs) <= 10
+                        else TooMany
+                    Lines(List.filter(x -> x > 0, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "no more came out of the filter than went in");
+    }
+
+    @Test
+    void aReorderingCarriesUniqueness() {
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { a: Int }
+                data Rows = List<Row>
+                    invariant List.allUniqueBy(r -> r.a, value)
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(r -> r.a, xs)
+                        else Duplicate
+                    Rows(List.sortBy(r -> r.a, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "sorting keeps the elements, so it keeps their distinctness");
+    }
+
+    @Test
+    void aSelectionCarriesAPropertyOfEveryElement() {
+        String m = """
+                module demo
+                data OutOfRange
+                data Row = { a: Int }
+                data Rows = List<Row>
+                    invariant List.all(r -> r.a >= 1, value)
+                behavior build : (xs: List<Row>) -> Rows | OutOfRange constructs Rows, OutOfRange
+                let build (xs) = {
+                    guard List.all(r -> r.a >= 1, xs)
+                        else OutOfRange
+                    Rows(List.filter(r -> r.a > 5, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "nothing new is in a sublist, so what held of every element still holds");
+    }
+
+    @Test
+    void aSelectionDoesNotCarryMembership() {
+        String m = """
+                module demo
+                data Missing
+                data Rows = List<Int>
+                    invariant List.member(1, value)
+                behavior build : (xs: List<Int>) -> Rows | Missing constructs Rows, Missing
+                let build (xs) = {
+                    guard List.member(1, xs)
+                        else Missing
+                    Rows(List.filter(x -> x > 5, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a filter may drop the very element that was there");
+    }
+
+    @Test
+    void aMappingDoesNotCarryUniqueness() {
+        // distinct elements can map to one — that a projection survives a map is #226's question
+        String m = """
+                module demo
+                data Duplicate
+                data Rows = List<Int>
+                    invariant List.allUniqueBy(x -> x, value)
+                behavior build : (xs: List<Int>) -> Rows | Duplicate constructs Rows, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(x -> x, xs)
+                        else Duplicate
+                    Rows(List.map(x -> x * 0, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a mapping says nothing about what the elements became");
     }
 
     @Test
