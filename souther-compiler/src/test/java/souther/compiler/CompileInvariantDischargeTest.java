@@ -561,6 +561,43 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aLiteralHoldingTheKeysOwnPunctuationIsAnotherTerm() {
+        // one element whose value is `a", "b` is not the two elements `a` and `b`
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a\\", \\"b"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a", "b"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "another list is another fact however its elements are spelled");
+    }
+
+    @Test
+    void aNewlineAndTheTwoCharactersSpellingItAreDifferentTerms() {
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a\\nb"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a\\\\nb"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a newline is not the backslash and the n that spell it");
+    }
+
+    @Test
     void aGuardOnAPatternMatchDischargesTheConstruction() {
         String m = """
                 module demo

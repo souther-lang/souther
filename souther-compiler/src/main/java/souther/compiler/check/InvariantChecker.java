@@ -985,7 +985,7 @@ public final class InvariantChecker {
         return switch (e) {
             case Ast.IntLit i -> Long.toString(i.value());
             case Ast.DecimalLit d -> d.value().toPlainString() + "m";
-            case Ast.StringLit s -> "\"" + s.value() + "\"";
+            case Ast.StringLit s -> quoted(s.value());
             case Ast.BoolLit b -> Boolean.toString(b.value());
             case Ast.Neg n -> wrap("-", termKey(n.operand(), site, bound, depth));
             case Ast.Binary b -> {
@@ -1036,6 +1036,12 @@ public final class InvariantChecker {
             sb.append(i == 0 ? "" : ", ").append(part);
         }
         return sb.append(close).toString();
+    }
+
+    /** A string value written into a key with the punctuation the key itself uses escaped, so a value
+     * holding a quote or a comma cannot be read back as a different expression. */
+    private static String quoted(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     private static String wrap(String prefix, String inner) {
