@@ -942,7 +942,7 @@ The check is intraprocedural. Within a behavior's `+let+` body it seeds what the
 * *Discharged* — the guards prove the invariant. No diagnostic; the construction cannot abort here (overflow aside).
 * *Definitely violated* — the guards prove the invariant false on a reachable path. A compile error — the path-sensitive generalization of the constant check `+Money(-5)+` (<<newtype>>).
 * *Possibly violated* — expressible but not proven. A warning: a possible abort. Guard it with `+guard+`, reify the relation into a type invariant (below), or attempt the construction (<<attempted-construction>>), which cannot abort.
-* *Not expressible* — an invariant outside the checked fragment. No diagnostic; the run-time check stands.
+* *Not expressible* — a clause outside the checked fragment. No diagnostic for it; the run-time check stands. The other clauses of the same invariant are answered on their own, so writing one the check cannot read beside one it can does not cost the second its report (<<invariant-discharge-capability>>).
 
 Guards that cannot all hold describe a path the behavior does not take, and a construction standing on one is neither of the middle two: nothing is built there, so nothing is reported. That the guards contradict is itself derived over the same fragment — `+a <= b+` with `+b <= 0+` bounds `+a+` above without a word about `+a+` — so a path is dead whenever the relations say so, whatever order they were written in.
 

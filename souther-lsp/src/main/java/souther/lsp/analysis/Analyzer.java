@@ -926,18 +926,15 @@ public final class Analyzer {
     /** What a clause's classification says, in the terms an author acts on. */
     private String dischargeContents(ClauseDischarge clause) {
         String head = switch (clause.kind()) {
-            case DERIVABLE -> """
-                    **Static discharge: derivable**
-
-                    The checker can prove this clause from numeric relations when the constructed                     value is nameable, so any guard that implies it discharges the construction.""";
-            case EXACT_MATCH -> """
-                    **Static discharge: exact match**
-
-                    The checker can discharge this clause only from a guard establishing the same                     canonical property. Nothing weaker discharges it.""";
-            case RUNTIME_ONLY -> """
-                    **Static discharge: runtime only**
-
-                    This clause cannot be represented by the static checker and is enforced only at                     construction time. No guard discharges it.""";
+            case DERIVABLE -> "**Static discharge: derivable**\n\n"
+                    + "The checker can prove this clause from numeric relations when the constructed "
+                    + "value is nameable, so any guard that implies it discharges the construction.";
+            case EXACT_MATCH -> "**Static discharge: exact match**\n\n"
+                    + "The checker can discharge this clause only from a guard establishing the same "
+                    + "canonical property. Nothing weaker discharges it.";
+            case RUNTIME_ONLY -> "**Static discharge: runtime only**\n\n"
+                    + "This clause cannot be represented by the static checker and is enforced only "
+                    + "at construction time. No guard discharges it.";
         };
         return clause.reason().map(why -> head + "\n\n" + why + ".").orElse(head);
     }
@@ -946,7 +943,7 @@ public final class Analyzer {
     private SyntaxNode enclosing(SyntaxNode node, int offset, SyntaxKind kind) {
         SyntaxNode found = node.kind() == kind ? node : null;
         for (SyntaxElement e : node.children()) {
-            if (e instanceof SyntaxNode child && offset >= child.start() && offset <= child.end()) {
+            if (e instanceof SyntaxNode child && offset >= child.start() && offset < child.end()) {
                 SyntaxNode inner = enclosing(child, offset, kind);
                 if (inner != null) {
                     found = inner;

@@ -222,15 +222,6 @@ public final class Shapes {
     }
 
     /**
-     * The invariants this module declares, in the representation the invariant-discharge analysis
-     * reads ({@link souther.compiler.check.InliningPolicy#DISCHARGE}) — beside the settled form that
-     * every other stage sees on the declaration itself.
-     *
-     * <p>Only this module's own. What another module publishes arrives settled, which is what makes
-     * an imported clause fall outside the statically dischargeable fragment: the analysis reads what
-     * it is given, and there the operations have already become the folds they are.
-     */
-    /**
      * How each clause of each invariant this module declares can be discharged at compile time (spec
      * §invariant-discharge-capability), in the order the clauses are written.
      *
@@ -293,6 +284,15 @@ public final class Shapes {
         return a.line() != b.line() ? a.line() < b.line() : a.column() < b.column();
     }
 
+    /**
+     * The invariants this module declares, in the representation the invariant-discharge analysis
+     * reads ({@link souther.compiler.check.InliningPolicy#DISCHARGE}) — beside the settled form that
+     * every other stage sees on the declaration itself.
+     *
+     * <p>Only this module's own. What another module publishes arrives settled, which is what makes
+     * an imported clause fall outside the statically dischargeable fragment: the analysis reads what
+     * it is given, and there the operations have already become the folds they are.
+     */
     public record InvariantsForDischarge(String name) implements Key<Map<TypeName, Ast.Expr>> {
         @Override
         public String module() {

@@ -484,10 +484,12 @@ public final class InvariantChecker {
         List<Clause> owed = new ArrayList<>();
         for (Ast.Expr inv : invs) {
             List<Clause> o = obligations(inv, binds);
-            if (o == null) {
-                return;   // some part is not expressible — leave the whole invariant opaque
+            if (o != null) {
+                owed.addAll(o);
             }
-            owed.addAll(o);
+        }
+        if (owed.isEmpty()) {
+            return;   // nothing here is expressible — the run-time check stands for all of it
         }
         NumericDomain dom = k.numbers();
         for (Clause c : owed) {
@@ -578,13 +580,15 @@ public final class InvariantChecker {
     private List<Clause> obligations(Ast.Expr rawInv, Bindings binds, boolean positive) {
         Ast.Expr inv = asSizeComparison(rawInv);
         if (inv instanceof Ast.Binary b && b.op() == Ast.BinOp.AND && positive) {
+            // Each conjunct on its own: an invariant is a set of things that hold, and one the check
+            // cannot read leaves its own run-time check standing without costing the others theirs.
             List<Clause> l = obligations(b.left(), binds, true);
             List<Clause> r = obligations(b.right(), binds, true);
-            if (l == null || r == null) {
+            if (l == null && r == null) {
                 return null;
             }
-            List<Clause> both = new ArrayList<>(l);
-            both.addAll(r);
+            List<Clause> both = new ArrayList<>(l == null ? List.of() : l);
+            both.addAll(r == null ? List.of() : r);
             return both;
         }
         Ast.Expr under = negated(inv);
@@ -726,27 +730,23 @@ public final class InvariantChecker {
                 },
                 resolvePath, fields);
         Known out = k;
-        // Each conjunct on its own: an input's invariant is a set of things that hold, and one the
-        // check cannot express does not cost it the others.
         for (Ast.Expr inv : invariantsOf(ref.name(), data)) {
-            for (Ast.Expr conjunct : conjuncts(inv)) {
-                List<Clause> o = obligations(conjunct, binds);
-                if (o == null) {
-                    continue;
+            List<Clause> o = obligations(inv, binds);
+            if (o == null) {
+                continue;
+            }
+            for (Clause c : o) {
+                for (Constraint known : c.known()) {
+                    out = out.with(out.numbers().assume(known.form(), known.rel()));
                 }
-                for (Clause c : o) {
-                    for (Constraint known : c.known()) {
-                        out = out.with(out.numbers().assume(known.form(), known.rel()));
-                    }
-                    if (c.numeric() != null) {
-                        out = out.with(out.numbers().assume(c.numeric().form(), c.numeric().rel()));
-                    }
-                    if (c.fact() != null) {
-                        // What an input's type guarantees is guaranteed of the term as written; a
-                        // container built from it is another term, and reads the rules where it is
-                        // constructed rather than here.
-                        out = out.with(out.facts().assume(c.fact().keys().get(0), c.fact().positive()));
-                    }
+                if (c.numeric() != null) {
+                    out = out.with(out.numbers().assume(c.numeric().form(), c.numeric().rel()));
+                }
+                if (c.fact() != null) {
+                    // What an input's type guarantees is guaranteed of the term as written; a
+                    // container built from it is another term, and reads the rules where it is
+                    // constructed rather than here.
+                    out = out.with(out.facts().assume(c.fact().keys().get(0), c.fact().positive()));
                 }
             }
         }

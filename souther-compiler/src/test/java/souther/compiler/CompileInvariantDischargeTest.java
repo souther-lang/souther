@@ -1162,4 +1162,39 @@ class CompileInvariantDischargeTest {
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
                 "which side of an equality a term is written on is not part of what it says");
     }
+
+    @Test
+    void aClauseTheCheckCannotReadLeavesTheOthersReported() {
+        // the second clause is a shape the check does not read (a comprehension), and the first is a
+        // length it derives over — writing them together does not cost the first its guard
+        String m = """
+                module demo
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                           && List.length([1 | List.length(value) >= 1]) >= 1
+                behavior build : (xs: List<Int>) -> Lines constructs Lines
+                let build (xs) = Lines(xs)
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "the derivable clause is still unproven, and guarding it is still open to the author");
+    }
+
+    @Test
+    void aClauseTheCheckCannotReadIsNotItselfReported() {
+        String m = """
+                module demo
+                data Ok
+                data Lines = List<Int>
+                    invariant List.length(value) >= 1
+                           && List.length([1 | List.length(value) >= 1]) >= 1
+                behavior build : (xs: List<Int>) -> Lines | Ok constructs Lines, Ok
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else Ok
+                    Lines(xs)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "what is reported is a clause a guard could discharge, and the comprehension is not one");
+    }
 }
