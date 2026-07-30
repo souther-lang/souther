@@ -577,6 +577,17 @@ public final class HelperInliner {
                 defs, m.behaviors(), m.fns(), m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
     }
 
+    /** The conjuncts of an invariant expression, flattened, in the order they are written — what a
+     * reader sees as separate clauses. */
+    public static List<Ast.Expr> conjunctsOf(Ast.Expr e) {
+        if (e instanceof Ast.Binary b && b.op() == Ast.BinOp.AND) {
+            List<Ast.Expr> out = new ArrayList<>(conjunctsOf(b.left()));
+            out.addAll(conjunctsOf(b.right()));
+            return out;
+        }
+        return List.of(e);
+    }
+
     /** Looks up a helper by name across the prelude and the module's own helpers, or null if the
      * name is not a helper (a builtin, injected behavior, or unknown). Used to type-check a function
      * passed to a helper's function parameter against the declared type, at the call site. */

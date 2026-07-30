@@ -4,6 +4,8 @@ import souther.compiler.Compiler;
 import souther.compiler.check.Resolve;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
+import souther.compiler.query.Shapes;
+import souther.compiler.check.ClauseDischarge;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.ast.Ast;
@@ -866,6 +868,92 @@ public final class Analyzer {
         }
         SyntaxToken name = nameToken(def);
         return name == null ? Optional.empty() : Optional.of(tokenRange(lines, name));
+    }
+
+    /**
+     * Hover: on a clause of an invariant, how that clause can be discharged at compile time; anywhere
+     * else, the signature line of the definition the identifier under the cursor names.
+     *
+     * <p>The clause answer is the compiler's, because the classification is a fact about the language
+     * and not something a reader of the syntax can work out. The rest stays syntactic: a hover that
+     * only shows what is written does not need a compile, and this one asks for one only where it has
+     * something semantic to say.
+     */
+    public Optional<Hover> hover(String uri, String text, Position pos, ModuleGraph graph) {
+        Optional<Hover> clause = invariantClauseHover(uri, text, pos, graph);
+        return clause.isPresent() ? clause : hover(text, pos);
+    }
+
+    /** The discharge classification of the invariant clause the cursor is in, or empty when it is not
+     * in one. */
+    private Optional<Hover> invariantClauseHover(String uri, String text, Position pos,
+                                                 ModuleGraph graph) {
+        LineIndex lines = new LineIndex(text);
+        SyntaxNode root = CstParser.parse(text).root();
+        int offset = lines.offsetOf(pos.line(), pos.character());
+        SyntaxNode clause = enclosing(root, offset, SyntaxKind.INVARIANT_CLAUSE);
+        if (clause == null) {
+            return Optional.empty();
+        }
+        SyntaxNode data = enclosing(root, offset, SyntaxKind.DATA_DEF);
+        SyntaxToken name = data == null ? null : nameToken(data);
+        String module = Compiler.moduleNameFromHeader(text);
+        if (name == null || module == null) {
+            return Optional.empty();
+        }
+        Compilation compilation = compileOf(graph);
+        Map<TypeName, List<ClauseDischarge>> byType =
+                compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
+        List<ClauseDischarge> clauses = byType == null
+                ? null : byType.get(new TypeName(module, name.text()));
+        if (clauses == null || clauses.isEmpty()) {
+            return Optional.empty();
+        }
+        // The clauses are in the order they are written, so the one the cursor is in is the last that
+        // starts at or before it.
+        ClauseDischarge found = null;
+        for (ClauseDischarge c : clauses) {
+            if (lines.offsetOf(c.clause().line() - 1, c.clause().column() - 1) <= offset) {
+                found = c;
+            }
+        }
+        if (found == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new Hover(dischargeContents(found), nodeRange(lines, clause)));
+    }
+
+    /** What a clause's classification says, in the terms an author acts on. */
+    private String dischargeContents(ClauseDischarge clause) {
+        String head = switch (clause.kind()) {
+            case DERIVABLE -> """
+                    **Static discharge: derivable**
+
+                    The checker can prove this clause from numeric relations when the constructed                     value is nameable, so any guard that implies it discharges the construction.""";
+            case EXACT_MATCH -> """
+                    **Static discharge: exact match**
+
+                    The checker can discharge this clause only from a guard establishing the same                     canonical property. Nothing weaker discharges it.""";
+            case RUNTIME_ONLY -> """
+                    **Static discharge: runtime only**
+
+                    This clause cannot be represented by the static checker and is enforced only at                     construction time. No guard discharges it.""";
+        };
+        return clause.reason().map(why -> head + "\n\n" + why + ".").orElse(head);
+    }
+
+    /** The innermost node of {@code kind} whose span contains {@code offset}, or null. */
+    private SyntaxNode enclosing(SyntaxNode node, int offset, SyntaxKind kind) {
+        SyntaxNode found = node.kind() == kind ? node : null;
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxNode child && offset >= child.start() && offset <= child.end()) {
+                SyntaxNode inner = enclosing(child, offset, kind);
+                if (inner != null) {
+                    found = inner;
+                }
+            }
+        }
+        return found;
     }
 
     /** Hover: shows the signature line of the definition the identifier under the cursor names. */

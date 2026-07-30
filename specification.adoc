@@ -1081,6 +1081,24 @@ Two clauses are one thing exactly when they are the same expression over the sam
 
 This is what a clause outside the derived fragment falls back to, whatever its shape. A comparison over a value the procedure cannot name is settled the same way, which is why `+guard+`-ing it verbatim discharges the construction.
 
+[#invariant-discharge-capability]
+==== A clause says how it can be discharged
+
+Some clauses are statically dischargeable and others are not, and the same `+invariant+` keyword is written for both. Left implicit, an author believes there is a static guarantee where there is none. So the compiler answers, per clause, how that clause can be discharged. It is a query rather than a diagnostic — a correct program would carry one on every declaration, which is noise — and the LSP surfaces it on the clause.
+
+[cols="1,3"]
+|===
+| | what discharges it
+
+| *derivable* | a relation the procedure reasons over. Any guard that *implies* it discharges the construction: `+guard amount >= 10+` discharges `+invariant value >= 0+`.
+| *exact match* | a term the procedure can name but not reason about. Only a guard establishing *the same* property discharges it, and nothing weaker: `+invariant List.allUniqueBy(.product, value)+` takes `+guard List.allUniqueBy(.product, lines)+`.
+| *runtime only* | not representable as a static obligation. No guard discharges it, and the run-time check on construction is the whole of its enforcement.
+|===
+
+The first two are the *statically dischargeable* ones, and they are separate because they admit different guards — which is what an author needs to know before writing one. The third carries a reason, because there is more than one way to be outside the fragment and which one it is decides what can be done about it.
+
+The classification is the clause's own, read with the construction assumed to name what it is given. A construction that names nothing the procedure can name discharges nothing whatever its clauses say (<<invariant-discharge-terms>>); that is a fact about the construction and not about the clause.
+
 [#invariant-reify]
 ==== Reifying a cross-behavior relation
 
