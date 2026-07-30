@@ -980,8 +980,13 @@ public final class InvariantChecker {
         if (built.shape() != Shape.MAPS || at == null || at >= stated.args().size()) {
             return null;
         }
-        Ast.Expr closure = inner.args().size() > 1 - built.from() ? inner.args().get(1 - built.from()) : null;
-        Ast.Expr traced = closure == null ? null : projectionThrough(stated.args().get(at), closure);
+        // Where the mapping's closure is written is already stated once, by the table that says which
+        // argument each combinator hands its elements to.
+        Combinator combo = COMBINATORS.get(inner.fn());
+        if (combo == null || combo.closureArg() >= inner.args().size()) {
+            return null;
+        }
+        Ast.Expr traced = projectionThrough(stated.args().get(at), inner.args().get(combo.closureArg()));
         return traced == null ? null : withArg(stated, at, traced);
     }
 
