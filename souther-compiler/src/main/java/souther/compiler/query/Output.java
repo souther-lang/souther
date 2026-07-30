@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.MemoryClassLoader;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
@@ -51,14 +52,18 @@ public final class Output {
             Answer<Set<String>> injected = db.ask(new Bodies.ImportedInjected(name));
             Answer<Map<String, ReqSig>> callees = db.ask(new Bodies.CalleeSigs(name));
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Map<String, List<BehaviorRequirement>>> requirements =
+                    db.ask(new Bodies.Requirements(name));
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
-                    || !injected.present() || !callees.present() || !prepared.present()) {
+                    || !injected.present() || !callees.present() || !prepared.present()
+                    || !requirements.present()) {
                 return Answer.absent();
             }
             try {
                 Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
                         lowering.value().lowered(), scope.value(), typePackages(prepared.value()),
-                        imported.value(), injected.value(), callees.value(), checked.value()));
+                        imported.value(), injected.value(), callees.value(), requirements.value(),
+                        checked.value()));
                 stamp(db, classes);
                 return Answer.of(Ordered.map(classes));
             } catch (CompileException e) {
@@ -233,10 +238,15 @@ public final class Output {
             if (rows.examples().isEmpty()) {
                 return Answer.of(Boolean.TRUE);
             }
+            Map<String, List<BehaviorRequirement>> requirements =
+                    db.ask(new Bodies.Requirements(name)).value();
+            if (requirements == null) {
+                return Answer.absent();
+            }
             List<Report> reports = new ArrayList<>();
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
             for (Diagnostic failure : souther.compiler.ExampleVerifier.check(rows, scope.value(),
-                    sigs.value(), classes, loader(db, Map.of()),
+                    sigs.value(), classes, requirements, loader(db, Map.of()),
                     values == null ? Map.of() : values)) {
                 reports.add(Report.of(failure));
             }

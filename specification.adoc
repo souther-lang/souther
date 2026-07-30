@@ -1915,7 +1915,20 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 [#example-evaluable]
 === What can carry an example
 
-A behavior with a `+let+` implementation is evaluated (<<fn>>). An injected behavior (no `+let+`, <<injected-behavior>>) or a `+>->+` composition cannot be — you fake an injected behavior, you do not example it (<<e1902>>). A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
+A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) cannot be — you fake one, you do not example it (<<e1902>>). A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
+
+A composition's row is written like any other. Its arguments are the first stage's (<<sequential-composition>>), and its expected result is any case of the composition's output — including one that departed the main line at an earlier stage (<<type-routing>>), which is the part no stage's own example can state, because the routing is not any stage's rule.
+
+[,text]
+----
+behavior 受注する = 見積を確定する >-> 受注を作る
+    -> 受注 | 下限未達
+
+example 受注する
+    | "下限を満たせば受注になる" : (交渉中 { 下限 = 金額(100) }, 金額(200)) -> 受注
+    | "下限未達はここで止まる"   : (交渉中 { 下限 = 金額(100) }, 金額(50))
+        -> 下限未達 { 下限 = 金額(100), 提示 = 金額(50) }
+----
 
 An input and an expected value are fixtures: literals, newtype applications, record constructions, and helpers applied to those. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
 
@@ -1979,6 +1992,8 @@ fake 上長を探す
 ----
 
 Each dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file, and is local to its module. `+fake+` is a contextual keyword.
+
+A composition's dependencies are its stages' (<<composition-with-requirements>>), so a row exampling one supplies a fake for each of those. That holds whichever path the row takes: an input that departs the main line at the first stage never reaches the second, and the second stage's dependency is faked all the same. What a row has to supply is a property of the composition, not of the input this row happens to use. One dependency two stages share is one fake — the composition holds one of it (<<composition-with-requirements>>) — and the diagnostic names the stage that wants it (<<e1908>>).
 
 [#example-placement]
 === Inline or an attached file
@@ -2995,11 +3010,11 @@ Emitted when an `+example+` names a target that is not a behavior of the module 
 [,text]
 ----
 error E1902:
-`事前承認する` cannot be evaluated as an example.
-hint: an example runs a behavior with a `let` body that depends on nothing; here it depends on injected dependencies (現在時刻).
+`現在時刻` cannot be evaluated as an example.
+hint: an example runs a behavior with a `let` body, or a `>->` composition of them; here it is injected from Java (no `let`) — fake it, do not example it.
 ----
 
-Emitted when an `+example+` targets a behavior that has no in-language implementation to evaluate: an injected behavior or a `+>->+` composition (<<example-evaluable>>). A `+depends on+` dependency is not a reason — it is supplied by a fake (<<example-fakes>>).
+Emitted when an `+example+` targets a behavior with no implementation to evaluate: an injected behavior (<<example-evaluable>>). A `+depends on+` dependency is not a reason — it is supplied by a fake (<<example-fakes>>) — and neither is a `+>->+` composition, which is evaluated by running its stages.
 
 [#e1903]
 === Example input cannot be built

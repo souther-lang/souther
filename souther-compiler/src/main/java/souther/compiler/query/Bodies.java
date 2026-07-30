@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.InjectionSigs;
@@ -320,6 +321,42 @@ public final class Bodies {
                 }
             }
             return Answer.of(Ordered.set(result));
+        }
+    }
+
+    /**
+     * What each behavior of a module requires injected to be constructed, and which definitions ask
+     * for it ({@link Requirements}).
+     *
+     * <p>The order is the injecting constructor's parameter order, so it is also the order an
+     * example passes its fakes in: the emitter and the example verifier ask this one question rather
+     * than each walking the stages, because a fake bound to the wrong parameter is not something
+     * either side would notice.
+     *
+     * <p>Read off the lowered module — the same tree the backend emits from — so the two cannot be
+     * looking at different behaviors.
+     */
+    public record Requirements(String name) implements Key<Map<String, List<BehaviorRequirement>>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, List<BehaviorRequirement>>> compute(Db db) {
+            Answer<Lower.Lowered> lowering = db.ask(new Lowering(name));
+            Answer<Set<String>> injected = db.ask(new ImportedInjected(name));
+            if (!lowering.present() || !injected.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(Ordered.map(souther.compiler.check.Requirements.of(
+                        lowering.value().lowered(), injected.value())));
+            } catch (CompileException e) {
+                // A composition that reaches itself has no requirement set to work out. The cycle is
+                // reported where it is written; nothing is emitted for the module either way.
+                return Answer.absent(e);
+            }
         }
     }
 
