@@ -2980,7 +2980,7 @@ let 引当して出荷する (番号, 出荷指示する) =
         | 在庫不足 as 不足 -> 引当不可 { 番号 = 不足.番号 }
 ----
 
-`+出荷指示する+` is a behavior of this module and has a requirement of its own, so it is named in `+depends on+` and arrives bound (<<fn-rules>>): a composition builds its stages and their requirements accumulate into it, while a caller receives what it calls. An imported behavior is reached either way — called by name when it requires nothing, named in `+depends on+` when it does not.
+`+出荷指示する+` is a behavior of this module and has a requirement of its own, so it is named in `+depends on+` and arrives bound (<<fn-rules>>): a composition builds its stages and their requirements accumulate into it, while a caller receives what it calls. An imported behavior is reached either way: it is called by name when its requirement set is empty, and named in `+depends on+` when the caller must supply what it requires.
 
 [#e1607]
 === depends on does not name a dependency

@@ -4,12 +4,18 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
+import java.lang.classfile.ClassFile;
+import java.lang.classfile.CodeElement;
+import java.lang.classfile.MethodModel;
+import java.lang.classfile.instruction.InvokeInstruction;
+import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -145,17 +151,86 @@ class CompileCrossModuleUnionTest {
                         loader.loadClass("ship.Shipped")),
                 Arrays.asList(union.getPermittedSubclasses()),
                 "both stages' outcomes reach one union, all of them declared here");
-        // a stage this module implements is received, so the boundary binds it rather than its leaves
-        assertEquals(List.of(loader.loadClass("ship.Instruct")),
-                Arrays.asList(loader.loadClass("ship.AllocateAndShip")
-                        .getMethod("bind", loader.loadClass("ship.Instruct")).getParameterTypes()));
+
+        // The stage is *received*: this counting stand-in is what runs, not something the composed
+        // behavior built for itself. A `bind` parameter of the right type would say nothing about that.
+        Object shipped = Codecs.decoded(loader, "ship.Shipped",
+                Map.of("sku", "SKU-1", "label", Map.of("text", "L")));
+        int[] calls = new int[1];
+        Object instruct = Proxy.newProxyInstance(loader, new Class<?>[] {loader.loadClass("ship.Instruct")},
+                (proxy, method, args) -> {
+                    if (!method.getName().equals("apply")) {
+                        return method.getName().equals("toString") ? "instruct" : Boolean.FALSE;
+                    }
+                    calls[0]++;
+                    return shipped;
+                });
+        Object composed = loader.loadClass("ship.AllocateAndShip")
+                .getMethod("bind", loader.loadClass("ship.Instruct")).invoke(null, instruct);
+
+        assertSame(shipped, Codecs.apply(composed, Codecs.decoded(loader, "inv.Sku", "SKU-1")),
+                "the mainline reaches the received stage and its answer is the answer");
+        assertEquals(1, calls[0]);
+
+        // The imported departure never reaches the next stage; it is answered here instead.
+        Object refused = Codecs.apply(composed, Codecs.decoded(loader, "inv.Sku", ""));
+        assertEquals("ship.NotAllocated", refused.getClass().getName());
+        assertEquals(1, calls[0], "a departed case does not go on to the next stage");
     }
 
     @Test
-    void anImportedBehaviorOfSeveralArgumentsIsCalledOnItsOwnResultUnion() throws Exception {
+    void anImportedBehaviorOfNoArgumentsIsCalledOnItsOwnResultUnion() throws Exception {
+        // The other half of "not one argument", and it reaches the typed `apply` by a different road:
+        // a behavior of no arguments cannot have a body at all (a `let` with no parameter list is a
+        // value, ADR-0072), so it is always injected and reached through `depends on`.
+        String issuing = """
+                module up exposing ( Token, NoToken, mint )
+                data Token = { v: String }
+                data NoToken
+                behavior mint : () -> Token | NoToken
+                    constructs Token, NoToken
+                """;
+        String stamping = """
+                module down exposing ( Stamped, Unstamped, stamp )
+                import up ( Token, NoToken, mint )
+                data Stamped = { v: String }
+                data Unstamped
+                behavior stamp : (n: Int) -> Stamped | Unstamped
+                    depends on mint
+                    constructs Stamped, Unstamped
+                let stamp (n, mint) =
+                    match mint() with
+                    | Token as t -> Stamped { v = t.v }
+                    | NoToken -> Unstamped
+                """;
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(issuing, stamping));
+        // The call is not run here: `up.Mint` is an abstract class with a protected constructor, so a
+        // stand-in cannot be made by reflection alone. What the bug produced was a descriptor naming a
+        // class nothing emits, which is what is checked — the call linked to `down.MintResult` before.
+        assertEquals("()Lup/MintResult;", calleeDescriptor(classes.get("down.Stamp$Impl"), "up/Mint"));
+        assertTrue(classes.containsKey("up.MintResult"), "and that class is one this compilation wrote");
+    }
+
+    /** The descriptor {@code $Impl} calls {@code apply} with on {@code owner}, read off the bytes. */
+    private static String calleeDescriptor(byte[] impl, String owner) {
+        for (MethodModel m : ClassFile.of().parse(impl).methods()) {
+            for (CodeElement e : m.code().orElseThrow()) {
+                if (e instanceof InvokeInstruction call
+                        && call.owner().asInternalName().equals(owner)
+                        && call.name().stringValue().equals("apply")) {
+                    return call.type().stringValue();
+                }
+            }
+        }
+        throw new AssertionError("no call to " + owner + ".apply");
+    }
+
+    @Test
+    void anImportedBehaviorOfTwoArgumentsIsCalledOnItsOwnResultUnion() throws Exception {
         // A one-input behavior is reached through the erased `Behavior.apply`, so nothing names its
-        // result union. Any other arity is called on a typed `apply` that does, and the union belongs
-        // to the module that declared the behavior — not to the one reading it.
+        // result union. Any other arity — this one and the no-argument one below — is called on a
+        // typed `apply` that does, and the union belongs to the module that declared the behavior,
+        // not to the one reading it.
         String inventory = """
                 module inv exposing ( Sku, Allocated, Shortage, allocateFor )
                 data Sku = String
