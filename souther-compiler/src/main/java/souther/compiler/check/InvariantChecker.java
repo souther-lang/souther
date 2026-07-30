@@ -1004,16 +1004,16 @@ public final class InvariantChecker {
                 || !(closure instanceof Ast.Block step) || step.params().size() != 1) {
             return null;
         }
-        Map<String, Ast.Expr> bound = new HashMap<>();
         String element = step.params().get(0);
-        List<String> read = chain(proj.body(), proj.params().get(0), new HashMap<>());
+        List<String> read = new Reads(proj.params().get(0)).chain(proj.body());
         if (read == null) {
             return null;
         }
-        Ast.Expr made = through(step.body(), bound);
+        Reads reads = new Reads(element);
+        Ast.Expr made = reads.produced(step.body());
         List<String> traced;
         if (read.isEmpty()) {
-            traced = chain(made, element, bound);   // the closure hands the element straight back
+            traced = reads.chain(made);   // the closure hands the element straight back
         } else {
             if (!(made instanceof Ast.NewData nd) || !nd.spreads().isEmpty()) {
                 return null;
@@ -1021,7 +1021,7 @@ public final class InvariantChecker {
             List<String> copied = null;
             for (Ast.FieldInit fi : nd.inits()) {
                 if (fi.name().equals(read.get(0))) {
-                    copied = chain(fi.value(), element, bound);
+                    copied = reads.chain(fi.value());
                 }
             }
             if (copied == null) {
@@ -1040,29 +1040,58 @@ public final class InvariantChecker {
         return new Ast.Block(List.of(element), on, step.pos());
     }
 
-    /** {@code e} with the bindings an expansion introduced read through — a helper spliced into a
-     * closure is {@code let $0_r = r in ...}, and what it builds is inside that. */
-    private static Ast.Expr through(Ast.Expr e, Map<String, Ast.Expr> bound) {
-        Ast.Expr cur = e;
-        while (cur instanceof Ast.LetIn li) {
-            bound.put(li.name(), li.value());
-            cur = li.body();
-        }
-        if (cur instanceof Ast.Var v && bound.containsKey(v.name())) {
-            return through(bound.get(v.name()), bound);
-        }
-        return cur;
-    }
+    /**
+     * What the names in a closure read off the element it is handed: a field chain, or nothing this
+     * trace can follow. A binding introduces what it reads <em>where it is written</em> — an expansion
+     * splices {@code let $0_r = r in ...} into a closure, and the closure may bind over its own
+     * parameter or over a name an earlier binding read — so what a name denotes is settled against the
+     * bindings before it and not reread later. Keeping the expression instead and substituting by
+     * spelling cannot say that: {@code let r = r} would stand for itself, which is the identity here
+     * and an endless walk there.
+     */
+    private static final class Reads {
 
-    /** The field chain {@code e} reads off {@code root}, or {@code null} if it reads anything else. */
-    private static List<String> chain(Ast.Expr e, String root, Map<String, Ast.Expr> bound) {
-        List<String> fields = new ArrayList<>();
-        Ast.Expr cur = through(e, bound);
-        while (cur instanceof Ast.FieldAccess fa) {
-            fields.add(0, fa.field());
-            cur = through(fa.target(), bound);
+        private final String element;
+        private final Map<String, List<String>> chains = new HashMap<>();
+
+        private Reads(String element) {
+            this.element = element;
         }
-        return cur instanceof Ast.Var v && v.name().equals(root) ? fields : null;
+
+        /** The expression the body produces, with what the bindings on the way there read taken in. */
+        Ast.Expr produced(Ast.Expr body) {
+            Ast.Expr cur = body;
+            while (cur instanceof Ast.LetIn li) {
+                List<String> read = chain(li.value());
+                chains.put(li.name(), read);
+                cur = li.body();
+            }
+            return cur;
+        }
+
+        /** The chain {@code e} reads off the element, or {@code null} if it reads anything else. */
+        List<String> chain(Ast.Expr e) {
+            return switch (e) {
+                case Ast.LetIn li -> {
+                    Reads inner = new Reads(element);
+                    inner.chains.putAll(chains);
+                    inner.chains.put(li.name(), chain(li.value()));
+                    yield inner.chain(li.body());
+                }
+                case Ast.FieldAccess fa -> {
+                    List<String> head = chain(fa.target());
+                    if (head == null) {
+                        yield null;
+                    }
+                    List<String> out = new ArrayList<>(head);
+                    out.add(fa.field());
+                    yield out;
+                }
+                case Ast.Var v when chains.containsKey(v.name()) -> chains.get(v.name());
+                case Ast.Var v -> v.name().equals(element) ? List.of() : null;
+                default -> null;
+            };
+        }
     }
 
     /** The clause's naming rule with one argument already named: what lets a key hold a term of the

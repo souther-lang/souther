@@ -902,6 +902,58 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aClosureBindingOverItsOwnParameterStillCopiesTheField() {
+        // `let r = r` is the identity, so the field is still copied from the element
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { sku: String }
+                data Line = { code: String }
+                data Lines = List<Line>
+                    invariant List.allUniqueBy(.code, value)
+                behavior build : (xs: List<Row>) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(.sku, xs)
+                        else Duplicate
+                    Lines(List.map(r -> {
+                        let r = r
+                        Line { code = r.sku }
+                    }, xs))
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "binding a name to itself is the identity, not a name standing for itself");
+    }
+
+    @Test
+    void aFieldReadBeforeTheNameWasReboundIsNotTheElements() {
+        // `a` reads the argument, and the later binding of that name does not reach back into it, so
+        // nothing says the built field came from the element
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { sku: String }
+                data Line = { code: String }
+                data Lines = List<Line>
+                    invariant List.allUniqueBy(.code, value)
+                behavior build : (xs: List<Row>, spare: Row) -> Lines | Duplicate
+                    constructs Lines, Line, Duplicate
+                let build (xs, spare) = {
+                    guard List.allUniqueBy(.sku, xs)
+                        else Duplicate
+                    Lines(List.map(r -> {
+                        let a = spare
+                        let spare = r
+                        Line { code = a.sku }
+                    }, xs))
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "the field was copied from the argument, not from the element");
+    }
+
+    @Test
     void aProjectionCarriesToTheFieldItWasCopiedFrom() {
         // the closure renames the field, so uniqueness of the result by `.code` is uniqueness of the
         // input by `.sku`
