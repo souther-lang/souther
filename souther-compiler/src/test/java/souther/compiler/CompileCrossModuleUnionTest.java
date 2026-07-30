@@ -150,4 +150,50 @@ class CompileCrossModuleUnionTest {
                 Arrays.asList(loader.loadClass("ship.AllocateAndShip")
                         .getMethod("bind", loader.loadClass("ship.Instruct")).getParameterTypes()));
     }
+
+    @Test
+    void anImportedBehaviorOfSeveralArgumentsIsCalledOnItsOwnResultUnion() throws Exception {
+        // A one-input behavior is reached through the erased `Behavior.apply`, so nothing names its
+        // result union. Any other arity is called on a typed `apply` that does, and the union belongs
+        // to the module that declared the behavior — not to the one reading it.
+        String inventory = """
+                module inv exposing ( Sku, Allocated, Shortage, allocateFor )
+                data Sku = String
+                data Allocated = { sku: Sku }
+                data Shortage = { sku: Sku }
+                behavior allocateFor : (sku: Sku, qty: Int) -> Allocated | Shortage
+                    constructs Allocated, Shortage
+                let allocateFor (sku, qty) =
+                    if qty > 0 then Allocated { sku = sku } else Shortage { sku = sku }
+                """;
+        String shipping = """
+                module ship exposing ( Shipped, NotAllocated, ship )
+                import inv ( Sku, Allocated, Shortage, allocateFor )
+                data Shipped = { sku: Sku }
+                data NotAllocated = { sku: Sku }
+                behavior ship : (sku: Sku, qty: Int) -> Shipped | NotAllocated
+                    constructs Shipped, NotAllocated
+                let ship (sku, qty) =
+                    match allocateFor(sku, qty) with
+                    | Allocated as a -> Shipped { sku = a.sku }
+                    | Shortage as s -> NotAllocated { sku = s.sku }
+                """;
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        Object behavior = loader.loadClass("ship.Ship$Impl").getConstructor().newInstance();
+        Object sku = Codecs.decoded(loader, "inv.Sku", "SKU-1");
+        assertEquals("ship.Shipped", applyTwo(behavior, sku, 3L).getClass().getName(),
+                "the call links because the union it names is inv's");
+        assertEquals("ship.NotAllocated", applyTwo(behavior, sku, 0L).getClass().getName());
+    }
+
+    /** Apply a reflectively-instantiated two-argument behavior. */
+    private static Object applyTwo(Object behavior, Object a, Object b) throws Exception {
+        for (java.lang.reflect.Method m : behavior.getClass().getDeclaredMethods()) {
+            if (m.getName().equals("apply") && m.getParameterCount() == 2) {
+                return m.invoke(behavior, a, b);
+            }
+        }
+        throw new AssertionError("no two-argument apply on " + behavior.getClass());
+    }
 }
