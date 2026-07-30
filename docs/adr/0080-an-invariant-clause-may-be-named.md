@@ -60,22 +60,28 @@ put the more informative rule first. Reordering the clauses of a published type 
 change, and where several clauses fail only the first is reported.
 
 The arms are total over what can fail. Every named clause has an arm; `| _ -> …` is written when the
-type has a clause carrying no name, and only then. Mixing named and unnamed clauses stays legal at the
-declaration — forbidding it would split a type that has an internal-consistency rule beside classifiable
-ones for no modelling reason — and the constraint sits at the attempt instead. The cost is that adding an
-unnamed clause to an all-named type breaks the mapping sites: acceptable, because adding a clause to a
-published type is already a change to what the type accepts, and today it is silent, showing up only as
-more aborts and more decode failures.
+type has a clause carrying no name, and only then. That is why `_` cannot be a clause's name: the arm
+reading it would be that wildcard, so the clause could never be answered by name — refused where the
+clause is declared rather than left to be met at an attempt.
+
+Mixing named and unnamed clauses stays legal at the declaration — forbidding it would split a type that
+has an internal-consistency rule beside classifiable ones for no modelling reason — and the constraint
+sits at the attempt instead. The cost is that adding an unnamed clause to an all-named type breaks the
+mapping sites: acceptable, because adding a clause to a published type is already a change to what the
+type accepts, and today it is silent, showing up only as more aborts and more decode failures.
 
 ## What the failure carries, and where
 
-`__construct`'s failure side becomes `souther.runtime.InvariantFailure` — the rejecting type and the
-clause, the clause being null where it was declared without a name. Three destinations read it and they
-now agree:
+`__construct`'s failure side becomes `souther.runtime.InvariantFailure` — the rejecting type, as its
+declaring module and its name, and the clause, which is null where it was declared without one. The
+module is carried apart from the name because a type is its module and its name — module is package
+(ADR-0058) — so two modules may each declare an `Id` and metadata keyed on the name alone would answer
+for either. #83's `{type}` was the simple name, which held only until such a pair existed. Three
+destinations read it and they now agree:
 
 - an attempted construction departs by the arm answering that clause;
-- a derived decoder reports it as `invariant_violation` with `{type, clause}` in the metadata, which is
-  where a product data's failure gains metadata it never had;
+- a derived decoder reports it as `invariant_violation` with `{module, type, clause}` in the metadata,
+  which is where a product data's failure gains metadata it never had;
 - an abort names it in the message, and so does the compile-time check of a constant construction.
 
 This does not walk back ADR-0070's decision that the failure carries nothing. What crosses is the

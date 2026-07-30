@@ -1219,10 +1219,11 @@ final class CodecGen {
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
             code.new_(CD_InvariantFailure);
             code.dup();
+            code.loadConstant(ctx.module());
             code.loadConstant(typeName);
             code.aload(0);                                            // the clause, or null
             code.invokespecial(CD_InvariantFailure, "<init>",
-                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_String, CD_String));
+                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_String, CD_String, CD_String));
             int failure = 3;
             code.astore(failure);
             code.aload(2);                                            // path

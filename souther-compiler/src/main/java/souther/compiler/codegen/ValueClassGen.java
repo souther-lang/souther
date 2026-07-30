@@ -630,6 +630,7 @@ final class ValueClassGen {
                             gen.expr(clause.expr());
                             Label ok = code.newLabel();
                             code.ifne(ok);
+                            code.loadConstant(ctx.module());
                             code.loadConstant(data.name());
                             if (clause.name().isPresent()) {
                                 code.loadConstant(clause.name().get());

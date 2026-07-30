@@ -313,6 +313,17 @@ public final class AstBuilder {
             Optional<String> name = Optional.empty();
             if (clause.token(SyntaxKind.ASSIGN).isPresent()) {
                 SyntaxToken label = identTokens(clause).get(0);
+                // `_` is what an attempt writes for the clauses that carry no name, so a clause named
+                // `_` could not be answered by name at all: the arm reading it would be that wildcard.
+                // Refused here rather than left to be discovered at the attempt.
+                if (label.text().equals("_")) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.invariant.underscore")
+                                    .title("check.invariant.invalid.title")
+                                    .at(posOf(label)).args(typeName)
+                                    .hint("check.invariant.underscore.hint").build(),
+                            "`_` cannot name an invariant clause");
+                }
                 if (!named.add(label.text())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.invariant.duplicate")

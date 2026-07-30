@@ -316,6 +316,39 @@ class CompileInvariantConstraintTest {
     }
 
     /**
+     * What a type is, is its module and its name, so the metadata carries both: two modules may each
+     * declare an `Id`, and a resolver keyed on the simple name alone would answer for either.
+     */
+    @Test
+    void theRejectingTypeIsNamedByItsModuleToo() throws Exception {
+        ClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
+                module sales exposing ( Id )
+                data Id = String
+                    invariant shaped = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                """, """
+                module customer exposing ( Id )
+                data Id = String
+                    invariant shaped = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                """)), getClass().getClassLoader());
+
+        Issue sales = sole(Codecs.decoder(loader, "sales.Id").decode("x", Path.ROOT));
+        Issue customer = sole(Codecs.decoder(loader, "customer.Id").decode("x", Path.ROOT));
+        assertEquals("sales", sales.meta().get("module"));
+        assertEquals("customer", customer.meta().get("module"));
+        assertEquals("Id", sales.meta().get("type"), "the name stays the name");
+        assertEquals("Id", customer.meta().get("type"));
+        assertTrue(sales.message().contains("sales.Id"),
+                "and the default message names the type as Souther identifies it: " + sales.message());
+    }
+
+    private static Issue sole(Result<?> r) {
+        assertTrue(r instanceof Err, "the value breaks the invariant, so decoding must fail");
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), "one broken rule, one issue");
+        return issues.get(0);
+    }
+
+    /**
      * The order a failure is reported in is the order the clauses are declared in, which is the order
      * {@code __construct} decides in too — so the boundary and an attempted construction name the same
      * clause for the same value. A mapped clause written after an unmapped one gives up Raoh's code to
@@ -357,6 +390,7 @@ class CompileInvariantConstraintTest {
         assertTrue(r instanceof Err);
         Issue issue = ((Err<?>) r).issues().asList().get(0);
         assertEquals("invariant_violation", issue.code());
+        assertEquals("demo", issue.meta().get("module"), "which module declared the type");
         assertEquals("Span", issue.meta().get("type"), "which type rejected the value");
         assertEquals("ordered", issue.meta().get("clause"));
         assertFalse(issue.customMessage());

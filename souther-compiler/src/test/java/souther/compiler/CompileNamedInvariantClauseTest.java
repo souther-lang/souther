@@ -228,6 +228,41 @@ class CompileNamedInvariantClauseTest {
         assertEquals("check.invariant.duplicate", e.diagnostics().get(0).messageKey());
     }
 
+    /**
+     * `_` is what an attempt writes for the clauses that carry no name, so a clause named `_` could not
+     * be answered by name — the arm reading it would be that wildcard, and the clause would stay
+     * unanswered. Refused where the clause is declared, not where an attempt fails to answer it.
+     */
+    @Test
+    void underscoreCannotNameAClause() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Positive = Int
+                    invariant _ = value > 0
+                """));
+        assertEquals("check.invariant.underscore", e.diagnostics().get(0).messageKey());
+        assertEquals(3, e.diagnostics().get(0).pos().line(), "reported at the clause, not at a use");
+    }
+
+    /**
+     * A diamond spread would reach one declaration twice, and its clause would be counted twice. It
+     * cannot arise: a spread flattens the fields it takes in, so the second path brings a field the
+     * first already brought and the declaration is refused before any invariant is read. Pinned here
+     * because the clause-name check rests on it.
+     */
+    @Test
+    void aDiamondSpreadIsRefusedBeforeItsClauseIsCountedTwice() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Base = { total: Int }
+                    invariant valid = total >= 1
+                data Left = { ...Base, l: Int }
+                data Right = { ...Base, r: Int }
+                data Combined = { ...Left, ...Right, c: Int }
+                """));
+        assertEquals("E1004", e.code(), "the shared field collides, so the shape is refused");
+    }
+
     /** A clause arriving by spread carries its name: the invariants a {@code ...} takes in are checked
      * where the spreading type is built (spec §field-spread), and an arm names them as their own
      * declaration did. */

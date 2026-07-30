@@ -111,9 +111,9 @@ final class Descriptors {
     /** The failure side of {@code __construct}: which clause of which type did not hold. */
     static final ClassDesc CD_InvariantFailure = ClassDesc.of("souther.runtime.InvariantFailure");
     static final MethodTypeDesc MTD_failureOf =
-            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String);
+            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String, CD_String);
     static final MethodTypeDesc MTD_failureUnnamed =
-            MethodTypeDesc.of(CD_InvariantFailure, CD_String);
+            MethodTypeDesc.of(CD_InvariantFailure, CD_String, CD_String);
     /** {@code clause()}: the failing clause's name, or null where it was declared without one. */
     static final MethodTypeDesc MTD_failureClause = MethodTypeDesc.of(CD_String);
     /** {@code meta()}: the rejecting type, and the clause where it has a name. */
