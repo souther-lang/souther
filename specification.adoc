@@ -1998,7 +1998,7 @@ A composition's dependencies are its stages' (<<composition-with-requirements>>)
 [#example-placement]
 === Inline or an attached file
 
-The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+` and contains only `+example+` declarations. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). An attached file that names a module not being compiled is <<e1907>>; one that contains anything other than an `+example+` is <<e1906>>.
+The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
 
 [#control-flow]
 == Control structures
@@ -3058,10 +3058,10 @@ Emitted when a row's evaluated result does not match the expected arm or value. 
 [,text]
 ----
 error E1906:
-An `examples for` file may contain only examples, not data, behavior, let, or import.
+An `examples for` file holds examples, the fakes they run against and the values they name. A data, a behavior, an import, and a `let` with parameters belong in the module itself.
 ----
 
-Emitted when a file that begins with `+examples for+` contains anything other than `+example+` declarations (<<example-placement>>).
+Emitted when a file that begins with `+examples for+` holds something other than an example, a `+fake+` table, or a value its rows name — and when a value it declares carries a name the target module already declares (<<example-placement>>). The second is reported on the attached file, where the declaration is written.
 
 [#e1907]
 === Examples file names an absent module

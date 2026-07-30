@@ -100,29 +100,52 @@ public final class AstBuilder {
                 examples, fakes, null, pos);
     }
 
-    /** An {@code examples for <module>} file: an example-only contribution to its target module. Any
-     * non-example declaration in it is E1906. The returned {@link Ast.Module} carries only examples
-     * and its {@code exampleFileTarget}; the compiler merges it into the target. */
+    /**
+     * An {@code examples for <module>} file: what its target module's rows are written in. It holds the
+     * rows, the fakes they run against, and the values those rows name; anything else in it is E1906. The
+     * returned {@link Ast.Module} carries those and its {@code exampleFileTarget}; the compiler merges it
+     * into the target.
+     *
+     * <p>A value is a {@code let} with no parameter list, and it is here because a row that names one had
+     * nowhere in this file to declare it — so the fixture went back to the model file, which is the file
+     * the rows exercise rather than the one they are written in (issue #210). A {@code let} with
+     * parameters is a helper, which is a method the target module emits, and a companion file does not
+     * add to what the model compiles to.
+     */
     private Ast.Module exampleFileModule(SyntaxNode file, SyntaxNode header) {
         String target = qualifiedNameText(header.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
         moduleName = target;
         SourcePos pos = pos(header);
         List<Ast.Example> examples = new ArrayList<>();
         List<Ast.Fake> fakes = new ArrayList<>();
+        List<Ast.FnDef> values = new ArrayList<>();
         for (SyntaxNode n : file.childNodes()) {
             switch (n.kind()) {
                 case EXAMPLE_DEF -> examples.add(example(n));
                 case FAKE_DEF -> fakes.add(fake(n));
                 case EXAMPLES_FILE_HEADER -> { /* the header itself */ }
-                case IMPORT_DECL, DATA_DEF, BEHAVIOR_DEF, FN_DEF -> throw CompileException.of(
-                        Diagnostic.of("E1906", "check.example.file.only").title("check.example.title")
-                                .at(pos(n)).build(),
-                        "an `examples for` file may contain only examples");
+                case FN_DEF -> {
+                    Ast.FnDef fn = fnDef(n);
+                    if (!fn.params().isEmpty()) {
+                        throw onlyExamples(n);
+                    }
+                    values.add(fn);
+                }
+                case IMPORT_DECL, DATA_DEF, BEHAVIOR_DEF -> throw onlyExamples(n);
                 default -> { /* ERROR nodes already reported */ }
             }
         }
         return new Ast.Module(target, List.of(), new HashMap<>(), List.of(), List.of(), List.of(),
-                List.of(), examples, fakes, target, pos);
+                values, examples, fakes, target, pos);
+    }
+
+    private CompileException onlyExamples(SyntaxNode n) {
+        return CompileException.of(
+                Diagnostic.of("E1906", "check.example.file.only").title("check.example.title")
+                        .at(pos(n)).build(),
+                "an `examples for` file holds examples, the fakes they run against and the values they"
+                        + " name; a data, a behavior, an import and a `let` with parameters belong in the"
+                        + " module itself");
     }
 
     /** {@code example <target> | rows...}. The contextual {@code example} lexes as an identifier, so

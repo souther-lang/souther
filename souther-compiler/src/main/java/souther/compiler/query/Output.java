@@ -18,6 +18,7 @@ import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -243,7 +244,10 @@ public final class Output {
             if (requirements == null) {
                 return Answer.absent();
             }
-            List<Report> reports = new ArrayList<>();
+            List<Report> reports = new ArrayList<>(alreadyDeclared(db));
+            if (!reports.isEmpty()) {
+                return Answer.absent(reports);   // a row naming one would read the other declaration
+            }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
             for (Diagnostic failure : souther.compiler.ExampleVerifier.check(rows, scope.value(),
                     sigs.value(), classes, requirements, loader(db, Map.of()),
@@ -251,6 +255,54 @@ public final class Output {
                 reports.add(Report.of(failure));
             }
             return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.absent(reports);
+        }
+
+        /**
+         * A value this source declares under a name something already declares — the module itself, or an
+         * attached file ahead of this one. The rows would read that other declaration, so the one written
+         * here would say nothing.
+         *
+         * <p>Reported from this key rather than from the module's own duplicate check because a position
+         * is a line and a column: the module's key can only be quoted against the module's file, and the
+         * position is in this one.
+         */
+        private List<Report> alreadyDeclared(Db db) {
+            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
+            if (layout == null || sourceId == null || sourceId.equals(layout.idOfModule().get(name))) {
+                return List.of();   // the module's own source declares what it declares
+            }
+            Set<String> taken = new LinkedHashSet<>(declaredIn(db, layout.idOfModule().get(name)));
+            List<Report> reports = new ArrayList<>();
+            for (String id : layout.exampleFilesOf().getOrDefault(name, List.of())) {
+                CstFrontend.Parsed parsed = db.ask(new Front.Parsed(id)).value();
+                if (parsed == null) {
+                    continue;
+                }
+                for (Ast.FnDef value : parsed.module().fns()) {
+                    boolean fresh = taken.add(value.name());
+                    if (!fresh && id.equals(sourceId)) {
+                        reports.add(Report.of(Diagnostic.of("E1906", "check.example.file.declared")
+                                .title("check.example.title").at(value.pos(), value.name().length())
+                                .args(value.name(), name).build()));
+                    }
+                }
+                if (id.equals(sourceId)) {
+                    break;   // the files after this one are their own key's to report
+                }
+            }
+            return reports;
+        }
+
+        /** The names the values of one source declare, or none where nothing parsed it. */
+        private Set<String> declaredIn(Db db, String id) {
+            Set<String> names = new LinkedHashSet<>();
+            CstFrontend.Parsed parsed = id == null ? null : db.ask(new Front.Parsed(id)).value();
+            if (parsed != null) {
+                for (Ast.FnDef fn : parsed.module().fns()) {
+                    names.add(fn.name());
+                }
+            }
+            return names;
         }
 
         /** The module carrying only the rows written in {@code sourceId}. The fakes stay whole: a

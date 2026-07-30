@@ -182,13 +182,25 @@ public final class Front {
                     .getOrDefault(name, List.of())));
         }
 
-        /** The module with every attached file's examples and fakes appended. */
+        /**
+         * The module with every attached file's examples, fakes and values appended.
+         *
+         * <p>The values join the module the rows join, as the fakes do: a module's own values are what its
+         * attached files' rows name, and the other way round. Nothing outside can reach them either way —
+         * an attached file is not a module and is not imported, and the values it declares are in no
+         * {@code exposing}.
+         */
         private Ast.Module withAttachedRows(Db db, Ast.Module m, List<String> files) {
             if (files.isEmpty()) {
                 return m;
             }
             List<Ast.Example> examples = new ArrayList<>(m.examples());
             List<Ast.Fake> fakes = new ArrayList<>(m.fakes());
+            List<Ast.FnDef> fns = new ArrayList<>(m.fns());
+            Set<String> taken = new LinkedHashSet<>();
+            for (Ast.FnDef fn : m.fns()) {
+                taken.add(fn.name());
+            }
             for (String id : files) {
                 Answer<CstFrontend.Parsed> file = db.ask(new Parsed(id));
                 if (!file.present()) {
@@ -196,9 +208,17 @@ public final class Front {
                 }
                 examples.addAll(file.value().module().examples());
                 fakes.addAll(file.value().module().fakes());
+                for (Ast.FnDef value : file.value().module().fns()) {
+                    // A name already declared is not merged, so the module has no duplicate to report
+                    // against a position in a file it cannot quote — the attached file's own key reports
+                    // it, where the position and the file agree (see Output.Examples).
+                    if (taken.add(value.name())) {
+                        fns.add(value);
+                    }
+                }
             }
             return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(), m.defs(),
-                    m.behaviors(), m.fns(), examples, fakes, m.exampleFileTarget(), m.pos());
+                    m.behaviors(), fns, examples, fakes, m.exampleFileTarget(), m.pos());
         }
     }
 
