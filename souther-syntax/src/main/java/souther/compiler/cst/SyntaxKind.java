@@ -120,6 +120,8 @@ public enum SyntaxKind {
     LIST_EXPR,          // [ e, ... ]
     LIST_COMP,          // [ e | guard, ... ]
     IF_EXPR,
+    ELSE_ARMS,          // else | clause -> e | clause -> e ...  (an attempt's per-clause departures)
+    ELSE_ARM,           // | <clause name> -> e   and   | _ -> e
     MATCH_EXPR,
     MATCH_CASE,
     LAMBDA_EXPR,        // x -> e  and  (a, b) -> e

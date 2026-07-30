@@ -47,7 +47,7 @@ public final class InvariantChecker {
      * declares is absent, and its clause is read off the declaration in the settled form — where the
      * operations have already become the folds they are, so it falls outside the fragment.
      */
-    public record Source(Ast.Expr body, Map<TypeName, Ast.Expr> invariants) {}
+    public record Source(Ast.Expr body, Map<TypeName, List<Ast.InvariantClause>> invariants) {}
 
     /** A stdlib combinator whose closure (argument {@code closureArg}) is handed each element of its
      * container argument ({@code listArg}) as closure parameter {@code elementParam} — mirrors
@@ -175,18 +175,19 @@ public final class InvariantChecker {
             "String.isEmpty", "String.length");
 
     private final Symbols symbols;
-    private final Map<TypeName, Ast.Expr> dischargeInvariants;
+    private final Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants;
     private final List<CompileException> errors = new ArrayList<>();
     private final List<Diagnostic> warnings = new ArrayList<>();
 
-    private InvariantChecker(Symbols symbols, Map<TypeName, Ast.Expr> dischargeInvariants) {
+    private InvariantChecker(Symbols symbols,
+                             Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants) {
         this.symbols = symbols;
         this.dischargeInvariants = dischargeInvariants;
     }
 
     /** Every invariant that applies to {@code named}, each in the analysis representation where this
      * module declares it. */
-    private List<Ast.Expr> invariantsOf(TypeName named, Ast.Data data) {
+    private List<Ast.InvariantClause> invariantsOf(TypeName named, Ast.Data data) {
         return TypeOps.effectiveInvariants(named, data, symbols, dischargeInvariants::get);
     }
 
@@ -341,7 +342,9 @@ public final class InvariantChecker {
                     k2 = seedParam(ic.binder(), built, k2);   // on this branch the invariant holds
                 }
                 walk(ic.then(), k2, t2);
-                walk(ic.els(), k, types);
+                // Each departure stands where the invariant did not hold, and nothing was built
+                // there, so none of them is seeded with anything the attempt would have guaranteed.
+                ic.els().forEach(arm -> walk(arm.body(), k, types));
             }
             case Ast.LetIn li -> {
                 walk(li.value(), k, types);
@@ -488,13 +491,13 @@ public final class InvariantChecker {
      * what the warning reports is a possible abort, and an attempt takes its else branch instead. */
     private void check(TypeName named, Ast.Data type, Bindings binds, Known k, SourcePos pos,
                        boolean attempted) {
-        List<Ast.Expr> invs = invariantsOf(named, type);
+        List<Ast.InvariantClause> invs = invariantsOf(named, type);
         if (invs.isEmpty()) {
             return;
         }
         List<Clause> owed = new ArrayList<>();
-        for (Ast.Expr inv : invs) {
-            List<Clause> o = obligations(inv, binds);
+        for (Ast.InvariantClause inv : invs) {
+            List<Clause> o = obligations(inv.expr(), binds);
             if (o != null) {
                 owed.addAll(o);
             }
@@ -741,8 +744,8 @@ public final class InvariantChecker {
                 },
                 resolvePath, fields);
         Known out = k;
-        for (Ast.Expr inv : invariantsOf(ref.name(), data)) {
-            List<Clause> o = obligations(inv, binds);
+        for (Ast.InvariantClause inv : invariantsOf(ref.name(), data)) {
+            List<Clause> o = obligations(inv.expr(), binds);
             if (o == null) {
                 continue;
             }

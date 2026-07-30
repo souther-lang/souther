@@ -13,6 +13,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -213,5 +214,151 @@ class CompileInvariantConstraintTest {
                 """), getClass().getClassLoader());
         Result<?> r = Codecs.decoder(loader, "demo.V").decode("ok", Path.ROOT);
         assertTrue(r instanceof Ok, "a value the invariant admits decodes as before");
+    }
+
+    // --- collections ---
+
+    @Test
+    void anEmptyListIsTooSmall() throws Exception {
+        Issue issue = soleIssue("""
+                data V = List<Int>
+                    invariant List.length(value) >= 1
+                """, List.of());
+        assertEquals("too_small", issue.code(), "Raoh states emptiness itself");
+        assertEquals(1, issue.meta().get("min"));
+        assertEquals(0, issue.meta().get("actual"));
+        assertFalse(issue.customMessage(), "the message is Raoh's, so a resolver may replace it");
+    }
+
+    @Test
+    void aListShorterThanItsMinimumIsTooSmall() throws Exception {
+        Issue issue = soleIssue("""
+                data V = List<Int>
+                    invariant List.length(value) >= 3
+                """, List.of(1L, 2L));
+        assertEquals("too_small", issue.code());
+        assertEquals(3, issue.meta().get("min"));
+        assertEquals(2, issue.meta().get("actual"));
+    }
+
+    @Test
+    void aListLongerThanItsMaximumIsTooBig() throws Exception {
+        Issue issue = soleIssue("""
+                data V = List<Int>
+                    invariant List.length(value) <= 1
+                """, List.of(1L, 2L));
+        assertEquals("too_big", issue.code());
+        assertEquals(1, issue.meta().get("max"));
+    }
+
+    /** {@code allUniqueBy} with the identity projection says of the elements what Raoh's
+     * {@code unique()} says of them, and Raoh names the duplicates it found. */
+    @Test
+    void aRepeatedElementIsADuplicate() throws Exception {
+        Issue issue = soleIssue("""
+                data V = List<Int>
+                    invariant List.allUniqueBy(x -> x, value)
+                """, List.of(1L, 2L, 1L));
+        assertEquals("duplicate_element", issue.code());
+        assertEquals(List.of(1L), issue.meta().get("duplicates"));
+    }
+
+    /** A projection that is not the identity says it of something else, and Raoh has no constraint for
+     * that: the clause keeps its own check, and names itself in the metadata instead. */
+    @Test
+    void aProjectedUniquenessKeepsItsOwnCheck() throws Exception {
+        Issue issue = soleIssue("""
+                data Line = { product: String, qty: Int }
+                data V = List<Line>
+                    invariant uniqueProducts = List.allUniqueBy(.product, value)
+                """, List.of(Map.of("product", "a", "qty", 1L), Map.of("product", "a", "qty", 2L)));
+        assertEquals("invariant_violation", issue.code());
+        assertEquals("V", issue.meta().get("type"));
+        assertEquals("uniqueProducts", issue.meta().get("clause"));
+        assertFalse(issue.customMessage(), "an invariant's text must stay replaceable");
+    }
+
+    @Test
+    void aMapWithTooFewEntriesIsTooSmall() throws Exception {
+        Issue issue = soleIssue("""
+                data V = Map<String, Int>
+                    invariant Map.size(value) >= 2
+                """, Map.of("a", 1L));
+        assertEquals("too_small", issue.code());
+        assertEquals(2, issue.meta().get("min"));
+    }
+
+    // --- what a clause's name adds ---
+
+    /** A clause no constraint states carries its name, so a boundary failure says which rule broke
+     * rather than only that the value was rejected. */
+    @Test
+    void aNamedClauseNamesItselfInTheMetadata() throws Exception {
+        Issue issue = soleIssue("""
+                data V = String
+                    invariant digitsOnly = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                """, "1a2");
+        assertEquals("invariant_violation", issue.code());
+        assertEquals("V", issue.meta().get("type"));
+        assertEquals("digitsOnly", issue.meta().get("clause"));
+    }
+
+    /** A clause declared without a name has nothing to be told apart by, and says so by carrying no
+     * clause in the metadata — the type still travels. */
+    @Test
+    void anUnnamedClauseCarriesOnlyTheType() throws Exception {
+        Issue issue = soleIssue("""
+                data V = String
+                    invariant List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                """, "1a2");
+        assertEquals("V", issue.meta().get("type"));
+        assertNull(issue.meta().get("clause"), "there is no name to report");
+    }
+
+    /**
+     * The order a failure is reported in is the order the clauses are declared in, which is the order
+     * {@code __construct} decides in too — so the boundary and an attempted construction name the same
+     * clause for the same value. A mapped clause written after an unmapped one gives up Raoh's code to
+     * keep that: Raoh's typed constraints cannot be chained behind a {@code refine}.
+     */
+    @Test
+    void anEarlierClauseIsReportedThoughALaterOneMapsOntoAConstraint() throws Exception {
+        Issue issue = soleIssue("""
+                data V = String
+                    invariant digitsOnly = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                    invariant long = String.length(value) >= 5
+                """, "1a2");
+        assertEquals("invariant_violation", issue.code(), "the first failing clause is the refined one");
+        assertEquals("digitsOnly", issue.meta().get("clause"));
+    }
+
+    @Test
+    void aMappedClauseDeclaredFirstKeepsItsCode() throws Exception {
+        Issue issue = soleIssue("""
+                data V = String
+                    invariant long = String.length(value) >= 5
+                    invariant digitsOnly = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                """, "1a2");
+        assertEquals("too_short", issue.code());
+    }
+
+    /** A product data's invariant has no single value for a constraint to be about, so it is checked
+     * where the value is built — and that failure now says which rule it was. */
+    @Test
+    void aProductDataReportsTheClauseThatFailed() throws Exception {
+        ClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data Span = { from: Int, to: Int }
+                    invariant ordered = from <= to
+                """), getClass().getClassLoader());
+        Result<?> r = Codecs.decoder(loader, "demo.Span")
+                .decode(Map.of("from", 5L, "to", 1L), Path.ROOT);
+        assertTrue(r instanceof Err);
+        Issue issue = ((Err<?>) r).issues().asList().get(0);
+        assertEquals("invariant_violation", issue.code());
+        assertEquals("Span", issue.meta().get("type"), "which type rejected the value");
+        assertEquals("ordered", issue.meta().get("clause"));
+        assertFalse(issue.customMessage());
     }
 }

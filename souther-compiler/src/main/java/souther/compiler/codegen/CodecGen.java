@@ -549,7 +549,7 @@ final class CodecGen {
                                         Map<String, Type> fields, Src src) {
         ClassDesc cdDec = cd(data.name() + srcSuffix(src));
         decoderClass = cdDec;
-        Invariants invariants = invariantsOf(data, fields);
+        Invariants invariants = invariantsOf(data, dec, fields);
         return build(cdDec, cb -> {
             cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
             cb.withInterfaceSymbols(CD_RDecoder);
@@ -573,44 +573,116 @@ final class CodecGen {
                 emitRekeyHelper(cb, key);
             }
             emitSharedInstance(cb, cdDec, ClassFile.ACC_PUBLIC, emitPatternFields(cb, invariants));
-            if (invariants.hasUnmapped()) {
+            if (invariants.hasRefined()) {
                 emitInvariantFailureHelper(cb, data.name());
             }
         });
     }
 
     /**
-     * A newtype's invariant as seen by its decoder (issue #83): the clauses that map onto a Raoh
-     * constraint, and whether any clause does not — those are left to {@code refine}, which runs the
-     * invariant itself.
+     * A newtype's invariant as seen by its decoder (issue #83): each declared clause, in the order it
+     * is declared, as what the decoder does about it.
      */
-    private record Invariants(List<InvariantConstraints.Constraint> constraints, boolean hasUnmapped) {
+    private record Invariants(List<ClauseEmit> clauses) {
 
-        static final Invariants NONE = new Invariants(List.of(), false);
+        static final Invariants NONE = new Invariants(List.of());
+
+        boolean hasRefined() {
+            return clauses.stream().anyMatch(ClauseEmit::refined);
+        }
+
+        /** Every mapped constraint, for the static fields a pattern constraint needs. */
+        List<InvariantConstraints.Constraint> constraints() {
+            List<InvariantConstraints.Constraint> out = new ArrayList<>();
+            for (ClauseEmit c : clauses) {
+                out.addAll(c.constraints());
+            }
+            return out;
+        }
     }
 
-    private Invariants invariantsOf(Ast.Data data, Map<String, Type> fields) {
+    /**
+     * What the decoder does about one declared clause: the Raoh constraints its conjuncts map onto, and
+     * whether a conjunct is left for the clause's own check to report.
+     *
+     * <p>Both may hold at once. {@code invariant a && b} with only {@code a} mapped states {@code a} as
+     * the constraint it is — so what breaks {@code a} is reported in Raoh's terms — and refines the
+     * clause behind it for what breaks {@code b}. That is not an ordering question: the two conjuncts
+     * are one rule, and one rule is what an arm and an issue name.
+     */
+    private record ClauseEmit(int index, Optional<String> name,
+                              List<InvariantConstraints.Constraint> constraints, boolean refined) {}
+
+    /**
+     * How each clause reaches the decoder: its conjuncts become the Raoh constraints they map onto, and
+     * the clause is refined for whatever is left. From the first clause that needs a refine, every later
+     * clause is refined whole.
+     *
+     * <p>That cut is what keeps the reporting order the declaration order. Raoh chains a constraint with
+     * {@code flatMap} and a {@code refine} answers the plain {@code Decoder}, so a typed constraint
+     * cannot follow a refine in the chain: were the later mapped clauses hoisted in front of it, a value
+     * breaking an earlier unmapped clause and a later mapped one would be reported as the later one, and
+     * the boundary and an attempted construction would name different rules for the same value. A mapped
+     * clause declared after an unmapped one therefore trades Raoh's code for its place in the order.
+     */
+    private Invariants invariantsOf(Ast.Data data, Ast.DecoderDef dec, Map<String, Type> fields) {
         if (!data.newtype()) {
             return Invariants.NONE;   // an object's invariant has no single value to constrain
         }
-        List<Ast.Expr> declared = TypeOps.effectiveInvariants(data, symbols);
+        List<Ast.InvariantClause> declared = dischargeForm(data);
         if (declared.isEmpty()) {
             return Invariants.NONE;
         }
         Type base = fields.get("value");
-        List<InvariantConstraints.Constraint> constraints = new ArrayList<>();
-        boolean unmapped = false;
-        for (Ast.Expr inv : declared) {
-            for (Ast.Expr clause : InvariantConstraints.clauses(inv)) {
-                Optional<InvariantConstraints.Constraint> c = InvariantConstraints.of(clause, base);
-                if (c.isPresent()) {
-                    constraints.add(c.get());
-                } else {
-                    unmapped = true;
+        List<ClauseEmit> out = new ArrayList<>();
+        boolean refining = !leafStaysTyped(dec);
+        for (int i = 0; i < declared.size(); i++) {
+            List<InvariantConstraints.Constraint> mapped = new ArrayList<>();
+            boolean refine = true;
+            if (!refining) {
+                refine = false;
+                for (Ast.Expr conjunct : InvariantConstraints.clauses(declared.get(i).expr())) {
+                    Optional<InvariantConstraints.Constraint> c =
+                            InvariantConstraints.of(conjunct, base);
+                    if (c.isPresent()) {
+                        mapped.add(c.get());
+                    } else {
+                        refine = true;
+                    }
                 }
             }
+            refining |= refine;
+            out.add(new ClauseEmit(i, declared.get(i).name(), List.copyOf(mapped), refine));
         }
-        return new Invariants(constraints, unmapped);
+        return new Invariants(out);
+    }
+
+    /**
+     * Whether the decoder this constrains is still one of Raoh's typed decoders, which is what a mapped
+     * constraint is a method on. A map whose keys are remapped into a key type is not: the remap is a
+     * {@code flatMapWithPath}, which answers the plain {@link Decoder}. Its clauses are refined instead.
+     */
+    private static boolean leafStaysTyped(Ast.DecoderDef dec) {
+        if (!(dec instanceof Ast.NewtypeDecoder nt)) {
+            return true;   // a prim leaf is typed; an object decoder maps nothing either way
+        }
+        return !(nt.inner() instanceof Ast.MapDecRef mp) || !needsRekey(mp.key());
+    }
+
+    /**
+     * The clauses of {@code data} in the representation the constraint mapping reads: this module's own
+     * helpers expanded, the language's own operations left standing
+     * ({@link souther.compiler.check.InliningPolicy#DISCHARGE}).
+     *
+     * <p>The mapping is written against the operations an author wrote — {@code List.length},
+     * {@code List.allUniqueBy} — and by the time the backend emits, a prelude helper has become the
+     * fold it is derived from. Reading the settled form instead would leave every collection rule
+     * unrecognised. A type another module declares has no such form here; nothing asks, because a type's
+     * decoder is generated where the type is declared.
+     */
+    private List<Ast.InvariantClause> dischargeForm(Ast.Data data) {
+        return TypeOps.effectiveInvariants(new TypeName(ctx.module(), data.name()), data, symbols,
+                ctx.dischargeInvariants()::get);
     }
 
     /** Collects the String-backed newtypes used as map keys anywhere in a derived decoder. */
@@ -984,28 +1056,36 @@ final class CodecGen {
     }
 
     /**
-     * Constrains the leaf decoder on the stack with the newtype's invariant (issue #83). A clause the
-     * mapping recognises becomes the Raoh constraint that says the same thing, so the failure carries
-     * that constraint's code, metadata and default message at the value's path — {@code too_short}
-     * with {@code min}, not one {@code invariant_violation} for every rule in the model. Whatever is
-     * left calls {@code refine} with the invariant itself, under the shared code and the type name in
-     * the metadata, so a resolver can still tell which type rejected the value. That failure is built
-     * here rather than through {@code refine}'s message overload, which mints a custom-message issue a
-     * resolver refuses to touch — an invariant's text must stay replaceable.
+     * Constrains the leaf decoder on the stack with the newtype's invariant, clause by clause in the
+     * order they are declared (issue #83). A clause the mapping recognises becomes the Raoh constraint
+     * that says the same thing, so the failure carries that constraint's code, metadata and default
+     * message at the value's path — {@code too_short} with {@code min}, not one
+     * {@code invariant_violation} for every rule in the model. A clause it does not recognise gets a
+     * {@code refine} over that clause's own check, under the shared code with the rejecting type and,
+     * where the clause has one, its name in the metadata. That failure is built here rather than through
+     * {@code refine}'s message overload, which mints a custom-message issue a resolver refuses to touch
+     * — an invariant's text must stay replaceable.
      *
-     * <p>Raoh chains constraints with {@code flatMap}, so the first failure stops the rest: the
-     * {@code refine} predicate — which runs the whole invariant, recognised clauses included — is
-     * reached only once the mapped constraints have passed, and no rule is reported twice.
+     * <p>Raoh chains with {@code flatMap}, so the first failure stops the rest and the chain's order is
+     * the order a failure is reported in — the same order {@code __construct} decides in, so the
+     * boundary and an attempted construction name the same clause for the same value.
      */
     private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
                                           Invariants invariants) {
-        for (InvariantConstraints.Constraint c : invariants.constraints()) {
-            emitConstraint(code, c);
-        }
-        if (invariants.hasUnmapped()) {
-            code.invokedynamic(invariantPredicateCallSite(cdName, base));
-            code.invokedynamic(invariantFailureCallSite());
-            code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine);
+        for (ClauseEmit clause : invariants.clauses()) {
+            clause.constraints().forEach(c -> emitConstraint(code, c));
+            if (clause.refined()) {
+                code.invokedynamic(invariantPredicateCallSite(cdName, base, clause.index()));
+                // The clause is captured off the stack, so a clause with no name captures null —
+                // a constant-pool entry could not have been one.
+                if (clause.name().isPresent()) {
+                    code.loadConstant(clause.name().get());
+                } else {
+                    code.aconst_null();
+                }
+                code.invokedynamic(invariantFailureCallSite());
+                code.invokeinterface(CD_RDecoder, "refine", MTD_Rrefine);
+            }
         }
     }
 
@@ -1052,6 +1132,30 @@ final class CodecGen {
                     code.invokevirtual(CD_DecimalDecoder, "positive", MTD_decSign);
             case InvariantConstraints.DecimalNonNegative _ ->
                     code.invokevirtual(CD_DecimalDecoder, "nonNegative", MTD_decSign);
+            case InvariantConstraints.NonEmpty _ ->
+                    code.invokevirtual(CD_ListDecoder, "nonempty", MTD_listSign);
+            case InvariantConstraints.MinSize m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_ListDecoder, "minSize", MTD_listSizeBound);
+            }
+            case InvariantConstraints.MaxSize m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_ListDecoder, "maxSize", MTD_listSizeBound);
+            }
+            case InvariantConstraints.FixedSize f -> {
+                pushInt(code, f.n());
+                code.invokevirtual(CD_ListDecoder, "fixedSize", MTD_listSizeBound);
+            }
+            case InvariantConstraints.Unique _ ->
+                    code.invokevirtual(CD_ListDecoder, "unique", MTD_listSign);
+            case InvariantConstraints.MapMinSize m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_RecordDecoder, "minSize", MTD_recordSizeBound);
+            }
+            case InvariantConstraints.MapMaxSize m -> {
+                pushInt(code, m.n());
+                code.invokevirtual(CD_RecordDecoder, "maxSize", MTD_recordSizeBound);
+            }
         }
     }
 
@@ -1062,10 +1166,10 @@ final class CodecGen {
         code.invokespecial(CD_BigDecimal, "<init>", MethodTypeDesc.of(ConstantDescs.CD_void, CD_String));
     }
 
-    /** {@code invokedynamic} producing a {@code Predicate} over the type's {@code $Ctfe.check} — the
-     * invariant as a plain boolean, already emitted for compile-time construction checking
-     * (ADR-0032). */
-    private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base) {
+    /** {@code invokedynamic} producing a {@code Predicate} over the type's {@code $Ctfe.check$i} — the
+     * clause declared {@code i}th as a plain boolean, emitted beside the whole-invariant check
+     * compile-time construction checking uses (ADR-0032). */
+    private DynamicCallSiteDesc invariantPredicateCallSite(ClassDesc cdName, Type base, int clause) {
         ClassDesc cdCtfe = cd(typeName(cdName) + "$Ctfe");
         MethodTypeDesc check = MethodTypeDesc.of(ConstantDescs.CD_boolean, JvmTypes.jvmType(base, ctx));
         // A Predicate's argument is a reference, so the instantiated type takes the decoded value's
@@ -1073,7 +1177,8 @@ final class CodecGen {
         ClassDesc boxed = JvmTypes.boxedPrim(base) != null ? JvmTypes.boxedPrim(base)
                 : JvmTypes.jvmType(base, ctx);
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
-                DirectMethodHandleDesc.Kind.STATIC, cdCtfe, "check", check);
+                DirectMethodHandleDesc.Kind.STATIC, cdCtfe,
+                ValueClassGen.ctfeClauseCheck(clause), check);
         return DynamicCallSiteDesc.of(
                 BSM_METAFACTORY, "test",
                 MethodTypeDesc.of(CD_Predicate),                                 // no captures
@@ -1082,35 +1187,50 @@ final class CodecGen {
                 MethodTypeDesc.of(ConstantDescs.CD_boolean, boxed));             // instantiatedMethodType
     }
 
-    /** {@code invokedynamic} producing the {@code BiFunction} that builds a refined invariant's
-     * failure — the issue this decoder reports when the value breaks a rule no constraint states. */
+    /**
+     * {@code invokedynamic} producing the {@code BiFunction} that builds a refined clause's failure —
+     * the issue this decoder reports when the value breaks a rule no constraint states. The clause's
+     * name is captured, so one helper serves every refined clause; a clause declared without a name
+     * captures null, which is what says there is nothing to tell it apart by.
+     */
     private DynamicCallSiteDesc invariantFailureCallSite() {
         DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
                 DirectMethodHandleDesc.Kind.STATIC, decoderClass, "__invariantFailure",
-                MTD_invariantFailure);
+                MTD_invariantFailureNamed);
         return DynamicCallSiteDesc.of(
                 BSM_METAFACTORY, "apply",
-                MethodTypeDesc.of(CD_BiFunction),
+                MethodTypeDesc.of(CD_BiFunction, CD_String),                     // captures the clause
                 MethodTypeDesc.of(CD_Object, CD_Object, CD_Object),              // samMethodType
                 impl,
                 MTD_invariantFailure);
     }
 
     /**
-     * {@code static Result __invariantFailure(Object value, Path path)}: the issue a refined
-     * invariant reports. It is a {@code Result.fail}, so the message is Raoh's default and a
-     * {@code MessageResolver} may replace it; the rejecting type travels in the metadata, which is
-     * what a resolver switches on when the code is the shared one.
+     * {@code static Result __invariantFailure(String clause, Object value, Path path)}: the issue a
+     * refined clause reports. It is a {@code Result.fail}, so the message is a default one a
+     * {@code MessageResolver} may replace; the rejecting type and the clause travel in the metadata,
+     * which is what a resolver switches on when the code is the shared one.
+     *
+     * <p>Both come from {@link souther.runtime.InvariantFailure}, the same value {@code __construct}
+     * hands its caller — so the boundary and an abort say the same thing about the same failure.
      */
     private void emitInvariantFailureHelper(ClassBuilder cb, String typeName) {
-        cb.withMethodBody("__invariantFailure", MTD_invariantFailure,
+        cb.withMethodBody("__invariantFailure", MTD_invariantFailureNamed,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
-            code.aload(1);                                            // path
-            code.loadConstant("invariant_violation");
-            code.loadConstant("invariant violated on " + typeName);
-            code.loadConstant("type");
+            code.new_(CD_InvariantFailure);
+            code.dup();
             code.loadConstant(typeName);
-            code.invokestatic(CD_Map, "of", MethodTypeDesc.of(CD_Map, CD_Object, CD_Object), true);
+            code.aload(0);                                            // the clause, or null
+            code.invokespecial(CD_InvariantFailure, "<init>",
+                    MethodTypeDesc.of(ConstantDescs.CD_void, CD_String, CD_String));
+            int failure = 3;
+            code.astore(failure);
+            code.aload(2);                                            // path
+            code.loadConstant("invariant_violation");
+            code.aload(failure);
+            code.invokevirtual(CD_InvariantFailure, "toString", MethodTypeDesc.of(CD_String));
+            code.aload(failure);
+            code.invokevirtual(CD_InvariantFailure, "meta", MTD_failureMeta);
             code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
             code.areturn();
         });
@@ -1181,19 +1301,29 @@ final class CodecGen {
         code.invokestatic(cdName, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)));
         // Souther construction Result -> Raoh boundary Result. An invariant failure becomes a
         // Raoh failure (spec 9.4, 10.1); success wraps the constructed value.
+        //
+        // The failure names the clause that did not hold, and it travels in the metadata beside the
+        // rejecting type: with the code the shared one, that metadata is all a resolver has to go on.
+        // The message is the default, so a resolver may still replace it.
         int srSlot = gen.slot(Type.STRING);
         code.astore(srSlot);
         code.aload(srSlot);
         code.instanceOf(CD_ResultErr);
         Label okL = code.newLabel();
         code.ifeq(okL);
-        code.aload(2);   // the path this value was decoded at (spec 9.4, 15) — not the document root
-        code.loadConstant("invariant_violation");
+        int failure = gen.slot(Type.STRING);
         code.aload(srSlot);
         code.checkcast(CD_ResultErr);
         code.invokevirtual(CD_ResultErr, "error", MTD_error);
-        code.checkcast(CD_String);
-        code.invokestatic(CD_RResult, "fail", MTD_Rfail, true);
+        code.checkcast(CD_InvariantFailure);
+        code.astore(failure);
+        code.aload(2);   // the path this value was decoded at (spec 9.4, 15) — not the document root
+        code.loadConstant("invariant_violation");
+        code.aload(failure);
+        code.invokevirtual(CD_InvariantFailure, "toString", MethodTypeDesc.of(CD_String));
+        code.aload(failure);
+        code.invokevirtual(CD_InvariantFailure, "meta", MTD_failureMeta);
+        code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
         code.areturn();
         code.labelBinding(okL);
         code.aload(srSlot);

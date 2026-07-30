@@ -64,6 +64,31 @@ final class InvariantConstraints {
 
     record DecimalNonNegative() implements OfDecimal {}
 
+    /** A {@code ListDecoder} constraint — a newtype over a {@code List}, whose decoder Raoh answers
+     * typed until something untyped is chained onto it. */
+    sealed interface OfList extends Constraint {}
+
+    /** {@code nonempty()} rather than {@code minSize(1)}: Raoh states emptiness on its own, and says so
+     * in the message. */
+    record NonEmpty() implements OfList {}
+
+    record MinSize(int n) implements OfList {}
+
+    record MaxSize(int n) implements OfList {}
+
+    record FixedSize(int n) implements OfList {}
+
+    /** {@code unique()}: no element appears twice, compared by value as Souther compares. */
+    record Unique() implements OfList {}
+
+    /** A {@code RecordDecoder} constraint — a newtype over a {@code Map}, which crosses the boundary as
+     * an object and is decoded as a record of its values. */
+    sealed interface OfMap extends Constraint {}
+
+    record MapMinSize(int n) implements OfMap {}
+
+    record MapMaxSize(int n) implements OfMap {}
+
     /** An invariant's clauses: {@code a && b} is two rules, each mappable on its own. */
     static List<Ast.Expr> clauses(Ast.Expr invariant) {
         List<Ast.Expr> out = new ArrayList<>();
@@ -110,7 +135,67 @@ final class InvariantConstraints {
         if (base == Type.DECIMAL) {
             return ofDecimal(op, left, right);
         }
+        if (base instanceof Type.ListOf) {
+            return ofListSize(op, left, right);
+        }
+        if (base instanceof Type.MapOf) {
+            return ofMapSize(op, left, right);
+        }
         return Optional.empty();
+    }
+
+    /**
+     * A bound on how many elements a list has: {@code List.length(value) >= 1} is Raoh's
+     * {@code nonempty()}, {@code >= 3} its {@code minSize(3)}, and so on. A size is a whole number, so a
+     * strict bound is the adjacent inclusive one — read the same way a string's length is.
+     *
+     * <p>A {@code Set} has no entry of its own here. Souther decodes one as a list and drops the
+     * duplicates while mapping it (spec §collections), so a constraint chained after that mapping is no
+     * longer on a typed decoder, and one chained before it would count the duplicates.
+     */
+    private static Optional<Constraint> ofListSize(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+        Integer n = sizeBound("List.length", left, right);
+        if (n == null) {
+            return Optional.empty();
+        }
+        return switch (op) {
+            case GE -> Optional.of(n == 1 ? new NonEmpty() : new MinSize(n));
+            case GT -> n == Integer.MAX_VALUE ? Optional.empty()
+                    : Optional.of(n == 0 ? new NonEmpty() : new MinSize(n + 1));
+            case LE -> Optional.of(new MaxSize(n));
+            case LT -> n == 0 ? Optional.empty() : Optional.of(new MaxSize(n - 1));
+            case EQ -> Optional.of(new FixedSize(n));
+            default -> Optional.empty();
+        };
+    }
+
+    /** The same for a map, which Raoh decodes as a record of its values and bounds by entry count.
+     * There is no emptiness constraint of its own there, so {@code >= 1} is a minimum of one. */
+    private static Optional<Constraint> ofMapSize(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
+        Integer n = sizeBound("Map.size", left, right);
+        if (n == null) {
+            return Optional.empty();
+        }
+        return switch (op) {
+            case GE -> Optional.of(new MapMinSize(n));
+            case GT -> n == Integer.MAX_VALUE ? Optional.empty() : Optional.of(new MapMinSize(n + 1));
+            case LE -> Optional.of(new MapMaxSize(n));
+            case LT -> n == 0 ? Optional.empty() : Optional.of(new MapMaxSize(n - 1));
+            default -> Optional.empty();
+        };
+    }
+
+    /** The literal bound {@code size(value)} is compared against, or null when this is not that shape. */
+    private static Integer sizeBound(String size, Ast.Expr left, Ast.Expr right) {
+        if (!(left instanceof Ast.Call call) || !call.fn().equals(size)
+                || call.args().size() != 1 || !isValue(call.args().get(0))) {
+            return null;
+        }
+        Long bound = intLiteral(right);
+        if (bound == null || bound < 0 || bound > Integer.MAX_VALUE) {
+            return null;
+        }
+        return bound.intValue();
     }
 
     private static Optional<Constraint> ofCall(Ast.Call call, Type base) {
@@ -122,6 +207,15 @@ final class InvariantConstraints {
         if (base == Type.STRING && call.fn().equals("String.matches") && call.args().size() == 2
                 && isValue(call.args().get(1))) {
             return ConstEval.evalString(call.args().get(0)).map(Pattern::new);
+        }
+        // `List.allUniqueBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
+        // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
+        // is not the identity says it of something else — the elements' products, their ids — and Raoh
+        // has no constraint for that, so the clause keeps its own check.
+        if (base instanceof Type.ListOf && call.fn().equals("List.allUniqueBy")
+                && call.args().size() == 2 && isValue(call.args().get(1))
+                && isIdentity(call.args().get(0))) {
+            return Optional.of(new Unique());
         }
         return Optional.empty();
     }
@@ -198,6 +292,13 @@ final class InvariantConstraints {
 
     private static boolean isValue(Ast.Expr e) {
         return e instanceof Ast.Var v && v.name().equals(VALUE);
+    }
+
+    /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is
+     * spelled. A block with one parameter is how a lambda arrives here (spec §blocks). */
+    private static boolean isIdentity(Ast.Expr e) {
+        return e instanceof Ast.Block b && b.params().size() == 1
+                && b.body() instanceof Ast.Var v && v.name().equals(b.params().get(0));
     }
 
     private static Ast.BinOp mirrored(Ast.BinOp op) {

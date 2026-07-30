@@ -179,8 +179,10 @@ public final class ModuleMetadata {
         }
         Set<String> reached = new LinkedHashSet<>();
         for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.Data d && d.invariant().isPresent()) {
-                reach(d.invariant().get(), own, reached);
+            if (def instanceof Ast.Data d) {
+                for (Ast.InvariantClause clause : d.invariants()) {
+                    reach(clause.expr(), own, reached);
+                }
             }
         }
         Set<String> exposed = new java.util.HashSet<>(module.exposing());

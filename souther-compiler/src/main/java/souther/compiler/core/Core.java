@@ -7,6 +7,7 @@ import souther.compiler.ast.Ast;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * The Core IR (ADR-0021): the lowered form of a behavior body the backend emits from.
@@ -57,13 +58,21 @@ public sealed interface Core {
 
     /**
      * An attempted construction: {@code construct}'s invariant decides the branch. It is built and
-     * bound to {@code binder} in {@code then} when the invariant holds, and {@code els} is taken when
-     * it does not. Emitted from the {@code __construct} the plain construction already goes through —
-     * what differs is that the {@code Result} is branched on rather than handed to
-     * {@code ConstraintViolation.orThrow}.
+     * bound to {@code binder} in {@code then} when the invariant holds, and a departure in
+     * {@code els} is taken when it does not. Emitted from the {@code __construct} the plain
+     * construction already goes through — what differs is that the {@code Result} is branched on
+     * rather than handed to {@code ConstraintViolation.orThrow}.
+     *
+     * <p>With one departure naming no clause, any failure takes it. With several, the failing clause
+     * the {@code Result} carries selects one; the checker has already established that every named
+     * clause is answered, so one always matches.
      */
-    record IfConstructed(NewData construct, String binder, Core then, Core els, Type type,
+    record IfConstructed(NewData construct, String binder, Core then, List<ElseArm> els, Type type,
                          SourcePos pos) implements Core {}
+
+    /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
+     * for any failure) and the value taken. */
+    record ElseArm(Optional<String> clause, Core body) {}
 
     /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
      * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an

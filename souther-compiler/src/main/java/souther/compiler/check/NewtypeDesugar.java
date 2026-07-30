@@ -79,7 +79,7 @@ public final class NewtypeDesugar {
             // the attempted construction is written `T(v)` too, so it is a Call until this rewrites it
             case Ast.IfConstructed ic ->
                     new Ast.IfConstructed(go(ic.construct(), symbols), ic.binder(),
-                            go(ic.then(), symbols), go(ic.els(), symbols), ic.pos());
+                            go(ic.then(), symbols), arms(ic.els(), symbols), ic.pos());
             case Ast.Block b -> new Ast.Block(b.params(), go(b.body(), symbols), b.pos());
             case Ast.Tuple tup -> new Ast.Tuple(mapExprs(tup.elements(), symbols), tup.pos());
             case Ast.TupleGet tg -> new Ast.TupleGet(go(tg.tuple(), symbols), tg.index(), tg.arity(), tg.pos());
@@ -99,6 +99,14 @@ public final class NewtypeDesugar {
         List<Ast.Expr> out = new ArrayList<>();
         for (Ast.Expr e : es) {
             out.add(go(e, symbols));
+        }
+        return out;
+    }
+
+    private static List<Ast.ElseArm> arms(List<Ast.ElseArm> arms, Symbols symbols) {
+        List<Ast.ElseArm> out = new ArrayList<>();
+        for (Ast.ElseArm arm : arms) {
+            out.add(arm.with(go(arm.body(), symbols)));
         }
         return out;
     }

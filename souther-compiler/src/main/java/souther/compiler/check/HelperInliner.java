@@ -155,8 +155,10 @@ public final class HelperInliner {
             collectHelperCalls(fn.body(), reachable);
         }
         for (Ast.Def d : module.defs()) {
-            if (d instanceof Ast.Data data && data.invariant().isPresent()) {
-                collectHelperCalls(data.invariant().get(), reachable);
+            if (d instanceof Ast.Data data) {
+                for (Ast.InvariantClause clause : data.invariants()) {
+                    collectHelperCalls(clause.expr(), reachable);
+                }
             }
         }
         forEachExampleExpr(module, e -> collectHelperCalls(e, reachable));
@@ -374,9 +376,9 @@ public final class HelperInliner {
         }
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {
-            defs.add(def instanceof Ast.Data d && d.invariant().isPresent()
+            defs.add(def instanceof Ast.Data d && !d.invariants().isEmpty()
                     ? new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
-                            java.util.Optional.of(qualifyForeign(d.invariant().get(), m.name())),
+                            Ast.mapClauses(d.invariants(), inv -> qualifyForeign(inv, m.name())),
                             d.decoder(), d.encoder(), d.pos())
                     : def);
         }
@@ -550,13 +552,15 @@ public final class HelperInliner {
      * an imported clause falls outside the statically dischargeable fragment (spec
      * §invariant-discharge).
      */
-    public static Map<TypeName, Ast.Expr> invariantsForDischarge(Ast.Module m, Symbols symbols) {
+    public static Map<TypeName, List<Ast.InvariantClause>> invariantsForDischarge(
+            Ast.Module m, Symbols symbols) {
         Ast.Module settled = HelperParams.settle(m, symbols, Map.of());
         HelperInliner inliner = forHelpers(helpersOf(settled), InliningPolicy.DISCHARGE);
-        Map<TypeName, Ast.Expr> out = new LinkedHashMap<>();
+        Map<TypeName, List<Ast.InvariantClause>> out = new LinkedHashMap<>();
         for (Ast.Def def : settled.defs()) {
-            if (def instanceof Ast.Data d && d.invariant().isPresent()) {
-                out.put(new TypeName(m.name(), d.name()), inliner.inline(d.invariant().get()));
+            if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
+                out.put(new TypeName(m.name(), d.name()),
+                        Ast.mapClauses(d.invariants(), inliner::inline));
             }
         }
         return out;
@@ -565,9 +569,9 @@ public final class HelperInliner {
     Ast.Module withInlinedInvariants(Ast.Module m) {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {
-            if (def instanceof Ast.Data d && d.invariant().isPresent()) {
+            if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
                 defs.add(new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
-                        java.util.Optional.of(inline(d.invariant().get())),
+                        Ast.mapClauses(d.invariants(), this::inline),
                         d.decoder(), d.encoder(), d.pos()));
             } else {
                 defs.add(def);
@@ -932,7 +936,7 @@ public final class HelperInliner {
             }
             case Ast.If iff -> new Ast.If(inline(iff.cond()), inline(iff.then()), inline(iff.els()), iff.pos());
             case Ast.IfConstructed ic -> new Ast.IfConstructed(inline(ic.construct()), ic.binder(),
-                    inline(ic.then()), inline(ic.els()), ic.pos());
+                    inline(ic.then()), Ast.mapArms(ic.els(), this::inline), ic.pos());
             case Ast.LetIn li when li.value() instanceof Ast.Block lambda -> {
                 // a lambda bound to a local: register it as a scoped helper so each application in
                 // the body expands inline (β-reduction), exactly like a named helper. Its parameters
@@ -1176,7 +1180,8 @@ public final class HelperInliner {
             case Ast.IfConstructed ic -> new Ast.IfConstructed(
                     rename(ic.construct(), subst, substDenotes, fnParams, at), ic.binder(),
                     rename(ic.then(), without(subst, ic.binder()), substDenotes, fnParams, at),
-                    rename(ic.els(), subst, substDenotes, fnParams, at), at(at, ic.pos()));
+                    Ast.mapArms(ic.els(), body -> rename(body, subst, substDenotes, fnParams, at)),
+                    at(at, ic.pos()));
             case Ast.LetIn li -> {
                 Ast.Expr value = rename(li.value(), subst, substDenotes, fnParams, at);
                 Ast.Expr body = rename(li.body(), without(subst, li.name()), substDenotes, fnParams, at);

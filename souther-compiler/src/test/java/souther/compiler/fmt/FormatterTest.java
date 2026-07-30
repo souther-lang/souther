@@ -130,6 +130,51 @@ class FormatterTest {
                 "the `as` binder was lost:\n" + Formatter.format(src));
     }
 
+    /**
+     * A clause's name and the arms that answer it are code. Written back without them, a departure per
+     * rule would come back as a departure by any rule — and the arms' cases would be lost outright.
+     */
+    @Test
+    void canonicalFormOfNamedClausesAndTheirDepartures() {
+        String messy = "module demo\n"
+                + "data NoItems\ndata Duplicate\ndata Accepted={ items:Items }\n"
+                + "data Items=List<Int>\n"
+                + "  invariant nonEmpty=List.length(value)>=1\n"
+                + "  invariant unique=List.allUniqueBy(x->x,value)\n"
+                + "behavior build:(xs:List<Int>)->Accepted|NoItems|Duplicate\n"
+                + "  constructs Accepted,Items,NoItems,Duplicate\n"
+                + "let build (xs)={\n"
+                + "guard Items(xs) as items else | nonEmpty->NoItems | unique->Duplicate\n"
+                + "Accepted { items=items }\n}\n";
+        String expected = """
+                module demo
+
+                data NoItems
+
+                data Duplicate
+
+                data Accepted =
+                    { items: Items
+                    }
+
+                data Items = List<Int>
+                    invariant nonEmpty = List.length(value) >= 1
+                    invariant unique = List.allUniqueBy(x -> x, value)
+
+                behavior build : (xs: List<Int>) -> Accepted | NoItems | Duplicate
+                    constructs Accepted, Items, NoItems, Duplicate
+
+                let build (xs) = {
+                    guard Items(xs) as items else
+                        | nonEmpty -> NoItems
+                        | unique -> Duplicate
+                    Accepted { items = items }
+                }
+                """;
+        assertEquals(expected, Formatter.format(messy));
+        assertEquals(expected, Formatter.format(expected), "and it is a fixed point");
+    }
+
     /** A spread naming a field path keeps its path: `...c.address`, not `...c`. */
     @Test
     void aNestedSpreadPathSurvivesFormatting() {

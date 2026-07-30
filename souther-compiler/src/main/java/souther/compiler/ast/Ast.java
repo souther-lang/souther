@@ -294,10 +294,34 @@ public interface Ast {
                 boolean newtype,
                 List<Name> includes,
                 List<Field> fields,
-                Optional<Expr> invariant,
+                List<InvariantClause> invariants,
                 Optional<DecoderDef> decoder,
                 Optional<EncoderDef> encoder,
                 SourcePos pos) implements Def {}
+
+    /**
+     * One {@code invariant} clause, in the order it is written. Every clause must hold, so the
+     * clauses of a declaration mean their conjunction; they are kept apart because a failure is
+     * reported as one of them — the first that does not hold (spec §invariant-declaration).
+     *
+     * <p>{@code name} is what an attempted construction's departure arm and a boundary issue call the
+     * rule. An unnamed clause is enforced exactly as before it could be named: nothing can tell it
+     * apart from the type's other unnamed clauses, so it aborts inside the domain and fails the decode
+     * outside it without saying which rule it was.
+     */
+    record InvariantClause(Optional<String> name, Expr expr, SourcePos pos) implements Ast {
+
+        /** A clause no name was written for. */
+        public static InvariantClause unnamed(Expr expr) {
+            return new InvariantClause(Optional.empty(), expr, expr.pos());
+        }
+
+        /** The same clause over a rewritten expression — what a stage that rewrites expressions
+         * produces, so a rewrite never drops the name the rest of the compiler classifies by. */
+        public InvariantClause with(Expr rewritten) {
+            return new InvariantClause(name, rewritten, pos);
+        }
+    }
 
     /** A sum data definition {@code data X = A | B | ...} with optional discriminate decoder/encoder. */
     record SumData(String name,
@@ -599,8 +623,41 @@ public interface Ast {
      * That it is one, and that its type carries an invariant to attempt, are checked once the names
      * are resolved.
      */
-    record IfConstructed(Expr construct, String binder, Expr then, Expr els, SourcePos pos)
-            implements Expr {}
+    record IfConstructed(Expr construct, String binder, Expr then, List<ElseArm> els, SourcePos pos)
+            implements Expr {
+
+        /** The attempt whose failure is not told apart: one arm, naming no clause. */
+        public IfConstructed(Expr construct, String binder, Expr then, Expr els, SourcePos pos) {
+            this(construct, binder, then, List.of(ElseArm.any(els)), pos);
+        }
+
+        /** Whether the failure is departed from per clause, rather than by one value for any of them. */
+        public boolean mapsClauses() {
+            return els.size() > 1 || els.get(0).clause().isPresent();
+        }
+    }
+
+    /**
+     * One departure of an attempted construction: the value taken when {@code clause} is the invariant
+     * clause that did not hold, or when any of them did not ({@code clause} empty — the {@code else e}
+     * form, and the {@code | _ -> e} that stands for the clauses carrying no name).
+     *
+     * <p>The arms are a lookup by clause, not a sequence: which arm is taken is decided by the failing
+     * clause, so the order they are written in has no effect. Which clause fails is decided by the
+     * order the clauses are declared in (spec §invariant-declaration).
+     */
+    record ElseArm(Optional<String> clause, Expr body, SourcePos pos) implements Ast {
+
+        /** The arm taken for any failure — what {@code else e} and {@code | _ -> e} both mean. */
+        public static ElseArm any(Expr body) {
+            return new ElseArm(Optional.empty(), body, body.pos());
+        }
+
+        /** The same arm over a rewritten body, so a rewriting stage keeps the clause it answers. */
+        public ElseArm with(Expr rewritten) {
+            return new ElseArm(clause, rewritten, pos);
+        }
+    }
 
     /** {@code match scrutinee { case Case as x -> body ... }} over a sum type. */
     record Match(Expr scrutinee, List<Case> cases, SourcePos pos) implements Expr {}
@@ -735,7 +792,7 @@ public interface Ast {
             case Call c -> new Call(c.fn(), c.denotes(), mapExprs(c.args(), f), c.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
             case IfConstructed ic -> new IfConstructed(f.apply(ic.construct()), ic.binder(),
-                    f.apply(ic.then()), f.apply(ic.els()), ic.pos());
+                    f.apply(ic.then()), mapArms(ic.els(), f), ic.pos());
             case LetIn li -> new LetIn(li.name(), f.apply(li.value()), li.declaredType(), li.annotated(),
                     li.opens(), f.apply(li.body()), li.pos());
             case Block bl -> new Block(bl.params(), f.apply(bl.body()), bl.pos());
@@ -788,7 +845,7 @@ public interface Ast {
             case IfConstructed ic -> {
                 f.accept(ic.construct());
                 f.accept(ic.then());
-                f.accept(ic.els());
+                ic.els().forEach(arm -> f.accept(arm.body()));
             }
             case LetIn li -> {
                 f.accept(li.value());
@@ -814,6 +871,25 @@ public interface Ast {
         List<Expr> out = new ArrayList<>();
         for (Expr e : es) {
             out.add(f.apply(e));
+        }
+        return out;
+    }
+
+    /** Rewrites each clause's expression, keeping its name. Every stage that rewrites a declaration's
+     * invariant goes through here, so no rewrite can drop the name the failure is classified by. */
+    public static List<InvariantClause> mapClauses(List<InvariantClause> clauses, UnaryOperator<Expr> f) {
+        List<InvariantClause> out = new ArrayList<>();
+        for (InvariantClause clause : clauses) {
+            out.add(clause.with(f.apply(clause.expr())));
+        }
+        return out;
+    }
+
+    /** Rewrites each departure's body, keeping the clause it answers. */
+    public static List<ElseArm> mapArms(List<ElseArm> arms, UnaryOperator<Expr> f) {
+        List<ElseArm> out = new ArrayList<>();
+        for (ElseArm arm : arms) {
+            out.add(arm.with(f.apply(arm.body())));
         }
         return out;
     }

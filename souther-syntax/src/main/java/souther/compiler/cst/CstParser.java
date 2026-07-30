@@ -272,9 +272,17 @@ public final class CstParser {
         }
     }
 
+    /** {@code invariant [ <name> = ] <expr>} — a clause, named or not. A name is what an attempt's
+     * departure arm and a boundary issue call the rule, so only a named clause can be told apart from
+     * the others; an unnamed one is enforced and never classified. Souther has no assignment and
+     * spells equality {@code ==}, so an unnamed clause cannot begin {@code <name> =}. */
     private void invariantClause() {
         start(SyntaxKind.INVARIANT_CLAUSE);
         bump();   // invariant
+        if (at(SyntaxKind.IDENT) && nth(1) == SyntaxKind.ASSIGN) {
+            bump();   // the clause name
+            bump();   // =
+        }
         expr();
         finish();
     }
@@ -816,6 +824,39 @@ public final class CstParser {
         expr();
         attemptBinder();
         expect(SyntaxKind.ELSE_KW);
+        elseBody();
+        finish();
+    }
+
+    /**
+     * What an {@code else} takes: one expression, or the arms an attempted construction departs by
+     * per invariant clause ({@code | nonEmpty -> NoLines | uniqueProducts -> DuplicateProduct}). No
+     * expression begins with {@code |}, so the two forms are told apart by the first token. That the
+     * arms name clauses of the attempted type, and cover them, is decided where the type is known.
+     */
+    private void elseBody() {
+        if (at(SyntaxKind.PIPE)) {
+            elseArms();
+        } else {
+            expr();
+        }
+    }
+
+    private void elseArms() {
+        start(SyntaxKind.ELSE_ARMS);
+        while (at(SyntaxKind.PIPE)) {
+            elseArm();
+        }
+        finish();
+    }
+
+    /** {@code | <clause> -> e}, or {@code | _ -> e} for the clauses that carry no name (`_` lexes as
+     * an identifier, as it does in a fake table's default row). */
+    private void elseArm() {
+        start(SyntaxKind.ELSE_ARM);
+        bump();   // |
+        expect(SyntaxKind.IDENT);
+        expect(SyntaxKind.ARROW);
         expr();
         finish();
     }
@@ -1044,7 +1085,7 @@ public final class CstParser {
         expect(SyntaxKind.THEN_KW);
         expr();
         expect(SyntaxKind.ELSE_KW);
-        expr();
+        elseBody();
         finish();
     }
 

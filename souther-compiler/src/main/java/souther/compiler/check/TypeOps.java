@@ -654,34 +654,37 @@ public final class TypeOps {
         }
     }
 
-    /** All invariants that apply to a data: included data's invariants first, then its own. */
-    public static List<Ast.Expr> effectiveInvariants(Ast.Data data, Symbols symbols) {
+    /**
+     * All invariant clauses that apply to a data, in the order a failure is decided by: the clauses of
+     * the data it spreads first, then its own, each in the order it is written.
+     *
+     * <p>A clause keeps the name it was declared with wherever it arrives from, so a spread carries not
+     * only the rule but what an attempt on the spreading type calls it.
+     */
+    public static List<Ast.InvariantClause> effectiveInvariants(Ast.Data data, Symbols symbols) {
         return effectiveInvariants(null, data, symbols, _ -> null);
     }
 
     /**
-     * The same, reading each declaration's invariant through {@code form} rather than off the
+     * The same, reading each declaration's clauses through {@code form} rather than off the
      * declaration.
      *
      * <p>An analysis that reads a representation other than the settled one asks for it by the
      * declaration's name, and gets the settled one wherever {@code form} has nothing to say — which
      * is every declaration another module made, since what travels is the settled form.
      */
-    public static List<Ast.Expr> effectiveInvariants(TypeName named, Ast.Data data, Symbols symbols,
-                                                     Function<TypeName, Ast.Expr> form) {
-        List<Ast.Expr> invs = new ArrayList<>();
+    public static List<Ast.InvariantClause> effectiveInvariants(
+            TypeName named, Ast.Data data, Symbols symbols,
+            Function<TypeName, List<Ast.InvariantClause>> form) {
+        List<Ast.InvariantClause> invs = new ArrayList<>();
         for (Ast.Name inc : data.includes()) {
             Ast.Data id = spreadTarget(inc, symbols);
             if (id != null) {
                 invs.addAll(effectiveInvariants(inc.denotes(), id, symbols, form));
             }
         }
-        Ast.Expr own = named == null ? null : form.apply(named);
-        if (own != null) {
-            invs.add(own);
-        } else {
-            data.invariant().ifPresent(invs::add);
-        }
+        List<Ast.InvariantClause> own = named == null ? null : form.apply(named);
+        invs.addAll(own != null ? own : data.invariants());
         return invs;
     }
 

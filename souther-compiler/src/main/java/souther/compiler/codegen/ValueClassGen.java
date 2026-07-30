@@ -125,31 +125,56 @@ final class ValueClassGen {
         }
     }
 
+    /**
+     * The Raoh-free checks of an invariant-bearing newtype: {@code check} for the whole invariant, and
+     * {@code check$i} for the clause declared {@code i}th. Both run the same bytecode
+     * {@code __construct} does (via {@code gen.expr}).
+     *
+     * <p>Two callers want the whole invariant — a constant construction verified at compile time
+     * (ADR-0032) — and one wants a clause on its own: the derived decoder hands each clause its own
+     * predicate, so a rule no Raoh constraint states exactly is still reported as the rule it is
+     * rather than as the whole invariant (issue #83, spec §decoder-error).
+     */
     private void emitCtfeCheck(Ast.Data data, Map<String, Type> fields, Map<String, byte[]> out) {
         ClassDesc cdName = cd(data.name());
         ClassDesc cdCtfe = cd(data.name() + "$Ctfe");
+        List<Ast.InvariantClause> clauses = TypeOps.effectiveInvariants(data, symbols);
         out.put(pkg + "." + data.name() + "$Ctfe", build(cdCtfe, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
-            cb.withMethodBody("check", MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
-                    ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
-                        BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
-                        int slot = 0;
-                        for (Map.Entry<String, Type> f : fields.entrySet()) {
-                            gen.bind(f.getKey(), slot, f.getValue());
-                            slot += width(f.getValue());
-                        }
-                        for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
-                            gen.expr(inv);                 // the same boolean __construct checks
-                            Label ok = code.newLabel();
-                            code.ifne(ok);
-                            code.iconst_0();
-                            code.ireturn();                // an invariant is false
-                            code.labelBinding(ok);
-                        }
-                        code.iconst_1();
-                        code.ireturn();                    // all held
-                    });
+            emitClauseCheck(cb, "check", cdName, data, fields, clauses);
+            for (int i = 0; i < clauses.size(); i++) {
+                emitClauseCheck(cb, ctfeClauseCheck(i), cdName, data, fields,
+                        List.of(clauses.get(i)));
+            }
         }));
+    }
+
+    /** The name of the {@code $Ctfe} method checking the clause declared {@code i}th. */
+    static String ctfeClauseCheck(int index) {
+        return "check$" + index;
+    }
+
+    private void emitClauseCheck(ClassBuilder cb, String method, ClassDesc cdName, Ast.Data data,
+                                 Map<String, Type> fields, List<Ast.InvariantClause> clauses) {
+        cb.withMethodBody(method, MethodTypeDesc.of(ConstantDescs.CD_boolean, fieldDescs(fields)),
+                ClassFile.ACC_STATIC | ClassFile.ACC_PUBLIC, code -> {
+                    BodyGen gen = new BodyGen(ctx, code, data, cdName, 0);
+                    int slot = 0;
+                    for (Map.Entry<String, Type> f : fields.entrySet()) {
+                        gen.bind(f.getKey(), slot, f.getValue());
+                        slot += width(f.getValue());
+                    }
+                    for (Ast.InvariantClause clause : clauses) {
+                        gen.expr(clause.expr());       // the same boolean __construct checks
+                        Label ok = code.newLabel();
+                        code.ifne(ok);
+                        code.iconst_0();
+                        code.ireturn();                // a clause is false
+                        code.labelBinding(ok);
+                    }
+                    code.iconst_1();
+                    code.ireturn();                    // all held
+                });
     }
 
     void generateSum(Ast.SumData sum, Map<String, byte[]> out) {
@@ -598,11 +623,21 @@ final class ValueClassGen {
                             slot += width(f.getValue());
                         }
 
-                        for (Ast.Expr inv : TypeOps.effectiveInvariants(data, symbols)) {
-                            gen.expr(inv);
+                        // Clause by clause, in the order they are declared, stopping at the first that
+                        // does not hold: what the failure carries is that clause, so a reordering of
+                        // the declaration changes which one a caller is told about.
+                        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                            gen.expr(clause.expr());
                             Label ok = code.newLabel();
                             code.ifne(ok);
-                            code.loadConstant("invariant violated on " + data.name());
+                            code.loadConstant(data.name());
+                            if (clause.name().isPresent()) {
+                                code.loadConstant(clause.name().get());
+                                code.invokestatic(CD_InvariantFailure, "of", MTD_failureOf, false);
+                            } else {
+                                code.invokestatic(CD_InvariantFailure, "unnamed",
+                                        MTD_failureUnnamed, false);
+                            }
                             code.invokestatic(CD_Result, "err", MTD_Result_err, true);
                             code.areturn();
                             code.labelBinding(ok);
@@ -624,11 +659,11 @@ final class ValueClassGen {
     }
 
     /**
-     * The generic {@code Signature} of {@code __construct}: {@code Result<T, String>}, where the
-     * failure side is the invariant message this method builds. Unlike a factory's, it is written
-     * whether or not a field is a container — the raw {@code Result} the descriptor names carries no
-     * type at all, and a Kotlin caller reads a raw type as a platform type, which is the one thing
-     * the rest of the class is marked to avoid (issue #150).
+     * The generic {@code Signature} of {@code __construct}: {@code Result<T, InvariantFailure>}, whose
+     * failure side names the clause that did not hold. Unlike a factory's, it is written whether or not
+     * a field is a container — the raw {@code Result} the descriptor names carries no type at all, and
+     * a Kotlin caller reads a raw type as a platform type, which is the one thing the rest of the class
+     * is marked to avoid (issue #150).
      */
     private String constructSignature(Map<String, Type> fields, ClassDesc cdName) {
         StringBuilder sb = new StringBuilder("(");
@@ -638,7 +673,7 @@ final class ValueClassGen {
         }
         return sb.append(")Lsouther/runtime/Result<")
                 .append(cdName.descriptorString())
-                .append(CD_String.descriptorString())
+                .append(CD_InvariantFailure.descriptorString())
                 .append(">;").toString();
     }
 }

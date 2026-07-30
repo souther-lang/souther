@@ -276,8 +276,8 @@ public final class Resolve {
             // an invariant reads the fields of the data it belongs to, which are what bind its
             // names — `value > 0` is about this declaration's `value`, whatever else is in scope
             case Ast.Data d -> new Ast.Data(d.name(), d.newtype(), names(d.includes()), fields(d.fields()),
-                    d.invariant().map(inv -> expr(inv, boundFields(d))), d.decoder().map(this::decoder),
-                    d.encoder().map(this::encoder), d.pos());
+                    Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
+                    d.decoder().map(this::decoder), d.encoder().map(this::encoder), d.pos());
             case Ast.SumData s -> new Ast.SumData(s.name(), sumCases(s), s.decoder().map(this::discriminate),
                     s.encoder().map(this::sumEncoder), s.pos());
         };
@@ -491,7 +491,7 @@ public final class Resolve {
             // branch. The construction and the else value are outside it.
             case Ast.IfConstructed ic -> new Ast.IfConstructed(expr(ic.construct(), bound),
                     ic.binder(), expr(ic.then(), bound.and(ic.binder(), ic.pos())),
-                    expr(ic.els(), bound), ic.pos());
+                    arms(ic.els(), bound), ic.pos());
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
                 for (Ast.Case c : m.cases()) {
@@ -504,6 +504,14 @@ public final class Resolve {
             }
             default -> Ast.mapChildren(e, x -> expr(x, bound));
         };
+    }
+
+    private List<Ast.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {
+        List<Ast.ElseArm> out = new ArrayList<>();
+        for (Ast.ElseArm arm : arms) {
+            out.add(arm.with(expr(arm.body(), bound)));
+        }
+        return out;
     }
 
     private List<Ast.Expr> exprs(List<Ast.Expr> es) {

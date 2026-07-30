@@ -66,9 +66,10 @@ public final class Lower {
     public static Ast.Module lowered(Ast.Module module, List<Ast.FnDef> fns) {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.Data d && d.invariant().isPresent()) {
+            if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
                 defs.add(new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
-                        Optional.of(desugar(d.invariant().get())), d.decoder(), d.encoder(), d.pos()));
+                        Ast.mapClauses(d.invariants(), Lower::desugar),
+                        d.decoder(), d.encoder(), d.pos()));
             } else {
                 defs.add(def);
             }

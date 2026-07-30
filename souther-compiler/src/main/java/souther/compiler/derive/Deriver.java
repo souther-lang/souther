@@ -66,7 +66,7 @@ public final class Deriver {
                 ? d.decoder() : Optional.of(deriveDecoder(d, fields, isCase, symbols));
         Optional<Ast.EncoderDef> encoder = d.encoder().isPresent()
                 ? d.encoder() : Optional.of(deriveEncoder(d, fields, isCase));
-        return new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(), d.invariant(),
+        return new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(), d.invariants(),
                 decoder, encoder, d.pos());
     }
 

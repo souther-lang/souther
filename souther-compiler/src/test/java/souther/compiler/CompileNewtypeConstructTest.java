@@ -127,6 +127,26 @@ class CompileNewtypeConstructTest {
         assertTrue(e.getMessage().contains("金額"), e.getMessage());
     }
 
+    /** The compile-time check asks one clause at a time, so a constant the compiler rejects names the
+     * rule it broke rather than the whole invariant. */
+    @Test
+    void constantViolatingANamedClauseNamesThatClause() {
+        // Both clauses are outside the fragment the discharge procedure reasons over, so this is the
+        // constant check speaking and not the possible-violation one.
+        String src = """
+                module demo
+                data Code = String
+                    invariant lower = String.matches("[a-z]+", value)
+                    invariant noDigits = String.matches("[^0-9]+", value)
+                behavior make : (x: Int) -> Code constructs Code
+                let make (x) = Code("AB")
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.const.invariant.clause", e.diagnostics().get(0).messageKey());
+        assertEquals("lower", e.diagnostics().get(0).args()[1],
+                "the first clause the constant breaks, in declaration order");
+    }
+
     @Test
     void emptyStringViolatingLengthInvariantIsACompileError() {
         String src = """

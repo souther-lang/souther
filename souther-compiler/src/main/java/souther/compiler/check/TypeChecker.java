@@ -213,10 +213,12 @@ public final class TypeChecker {
         // The invariant checks run before the data check, so a partial call or a construction is named
         // before it is otherwise reported as an unknown function or type-checked.
         for (Ast.Def def : module.defs()) {
-            if (def instanceof Ast.Data data && data.invariant().isPresent()) {
-                Ast.Expr inv = data.invariant().get();
-                HelperTyping.rejectPartialHelperInInvariant(inv, data.name(), partialRecursiveFns);
-                HelperTyping.rejectConstructionInInvariant(inv, data.name());
+            if (def instanceof Ast.Data data) {
+                for (Ast.InvariantClause clause : data.invariants()) {
+                    HelperTyping.rejectPartialHelperInInvariant(
+                            clause.expr(), data.name(), partialRecursiveFns);
+                    HelperTyping.rejectConstructionInInvariant(clause.expr(), data.name());
+                }
             }
         }
         for (Ast.Def def : module.defs()) {

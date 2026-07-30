@@ -9,12 +9,15 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
+import souther.compiler.check.TypeOps;
 import souther.compiler.codegen.Backend;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
+
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -55,16 +58,20 @@ public final class Output {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Map<String, List<BehaviorRequirement>>> requirements =
                     db.ask(new Bodies.Requirements(name));
+            // A derived decoder maps a clause onto the Raoh constraint that says the same thing, and it
+            // is written against the operations an author wrote — which the lowered module no longer has.
+            Answer<Map<TypeName, List<Ast.InvariantClause>>> dischargeClauses =
+                    db.ask(new Shapes.InvariantsForDischarge(name));
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
                     || !injected.present() || !callees.present() || !prepared.present()
-                    || !requirements.present()) {
+                    || !requirements.present() || !dischargeClauses.present()) {
                 return Answer.absent();
             }
             try {
                 Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
                         lowering.value().lowered(), scope.value(), typePackages(prepared.value()),
                         imported.value(), injected.value(), callees.value(), requirements.value(),
-                        checked.value()));
+                        checked.value(), dischargeClauses.value()));
                 stamp(db, classes);
                 return Answer.of(Ordered.map(classes));
             } catch (CompileException e) {
@@ -173,8 +180,9 @@ public final class Output {
             List<Report> reports = new ArrayList<>();
             for (DataChecker.ConstCheck check : checks) {
                 boolean holds;
+                Class<?> ctfe;
                 try {
-                    Class<?> ctfe = Class.forName(
+                    ctfe = Class.forName(
                             check.type().module() + "." + check.type().name() + "$Ctfe", true, loader);
                     holds = (boolean) ctfe.getMethod("check", paramClass(check.value()))
                             .invoke(null, check.value());
@@ -184,13 +192,52 @@ public final class Output {
                 if (!holds) {
                     String shown = check.typeName() + "("
                             + (check.value() instanceof String s ? "\"" + s + "\"" : check.value()) + ")";
+                    String clause = failingClause(db, check, ctfe);
                     reports.add(Report.raised(
-                            Diagnostic.of(null, "check.const.invariant").title("check.construct.title")
-                                    .at(check.pos()).args(shown).build(),
-                            "`" + shown + "` violates its invariant."));
+                            Diagnostic.of(null, clause == null
+                                            ? "check.const.invariant" : "check.const.invariant.clause")
+                                    .title("check.construct.title")
+                                    .at(check.pos()).args(shown, clause).build(),
+                            "`" + shown + "` violates its invariant"
+                                    + (clause == null ? "." : " `" + clause + "`.")));
                 }
             }
             return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.absent(reports);
+        }
+
+        /**
+         * The name of the clause this constant breaks, or null where the clause carries none or the
+         * declaration cannot be read here. The same run-time checks the decoder refines with are asked
+         * one at a time, in declaration order, so the clause named is the one a construction would
+         * report.
+         */
+        private String failingClause(Db db, DataChecker.ConstCheck check, Class<?> ctfe) {
+            Answer<Ast.Module> declaring = db.ask(new Shapes.Prepared(check.type().module()));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(check.type().module()));
+            if (!declaring.present() || !scope.present()) {
+                return null;
+            }
+            List<Ast.InvariantClause> clauses = null;
+            for (Ast.Def def : declaring.value().defs()) {
+                if (def instanceof Ast.Data d && d.name().equals(check.type().name())) {
+                    clauses = TypeOps.effectiveInvariants(d, scope.value());
+                }
+            }
+            if (clauses == null) {
+                return null;
+            }
+            for (int i = 0; i < clauses.size(); i++) {
+                try {
+                    boolean holds = (boolean) ctfe.getMethod(Backend.clauseCheck(i),
+                            paramClass(check.value())).invoke(null, check.value());
+                    if (!holds) {
+                        return clauses.get(i).name().orElse(null);
+                    }
+                } catch (ReflectiveOperationException | LinkageError _) {
+                    return null;
+                }
+            }
+            return null;
         }
 
         private Class<?> paramClass(Object v) {
