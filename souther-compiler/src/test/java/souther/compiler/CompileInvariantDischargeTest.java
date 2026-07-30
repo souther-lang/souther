@@ -414,6 +414,279 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aGuardOnAUniquenessPredicateDischargesTheConstruction() {
+        // the guard and the clause project the same way over the same list, so they are one fact
+        String m = """
+                module demo
+                data Duplicate
+                data Lines = List<Int>
+                    invariant List.allUniqueBy(x -> x, value)
+                behavior build : (xs: List<Int>) -> Lines | Duplicate constructs Lines, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(x -> x, xs)
+                        else Duplicate
+                    Lines(xs)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the guard discharges the uniqueness invariant");
+    }
+
+    @Test
+    void anUnguardedUniquenessConstructionIsAPossibleViolationWarning() {
+        String m = """
+                module demo
+                data Lines = List<Int>
+                    invariant List.allUniqueBy(x -> x, value)
+                behavior build : (xs: List<Int>) -> Lines constructs Lines
+                let build (xs) = Lines(xs)
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "an unguarded uniqueness invariant should warn (E2011)");
+    }
+
+    @Test
+    void aGuardWritingAnotherProjectionDoesNotDischarge() {
+        // uniqueness by `.a` says nothing about uniqueness by `.b`
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { a: Int, b: Int }
+                data Rows = List<Row>
+                    invariant List.allUniqueBy(r -> r.b, value)
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(r -> r.a, xs)
+                        else Duplicate
+                    Rows(xs)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a guard on another projection should not discharge");
+    }
+
+    @Test
+    void aClosureIsTheSameTermWhateverItsParameterIsCalled() {
+        // the parameter's spelling is not part of what the closure computes
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { a: Int, b: Int }
+                data Rows = List<Row>
+                    invariant List.allUniqueBy(r -> r.a, value)
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(row -> row.a, xs)
+                        else Duplicate
+                    Rows(xs)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "renaming the closure parameter does not change the term");
+    }
+
+    @Test
+    void theProjectionShorthandIsTheSameTermAsTheClosure() {
+        String m = """
+                module demo
+                data Duplicate
+                data Row = { a: Int, b: Int }
+                data Rows = List<Row>
+                    invariant List.allUniqueBy(.a, value)
+                behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(r -> r.a, xs)
+                        else Duplicate
+                    Rows(xs)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "`.a` and `r -> r.a` are one term");
+    }
+
+    @Test
+    void aGuardOnMembershipDischargesTheConstruction() {
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a", "b"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a", "b"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the membership guard discharges the construction");
+    }
+
+    @Test
+    void aLiteralHoldingTheKeysOwnPunctuationIsAnotherTerm() {
+        // one element whose value is `a", "b` is not the two elements `a` and `b`
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a\\", \\"b"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a", "b"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "another list is another fact however its elements are spelled");
+    }
+
+    @Test
+    void aNewlineAndTheTwoCharactersSpellingItAreDifferentTerms() {
+        String m = """
+                module demo
+                data Unknown
+                data Known = String
+                    invariant List.member(value, ["a\\nb"])
+                behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
+                let build (s) = {
+                    guard List.member(s, ["a\\\\nb"])
+                        else Unknown
+                    Known(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a newline is not the backslash and the n that spell it");
+    }
+
+    @Test
+    void aGuardOnAPatternMatchDischargesTheConstruction() {
+        String m = """
+                module demo
+                data Malformed
+                data Code = String
+                    invariant String.matches("[A-Z]{2}-[0-9]{4}", value)
+                behavior build : (s: String) -> Code | Malformed constructs Code, Malformed
+                let build (s) = {
+                    guard String.matches("[A-Z]{2}-[0-9]{4}", s)
+                        else Malformed
+                    Code(s)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the pattern guard discharges the construction");
+    }
+
+    @Test
+    void aDifferentPatternDoesNotDischarge() {
+        String m = """
+                module demo
+                data Malformed
+                data Code = String
+                    invariant String.matches("[A-Z]{2}-[0-9]{4}", value)
+                behavior build : (s: String) -> Code | Malformed constructs Code, Malformed
+                let build (s) = {
+                    guard String.matches("[A-Z]{3}-[0-9]{4}", s)
+                        else Malformed
+                    Code(s)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "another pattern is another fact");
+    }
+
+    @Test
+    void aPredicateTheGuardsSettleFalseIsADefiniteViolation() {
+        // on the else branch the predicate is known not to hold, so the construction must abort
+        String m = """
+                module demo
+                data Lines = List<Int>
+                    invariant List.allUniqueBy(x -> x, value)
+                behavior build : (xs: List<Int>) -> Lines constructs Lines
+                let build (xs) =
+                    if List.allUniqueBy(x -> x, xs) then Lines(xs) else Lines(xs)
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(m));
+        assertEquals("E2010", e.diagnostic().code(),
+                "a predicate settled false is a definite violation: " + e.getMessage());
+    }
+
+    @Test
+    void aNegatedGuardSettlesThePredicateOnTheMainline() {
+        // `Bool.not(p)` on the guard leaves `p` false where the construction stands
+        String m = """
+                module demo
+                data Ok
+                data Lines = List<Int>
+                    invariant List.allUniqueBy(x -> x, value)
+                behavior build : (xs: List<Int>) -> Lines | Ok constructs Lines, Ok
+                let build (xs) = {
+                    guard Bool.not(List.allUniqueBy(x -> x, xs))
+                        else Ok
+                    Lines(xs)
+                }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(m));
+        assertEquals("E2010", e.diagnostic().code(),
+                "the negated guard settles the predicate false: " + e.getMessage());
+    }
+
+    @Test
+    void anInputTypesPredicateInvariantIsSeeded() {
+        String m = """
+                module demo
+                data Row = { a: Int }
+                data Rows = List<Row>
+                    invariant List.allUniqueBy(r -> r.a, value)
+                data Batch = List<Row>
+                    invariant List.allUniqueBy(r -> r.a, value)
+                behavior rewrap : (rs: Rows) -> Batch constructs Batch
+                let rewrap (rs) = Batch(rs.value)
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the input newtype's uniqueness invariant discharges the re-wrap");
+    }
+
+    @Test
+    void aFreeNameInsideTheClosureIsPartOfTheTerm() {
+        // the clause's `floor` is the field being given, so the guard has to bound by the same value
+        String m = """
+                module demo
+                data TooSmall
+                data Bounded = { items: List<Int>, floor: Int }
+                    invariant List.all(x -> x >= floor, items)
+                behavior build : (xs: List<Int>, lo: Int, hi: Int) -> Bounded | TooSmall
+                    constructs Bounded, TooSmall
+                let build (xs, lo, hi) = {
+                    guard List.all(x -> x >= hi, xs)
+                        else TooSmall
+                    Bounded { items = xs, floor = lo }
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a guard bounding by another value should not discharge");
+    }
+
+    @Test
+    void aRebindingDropsThePredicateFact() {
+        String m = """
+                module demo
+                data Duplicate
+                data Lines = List<Int>
+                    invariant List.allUniqueBy(x -> x, value)
+                behavior build : (xs: List<Int>) -> Lines | Duplicate constructs Lines, Duplicate
+                let build (xs) = {
+                    guard List.allUniqueBy(x -> x, xs)
+                        else Duplicate
+                    let xs = xs ++ [1]
+                    Lines(xs)
+                }
+                """;
+        assertTrue(hasWarning(Compiler.compileWithWarnings(m), "E2011"),
+                "a rebinding invalidates the guard's fact about that name");
+    }
+
+    @Test
     void aRequireGuardDischargesTheSubtraction() {
         // `guard 額 <= 残高` establishes the relation on the mainline, discharging `残高 - 額`
         String m = """
