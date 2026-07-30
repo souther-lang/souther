@@ -177,6 +177,7 @@ final class CodegenContext {
     private final Map<String, ClassDesc> typeDescs = new HashMap<>();
     private final Map<String, ClassDesc> behaviorDescs = new HashMap<>();
     private final Map<String, ClassDesc> behaviorImplDescs = new HashMap<>();
+    private final Map<String, ClassDesc> behaviorResultDescs = new HashMap<>();
 
     /** The class of a type, from the module that declares it — nothing to look up, since a
      * {@link TypeName} already says where it lives. */
@@ -209,6 +210,17 @@ final class CodegenContext {
     ClassDesc cdBehaviorImpl(String name) {
         return behaviorImplDescs.computeIfAbsent(name,
                 n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorImplClass(n)));
+    }
+
+    /**
+     * The result-union class of a behavior, in the module that declared the behavior. Nothing declares
+     * the name {@code <名>Result} — this backend makes it up — so {@link #cd(String)} would place it in
+     * the module being generated, which is right only for a behavior declared here. An imported one is
+     * called on a typed {@code apply} naming this class, and the class lives where the behavior does.
+     */
+    ClassDesc cdBehaviorResult(String name) {
+        return behaviorResultDescs.computeIfAbsent(name,
+                n -> ClassDesc.of(typePackage.getOrDefault(n, pkg) + "." + behaviorResultClass(n)));
     }
 
     /**
@@ -289,7 +301,7 @@ final class CodegenContext {
      */
     ClassDesc refTypeOrNull(Type t, String behaviorName) {
         if (t instanceof Type.Union) {
-            return cd(behaviorResultClass(behaviorName));
+            return cdBehaviorResult(behaviorName);
         }
         if (t instanceof Type.Ref r) {
             return cd(r.name());

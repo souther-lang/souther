@@ -187,8 +187,9 @@ public final class Backend {
                         "the output union of `" + bname + "` includes `" + caseName
                                 + "`, a case declared in another module; a case class carries the unions"
                                 + " it belongs to from its own module's generation, so this one cannot"
-                                + " join — consume it at the boundary, or re-express it as a case of"
-                                + " this module");
+                                + " join — give `" + bname + "` a body instead of a composition: call"
+                                + " the stages, open the imported result with `match`, and answer `"
+                                + caseName + "` with a case this module declares");
             }
         }
         behaviorResults.forEach((resultName, cases) -> {

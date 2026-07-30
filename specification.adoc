@@ -2957,13 +2957,30 @@ error E1606:
 The output union of `引当して出荷する` includes `在庫不足`, a case declared in
 another module.
 A case class carries the unions it belongs to, decided when its own module is
-generated, so an imported case cannot join a union declared here; consume
-`在庫不足` at the boundary, or re-express it as a case of this module.
+generated, so an imported case cannot join a union declared here. Give
+`引当して出荷する` a body instead of a composition: call the stages, open the
+imported result with `match`, and answer `在庫不足` with a case this module
+declares.
 ----
 
 A behavior's output union is generated as a sealed interface its leaf cases implement (<<jvm-anonymous-union>>), and a case class receives that interface when *its own* module is generated. A union declared here cannot take a case from an imported module: the class the other module emitted would have to implement an interface this one declares. This is not the JVM's same-package rule for `+permits+` — that rule is enforced by javac when it declares a sealed type in source, not when one is read from the classpath — but the ordering of separate module generation (ADR-0057).
 
-The move is to translate: match the imported behavior's result and return a case of this module. A module boundary is where another context's vocabulary is restated in this one's.
+The move is to translate: match the imported behavior's result and return a case of this module. A module boundary is where another context's vocabulary is restated in this one's. An operation that spans two contexts is written this way, and is one behavior — the composition is what cannot cross, not the operation.
+
+[,text]
+----
+// 引き当てる is imported and 在庫不足 is its departure; 引当不可 is this module's answer to it
+behavior 引当して出荷する : (番号: 品番) -> 出荷指示 | 出荷不可 | 引当不可
+    depends on 出荷指示する
+    constructs 引当不可
+
+let 引当して出荷する (番号, 出荷指示する) =
+    match 引き当てる(番号) with
+        | 引当済み as 引当 -> 出荷指示する(引当)
+        | 在庫不足 as 不足 -> 引当不可 { 番号 = 不足.番号 }
+----
+
+`+出荷指示する+` is a behavior of this module and has a requirement of its own, so it is named in `+depends on+` and arrives bound (<<fn-rules>>): a composition builds its stages and their requirements accumulate into it, while a caller receives what it calls. An imported behavior is reached either way: it is called by name when its requirement set is empty, and named in `+depends on+` when the caller must supply what it requires.
 
 [#e1607]
 === depends on does not name a dependency
