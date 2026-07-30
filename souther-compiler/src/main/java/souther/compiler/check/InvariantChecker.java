@@ -329,8 +329,9 @@ public final class InvariantChecker {
                         given.put(fi.name(), fi.value());
                     }
                     check(nd.typeName().denotes(), type,
-                            new Bindings(forms::get, paths::get, given::get, bodyKey), k,
-                            nd.pos(), attempted);
+                            new Bindings(forms::get, paths::get, given::get, bodyKey,
+                                    TypeOps.fieldTypes(type, symbols)),
+                            k, nd.pos(), attempted);
                 }
             }
             case Ast.Binary bin when isArith(bin.op()) -> {
@@ -340,7 +341,8 @@ public final class InvariantChecker {
                     if (value != null) {
                         // an arithmetic result is a form, not a location, so it names no path
                         check(r.name(), type,
-                                Bindings.ofPaths(name -> "value".equals(name) ? value : null, _ -> null),
+                                Bindings.ofPaths(name -> "value".equals(name) ? value : null, _ -> null,
+                                        TypeOps.fieldTypes(type, symbols)),
                                 k, bin.pos(), attempted);
                     }
                 }
@@ -353,16 +355,18 @@ public final class InvariantChecker {
      * field is being given, and to that value's canonical path — so a size call over the field names
      * the same atom the body names when it calls the same function on the same container. */
     private record Bindings(Function<String, LinearForm> form, Function<String, String> path,
-                            Function<String, Ast.Expr> given, Function<Ast.Expr, String> bodyKey) {
+                            Function<String, Ast.Expr> given, Function<Ast.Expr, String> bodyKey,
+                            Map<String, Type> fields) {
 
         /** A clause naming only fields, with nothing of the site to look through — what seeding has. */
-        static Bindings ofPaths(Function<String, LinearForm> form, Function<String, String> path) {
-            return new Bindings(form, path, _ -> null, _ -> null);
+        static Bindings ofPaths(Function<String, LinearForm> form, Function<String, String> path,
+                                Map<String, Type> fields) {
+            return new Bindings(form, path, _ -> null, _ -> null, fields);
         }
 
         /** Nothing to substitute: what the body's own expressions are read with. */
         static Bindings ofBody(Function<Ast.Expr, String> bodyKey) {
-            return new Bindings(_ -> null, _ -> null, _ -> null, bodyKey);
+            return new Bindings(_ -> null, _ -> null, _ -> null, bodyKey, Map.of());
         }
     }
 
@@ -604,7 +608,7 @@ public final class InvariantChecker {
                     String p = resolvePath.apply(fieldName);
                     return p == null ? null : LinearForm.atom(p);
                 },
-                resolvePath);
+                resolvePath, fields);
         Known out = k;
         // Each conjunct on its own: an input's invariant is a set of things that hold, and one the
         // check cannot express does not cost it the others.
@@ -630,7 +634,11 @@ public final class InvariantChecker {
                 }
             }
         }
-        if (!data.newtype()) {
+        if (data.newtype()) {
+            // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
+            // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
+            out = seedAt(path, fields.get("value"), out, depth + 1);
+        } else {
             for (Map.Entry<String, Type> f : fields.entrySet()) {
                 out = seedAt(path + "." + f.getKey(), f.getValue(), out, depth + 1);
             }
@@ -735,15 +743,22 @@ public final class InvariantChecker {
 
     /** The path an invariant expression names at the construction site: a bare field name through the
      * bindings, then plain field steps. */
-    private static String invPath(Ast.Expr e, Bindings binds) {
-        return switch (e) {
-            case Ast.Var v -> binds.path().apply(v.name());
-            case Ast.FieldAccess fa -> {
-                String base = invPath(fa.target(), binds);
-                yield base == null ? null : base + "." + fa.field();
-            }
-            default -> null;
-        };
+    private String invPath(Ast.Expr e, Bindings binds) {
+        // A clause is a path over the declaration's own fields, read by the very rule a body path is
+        // read by — so a newtype's `.value` is the same location on both sides — and then the field it
+        // is rooted at is replaced by what the construction is giving that field. One rule for what a
+        // location is, applied twice, rather than two rules that have to be kept agreeing.
+        String local = pathKey(e, binds.fields());
+        if (local == null) {
+            return null;
+        }
+        int dot = local.indexOf('.');
+        String root = dot < 0 ? local : local.substring(0, dot);
+        String given = binds.path().apply(root);
+        if (given == null) {
+            return null;
+        }
+        return dot < 0 ? given : given + local.substring(dot);
     }
 
     private static LinearForm negate(LinearForm f) {
