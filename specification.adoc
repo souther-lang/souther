@@ -1932,7 +1932,7 @@ example 受注する
 
 An input and an expected value are fixtures: literals, newtype applications, record constructions, and helpers applied to those. A `+?+` field takes a value directly (wrapped in `+Some+`) or `+None+` for empty, the same way a `+let+` body writes an optional (<<optional>>); omitting the field reads as `+None+` too. A row's argument is decoded into the behavior's parameter type through that type's derived Decoder (<<decoder>>), so a fixture that breaks an invariant is rejected (<<e1903>>).
 
-A row may also *name a value* (<<fn-declaration>>) rather than write the whole input again, and may spread one to vary a field.
+A row may also *name a value* (<<fn-declaration>>) rather than write the whole input again, and may spread one to vary a field. A spread copies the fields of the value it names, and the case is the one the construction writing it names; a name on its own stands for the case the value it denotes constructs. So a fixture in a position typed by a sum says which case it is however it is written.
 
 [,text]
 ----
@@ -3084,7 +3084,7 @@ error E1908:
 hint: add `with 現在時刻 = ...` on the row, or a `fake 現在時刻` table
 ----
 
-Emitted when an example targets a behavior whose `+depends on+` dependency has neither a `+with+` on the row nor a `+fake+` declaration (<<example-fakes>>). A dependency that *is* faked but whose faked value cannot be built is reported under the same code and says that instead — the row supplies the fake, and what failed is the fixture.
+Emitted when an example targets a behavior whose `+depends on+` dependency has neither a `+with+` on the row nor a `+fake+` declaration (<<example-fakes>>). A dependency that *is* faked but whose fake cannot be built — a `+with+` value, or a row of its `+fake+` table — is reported under the same code and says that instead, naming the dependency once: the fake is supplied, and what failed is the fixture.
 
 [#e1909]
 === A fake has no output for an input

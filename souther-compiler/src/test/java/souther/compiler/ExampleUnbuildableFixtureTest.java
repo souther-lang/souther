@@ -89,6 +89,36 @@ class ExampleUnbuildableFixtureTest {
     }
 
     @Test
+    void aFakeRowThatCannotBeBuiltIsNotReportedAsAMissingFake() {
+        Diagnostic d = only(INJECTED + """
+                fake quote
+                  | (Amount(1)) -> Amount("x")
+
+                example bill
+                  | (Amount(1)) -> Receipt { total = Amount(1) }
+                """);
+
+        assertEquals("E1908", d.code());
+        assertEquals("check.fake.unbuildable", d.messageKey(),
+                "the module supplies a fake table; what failed is building one of its rows");
+    }
+
+    @Test
+    void aFakeRowOfTheWrongArityIsReportedAgainstTheDependencyItFakes() {
+        Diagnostic d = only(INJECTED + """
+                fake quote
+                  | (Amount(1), Amount(2)) -> Amount(3)
+
+                example bill
+                  | (Amount(1)) -> Receipt { total = Amount(3) }
+                """);
+
+        assertEquals("E1908", d.code());
+        assertEquals("check.fake.unbuildable", d.messageKey());
+        assertEquals("quote", d.args()[0], "the dependency the row fakes, named once");
+    }
+
+    @Test
     void aRowThatDoesNotHoldIsStillAMismatch() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(BASE + """
                 example bill

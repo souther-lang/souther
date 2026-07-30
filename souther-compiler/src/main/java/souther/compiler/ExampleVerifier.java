@@ -26,6 +26,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -356,9 +357,10 @@ public final class ExampleVerifier {
                 return;
             }
         }
-        // validate the expected arm/value against the output cases before running
+        // validate the expected arm/value against the output cases before running. Which case the row
+        // asserts is read through what it names, so a row may name a value where it may name a case.
         String expectedArm = expectedArm(row.expected());
-        TypeName named = expectedArm == null ? null : symbols.resolveCase(expectedArm);
+        TypeName named = constructedCase(row.expected());
         // a name nothing here denotes is not an arm of the target either, and says so the same way
         if (expectedArm != null && !outCases.isEmpty()
                 && (named == null || !outCases.contains(named))) {
@@ -376,7 +378,7 @@ public final class ExampleVerifier {
         // against an empty expected value — a wrong answer for a row that was right.
         Object expectedValue;
         try {
-            expectedValue = row.expected() instanceof Ast.Var ? null
+            expectedValue = caseOnly(row.expected()) != null ? null
                     : builtExpected(row.expected(), sig.out());
         } catch (FixtureException fe) {
             out.add(Diagnostic.of("E1903", "check.example.expected").title("check.example.title")
@@ -505,11 +507,8 @@ public final class ExampleVerifier {
                     def[0] = value;
                 } else {
                     if (r.inputs().size() != paramTypes.size()) {
-                        out.add(Diagnostic.of("E1908", "check.fake.missing").title("check.example.title")
-                                .at(r.pos()).args(fk.target(), fk.target())
-                                .hint("check.fake.missing.hint", "a fake row has " + r.inputs().size()
-                                        + " input(s) but `" + fk.target() + "` takes " + paramTypes.size())
-                                .build());
+                        out.add(unbuildableFake(r.pos(), fk.target(), "a row has " + r.inputs().size()
+                                + " input(s) where the dependency takes " + paramTypes.size()));
                         return null;
                     }
                     Object[] key = new Object[paramTypes.size()];
@@ -520,10 +519,7 @@ public final class ExampleVerifier {
                 }
             }
         } catch (FixtureException fe) {
-            out.add(Diagnostic.of("E1908", "check.fake.missing").title("check.example.title")
-                    .at(fk.pos()).args(fk.target(), fk.target())
-                    .hint("check.fake.missing.hint", "a fake row could not be built: " + fe.getMessage())
-                    .build());
+            out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
             return null;
         }
         String depName = fk.target();
@@ -578,12 +574,20 @@ public final class ExampleVerifier {
             Class<?> fakeClass = loader.define(fakeName, () -> fakeSubclassBytes(fakeName, base, applyM));
             return fakeClass.getConstructor(java.util.function.Function.class).newInstance(body);
         } catch (ReflectiveOperationException e) {
-            out.add(Diagnostic.of("E1908", "check.fake.missing").title("check.example.title")
-                    .at(dep.pos()).args(dep.name(), dep.name())
-                    .hint("check.fake.missing.hint", "the fake's base subclass could not be built: " + e)
-                    .build());
+            out.add(unbuildableFake(dep.pos(), dep.name(),
+                    "its base subclass could not be built: " + e));
             return null;
         }
+    }
+
+    /**
+     * A fake that was supplied and could not be built. A dependency nothing stands in for is a different
+     * problem, and saying this as that named the dependency as its own requester and reported a fake as
+     * missing where one was written (issue #206).
+     */
+    private static Diagnostic unbuildableFake(SourcePos pos, String dependency, String reason) {
+        return Diagnostic.of("E1908", "check.fake.unbuildable").title("check.example.title")
+                .at(pos).args(dependency, reason).build();
     }
 
     private byte[] fakeSubclassBytes(String fakeName, Class<?> base, java.lang.reflect.Method apply) {
@@ -677,27 +681,42 @@ public final class ExampleVerifier {
 
     // --- comparison ---------------------------------------------------------------------------
 
-    /** Whether {@code result} matches the row's expected: a bare {@link Ast.Var} asserts only the
+    /** Whether {@code result} matches the row's expected: a name denoting a case asserts only the
      * arm (the concrete case class); anything else asserts the whole value, {@code expectedValue}
      * (built before the behavior ran), by structural equality. */
     private boolean matches(Ast.Expr expected, Object result, Object expectedValue) {
-        if (expected instanceof Ast.Var v) {
-            return NeutralForm.simpleName(result).equals(v.name());
+        String arm = caseOnly(expected);
+        if (arm != null) {
+            return NeutralForm.simpleName(result).equals(arm);
         }
         return expectedValue != null && expectedValue.equals(result);
     }
 
-    /** The expected value built the same way as an input, so structural equality compares like with
-     * like: a construction/newtype decodes through its type's decoder; a literal is its raw value.
-     * Throws {@link FixtureException} when the row's expectation cannot be built — the caller reports
-     * that as the fixture error it is, rather than comparing against nothing. */
-    private Object builtExpected(Ast.Expr expected, Type outType) {
-        if (expected instanceof Ast.NewData nd) {
-            return decode(Type.ref(nd.typeName().denotes()),
-                    raw(expected, Type.ref(nd.typeName().denotes())));
+    /**
+     * The case a row asserts and nothing more: a bare name denoting a case — a unit case, or a case
+     * written bare — where there is no value under it to compare. Null for anything else, including a
+     * name denoting a value, which stands for the value it was defined as.
+     *
+     * <p>The case's own name, not the spelling: what came out carries the name its type was declared
+     * under, so a row spelling that type qualified asserts the same case.
+     */
+    private String caseOnly(Ast.Expr expected) {
+        if (!(expected instanceof Ast.Var v)) {
+            return null;
         }
-        if (expected instanceof Ast.Call c && neutral.isNewtype(c.fn())) {
-            return decode(Type.ref(symbols.resolve(c.fn())), raw(expected));
+        TypeName type = symbols.resolveCase(v.name());
+        return type == null ? null : type.name();
+    }
+
+    /** The expected value built the same way as an input, so structural equality compares like with
+     * like: a fixture that names a case — written as a construction, or named through a value — decodes
+     * through that case's decoder; a literal is its raw value. Throws {@link FixtureException} when the
+     * row's expectation cannot be built — the caller reports that as the fixture error it is, rather
+     * than comparing against nothing. */
+    private Object builtExpected(Ast.Expr expected, Type outType) {
+        TypeName asserted = constructedCase(expected);
+        if (asserted != null) {
+            return decode(Type.ref(asserted), raw(expected, Type.ref(asserted)));
         }
         // A collection output has no case name to decode against, so the behavior's declared
         // output type is what says which of `List`/`Set`/`Map` the written list means and what
@@ -722,7 +741,8 @@ public final class ExampleVerifier {
         return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
     }
 
-    /** The arm name an expected asserts: a bare type name, or a construction's/newtype's type name. */
+    /** The arm an expected names, as it was written — what a row that names no case of the target is
+     * told it wrote. Which case it stands for is {@link #constructedCase}. */
     private String expectedArm(Ast.Expr expected) {
         if (expected instanceof Ast.Var v) {
             return v.name();
@@ -736,23 +756,60 @@ public final class ExampleVerifier {
         return null;   // a literal expected (a primitive output)
     }
 
-    /** The concrete type a fixture construction asserts — the case named by a record/newtype/unit
-     * expression — or {@code declared} for a literal. A sum-returning dependency's fake row names one
-     * case, so its output decodes against that case, not the declared sum (which has no decoder). */
+    /** The concrete type a fixture stands for — the case it constructs — or {@code declared} where
+     * nothing in it names one (a literal, a collection). A sum-returning dependency's fake row names one
+     * case, so its output decodes against that case, not the declared sum (which, written inline, has no
+     * decoder at all). */
     private Type fixtureType(Ast.Expr e, Type declared) {
-        String arm = expectedArm(e);
-        TypeName named = arm == null ? null : symbols.resolveCase(arm);
+        TypeName named = constructedCase(e);
         // a fixture naming nothing this target can produce is reported by the arm check; decoding it
         // against the declared type is what turns it into that diagnostic rather than a crash
         return named != null ? Type.ref(named) : declared;
     }
 
-    /** The written expectation, rendered as it was written: a bare arm stays the arm name, anything
-     * else is its neutral form under that arm ({@code Out { n = 7 }}). */
+    /**
+     * The case a fixture stands for: the one a construction names, and for a name, the one the value it
+     * denotes constructs.
+     *
+     * <p>Read through the value rather than off the spelling. A value's name is not a case name, and
+     * where the position is a union written inline there is no decoder to dispatch on a tag — so the
+     * value is the only thing that says which case it is, and reading the name found a type of that
+     * spelling or nothing (issue #206).
+     */
+    private TypeName constructedCase(Ast.Expr e) {
+        return constructedCase(e, new LinkedHashSet<>());
+    }
+
+    /** As above; {@code followed} are the names already followed, so a value defined in terms of itself
+     * stops here and is reported as the cycle it is where the fixture is built. */
+    private TypeName constructedCase(Ast.Expr e, Set<String> followed) {
+        return switch (e) {
+            case Ast.NewData nd -> nd.typeName().denotes();
+            case Ast.Call c when neutral.isNewtype(c.fn()) -> symbols.resolveCase(c.fn());
+            case Ast.LetIn let -> constructedCase(let.body(), followed);
+            case Ast.Var v -> namedCase(v.name(), followed);
+            case null, default -> null;
+        };
+    }
+
+    /** The case a bare name stands for: the type it denotes where it denotes one — a unit case, or a
+     * case written bare — and otherwise the case the value it names constructs. */
+    private TypeName namedCase(String name, Set<String> followed) {
+        TypeName type = symbols.resolveCase(name);
+        if (type != null) {
+            return type;
+        }
+        Ast.Expr body = followed.add(name) ? valueBody(name) : null;
+        return body == null ? null : constructedCase(body, followed);
+    }
+
+    /** The expectation, rendered as the value it stands for: a bare case stays the case name, anything
+     * else is its neutral form under the case it constructs ({@code Out { n = 7 }}) — which is what a
+     * row naming a value asserts, so that is what the failure shows. */
     private String describeExpected(Ast.Expr expected, Type outType) {
-        String arm = expectedArm(expected);
-        if (expected instanceof Ast.Var) {
-            return arm;   // a bare arm asserts only the case, so there is no value to show
+        String only = caseOnly(expected);
+        if (only != null) {
+            return only;   // a bare case asserts only that, so there is no value to show
         }
         if (isCollection(outType)) {
             Object built = builtExpectedOrNull(expected, outType);
@@ -761,8 +818,13 @@ public final class ExampleVerifier {
         // Render it through the same encoder the actual goes through, so the two sides are written
         // in one notation and can be read against each other; the fixture's own neutral form (which
         // still holds e.g. a LocalDate where the encoder writes its ISO text) is the fallback.
+        TypeName asserted = constructedCase(expected);
+        // The case it constructs, and nothing where it constructs none: a name standing for a literal
+        // has no case to write around the value, and writing the name there rendered `answer(42)`.
+        String arm = asserted != null ? asserted.name() : null;
         Object built = builtExpectedOrNull(expected, outType);
-        Object neutral = built == null || arm == null ? rawOrNull(expected) : encodedOrNull(built, arm);
+        Object neutral = built == null || asserted == null
+                ? rawOrNull(expected) : encodedOrNull(built, asserted);
         if (neutral == null) {
             neutral = rawOrNull(expected);
         }
@@ -833,9 +895,19 @@ public final class ExampleVerifier {
 
     /** {@code result} through its class's derived {@code encoder()}, or null when it has none. */
     private Object encodedOrNull(Object result, String name) {
+        TypeName type = symbols.resolve(name);
+        return encoded(result, type != null ? type.qualified() : module.name() + "." + name);
+    }
+
+    /** As above, for a type already resolved — a fixture says which case it constructs, and that answer
+     * names the class whether or not the reader spells the type the way its module does. */
+    private Object encodedOrNull(Object result, TypeName type) {
+        return encoded(result, type.qualified());
+    }
+
+    private Object encoded(Object result, String className) {
         try {
-            TypeName type = symbols.resolve(name);
-            Class<?> c = loader.loadClass(type != null ? type.qualified() : module.name() + "." + name);
+            Class<?> c = loader.loadClass(className);
             Object encoder = staticCodec(c, "encoder");
             return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
                     .invoke(encoder, result);
@@ -935,6 +1007,7 @@ public final class ExampleVerifier {
             case Ast.Call c -> collectionOrNewtype(c, expected);
             case Ast.Var v -> unitInput(v.name(), expected);
             case Ast.NewData nd -> record(nd);
+            case Ast.LetIn let -> bound(let, expected);
             case Ast.ListLit l -> {
                 Type element = NeutralForm.elementOf(expected);
                 List<Object> out = new ArrayList<>();
@@ -987,8 +1060,33 @@ public final class ExampleVerifier {
     }
 
     /**
-     * The body a value — a {@code let} with no parameter list — was defined as, or null where the
-     * name is not one of this module's values.
+     * A name bound while this fixture is being built, holding what it was bound to.
+     *
+     * <p>A spread holds a name rather than an expression, so a published body that spreads one of its
+     * module's values arrives with that value bound ahead of the construction — the shape a spread of a
+     * local already has. That binding is what the spread then names, so a fixture reads one the way it
+     * reads a value: the position says what type to read it as.
+     */
+    private final Map<String, Ast.Expr> bindings = new LinkedHashMap<>();
+
+    /** A {@code let} inside a fixture: its name stands for what it was bound to while the body is
+     * built, and a binding of the same spelling that was already in force is put back afterwards. */
+    private Object bound(Ast.LetIn let, Type expected) {
+        Ast.Expr shadowed = bindings.put(let.name(), let.value());
+        try {
+            return raw(let.body(), expected);
+        } finally {
+            if (shadowed == null) {
+                bindings.remove(let.name());
+            } else {
+                bindings.put(let.name(), shadowed);
+            }
+        }
+    }
+
+    /**
+     * What a name stands for: a binding in force, or the body a value — a {@code let} with no parameter
+     * list — was defined as. Null where the name is neither.
      *
      * <p>Whether a fixture may name it is not a property of this one body: a value stands for a
      * fixture when it is a literal, a construction, a spread, a {@code fromList} over one, or a name
@@ -996,6 +1094,10 @@ public final class ExampleVerifier {
      * values holds.
      */
     private Ast.Expr valueBody(String name) {
+        Ast.Expr binding = bindings.get(name);
+        if (binding != null) {
+            return binding;   // a binding in force is what the name means here
+        }
         for (Ast.FnDef fn : module.fns()) {
             if (fn.name().equals(name) && fn.params().isEmpty() && fn.body() != null) {
                 return fn.body();
@@ -1145,7 +1247,7 @@ public final class ExampleVerifier {
         Map<String, Ast.TypeRef> declared = neutral.fieldTypes(nd.typeName().denotes());
         Map<String, Object> map = new LinkedHashMap<>();
         // `...base` copies the fields of a value, and the fields written after it replace what it
-        // brought. Only a value can be spread here: a row has no bindings to read from.
+        // brought.
         for (Ast.ValueRef ref : nd.spreads()) {
             String spread = ref.bare();
             Ast.Expr value = valueBody(spread);
@@ -1159,7 +1261,15 @@ public final class ExampleVerifier {
                         + " spread");
             }
             for (Map.Entry<?, ?> f : fields.entrySet()) {
-                map.put(String.valueOf(f.getKey()), f.getValue());
+                String field = String.valueOf(f.getKey());
+                // A spread copies fields, and only the ones this construction has — which is what the
+                // language copies. The discriminator the spread source's own sum's decoder reads is not
+                // one of them: it says which case that value is, and this construction says which case
+                // it builds (below). Copying it left the source's case in place of it, and where the
+                // position is a union that is the case the behavior saw (issue #206).
+                if (declared.containsKey(field)) {
+                    map.put(field, f.getValue());
+                }
             }
         }
         for (Ast.FieldInit fi : nd.inits()) {
