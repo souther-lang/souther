@@ -113,4 +113,48 @@ public sealed interface Core {
 
     record Match(Core scrutinee, List<Case> cases, Type type, SourcePos pos) implements Core {}
 
+    /**
+     * {@code e} with {@code f} applied to each of its immediate children, the node's own kind, type
+     * and position kept. A Core-to-Core pass recurses through this rather than hand-copying every
+     * node kind; being exhaustive over {@code Core}, a new node kind forces every such pass to
+     * acknowledge it.
+     */
+    static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> f) {
+        return switch (e) {
+            case Int x -> x;
+            case Decimal x -> x;
+            case Str x -> x;
+            case Bool x -> x;
+            case Var x -> x;
+            case OptionNone x -> x;
+            case Neg n -> new Neg(f.apply(n.operand()), n.type(), n.pos());
+            case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.type(), fa.pos());
+            case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.type(), b.pos());
+            case Call c -> new Call(c.fn(), c.args().stream().map(f).toList(), c.type(), c.pos());
+            case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()),
+                    iff.type(), iff.pos());
+            case IfConstructed ic -> new IfConstructed((NewData) mapChildren(ic.construct(), f),
+                    ic.binder(), f.apply(ic.then()),
+                    ic.els().stream().map(arm -> new ElseArm(arm.clause(), f.apply(arm.body()))).toList(),
+                    ic.type(), ic.pos());
+            case LetIn li -> new LetIn(li.name(), f.apply(li.value()), f.apply(li.body()),
+                    li.type(), li.pos());
+            case Block b -> new Block(b.params(), f.apply(b.body()), b.type(), b.pos());
+            case ListLit lit -> new ListLit(lit.elements().stream().map(f).toList(), lit.type(), lit.pos());
+            case OptionSome s -> new OptionSome(f.apply(s.value()), s.type(), s.pos());
+            case Tuple t -> new Tuple(t.elements().stream().map(f).toList(), t.type(), t.pos());
+            case TupleGet tg -> new TupleGet(f.apply(tg.tuple()), tg.index(), tg.arity(),
+                    tg.type(), tg.pos());
+            case NewData nd -> new NewData(nd.typeName(),
+                    nd.inits().stream()
+                            .map(i -> new FieldInit(i.name(), f.apply(i.value()), i.pos())).toList(),
+                    nd.spreads(), nd.type(), nd.pos());
+            case Match m -> new Match(f.apply(m.scrutinee()),
+                    m.cases().stream()
+                            .map(c -> new Case(c.caseTypes(), c.binding(), f.apply(c.body()),
+                                    c.bindType(), c.pos())).toList(),
+                    m.type(), m.pos());
+        };
+    }
+
 }

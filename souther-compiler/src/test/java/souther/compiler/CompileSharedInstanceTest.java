@@ -29,6 +29,13 @@ class CompileSharedInstanceTest {
 
             behavior sumUp : (xs: List<Int>) -> Tally constructs Tally
             let sumUp (xs) = Tally { n = List.fold((acc, x) -> acc + x, 0, xs) }
+
+            behavior firstPositive : (xs: List<Int>) -> Tally constructs Tally
+            let firstPositive (xs) = Tally {
+                n = match List.find(x -> x > 0, xs) with
+                    | Some found -> found
+                    | None -> 0
+            }
             """;
 
     /** The module compiled once: the four tests only read, so they can share one loader. */
@@ -100,9 +107,11 @@ class CompileSharedInstanceTest {
     @Test
     void aLambdaCapturingNothingIsGeneratedOnce() throws Exception {
         BytesClassLoader loader = compiled();
-        // `(acc, x) -> acc + x` closes over neither a local nor an injected behavior, so its class
-        // carries the one instance every evaluation of that lambda loads. Found by shape rather than
-        // by name: the `$FnN` counter shifts whenever anything else in the module emits a lambda.
+        // `x -> x > 0` closes over neither a local nor an injected behavior, so its class carries the
+        // one instance every evaluation of that lambda loads. It is handed to `List.find`, which takes
+        // its predicate as a value — a fold's step is not a lambda that escapes, being emitted as the
+        // loop body where it stands. Found by shape rather than by name: the `$FnN` counter shifts
+        // whenever anything else in the module emits a lambda.
         java.lang.reflect.Field instance = interningLambdaField(loader);
         assertSame(instance.get(null), instance.get(null));
 

@@ -35,6 +35,49 @@ public final class Maps {
         return PersistentHashMap.from(m).assoc(key, value);
     }
 
+    /** An empty builder to walk with, as the accumulator a fold that only grows a map starts from.
+     *  The walk is emitted at the call site, for the reason {@link Lists#builder} gives. */
+    public static Map<Object, Object> builder() {
+        return new PersistentHashMap.Builder<>();
+    }
+
+    /** The map a walk built, handed over: nothing may be written to the builder after this. */
+    @SuppressWarnings("unchecked")
+    public static <K, V> Map<K, V> sealed(Map<K, V> acc) {
+        return ((PersistentHashMap.Builder<K, V>) acc).build();
+    }
+
+    /**
+     * Walks {@code xs} from index {@code from} with a builder as the accumulating map and hands over
+     * the map it built — the same walk as {@link #builder}'s, for the two shapes the backend does not
+     * emit in place: one that starts past the head, and one whose step is {@link Fn#NEVER}.
+     *
+     * <p>The step is the fold's own, except that its {@code Map.insert} has become {@link #put} and so
+     * writes into the builder and answers with it. Reading the accumulator is left as it was: the
+     * builder is a {@link java.util.Map}, so the {@code Map.get} in an {@code upsert} answers from
+     * what has been written so far. The compiler only rewrites a fold whose accumulator is read and
+     * written and nothing else — never stored, never handed on — so no version before the last one is
+     * ever seen, which is the whole of what the builder's mutation asks for.
+     */
+    @SuppressWarnings("unchecked")
+    public static <K, V> Map<K, V> build(Fn step, List<?> xs, long from) {
+        PersistentHashMap.Builder<K, V> builder = new PersistentHashMap.Builder<>();
+        Object acc = builder;
+        int n = xs.size();
+        for (long i = from; i >= 0 && i < n; i++) {
+            acc = step.apply(new Object[] {acc, xs.get((int) i)});
+        }
+        return ((PersistentHashMap.Builder<K, V>) acc).build();
+    }
+
+    /** {@code Map.insert} inside a {@link #build}: writes into the builder the walk carries and
+     *  answers with it, so the step reads as the fold it was written as. */
+    @SuppressWarnings("unchecked")
+    public static <K, V> Map<K, V> put(Map<K, V> acc, K key, V value) {
+        ((PersistentHashMap.Builder<K, V>) acc).set(key, value);
+        return acc;
+    }
+
     /** {@code m} without {@code key}; {@code m} unchanged when the key is absent. The {@code containsKey}
      *  probe is worth the extra lookup: when the key is absent it returns the original map untouched,
      *  which avoids normalizing a still-JDK input map (a just-decoded {@code LinkedHashMap}) into a
@@ -70,7 +113,7 @@ public final class Maps {
     public static <K, V> Map<K, V> fromList(List<Object[]> entries) {
         PersistentHashMap.Builder<K, V> out = new PersistentHashMap.Builder<>();
         for (Object[] e : entries) {
-            out.put((K) e[0], (V) e[1]);
+            out.set((K) e[0], (V) e[1]);
         }
         return out.build();
     }
@@ -101,7 +144,7 @@ public final class Maps {
     public static <K, V> Map<Object, V> mapKeys(Map<K, V> m, java.util.function.Function<K, ?> keyFn) {
         PersistentHashMap.Builder<Object, V> out = new PersistentHashMap.Builder<>();
         for (Map.Entry<K, V> e : m.entrySet()) {
-            out.put(keyFn.apply(e.getKey()), e.getValue());
+            out.set(keyFn.apply(e.getKey()), e.getValue());
         }
         return out.build();
     }

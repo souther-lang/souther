@@ -68,7 +68,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
         Builder<K, V> b = new Builder<>();
         for (Map.Entry<? extends K, ? extends V> e : m.entrySet()) {
-            b.put(e.getKey(), e.getValue());
+            b.set(e.getKey(), e.getValue());
         }
         return b.build();
     }
@@ -583,8 +583,13 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
      * <p>That is what {@code assoc} cannot do. An insert rewrites the bitmaps an older version reads
      * to interpret the same array, so a persistent put has to clone every node on the path — there is
      * no region of a CHAMP node that older versions do not look at, which is why the vector's claimed
-     * tail has no counterpart here (ADR-0060) and why this is confined to bulk construction rather
-     * than offered as a transient a caller could thread through a fold.
+     * tail has no counterpart here (ADR-0060).
+     *
+     * <p>A fold may thread one through all the same, and {@code Maps.build} does: what the confinement
+     * asks for is that no version before the last is read, and the compiler establishes exactly that
+     * before it hands the walk a builder (the compiler's {@code GrowingFold}). It is a
+     * {@link java.util.Map} of what it has been given so far, so a step that reads the accumulator it
+     * is growing — which is what {@code Map.upsert} does — reads it as any map.
      *
      * <p>Ownership needs no mark on the node. Starting from the shared {@link
      * BitmapIndexedNode#EMPTY} and only ever inserting, every node the builder can reach below the
@@ -598,20 +603,62 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
      * as a 6% regression on the persistent {@code assoc} path — the common one — to speed up this
      * one. A flag threaded down the call is free.
      */
-    static final class Builder<K, V> {
+    static final class Builder<K, V> extends AbstractMap<K, V> {
         private final Box added = new Box();
         private Node root = BitmapIndexedNode.EMPTY;
         private int size;
 
-        Builder<K, V> put(K key, V val) {
+        /** Sets {@code key} to {@code val}, saying nothing about what was there before — bulk
+         *  construction has no use for the old value and would pay a second lookup for it. */
+        void set(K key, V val) {
             added.value = false;
             root = root.put(key, hashOf(key), val, 0, added, true);
             if (added.value) {
                 size++;
             }
-            return this;
         }
 
+        @Override
+        public @Nullable V put(K key, V val) {
+            @Nullable V old = get(key);
+            set(key, val);
+            return old;
+        }
+
+        @Override
+        public int size() {
+            return size;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public @Nullable V get(@Nullable Object key) {
+            Object r = root.find(key, hashOf(key), 0);
+            return r == NOT_FOUND ? null : (V) r;
+        }
+
+        @Override
+        public boolean containsKey(@Nullable Object key) {
+            return root.find(key, hashOf(key), 0) != NOT_FOUND;
+        }
+
+        @Override
+        public Set<Map.Entry<K, V>> entrySet() {
+            return new AbstractSet<>() {
+                @Override
+                public int size() {
+                    return size;
+                }
+
+                @Override
+                @SuppressWarnings("unchecked")
+                public Iterator<Map.Entry<K, V>> iterator() {
+                    return (Iterator<Map.Entry<K, V>>) (Iterator<?>) new EntryIterator(root, size);
+                }
+            };
+        }
+
+        /** The map it has built. The trie is handed over here, so nothing may be set afterwards. */
         PersistentHashMap<K, V> build() {
             return size == 0 ? empty() : new PersistentHashMap<>(root, size);
         }
