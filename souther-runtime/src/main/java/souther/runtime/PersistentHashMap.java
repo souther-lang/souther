@@ -147,8 +147,28 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         boolean value;
     }
 
+    /**
+     * Where a value is held, so that reading a key and then writing it descends the trie once rather
+     * than twice — what {@code Map.upsert} does on every element of a fold that counts. A
+     * {@link Builder} owns one and hands it to {@link Node#probe}, so the sharing costs no allocation.
+     *
+     * <p>It is only ever read straight after the descent that filled it, and only by the builder that
+     * owns the nodes it points into: a write that does anything other than overwrite that very slot
+     * gives up the probe first, so it can never name an array the trie has replaced.
+     */
+    private static final class Probe {
+        @Nullable Object key;
+        @Nullable Object @Nullable [] holder;
+        int index;
+    }
+
     private interface Node {
         Object find(@Nullable Object key, int keyHash, int shift);
+
+        /** Reports into {@code probe} where {@code key}'s value is held inline under this node, and
+         *  answers whether it is held at all. A key in a collision bucket is not reported: the bucket
+         *  is the rare case and has nothing to gain. */
+        boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe);
 
         /**
          * This node with {@code key} mapped to {@code val}.
@@ -260,6 +280,24 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
                 return nodeAt(nodeIndex(bitpos)).find(key, keyHash, shift + BITS);
             }
             return NOT_FOUND;
+        }
+
+        @Override
+        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe) {
+            int bitpos = 1 << ((keyHash >>> shift) & MASK);
+            if ((dataMap & bitpos) != 0) {
+                int i = dataIndex(bitpos);
+                if (!Objects.equals(keyAt(i), key)) {
+                    return false;
+                }
+                probe.holder = contents;
+                probe.index = 2 * i + 1;
+                return true;
+            }
+            if ((nodeMap & bitpos) != 0) {
+                return nodeAt(nodeIndex(bitpos)).probe(key, keyHash, shift + BITS, probe);
+            }
+            return false;
         }
 
         @Override
@@ -451,6 +489,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
+        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe) {
+            return false;   // a bucket of colliding keys: rare, and the walk down it is the cost
+        }
+
+        @Override
         public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned) {
             if (keyHash != hash) {
                 // A key that reaches this node with a different hash: wrap the bucket in a bitmap node
@@ -605,12 +648,28 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
      */
     static final class Builder<K, V> extends AbstractMap<K, V> {
         private final Box added = new Box();
+        private final Probe probe = new Probe();
         private Node root = BitmapIndexedNode.EMPTY;
         private int size;
 
-        /** Sets {@code key} to {@code val}, saying nothing about what was there before — bulk
-         *  construction has no use for the old value and would pay a second lookup for it. */
+        /**
+         * Sets {@code key} to {@code val}, saying nothing about what was there before — bulk
+         * construction has no use for the old value and would pay a second lookup for it.
+         *
+         * <p>A key just read is written where it was found: {@code Map.upsert} reads the key and then
+         * writes it, and the descent the read made is still good for the write. Anything else gives up
+         * the probe and descends, which is also what keeps the probe from ever naming a slot that has
+         * moved — only this method moves one.
+         */
         void set(K key, V val) {
+            if (probe.holder != null && Objects.equals(probe.key, key)) {
+                probe.holder[probe.index] = val;
+                probe.holder = null;
+                probe.key = null;
+                return;
+            }
+            probe.holder = null;
+            probe.key = null;
             added.value = false;
             root = root.put(key, hashOf(key), val, 0, added, true);
             if (added.value) {
@@ -630,11 +689,18 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             return size;
         }
 
+        /** The value at {@code key}, remembering where it was found so that writing the same key back
+         *  — which is what an {@code upsert} does next — need not descend again. */
         @Override
         @SuppressWarnings("unchecked")
         public @Nullable V get(@Nullable Object key) {
-            Object r = root.find(key, hashOf(key), 0);
-            return r == NOT_FOUND ? null : (V) r;
+            if (root.probe(key, hashOf(key), 0, probe)) {
+                probe.key = key;
+                return (V) probe.holder[probe.index];
+            }
+            probe.holder = null;
+            probe.key = null;
+            return null;
         }
 
         @Override
