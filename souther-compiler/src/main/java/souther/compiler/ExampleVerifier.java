@@ -8,7 +8,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
-import souther.compiler.codegen.Backend;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;

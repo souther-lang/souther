@@ -1,15 +1,11 @@
 package souther.compiler;
 
-import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.PipelineSigs;
-import souther.compiler.check.Resolve;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.query.Compilation;
 import souther.compiler.diag.Messages;
-import souther.compiler.frontend.CstFrontend;
-
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issues;
 import net.unit8.raoh.ResourceBundleMessageResolver;

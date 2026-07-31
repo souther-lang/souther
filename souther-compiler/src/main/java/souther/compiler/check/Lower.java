@@ -5,7 +5,6 @@ import souther.compiler.ast.Ast;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * The Lower stage (ADR-0021): rewrites the surface AST toward the form the backend emits, so the

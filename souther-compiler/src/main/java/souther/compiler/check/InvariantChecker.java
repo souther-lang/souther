@@ -1217,16 +1217,6 @@ public final class InvariantChecker {
         return e;
     }
 
-    /** The conjuncts of an invariant expression, flattened. */
-    private static List<Ast.Expr> conjuncts(Ast.Expr e) {
-        if (e instanceof Ast.Binary b && b.op() == Ast.BinOp.AND) {
-            List<Ast.Expr> out = new ArrayList<>(conjuncts(b.left()));
-            out.addAll(conjuncts(b.right()));
-            return out;
-        }
-        return List.of(e);
-    }
-
     /**
      * The canonical key of an expression as a term, or {@code null} when nothing here can be named.
      * Two expressions with one key compute one value, which is the whole of what the fact set knows:
@@ -1367,11 +1357,6 @@ public final class InvariantChecker {
     /** The field chain of {@code e} rebuilt on {@code head}. */
     private static String chainOn(String head, Ast.Expr e) {
         return e instanceof Ast.FieldAccess fa ? chainOn(head, fa.target()) + "." + fa.field() : head;
-    }
-
-    private static boolean isSizeAtom(String atom) {
-        int open = atom.indexOf('(');
-        return open > 0 && atom.endsWith(")") && SIZE_CALLS.contains(atom.substring(0, open));
     }
 
     private String pathKey(Ast.Expr e, Map<String, Type> types) {

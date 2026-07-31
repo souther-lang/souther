@@ -5,8 +5,6 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
