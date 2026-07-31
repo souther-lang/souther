@@ -316,6 +316,33 @@ public final class Front {
     }
 
     /**
+     * The modules a module imports, named once each, in the order it names them.
+     *
+     * <p>Its own question for the same reason {@link Exposes} is: what reads this wants the shape of
+     * the workspace around a module, and that shape survives almost every edit to the module itself.
+     * Reading the module here would put every body on the far side of an answer about its header.
+     */
+    public record ImportedModules(String name) implements Key<List<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            Ast.Module m = db.ask(new Available(name)).value();
+            if (m == null) {
+                return Answer.of(List.of());
+            }
+            Set<String> imported = new LinkedHashSet<>();
+            for (Ast.Import imp : m.imports()) {
+                imported.add(imp.module());
+            }
+            return Answer.of(List.copyOf(imported));
+        }
+    }
+
+    /**
      * The type names a module exposes.
      *
      * <p>Its own question, not a read of the module. Everything that resolves a name against another

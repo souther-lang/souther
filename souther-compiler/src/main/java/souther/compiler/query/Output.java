@@ -19,7 +19,9 @@ import souther.compiler.meta.ModulePath;
 
 import souther.compiler.types.TypeName;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -30,8 +32,10 @@ import java.util.Set;
  * The bytecode a module comes to, and the two things that can only be asked once it exists: whether
  * its constant constructions satisfy their invariants, and whether its examples hold.
  *
- * <p>Both of those load classes, so both read {@link All} rather than one module's own — an example
- * may reach across an import, and the class it reaches has to be there.
+ * <p>Both of those load classes, so both read {@link Linked} rather than one module's own — an
+ * example may reach across an import, and the class it reaches has to be there. {@link All} is what
+ * a build writes out, and nothing that runs code reads it: a key that did would be recomputed by an
+ * edit to any module in the workspace.
  */
 public final class Output {
 
@@ -136,6 +140,79 @@ public final class Output {
         }
     }
 
+    /**
+     * Every module whose classes a module can load: itself, and what it imports, transitively.
+     *
+     * <p>An example row constructs values of the types its module names and applies behaviors those
+     * types reach, and a name it can write is one an import brought in — so the import graph is the
+     * bound on what its evaluation loads. A module outside it cannot be reached by any name the row
+     * can write.
+     *
+     * <p>The walk is iterative rather than a question asking itself about the module it reached,
+     * because two modules naming each other would then be a question that depends on itself. That is
+     * already an error, and it is found before any of this is asked, but this key is asked while the
+     * error is on screen too.
+     */
+    public record Reaches(String name) implements Key<List<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            Set<String> reached = new LinkedHashSet<>();
+            Deque<String> pending = new ArrayDeque<>();
+            pending.add(name);
+            while (!pending.isEmpty()) {
+                String module = pending.removeFirst();
+                if (!reached.add(module)) {
+                    continue;
+                }
+                List<String> imports = db.ask(new Front.ImportedModules(module)).value();
+                if (imports != null) {
+                    pending.addAll(imports);
+                }
+            }
+            return Answer.of(List.copyOf(reached));
+        }
+    }
+
+    /**
+     * The classes an evaluation of one module's code loads: its own, and those of every module it
+     * reaches.
+     *
+     * <p>Not {@link All}. A module's classes are a map of arrays, and arrays compare by identity, so
+     * regenerating a module always counts as a change — and a key that read every module's classes
+     * would be recomputed by an edit anywhere in the workspace, however far from it. Reading only
+     * what it reaches is what keeps an edit to one module from re-running the examples of every
+     * other one.
+     */
+    public record Linked(String name) implements Key<Map<String, byte[]>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, byte[]>> compute(Db db) {
+            List<String> reaches = db.ask(new Reaches(name)).value();
+            if (reaches == null) {
+                return Answer.of(Map.of());
+            }
+            Map<String, byte[]> linked = new LinkedHashMap<>();
+            // Furthest first, so the module being evaluated is put on last: a name two of them
+            // generate is the near one's, which is the order All puts them in as well.
+            for (int i = reaches.size() - 1; i >= 0; i--) {
+                Map<String, byte[]> classes = db.ask(new Classes(reaches.get(i))).value();
+                if (classes != null) {
+                    linked.putAll(classes);
+                }
+            }
+            return Answer.of(Ordered.map(linked));
+        }
+    }
+
     /** The class loader an evaluation runs against: this compilation's classes over the ones the
      * projects it depends on already built. */
     static ClassLoader loader(Db db, Map<String, byte[]> classes) {
@@ -172,7 +249,7 @@ public final class Output {
             if (checks.isEmpty()) {
                 return Answer.of(Boolean.TRUE);
             }
-            Map<String, byte[]> classes = db.ask(new All()).value();
+            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
             if (classes == null) {
                 return Answer.absent();
             }
@@ -278,7 +355,7 @@ public final class Output {
             if (db.ask(new Bodies.Checked(name)).value() == null) {
                 return Answer.absent();   // a module that did not check has nothing to run
             }
-            Map<String, byte[]> classes = db.ask(new All()).value();
+            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
             if (classes == null) {
                 return Answer.absent();
             }
