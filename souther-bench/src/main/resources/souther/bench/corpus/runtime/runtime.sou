@@ -1,0 +1,86 @@
+// What the generated code costs to run, rather than to produce. Every behavior here is driven
+// directly through `Behavior.apply` from the benchmark, so each measures one shape of work:
+// accumulating over a list, building a list, and constructing a value that carries an invariant.
+module bench.runtime exposing ( sumAll, evensDoubled, tally, flipped, kept, held, keyed, modded, amountOf )
+
+data Amount = Int
+    invariant value >= 0
+data Negative = { given: Int }
+
+// Accumulation without building: the fold reaches every element and the result is one number, so
+// what this measures is the loop and the arithmetic, with no structure allocated on the way.
+behavior sumAll : (xs: List<Int>) -> Int
+let sumAll (xs) = List.fold((acc, x) -> acc + x, 0, xs)
+
+// Building: two traversals, each producing a list. Against `sumAll` over the same input, the
+// difference is what a list costs to build.
+behavior evensDoubled : (xs: List<Int>) -> List<Int>
+let evensDoubled (xs) = List.map(x -> x * 2, List.filter(x -> Int.modBy(2, x) == 0, xs))
+
+// Accumulating into a map: a fold whose accumulator is a Map, read and written once per element.
+// The key is an Int, so it is boxed on the way into the map on every element.
+//
+// It answers the map's size rather than the map, because a map crossing the boundary is keyed by
+// String (ADR-0040) and what is measured here is the accumulation, not the encoding.
+//
+// The four below it are the same walk with one part taken away each time, so the distance between
+// two of them is the cost of the one part they differ by. `kept` writes back the number it read
+// instead of one more than it, so it reads and writes as `tally` does and boxes nothing; `held`
+// writes a number of its own, dropping the read's value as well; `keyed` drops the read; `modded`
+// drops the map, leaving the walk and the arithmetic.
+behavior tally : (xs: List<Int>) -> Int
+let counted (xs: List<Int>) : Map<Int, Int> =
+    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> c + 1, acc), Map.empty(), xs)
+let tally (xs) = Map.size(counted(xs))
+
+// `flipped` writes a different number every element, as `tally` does, but one the JVM keeps a boxed
+// instance of: the distance to `tally` is what boxing a count past that cache costs, and the distance
+// to `kept` is the write itself. Writing the same number twice is not a write at all — the trie
+// answers with itself when the value is equal — which is why `kept`, `held` and `keyed` say nothing
+// about what a write costs.
+behavior flipped : (xs: List<Int>) -> Int
+let flipping (xs: List<Int>) : Map<Int, Int> =
+    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> 127 - c, acc), Map.empty(), xs)
+let flipped (xs) = Map.size(flipping(xs))
+
+behavior kept : (xs: List<Int>) -> Int
+let keeping (xs: List<Int>) : Map<Int, Int> =
+    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> c, acc), Map.empty(), xs)
+let kept (xs) = Map.size(keeping(xs))
+
+behavior held : (xs: List<Int>) -> Int
+let holding (xs: List<Int>) : Map<Int, Int> =
+    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> 1, acc), Map.empty(), xs)
+let held (xs) = Map.size(holding(xs))
+
+behavior keyed : (xs: List<Int>) -> Int
+let keying (xs: List<Int>) : Map<Int, Int> =
+    List.fold((acc, x) -> Map.insert(Int.modBy(16, x), 1, acc), Map.empty(), xs)
+let keyed (xs) = Map.size(keying(xs))
+
+behavior modded : (xs: List<Int>) -> Int
+let modded (xs) = List.fold((acc, x) -> acc + Int.modBy(16, x), 0, xs)
+
+// One construction, with the invariant checked as a run-time construction checks it.
+behavior amountOf : (n: Int) -> Amount | Negative
+let amountOf (n) = if n >= 0 then Amount(n) else Negative { given = n }
+
+example sumAll
+    | ([1, 2, 3]) -> 6
+example evensDoubled
+    | ([1, 2, 3, 4]) -> [4, 8]
+example tally
+    | ([1, 2, 17, 33]) -> 2
+example flipped
+    | ([1, 2, 17, 33]) -> 2
+example kept
+    | ([1, 2, 17, 33]) -> 2
+example held
+    | ([1, 2, 17, 33]) -> 2
+example keyed
+    | ([1, 2, 17, 33]) -> 2
+example modded
+    | ([1, 2, 17, 33]) -> 5
+example amountOf
+    | (7) -> Amount(7)
+    | (-1) -> Negative { given = -1 }

@@ -85,6 +85,16 @@ mvn -pl souther-cli -am -DskipTests install
 
 The same `souther` binary also compiles to `.class` files (`souther compile hello.sou -d out`). It runs on any Unix shell; on Windows, use it as a plain jar (`java -jar souther-cli/target/souther.jar …`).
 
+`souther-bench` measures what the compiler costs, and what the code it generates costs to run. It carries the sources it measures, so a number means the same thing on any machine, and it checks that they still compile before it times anything.
+
+```sh
+mvn -pl souther-bench -am -DskipTests install
+java -jar souther-bench/target/souther-bench.jar
+
+# One measurement at a time: cold, warm, phase, edit, scale, run.
+java -jar souther-bench/target/souther-bench.jar phase edit
+```
+
 To integrate Souther into an application's Maven build, configure `SoutherProcessor` as an annotation processor. The [examples repository](https://github.com/souther-lang/examples) contains that configuration and examples using the generated types from Java, Kotlin, and Clojure boundaries (Spring Boot, jOOQ, Pedestal).
 
 The Java API compiles a source string containing either one module or several linked modules:
@@ -162,10 +172,15 @@ Not yet implemented: incremental compilation, static invariant proofs, handwritt
 - [ADRs](docs/adr/README.md): design decisions, alternatives, and prior art
 - [Examples](https://github.com/souther-lang/examples): Maven / Gradle integration, decoders / encoders, and Java / Kotlin / Clojure boundary interop (Spring Boot, jOOQ, Pedestal). They live in their own repository because the boundary code moves on Spring / jOOQ / Kotlin's schedule rather than the compiler's; their build tracks `develop` here
 
-The repository has two Maven modules:
+The repository has these Maven modules:
 
 - `souther-runtime`: `Option`, `Behavior`, `Fn`, boundary `Result`, `ConstraintViolation`, and numeric / collection helpers
-- `souther-compiler`: lexer, parser, type checker, deriver, and ClassFile backend
+- `souther-syntax`: the lexer, the lossless CST, and the diagnostic types every other module reports through
+- `souther-compiler`: parser, name resolution, type checker, deriver, and ClassFile backend
+- `souther-fmt`: a canonical layout re-derived from the CST
+- `souther-lsp`: the language server
+- `souther-cli`: the `souther` executable
+- `souther-bench`: what the compiler costs, measured on a corpus the module carries
 
 ## Specification Model-Driven Development (SMDD)
 
