@@ -30,6 +30,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Evaluates a module's {@code example}s at compile time and reports any mismatch as a compile error.
@@ -81,18 +82,62 @@ public final class ExampleVerifier {
             return List.of();
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values);
-        List<Diagnostic> failures = new ArrayList<>();
+        // Read each declaration once and keep it: the rows below run at the same time, and what they
+        // would otherwise read is the single-threaded store this compilation is being answered from.
+        ExampleVerifier v = new ExampleVerifier(module, symbols.cached(), sigs, requirements, loader,
+                values);
+        // Everything the rows need is worked out first, and only then are they started, so nothing
+        // reaches the store while they run.
+        List<Runnable> starts = new ArrayList<>();
+        Pending pending = new Pending();
         for (Ast.Example ex : module.examples()) {
             try {
-                v.checkExample(ex, failures);
+                v.prepare(ex, pending, starts);
             } catch (LinkageError _) {
                 // The runtime is not on this host's classpath (it is `provided`, like CTFE), so the
                 // generated classes cannot be loaded to evaluate here; the build-time pass, where the
                 // runtime is present, still checks this example.
             }
         }
-        return failures;
+        starts.forEach(Runnable::run);
+        try {
+            return pending.read();
+        } catch (LinkageError _) {
+            return List.of();
+        }
+    }
+
+    /**
+     * What a module's examples come to, in the order they were written, with the rows still running
+     * not yet asked for.
+     *
+     * <p>Rows are all started before any of them is read, so they run at the same time. They are
+     * independent by construction — each evaluates its own fixtures through its own
+     * {@link ExampleVerifier}, over declarations that were read before any of them began. What the
+     * order is for is the report: the failure an author is shown first is the first one written, not
+     * the first one to finish.
+     */
+    private static final class Pending {
+
+        private final List<Supplier<List<Diagnostic>>> inOrder = new ArrayList<>();
+
+        /** Something already known about an example, before any row of it runs. */
+        void say(Diagnostic diagnostic) {
+            inOrder.add(() -> List.of(diagnostic));
+        }
+
+        /** A row that will run; asking {@code result} waits for it and says what it found. */
+        void awaiting(Supplier<List<Diagnostic>> result) {
+            inOrder.add(result);
+        }
+
+        List<Diagnostic> read() {
+            List<Diagnostic> found = new ArrayList<>();
+            for (Supplier<List<Diagnostic>> result : inOrder) {
+                found.addAll(result.get());
+            }
+            return found;
+        }
     }
 
     /** The one-line form for a set of failures gathered across modules: the count, then the first
@@ -150,10 +195,10 @@ public final class ExampleVerifier {
 
     // --- one example (a target and its rows) --------------------------------------------------
 
-    private void checkExample(Ast.Example ex, List<Diagnostic> out) {
+    private void prepare(Ast.Example ex, Pending pending, List<Runnable> starts) {
         ExampleTarget target = runnableTarget(ex.target());
         if (target == null) {
-            out.add(notRunnable(ex));
+            pending.say(notRunnable(ex));
             return;
         }
         Sig sig = sigs.get(target.name());
@@ -162,7 +207,11 @@ public final class ExampleVerifier {
         }
         Set<TypeName> outCases = outCases(sig.out());
         for (Ast.ExampleRow row : ex.rows()) {
-            checkRow(target, sig, outCases, row, out);
+            RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
+            java.util.concurrent.FutureTask<List<Diagnostic>> task =
+                    new java.util.concurrent.FutureTask<>(evaluation);
+            starts.add(() -> Thread.ofVirtual().name("souther-example-eval").start(task));
+            pending.awaiting(() -> awaitRow(evaluation, task, target, row));
         }
     }
 
@@ -281,9 +330,22 @@ public final class ExampleVerifier {
 
         @Override
         public List<Diagnostic> call() {
+            startedAt = System.nanoTime();
             List<Diagnostic> mine = new ArrayList<>();
             evaluation.checkRowNow(target, sig, outCases, row, mine);
             return mine;
+        }
+
+        /**
+         * When this row began, or 0 while it is still waiting for a thread to run on. The budget is
+         * counted from here rather than from when the row was started, because the rows of a module
+         * run at the same time: counted from the start, a row would be charged for the ones ahead of
+         * it, and how long an example may take would depend on how many others the module has.
+         */
+        private volatile long startedAt;
+
+        long startedAt() {
+            return startedAt;
         }
 
         /** The helper this row is inside, for the budget to name when the row does not finish. */
@@ -298,33 +360,45 @@ public final class ExampleVerifier {
      * by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
      * {@link RowEvaluation} for why the row's own worker must not.
      */
-    private void checkRow(ExampleTarget target, Sig sig,
-                          Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
-        RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
-        java.util.concurrent.FutureTask<List<Diagnostic>> task =
-                new java.util.concurrent.FutureTask<>(evaluation);
-        Thread worker = new Thread(task, "souther-example-eval");
-        worker.setDaemon(true);
-        worker.start();
+    /** Waits for one row, within its budget, and says what it found. */
+    private List<Diagnostic> awaitRow(RowEvaluation evaluation,
+                                      java.util.concurrent.FutureTask<List<Diagnostic>> task,
+                                      ExampleTarget target, Ast.ExampleRow row) {
         try {
-            out.addAll(task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
-        } catch (java.util.concurrent.TimeoutException _) {
-            // Read what the row was doing before cancelling: the interrupt may let the worker leave the
-            // helper it is in, and then the reason would depend on which thread got there first.
-            String helper = evaluation.helper();
-            task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
-            out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
-                    .at(row.pos()).args("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms"
-                            + (helper == null ? "" : " while calling `" + helper + "`")).build());
+            while (true) {
+                // Whether it finished comes before whether its budget is spent. A row that ran while
+                // an earlier one was still going has an answer, however long ago it was reached, and
+                // reading the clock first would report a row that held as one that never finished.
+                if (task.isDone()) {
+                    return task.get();
+                }
+                long started = evaluation.startedAt();
+                long left = started == 0 ? EXAMPLE_TIMEOUT_MS
+                        : EXAMPLE_TIMEOUT_MS - (System.nanoTime() - started) / 1_000_000L;
+                if (started != 0 && left <= 0) {
+                    return overBudget(evaluation, task, row);
+                }
+                try {
+                    return task.get(left, java.util.concurrent.TimeUnit.MILLISECONDS);
+                } catch (java.util.concurrent.TimeoutException _) {
+                    // If it has not begun, none of its budget is spent: this thread simply asked
+                    // before the row had a turn, and asking again is all there is to do.
+                    if (evaluation.startedAt() != 0) {
+                        return overBudget(evaluation, task, row);
+                    }
+                }
+            }
         } catch (java.util.concurrent.ExecutionException ee) {
             Throwable cause = ee.getCause();
             if (cause instanceof NonTerminationException nt) {
-                out.add(Diagnostic.of("E1910", "check.example.nonterminating")
+                return List.of(Diagnostic.of("E1910", "check.example.nonterminating")
                         .title("check.example.title").at(row.pos()).args(nt.getMessage()).build());
-                return;
             }
             if (cause instanceof RuntimeException re) {
                 throw re;
+            }
+            if (cause instanceof LinkageError le) {
+                throw le;
             }
             throw new IllegalStateException(cause);
         } catch (InterruptedException e) {
@@ -336,6 +410,20 @@ public final class ExampleVerifier {
             throw new java.util.concurrent.CancellationException(
                     "interrupted while evaluating an example of `" + target.name() + "`");
         }
+    }
+
+    /** A row that spent its budget without finishing. */
+    private List<Diagnostic> overBudget(RowEvaluation evaluation,
+                                        java.util.concurrent.FutureTask<List<Diagnostic>> task,
+                                        Ast.ExampleRow row) {
+        // Read what the row was doing before cancelling: the interrupt may let the worker leave the
+        // helper it is in, and then the reason would depend on which thread got there first.
+        String helper = evaluation.helper();
+        task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
+        return List.of(Diagnostic.of("E1910", "check.example.nonterminating")
+                .title("check.example.title")
+                .at(row.pos()).args("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms"
+                        + (helper == null ? "" : " while calling `" + helper + "`")).build());
     }
 
     private void checkRowNow(ExampleTarget target, Sig sig,

@@ -76,6 +76,14 @@ public final class Symbols {
         return new Symbols(module, registry, scope, Map.copyOf(aliases));
     }
 
+    /**
+     * The same symbols, reading each declaration once and keeping it — what a reader that evaluates
+     * a module's example rows on more than one thread uses. See {@link Registry#cached}.
+     */
+    public Symbols cached() {
+        return new Symbols(module, Registry.cached(registry), scope, aliases);
+    }
+
     /** The module being compiled. */
     public String module() {
         return module;
