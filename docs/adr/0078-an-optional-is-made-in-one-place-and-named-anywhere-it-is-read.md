@@ -71,11 +71,11 @@ of the model's own sum — and keeps it in every position rather than in the one
 to check.
 
 **A behavior does not answer an optional.** ADR-0011's reason was that `>->` would otherwise have to
-decide whether it consumes `Some`/`None` or treats `Option<会員>` as one case. Measured, the
+decide whether it consumes `Some`/`None` or treats `Option<Member>` as one case. Measured, the
 implementation has been answering that all along: an optional output composes when the next stage takes
 the same optional, and it travels as one case. So the prohibition stands on the two grounds the
 measurement does not touch — the business vocabulary a reader of the answer matches on
-(`-> 会員 | 会員なし`), and keeping the runtime's `Option` out of the Java-facing signature an exposed
+(`-> Member | NoSuchMember`), and keeping the runtime's `Option` out of the Java-facing signature an exposed
 behavior generates (ADR-0008; an optional's JVM type is `souther.runtime.Option`). It is read off the
 resolved output type, so `-> Option<Int>` and `-> Int?` are refused as the same thing, and the report
 names the rule instead of blaming the pair that could not compose (E1701).

@@ -6,9 +6,9 @@ Status: Accepted. Supersedes the lambda-parameter consequence of ADR-0036.
 
 Souther had three ways to open a value and no rule connecting them. `match` opened a sum's case, a newtype's constructor (ADR-0054) and a record's fields; `let (a, b) = t` opened a tuple and nothing else (ADR-0036); `.value` read one newtype layer (ADR-0014). Which one applied was a fact about the form, not about the value, and a reader had to know all three.
 
-The gap showed when a newtype wrapped a collection (`data タグ集合 = Set<タグ>`). Naming a collection puts `.value` between every use and the collection, and the destructuring that would have removed it was available only in `match` — which needs a sum to match on, so a bare newtype had no way to be opened by a pattern at all.
+The gap showed when a newtype wrapped a collection (`data TagSet = Set<Tag>`). Naming a collection puts `.value` between every use and the collection, and the destructuring that would have removed it was available only in `match` — which needs a sum to match on, so a bare newtype had no way to be opened by a pattern at all.
 
-The obvious alternative was to make the wrapped value reachable without opening it: accept `タグ集合` wherever `Set<タグ>` is expected, so `Set.size(tags)` would work. That was rejected. It reads as one rule and is not one: `List.filter` closes over the newtype and could return it, `List.map` changes the element type and cannot, so what survives an operation becomes a per-function fact. The invariant is worse — either it silently stops applying after the first operation, or a re-wrap runs it at points the code does not show. This is the transparent-deref direction ADR-0054 already declined, widened from operators to the whole library.
+The obvious alternative was to make the wrapped value reachable without opening it: accept `TagSet` wherever `Set<Tag>` is expected, so `Set.size(tags)` would work. That was rejected. It reads as one rule and is not one: `List.filter` closes over the newtype and could return it, `List.map` changes the element type and cannot, so what survives an operation becomes a per-function fact. The invariant is worse — either it silently stops applying after the first operation, or a re-wrap runs it at points the code does not show. This is the transparent-deref direction ADR-0054 already declined, widened from operators to the whole library.
 
 What can be said as one rule is refutability. A pattern that every value of the type satisfies can be written where exactly one arm is available, because there is nothing to fall through to. A pattern that some values fail needs the arm that catches them, which is what `match` is.
 
@@ -19,13 +19,13 @@ Both languages Souther grounds its surface in already draw the line there. Elm a
 **An irrefutable pattern — a name, a tuple, a newtype opened by its constructor, a record's fields — may be written wherever a name is bound: a block's `let`, a behavior implementation's parameter, a helper's parameter, a lambda's parameter. A refutable one — a sum's case, `Some` — stays in `match`.**
 
 ```
-let タグ集合(ts) = 集合
-let { 名称, 数量 } = 明細
-let (k, v) = 対
+let TagSet(ts) = set
+let { name, quantity } = line
+let (k, v) = pair
 
-let 個数 (タグ集合(ts)) = Set.size(ts)
+let count (TagSet(ts)) = Set.size(ts)
 
-List.map((タグ集合(ts)) -> Set.size(ts), 集合たち)
+List.map((TagSet(ts)) -> Set.size(ts), sets)
 ```
 
 Refutability is judged on the resolved name, not on the spelling, since only the name's declaration says whether a value can fail to have the shape. Opening something that is not a newtype is refused, and the report points at `match`.

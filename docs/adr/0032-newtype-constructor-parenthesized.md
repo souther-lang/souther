@@ -1,10 +1,10 @@
-# ADR-0032: A newtype is constructed by applying its name, parenthesized: `金額(500)`
+# ADR-0032: A newtype is constructed by applying its name, parenthesized: `Amount(500)`
 
 Status: Accepted (decided 2026-07-18; implemented)
 
 ## Context
 
-A newtype `data 金額 = Int` is nominally distinct from `Int` (ADR-0014). Until now its values
+A newtype `data Amount = Int` is nominally distinct from `Int` (ADR-0014). Until now its values
 arose only at the decode boundary; there was no in-language way to build one from a literal
 or a computed value.
 
@@ -12,32 +12,32 @@ ML-family languages construct a wrapper by applying the constructor: Haskell and
 `Money 500`, F# `Money 500` or `Money(500)`. The juxtaposition form is unambiguous in
 Haskell and Elm because constructors are Capitalized — the parser tells `Money 500`
 (construction) from `money - 5` (subtraction) lexically. Souther's identifiers are Unicode
-(Japanese domain terms) with no case distinction, so `金額 500` cannot be told from
-`金額 - 5` at parse time. And Souther already applies functions with parentheses everywhere
+(Japanese domain terms) with no case distinction, so `Amount 500` cannot be told from
+`Amount - 5` at parse time. And Souther already applies functions with parentheses everywhere
 (`f(x)`, `length(value)`) — the F#-tupled branch of ML, not Haskell/Elm currying.
 
 ## Decision
 
-Construct a newtype by applying its type name to one argument, parenthesized: `金額(500)`,
-`会員ID("m-01")`. It is the record literal `金額 { value = e }` written in call form — the
+Construct a newtype by applying its type name to one argument, parenthesized: `Amount(500)`,
+`MemberId("m-01")`. It is the record literal `Amount { value = e }` written in call form — the
 type name in call position is the constructor. This matches Souther's parenthesized
-application and avoids the `金額 -5` ambiguity a juxtaposition form would carry.
+application and avoids the `Amount -5` ambiguity a juxtaposition form would carry.
 
 An invariant violation *aborts*, as for any data construction (ADR-0029,
 `[#violation-destination]`); construction is not fallible in the domain (there is no
-`金額 | 不正`). So no constant-only restriction is needed: a runtime argument is allowed and
-aborts on violation, exactly like an invariant-bearing product `値引き済み { 額 = x }`.
+`Amount | Invalid`). So no constant-only restriction is needed: a runtime argument is allowed and
+aborts on violation, exactly like an invariant-bearing product `Discounted { amount = x }`.
 
 When the argument is a compile-time constant and the invariant folds to `true`, the
-construction cannot abort: it is checked at compile time — so `金額(-5)` is a compile error,
-not a runtime abort — and may sit anywhere, including a non-tail `let money = 金額(500)`. A
+construction cannot abort: it is checked at compile time — so `Amount(-5)` is a compile error,
+not a runtime abort — and may sit anywhere, including a non-tail `let money = Amount(500)`. A
 runtime argument to an invariant-bearing newtype may likewise sit wherever an expression may —
 the behavior's result, a non-tail `let`, a `match` arm — and aborts on violation, like any
 invariant-bearing construction.
 
 ## Consequences
 
-The parser is unchanged: `金額(500)` already parses as a call. The checker routes a call
+The parser is unchanged: `Amount(500)` already parses as a call. The checker routes a call
 whose name is a newtype to construction and, when the argument folds to a constant, records
 it. The constant argument is verified by **compile-time function evaluation**: the backend
 emits, per invariant-bearing newtype, a Raoh-free `$Ctfe.check(value)` that runs the *same*
@@ -54,9 +54,9 @@ still does not depend on Raoh — CTFE runs the bare boolean invariant, not the
 Raoh-returning decoder or `__construct`.
 
 Two alternatives were rejected. A capitalization convention marking constructors (which
-would enable `金額 500`) is incompatible with free Japanese naming. Type-ascription
-construction (`let money: 金額 = 500`) opens a nominal hole, letting a bare `Int` become a
-`金額` by annotation.
+would enable `Amount 500`) is incompatible with free Japanese naming. Type-ascription
+construction (`let money: Amount = 500`) opens a nominal hole, letting a bare `Int` become a
+`Amount` by annotation.
 
 ## References
 

@@ -11,7 +11,7 @@ inside-out as `g(f(x))`. Souther had no such pipe, and its nested combinator cal
 inside-out. A representative line from the `issuetracker` example (then named `tagging`):
 
 ```
-sort(filter(map(split(入力.生, ","), 片 -> lowercase(trim(片))), 片 -> String.length(片) >= 1))
+sort(filter(map(split(input.raw, ","), piece -> lowercase(trim(piece))), piece -> String.length(piece) >= 1))
 ```
 
 ADR-0028 explicitly left `|>` out, with the reason that Souther's combinators take the
@@ -49,10 +49,10 @@ The pipe is pure sugar: it exists only in the lexer and parser, adds no AST node
 checker or backend case. The example above becomes a chain read top to bottom:
 
 ```
-入力.生
+input.raw
     |> split(",")
-    |> map(片 -> 片 |> trim |> lowercase)
-    |> filter(片 -> String.length(片) >= 1)
+    |> map(piece -> piece |> trim |> lowercase)
+    |> filter(piece -> String.length(piece) >= 1)
     |> sort
 ```
 

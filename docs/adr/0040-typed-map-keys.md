@@ -9,14 +9,14 @@ ISO form) and encoding it back bare.
 ## Context
 
 `Map` was fixed to `Map<String, V>`. A domain map is almost always keyed by an identifier that has a
-type — `Map<商品ID, 在庫>`, `Map<従業員ID, 権限>` — and forcing the key to `String` throws that type
-away: `商品ID` and `従業員ID` become the same key type, and a caller can pass one where the other is
+type — `Map<ProductId, Stock>`, `Map<EmployeeId, authority>` — and forcing the key to `String` throws that type
+away: `ProductId` and `EmployeeId` become the same key type, and a caller can pass one where the other is
 meant. It also runs against Souther's whole stance of putting distinctions in types (closed
 construction, newtypes). Elm's `Dict` and F#'s `Map` both key by a typed value.
 
 The key cannot be an arbitrary type, though. A `Map`'s external representation is a JSON object, whose
 keys are strings, so a key type must be renderable as (and parseable from) a bare string. A
-String-backed newtype (`data 商品ID = String`) is exactly that: nominally distinct, bare-string
+String-backed newtype (`data ProductId = String`) is exactly that: nominally distinct, bare-string
 represented (ADR-0014).
 
 ## Decision
@@ -27,15 +27,15 @@ over `String`, or (inside `core` only) a key type variable `'k` that monomorphis
 
 - **Runtime.** The map is keyed by the key value itself — a `String`, or the newtype wrapper — and
   java's `Map` compares keys by their value equality (ADR-0009, the equality every data already has),
-  so `containsKey(商品ID("P-01"), m)` matches a stored `商品ID("P-01")`. `Map.keys` returns
-  `List<商品ID>`, keeping the type.
+  so `containsKey(ProductId("P-01"), m)` matches a stored `ProductId("P-01")`. `Map.keys` returns
+  `List<ProductId>`, keeping the type.
 - **Standard library** generalises over the key: `containsKey` / `insert` / `remove` / `singleton` /
   `get` / `keys` / `toList` / `fromList` take and return the key type. `Map.empty` is the
   empty-collection bottom in both key and value, fixed by context like `[]`.
-- **Boundary codec.** A `Map<商品ID, V>` is a JSON object with bare-string keys. Decoding reads the
+- **Boundary codec.** A `Map<ProductId, V>` is a JSON object with bare-string keys. Decoding reads the
   object with the value decoder, then runs the key newtype's own decoder on each string key, so the
   key's invariant is enforced and a bad key fails the decode at that key's path (issues accumulate
-  across the map). Encoding renders each key `商品ID` back to its bare `value` before writing the
+  across the map). Encoding renders each key `ProductId` back to its bare `value` before writing the
   object. The runtime carries no Raoh dependency (ADR-0004): the key-remap runs in a small helper the
   decoder class generates, and the encode-side stringify is a pure key rewrite in souther-runtime.
 
@@ -54,7 +54,7 @@ output are checked, at any depth; a map that stays inside a body may be keyed by
 
 The boundary set also admits `Date` and `DateTime`. What a key must satisfy is "renderable as, and
 parseable from, a bare string", and a temporal already crosses that way — a `Date` field travels as
-its ISO 8601 form, so `Map<Date, 金額>` is a JSON object whose keys are the same strings that field
+its ISO 8601 form, so `Map<Date, Amount>` is a JSON object whose keys are the same strings that field
 would carry. Daily aggregation, which had no expressible form, is `{"2026-01-01": 300}`.
 
 An `Int`-backed newtype key stays out. It meets the letter of "parseable from a string" but not the
@@ -69,10 +69,10 @@ answers to fails at that key's path, as a newtype's invariant does.
 
 ## Consequences
 
-`Map<商品ID, 在庫>` and `Map<従業員ID, 権限>` are distinct types, and the key of a lookup is checked
+`Map<ProductId, Stock>` and `Map<EmployeeId, authority>` are distinct types, and the key of a lookup is checked
 against the map's key type, so the two cannot be confused. Building and querying a keyed map — the
 aggregation the review asked for (add/update/remove an entry by a typed key) — works in a behavior
-body, and such a map now crosses the boundary too: a behavior can receive or return `Map<商品ID, V>`
+body, and such a map now crosses the boundary too: a behavior can receive or return `Map<ProductId, V>`
 directly, and a key that violates the newtype's invariant is a decode failure at that key's path,
 not a silently accepted string.
 

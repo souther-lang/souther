@@ -7,7 +7,7 @@ Status: Accepted. Refined by ADR-0029 (the sum carries domain outcomes only; pla
 A behavior returns one of several possible business results. Many languages force a
 success/failure split at this point (`Result`, `Either`, an `error` tag). But whether a
 given result is "the failure that leaves the mainline" is not an intrinsic property of the
-value — a `会員なし` handled by the next stage is on the mainline, while the same value
+value — a `NoSuchMember` handled by the next stage is on the mainline, while the same value
 left unconsumed is an off-ramp. Souther wants the behavior's type to state the business
 results without prejudging which is a failure.
 

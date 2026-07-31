@@ -4,11 +4,11 @@ Status: Accepted (decided 2026-07-26). Supersedes the sentence in `[#imports]` t
 
 ## Context
 
-Souther had two module mechanisms. The standard library was reachable qualified — `String.length` works with no `import`, and `import String ( length )` only elides the qualifier. A user module was not: a name existed in another module only if imported, and no qualified form was accepted anywhere. `probe.up.金額` was a syntax error, in a type position and in an expression.
+Souther had two module mechanisms. The standard library was reachable qualified — `String.length` works with no `import`, and `import String ( length )` only elides the qualifier. A user module was not: a name existed in another module only if imported, and no qualified form was accepted anywhere. `probe.up.Amount` was a syntax error, in a type position and in an expression.
 
-The gap showed up as issue #101. Two bounded contexts each declaring `金額` or `顧客ID` is ordinary, and a third module integrating both cannot import the name twice. The spec said what to do about it: import the one you mean, and reach the other "through a module that gives it a different name". That is a shim module written for the compiler's benefit, and the type it re-declares is a different type, so it does not integrate the two contexts — it hides one. The only other way out was renaming a type in an upstream module, which is not the integrator's to change.
+The gap showed up as issue #101. Two bounded contexts each declaring `Amount` or `CustomerId` is ordinary, and a third module integrating both cannot import the name twice. The spec said what to do about it: import the one you mean, and reach the other "through a module that gives it a different name". That is a shim module written for the compiler's benefit, and the type it re-declares is a different type, so it does not integrate the two contexts — it hides one. The only other way out was renaming a type in an upstream module, which is not the integrator's to change.
 
-Underneath the surface gap was a representation one. A type name was carried as a `String` and looked up in one flat map per module, so two `金額` could not both be in it. The backend then derived a class from a simple-name-to-package map, which has the same collision. Names written inside another module's declaration — a spread's element, a field's type — were resolved against the *reading* module's names, which is why reading a field spread in from a third module needed that module imported too (the other half of issue #110).
+Underneath the surface gap was a representation one. A type name was carried as a `String` and looked up in one flat map per module, so two `Amount` could not both be in it. The backend then derived a class from a simple-name-to-package map, which has the same collision. Names written inside another module's declaration — a spread's element, a field's type — were resolved against the *reading* module's names, which is why reading a field spread in from a third module needed that module imported too (the other half of issue #110).
 
 Elm, OCaml and Java all give a name its home before anything else uses it. Elm canonicalizes to `TType ModuleName.Canonical Name [Type]` in a pass whose comment says "Creating a canonical AST means finding the home module for all variables"; OCaml's `Path.t` distinguishes `Pident` from `Pdot` in the type system; javac carries a fully qualified name with an owner on every `Symbol`. All three then let source name a type through its module — `java.util.List` and `java.awt.List` in one file is the everyday case.
 
@@ -27,11 +27,11 @@ Qualified form is accepted in type positions and as a `match` arm's case name. A
 
 ## Alternatives considered
 
-**Import alias for a name (`import probe.b ( 金額 as b金額 )`).** Declined earlier and still declined: it invents a third name for the type, local to one module, so the same type reads differently in each module that integrates it. Naming the module instead leaves the type's name alone.
+**Import alias for a name (`import probe.b ( Amount as bAmount )`).** Declined earlier and still declined: it invents a third name for the type, local to one module, so the same type reads differently in each module that integrates it. Naming the module instead leaves the type's name alone.
 
 **Keeping the shim module.** What the spec prescribed. Rejected: a re-declared type is a different type, so the integrator gets a translation layer where it wanted a reference, and the two contexts still cannot meet.
 
-**A fully qualified `String` everywhere.** Cheapest change — keep `Type.Ref(String)` and put `probe.b.金額` in it. Rejected: every place that compares a reference to a written name would keep compiling and start being wrong. Changing the type is what made the compiler point at those places.
+**A fully qualified `String` everywhere.** Cheapest change — keep `Type.Ref(String)` and put `probe.b.Amount` in it. Rejected: every place that compares a reference to a written name would keep compiling and start being wrong. Changing the type is what made the compiler point at those places.
 
 **Re-export — letting `exposing` name a type this module imported.** The other way to give one module access to another's types: a module in the middle publishes what it depends on, and its consumers reach the type through it. Rejected, and this settles the question rather than deferring it (it had been held until qualified reference landed, since Elm's refusal only makes sense paired with `import ... as`).
 
@@ -43,7 +43,7 @@ Against Souther that leaves nothing to add and one thing to avoid. The readabili
 
 ## Consequences
 
-- Issue #101's collision has a way out inside the module: name each `金額` through its module, or alias the modules.
+- Issue #101's collision has a way out inside the module: name each `Amount` through its module, or alias the modules.
 - `importedPackages` is gone. The backend derives a class from the `TypeName` it is given instead of looking the package up by simple name; `souther.runtime`'s built-in cases (`DivisionByZero`) need no special case, since their name says where they live.
 - A field spread in from another data is readable with only the data it is read from in scope.
 - A sum's cases are its own module's, whether or not the reader imported them.

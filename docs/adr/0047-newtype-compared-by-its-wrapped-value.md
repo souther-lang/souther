@@ -6,15 +6,15 @@ sort family was brought onto the same reading (see "Sorting").
 
 ## Context
 
-`data 金額 = Int` is a newtype: a domain name and an invariant over a single underlying value. The
-value is reached as `金額.value`. But `value` is not a name the author writes — the `data X = Y`
-syntax generates it. So requiring `.value` to compare amounts (`m.額.value <= 100`) leaks an implicit
+`data Amount = Int` is a newtype: a domain name and an invariant over a single underlying value. The
+value is reached as `Amount.value`. But `value` is not a name the author writes — the `data X = Y`
+syntax generates it. So requiring `.value` to compare amounts (`m.amount.value <= 100`) leaks an implicit
 detail into every comparison, and reads as ceremony.
 
 Two things were already inconsistent. Equality (`==` / `/=`) works on any data structurally, so
-`金額 == 金額` compares the wrapped values without `.value`; but ordering (`<` `<=` `>` `>=`) was
-defined only for the five primitive types, so `金額 <= 金額` was a type error and you dropped to
-`.value`. And a bare literal never met a newtype: `金額 == 100` did not type-check either.
+`Amount == Amount` compares the wrapped values without `.value`; but ordering (`<` `<=` `>` `>=`) was
+defined only for the five primitive types, so `Amount <= Amount` was a type error and you dropped to
+`.value`. And a bare literal never met a newtype: `Amount == 100` did not type-check either.
 
 Souther has already extended ordering beyond Elm. Elm orders only `Int`/`Float`/`Char`/`String`;
 Souther adds `Decimal`/`Date`/`DateTime` because the JVM carries them as `Comparable`. A single-value
@@ -22,40 +22,40 @@ newtype over an ordered type is "morally" that type with a name and an invariant
 the wrapped value is the same kind of extension — and it removes the `.value` noise the author never
 asked to write.
 
-The pull against it is nominal safety: the whole point of `金額` and `数量` being distinct newtypes is
-that they must not be confused. Any relaxation has to keep `金額 <= 数量` an error.
+The pull against it is nominal safety: the whole point of `Amount` and `quantity` being distinct newtypes is
+that they must not be confused. Any relaxation has to keep `Amount <= quantity` an error.
 
 ## Decision
 
 A single-value newtype (`data X = Y`) is compared by the value it wraps, for both equality and
 ordering, so `.value` is not written. The nominal boundary is kept by four rules:
 
-- Two of the same newtype compare their wrapped values: `金額 <= 金額`, `金額 == 金額`.
-- A bare literal of the wrapped type takes the newtype from the other operand: `金額 <= 100`,
-  `金額 == 0`. Only a source literal is taken this way — this mirrors how `[]` takes its element type
+- Two of the same newtype compare their wrapped values: `Amount <= Amount`, `Amount == Amount`.
+- A bare literal of the wrapped type takes the newtype from the other operand: `Amount <= 100`,
+  `Amount == 0`. Only a source literal is taken this way — this mirrors how `[]` takes its element type
   from context (ADR-0028).
-- Two different newtypes over the same base do not compare: `金額 <= 数量` is a type error, even
+- Two different newtypes over the same base do not compare: `Amount <= quantity` is a type error, even
   though both wrap `Int`.
-- A non-literal value of the wrapped type is not taken implicitly: `金額 <= n` (with `n: Int`) is a
-  type error — write `金額 <= 金額(n)`.
+- A non-literal value of the wrapped type is not taken implicitly: `Amount <= n` (with `n: Int`) is a
+  type error — write `Amount <= Amount(n)`.
 
 Ordering additionally requires the wrapped type to be ordered (Int/String/Decimal/Date/DateTime);
 equality works over any wrapped type. The unwrap recurses, so a newtype over a newtype
-(`管理職 = レベル = Int`) reaches its base. In the backend, a newtype operand of a comparison is opened
-to its wrapped value (its `value` accessor) before the primitive comparison, so `金額 <= 金額` emits
-the same integer comparison `金額.value <= 金額.value` would.
+(`Manager = Level = Int`) reaches its base. In the backend, a newtype operand of a comparison is opened
+to its wrapped value (its `value` accessor) before the primitive comparison, so `Amount <= Amount` emits
+the same integer comparison `Amount.value <= Amount.value` would.
 
-Arithmetic on a newtype (`金額 + 金額`) was out of scope in the original decision — only comparison
+Arithmetic on a newtype (`Amount + Amount`) was out of scope in the original decision — only comparison
 was adopted — because it raised questions this decision did not settle: whether the result re-wraps
-(and re-checks the invariant, so `金額 - 金額` could abort on a negative), and which operators make
+(and re-checks the invariant, so `Amount - Amount` could abort on a negative), and which operators make
 domain sense. **Arithmetic was added subsequently**, resolving those questions:
 
-- Closed `+`/`-` stay in the newtype (`金額 - 金額 : 金額`): the operator opens each operand to its
-  base, computes, and re-wraps, re-checking the invariant. A `金額 - 金額` that goes negative aborts
+- Closed `+`/`-` stay in the newtype (`Amount - Amount : Amount`): the operator opens each operand to its
+  base, computes, and re-wraps, re-checking the invariant. A `Amount - Amount` that goes negative aborts
   inside the domain, or is *discharged* at compile time when a `guard` guard establishes it (the
   invariant-discharge check, spec §invariant-discharge).
-- Scalar `*`/`/` by a plain number of the base also stay in the newtype (`金額 * 2`) — the dimension
-  is unchanged. A product of *two* newtypes (`単価 * 数量`, a dimension change / units) is not modeled
+- Scalar `*`/`/` by a plain number of the base also stay in the newtype (`Amount * 2`) — the dimension
+  is unchanged. A product of *two* newtypes (`unitPrice * quantity`, a dimension change / units) is not modeled
   and stays rejected.
 
 See spec §newtype-arithmetic. The re-wrap/invariant question is answered by the invariant-discharge
@@ -64,7 +64,7 @@ check, and the operator question by "dimension-preserving only".
 ## Sorting
 
 `List.sort` / `max` / `min` / `sortBy` kept the older reading — only the five primitives are ordered —
-so `金額 > 基準` was accepted while `sortBy((r) -> r.金額, 請求)` was rejected as a key with no
+so `Amount > threshold` was accepted while `sortBy((r) -> r.Amount, Bill)` was rejected as a key with no
 ordering. The same value is orderable in a comparison and not orderable as a sort key, which is not a
 distinction anyone can act on. **The sort family now reads ordering the same way the operators do**:
 the element (or the key) is ordered when its base is.
@@ -77,14 +77,14 @@ type unordered for a Java caller that wants a `TreeMap` key.
 
 ## Consequences
 
-- `m.額.value <= 100` becomes `m.額 <= 100`, and `m.額 <= m.予算` (two amounts) now type-checks. The
+- `m.amount.value <= 100` becomes `m.amount <= 100`, and `m.amount <= m.budget` (two amounts) now type-checks. The
   implicit `value` name stays implicit; the author writes the domain name.
 - Equality and ordering are now consistent for newtypes (both read the wrapped value), and a bare
   literal compares against a newtype in both.
-- `金額` and `数量` remain uncomparable to each other and to a raw `Int` variable, so the nominal
+- `Amount` and `quantity` remain uncomparable to each other and to a raw `Int` variable, so the nominal
   distinction that motivates newtypes is intact.
-- Sorting reads the same definition of ordered, so `sortBy((r) -> r.金額, 請求)` orders by a typed key
-  without projecting to `.value` — which for a `List<金額>` also meant re-wrapping afterwards, running
+- Sorting reads the same definition of ordered, so `sortBy((r) -> r.Amount, Bill)` orders by a typed key
+  without projecting to `.value` — which for a `List<Amount>` also meant re-wrapping afterwards, running
   the invariant on every element again.
 - Arithmetic was subsequently added on the same wrapped-value footing — closed `+`/`-` and scalar
   `*`/`/`, re-wrapping and re-checking the invariant. The re-wrap/invariant question this decision
