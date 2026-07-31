@@ -30,11 +30,12 @@ public record Timing(List<Long> micros) {
     }
 
     /**
-     * The same, where each run needs setting up first and the set-up must not be timed — an edit is
-     * measured this way, because the store it is applied to has to be brought back to the state the
-     * edit starts from.
+     * The same, where each run is handed its round number because it must differ from the one before
+     * it — an edit is measured this way, since applying the same edit twice is not an edit and the
+     * second one would measure a store that already holds the answer. Everything the run does is
+     * timed; there is no set-up phase here to leave out.
      */
-    public static Timing ofPrepared(int warmup, int measured, Consumer<Integer> work) {
+    public static Timing ofRounds(int warmup, int measured, Consumer<Integer> work) {
         List<Long> micros = new ArrayList<>();
         for (int i = 0; i < warmup + measured; i++) {
             long start = System.nanoTime();

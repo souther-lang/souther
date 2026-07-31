@@ -42,15 +42,15 @@ final class Incremental {
         String imported = ids.getFirst();
         String leaf = ids.getLast();
 
-        Timing reask = Timing.ofPrepared(40, 40, _ -> {
+        Timing reask = Timing.ofRounds(40, 40, _ -> {
             compilation.update(byId, Set.of());
             compilation.diagnostics();
         });
-        Timing comment = Timing.ofPrepared(40, 40, round ->
+        Timing comment = Timing.ofRounds(40, 40, round ->
                 apply(compilation, byId, imported, byId.get(imported) + "\n-- round " + round + "\n"));
-        Timing atImported = Timing.ofPrepared(40, 40, round ->
+        Timing atImported = Timing.ofRounds(40, 40, round ->
                 apply(compilation, byId, imported, added(byId.get(imported), round)));
-        Timing atLeaf = Timing.ofPrepared(40, 40, round ->
+        Timing atLeaf = Timing.ofRounds(40, 40, round ->
                 apply(compilation, byId, leaf, added(byId.get(leaf), round)));
 
         report.line("EDIT  %-14s re-ask %6.2f ms   comment %6.2f ms   "
