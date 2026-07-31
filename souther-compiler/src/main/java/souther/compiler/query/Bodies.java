@@ -16,6 +16,7 @@ import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.check.Unanswerable;
 import souther.compiler.core.Core;
+import souther.compiler.core.GrowingFold;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.Type;
@@ -954,7 +955,9 @@ public final class Bodies {
                 for (Diagnostic warning : warnings) {
                     reports.add(Report.of(warning));
                 }
-                return Answer.of(core, reports);
+                // The last thing done to a body before it is emitted, and the only one that is not a
+                // check: a fold that only grows a list is turned into a build (see GrowingFold).
+                return Answer.of(GrowingFold.rewrite(core), reports);
             } catch (Unanswerable _) {
                 // The name it rested on was reported where it was written. This body has no meaning
                 // to emit, which the absence says, and nothing further to add.
@@ -1016,9 +1019,9 @@ public final class Bodies {
                 reports.addAll(Report.of(e));
             }
             boolean sound = reported.errors().isEmpty() && reported.abandoned().isEmpty();
-            return Answer.of(
-                    new Of(reported.emittedHelpers(), sound, reported.stopped()),
-                    reports);
+            Map<String, Core> helperBodies = new LinkedHashMap<>();
+            reported.emittedHelpers().forEach((h, core) -> helperBodies.put(h, GrowingFold.rewrite(core)));
+            return Answer.of(new Of(helperBodies, sound, reported.stopped()), reports);
         }
     }
 

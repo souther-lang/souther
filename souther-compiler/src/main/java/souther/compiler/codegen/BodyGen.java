@@ -13,6 +13,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
+import souther.compiler.core.GrowingFold;
 
 import java.lang.classfile.ClassFile;
 import java.lang.classfile.CodeBuilder;
@@ -754,11 +755,48 @@ final class BodyGen {
                 finishInvariantConstruct(cdType, flds);
                 return;
             }
+            MethodTypeDesc ctor = MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds));
+            if (!walksInside(nd)) {
+                code.new_(cdType);
+                code.dup();
+                emitFieldValues(flds, nd.inits(), nd.spreads());
+                code.invokespecial(cdType, "<init>", ctor);
+                return;
+            }
+            // A field built by a walk is built through a loop, and a value under construction may not
+            // be live across a backwards branch: the reference `new` leaves is uninitialised until
+            // `<init>`, and the verifier will not carry one over a jump. So the fields are built first
+            // and held in slots, exactly as a newtype's single field already is, and the construction
+            // itself is the straight line at the end.
+            emitFieldValues(flds, nd.inits(), nd.spreads());
+            List<Type> fieldTypes = new ArrayList<>(flds.values());
+            int[] held = new int[fieldTypes.size()];
+            for (int i = fieldTypes.size() - 1; i >= 0; i--) {
+                held[i] = slot(fieldTypes.get(i));
+                store(code, held[i], fieldTypes.get(i));
+            }
             code.new_(cdType);
             code.dup();
-            emitFieldValues(flds, nd.inits(), nd.spreads());
-            code.invokespecial(cdType, "<init>",
-                    MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(flds)));
+            for (int i = 0; i < fieldTypes.size(); i++) {
+                load(code, held[i], fieldTypes.get(i));
+            }
+            code.invokespecial(cdType, "<init>", ctor);
+        }
+
+        /** Whether emitting {@code e} emits a loop — a fold, or the walk a fold that grows a collection
+         *  became. What it decides is whether a value being constructed can stay on the stack while its
+         *  fields are built. */
+        private static boolean walksInside(Core e) {
+            if (e instanceof Core.Call c && (c.fn().equals(FOLD)
+                    || c.fn().equals(GrowingFold.BUILD) || c.fn().equals(GrowingFold.MAP_BUILD))) {
+                return true;
+            }
+            boolean[] found = {false};
+            Core.mapChildren(e, child -> {
+                found[0] |= walksInside(child);
+                return child;
+            });
+            return found[0];
         }
 
         /** Where an attempt's failing side continues, and the slot holding the value its success side
@@ -1001,6 +1039,10 @@ final class BodyGen {
                                 : MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
                     }
                 }
+                case GrowingFold.BUILD -> buildList(call);
+                case GrowingFold.GROW -> growList(call);
+                case GrowingFold.MAP_BUILD -> buildMap(call);
+                case GrowingFold.PUT -> putIntoMap(call);
                 case "Option.map" -> {
                     // map(f, opt): materialise f as an Fn (its one parameter is the option's element
                     // type), then the option. `Option` is not surface-writable, so the rewrap into
@@ -1012,7 +1054,10 @@ final class BodyGen {
                 }
                 case "Map.get" -> {
                     genExpr(call.args().get(1));      // get(key, m): map then key (Maps.get)
-                    genExpr(call.args().get(0));      // key (a reference)
+                    // The key goes into an Object parameter, so a primitive one boxes here. An Int
+                    // key is a long on the stack, and a String key is already a reference — which is
+                    // why leaving this out is bytecode that verifies for one and not the other.
+                    box(code, genExpr(call.args().get(0)));
                     code.invokestatic(CD_Maps, "get",
                             MethodTypeDesc.of(CD_Option, CD_Map, ConstantDescs.CD_Object));
                 }
@@ -1040,7 +1085,10 @@ final class BodyGen {
                     if (fv != null && fv.type() instanceof Type.FnOf fnType) {
                         applyFn(call, fnType);
                     } else if (ctx.emittedHelpers.containsKey(call.fn())) {
-                        recursiveHelperCall(call);
+                        // The one loop the language has is emitted where it stands, not called.
+                        if (!call.fn().equals(FOLD) || !folded(call)) {
+                            recursiveHelperCall(call);
+                        }
                     } else if (reqNames.contains(call.fn())) {
                         requiredCall(call);
                     } else if (ctx.calleeSig(call.fn()) != null) {
@@ -1078,6 +1126,167 @@ final class BodyGen {
         }
 
         /**
+         * A fold that only grows a list: the walk carries a builder and seals it at the end
+         * ({@code GrowingFold}). The step is materialised as it is for the fold this was rewritten
+         * from — an empty list still hands over {@code Fn.NEVER} — and the seed is gone, because the
+         * builder is the seed.
+         */
+        private void buildList(Core.Call call) {
+            if (walked(call, CD_Lists, MTD_Lists_builder, MTD_Lists_sealed)) {
+                return;
+            }
+            emitStep(call.args().get(0));
+            genExpr(call.args().get(1));      // the list walked
+            genExpr(call.args().get(2));      // the index walked from (a long)
+            code.invokestatic(CD_Lists, "build", MTD_Lists_build);
+        }
+
+        /**
+         * {@code acc ++ …} inside such a walk: the accumulator is the builder, so this adds to it
+         * rather than building a new vector. As with {@code ++} itself, a one-element list literal on
+         * the right pushes its element instead of the list around it.
+         */
+        private void growList(Core.Call call) {
+            genExpr(call.args().get(0));
+            Core added = call.args().get(1);
+            if (added instanceof Core.ListLit lit && lit.elements().size() == 1) {
+                box(code, genExpr(lit.elements().get(0)));
+                code.invokestatic(CD_Lists, "grow", MTD_Lists_grow);
+            } else {
+                genExpr(added);
+                code.invokestatic(CD_Lists, "growAll", MTD_Lists_growAll);
+            }
+        }
+
+        /** The same walk for a fold accumulating a map: the builder is the seed and the map it built
+         *  is handed over at the end. */
+        private void buildMap(Core.Call call) {
+            if (walked(call, CD_Maps, MTD_Maps_builder, MTD_Maps_sealed)) {
+                return;
+            }
+            emitStep(call.args().get(0));
+            genExpr(call.args().get(1));      // the list walked
+            genExpr(call.args().get(2));      // the index walked from (a long)
+            code.invokestatic(CD_Maps, "build", MTD_Maps_build);
+        }
+
+        /**
+         * A fold as the loop it is: the seed in a local, the list walked by its iterator, and the
+         * step's own body as the loop body reading the accumulator and the element from locals.
+         * Answers whether it was emitted that way — a walk that starts past the head, or whose step
+         * is one that never runs, is left to the {@code foldFrom} method (spec 13.1).
+         *
+         * <p>This is what makes a fold cost what a loop costs, and {@code fold} is the one loop the
+         * language has, so it is the whole of what a program's loops cost. Handed to a method instead,
+         * the step has to be a first-class {@code Fn}: a class of its own, an {@code Object[]} of
+         * boxed arguments per element, an accumulator that is boxed because {@code apply} answers with
+         * an {@code Object} — and, where the method walks for every fold in the program, a call site
+         * seeing so many different steps that it stops being inlined at all. Emitted here, the step's
+         * body reads the locals it closes over directly, an {@code Int} accumulator stays a
+         * {@code long} in its slot, and each walk is straight-line code the JIT sees on its own.
+         */
+        private boolean folded(Core.Call call) {
+            if (!(call.args().get(3) instanceof Core.Int from) || from.value() != 0) {
+                return false;
+            }
+            Core seed = call.args().get(1);
+            return walked(call.args().get(0), call.args().get(2), () -> {
+                Type produced = genExpr(seed);
+                asAccumulator(produced, accumulatorOf(call.args().get(0)));
+            }, () -> { });
+        }
+
+        /** The same walk, accumulating into a builder that is sealed at the end (see
+         *  {@link GrowingFold}): the seed is the builder, and the list or map it built is what the
+         *  walk answers with. */
+        private boolean walked(Core.Call call, ClassDesc helpers,
+                               MethodTypeDesc builder, MethodTypeDesc sealed) {
+            return walked(call.args().get(0), call.args().get(1),
+                    () -> code.invokestatic(helpers, "builder", builder),
+                    () -> code.invokestatic(helpers, "sealed", sealed));
+        }
+
+        /** The accumulator's type, as the checker put it on the step. */
+        private static Type accumulatorOf(Core step) {
+            return ((Type.FnOf) step.type()).params().get(0);
+        }
+
+        /** Leaves the value on the stack in the accumulator's own form: boxed where the accumulator is
+         *  a reference, and left as it is where the accumulator is an {@code Int} or a {@code Bool},
+         *  which stays in its slot as a primitive for the length of the walk. */
+        private void asAccumulator(Type produced, Type accType) {
+            if (accType != Type.INT && accType != Type.BOOL) {
+                box(code, produced);
+            }
+        }
+
+        private boolean walked(Core stepValue, Core walked, Runnable seed, Runnable answer) {
+            if (!(stepValue instanceof Core.Block step)
+                    || !(step.type() instanceof Type.FnOf fn) || stepNeverRuns(fn)) {
+                return false;
+            }
+            Type accType = fn.params().get(0);
+            Type elementType = fn.params().get(1);
+
+            int iterator = slot(Type.STRING);   // a reference slot; the type is not read back
+            genExpr(walked);
+            code.invokeinterface(CD_List, "iterator", MTD_iterator);
+            code.astore(iterator);
+
+            int acc = slot(accType);
+            seed.run();
+            store(code, acc, accType);
+
+            // The step's body is emitted here rather than in a class of its own, so the names it binds
+            // would otherwise stay bound after the walk — and a step that destructures its accumulator
+            // binds ordinary names (`let (i, ys) = acc`), which are the caller's names as often as not.
+            // The whole scope is put back, the slots it took staying taken.
+            Map<String, Var> enclosing = new HashMap<>(env);
+            bind(step.params().get(0), acc, accType);
+            int element = slot(elementType);
+            bind(step.params().get(1), element, elementType);
+
+            Label next = code.newLabel();
+            Label done = code.newLabel();
+            code.labelBinding(next);
+            code.aload(iterator);
+            code.invokeinterface(CD_Iterator, "hasNext", MTD_hasNext);
+            code.ifeq(done);
+            code.aload(iterator);
+            code.invokeinterface(CD_Iterator, "next", MTD_next);
+            unbox(code, elementType, element);
+            Type stepped = genExpr(step.body());   // the accumulator the step answers with
+            asAccumulator(stepped, accType);
+            store(code, acc, accType);
+            code.goto_(next);
+            code.labelBinding(done);
+
+            env.clear();
+            env.putAll(enclosing);
+            load(code, acc, accType);
+            answer.run();
+            return true;
+        }
+
+        /** {@code Map.insert(key, value, acc)} inside such a walk: a write into the builder. */
+        private void putIntoMap(Core.Call call) {
+            genExpr(call.args().get(0));
+            box(code, genExpr(call.args().get(1)));
+            box(code, genExpr(call.args().get(2)));
+            code.invokestatic(CD_Maps, "put", MTD_Maps_put);
+        }
+
+        /** The step of a build, as the fold it was rewritten from would have materialised it — an
+         *  empty list still hands over {@code Fn.NEVER}. */
+        private void emitStep(Core step) {
+            if (step.type() instanceof Type.FnOf fn && !stepNeverRuns(fn)) {
+                emitFunctionValue(step, fn.params());
+            } else {
+                code.getstatic(CD_Fn, "NEVER", CD_Fn);
+            }
+        }
+
+        /**
          * Whether a step closure would never be applied: one of its parameters is the bare bottom, so
          * it is the element of an empty-literal list and there are no elements — {@code foldFrom} over
          * {@code []} yields the seed. Such a step is passed as {@link souther.runtime.Fn#NEVER} rather
@@ -1100,6 +1309,10 @@ final class BodyGen {
             code.invokestatic(ClassDesc.of(pkg + ".$Fns"), CodegenContext.helperMethod(call.fn()),
                     MethodTypeDesc.of(CD_Object, params));
         }
+
+        /** The self-hosted walk of {@code souther.list}: a recursive helper everywhere else, and the
+         *  loop every fold in a program is, which is why the emitter knows its name. */
+        private static final String FOLD = "List.foldFrom";
 
         /** The operation name from a qualified builtin call ({@code "List.max"} → {@code "max"}). */
         private static String bareOp(String fn) {

@@ -35,6 +35,35 @@ class CompileMapUpsertFoldTest {
         assertEquals(Map.of("a", 3L, "b", 2L, "c", 1L), m.get("m"));
     }
 
+    // The same count, keyed by Int. A Map key reaches its runtime method through an Object parameter,
+    // so a key that is a primitive on the stack has to be boxed on the way in; a String key is already
+    // a reference and says nothing about whether that happens. Both the write (`upsert`, inside the
+    // fold's step) and the read (`get`, from a helper parameter) are keyed here, because they are
+    // emitted at different places. A key left unboxed is bytecode that does not verify, so this fails
+    // at class load rather than as a wrong answer.
+    @Test
+    void countByIntKeyWithUpsertAndEmptySeed() throws Exception {
+        String src = """
+                module demo
+                import List ( fold )
+                data In = { ns: List<Int> }
+                data Out = { distinct: Int, ones: Int }
+                let counted (ns: List<Int>) : Map<Int, Int> =
+                    fold((acc, n) -> Map.upsert(n, 1, c -> c + 1, acc), Map.empty(), ns)
+                let countOf (k: Int, ns: List<Int>) : Int =
+                    match Map.get(k, counted(ns)) with | Some c -> c | None -> 0
+                behavior run : (i: In) -> Out constructs Out
+                let run (i) = Out { distinct = Map.size(counted(i.ns)), ones = countOf(1, i.ns) }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("ns", List.of(1L, 2L, 1L, 3L, 1L)));
+        Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
+        Object out = Codecs.apply(behavior, in);
+        Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
+        assertEquals(3L, m.get("distinct"));
+        assertEquals(3L, m.get("ones"));
+    }
+
     // REPRO 2 (diagnostics): a helper `empty` whose declared return type is the map, used as the seed,
     // with a read-modify-write step through a helper `cur`. Previously the error was misleadingly
     // stamped inside the correct helper `cur`.

@@ -60,7 +60,7 @@ public final class PersistentHashSet<E> extends AbstractSet<E> {
     private static <E> PersistentHashSet<E> build(java.util.Iterator<? extends E> elements) {
         PersistentHashMap.Builder<E, Object> b = new PersistentHashMap.Builder<>();
         while (elements.hasNext()) {
-            b.put(elements.next(), PRESENT);
+            b.set(elements.next(), PRESENT);
         }
         PersistentHashMap<E, Object> m = b.build();
         return m.isEmpty() ? empty() : new PersistentHashSet<>(m);
@@ -102,10 +102,10 @@ public final class PersistentHashSet<E> extends AbstractSet<E> {
         }
         PersistentHashMap.Builder<E, Object> out = new PersistentHashMap.Builder<>();
         for (E e : larger) {
-            out.put(e, PRESENT);
+            out.set(e, PRESENT);
         }
         for (E e : smaller) {
-            out.put(e, PRESENT);
+            out.set(e, PRESENT);
         }
         PersistentHashMap<E, Object> m = out.build();
         return m.isEmpty() ? empty() : new PersistentHashSet<>(m);

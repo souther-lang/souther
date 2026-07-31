@@ -1,0 +1,875 @@
+// The CRM core: the party vocabulary five modules speak, the Account and the Contact, the Lead
+// lifecycle, and conversion. The rules are the ones a CRM actually enforces — Salesforce's id formats,
+// its standard duplicate rules, BANT disqualification, and a conversion that reports every blocking
+// reason rather than the first one it meets.
+//
+// What is on show:
+//   - A sum where a pair of optionals is the obvious modelling, and why the sum is right. A contact is
+//     reachable by email, by phone, or by both; the fourth combination a pair of nullable columns
+//     admits — reachable by nothing — has no name here because it is not a contact anyone can work.
+//     Beside it sits `title: JobTitle?`, an optional that IS right, because no rule depends on it.
+//   - The derived discriminated codec, which is what the module this file replaces was for. A sum
+//     with a field-bearing case decodes and encodes through `{"type": "<CaseName>"}`, an unknown tag is a
+//     decode failure, and a newtype's format invariant is checked even when the value is reached through
+//     the discriminator. A sum every one of whose cases is a unit data — Industry, AccountTier — has
+//     nothing to put beside the tag, so it travels as the case's name alone.
+//     A nested sum folds to its leaf tag, so `LeadSource` crosses the boundary as one flat tag.
+//   - The lead's states are the sum, with the touch record spread onto the common items so that only
+//     the states past New carry it. A converted lead cannot be converted again and no guard says so:
+//     `convertLead` takes a QualifiedLead and produces a ConvertedLead, so the second call does not
+//     typecheck.
+//   - Accumulating every reason a conversion is blocked. `guard` returns one departure and stops, so
+//     the reasons are built as a value — the guard-comprehension `++` chain — and wrapped in a
+//     non-empty newtype after the `guard` that discharges its invariant.
+//   - The set a rule is checked against is passed in. Duplicate screening takes the account book and
+//     the contact book as data rather than reading the world behind the model's back, and Salesforce's
+//     two standard rules stay two rules: accounts match on the email domain, contacts on the exact
+//     address.
+//   - One injected behavior, `findAccountByDomain`, because the CRM database is outside the model. It
+//     is pinned at compile time with `fake` + `example` and again in the smoke test, which extends the
+//     generated base class from plain Java with no framework.
+//
+// Where the language could not state a rule directly, this file says so at the declaration that hit it.
+// Those notes are the point of the example as much as the model is (see the README's dogfooding
+// findings): F8 at `screenForDuplicates`.
+module example.crm exposing (
+    AccountId,
+    ContactId,
+    LeadId,
+    UserId,
+    EmailAddress,
+    PhoneNumber,
+    DomainName,
+    CompanyName,
+    PersonName,
+    JobTitle,
+    CampaignName,
+    Amount,
+    CurrencyCode,
+    EmployeeCount,
+    LeadScore,
+    Industry,
+    Manufacturing,
+    Financial,
+    Retail,
+    Healthcare,
+    Education,
+    PublicSector,
+    Technology,
+    AccountType,
+    Prospect,
+    Customer,
+    Partner,
+    Competitor,
+    AccountTier,
+    Enterprise,
+    MidMarket,
+    SmallBusiness,
+    ContactPoint,
+    EmailOnly,
+    PhoneOnly,
+    EmailAndPhone,
+    Account,
+    Contact,
+    AccountBook,
+    ContactBook,
+    LeadSource,
+    Inbound,
+    WebForm,
+    PhoneInquiry,
+    ChatRequest,
+    Referral,
+    PartnerReferral,
+    EmployeeReferral,
+    Outbound,
+    PurchasedList,
+    TradeShow,
+    ColdOutreach,
+    NewLead,
+    WorkingLead,
+    QualifiedLead,
+    DisqualifiedLead,
+    ConvertedLead,
+    DisqualifyReason,
+    BantFailure,
+    NoBudget,
+    NoAuthority,
+    NoNeed,
+    BadTiming,
+    DuplicateOf,
+    Unreachable,
+    RevisitOn,
+    NoRevisit,
+    LeadConverted,
+    ConversionRequest,
+    OpportunityIntent,
+    NoOpportunity,
+    OpportunityRequested,
+    ConversionBlocked,
+    BlockReason,
+    BudgetNotConfirmed,
+    CloseDateInPast,
+    DuplicateAccount,
+    DuplicateContact,
+    tierOf,
+    convertLead,
+    screenForDuplicates,
+    NoDuplicate,
+    PossibleDuplicate,
+    NoEmailOnLead,
+    findAccountByDomain,
+    AccountNotFound,
+    linkLeadToAccount,
+    MatchedAccount,
+    UnmatchedLead,
+    disqualifyAndNurture : RevisitOn | NoRevisit
+)
+
+// === Identity ===
+// A Salesforce id is a three-character object prefix, twelve alphanumerics, and — in the 18-character
+// form — a three-character checksum. The prefix is what says which object an id names, so each id type
+// carries its own, and a contact id handed to something expecting an account is a decode failure at the
+// boundary rather than a lookup that finds nothing.
+//
+// The twelve-character tail these three share is held once: a `String.matches` pattern may be any
+// expression that evaluates to a string at compile time, which covers a `++` of a literal and a module's
+// own value (souther#208/#219, retiring finding F10), so the tail is a named value and each type composes
+// its own prefix onto it. Naming pays where a pattern is used twice, which is DomainName below.
+let salesforceIdTail = "[0-9A-Za-z]{12}([0-9A-Z]{3})?"
+
+data AccountId = String
+    invariant String.matches("001" ++ salesforceIdTail, value)
+
+data ContactId = String
+    invariant String.matches("003" ++ salesforceIdTail, value)
+
+data LeadId = String
+    invariant String.matches("00Q" ++ salesforceIdTail, value)
+
+// The owner of a record. User ids come from the identity provider, so there is no format to claim.
+data UserId = String
+    invariant String.length(value) >= 1
+
+// === Reachability ===
+// Carried over from the module this file replaces, where the two formats stood alone. Here they are
+// attached to a rule.
+
+data EmailAddress = String
+    invariant String.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+", value)
+
+// Loose on purpose: an international CRM holds +81-3-1234-5678 and (555) 010 9999 alike, and a phone
+// number's real check is whether a call connects. What the invariant refuses is a value that cannot be
+// dialled at all.
+data PhoneNumber = String
+    invariant String.matches("\\+?[0-9][0-9 \\-()]{6,19}", value)
+
+// The account's web domain, lowercase and dotted. This is the key Salesforce's Lead-to-Account
+// duplicate rule matches on, so its shape is an invariant rather than a convention living inside
+// whatever code last split an email address. The pattern needed a name of its own while domainOf
+// checked it a second time; domainOf attempts the construction now, so this is the only place it is
+// written.
+data DomainName = String
+    invariant String.matches("[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)+", value)
+
+// Salesforce's Contact carries a nullable Email and a nullable Phone. That is four states, and the one
+// that matters — a contact reachable by nothing — is representable, which is why every campaign, every
+// sequence and every dialler in a real org has to defend against it.
+//
+// So reachability is a sum. A contact is reachable by email, by phone, or by both, and the fourth
+// combination has no name because it is not a contact anyone can work. A behavior that emails takes the
+// case that has an email; there is no null check anybody can forget.
+//
+// It is the same value a Lead carries and the same value conversion hands to the Contact unchanged, so
+// the rule holds on both sides of conversion without being restated.
+data EmailOnly     = { email: EmailAddress }
+data PhoneOnly     = { phone: PhoneNumber }
+data EmailAndPhone = { email: EmailAddress, phone: PhoneNumber }
+data ContactPoint  = EmailOnly | PhoneOnly | EmailAndPhone
+
+// === Names, money, size ===
+
+data CompanyName  = String   invariant String.length(value) >= 1
+data PersonName   = String   invariant String.length(value) >= 1
+data JobTitle     = String   invariant String.length(value) >= 1
+data CampaignName = String   invariant String.length(value) >= 1
+
+// Money, as a record states it and as the four contexts downstream compute it. Declared once for the whole
+// project: only one module may own the word, because two modules exposing the same name cannot both be
+// imported by a third. Negative money is not an amount — a shortfall or a refund is a direction, and a
+// direction is carried by the case that means it, never by a sign.
+//
+// The downstream contexts build one as well as read one. A behavior constructs what its `constructs` names
+// wherever that type was declared, so a stage total in example.pipeline and a weighted number in
+// example.forecasting are this Amount rather than a parallel newtype apiece — each origination still
+// written in the signature that performs it, and each running this invariant.
+data Amount = Decimal
+    invariant value >= 0.0m
+
+// ISO 4217, Salesforce's CurrencyIsoCode.
+data CurrencyCode = String
+    invariant String.matches("[A-Z]{3}", value)
+
+// Drives tiering. An account with nobody in it is not an account anyone sells to.
+data EmployeeCount = Int
+    invariant value >= 1
+
+// The marketing-qualification score. Built after the guard that discharges the range, so the newtype
+// never aborts on a path a rule could have reported.
+data LeadScore = Int
+    invariant value >= 0 && value <= 100
+
+// === Classification ===
+// Flat sums, deliberately. Nesting an industry or an account type would be decoration: no rule here
+// reads one of them at two depths, which is the test a nested sum has to pass (LeadSource passes it).
+
+data Industry =
+    Technology | Manufacturing | Financial | Retail | Healthcare | Education | PublicSector
+
+// A Customer knows since when; a Prospect has nothing to know. The one case that carries a field is
+// what makes this a sum rather than a string, and it is why "customers since 2024" is a question the
+// model can answer without a second column that only some rows fill in.
+data Customer = { since: Date }
+data AccountType = Prospect | Customer | Partner | Competitor
+
+// Derived from the employee count by tierOf, never stored. A segment is a reading of the account, and a
+// stored reading is a reading that goes stale. The three tiers are named together, so "which tier" is a
+// question with a type rather than three cases that only tierOf's signature holds side by side.
+data AccountTier = Enterprise | MidMarket | SmallBusiness
+
+// === The records ===
+
+data Account =
+    { id: AccountId
+    , name: CompanyName
+    , domain: DomainName?         // an honest optional: an account may have no website on file
+    , industry: Industry
+    , employees: EmployeeCount
+    , type: AccountType
+    , owner: UserId
+    , currency: CurrencyCode
+    }
+
+data Contact =
+    { id: ContactId
+    , accountId: AccountId
+    , name: PersonName
+    , title: JobTitle?            // an honest optional: no rule depends on its presence
+    , reach: ContactPoint         // not a pair of optionals — see ContactPoint above
+    }
+
+// The books a duplicate rule is checked against. A rule over a set is stated by handing the set over,
+// and the id column is trustworthy because the list says so — allUniqueBy derives from fold, so it is
+// total and may stand in an invariant.
+data AccountBook = List<Account>
+    invariant List.allUniqueBy(.id, value)
+
+data ContactBook = List<Contact>
+    invariant List.allUniqueBy(.id, value)
+
+// === tierOf: the segment, read rather than stored ===
+// The thresholds are the ones an enterprise sales org actually runs on. Both sides of both are pinned
+// below, because a threshold with only one side tested is a threshold nobody has checked.
+
+behavior tierOf : (a: Account) -> AccountTier
+    constructs Enterprise, MidMarket, SmallBusiness
+
+let tierOf (a) =
+    if a.employees >= 1000 then Enterprise
+    else if a.employees >= 100 then MidMarket
+    else SmallBusiness
+
+example tierOf
+    | "a thousand people is enterprise" : (acmeAccount) -> Enterprise
+    | "one short of a thousand is mid-market" : (betaAccount) -> MidMarket
+    | "under a hundred is small business, and a domain may be missing" : (gammaAccount)
+        -> SmallBusiness
+
+// === LeadSource: the attribution hierarchy ===
+// Salesforce's LeadSource is a flat picklist, which is why attribution in a real org lives in a
+// spreadsheet beside the CRM. What actually distinguishes the sources is what each one gives you to
+// attribute to: a referral has somebody to credit, an outbound has a cost to charge home, an inbound has
+// neither. So the picklist is a two-level sum — and it earns the nesting because two rules read it at two
+// different depths. attributionOf opens to the leaf to name the partner or the campaign; scoreLead reads
+// the outer level only, because the score depends on where a lead came from and not on who sent it.
+
+data PartnerReferral  = { partner: AccountId }
+data EmployeeReferral = { employee: UserId }
+data Referral = PartnerReferral | EmployeeReferral
+
+data PurchasedList = { vendor: CompanyName }
+data TradeShow     = { campaign: CampaignName }
+data Outbound = PurchasedList | TradeShow | ColdOutreach
+
+data Inbound = WebForm | PhoneInquiry | ChatRequest      // three units; nothing to attribute
+data LeadSource = Inbound | Referral | Outbound
+
+// === DisqualifyReason ===
+// BANT is the standard qualification frame, and the reason a BANT failure nests is that only a BANT
+// failure comes back: no budget this year is next year's deal, a duplicate never is. Only BadTiming
+// names a date, so only BadTiming carries one — the alternative, a nullable revisit date on every
+// reason, would be a column three quarters of the rows leave empty.
+
+data BadTiming = { revisitAfter: Date }
+data BantFailure = NoBudget | NoAuthority | NoNeed | BadTiming
+
+data DuplicateOf = { existing: LeadId }
+data Unreachable = { attempts: Int }
+    invariant attempts >= 1
+
+data DisqualifyReason = BantFailure | DuplicateOf | Unreachable
+
+// === The lead's states are the sum ===
+// The touch record is spread onto the common items rather than repeated per state, so only the states
+// past New carry it, and a state that has been worked cannot be missing its first-touch date. The
+// invariant relates two fields across the spread, and every state that spreads it inherits the check.
+
+data LeadCommon =
+    { id: LeadId
+    , person: PersonName
+    , company: CompanyName
+    , title: JobTitle?               // Salesforce's Lead carries a Title, and conversion copies it over
+    , reach: ContactPoint
+    , source: LeadSource
+    , campaigns: Set<CampaignName>   // membership, not order: Set.contains scores it, and two rows for
+                                     // one campaign are not two campaigns
+    , owner: UserId
+    , createdOn: Date
+    }
+
+data WorkedLeadCommon =
+    { ...LeadCommon
+    , firstTouchedOn: Date
+    , touches: Int
+    }
+    invariant touches >= 1 && Date.daysBetween(createdOn, firstTouchedOn) >= 0
+
+data NewLead          = { ...LeadCommon }
+data WorkingLead      = { ...WorkedLeadCommon }
+data QualifiedLead    = { ...WorkedLeadCommon, qualifiedOn: Date, score: LeadScore, budgetConfirmed: Bool }
+data DisqualifiedLead = { ...WorkedLeadCommon, disqualifiedOn: Date, reason: DisqualifyReason }
+data ConvertedLead    = { ...WorkedLeadCommon, convertedOn: Date, accountId: AccountId, contactId: ContactId }
+
+data Lead = NewLead | WorkingLead | QualifiedLead | DisqualifiedLead | ConvertedLead
+
+// recordTouch and scoreLead both start from either open state, so the two are bound into a sum of their
+// own. The same data is a case of two sums — a case is a reference to a named data, and as many sums as
+// need it may point at it.
+data OpenLead = NewLead | WorkingLead
+
+// === The lead and the accounts the rows are about ===
+// A row names its fixture instead of restating it. The rows of this module are about one lead of Acme
+// Corp walked through its states, and about three accounts whose employee counts are the tier
+// boundaries — so each is a value, and a row that varies one field spreads it.
+//
+// `acmeQualified`, the conversion request and the account/contact books live in `crm.examples.sou`
+// instead, beside the only rows that use them: an `examples for` file may now declare the values its own
+// rows name (souther#210, retiring finding F25), so a fixture named there no longer has to live here just
+// to be nameable.
+//
+// `acmeNew` and `acmeWorking` stay here because this module's own examples (`recordTouch`, `scoreLead`,
+// `linkLeadToAccount`) use them too. `acmeNew` has no earlier state to spread; `acmeWorking` spreads it,
+// the same as the two states after them.
+
+let acmeNew = NewLead
+    { id = LeadId("00Q000000000001")
+    , person = PersonName("Aoyagi")
+    , company = CompanyName("Acme Corp")
+    , title = JobTitle("CTO")
+    , reach = EmailOnly { email = EmailAddress("cto@acme.example.com") }
+    , source = WebForm
+    , campaigns = Set.fromList([ CampaignName("Q3 Expo") ])
+    , owner = UserId("u-001")
+    , createdOn = Date("2026-07-01")
+    }
+
+let acmeWorking = WorkingLead
+    { ...acmeNew, firstTouchedOn = Date("2026-07-03"), touches = 3 }
+
+let acmeDisqualified = DisqualifiedLead
+    { ...acmeWorking, disqualifiedOn = Date("2026-07-20"), reason = NoBudget }
+
+// The three accounts. Their employee counts are the tier boundaries, beta is the domain a duplicate row
+// hits, and gamma has no domain on file at all — which is what makes it the account a domain rule can
+// never match.
+let acmeAccount = Account
+    { id = AccountId("001000000000001")
+    , name = CompanyName("Acme Corp")
+    , domain = DomainName("acme.example.com")
+    , industry = Technology
+    , employees = EmployeeCount(1000)
+    , type = Prospect
+    , owner = UserId("u-001")
+    , currency = CurrencyCode("JPY")
+    }
+
+let betaAccount = Account
+    { id = AccountId("001000000000002")
+    , name = CompanyName("Beta KK")
+    , domain = DomainName("beta.example.com")
+    , industry = Manufacturing
+    , employees = EmployeeCount(999)
+    , type = Customer { since = Date("2024-04-01") }
+    , owner = UserId("u-001")
+    , currency = CurrencyCode("JPY")
+    }
+
+let gammaAccount = Account
+    { id = AccountId("001000000000003")
+    , name = CompanyName("Gamma LLC")
+    , domain = None
+    , industry = Retail
+    , employees = EmployeeCount(99)
+    , type = Prospect
+    , owner = UserId("u-002")
+    , currency = CurrencyCode("USD")
+    }
+
+let acmeContact = Contact
+    { id = ContactId("003000000000001")
+    , accountId = AccountId("001000000000001")
+    , name = PersonName("Aoyagi")
+    , title = JobTitle("CTO")
+    , reach = EmailAndPhone { email = EmailAddress("cto@acme.example.com")
+                            , phone = PhoneNumber("+81-3-1234-5678") }
+    }
+
+// === Reading a field off the sum ===
+// A field both cases of OpenLead spread is read directly off it. `touches` is not one of them — NewLead
+// carries none — so touchesOf still opens the state.
+
+let sourceOf (lead: OpenLead): LeadSource = lead.source
+
+let touchesOf (lead: OpenLead): Int =
+    match lead with
+        | NewLead                -> 0
+        | WorkingLead { touches } -> touches
+
+let campaignsOf (lead: OpenLead): Set<CampaignName> = lead.campaigns
+
+// === recordTouch: New becomes Working, Working counts up ===
+// A touch dated before the lead existed is a data-entry error a CRM does report, so it is a case. It has
+// to be: WorkedLeadCommon's invariant would otherwise abort, and an abort is not something a boundary can
+// tell a user about. The guard discharges the invariant the spread brought in.
+
+behavior recordTouch : (lead: OpenLead, on: Date) -> WorkingLead | TouchBeforeCreation
+    constructs WorkingLead, TouchBeforeCreation
+
+let recordTouch (lead, on) =
+    match lead with
+        | NewLead as n -> {
+            guard Date.daysBetween(n.createdOn, on) >= 0 else TouchBeforeCreation
+            WorkingLead { ...n, firstTouchedOn = on, touches = 1 }
+        }
+        | WorkingLead as w -> {
+            guard Date.daysBetween(w.createdOn, on) >= 0 else TouchBeforeCreation
+            WorkingLead { ...w, touches = w.touches + 1 }
+        }
+
+example recordTouch
+    | "the first touch is the first-touch date, and the count starts at one" :
+        (acmeNew, Date("2026-07-03"))
+        -> WorkingLead { ...acmeWorking, touches = 1 }
+    | "a later touch counts up and leaves the first-touch date alone" :
+        (acmeWorking, Date("2026-07-10"))
+        -> WorkingLead { ...acmeWorking, touches = 4 }
+    | "a touch dated before the lead existed is reported, not stored" :
+        (acmeNew, Date("2026-06-30"))
+        -> TouchBeforeCreation
+
+// === scoreLead: the MQL score, read at the outer level of LeadSource ===
+// Inbound leads score highest because they came to you; a purchased list scores lowest because anybody
+// could have bought it. The band is the real shape of marketing scoring, and the campaign bonus is why
+// campaigns are a Set: the question is whether this lead is in the priority campaign, not in what order
+// it joined.
+
+let sourceBand (source: LeadSource): Int =
+    match source with
+        | Inbound  -> 10
+        | Referral -> 30
+        | Outbound -> 5
+
+behavior scoreLead : (lead: OpenLead, priority: CampaignName) -> LeadScore
+    constructs LeadScore
+
+let scoreLead (lead, priority) =
+    LeadScore(Int.clamp(0, 100,
+        sourceBand(sourceOf(lead))
+            + touchesOf(lead) * 5
+            + (if Set.contains(priority, campaignsOf(lead)) then 25 else 0)))
+
+example scoreLead
+    | "an untouched inbound lead in the priority campaign scores the source band plus the bonus" :
+        (acmeNew, CampaignName("Q3 Expo"))
+        -> LeadScore(35)
+    | "a referral outside the priority campaign scores its band and its touches" :
+        (WorkingLead { ...acmeWorking
+                     , source = PartnerReferral { partner = AccountId("001000000000009") }
+                     , campaigns = [ CampaignName("Newsletter") ]
+                     , touches = 4
+                     }, CampaignName("Q3 Expo"))
+        -> LeadScore(50)
+    | "the score is a hundred at most, however many times somebody was called" :
+        (WorkingLead { ...acmeWorking
+                     , source = EmployeeReferral { employee = UserId("u-007") }
+                     , touches = 20
+                     }, CampaignName("Q3 Expo"))
+        -> LeadScore(100)
+
+// === attributionOf: the same sum, opened to the leaf ===
+// Marketing has to charge every lead home. A referral credits a person or a partner account, an outbound
+// charges a cost centre, and an inbound has nobody and nothing to charge — which is a real answer, not a
+// missing one, so it has a name.
+
+data PartnerCredit  = { account: AccountId }
+data EmployeeCredit = { employee: UserId }
+data VendorCost     = { vendor: CompanyName }
+data CampaignCost   = { campaign: CampaignName }
+
+behavior attributionOf : (source: LeadSource)
+        -> PartnerCredit | EmployeeCredit | VendorCost | CampaignCost | NoAttribution
+    constructs PartnerCredit, EmployeeCredit, VendorCost, CampaignCost, NoAttribution
+
+let attributionOf (source) =
+    match source with
+        | Inbound -> NoAttribution
+        | Referral as r ->
+            match r with
+                | PartnerReferral { partner }   -> PartnerCredit { account = partner }
+                | EmployeeReferral { employee } -> EmployeeCredit { employee = employee }
+        | Outbound as o ->
+            match o with
+                | PurchasedList { vendor }   -> VendorCost { vendor = vendor }
+                | TradeShow { campaign }     -> CampaignCost { campaign = campaign }
+                | ColdOutreach               -> NoAttribution
+
+example attributionOf
+    | "a partner referral credits the partner account" :
+        (PartnerReferral { partner = AccountId("001000000000009") })
+        -> PartnerCredit { account = AccountId("001000000000009") }
+    | "an employee referral credits the employee" :
+        (EmployeeReferral { employee = UserId("u-007") })
+        -> EmployeeCredit { employee = UserId("u-007") }
+    | "a trade show charges the campaign" :
+        (TradeShow { campaign = CampaignName("Q3 Expo") })
+        -> CampaignCost { campaign = CampaignName("Q3 Expo") }
+    | "cold outreach has nobody to credit, and that is an answer" :
+        (ColdOutreach)
+        -> NoAttribution
+    | "an inbound web form has nobody to credit either" :
+        (WebForm)
+        -> NoAttribution
+
+// === qualifyLead ===
+// Sixty is the MQL bar. The score arrives raw so that the threshold can be a business outcome: the
+// newtype is built after the guard, on the path where its range already holds.
+
+behavior qualifyLead : (lead: WorkingLead, on: Date, rawScore: Int, budgetConfirmed: Bool)
+        -> QualifiedLead | ScoreBelowThreshold
+    constructs QualifiedLead, LeadScore, ScoreBelowThreshold
+
+let qualifyLead (lead, on, rawScore, budgetConfirmed) = {
+    guard rawScore >= 60 else ScoreBelowThreshold
+    QualifiedLead { ...lead
+                  , qualifiedOn = on
+                  , score = LeadScore(Int.clamp(0, 100, rawScore))
+                  , budgetConfirmed = budgetConfirmed
+                  }
+}
+
+example qualifyLead
+    | "sixty qualifies" :
+        (acmeWorking, Date("2026-07-15"), 60, true)
+        -> QualifiedLead { ...acmeQualified, score = LeadScore(60) }
+    | "fifty-nine does not, and says which side of the bar it fell" :
+        (acmeWorking, Date("2026-07-15"), 59, true)
+        -> ScoreBelowThreshold
+
+// === disqualifyLead and the nurture plan ===
+// Disqualifying takes a WorkingLead, not an OpenLead: a lead nobody has looked at has not been
+// disqualified, it has been ignored, and the difference matters to every funnel report. recordTouch is
+// how a NewLead becomes eligible, which is the rule stated as a sequence of types rather than as a
+// validation.
+
+behavior disqualifyLead : (lead: WorkingLead, on: Date, reason: DisqualifyReason) -> DisqualifiedLead
+    constructs DisqualifiedLead
+
+let disqualifyLead (lead, on, reason) =
+    DisqualifiedLead { ...lead, disqualifiedOn = on, reason = reason }
+
+data RevisitOn = { on: Date }
+
+// Only a BANT failure comes back, and only BadTiming says when. Two stages of match, because the rule is
+// two sentences: is this a qualification failure at all, and does it name a date.
+behavior nurturePlan : (lead: DisqualifiedLead) -> RevisitOn | NoRevisit
+    constructs RevisitOn, NoRevisit
+
+let nurturePlan (lead) =
+    match lead.reason with
+        | BantFailure as b ->
+            match b with
+                | NoBudget                -> RevisitOn { on = Date.addMonths(6, lead.disqualifiedOn) }
+                | NoAuthority             -> RevisitOn { on = Date.addMonths(3, lead.disqualifiedOn) }
+                | NoNeed                  -> NoRevisit
+                | BadTiming { revisitAfter } -> RevisitOn { on = revisitAfter }
+        | DuplicateOf  -> NoRevisit
+        | Unreachable  -> NoRevisit
+
+example nurturePlan
+    | "no budget this year is next half-year's deal" :
+        (DisqualifiedLead { ...acmeDisqualified, reason = NoBudget })
+        -> RevisitOn { on = Date("2027-01-20") }
+    | "bad timing names its own date, so the plan uses it" :
+        (DisqualifiedLead { ...acmeDisqualified, reason = BadTiming { revisitAfter = Date("2026-10-01") } })
+        -> RevisitOn { on = Date("2026-10-01") }
+    | "a duplicate never comes back" :
+        (DisqualifiedLead { ...acmeDisqualified, reason = DuplicateOf { existing = LeadId("00Q000000000009") } })
+        -> NoRevisit
+
+// One business operation in two behaviors: disqualify, then decide whether this lead is worth coming
+// back to. The routing is by type, so nothing here names an intermediate variable. An exposed
+// composition carries its output in the `exposing` list.
+behavior disqualifyAndNurture = disqualifyLead >-> nurturePlan
+
+example disqualifyAndNurture
+    | "no budget disqualifies and comes back in half a year" :
+        (acmeWorking, Date("2026-07-20"), NoBudget)
+        -> RevisitOn { on = Date("2027-01-20") }
+
+// === Duplicate screening: two rules, two match keys ===
+// Salesforce's standard duplicate rules match Lead-to-Account on the email *domain* and Lead-to-Contact
+// on the *exact* address. They are different rules and they stay two rules here, over two books handed
+// in as data. A phone-only lead matches neither, and that is a third answer rather than an empty result.
+
+// Absence is the model's own here (PhoneOnly has no address). List.filterMap serves absence the model
+// reads — a `?` field, a lookup that misses — and a case of ContactPoint is not that: nothing turns it
+// into an optional. So the projection is a 0-or-1-element list and the combinator is concatMap. Finding F8.
+let emailOf (reach: ContactPoint): List<EmailAddress> =
+    match reach with
+        | EmailOnly { email }     -> [ email ]
+        | EmailAndPhone { email } -> [ email ]
+        | PhoneOnly               -> []
+
+// The domain part of an address, lowercased. The construction is attempted, so what decides whether
+// this is a domain name is DomainName's own invariant rather than a copy of it written here. A local
+// part with no dot in it — a@b — leaves nothing to work with, and dropping it is the answer: an
+// address whose domain is not one matches no account.
+let domainOf (email: EmailAddress): List<DomainName> =
+    match List.get(1, String.split("@", String.lowercase(email.value))) with
+        | Some d -> if DomainName(d) as name then [ name ] else []
+        | None   -> []
+
+let domainsOf (reach: ContactPoint): List<DomainName> =
+    List.concatMap(e -> domainOf(e), emailOf(reach))
+
+let accountHasDomain (domain: DomainName, a: Account): Bool =
+    match a.domain with
+        | Some own -> own == domain
+        | None      -> false
+
+let accountsOnDomain (domain: DomainName, AccountBook(rows)): List<Account> =
+    List.filter(a -> accountHasDomain(domain, a), rows)
+
+let domainMatches (reach: ContactPoint, accounts: AccountBook): List<Account> =
+    List.concatMap(d -> accountsOnDomain(d, accounts), domainsOf(reach))
+
+let reachHasEmail (email: EmailAddress, reach: ContactPoint): Bool =
+    match reach with
+        | EmailOnly { email = own }     -> own == email
+        | EmailAndPhone { email = own } -> own == email
+        | PhoneOnly                     -> false
+
+let contactsOnEmail (email: EmailAddress, ContactBook(rows)): List<Contact> =
+    List.filter(c -> reachHasEmail(email, c.reach), rows)
+
+let emailMatches (reach: ContactPoint, contacts: ContactBook): List<Contact> =
+    List.concatMap(e -> contactsOnEmail(e, contacts), emailOf(reach))
+
+data PossibleDuplicate =
+    { accounts: List<AccountId>
+    , contacts: List<ContactId>
+    }
+    invariant List.length(accounts) + List.length(contacts) >= 1
+
+behavior screenForDuplicates : (lead: NewLead, accounts: AccountBook, contacts: ContactBook)
+        -> NoDuplicate | PossibleDuplicate | NoEmailOnLead
+    constructs NoDuplicate, PossibleDuplicate, NoEmailOnLead, DomainName
+
+let screenForDuplicates (lead, accounts, contacts) = {
+    guard List.length(emailOf(lead.reach)) >= 1 else NoEmailOnLead
+
+    // Two accounts can sit on one domain, so the ids are made distinct: the rule is "which accounts",
+    // not "how many rows matched".
+    let matchedAccounts = List.distinct(List.map(a -> a.id, domainMatches(lead.reach, accounts)))
+    let matchedContacts = List.distinct(List.map(c -> c.id, emailMatches(lead.reach, contacts)))
+
+    guard List.length(matchedAccounts) + List.length(matchedContacts) >= 1 else NoDuplicate
+    PossibleDuplicate { accounts = matchedAccounts, contacts = matchedContacts }
+}
+
+// === findAccountByDomain: the one thing outside the model ===
+// Screening takes the books as data because a rule over a set is stated by handing over the set. Matching
+// a single lead to an account cannot work that way — an org has a hundred thousand accounts and the
+// question is about one domain — so the lookup is an injected behavior: declared with a type and no `let`,
+// implemented outside, and its declaration is what generates the base class the implementation extends.
+//
+// `constructs` names only AccountNotFound. The success value is an Account the outside world already
+// holds, so the implementation builds it through the generated decoder rather than through a constructor
+// this declaration would have to grant — which is also why an injected behavior's non-unit `constructs`
+// has to be exposed (E1305) and this one has nothing to expose.
+behavior findAccountByDomain : (domain: DomainName) -> Account | AccountNotFound
+    constructs AccountNotFound
+
+data MatchedAccount = { leadId: LeadId, accountId: AccountId }
+
+// Account-based marketing's first question: is this lead already somebody we sell to? Read, match,
+// answer — the shape every read-then-decide behavior in this repo has, and the reason it is worth
+// writing separately from screenForDuplicates is that the two answer different questions from different
+// sources: one reads a set it was given, one asks the database about a key.
+behavior linkLeadToAccount : (lead: NewLead) -> MatchedAccount | UnmatchedLead | NoEmailOnLead
+    depends on findAccountByDomain
+    constructs MatchedAccount, UnmatchedLead, NoEmailOnLead, DomainName
+
+let linkLeadToAccount (lead, findAccountByDomain) =
+    match List.get(0, domainsOf(lead.reach)) with
+        | None   -> NoEmailOnLead
+        | Some d ->
+            match findAccountByDomain(d) with
+                | Account as a    -> MatchedAccount { leadId = lead.id, accountId = a.id }
+                | AccountNotFound -> UnmatchedLead
+
+// A fake is a table of what the outside world would answer, so the rule around the lookup is checked at
+// compile time with no database in sight. The `_` row is what makes the unmatched path a path.
+fake findAccountByDomain
+    | (DomainName("beta.example.com")) -> betaAccount
+    | _ -> AccountNotFound
+
+example linkLeadToAccount
+    | "a lead on a known domain is linked to that account" :
+        (NewLead { ...acmeNew, reach = EmailOnly { email = EmailAddress("h@beta.example.com") } })
+        -> MatchedAccount { leadId = LeadId("00Q000000000001"), accountId = AccountId("001000000000002") }
+    | "a lead on a domain nobody has is unmatched, which is not a failure" :
+        (NewLead { ...acmeNew, reach = EmailOnly { email = EmailAddress("s@gamma.example.com") } })
+        -> UnmatchedLead
+    | "a lead reachable only by phone has no key to match on" :
+        (NewLead { ...acmeNew, reach = PhoneOnly { phone = PhoneNumber("+81-3-9999-0000") } })
+        -> NoEmailOnLead
+
+// === Conversion ===
+// Salesforce's conversion screen is an opportunity name and an amount plus a "do not create an
+// opportunity" checkbox. Two optionals and a flag spell eight states; the two that mean anything are
+// these, and the intent travels with the result so the pipeline can decide without re-reading the lead.
+
+data OpportunityRequested = { amount: Amount, closeDate: Date }
+data OpportunityIntent = NoOpportunity | OpportunityRequested
+
+data ConversionRequest =
+    { accountId: AccountId        // the ids are minted outside and arrive here
+    , contactId: ContactId
+    , convertedOn: Date
+    , intent: OpportunityIntent
+    , accountType: AccountType
+    , industry: Industry
+    , employees: EmployeeCount
+    , currency: CurrencyCode
+    }
+
+data LeadConverted =
+    { lead: ConvertedLead
+    , account: Account
+    , contact: Contact
+    , intent: OpportunityIntent
+    }
+
+// A real CRM reports every reason a conversion is blocked, not the first one it trips over. `guard`
+// returns one departure and stops, so the reasons are a list the behavior builds rather than a
+// sequence of guards — two of the four sources below produce one reason per matching record, so how
+// many there are is not known until they are collected.
+//
+// What says a conversion was blocked is that there is a reason it was, and that is this case's own
+// invariant. `convertLead` attempts the construction, so the list is checked once, where the rule is
+// declared, and the behavior writes no emptiness test of its own.
+data CloseDateInPast  = { requested: Date }
+data DuplicateAccount = { existing: AccountId }
+data DuplicateContact = { existing: ContactId }
+data BlockReason = BudgetNotConfirmed | CloseDateInPast | DuplicateAccount | DuplicateContact
+
+data ConversionBlocked = { reasons: List<BlockReason> }
+    invariant List.length(reasons) >= 1
+
+// The requested close date as a 0-or-1-element list, so the rules that only apply when an opportunity
+// was asked for are asked of that list rather than through a nested if.
+let requestedCloseDate (intent: OpportunityIntent): List<Date> =
+    match intent with
+        | NoOpportunity                      -> []
+        | OpportunityRequested { closeDate } -> [ closeDate ]
+
+// An unconfirmed budget only blocks a conversion that asks for an opportunity: converting a lead to an
+// account and a contact is filing, and filing does not need a budget.
+let budgetReasons (lead: QualifiedLead, request: ConversionRequest): List<BlockReason> =
+    if Bool.not(lead.budgetConfirmed) && List.length(requestedCloseDate(request.intent)) >= 1
+    then [ BudgetNotConfirmed ]
+    else []
+
+let closeDateReasons (request: ConversionRequest): List<BlockReason> =
+    List.map(d -> CloseDateInPast { requested = d },
+             List.filter(d -> Date.daysBetween(request.convertedOn, d) < 0,
+                         requestedCloseDate(request.intent)))
+
+let blockingReasons (lead: QualifiedLead, request: ConversionRequest,
+                     accounts: AccountBook, contacts: ContactBook): List<BlockReason> =
+       budgetReasons(lead, request)
+    ++ closeDateReasons(request)
+    ++ List.map(a -> DuplicateAccount { existing = a.id }, domainMatches(lead.reach, accounts))
+    ++ List.map(c -> DuplicateContact { existing = c.id }, emailMatches(lead.reach, contacts))
+
+// A converted lead cannot be converted again, and it is the type that says so: this behavior takes a
+// QualifiedLead and produces a ConvertedLead. There is no guard, no `alreadyConverted` case and no flag —
+// the second call does not typecheck.
+//
+// The account and the contact are built here. The opportunity is the leg this module cannot reach:
+// example.pipeline imports this one, so this one cannot import it back (E1501). The whole of conversion
+// is one operation all the same, and it is stated on the other side of the seam — pipeline's
+// convertAndOpen calls this behavior and answers ConversionBlocked with a case of its own. What cannot
+// cross a module boundary is the composition, not the operation.
+behavior convertLead : (lead: QualifiedLead, request: ConversionRequest,
+                        accounts: AccountBook, contacts: ContactBook)
+        -> LeadConverted | ConversionBlocked
+    constructs LeadConverted, ConvertedLead, Account, Contact, ConversionBlocked, DomainName,
+               BudgetNotConfirmed, CloseDateInPast, DuplicateAccount, DuplicateContact
+
+let convertLead (lead, request, accounts, contacts) =
+    if ConversionBlocked { reasons = blockingReasons(lead, request, accounts, contacts) } as blocked
+    then blocked
+    else LeadConverted
+        { lead = ConvertedLead { ...lead
+                               , convertedOn = request.convertedOn
+                               , accountId = request.accountId
+                               , contactId = request.contactId
+                               }
+        , account = Account { id = request.accountId
+                            , name = lead.company
+                            // The account's website is the lead's address domain when there is one. A
+                            // phone-only lead converts to an account with no domain on file, which is
+                            // what the optional field is for — and List.get already answers in exactly
+                            // that shape, so nothing here unwraps and rewraps.
+                            , domain = List.get(0, domainsOf(lead.reach))
+                            , industry = request.industry
+                            , employees = request.employees
+                            , type = request.accountType
+                            , owner = lead.owner
+                            , currency = request.currency
+                            }
+        // The reach is carried, not rebuilt. A converted lead's address IS the contact's address, and
+        // passing a value through is not construction, so ContactPoint is not in `constructs`.
+        //
+        // The title is carried from the lead, which is what Salesforce's conversion does. Dropping it
+        // instead would be `title = None`: an optional field has to be given a value explicitly, since a
+        // spread does not supply it (E1005), and `None` is the empty one to give it.
+        , contact = Contact { id = request.contactId
+                            , accountId = request.accountId
+                            , name = lead.person
+                            , title = lead.title
+                            , reach = lead.reach
+                            }
+        , intent = request.intent
+        }

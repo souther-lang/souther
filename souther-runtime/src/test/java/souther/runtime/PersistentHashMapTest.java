@@ -224,4 +224,56 @@ class PersistentHashMapTest {
             assertEquals(i, built.get(i), "built lost " + i);
         }
     }
+
+    /**
+     * The builder against a {@link LinkedHashMap} oracle, driven the way a fold drives it: a read of a
+     * key followed by a write of one, sometimes the same key and sometimes another. Reading is what
+     * lets the next write skip the descent (the probe), so what this holds is that the write lands
+     * where the oracle says whatever came between them.
+     */
+    @Test
+    void aBuilderReadAndThenWrittenAgreesWithAnOracle() {
+        Map<Integer, Integer> oracle = new LinkedHashMap<>();
+        PersistentHashMap.Builder<Integer, Integer> builder = new PersistentHashMap.Builder<>();
+        int seed = 12345;
+        for (int step = 0; step < 20_000; step++) {
+            seed = seed * 1103515245 + 12345;
+            int read = Math.floorMod(seed >> 8, 400);
+            int written = Math.floorMod(seed >> 16, 400);
+            // The read the builder answers must be the oracle's, and the write that follows it must
+            // land whether or not it is the key just read.
+            assertEquals(oracle.get(read), builder.get(read), "read of " + read + " at step " + step);
+            int value = step;
+            oracle.put(written, value);
+            builder.set(written, value);
+            assertEquals(oracle.size(), builder.size(), "size at step " + step);
+        }
+        assertEquals(oracle, builder);
+        assertEquals(oracle, builder.build());
+    }
+
+    /** A read that finds nothing leaves nothing behind: the write that follows adds the key rather
+     *  than overwriting whatever the last successful read pointed at. */
+    @Test
+    void aWriteAfterAReadThatMissedAdds() {
+        PersistentHashMap.Builder<Integer, Integer> builder = new PersistentHashMap.Builder<>();
+        builder.set(1, 10);
+        assertEquals(10, builder.get(1));
+        assertNull(builder.get(2));
+        builder.set(2, 20);
+        assertEquals(10, builder.get(1));
+        assertEquals(20, builder.get(2));
+        assertEquals(2, builder.size());
+    }
+
+    /** A builder is single-use, for the reason the vector's is: the map it built shares the nodes it
+     *  filled. */
+    @Test
+    void aBuilderRefusesToWriteAfterItHasBuilt() {
+        PersistentHashMap.Builder<Integer, Integer> builder = new PersistentHashMap.Builder<>();
+        builder.set(1, 10);
+        PersistentHashMap<Integer, Integer> built = builder.build();
+        assertThrows(IllegalStateException.class, () -> builder.set(2, 20));
+        assertEquals(Map.of(1, 10), built);
+    }
 }

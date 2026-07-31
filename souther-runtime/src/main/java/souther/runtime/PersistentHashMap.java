@@ -68,7 +68,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
         Builder<K, V> b = new Builder<>();
         for (Map.Entry<? extends K, ? extends V> e : m.entrySet()) {
-            b.put(e.getKey(), e.getValue());
+            b.set(e.getKey(), e.getValue());
         }
         return b.build();
     }
@@ -147,8 +147,28 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         boolean value;
     }
 
+    /**
+     * Where a value is held, so that reading a key and then writing it descends the trie once rather
+     * than twice — what {@code Map.upsert} does on every element of a fold that counts. A
+     * {@link Builder} owns one and hands it to {@link Node#probe}, so the sharing costs no allocation.
+     *
+     * <p>It is only ever read straight after the descent that filled it, and only by the builder that
+     * owns the nodes it points into: a write that does anything other than overwrite that very slot
+     * gives up the probe first, so it can never name an array the trie has replaced.
+     */
+    private static final class Probe {
+        @Nullable Object key;
+        @Nullable Object @Nullable [] holder;
+        int index;
+    }
+
     private interface Node {
         Object find(@Nullable Object key, int keyHash, int shift);
+
+        /** Reports into {@code probe} where {@code key}'s value is held inline under this node, and
+         *  answers whether it is held at all. A key in a collision bucket is not reported: the bucket
+         *  is the rare case and has nothing to gain. */
+        boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe);
 
         /**
          * This node with {@code key} mapped to {@code val}.
@@ -260,6 +280,24 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
                 return nodeAt(nodeIndex(bitpos)).find(key, keyHash, shift + BITS);
             }
             return NOT_FOUND;
+        }
+
+        @Override
+        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe) {
+            int bitpos = 1 << ((keyHash >>> shift) & MASK);
+            if ((dataMap & bitpos) != 0) {
+                int i = dataIndex(bitpos);
+                if (!Objects.equals(keyAt(i), key)) {
+                    return false;
+                }
+                probe.holder = contents;
+                probe.index = 2 * i + 1;
+                return true;
+            }
+            if ((nodeMap & bitpos) != 0) {
+                return nodeAt(nodeIndex(bitpos)).probe(key, keyHash, shift + BITS, probe);
+            }
+            return false;
         }
 
         @Override
@@ -451,6 +489,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
+        public boolean probe(@Nullable Object key, int keyHash, int shift, Probe probe) {
+            return false;   // a bucket of colliding keys: rare, and the walk down it is the cost
+        }
+
+        @Override
         public Node put(Object key, int keyHash, Object val, int shift, Box addedLeaf, boolean owned) {
             if (keyHash != hash) {
                 // A key that reaches this node with a different hash: wrap the bucket in a bitmap node
@@ -583,8 +626,13 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
      * <p>That is what {@code assoc} cannot do. An insert rewrites the bitmaps an older version reads
      * to interpret the same array, so a persistent put has to clone every node on the path — there is
      * no region of a CHAMP node that older versions do not look at, which is why the vector's claimed
-     * tail has no counterpart here (ADR-0060) and why this is confined to bulk construction rather
-     * than offered as a transient a caller could thread through a fold.
+     * tail has no counterpart here (ADR-0060).
+     *
+     * <p>A fold may thread one through all the same, and {@code Maps.build} does: what the confinement
+     * asks for is that no version before the last is read, and the compiler establishes exactly that
+     * before it hands the walk a builder (the compiler's {@code GrowingFold}). It is a
+     * {@link java.util.Map} of what it has been given so far, so a step that reads the accumulator it
+     * is growing — which is what {@code Map.upsert} does — reads it as any map.
      *
      * <p>Ownership needs no mark on the node. Starting from the shared {@link
      * BitmapIndexedNode#EMPTY} and only ever inserting, every node the builder can reach below the
@@ -598,21 +646,96 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
      * as a 6% regression on the persistent {@code assoc} path — the common one — to speed up this
      * one. A flag threaded down the call is free.
      */
-    static final class Builder<K, V> {
+    static final class Builder<K, V> extends AbstractMap<K, V> {
         private final Box added = new Box();
+        private final Probe probe = new Probe();
         private Node root = BitmapIndexedNode.EMPTY;
         private int size;
+        /** Whether {@link #build} has handed the trie over. A builder is single-use: the map it built
+         *  shares the nodes it filled, so a later write would reach into a value that is supposed to be
+         *  immutable. Refusing here is what keeps that from being possible rather than merely unlikely
+         *  — the compiler's own analysis is what stops a walk from keeping its builder, and a guarantee
+         *  about a value should not rest on an analysis somewhere else. */
+        private boolean built;
 
-        Builder<K, V> put(K key, V val) {
+        /**
+         * Sets {@code key} to {@code val}, saying nothing about what was there before — bulk
+         * construction has no use for the old value and would pay a second lookup for it.
+         *
+         * <p>A key just read is written where it was found: {@code Map.upsert} reads the key and then
+         * writes it, and the descent the read made is still good for the write. Anything else gives up
+         * the probe and descends, which is also what keeps the probe from ever naming a slot that has
+         * moved — only this method moves one.
+         */
+        void set(K key, V val) {
+            if (built) {
+                throw new IllegalStateException("this builder has already been built");
+            }
+            if (probe.holder != null && Objects.equals(probe.key, key)) {
+                probe.holder[probe.index] = val;
+                probe.holder = null;
+                probe.key = null;
+                return;
+            }
+            probe.holder = null;
+            probe.key = null;
             added.value = false;
             root = root.put(key, hashOf(key), val, 0, added, true);
             if (added.value) {
                 size++;
             }
-            return this;
         }
 
+        @Override
+        public @Nullable V put(K key, V val) {
+            @Nullable V old = get(key);
+            set(key, val);
+            return old;
+        }
+
+        @Override
+        public int size() {
+            return size;
+        }
+
+        /** The value at {@code key}, remembering where it was found so that writing the same key back
+         *  — which is what an {@code upsert} does next — need not descend again. */
+        @Override
+        @SuppressWarnings("unchecked")
+        public @Nullable V get(@Nullable Object key) {
+            if (root.probe(key, hashOf(key), 0, probe)) {
+                probe.key = key;
+                return (V) probe.holder[probe.index];
+            }
+            probe.holder = null;
+            probe.key = null;
+            return null;
+        }
+
+        @Override
+        public boolean containsKey(@Nullable Object key) {
+            return root.find(key, hashOf(key), 0) != NOT_FOUND;
+        }
+
+        @Override
+        public Set<Map.Entry<K, V>> entrySet() {
+            return new AbstractSet<>() {
+                @Override
+                public int size() {
+                    return size;
+                }
+
+                @Override
+                @SuppressWarnings("unchecked")
+                public Iterator<Map.Entry<K, V>> iterator() {
+                    return (Iterator<Map.Entry<K, V>>) (Iterator<?>) new EntryIterator(root, size);
+                }
+            };
+        }
+
+        /** The map it has built. The trie is handed over here, so nothing may be set afterwards. */
         PersistentHashMap<K, V> build() {
+            built = true;
             return size == 0 ? empty() : new PersistentHashMap<>(root, size);
         }
     }

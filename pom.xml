@@ -36,6 +36,7 @@
         <module>souther-fmt</module>
         <module>souther-lsp</module>
         <module>souther-cli</module>
+        <module>souther-bench</module>
     </modules>
 
     <scm>

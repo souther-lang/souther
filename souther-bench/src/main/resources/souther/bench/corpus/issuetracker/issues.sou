@@ -1,0 +1,376 @@
+// A small issue tracker: issues carry a Set of labels and an optional assignee, and the label
+// operations are read → transform → write over a database. It is the showcase for the Set and Map
+// stdlib modules plus Option destructuring, and — on the boundary side — for a Kotlin + Spring Boot
+// app driving the generated types (ordering does the same in Java, account in Clojure).
+//
+// The features on show:
+//   - Set<Label> as a data field (labels): the derived codec reads a JSON array and dedups it into a
+//     Set; Set.fromList / insert / remove / intersect / toList / size drive the label operations, and
+//     Set.map / Set.filter clean the raw label text without leaving the set for a list first.
+//   - Map<Label, Int> as a behavior output (countByLabel): Map.upsert counts each label across a
+//     board of issues (a String-backed newtype key is allowed as a map key). The same counts are read
+//     two more ways: topLabels ranks them — Map.toList's (label, count) entries ordered with
+//     List.sortBy / reverse, cut with List.take, and split with List.unzip so only the labels leave —
+//     and busyLabels keeps the entries a threshold holds for with Map.filter. groupByAssignee buckets
+//     the issues themselves rather than counting them, so its output nests: a Map<String,
+//     List<IssueId>>. Its key is the optional assignee, so List.filterMap turns the issues into the
+//     entries that have one first.
+//   - Some(Assignee(name)) destructuring: assigneeOf opens the optional assignee's newtype in one
+//     match pattern (the outermost .value elided), with a None arm for the unassigned case.
+//   - Three injected behaviors (findIssue / createIssue / storeLabels) with no `let`: the database is
+//     outside, so the implementation comes from the boundary. The composed openIssue / attachLabel /
+//     detachLabel `depends on` them, which is what makes their sequencing checkable with `fake` +
+//     `example` — no database involved at compile time.
+//
+// The label text editing this example grew out of survives as the `cleaned` helper (split / trim /
+// lowercase over souther.string, then Set.map / Set.filter): openIssue takes a raw comma-separated
+// string and turns it into the label Set, reporting NoLabels when nothing survives.
+//
+// Fixture notation: a Set is written as a list (duplicates collapse on decode, as they do at the
+// boundary), a Map as its list of (key, value) pairs, and an optional as the bare value or `None`.
+//
+// exposing is omitted, so every generated class is public — the Kotlin boundary references them by
+// name.
+module example.issuetracker
+import String ( split, trim, lowercase, isEmpty )
+import Bool ( not )
+import List ( map, fold, filterMap, concatMap, unzip )
+
+data IssueId  = String
+    invariant String.length(value) >= 1
+data Label    = String
+    invariant String.length(value) >= 1
+data Assignee = String
+    invariant String.length(value) >= 1
+
+// An issue carries a Set of labels (duplicates collapse) and an optional assignee.
+data Issue =
+    { id: IssueId
+    , title: String
+    , labels: Set<Label>
+    , assignee: Assignee?
+    }
+// A board is just the issues; countByLabel folds over it.
+data Board = { issues: List<Issue> }
+
+// === the injected database behaviors ===
+// No `let`, so the implementation is injected. An injected behavior's declaration is the input to
+// factory generation, so it writes `constructs` for the cases it has to build itself; a value it reads
+// out of the database (an Issue) is built through the public derived decoder instead.
+//
+// IssueNotFound is the domain failure of a lookup by id. A unit data (no fields) named in an output,
+// so the line below is its declaration and it has no `data` line (8.4 unit-data); the injected
+// implementation builds it through the protected factory it inherits. A platform failure (database
+// down) is not this — it is an exception the boundary throws and Souther passes through (ADR-0029).
+behavior findIssue : (id: IssueId) -> Issue | IssueNotFound
+    constructs IssueNotFound
+
+// Inserts a new issue and returns it as stored.
+behavior createIssue : (issue: Issue) -> Issue
+
+// Writes an existing issue's label set back and returns it as stored.
+behavior storeLabels : (issue: Issue) -> Issue
+
+// === openIssue: raw label text -> a stored issue ===
+// The string-editing heritage: split on comma, drop the pieces into a Set at once, then normalise and
+// clean inside it — Set.map trims and lowercases (two pieces that agree once normalised collapse),
+// Set.filter drops the blanks, and a second Set.map wraps each survivor as a Label. Nothing surviving
+// means NoLabels and no write.
+data NewIssue =
+    { id: IssueId
+    , title: String
+    , labels: String
+    , assignee: Assignee?
+    }
+
+behavior openIssue : (draft: NewIssue) -> Issue | NoLabels
+    depends on createIssue
+
+// One raw string to the cleaned, non-empty labels. The whole pipeline stays in Set land: nothing here
+// needs order or repeats, and the label set is what the issue carries.
+let cleaned (text: String): Set<Label> =
+    text
+        |> split(",")
+        |> Set.fromList
+        |> Set.map(piece -> piece |> trim |> lowercase)
+        |> Set.filter(piece -> not(isEmpty(piece)))
+        |> Set.map(piece -> Label(piece))
+
+let openIssue (draft, createIssue) = {
+    let labels = cleaned(draft.labels)
+    guard Set.size(labels) >= 1 else NoLabels
+    createIssue(Issue { id = draft.id, title = draft.title, labels = labels, assignee = draft.assignee })
+}
+
+let crashOnSave = Issue { id = IssueId("i-1"), title = "crash on save",
+    labels = Set.fromList([ Label("bug"), Label("ui") ]), assignee = Assignee("kawasima") }
+
+fake createIssue
+    | _ -> crashOnSave
+
+example openIssue
+    | "case and spacing collapse into one label, and the issue is stored" :
+        (NewIssue { id = IssueId("i-1"), title = "crash on save", labels = "Bug, bug , UI",
+            assignee = "kawasima" })
+        -> crashOnSave
+    | "blank pieces leave no labels, so nothing is written" :
+        (NewIssue { id = IssueId("i-2"), title = "whitespace", labels = " , ", assignee = None })
+        -> NoLabels
+
+// === attachLabel / detachLabel: read the issue, change its label set, write it back ===
+// Set insert / remove on the labels field, with constructor spread reusing every other field. Both
+// `depends on` the read and the write, so the whole sequence is checked below with the database faked.
+// An unknown id passes IssueNotFound through, and nothing is written.
+data LabelRequest =
+    { id: IssueId
+    , label: Label
+    }
+
+behavior attachLabel : (request: LabelRequest) -> Issue | IssueNotFound
+    depends on findIssue, storeLabels
+
+behavior detachLabel : (request: LabelRequest) -> Issue | IssueNotFound
+    depends on findIssue, storeLabels
+
+let withLabel (issue: Issue, label: Label): Issue =
+    Issue { ...issue, labels = Set.insert(label, issue.labels) }
+
+let withoutLabel (issue: Issue, label: Label): Issue =
+    Issue { ...issue, labels = Set.remove(label, issue.labels) }
+
+let attachLabel (request, findIssue, storeLabels) =
+    match findIssue(request.id) with
+        | IssueNotFound  -> IssueNotFound
+        | Issue as issue -> storeLabels(withLabel(issue, request.label))
+
+let detachLabel (request, findIssue, storeLabels) =
+    match findIssue(request.id) with
+        | IssueNotFound  -> IssueNotFound
+        | Issue as issue -> storeLabels(withoutLabel(issue, request.label))
+
+// The fakes stand in for the two database behaviors: an input -> output table matched by value
+// equality, with a `_` default. A Set fixture is a list, so the stored issue's labels are written out
+// as the set they became.
+fake findIssue
+    | (IssueId("i-1")) -> Issue { ...crashOnSave, labels = [ Label("bug") ] }
+    | _ -> IssueNotFound
+
+fake storeLabels
+    | (crashOnSave) -> crashOnSave
+    | (Issue { ...crashOnSave, labels = [] }) -> Issue { ...crashOnSave, labels = [] }
+    | _ -> Issue { id = IssueId("i-0"), title = "unstored", labels = [], assignee = None }
+
+example attachLabel
+    | "a new label joins the set and is written back" :
+        (LabelRequest { id = IssueId("i-1"), label = Label("ui") })
+        -> crashOnSave
+    | "an unknown issue is not found, and nothing is written" :
+        (LabelRequest { id = IssueId("nope"), label = Label("ui") }) -> IssueNotFound
+
+example detachLabel
+    | "the label leaves the set and is written back" :
+        (LabelRequest { id = IssueId("i-1"), label = Label("bug") })
+        -> Issue { ...crashOnSave, labels = [] }
+    | "an unknown issue is not found" :
+        (LabelRequest { id = IssueId("nope"), label = Label("bug") }) -> IssueNotFound
+
+// === sharedLabels: the labels two issues have in common (Set intersection) ===
+data LabelSet = { labels: Set<Label> }
+
+behavior sharedLabels : (a: Issue, b: Issue) -> LabelSet
+    constructs LabelSet
+let sharedLabels (a, b) = LabelSet { labels = Set.intersect(a.labels, b.labels) }
+
+example sharedLabels
+    | "only the labels both issues carry" :
+        (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+            assignee = None },
+         Issue { id = IssueId("i-2"), title = "b", labels = [ Label("ui"), Label("docs") ],
+            assignee = None })
+        -> LabelSet { labels = [ Label("ui") ] }
+    | "nothing in common is an empty set" :
+        (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None },
+         Issue { id = IssueId("i-2"), title = "b", labels = [ Label("docs") ], assignee = None })
+        -> LabelSet { labels = [] }
+
+// === assigneeOf: open the optional assignee with a Some(Newtype) pattern ===
+// Some's first written layer opens the element type directly, so Some(Assignee(name)) binds name to
+// the bare String in one pattern; the None arm handles the unassigned issue.
+data Assigned = { name: String }
+
+behavior assigneeOf : (issue: Issue) -> Assigned | Unassigned
+    constructs Assigned, Unassigned
+let assigneeOf (issue) =
+    match issue.assignee with
+        | Some(Assignee(name)) -> Assigned { name = name }
+        | None -> Unassigned
+
+example assigneeOf
+    | "an assigned issue names its assignee" :
+        (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ],
+            assignee = "kawasima" })
+        -> Assigned { name = "kawasima" }
+    | "an unassigned issue takes the None arm" :
+        (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None })
+        -> Unassigned
+
+// === countByLabel: how many issues carry each label (fold + Map.upsert) ===
+// Collect every label occurrence across the board as plain strings (Set.toList each issue's labels,
+// unwrap to the text, concatenate), then fold them into a Map<String, Int>, counting each key with
+// Map.upsert — seed 1 on first sight, +1 on every repeat. The empty-map seed's value type comes from
+// the helper's declared return type `Map<String, Int>`: a written type is pushed into the body, so a
+// fold over an empty seed can stand on its own rather than being inlined into the field it feeds. The
+// key is the label text (Label.value); a Map key is a String or a String-backed newtype.
+data LabelCounts = { counts: Map<String, Int> }
+
+behavior countByLabel : (board: Board) -> LabelCounts
+    constructs LabelCounts
+
+// Every label occurrence on the board, as plain strings, with repeats. One issue contributes the
+// labels it carries, and `concatMap` joins those lists as it goes — the fold with `++` in its step
+// that this used to spell out by hand.
+let labelKeys (issues: List<Issue>): List<String> =
+    concatMap(issue -> map(l -> l.value, Set.toList(issue.labels)), issues)
+
+// The counts themselves, shared with the ranking below. The helper's declared return type is pushed
+// into its body wherever it expands, so the empty-map seed takes its value type from
+// `Map<String, Int>` — including under `Map.toList`, whose parameter says nothing concrete.
+let labelCounts (issues: List<Issue>): Map<String, Int> =
+    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), labelKeys(issues))
+
+let countByLabel (board) = LabelCounts { counts = labelCounts(board.issues) }
+
+// A Map fixture is its list of (key, value) pairs, as `Map.fromList` takes it.
+example countByLabel
+    | "each label counted across the board" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+                assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
+                assignee = "kawasima" } ] })
+        -> LabelCounts { counts = [ ("bug", 2), ("ui", 1) ] }
+    | "an empty board counts nothing" : (Board { issues = [] }) -> LabelCounts { counts = [] }
+
+// === topLabels: the most-used labels, most frequent first ===
+// The ranking side of the same counts. `Map.toList` hands the counts over as `(label, count)` pairs;
+// a tuple type may be written in a helper signature, and `let (a, b) = e` opens one, so the entries
+// are read without leaving the pipe. `List.sortBy` + `List.reverse` order them by count, and
+// `List.take` keeps the head of the ranking. `List.unzip` then splits the ranked pairs into the two
+// parallel lists and only the labels are kept — the counts have done their work by then. A tie falls
+// back to the map's iteration order, which is deterministic but unspecified — the example below
+// avoids one.
+data LabelRanking = { labels: List<String> }
+
+behavior topLabels : (board: Board, n: Int) -> LabelRanking
+    constructs LabelRanking
+
+let entryCount (e: (String, Int)): Int = {
+    let (_, count) = e
+    count
+}
+
+let topLabels (board, n) = {
+    let ranked =
+        Map.toList(labelCounts(board.issues))
+            |> List.sortBy(e -> entryCount(e))
+            |> List.reverse
+            |> List.take(n)
+    let (labels, _) = unzip(ranked)
+    LabelRanking { labels = labels }
+}
+
+example topLabels
+    | "the most-used label leads the ranking" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+                assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
+                assignee = None } ] }, 1)
+        -> LabelRanking { labels = [ "bug" ] }
+    | "asking for more than there are gives every label" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+                assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
+                assignee = None } ] }, 9)
+        -> LabelRanking { labels = [ "bug", "ui" ] }
+
+// === busyLabels: the labels the board leans on (Map.filter) ===
+// The same counts read a third way. Not the whole table (countByLabel) and not a ranking of fixed
+// length (topLabels), but "every label at least this many issues carry" — the shape a board asks for
+// when it wants the vocabulary that is actually in use. `Map.filter` keeps those entries in the map,
+// so the answer still carries the counts and the boundary does not have to look them up again.
+data LabelUsage = { counts: Map<String, Int> }
+
+behavior busyLabels : (board: Board, atLeast: Int) -> LabelUsage
+    constructs LabelUsage
+
+let busyLabels (board, atLeast) =
+    LabelUsage { counts = Map.filter((_, count) -> count >= atLeast, labelCounts(board.issues)) }
+
+example busyLabels
+    | "only the labels carried by at least two issues" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug"), Label("ui") ],
+                assignee = None }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("bug") ],
+                assignee = None } ] }, 2)
+        -> LabelUsage { counts = [ ("bug", 2) ] }
+    | "a threshold nothing meets leaves an empty map" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ],
+                assignee = None } ] }, 5)
+        -> LabelUsage { counts = [] }
+
+// === groupByAssignee: the board's issues bucketed by assignee (filterMap + groupBy) ===
+// The other direction of the same board: not a count per key but the elements themselves under it.
+// The assignee is optional and a grouping key has to be total, so the issues become (assignee, id)
+// entries first: `Option.map` rewrites the assignee that is there into an entry and leaves None
+// alone, and `List.filterMap` keeps the entries that exist — the unassigned issue drops out with no
+// stand-in value written for it. `List.groupBy` then buckets the entries by their key, each bucket in
+// board order, and `Map.map` rewrites the buckets to the ids the boundary shows.
+data Workload = { byAssignee: Map<String, List<IssueId>> }
+
+behavior groupByAssignee : (board: Board) -> Workload
+    constructs Workload
+
+// One issue as the entry it contributes, or nothing when it is unassigned. The return type is written,
+// because a reader of `filterMap(assigneeEntry, …)` should not have to infer what the step answers —
+// `Option<T>` may be named wherever a model reads an optional, and this helper reads one.
+let assigneeEntry (issue: Issue): Option<(String, IssueId)> =
+    Option.map(a -> (a.value, issue.id), issue.assignee)
+
+let entryKey (e: (String, IssueId)): String = {
+    let (key, _) = e
+    key
+}
+
+let entryId (e: (String, IssueId)): IssueId = {
+    let (_, id) = e
+    id
+}
+
+let groupByAssignee (board) =
+    Workload { byAssignee =
+        board.issues
+            |> filterMap(assigneeEntry)
+            |> List.groupBy(entryKey)
+            |> Map.map((_, entries) -> map(entryId, entries))
+    }
+
+example groupByAssignee
+    | "each assignee holds the issues assigned to them, in board order" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ],
+                assignee = "kawasima" }
+            , Issue { id = IssueId("i-2"), title = "b", labels = [ Label("ui") ],
+                assignee = "aoyagi" }
+            , Issue { id = IssueId("i-3"), title = "c", labels = [ Label("bug") ],
+                assignee = "kawasima" } ] })
+        -> Workload { byAssignee =
+            [ ("kawasima", [ IssueId("i-1"), IssueId("i-3") ])
+            , ("aoyagi", [ IssueId("i-2") ]) ] }
+    | "an unassigned issue is bucketed under nobody" :
+        (Board { issues =
+            [ Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None } ] })
+        -> Workload { byAssignee = [] }

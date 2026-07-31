@@ -1,0 +1,938 @@
+// The SFA core: the opportunity, and the ten stages Salesforce ships with. The stages are the type, so
+// every transition names the exact stage it advances from and there is no `if (stage == ...)` anywhere in
+// this module. A call that skips discovery, or closes a deal nobody qualified, is not a call that
+// compiles.
+//
+// What is on show:
+//   - Ten states, six spread layers. Each state carries only what that stage has: a Qualification knows
+//     who the primary contact is, a NeedsAnalysis has at least one recorded pain point, a
+//     NegotiationReview has a walk-away price and a ProposalPriceQuote does not, a ClosedWon has the
+//     quote it was won on. The exit criterion of each stage is the field the next state adds.
+//   - The stage's probability and forecast category are the real Salesforce mappings, written as
+//     ten-arm matches. Adding a stage is a non-exhaustive-match error in three places rather than a deal
+//     that quietly weighs nothing. What every stage *has* needs no match at all: the ten states all spread
+//     OpportunityCommon, so `opp.id` is read off the sum.
+//   - A nested sum where the domain nests: a lost deal was either taken by somebody else or bought by
+//     nobody, and only the first kind names a rival. `match` opens one level at a time, so the rule reads
+//     as that sentence — while the codec folds to the leaf, so the JSON stays one flat tag.
+//   - The seam with example.crm, crossed by one behavior. `convertAndOpen` calls crm's convertLead,
+//     carries a converted lead on to openFromLead, and answers crm's ConversionBlocked with its own
+//     ConversionRefused — because an output union is built from the cases the module declares (E1606).
+//     A context that declines states its own declining, and the aggregate rule holds: an account, a
+//     contact and an opportunity are made together or none of them is.
+//   - Aggregation with `Map.upsert`: the pipeline by stage, counted and totalled in two folds, keyed by a
+//     String-backed StageName rather than by the stage sum — a stage carries fields, so it is not the
+//     enumeration a boundary map keys by, which is what is left of finding F3 and the reason the ten stage
+//     names exist twice in this file.
+//   - A zero-argument injected behavior. `nextOpportunityId` produces rather than transforms, so its
+//     generated base declares `apply()` with no input at all.
+//
+// The findings this module hit are recorded where they bite: F3 at StageName, F5 at winRateOf, F18 at the
+// two names this file had to change, F19 at pipelineByStage, F26 at the fixtures. F16 was recorded at idOf
+// and is gone: a field every case spreads is read on the sum itself. F17 is gone too: a behavior calls a
+// behavior whose requirement set is empty, so probabilityOf and categoryOf have no helper twin. F4 is
+// gone: closeAndSummarize carries its own rows. F1 was recorded at openFromLead and is gone: what a
+// cross-module `>->` cannot do, convertAndOpen does with a body.
+//
+// F18 is worth reading before the model: a behavior generates a class from its name with the first letter
+// capitalized, so a behavior and a data cannot share a word. This domain has two words that are both a
+// noun and a verb — you open an opportunity and you report on open opportunities; a win rate is a number
+// and working it out is an operation — and in both cases the compiler rejected the pair. The noun kept the
+// name (`OpenOpportunity`, `WinRate`) because that is what a pipeline report says, so the behaviors are
+// `openFromLead` and `winRateOf`. Nothing was learned by renaming them; the vocabulary just got worse in
+// two places.
+module example.pipeline exposing (
+    acmeInNegotiation,
+    OpportunityId,
+    OpportunityName,
+    StageName,
+    Probability,
+    QuoteNumber,
+    PainPoint,
+    BusinessCase,
+    DecisionCriterion,
+    PerceivedRisk,
+    Needs,
+    DecisionMakers,
+    ForecastCategory,
+    Pipeline,
+    BestCase,
+    Commit,
+    Closed,
+    Omitted,
+    StageProfile,
+    OpportunityCommon,
+    QualifiedCommon,
+    DiscoveredCommon,
+    ValuedCommon,
+    ChampionedCommon,
+    QuotedCommon,
+    Prospecting,
+    Qualification,
+    NeedsAnalysis,
+    ValueProposition,
+    IdDecisionMakers,
+    PerceptionAnalysis,
+    ProposalPriceQuote,
+    NegotiationReview,
+    ClosedWon,
+    ClosedLost,
+    Opportunity,
+    OpenOpportunity,
+    Committed,
+    ClosedOpportunity,
+    LossReason,
+    DisplacedLoss,
+    CompetitorLoss,
+    IncumbentRetained,
+    AbandonedLoss,
+    NoBudget,
+    NoDecision,
+    ProjectCancelled,
+    PriceLoss,
+    StageBreakdown,
+    DealRanking,
+    WinRate,
+    WinSummary,
+    SlipReport,
+    nextOpportunityId,
+    openFromLead,
+    NoOpportunityRequested,
+    convertAndOpen,
+    ConversionRefused,
+    probabilityOf,
+    probabilityFor,
+    categoryOf,
+    profileOf,
+    // The transitions are the module's interface: a boundary drives a deal through them and a downstream
+    // context takes a state type as an input. Listing a behavior only settles its visibility on the JVM,
+    // though — a behavior, such as qualifyOpportunity, is callable only from another behavior's body
+    // (cross-module or not), never from a plain helper `let` (retired finding F23, at probabilityFor
+    // above: the fix there was publishing the helper the behavior wraps, not a change to this rule).
+    qualifyOpportunity,
+    AmountNotStated,
+    recordNeeds,
+    NoNeedsRecorded,
+    proposeValue,
+    BusinessCaseMissesNeeds,
+    identifyDecisionMakers,
+    NoDecisionMakers,
+    assessPerception,
+    ChampionNotADecisionMaker,
+    sendProposal,
+    ProposalAfterCloseDate,
+    withdrawProposal,
+    openNegotiation,
+    FloorAboveAsk,
+    closeWon,
+    BelowFloor,
+    closeLost,
+    lossFollowUp,
+    CompetitiveIntel,
+    Renurture,
+    PriceReview,
+    NoFollowUp,
+    slipCloseDate,
+    NotASlip,
+    summarizeWin,
+    pipelineByStage,
+    topDeals,
+    winRateOf,
+    NoClosedDeals,
+    closeAndSummarize : WinSummary | BelowFloor
+)
+import example.crm ( AccountId, ContactId, UserId, CompanyName, Amount, CurrencyCode
+                   , LeadConverted, OpportunityIntent, NoOpportunity, OpportunityRequested
+                   , QualifiedLead, ConversionRequest, AccountBook, ContactBook
+                   , ConversionBlocked, BlockReason, convertLead )
+
+// === Values ===
+
+data OpportunityId = String
+    invariant String.matches("006[0-9A-Za-z]{12}([0-9A-Z]{3})?", value)
+
+// Built by openFromLead rather than received: "Acme Corp — New Business" is the convention a CRM
+// actually uses, so the model writes the name instead of asking somebody to type it.
+data OpportunityName = String
+    invariant String.length(value) >= 1
+
+// The quote's number is minted by the quoting system, but the *word* is owned here: ProposalPriceQuote
+// cannot exist without one, and importing example.quoting would close a cycle, since quoting imports this
+// module's state types. Which context owns a shared name is settled once, upstream.
+data QuoteNumber = String
+    invariant String.matches("0Q0[0-9A-Za-z]{12}([0-9A-Z]{3})?", value)
+
+// Salesforce's stage really is a string picklist column called StageName. A sum every one of whose cases
+// is a unit data keys a boundary map directly, but a stage is not one of those: it is a state carrying the
+// fields that stage has. So the ten stage names live twice in this file — once as the case names above,
+// once as the strings profileOf produces — and nothing keeps the two in step but that match being
+// exhaustive. What is left of finding F3.
+data StageName = String
+    invariant String.length(value) >= 1
+
+data Probability = Int
+    invariant value >= 0 && value <= 100
+
+data PainPoint         = String   invariant String.length(value) >= 1
+data BusinessCase      = String   invariant String.length(value) >= 1
+data DecisionCriterion = String   invariant String.length(value) >= 1
+data PerceivedRisk     = String   invariant String.length(value) >= 1
+
+// Discovery is not done until at least one pain point is written down, and that is a property of the list
+// rather than of any entry in it — so the list has a name and the name carries the rule. At the boundary
+// it is a bare JSON array.
+data Needs = List<PainPoint>
+    invariant List.length(value) >= 1
+
+// A deal with nobody identified cannot advance. A Set because the question is membership — is the
+// champion one of them — and because two rows for one contact are not two decision makers.
+data DecisionMakers = Set<ContactId>
+    invariant Set.size(value) >= 1
+
+// Salesforce derives ForecastCategory from the stage, so the stage's context owns it and
+// example.forecasting imports it rather than declaring a second one.
+data ForecastCategory = Pipeline | BestCase | Commit | Closed | Omitted
+
+data StageProfile =
+    { stage: StageName
+    , probability: Probability
+    , category: ForecastCategory
+    , isClosed: Bool
+    }
+
+// === The ten stages ===
+// Six spread layers, because the deal accumulates commitments in six steps and each step is what the
+// next stage needs to exist. Everything an opportunity always has is in OpportunityCommon; qualifying
+// adds the primary contact; discovery adds the needs; proposing adds the quote.
+
+data OpportunityCommon =
+    { id: OpportunityId
+    , accountId: AccountId
+    , name: OpportunityName
+    , owner: UserId
+    , amount: Amount              // crm's word, imported rather than re-declared
+    , currency: CurrencyCode
+    , closeDate: Date
+    , openedOn: Date
+    }
+    invariant Date.daysBetween(openedOn, closeDate) >= 0
+
+data QualifiedCommon  = { ...OpportunityCommon, qualifiedOn: Date, primaryContactId: ContactId }
+data DiscoveredCommon = { ...QualifiedCommon, needs: Needs }
+data ValuedCommon     = { ...DiscoveredCommon, businessCase: BusinessCase
+                        , criteria: List<DecisionCriterion> }
+data ChampionedCommon = { ...ValuedCommon, decisionMakers: DecisionMakers, champion: ContactId
+                        , risks: List<PerceivedRisk> }
+data QuotedCommon =
+    { ...ChampionedCommon
+    , quoteNumber: QuoteNumber
+    , proposedOn: Date
+    , proposedAmount: Amount
+    }
+
+// 10% — a name and an account and nothing anybody has agreed to yet.
+data Prospecting = { ...OpportunityCommon }
+
+// 10% — still ten, because qualifying tells you the deal is real without moving it forward. What it adds
+// is the person the deal runs through.
+data Qualification = { ...QualifiedCommon }
+
+// 20% — at least one pain point is written down.
+data NeedsAnalysis = { ...DiscoveredCommon }
+
+// 50% — the business case answers the needs, and the criteria the customer will decide on are known.
+data ValueProposition = { ...ValuedCommon }
+
+// 60% — the people who can say yes are identified. This is where a deal stops being one contact's
+// enthusiasm.
+data IdDecisionMakers = { ...ValuedCommon, decisionMakers: DecisionMakers }
+
+// 70% — one of those decision makers is the champion, and the risks they have voiced are recorded.
+data PerceptionAnalysis = { ...ChampionedCommon }
+
+// 75% — a price is on the table. The quote's number, the date it went out, and what it said.
+data ProposalPriceQuote = { ...QuotedCommon }
+
+// 90% — the walk-away price exists. This is the field that makes closing out of negotiation a different
+// operation from closing out of a proposal.
+data NegotiationReview =
+    { ...QuotedCommon
+    , openedNegotiationOn: Date
+    , floorAmount: Amount
+    }
+    // The floor is at or below the ask. Two newtypes cannot be compared directly, so the invariant
+    // compares what they wrap; Decimal.compare is total and constructs nothing, so it may stand here.
+    invariant Decimal.compare(floorAmount.value, amount.value) <= 0
+
+// 100% — and it carries what it was won at, which is not always what was asked.
+data ClosedWon = { ...QuotedCommon, closedOn: Date, wonAmount: Amount }
+
+// 0% — a lost deal keeps only the common items, plus why it was lost and how far it had got. It does not
+// keep the quote: the fields a lost deal has are the fields a win/loss review reads.
+data ClosedLost =
+    { ...OpportunityCommon
+    , closedOn: Date
+    , reason: LossReason
+    , stageAtLoss: StageName
+    }
+
+data Opportunity =
+    Prospecting | Qualification | NeedsAnalysis | ValueProposition | IdDecisionMakers
+  | PerceptionAnalysis | ProposalPriceQuote | NegotiationReview | ClosedWon | ClosedLost
+
+// The input sums. An anonymous union may not appear in a parameter, so "from any open stage" and "won
+// from either of these two" each need a name — which makes each of them sealed and every match over them
+// exhaustive, so naming them pays for itself. Finding F11, recorded as working-as-designed.
+data OpenOpportunity =
+    Prospecting | Qualification | NeedsAnalysis | ValueProposition | IdDecisionMakers
+  | PerceptionAnalysis | ProposalPriceQuote | NegotiationReview
+
+data Committed         = ProposalPriceQuote | NegotiationReview    // the stages a quote exists for
+data ClosedOpportunity = ClosedWon | ClosedLost
+
+// === Why a deal was lost ===
+// Win/loss review asks one question first: did somebody else win it, or did nobody buy? A displaced loss
+// produces competitive intelligence and names a rival; an abandoned loss produces a re-nurture date and
+// names nobody. That is the split, so that is where the sum divides — and the two-stage match reads as
+// the two questions.
+
+data CompetitorLoss    = { competitor: CompanyName }
+data IncumbentRetained = { incumbent: CompanyName }
+data DisplacedLoss     = CompetitorLoss | IncumbentRetained
+
+data NoDecision    = { lastContactOn: Date }
+data AbandonedLoss = NoBudget | NoDecision | ProjectCancelled
+
+data PriceLoss = { gapToBudget: Amount }
+
+data LossReason = DisplacedLoss | AbandonedLoss | PriceLoss
+
+// === Reports ===
+
+data StageBreakdown =
+    { stages: List<StageName>
+    , count: Map<StageName, Int>
+    , total: Map<StageName, Amount>
+    , openCount: Int
+    }
+
+data DealRanking = { deals: List<OpportunityId> }
+
+data WinRate = { rate: Probability, won: Int, lost: Int }
+
+data WinSummary =
+    { id: OpportunityId
+    , owner: UserId
+    , wonAmount: Amount
+    , daysToClose: Int
+    }
+
+data SlipReport =
+    { id: OpportunityId
+    , from: Date
+    , to: Date
+    , slippedDays: Int
+    }
+
+// === Reading what every stage has ===
+// Every one of the ten states spreads OpportunityCommon, so every one of them has an id, an amount and a
+// close date — and the sum has them too, because what holds of every case is a property of the sum. So
+// `opp.id` and `opp.closeDate` are read straight off Opportunity and no helper stands between. This used
+// to be three ten-arm matches; finding F16 was that they had to be written.
+//
+// Only the amount still opens the value, and for a reason the spread does not carry: a won deal weighs
+// what it was won at, not what it was asked at. The nine stages that do weigh the ask share one arm, and
+// naming them keeps what the ten-arm version was worth — adding a stage is still a compile error here.
+
+let amountOf (opp: Opportunity): Amount =
+    match opp with
+        | ClosedWon { wonAmount } -> wonAmount
+        | Prospecting | Qualification | NeedsAnalysis | ValueProposition | IdDecisionMakers
+        | PerceptionAnalysis | ProposalPriceQuote | NegotiationReview | ClosedLost -> opp.amount
+
+// === The stage's name, probability and forecast category ===
+// Salesforce's standard numbers, exactly. They are a ten-arm match rather than a field on the state
+// because a probability is a reading of the stage: storing it would let a deal sit in Negotiation at 20%,
+// which is a row every pipeline report has to defend against.
+//
+// Adding a stage breaks these three matches at compile time. That is the whole reason the mapping is
+// written this way and not as a lookup table.
+
+let stageNameOf (opp: Opportunity): StageName =
+    match opp with
+        | Prospecting        -> StageName("Prospecting")
+        | Qualification      -> StageName("Qualification")
+        | NeedsAnalysis      -> StageName("Needs Analysis")
+        | ValueProposition   -> StageName("Value Proposition")
+        | IdDecisionMakers   -> StageName("Id. Decision Makers")
+        | PerceptionAnalysis -> StageName("Perception Analysis")
+        | ProposalPriceQuote -> StageName("Proposal/Price Quote")
+        | NegotiationReview  -> StageName("Negotiation/Review")
+        | ClosedWon          -> StageName("Closed Won")
+        | ClosedLost         -> StageName("Closed Lost")
+
+// The two readings other contexts ask for are behaviors, and the two that only profileOf reads are
+// helpers. There is no twin: a behavior whose own requirement set is empty is called by name, so
+// profileOf calls these two rather than a helper copy of the mapping. probabilityOf's own mapping is a
+// published helper (ADR-0075) rather than the behavior's own match: a behavior is only callable from
+// another behavior's body, cross-module or not (souther#159/#189), never from a plain helper `let` —
+// so forecasting's weightedOf, an ordinary helper, reaches probabilityFor directly and probabilityOf
+// is the published helper's behavior wrapper, retiring finding F23.
+let probabilityFor (opp: Opportunity): Probability =
+    match opp with
+        | Prospecting        -> Probability(10)
+        | Qualification      -> Probability(10)
+        | NeedsAnalysis      -> Probability(20)
+        | ValueProposition   -> Probability(50)
+        | IdDecisionMakers   -> Probability(60)
+        | PerceptionAnalysis -> Probability(70)
+        | ProposalPriceQuote -> Probability(75)
+        | NegotiationReview  -> Probability(90)
+        | ClosedWon          -> Probability(100)
+        | ClosedLost         -> Probability(0)
+
+behavior probabilityOf : (opp: Opportunity) -> Probability
+    constructs Probability
+
+let probabilityOf (opp) = probabilityFor(opp)
+
+behavior categoryOf : (opp: Opportunity) -> ForecastCategory
+    constructs Pipeline, BestCase, Commit, Closed, Omitted
+
+let categoryOf (opp) =
+    match opp with
+        | Prospecting        -> Pipeline
+        | Qualification      -> Pipeline
+        | NeedsAnalysis      -> Pipeline
+        | ValueProposition   -> Pipeline
+        | IdDecisionMakers   -> BestCase
+        | PerceptionAnalysis -> BestCase
+        | ProposalPriceQuote -> BestCase
+        | NegotiationReview  -> Commit
+        | ClosedWon          -> Closed
+        | ClosedLost         -> Omitted
+
+let isClosedOf (opp: Opportunity): Bool =
+    match opp with
+        | ClosedWon  -> true
+        | ClosedLost -> true
+        | Prospecting        -> false
+        | Qualification      -> false
+        | NeedsAnalysis      -> false
+        | ValueProposition   -> false
+        | IdDecisionMakers   -> false
+        | PerceptionAnalysis -> false
+        | ProposalPriceQuote -> false
+        | NegotiationReview  -> false
+
+// The probability and the category are what `probabilityOf` and `categoryOf` built, passed through — so
+// this behavior's construction authority is the two things it makes itself, and the compiler says so.
+behavior profileOf : (opp: Opportunity) -> StageProfile
+    constructs StageProfile, StageName
+
+let profileOf (opp) =
+    StageProfile { stage = stageNameOf(opp)
+                 , probability = probabilityOf(opp)
+                 , category = categoryOf(opp)
+                 , isClosed = isClosedOf(opp)
+                 }
+
+// === The deal the rows are about ===
+// Every example in this file walks one deal, so the deal has a name and the chain spreads the way the
+// states themselves do: each fixture is the one before it plus what that stage agreed. A row then states
+// the transition rather than restating the eight fields that were already there, and the expected side
+// spreads the input, so what a reader compares is the delta.
+//
+// Two fixtures in the chain stay flat, but not for the same reason: `acme` opens it, so there is no
+// earlier state to spread, and `acmeLost` is a different deal entirely, not a later state of this one.
+// Every other fixture spreads the one before it, `acmeInNegotiation` included.
+//
+// The expected side names a fixture directly rather than spreading it: `-> acmeQualified` is how a row
+// states a whole fixture.
+
+let acme = Prospecting
+    { id = OpportunityId("006000000000001")
+    , accountId = AccountId("001000000000100")
+    , name = OpportunityName("Acme Corp — New Business")
+    , owner = UserId("u-001")
+    , amount = Amount(4800000.00m)
+    , currency = CurrencyCode("JPY")
+    , closeDate = Date("2026-09-30")
+    , openedOn = Date("2026-07-20")
+    }
+
+let acmeQualified = Qualification
+    { ...acme, qualifiedOn = Date("2026-07-25"), primaryContactId = ContactId("003000000000100") }
+
+let acmeDiscovered = NeedsAnalysis
+    { ...acmeQualified
+    , needs = Needs([ PainPoint("invoicing takes three days"), PainPoint("no audit trail") ])
+    }
+
+let acmeValued = ValueProposition
+    { ...acmeDiscovered
+    , businessCase = BusinessCase("Automating invoicing removes three days of manual work")
+    , criteria = [ DecisionCriterion("total cost") ]
+    }
+
+// `decisionMakers` wraps a `Set`, and a value is ordinary code where a list literal is a `List` whatever
+// the position declares — so it is written `Set.fromList([...])`, the form the row notation stands for.
+let acmeChampioned = PerceptionAnalysis
+    { ...acmeValued
+    , decisionMakers = DecisionMakers(Set.fromList([ ContactId("003000000000200") ]))
+    , champion = ContactId("003000000000200")
+    , risks = [ PerceivedRisk("security review") ]
+    }
+
+let acmeQuoted = ProposalPriceQuote
+    { ...acmeChampioned
+    , quoteNumber = QuoteNumber("0Q0000000000001")
+    , proposedOn = Date("2026-08-01")
+    , proposedAmount = Amount(4800000.00m)
+    }
+
+// The worked deal in negotiation is published: a module stating a rule against one names this value
+// rather than the twenty-two types inside it.
+let acmeInNegotiation = NegotiationReview
+    { ...acmeQuoted, openedNegotiationOn = Date("2026-09-01"), floorAmount = Amount(4200000.00m) }
+
+// A lost deal, for the follow-up rules. Every row varies the reason, because the reason is what
+// lossFollowUp reads. Written flat: it is a different deal, not a later state of `acme`, so there is
+// nothing here for it to spread.
+let acmeLost = ClosedLost
+    { id = OpportunityId("006000000000002")
+    , accountId = AccountId("001000000000100")
+    , name = OpportunityName("Acme Corp — Renewal")
+    , owner = UserId("u-001")
+    , amount = Amount(1200000.00m)
+    , currency = CurrencyCode("JPY")
+    , closeDate = Date("2026-08-31")
+    , openedOn = Date("2026-06-01")
+    , closedOn = Date("2026-09-15")
+    , reason = ProjectCancelled
+    , stageAtLoss = StageName("Negotiation/Review")
+    }
+
+// Two rows, not ten. A state is the type here, so a fixture is the whole state — and the ten mappings are
+// held together by the matches being exhaustive rather than by ten rows repeating what the match already
+// says. What the rows pin is the shape of the answer at both ends of the pipeline: the earliest open stage
+// and the closed one that weighs nothing.
+example profileOf
+    | "the first stage is pipeline at ten, and it is not closed" :
+        (acme)
+        -> StageProfile { stage = StageName("Prospecting"), probability = Probability(10)
+                        , category = Pipeline, isClosed = false }
+    | "a lost deal is omitted from the forecast at zero, and it is closed" :
+        (acmeLost)
+        -> StageProfile { stage = StageName("Closed Lost"), probability = Probability(0)
+                        , category = Omitted, isClosed = true }
+
+// === openFromLead: the third leg of conversion, in the context that owns it ===
+// crm builds the account and the contact; the opportunity is built here, because a behavior constructs
+// only what its own module declares. What crosses the seam is crm's OpportunityIntent, and what this
+// module answers with is its OWN case: crm's NoOpportunity may not join a union declared here (E1606),
+// however alike the two read.
+//
+// The whole of conversion is one behavior all the same — convertAndOpen, below.
+behavior nextOpportunityId : () -> OpportunityId
+    constructs OpportunityId
+
+behavior openFromLead : (converted: LeadConverted) -> Prospecting | NoOpportunityRequested
+    depends on nextOpportunityId
+    constructs Prospecting, OpportunityName, NoOpportunityRequested
+
+let openFromLead (converted, nextOpportunityId) =
+    match converted.intent with
+        | NoOpportunity -> NoOpportunityRequested
+        | OpportunityRequested { amount, closeDate } ->
+            Prospecting
+                { id = nextOpportunityId()
+                , accountId = converted.account.id
+                , name = OpportunityName(String.join(" — ", [ converted.account.name.value
+                                                            , "New Business" ]))
+                , owner = converted.account.owner
+                , amount = amount                     // crm's Amount, carried through
+                , currency = converted.account.currency
+                , closeDate = closeDate
+                , openedOn = converted.lead.convertedOn
+                }
+
+// === convertAndOpen: conversion, across the seam, as one operation ===
+// A conversion makes an account, a contact AND an opportunity. Making two of the three is a
+// data-integrity bug, so the rule has to be stated somewhere that can refuse all three at once — and
+// that place cannot be crm, which does not know this module (importing it back is a cycle, E1501).
+//
+// It is not a `>->` either: a composition would carry crm's ConversionBlocked into a union declared
+// here, which the compiler refuses (E1606) because a case class settles its unions when its own module
+// is generated. So this is a behavior with a body. It calls convertLead, carries a converted lead on to
+// openFromLead, and answers crm's departure with ConversionRefused — this module's word for it,
+// carrying crm's reasons as data. A field may hold an imported type; only a union may not.
+//
+// openFromLead needs nextOpportunityId, so it is received rather than built: a composition builds its
+// stages and their requirements accumulate into it, while a caller receives what it calls. The boundary
+// binds one OpenFromLead instead of the leaf it rests on, which is the whole difference from `>->`.
+data ConversionRefused = { reasons: List<BlockReason> }
+
+behavior convertAndOpen : (lead: QualifiedLead, request: ConversionRequest,
+                           accounts: AccountBook, contacts: ContactBook)
+        -> Prospecting | NoOpportunityRequested | ConversionRefused
+    depends on openFromLead
+    constructs ConversionRefused
+
+let convertAndOpen (lead, request, accounts, contacts, openFromLead) =
+    match convertLead(lead, request, accounts, contacts) with
+        | LeadConverted as converted -> openFromLead(converted)
+        | ConversionBlocked as blocked -> ConversionRefused { reasons = blocked.reasons }
+
+// === The transitions ===
+// Each one takes the exact stage it advances from. There is no stage argument, no stage check, and no way
+// to call the fifth transition on a deal that has not been through the fourth.
+
+// A qualified deal states an amount and names the person the deal runs through. A zero amount is the
+// commonest way a forecast goes wrong, so it is a case rather than something a report has to filter out
+// later.
+behavior qualifyOpportunity : (opp: Prospecting, on: Date, primaryContactId: ContactId)
+        -> Qualification | AmountNotStated
+    constructs Qualification, AmountNotStated
+
+let qualifyOpportunity (opp, on, primaryContactId) = {
+    guard Decimal.compare(opp.amount.value, 0.0m) > 0 else AmountNotStated
+    Qualification { ...opp, qualifiedOn = on, primaryContactId = primaryContactId }
+}
+
+example qualifyOpportunity
+    | "a deal with an amount and a contact qualifies" :
+        (acme, Date("2026-07-25"), ContactId("003000000000100"))
+        -> acmeQualified
+    | "a deal worth nothing is not a qualified deal, however real the interest" :
+        (Prospecting { ...acme, amount = Amount(0.0m) }, Date("2026-07-25"), ContactId("003000000000100"))
+        -> AmountNotStated
+
+// Discovery is over when at least one pain point is written down. The raw text is trimmed and the blanks
+// are dropped before the guard, so PainPoint and Needs are both built on a path where their invariants
+// already hold — the guard-then-wrap shape, twice in one behavior.
+behavior recordNeeds : (opp: Qualification, points: List<String>) -> NeedsAnalysis | NoNeedsRecorded
+    constructs NeedsAnalysis, Needs, PainPoint, NoNeedsRecorded
+
+let recordNeeds (opp, points) = {
+    let usable = List.filter(p -> String.length(String.trim(p)) >= 1, points)
+    guard Needs(List.map(p -> PainPoint(String.trim(p)), usable)) as needs else NoNeedsRecorded
+
+    NeedsAnalysis { ...opp, needs = needs }
+}
+
+example recordNeeds
+    | "blank entries are dropped and the rest are trimmed" :
+        (acmeQualified, [ "  invoicing takes three days  ", "   ", "no audit trail" ])
+        -> acmeDiscovered
+    | "a form full of whitespace records nothing, and discovery is not over" :
+        (acmeQualified, [ "  ", "" ])
+        -> NoNeedsRecorded
+
+// A business case that answers none of the recorded needs is a pitch, not a business case. The rule is
+// the one a sales methodology actually states, and it is checkable because the needs are in the state.
+behavior proposeValue : (opp: NeedsAnalysis, businessCase: String, criteria: List<String>)
+        -> ValueProposition | BusinessCaseMissesNeeds
+    constructs ValueProposition, BusinessCase, DecisionCriterion, BusinessCaseMissesNeeds
+
+let answersANeed (businessCase: String, Needs(points)): Bool =
+    List.any(p -> String.contains(String.lowercase(p.value), String.lowercase(businessCase)), points)
+
+let proposeValue (opp, businessCase, criteria) = {
+    guard BusinessCase(String.trim(businessCase)) as stated else BusinessCaseMissesNeeds
+    guard answersANeed(businessCase, opp.needs) else BusinessCaseMissesNeeds
+
+    ValueProposition
+        { ...opp
+        , businessCase = stated
+        , criteria = List.map(c -> DecisionCriterion(String.trim(c)),
+                              List.filter(c -> String.length(String.trim(c)) >= 1, criteria))
+        }
+}
+
+// A deal nobody can say yes to cannot advance. The set is attempted, so what answers "nobody" is
+// DecisionMakers' own non-empty invariant, asked of the set the ids actually make.
+behavior identifyDecisionMakers : (opp: ValueProposition, ids: List<ContactId>)
+        -> IdDecisionMakers | NoDecisionMakers
+    constructs IdDecisionMakers, DecisionMakers, NoDecisionMakers
+
+let identifyDecisionMakers (opp, ids) = {
+    guard DecisionMakers(Set.fromList(ids)) as makers else NoDecisionMakers
+
+    IdDecisionMakers { ...opp, decisionMakers = makers }
+}
+
+// The champion has to be one of the people who can say yes. A champion outside that set is the classic
+// single-threaded deal, and naming it as a case is the cheapest thing this model does for a sales team.
+behavior assessPerception : (opp: IdDecisionMakers, champion: ContactId, risks: List<String>)
+        -> PerceptionAnalysis | ChampionNotADecisionMaker
+    constructs PerceptionAnalysis, PerceivedRisk, ChampionNotADecisionMaker
+
+let assessPerception (opp, champion, risks) = {
+    guard Set.contains(champion, opp.decisionMakers.value) else ChampionNotADecisionMaker
+    PerceptionAnalysis
+        { ...opp
+        , champion = champion
+        , risks = List.map(r -> PerceivedRisk(String.trim(r)),
+                           List.filter(r -> String.length(String.trim(r)) >= 1, risks))
+        }
+}
+
+// A proposal dated after the close date is a deal that has already missed. The amount the quote states
+// arrives as an Amount and is carried from there: this behavior originates no figure, so it names none in
+// its `constructs`.
+behavior sendProposal : (opp: PerceptionAnalysis, number: QuoteNumber, on: Date, proposed: Amount)
+        -> ProposalPriceQuote | ProposalAfterCloseDate
+    constructs ProposalPriceQuote, ProposalAfterCloseDate
+
+let sendProposal (opp, number, on, proposed) = {
+    guard Date.daysBetween(on, opp.closeDate) >= 0 else ProposalAfterCloseDate
+    ProposalPriceQuote { ...opp, quoteNumber = number, proposedOn = on, proposedAmount = proposed }
+}
+
+// The one transition that goes backwards. Pulling a quote is a real operation, and the type is what makes
+// it honest: PerceptionAnalysis has no quote number and no proposed amount, so the fields the withdrawal
+// invalidates are gone rather than left behind holding stale values. The spread narrows — the extra fields
+// a ProposalPriceQuote carries simply do not appear in what is built.
+behavior withdrawProposal : (opp: ProposalPriceQuote) -> PerceptionAnalysis
+    constructs PerceptionAnalysis
+
+let withdrawProposal (opp) = PerceptionAnalysis { ...opp }
+
+// Opening a negotiation is stating a walk-away price. The guard discharges NegotiationReview's
+// cross-field invariant, so the state cannot exist with a floor above the ask.
+behavior openNegotiation : (opp: ProposalPriceQuote, on: Date, floor: Amount)
+        -> NegotiationReview | FloorAboveAsk
+    constructs NegotiationReview, FloorAboveAsk
+
+let openNegotiation (opp, on, floor) = {
+    guard Decimal.compare(floor.value, opp.amount.value) <= 0 else FloorAboveAsk
+    NegotiationReview { ...opp, openedNegotiationOn = on, floorAmount = floor }
+}
+
+// A deal is won out of a proposal or out of a negotiation, and the difference is exactly what the two
+// states carry: a NegotiationReview has a walk-away price, a ProposalPriceQuote does not. So the discount
+// rule lives in the match — the arm that has a floor is the arm that checks it — instead of in a check
+// over a nullable floor that the other arm would have to pretend about.
+data BelowFloor = { floor: Amount, offered: Amount }
+
+behavior closeWon : (opp: Committed, on: Date, finalAmount: Amount) -> ClosedWon | BelowFloor
+    constructs ClosedWon, BelowFloor
+
+let closeWon (opp, on, finalAmount) =
+    match opp with
+        | ProposalPriceQuote as p -> ClosedWon { ...p, closedOn = on, wonAmount = finalAmount }
+        | NegotiationReview as n -> {
+            guard Decimal.compare(finalAmount.value, n.floorAmount.value) >= 0
+                else BelowFloor { floor = n.floorAmount, offered = finalAmount }
+            ClosedWon { ...n, closedOn = on, wonAmount = finalAmount }
+        }
+
+// Eight arms whose only job is to name the stage the deal was lost at. That name is what a win/loss review
+// reads first, and it is why ClosedLost carries a StageName rather than the state it came from: the state
+// is gone, the fact of how far it got is not.
+behavior closeLost : (opp: OpenOpportunity, on: Date, reason: LossReason) -> ClosedLost
+    constructs ClosedLost, StageName
+
+let closeLost (opp, on, reason) =
+    match opp with
+        | Prospecting as s ->
+            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+        | Qualification as s ->
+            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+        | NeedsAnalysis as s ->
+            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+        | ValueProposition as s ->
+            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+        | IdDecisionMakers as s ->
+            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+        | PerceptionAnalysis as s ->
+            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+        | ProposalPriceQuote as s ->
+            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+        | NegotiationReview as s ->
+            ClosedLost { ...s, closedOn = on, reason = reason, stageAtLoss = stageNameOf(s) }
+
+// === What a loss is followed up with ===
+// The nested sum earns its nesting here: the outer match asks whether somebody else won the deal, and only
+// that branch has a rival to name. An abandoned loss has a date to come back on instead, and a cancelled
+// project has neither.
+data CompetitiveIntel = { rival: CompanyName }
+data Renurture       = { revisitOn: Date }
+data PriceReview     = { gap: Amount }
+
+behavior lossFollowUp : (lost: ClosedLost) -> CompetitiveIntel | Renurture | PriceReview | NoFollowUp
+    constructs CompetitiveIntel, Renurture, PriceReview, NoFollowUp
+
+let lossFollowUp (lost) =
+    match lost.reason with
+        | DisplacedLoss as d ->
+            match d with
+                | CompetitorLoss { competitor }   -> CompetitiveIntel { rival = competitor }
+                | IncumbentRetained { incumbent } -> CompetitiveIntel { rival = incumbent }
+        | AbandonedLoss as a ->
+            match a with
+                | NoBudget                   -> Renurture { revisitOn = Date.addMonths(6, lost.closedOn) }
+                | NoDecision { lastContactOn } -> Renurture { revisitOn = Date.addMonths(3, lastContactOn) }
+                | ProjectCancelled           -> NoFollowUp
+        | PriceLoss { gapToBudget } -> PriceReview { gap = gapToBudget }
+
+// Five rows, one per leaf, because the follow-up is the reason the sum nests and a nesting nobody checks is
+// a nesting nobody trusts. Both displaced kinds name a rival; both abandoned kinds that come back name a
+// date, and they name different dates.
+example lossFollowUp
+    | "a deal a competitor won produces competitive intelligence" :
+        (ClosedLost { ...acmeLost, reason = CompetitorLoss { competitor = CompanyName("Rival KK") }
+                    , stageAtLoss = StageName("Negotiation/Review") })
+        -> CompetitiveIntel { rival = CompanyName("Rival KK") }
+    | "an incumbent that kept the account is the same kind of intelligence" :
+        (ClosedLost { ...acmeLost, reason = IncumbentRetained { incumbent = CompanyName("Legacy Systems Co") }
+                    , stageAtLoss = StageName("Proposal/Price Quote") })
+        -> CompetitiveIntel { rival = CompanyName("Legacy Systems Co") }
+    | "no budget comes back in half a year, measured from the close" :
+        (ClosedLost { ...acmeLost, reason = NoBudget
+                    , stageAtLoss = StageName("Value Proposition") })
+        -> Renurture { revisitOn = Date("2027-03-15") }
+    | "a deal nobody decided on comes back sooner, measured from the last contact" :
+        (ClosedLost { ...acmeLost, reason = NoDecision { lastContactOn = Date("2026-08-01") }
+                    , stageAtLoss = StageName("Needs Analysis") })
+        -> Renurture { revisitOn = Date("2026-11-01") }
+    | "a cancelled project is not somebody to follow up with" :
+        (ClosedLost { ...acmeLost, reason = ProjectCancelled
+                    , stageAtLoss = StageName("Qualification") })
+        -> NoFollowUp
+    | "losing on price sends the gap to a price review" :
+        (ClosedLost { ...acmeLost, reason = PriceLoss { gapToBudget = Amount(200000.00m) }
+                    , stageAtLoss = StageName("Negotiation/Review") })
+        -> PriceReview { gap = Amount(200000.00m) }
+
+// === slipCloseDate ===
+// A close date pushed to the right is the most-watched signal in a pipeline review, so pushing one
+// produces a report rather than a quietly-updated field. Pulling it in, or leaving it where it is, is not a
+// slip and says so.
+behavior slipCloseDate : (opp: OpenOpportunity, newDate: Date) -> SlipReport | NotASlip
+    constructs SlipReport, NotASlip
+
+let slipCloseDate (opp, newDate) = {
+    let was = opp.closeDate
+    let days = Date.daysBetween(was, newDate)
+    guard days >= 1 else NotASlip
+    SlipReport { id = opp.id, from = was, to = newDate, slippedDays = days }
+}
+
+example slipCloseDate
+    | "a date pushed to the right is a slip, and it says how far" :
+        (acme, Date("2026-10-31"))
+        -> SlipReport { id = OpportunityId("006000000000001"), from = Date("2026-09-30")
+                      , to = Date("2026-10-31"), slippedDays = 31 }
+    | "pulling a date in is not a slip" :
+        (acme, Date("2026-09-15"))
+        -> NotASlip
+    | "the same date is not a slip either" :
+        (acme, Date("2026-09-30"))
+        -> NotASlip
+
+// === summarizeWin, and the one composition ===
+// Closing a deal and emitting the record commission and reporting read is one business operation, so the
+// two behaviors are routed by type. The composition carries its own rows: what no stage's example can
+// state is that a below-floor close leaves the main line and never reaches the summary, because that is
+// the routing and not either stage's rule.
+behavior summarizeWin : (won: ClosedWon) -> WinSummary
+    constructs WinSummary
+
+let summarizeWin (won) =
+    WinSummary { id = won.id
+               , owner = won.owner
+               , wonAmount = won.wonAmount
+               , daysToClose = Date.daysBetween(won.openedOn, won.closedOn)
+               }
+
+behavior closeAndSummarize = closeWon >-> summarizeWin
+    -> WinSummary | BelowFloor
+
+example closeAndSummarize
+    | "a deal closed at or above the floor is summarised" :
+        (acmeInNegotiation, Date("2026-09-20"), Amount(4500000.00m))
+        -> WinSummary { id = OpportunityId("006000000000001")
+                      , owner = UserId("u-001")
+                      , wonAmount = Amount(4500000.00m)
+                      , daysToClose = 62
+                      }
+    | "below the floor never reaches the summary" :
+        (acmeInNegotiation, Date("2026-09-20"), Amount(3000000.00m))
+        -> BelowFloor { floor = Amount(4200000.00m), offered = Amount(3000000.00m) }
+
+// === pipelineByStage: the aggregation ===
+// Two folds with Map.upsert, over one list. The absent branch inserts this deal's own figure and the
+// present branch adds to it — writing a zero into the absent branch and adding afterwards would lose the
+// first deal of every stage, which is the mistake this shape exists to prevent.
+//
+// The keys are StageName, not the stage sum: the stages carry fields, so they are not the enumeration a
+// boundary map keys by. The picklist vocabulary is written twice in this file and kept in step by one
+// exhaustive match. What is left of finding F3.
+
+let countByStage (opps: List<Opportunity>): Map<StageName, Int> =
+    List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty(), opps)
+
+// A call's result is reached into, so the amount arrives as `amountOf(opp).value` and neither the helper
+// that opened the newtype nor the one that chained the two calls is here any more.
+let totalByStage (opps: List<Opportunity>): Map<StageName, Amount> =
+    List.fold((acc, opp) ->
+                  Map.upsert(stageNameOf(opp),
+                             amountOf(opp),
+                             running -> Amount(Decimal.add(running.value, amountOf(opp).value)),
+                             acc),
+              Map.empty(), opps)
+
+behavior pipelineByStage : (opps: List<Opportunity>) -> StageBreakdown
+    constructs StageBreakdown, StageName, Amount
+
+let pipelineByStage (opps) = {
+    let counts = countByStage(opps)
+    StageBreakdown
+        // Alphabetical, which is the wrong order and the only one available. The ten stages have a natural
+        // order — the order they are declared in, which is the order a deal moves through them — and nothing
+        // carries it: a sum's cases have no index, and StageName is a String, so sorting it puts "Closed
+        // Lost" first and "Value Proposition" last. A pipeline report in that order is a pipeline report
+        // nobody reads. Ordering a unit-only sum by its declaration order would fix it in one line.
+        // Finding F19.
+        { stages = List.sort(Map.keys(counts))
+        , count = counts
+        , total = totalByStage(opps)
+        , openCount = List.length(List.filter(opp -> Bool.not(isClosedOf(opp)), opps))
+        }
+}
+
+// === topDeals ===
+// Rank the open deals by what they are worth and keep the top n. The amounts have done their work once the
+// list is in order, so what comes back is the ids: a ranking is an order, not a table.
+behavior topDeals : (opps: List<Opportunity>, n: Int) -> DealRanking
+    constructs DealRanking
+
+let topDeals (opps, n) =
+    DealRanking
+        { deals = List.map(opp -> opp.id,
+                           List.take(n, List.reverse(List.sortBy(opp -> amountOf(opp), opps))))
+        }
+
+// === winRate ===
+// Wins over closed deals. The guard makes the division by zero unreachable rather than reporting it: a
+// period with no closed deals has no win rate, which is a different statement from a rate of zero. That is
+// also why no outcome here is a DivisionByZero — the model does not carry a case it can never return, and
+// the guard is what earns that. Finding F5.
+behavior winRateOf : (closed: List<ClosedOpportunity>) -> WinRate | NoClosedDeals
+    constructs WinRate, Probability, NoClosedDeals
+
+let isWon (opp: ClosedOpportunity): Bool =
+    match opp with
+        | ClosedWon  -> true
+        | ClosedLost -> false
+
+let winRateOf (closed) = {
+    guard List.length(closed) >= 1 else NoClosedDeals
+    let (won, lost) = List.partition(opp -> isWon(opp), closed)
+    WinRate { rate = Probability(List.length(won) * 100 / List.length(closed))
+            , won = List.length(won)
+            , lost = List.length(lost)
+            }
+}

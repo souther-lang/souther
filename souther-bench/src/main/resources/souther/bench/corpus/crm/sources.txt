@@ -1,0 +1,4 @@
+crm.sou
+crm.examples.sou
+pipeline.sou
+quoting.sou

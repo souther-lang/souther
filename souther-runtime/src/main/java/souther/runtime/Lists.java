@@ -45,6 +45,66 @@ public final class Lists {
         return PersistentVector.<T>from(list).append(element);
     }
 
+    /**
+     * An empty builder to walk with, as the accumulator a fold that only grows its list starts from.
+     *
+     * <p>The walk itself is emitted at the call site rather than made a loop here: a loop here would
+     * be one method for every fold in the program, and the step it applies would be one call site
+     * seeing every step there is — which past two or three of them stops being inlined and costs more
+     * than the walk. Emitted where it stands, each walk applies the one step it was written with. What
+     * is left in this class is the builder, which is not something generated code can name.
+     */
+    public static List<Object> builder() {
+        return new PersistentVector.Builder<>();
+    }
+
+    /** The list a walk built, sealed: nothing may be added to the builder after this. */
+    @SuppressWarnings("unchecked")
+    public static <T> List<T> sealed(List<T> acc) {
+        return ((PersistentVector.Builder<T>) acc).build();
+    }
+
+    /**
+     * Walks {@code xs} from index {@code from} with a builder as the accumulator and seals it into a
+     * list — the same walk as {@link #builder}'s, for the two shapes the backend does not emit in
+     * place: one that starts past the head, and one whose step is {@link Fn#NEVER}.
+     *
+     * <p>The step is the fold's own step, applied per element, except that its {@code acc ++ …} has
+     * become {@link #grow}/{@link #growAll} and so adds to the builder and answers with it. The
+     * compiler only rewrites a fold whose step touches the accumulator nowhere else, so the builder
+     * is what comes back from every step and the cast below cannot fail. That is also what makes the
+     * mutation unobservable: no version of the list before the last one is ever read.
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> List<T> build(Fn step, List<? extends T> xs, long from) {
+        PersistentVector.Builder<T> builder = new PersistentVector.Builder<>();
+        Object acc = builder;
+        int n = xs.size();
+        for (long i = from; i >= 0 && i < n; i++) {
+            acc = step.apply(new Object[] {acc, xs.get((int) i)});
+        }
+        return ((PersistentVector.Builder<T>) acc).build();
+    }
+
+    /** {@code acc ++ [element]} inside a {@link #build}: adds to the builder the walk carries and
+     *  answers with it, so the step reads as the fold it was written as. */
+    @SuppressWarnings("unchecked")
+    public static <T> List<T> grow(List<T> acc, T element) {
+        ((PersistentVector.Builder<T>) acc).add(element);
+        return acc;
+    }
+
+    /** {@code acc ++ elements} inside a {@link #build}, for a step that adds a list rather than one
+     *  element ({@code List.concatMap}, a fold joining what each element gives). */
+    @SuppressWarnings("unchecked")
+    public static <T> List<T> growAll(List<T> acc, List<? extends T> elements) {
+        PersistentVector.Builder<T> builder = (PersistentVector.Builder<T>) acc;
+        for (int i = 0, n = elements.size(); i < n; i++) {
+            builder.add(elements.get(i));
+        }
+        return acc;
+    }
+
     /** The list in reverse order (Elm {@code List.reverse}). A native primitive rather than a fold:
      *  a left fold can only prepend to build a reversed list, and prepending to an array-backed
      *  vector is O(n) per step (O(n²) overall), so reversing walks the input from the end in O(n). */

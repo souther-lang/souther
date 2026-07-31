@@ -158,6 +158,18 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Lists_concat = MethodTypeDesc.of(CD_List, CD_List, CD_List);
     static final MethodTypeDesc MTD_Lists_append = MethodTypeDesc.of(CD_List, CD_List, CD_Object);
     static final MethodTypeDesc MTD_Lists_sort = MethodTypeDesc.of(CD_List, CD_List);
+    static final MethodTypeDesc MTD_Lists_build =
+            MethodTypeDesc.of(CD_List, CD_Fn, CD_List, ConstantDescs.CD_long);
+    static final MethodTypeDesc MTD_Lists_grow = MethodTypeDesc.of(CD_List, CD_List, CD_Object);
+    static final MethodTypeDesc MTD_Lists_growAll = MethodTypeDesc.of(CD_List, CD_List, CD_List);
+    static final MethodTypeDesc MTD_Maps_build =
+            MethodTypeDesc.of(CD_Map, CD_Fn, CD_List, ConstantDescs.CD_long);
+    static final MethodTypeDesc MTD_Maps_put = MethodTypeDesc.of(CD_Map, CD_Map, CD_Object, CD_Object);
+    static final MethodTypeDesc MTD_Lists_builder = MethodTypeDesc.of(CD_List);
+    static final MethodTypeDesc MTD_Lists_sealed = MethodTypeDesc.of(CD_List, CD_List);
+    static final MethodTypeDesc MTD_Maps_builder = MethodTypeDesc.of(CD_Map);
+    static final MethodTypeDesc MTD_Maps_sealed = MethodTypeDesc.of(CD_Map, CD_Map);
+    static final MethodTypeDesc MTD_next = MethodTypeDesc.of(CD_Object);
     static final MethodTypeDesc MTD_Strings_split = MethodTypeDesc.of(CD_List, CD_String, CD_String);
     static final MethodTypeDesc MTD_Strings_join = MethodTypeDesc.of(CD_String, CD_List, CD_String);
     static final MethodTypeDesc MTD_Strings_replace =
