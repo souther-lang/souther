@@ -68,7 +68,6 @@ class CompileFunctionValueFlowTest {
     // A helper's name in a value position is the function it names — the same value a lambda spelling
     // it out would be. What it denotes does not depend on which of the two the author wrote.
     @Test
-    @SuppressWarnings("unchecked")
     void aHelperNamedAsAValueIsTheFunctionItNames() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(BY_NAME), getClass().getClassLoader());
@@ -168,7 +167,6 @@ class CompileFunctionValueFlowTest {
     // An application whose arguments this scope can read is still a constraint, even inside a lambda:
     // what puts an application out of reach is a binder below the inference point, not the lambda.
     @Test
-    @SuppressWarnings("unchecked")
     void anApplicationInsideALambdaOverOuterNamesStillTypesTheFunction() throws Exception {
         String src = """
                 module demo

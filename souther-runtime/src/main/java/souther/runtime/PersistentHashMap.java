@@ -87,8 +87,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         return size;
     }
 
+    /** {@code null} for an absent key, as {@link Map#get} says. The {@code "null"} suppression is for
+     *  {@link AbstractMap}, which carries no nullness annotations: against an unannotated {@code V}
+     *  a nullable return reads as narrowing the inherited one. */
     @Override
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "null"})
     public @Nullable V get(@Nullable Object key) {
         Object r = root.find(key, hashOf(key), 0);
         return r == NOT_FOUND ? null : (V) r;
@@ -603,13 +606,14 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
 
         @Override
         public Map.Entry<Object, Object> next() {
-            if (payloadNode == null) {
+            Node node = payloadNode;
+            if (node == null) {
                 throw new NoSuchElementException();
             }
-            Object k = payloadNode.keyAt(payloadIndex);
-            Object v = payloadNode.valAt(payloadIndex);
+            Object k = node.keyAt(payloadIndex);
+            Object v = node.valAt(payloadIndex);
             payloadIndex++;
-            if (payloadIndex >= payloadNode.payloadArity()) {
+            if (payloadIndex >= node.payloadArity()) {
                 advance();
             }
             return new SimpleImmutableEntry<>(k, v);
@@ -671,8 +675,9 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             if (built) {
                 throw new IllegalStateException("this builder has already been built");
             }
-            if (probe.holder != null && Objects.equals(probe.key, key)) {
-                probe.holder[probe.index] = val;
+            @Nullable Object @Nullable [] held = probe.holder;
+            if (held != null && Objects.equals(probe.key, key)) {
+                held[probe.index] = val;
                 probe.holder = null;
                 probe.key = null;
                 return;
@@ -687,6 +692,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         }
 
         @Override
+        @SuppressWarnings("null")
         public @Nullable V put(K key, V val) {
             @Nullable V old = get(key);
             set(key, val);
@@ -701,11 +707,11 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         /** The value at {@code key}, remembering where it was found so that writing the same key back
          *  — which is what an {@code upsert} does next — need not descend again. */
         @Override
-        @SuppressWarnings("unchecked")
+        @SuppressWarnings({"unchecked", "null"})
         public @Nullable V get(@Nullable Object key) {
             if (root.probe(key, hashOf(key), 0, probe)) {
                 probe.key = key;
-                return (V) probe.holder[probe.index];
+                return (V) Objects.requireNonNull(probe.holder)[probe.index];
             }
             probe.holder = null;
             probe.key = null;

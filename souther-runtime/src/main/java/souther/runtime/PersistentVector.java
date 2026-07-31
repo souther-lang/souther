@@ -8,6 +8,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.RandomAccess;
 import java.util.function.Consumer;
 
@@ -207,7 +208,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         }
         @Nullable Object[] node = root;
         for (int level = shift; level > 0; level -= BITS) {
-            node = (@Nullable Object[]) node[(i >>> level) & MASK];
+            node = (@Nullable Object[]) Objects.requireNonNull(node[(i >>> level) & MASK]);
         }
         return node;
     }
@@ -308,8 +309,11 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         };
     }
 
+    /** The {@code "null"} suppression is for {@link Iterable}, which carries no nullness annotations:
+     *  against an unannotated parameter, requiring one here reads as strengthening what the inherited
+     *  method asks of its callers. */
     @Override
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "null"})
     public void forEach(Consumer<? super E> action) {
         for (int base = 0; base < cnt; base += WIDTH) {
             @Nullable Object[] leaf = arrayFor(base);
@@ -424,7 +428,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
             }
             @Nullable Object[] node = root;
             for (int level = shift; level > 0; level -= BITS) {
-                node = (@Nullable Object[]) node[(i >>> level) & MASK];
+                node = (@Nullable Object[]) Objects.requireNonNull(node[(i >>> level) & MASK]);
             }
             return (E) node[i & MASK];
         }

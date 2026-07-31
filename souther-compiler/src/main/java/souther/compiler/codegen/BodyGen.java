@@ -48,10 +48,6 @@ final class BodyGen {
     private final String pkg;
     private final Symbols symbols;
 
-    private ClassDesc cd(String typeName) {
-        return ctx.cd(typeName);
-    }
-
     private ClassDesc cd(TypeName typeName) {
         return ctx.cd(typeName);
     }

@@ -42,7 +42,6 @@ public final class Maps {
     }
 
     /** The map a walk built, handed over: nothing may be written to the builder after this. */
-    @SuppressWarnings("unchecked")
     public static <K, V> Map<K, V> sealed(Map<K, V> acc) {
         return ((PersistentHashMap.Builder<K, V>) acc).build();
     }
@@ -72,7 +71,6 @@ public final class Maps {
 
     /** {@code Map.insert} inside a {@link #build}: writes into the builder the walk carries and
      *  answers with it, so the step reads as the fold it was written as. */
-    @SuppressWarnings("unchecked")
     public static <K, V> Map<K, V> put(Map<K, V> acc, K key, V value) {
         ((PersistentHashMap.Builder<K, V>) acc).set(key, value);
         return acc;
