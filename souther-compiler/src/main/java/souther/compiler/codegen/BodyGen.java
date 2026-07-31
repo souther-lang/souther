@@ -1012,7 +1012,10 @@ final class BodyGen {
                 }
                 case "Map.get" -> {
                     genExpr(call.args().get(1));      // get(key, m): map then key (Maps.get)
-                    genExpr(call.args().get(0));      // key (a reference)
+                    // The key goes into an Object parameter, so a primitive one boxes here. An Int
+                    // key is a long on the stack, and a String key is already a reference — which is
+                    // why leaving this out is bytecode that verifies for one and not the other.
+                    box(code, genExpr(call.args().get(0)));
                     code.invokestatic(CD_Maps, "get",
                             MethodTypeDesc.of(CD_Option, CD_Map, ConstantDescs.CD_Object));
                 }
