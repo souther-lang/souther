@@ -6,7 +6,7 @@ Status: Accepted
 
 Souther must not implement outside-world effects — database queries, HTTP calls, file
 access, clock reads, id generation, message sending. These are exactly the things the
-specification DSL annotates with `// 依存:` (depends on) and `// 副作用:` (side effect).
+specification DSL annotates with `// depends:` (depends on) and `// side effect:` (side effect).
 The language needs a way to name such a dependency as a type while leaving its
 implementation outside, and to do so without adding surface that the spec DSL does not
 have.
@@ -23,16 +23,16 @@ behavior with neither is the injection target.
 
 The spec DSL has no `required` word either; a dependency is marked only by a comment
 note. Because Souther also uses no keyword, the DSL line survives verbatim — `behavior
-現在時刻 = () -> DateTime` with no `let` is the whole declaration.
+now = () -> DateTime` with no `let` is the whole declaration.
 
 Code that uses such a behavior lists its name under `depends on`, which then surfaces as an
-argument of the using `let` (see ADR-0016). The read-only "// 依存" versus mutating
-"// 副作用" distinction is documentation of intent only; it does not affect the value
+argument of the using `let` (see ADR-0016). The read-only "// depends" versus mutating
+"// side effect" distinction is documentation of intent only; it does not affect the value
 composition rules.
 
 `constructs` is still required on a non-implemented behavior (`[#constructs]`): the declaration
 reads the same as if it were implemented in Souther — `findMember` mints its failure cases
-but does *not* mint `会員` (it reads an outside value through a decoder). The generated
+but does *not* mint `Member` (it reads an outside value through a decoder). The generated
 Java base class (`[#java-base-class]`) hands out factories for the declared unit cases from here.
 
 The base class an implementation extends is public whatever `exposing` says, so the
@@ -51,10 +51,10 @@ accepts and runs such an implementation from another package. That is what E1305
 allowance rests on.
 
 Which behaviors get a `let` and which are injected is not mechanically derivable from the
-DSL: `// 依存:` is a note, not an obligation, so its absence does not prove a behavior is
+DSL: `// depends:` is a note, not an obligation, so its absence does not prove a behavior is
 internal. The one-to-one correspondence (ADR-0001) is therefore at the level of the
 *declaration*, not the implementation form (`let` / injection / `>->`); the modeler chooses
-the form using the `// 依存:` / `// 副作用:` notes as a guide.
+the form using the `// depends:` / `// side effect:` notes as a guide.
 
 ## References
 

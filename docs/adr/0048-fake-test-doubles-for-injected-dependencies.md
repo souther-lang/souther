@@ -5,7 +5,7 @@ Status: Accepted
 ## Context
 
 `example` (ADR-0046) evaluates a behavior at compile time, but only if the compiler can run it.
-A behavior that `depends on` an injected dependency (`事前承認する depends on 現在時刻`; ADR-0029) could not
+A behavior that `depends on` an injected dependency (`preApprove depends on now`; ADR-0029) could not
 be evaluated: the dependency has no in-language implementation (it is provided from Java at the
 boundary). Yet behaviors that depend on time, id generation, or an external lookup are most of a real
 domain. The injected dependency itself needs no test (it is boundary code), but the behavior that
@@ -30,7 +30,7 @@ run-time class, so it never ships (like an example, zero Jar footprint).
 Dependencies split by shape:
 
 - A *value dependency* (a constant faked result) is given on the row with `with dep = value`:
-  `… with 現在時刻 = "2026-07-20T09:00" -> …`. The value is a fixture decoded into the dependency's
+  `… with now = "2026-07-20T09:00" -> …`. The value is a fixture decoded into the dependency's
   output type.
 - A *function dependency* (result varies with input) is given by a `fake dep | (in) -> out | …`
   declaration — an input→output table matched by value equality (using newtype `==`, ADR-0047, so the

@@ -36,9 +36,9 @@ Surface. An `example` names a target behavior and lists `|`-led rows; each row i
 description, an input argument tuple, `->`, and an expected result:
 
 ```
-example 提出する
-    | "上限内なら提出できる" : (申請準備中 { 予定費用 = 金額(50000) }, "…") -> 提出済み
-    | "上限超過は却下"       : (申請準備中 { 予定費用 = 金額(100001) }, "…") -> 却下 { 理由 = "high_cost" }
+example submit
+    | "within the ceiling it submits" : (Drafting { estimatedCost = Amount(50000) }, "…") -> Submitted
+    | "over the ceiling is rejected"       : (Drafting { estimatedCost = Amount(100001) }, "…") -> Rejected { reason = "high_cost" }
 ```
 
 The expected side asserts at two granularities: a bare type name asserts only the result arm (which case

@@ -14,7 +14,7 @@ A composition (Pipe) behavior listed in `exposing` must declare its output, and 
 
 ```
 module example.order exposing (
-    注文を確定する : 確定注文 | 在庫不足
+    placeOrder : PlacedOrder | OutOfStock
 )
 ```
 

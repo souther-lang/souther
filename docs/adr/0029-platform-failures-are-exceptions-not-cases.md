@@ -12,7 +12,7 @@ keeps failure handling in the type and under exhaustiveness checking.
 External-world dependencies are behaviors with no implementation, injected from Java
 (ADR-0006). The original rule for those Java implementations (`[#java-impl-rules]`) said: *return one of the
 declared failure cases; do not let DB exceptions or HTTP failures leak to the language side.*
-Its worked example, `findMember`, therefore declared a `DB不通` (database-unavailable) case and
+Its worked example, `findMember`, therefore declared a `DBunavailable` (database-unavailable) case and
 folded any `DataAccessException` into it.
 
 That conflates two different kinds of failure:
@@ -25,17 +25,17 @@ That conflates two different kinds of failure:
   are not a decision the model makes; they are an abnormal condition that happened *to* it.
 
 Forcing platform failures into the output sum has real costs. Every DB-touching behavior's
-domain type must then carry an infrastructure case (`DB不通`), polluting the signature and the
+domain type must then carry an infrastructure case (`DBunavailable`), polluting the signature and the
 exhaustiveness check with something that is not a domain outcome. Worse, when the database is
 genuinely down there is no honest case value to return — the implementation must either invent
-an infrastructure case or lie (fold it into `在庫不足` / "insufficient", which it wasn't).
+an infrastructure case or lie (fold it into `OutOfStock` / "insufficient", which it wasn't).
 
 ## Decision
 
 Split the two kinds of failure by channel:
 
-- **Domain outcomes are cases.** Success values and declared failure cases (`会員なし`,
-  `在庫不足`, `保存データ不正`, …) are returned as values, exactly as before.
+- **Domain outcomes are cases.** Success values and declared failure cases (`NoSuchMember`,
+  `OutOfStock`, `CorruptStoredData`, …) are returned as values, exactly as before.
 - **Platform failures are exceptions.** The Java binding — the injected implementation of a
   behavior — *may throw* for platform/infrastructure failures. Souther does not fold them into
   cases; it propagates them transparently. The generated `>->` pipeline and `Behavior.apply`
@@ -54,7 +54,7 @@ rule). A platform failure is infrastructure being unavailable or unresponsive. T
 a case and shows up in the domain type; the latter is an exception and stays out of the domain
 type.
 
-`保存データ不正` (the stored value violates a domain invariant when decoded) stays a domain
+`CorruptStoredData` (the stored value violates a domain invariant when decoded) stays a domain
 case. The infrastructure worked and handed back data; that the data breaks a domain rule is a
 statement about the *domain*, and the model may legitimately name it as an outcome. Whether a
 given corrupt-data case is worth naming is a modeling choice; classifying it is the author's
@@ -87,17 +87,17 @@ not a 503.
 
 ## Consequences
 
-- Injected behaviors no longer declare a `DB不通`-style case for infrastructure availability.
-  The `ordering` example (`注文を記録する >-> 在庫を引き当てる`) demonstrates this: a DB outage
+- Injected behaviors no longer declare a `DBunavailable`-style case for infrastructure availability.
+  The `ordering` example (`recordOrder >-> allocateStock`) demonstrates this: a DB outage
   is thrown by the jOOQ implementation, passes through Souther untouched, is auto-rolled-back
   by the transaction boundary, and mapped to 503 by a boundary exception handler — while the
-  domain type stays `注文確定 | 在庫不足`.
-- The `findMember` example (spec and the `member` module) drops `DB不通`; a DB-down there is a
-  thrown platform failure. `会員なし` and `保存データ不正` remain domain cases.
+  domain type stays `PlacedOrder | OutOfStock`.
+- The `findMember` example (spec and the `member` module) drops `DBunavailable`; a DB-down there is a
+  thrown platform failure. `NoSuchMember` and `CorruptStoredData` remain domain cases.
 - Callers of injected behaviors must expect that a platform failure surfaces as an exception at
   the boundary, not as a case, and handle it there.
 - The most important reason for writing this ADR: the previous `[#java-impl-rules]` text stated the opposite
-  ("do not let DB exceptions leak"), which actively misled readers into modeling `DB不通` as a
+  ("do not let DB exceptions leak"), which actively misled readers into modeling `DBunavailable` as a
   domain case. The principle was load-bearing but undocumented; this records it.
 
 ## Relationship to other decisions

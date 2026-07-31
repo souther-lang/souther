@@ -14,11 +14,11 @@ Both halves of that claim were wrong. A `data` may already refer to itself — a
 ordinary business data:
 
 ```
-data 社員 = { 上司: 社員?, 氏名: String }
+data Employee = { manager: Employee?, name: String }
 ```
 
 The compiler accepts this, and the derived decoder/encoder already traverse it: a nested
-`{"氏名":"a","上司":{"氏名":"b"}}` decodes to a `社員` whose `上司` is a `社員`. Self-referential
+`{"name":"a","manager":{"name":"b"}}` decodes to a `Employee` whose `manager` is a `Employee`. Self-referential
 data is not absent from Souther; it works. What was missing is the ability to *compute* over it.
 `fold` is the one loop primitive and it folds a `List` of fixed structure; it cannot walk a
 reporting line to the top, collect all ancestors, or measure the depth of a tree, because the
@@ -39,7 +39,7 @@ helpers.
   and emitted as `static` methods on a package-private `$Fns` class; a self- or mutual call is a
   plain `invokestatic`. Non-recursive helpers are still inlined, unchanged — combinators keep
   self-hosting over `fold`, and the inliner keeps stamping prelude-helper errors at the call site.
-- **A recursive helper must declare its return type**: `let 深さ (s: 社員): Int = ...`. The result
+- **A recursive helper must declare its return type**: `let depth (s: Employee): Int = ...`. The result
   cannot be inferred through the cycle without a fixpoint; the declared type lets a self-call be
   typed before the body is checked. Parameter types are already declared for helpers. A
   non-recursive helper still infers its return type, so the annotation is required only when the
@@ -66,7 +66,7 @@ helpers.
 
 Because self-referential data is now a deliberate, supported shape, one soundness gap is closed
 alongside: a `data` whose construction requires constructing itself through **mandatory** fields
-with no base case is uninhabitable and is rejected at compile time. `上司: 社員` (no `?`) is a
+with no base case is uninhabitable and is rejected at compile time. `manager: Employee` (no `?`) is a
 base-less cycle — no value can ever be built — so it is a compile error, not a runtime overflow.
 An optional (`?`) field or a `List`/`Map` field is a base case (`None`, the empty collection) and
 breaks the cycle. A sum is OR-composed, so the check does not propagate through one.

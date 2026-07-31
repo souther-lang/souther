@@ -49,7 +49,7 @@ An `example` row names a value instead of restating its input, and spreads one t
 
 The two `fromList` forms are admitted because a value has to be ordinary code and a row does not. A row writes a set as its elements and a map as its entry pairs, and the decoder reads that; in code a list literal is a `List` whatever the position declares, which is measured — `let s: Set<Int> = [ 1, 2 ]` is a type error. `Set.fromList` and `Map.fromList` are the forms that notation already stands for, so admitting them is what lets one record serve as both. Without it the CRM record this issue is about cannot be hoisted at all: `NegotiationReview.decisionMakers` wraps a `Set`.
 
-The neutral form of a newtype no longer depends on how it was spelled. A value's body reaches the fixture builder already desugared, where `金額(500)` is the record `金額 { value = 500 }` (ADR-0032) — the same value written the other way — so both now build the newtype's inner value rather than a field map.
+The neutral form of a newtype no longer depends on how it was spelled. A value's body reaches the fixture builder already desugared, where `Amount(500)` is the record `Amount { value = 500 }` (ADR-0032) — the same value written the other way — so both now build the newtype's inner value rather than a field map.
 
 The measured migration cost is six occurrences, all of them source written inside the compiler's own tests (`let now ()`, `let caller ()`, `let empty ()`, `let group ()`). The bundled prelude and every module of souther-lang/examples have none, and compile unchanged.
 

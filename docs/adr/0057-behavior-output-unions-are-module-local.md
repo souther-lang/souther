@@ -4,13 +4,13 @@ Status: Accepted (decided 2026-07-26). Records the reason behind E1606, replacin
 
 ## Context
 
-A behavior whose output is an anonymous union (`-> 出荷指示 | 在庫不足`) gets a generated sealed interface, `<Behavior名>Result`, that its leaf cases implement (ADR-0008, ADR-0049). A Java caller receives one value and matches it with a `switch` that needs no `default`.
+A behavior whose output is an anonymous union (`-> ShipmentOrder | OutOfStock`) gets a generated sealed interface, `<BehaviorName>Result`, that its leaf cases implement (ADR-0008, ADR-0049). A Java caller receives one value and matches it with a `switch` that needs no `default`.
 
 E1606 rejects such a union when one of its cases was declared in an imported module. That happens in two ordinary shapes once a domain is split into bounded contexts: a behavior declaring an imported failure case in its own output, and a `>->` whose departed case comes from an imported stage.
 
 The reason recorded in the compiler was that the JVM cannot do it — that a sealed type in the unnamed module permits only same-package subclasses. That claim was measured on JDK 25 and does not hold for classfiles read from the classpath (issue #95): the same-package rule is enforced by javac when it *declares* a sealed type in source, and a cross-package `permits` read from a classfile loads and still gives a Java consumer an exhaustive `switch`.
 
-The premise was wrong, but so was the conclusion drawn from testing only the `permits` side. Both sides of a sealed hierarchy have to hold: the union lists its cases, and each case class implements the union. Souther puts that interface on the case class when the case's **own** module is generated — `inv.Shortage` comes out of `inv` with `implements inv.AllocateResult` and nothing else. For it to be a member of `ship.出荷するResult`, the class `inv` already emitted would have to implement an interface `ship` declares.
+The premise was wrong, but so was the conclusion drawn from testing only the `permits` side. Both sides of a sealed hierarchy have to hold: the union lists its cases, and each case class implements the union. Souther puts that interface on the case class when the case's **own** module is generated — `inv.Shortage` comes out of `inv` with `implements inv.AllocateResult` and nothing else. For it to be a member of `ship.shipResult`, the class `inv` already emitted would have to implement an interface `ship` declares.
 
 Lifting E1606 and compiling the pair shows what that costs. The union is emitted permitting only the local case, the imported value is not a member of it, and a Java consumer's exhaustive `switch` compiles and then fails:
 

@@ -30,12 +30,12 @@ One spelling everywhere, matching TypeScript and JavaScript, where `...` is spre
 uniformly.
 
 ```text
-data 提出済み = {
-    ...出張申請共通項目,
-    提出日時: String
+data Submitted = {
+    ...TravelRequestCommon,
+    submittedAt: String
 }
 
-let f (申請, 提出日時) = 提出済み { ...申請, 提出日時 = 提出日時 }
+let f (request, submittedAt) = Submitted { ...request, submittedAt = submittedAt }
 ```
 
 ## Consequences

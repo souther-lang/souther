@@ -8,8 +8,8 @@ Souther had two collection types, `List<T>` and `Map<String, T>`. A domain often
 collection with no duplicates and no significant order — a set of tags, a set of permissions, a set
 of applicable product codes. Modeled as a `List`, "no duplicates" is not in the type; it has to be
 asserted with an invariant, and the stdlib had no `distinct` to build one. Elm (`Set`) and F#
-(`Set`) both carry a set type, and the domain vocabulary distinguishes `List<タグ>` (order and
-repetition matter) from `Set<タグ>` (neither does).
+(`Set`) both carry a set type, and the domain vocabulary distinguishes `List<Tag>` (order and
+repetition matter) from `Set<Tag>` (neither does).
 
 Unlike a tuple or a function, a set *does* have an external representation — a JSON array — so it can
 cross the codec boundary and be a data field or a behavior's input/output, the way `List` and `Map`
