@@ -305,4 +305,15 @@ class PersistentVectorTest {
         assertFalse(it.hasNext());
         assertThrows(java.util.NoSuchElementException.class, it::next);
     }
+
+    /** A builder is single-use: the vector it built shares the nodes it filled, so a later add would
+     *  write into a value that is supposed to be immutable. */
+    @Test
+    void aBuilderRefusesToAddAfterItHasBuilt() {
+        PersistentVector.Builder<Integer> builder = new PersistentVector.Builder<>();
+        builder.add(1);
+        PersistentVector<Integer> built = builder.build();
+        assertThrows(IllegalStateException.class, () -> builder.add(2));
+        assertEquals(List.of(1), built);
+    }
 }

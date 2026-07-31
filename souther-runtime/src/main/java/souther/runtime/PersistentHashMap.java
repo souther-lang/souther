@@ -651,6 +651,12 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         private final Probe probe = new Probe();
         private Node root = BitmapIndexedNode.EMPTY;
         private int size;
+        /** Whether {@link #build} has handed the trie over. A builder is single-use: the map it built
+         *  shares the nodes it filled, so a later write would reach into a value that is supposed to be
+         *  immutable. Refusing here is what keeps that from being possible rather than merely unlikely
+         *  — the compiler's own analysis is what stops a walk from keeping its builder, and a guarantee
+         *  about a value should not rest on an analysis somewhere else. */
+        private boolean built;
 
         /**
          * Sets {@code key} to {@code val}, saying nothing about what was there before — bulk
@@ -662,6 +668,9 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
          * moved — only this method moves one.
          */
         void set(K key, V val) {
+            if (built) {
+                throw new IllegalStateException("this builder has already been built");
+            }
             if (probe.holder != null && Objects.equals(probe.key, key)) {
                 probe.holder[probe.index] = val;
                 probe.holder = null;
@@ -726,6 +735,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
 
         /** The map it has built. The trie is handed over here, so nothing may be set afterwards. */
         PersistentHashMap<K, V> build() {
+            built = true;
             return size == 0 ? empty() : new PersistentHashMap<>(root, size);
         }
     }

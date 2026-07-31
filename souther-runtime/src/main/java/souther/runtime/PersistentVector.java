@@ -382,9 +382,19 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         private @Nullable Object[] root = EMPTY_NODE;   // shared and untouched until the first spill into the trie
         private @Nullable Object[] tail = new @Nullable Object[WIDTH];
         private int tailLen = 0;
+        /** Whether {@link #build} has handed the trie over. A builder is single-use: the vector it
+         *  built shares the nodes it filled, so a later add would write into a value that is supposed
+         *  to be immutable. Refusing here is what keeps that from being possible rather than merely
+         *  unlikely — the compiler's own analysis is what stops a walk from keeping its builder, and a
+         *  guarantee about a value should not rest on an analysis somewhere else. */
+        private boolean built;
 
         @Override
         public boolean add(E val) {
+            if (built) {
+                throw new IllegalStateException("this builder has already been built");
+            }
+            modCount++;
             if (tailLen == WIDTH) {
                 spillTail();
                 tail = new @Nullable Object[WIDTH];
@@ -420,6 +430,7 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
         }
 
         PersistentVector<E> build() {
+            built = true;
             if (cnt == 0) {
                 return empty();
             }

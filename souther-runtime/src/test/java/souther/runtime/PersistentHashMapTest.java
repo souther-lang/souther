@@ -265,4 +265,15 @@ class PersistentHashMapTest {
         assertEquals(20, builder.get(2));
         assertEquals(2, builder.size());
     }
+
+    /** A builder is single-use, for the reason the vector's is: the map it built shares the nodes it
+     *  filled. */
+    @Test
+    void aBuilderRefusesToWriteAfterItHasBuilt() {
+        PersistentHashMap.Builder<Integer, Integer> builder = new PersistentHashMap.Builder<>();
+        builder.set(1, 10);
+        PersistentHashMap<Integer, Integer> built = builder.build();
+        assertThrows(IllegalStateException.class, () -> builder.set(2, 20));
+        assertEquals(Map.of(1, 10), built);
+    }
 }
