@@ -114,14 +114,26 @@ public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueS
         return valueHash();
     }
 
-    /** Whether {@code o} holds the same elements the language means. {@link #contains} already asks
-     *  the language's question, so each of the other set's elements is looked for here. */
+    /**
+     * Whether {@code o} holds the same elements the language means.
+     *
+     * <p>The other set is taken through {@link #from} first, because a foreign set is indexed by
+     * Java's equality, which is finer than the language's: a {@code HashSet} of 1.0 and 1.00 has two
+     * elements and the language sees one. Counted as it stands, both of those would find the same
+     * element here and nothing would notice the element this set has that it does not. Normalized,
+     * the sizes are the sizes the language means and one lookup each decides it. {@code from} shares
+     * when the set already is one, so a set Souther built pays nothing.
+     */
     @Override
     public boolean valueEquals(Object o) {
         if (o == this) {
             return true;
         }
-        if (!(o instanceof Set<?> other) || other.size() != size()) {
+        if (!(o instanceof Set<?> s)) {
+            return false;
+        }
+        PersistentHashSet<?> other = PersistentHashSet.from(s);
+        if (other.size() != size()) {
             return false;
         }
         for (Object e : other) {

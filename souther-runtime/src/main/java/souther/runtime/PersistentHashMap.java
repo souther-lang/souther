@@ -149,15 +149,29 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         return valueHash();
     }
 
-    /** Whether {@code o} is the same map the language means: the same keys, each mapped to the same
-     *  value. Both questions are asked of {@link Values}, so an amount is the amount it is at either
-     *  scale, on the key side and on the value side. */
+    /**
+     * Whether {@code o} is the same map the language means: the same keys, each mapped to the same
+     * value. Both questions are asked of {@link Values}, so an amount is the amount it is at either
+     * scale, on the key side and on the value side.
+     *
+     * <p>The other map is taken through {@link #from} first, because a foreign map is keyed by
+     * Java's equality, which is finer than the language's: a map holding 1.0 and 1.00 has two
+     * entries and the language sees one key. Counted as it stands, both would find the same entry
+     * here and nothing would notice the key this map has that it does not. Where such a map maps its
+     * duplicate keys to different values, {@code from} keeps the later one in iteration order, and
+     * that is the value the comparison sees — the language cannot hold both, and which of them a
+     * foreign map meant is not a question the boundary can answer.
+     */
     @Override
     public boolean valueEquals(Object o) {
         if (o == this) {
             return true;
         }
-        if (!(o instanceof Map<?, ?> other) || other.size() != size) {
+        if (!(o instanceof Map<?, ?> m)) {
+            return false;
+        }
+        PersistentHashMap<?, ?> other = PersistentHashMap.from(m);
+        if (other.size() != size) {
             return false;
         }
         for (Map.Entry<?, ?> e : other.entrySet()) {

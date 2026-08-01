@@ -53,14 +53,15 @@ public final class Values {
             case String s -> s.equals(b);
             case BigDecimal x -> b instanceof BigDecimal y && equal(x, y);
             case ValueSemantics s -> s.valueEquals(b);
-            // a foreign container on the left and one of ours on the right: ours knows how to be
-            // asked, so it is, rather than walking the foreign one against it
+            // A foreign container is asked through one of ours. A list is walked here, since a list
+            // compares positionally and a foreign one holds what it holds; a set and a map are not,
+            // because Java's equality is finer than the language's and a foreign one may hold two
+            // elements the language calls one. Normalizing is what makes their sizes the sizes the
+            // language means, and it is the same normalizing the hash below does.
             case List<?> xs -> b instanceof ValueSemantics s ? s.valueEquals(xs)
                     : b instanceof List<?> ys && equalLists(xs, ys);
-            case Set<?> xs -> b instanceof ValueSemantics s ? s.valueEquals(xs)
-                    : b instanceof Set<?> ys && equalSets(xs, ys);
-            case Map<?, ?> xs -> b instanceof ValueSemantics s ? s.valueEquals(xs)
-                    : b instanceof Map<?, ?> ys && equalMaps(xs, ys);
+            case Set<?> xs -> b instanceof Set<?> && PersistentHashSet.from(xs).valueEquals(b);
+            case Map<?, ?> xs -> b instanceof Map<?, ?> && PersistentHashMap.from(xs).valueEquals(b);
             default -> a.equals(b);
         };
     }
@@ -84,20 +85,10 @@ public final class Values {
                 }
                 yield h;
             }
-            case Set<?> xs -> {
-                int h = 0;                 // summed: a set is unordered
-                for (Object e : xs) {
-                    h += hash(e);
-                }
-                yield h;
-            }
-            case Map<?, ?> m -> {
-                int h = 0;
-                for (Map.Entry<?, ?> e : m.entrySet()) {
-                    h += hash(e.getKey()) ^ hash(e.getValue());
-                }
-                yield h;
-            }
+            // through the same normalizing the comparison above does, so a foreign set holding two
+            // elements the language calls one hashes as the one element it is
+            case Set<?> xs -> PersistentHashSet.from(xs).valueHash();
+            case Map<?, ?> m -> PersistentHashMap.from(m).valueHash();
             default -> v.hashCode();
         };
     }
@@ -128,50 +119,6 @@ public final class Values {
         Iterator<?> ys = b.iterator();
         while (xs.hasNext()) {
             if (!equal(xs.next(), ys.next())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /** A scan per element, because a foreign set is indexed by its elements' own hashes and cannot be
-     *  asked where one of ours would be. One of ours answers through {@link ValueSemantics} and never
-     *  reaches here. */
-    private static boolean equalSets(Set<?> a, Set<?> b) {
-        if (a.size() != b.size()) {
-            return false;
-        }
-        for (Object x : a) {
-            boolean found = false;
-            for (Object y : b) {
-                if (equal(x, y)) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static boolean equalMaps(Map<?, ?> a, Map<?, ?> b) {
-        if (a.size() != b.size()) {
-            return false;
-        }
-        for (Map.Entry<?, ?> e : a.entrySet()) {
-            boolean found = false;
-            for (Map.Entry<?, ?> f : b.entrySet()) {
-                if (equal(e.getKey(), f.getKey())) {
-                    if (!equal(e.getValue(), f.getValue())) {
-                        return false;
-                    }
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
                 return false;
             }
         }

@@ -353,7 +353,7 @@ final class Descriptors {
     // written once in `Values`, and the emitted call selects the overload the static type allows.
     static final ClassDesc CD_Values = ClassDesc.of("souther.runtime.Values");
     static final ClassDesc CD_Tuple = ClassDesc.of("souther.runtime.Tuple");
-    static final MethodTypeDesc MTD_Tuple_of =
+    static final MethodTypeDesc MTD_Tuple_ofOwned =
             MethodTypeDesc.of(CD_Tuple, CD_Object.arrayType());
     static final ClassDesc CD_TuplePair = ClassDesc.of("souther.runtime.Tuple$Pair");
     static final MethodTypeDesc MTD_TuplePair_init =

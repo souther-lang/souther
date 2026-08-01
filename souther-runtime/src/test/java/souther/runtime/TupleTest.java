@@ -66,11 +66,11 @@ class TupleTest {
     }
 
     @Test
-    void copyOfIsNotDisturbedByAWriteToTheArrayItWasGiven() {
-        Object[] xs = {"x", "y"};
-        Tuple t = Tuple.copyOf(xs);
+    void ofIsNotDisturbedByAWriteToTheArrayItWasGiven() {
+        Object[] xs = {"x", "y", "z"};
+        Tuple t = Tuple.of(xs);
         int before = t.hashCode();
-        xs[0] = "z";
+        xs[0] = "w";
         assertEquals(before, t.hashCode());
         assertEquals("x", t.get(0));
     }

@@ -520,7 +520,7 @@ final class BodyGen {
                 box(code, genExpr(t.elements().get(i)));
                 code.aastore();
             }
-            code.invokestatic(CD_Tuple, "of", MTD_Tuple_of, true);
+            code.invokestatic(CD_Tuple, "ofOwned", MTD_Tuple_ofOwned, true);
         }
 
         /** Reads a tuple element by index, cast back to the element's type. */
