@@ -141,6 +141,67 @@ class CompileNumericListFoldTest {
     }
 
     @Test
+    void aPositionThatIsNotNumericIsAMismatchRatherThanAMissingAnnotation() {
+        // The field says String, so nothing about the element is unknown here. Asking for the
+        // annotation would send the reader after something the position already carries.
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                import List ( sum )
+
+                data In = { xs: List<Int> }
+                data Out = { name: String }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { name = sum([]) }
+                """));
+        assertTrue(e.getMessage().contains("String"), e.getMessage());
+        assertTrue(!e.getMessage().toLowerCase().contains("annotate"),
+                "the position is annotated; annotating it again changes nothing: " + e.getMessage());
+    }
+
+    @Test
+    void aNewtypePositionIsAMismatchRatherThanAMissingAnnotation() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                import List ( sum )
+
+                data Hours = Decimal
+                data In = { xs: List<Decimal> }
+                data Out = { total: Hours }
+
+                behavior run : (i: In) -> Out constructs Out, Hours
+
+                let run (i) = Out { total = sum([]) }
+                """));
+        assertTrue(e.getMessage().contains("Hours"), e.getMessage());
+        assertTrue(!e.getMessage().toLowerCase().contains("annotate"),
+                "the position is annotated; annotating it again changes nothing: " + e.getMessage());
+    }
+
+    @Test
+    void anOptionalFieldAsksForTheValueItWraps() throws Exception {
+        // A `?` field being given a value asks for the value, not for an optional, so it says which
+        // of Int and Decimal the seed is exactly as a plain field does.
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                import List ( sum )
+
+                data In = { xs: List<Decimal> }
+                data Out = { total: Decimal? }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { total = sum([]) }
+                """), getClass().getClassLoader());
+
+        assertEquals(0, BigDecimal.ZERO.compareTo((BigDecimal) run(loader, List.of()).get("total")));
+    }
+
+    @Test
     void aNewtypeOverDecimalIsNotANumericElement() {
         // `Hours` wraps a Decimal but declares no addition and no zero of its own, so a list of them
         // has no sum. The value is summed by mapping to the wrapped field first.

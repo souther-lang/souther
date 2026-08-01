@@ -108,6 +108,14 @@ final class Intrinsics {
     record NumericFold(String intMethod, String decimalMethod) implements Emit {
         public Type emit(BodyGen g, Core.Call call) {
             Type result = call.type();
+            if (result != Type.INT && result != Type.DECIMAL) {
+                // the checker admits these two and nothing else; anything here is this compiler
+                // disagreeing with itself, and emitting the Int kernel for it would answer a wrong
+                // number rather than say so
+                throw new CompileException(call.pos(),
+                        "`" + call.fn() + "` reached the backend answering " + Type.show(result)
+                                + ", which is neither Int nor Decimal");
+            }
             g.genExpr(call.args().get(0));
             String method = result == Type.DECIMAL ? decimalMethod : intMethod;
             g.emitInvokeStatic(CD_Lists, method, MethodTypeDesc.of(boundaryDesc(result), CD_List));

@@ -23,9 +23,19 @@ The fold could not be generalised where it was written. `member` generalises bec
 
 The element MUST be `Int` or `Decimal`, and the answer has the element's type. These are the two types `+` and `*` are defined for; the constraint is checked in the compiler, as `sort`'s ordered-element constraint is.
 
-Over the empty-list literal there is no element to read. The answer is the seed — `sum([]) == 0`, `product([]) == 1`, Elm's rule — and which of the two comes from the position the call is written in: the field it fills, the annotated binding it feeds, the declared output it returns. Written where nothing states that, it is a compile error asking for the annotation.
+Over the empty-list literal there is no element to read. The answer is the seed — `sum([]) == 0`, `product([]) == 1`, Elm's rule — and which of the two comes from the position the call is written in: the field it fills, the annotated binding it feeds, the declared output it returns. A `?` field asks for the value it wraps rather than for an optional (ADR-0011), so the optional is peeled before the position is read, exactly as a written literal has it peeled.
 
-Choosing `Int` there would be a numeric default rule. Souther has none, and adding one for one library function costs more than the annotation does: `let total: Decimal = List.sum([])` says what the domain meant, and a rule that quietly answers `0` when it meant `0.0m` does not.
+The position can be three things, and they are three different reports.
+
+| The position states | The answer |
+| --- | --- |
+| `Int` or `Decimal` | that type |
+| nothing | a compile error asking for the annotation |
+| some other type | a type mismatch |
+
+Choosing `Int` for the second row would be a numeric default rule. Souther has none, and adding one for one library function costs more than the annotation does: `let total: Decimal = List.sum([])` says what the domain meant, and a rule that quietly answers `0` when it meant `0.0m` does not.
+
+The third row is a separate report because nothing about the element is unknown there. `Out { name: String }` given `List.sum([])` is annotated already; what is wrong is that a sum does not go in that position, and asking for an annotation would send the reader after something the position already carries.
 
 **A newtype over `Int` or `Decimal` is not a numeric element.** `data Hours = Decimal` declares no addition and no zero of its own. A list of them is summed by mapping to the wrapped value first:
 

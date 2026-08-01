@@ -595,27 +595,45 @@ public final class CallElaborator {
      *
      * <p>Over the empty-list literal there is no element to read, and the seed the fold answers with
      * is {@code 0} or {@code 0.0m} by which of the two this is. That comes from the position the call
-     * is written in — the field, the annotated binding, the declared output it feeds. With no
-     * position to read, the answer is asked for rather than defaulted: defaulting to {@code Int}
-     * would make a numeric-literal default rule out of one library function.
+     * is written in — the field, the annotated binding, the declared output it feeds. A {@code ?}
+     * field asks for the value it wraps rather than for an optional (ADR-0011), so the optional is
+     * peeled before the position is read, exactly as a written literal has it peeled.
+     *
+     * <p>Three things the position can be, and they are three different reports. It states one of
+     * the two: that is the answer. It states nothing: the answer is asked for rather than defaulted,
+     * since defaulting to {@code Int} would make a numeric-literal default rule out of one library
+     * function. It states something else: nothing about the element is unknown, and what is wrong is
+     * that a sum does not go here — asking for an annotation would send the reader after something
+     * the position already carries.
      */
     private static Type numericFold(Ast.Call call, Type element, Type expected) {
         if (element == Type.INT || element == Type.DECIMAL) {
             return element;
         }
         if (BottomInfer.isBottom(element)) {
-            if (expected == Type.INT || expected == Type.DECIMAL) {
-                return expected;
+            Type position = expected instanceof Type.OptionOf o ? o.element() : expected;
+            if (position == Type.INT || position == Type.DECIMAL) {
+                return position;
+            }
+            if (position == null || BottomInfer.isBottom(position)) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.numeric.empty").title("check.fold.seed.title")
+                                .at(call.pos(), call.fn().length()).args(call.fn())
+                                .hint("check.numeric.empty.hint").build(),
+                        call.fn() + " over the empty list answers with its seed, and whether that"
+                                + " seed is the Int 0 or the Decimal 0.0m follows from an element the"
+                                + " empty list does not have — annotate the position it feeds"
+                                + " (`let total: Decimal = " + call.fn() + "([])`)");
             }
             throw CompileException.of(
-                    Diagnostic.of(null, "check.numeric.empty").title("check.fold.seed.title")
-                            .at(call.pos(), call.fn().length()).args(call.fn())
-                            .hint("check.numeric.empty.hint").build(),
-                    call.fn() + " over the empty list answers with its seed, and whether that seed is"
-                            + " the Int 0 or the Decimal 0.0m follows from an element the empty list"
-                            + " does not have —"
-                            + " annotate the position it feeds (`let total: Decimal = " + call.fn()
-                            + "([])`)");
+                    Diagnostic.of(null, "check.numeric.result").title("check.type.mismatch.title")
+                            .at(call.pos(), call.fn().length())
+                            .args(call.fn(), Type.show(position))
+                            .hint("check.numeric.result.hint").build(),
+                    call.fn() + " answers with an Int or a Decimal, but this position needs "
+                            + Type.show(position) + " — a newtype over one of them is built from the"
+                            + " sum (`Hours(" + call.fn() + "(xs))`) rather than being it, and any"
+                            + " other type has no sum to take here");
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.numeric").title("check.type.mismatch.title")
