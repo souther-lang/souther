@@ -1051,9 +1051,8 @@ public final class HelperInliner {
                 }
                 scopedLambdas.forEach(helpers::put);
                 // a prelude helper's body is stamped with the call site, so errors inside it point at
-                // the user's call, not at the shipped source of souther.* (a module-own helper keeps
-                // its own positions, which already lie in the user's file).
-                SourcePos at = own.containsKey(helper.name()) ? null : call.pos();
+                // the user's call, not at the shipped source of souther.*
+                SourcePos at = keepsItsPositions(helper.name()) ? null : call.pos();
                 Ast.Expr body = inline(rename(helper.body(), subst, substDenotes, fnParams, at));   // expand nested helpers too
                 scopedLambdas.keySet().forEach(helpers::remove);
                 body = keepDeclaredReturn(helper, body, call.pos(), k);
@@ -1262,8 +1261,9 @@ public final class HelperInliner {
      * <p>{@code at}, when non-null, is stamped onto every rebuilt node in place of its own position.
      * A prelude helper is expanded with the call site as {@code at}, so a type error inside its body
      * points at the user's call — {@code filter(xs, x -> x * 2)} — not at a line of {@code souther.list}
-     * the user never wrote. A module-own helper passes {@code null} and keeps its own positions. The
-     * caller's argument expressions, spliced in separately, keep their own positions either way.
+     * the user never wrote. A module-own helper, and a lambda given to a fn parameter, pass {@code
+     * null} and keep the positions their bodies have ({@link #keepsItsPositions}). The caller's
+     * argument expressions, spliced in separately, keep their own positions either way.
      */
     private Ast.Expr rename(Ast.Expr e, Map<String, String> subst,
                             Map<String, ValueName> substDenotes, Set<String> fnParams,
@@ -1356,8 +1356,21 @@ public final class HelperInliner {
         };
     }
 
+    /**
+     * Whether expanding this helper leaves the positions in its body alone. A module-own helper does:
+     * its body lies in the user's file, so it is already where a diagnostic should point. A lambda
+     * given to a fn parameter does too: it is the caller's own code, and a lambda written in a prelude
+     * body was stamped with the call site when that body was renamed, so either way its positions are
+     * the ones to report. Everything else is a prelude helper, whose body lies in the shipped source of
+     * {@code souther.*} and is stamped with the call site instead.
+     */
+    private boolean keepsItsPositions(String helper) {
+        return own.containsKey(helper) || lambdaOrigins.containsKey(helper)
+                || scopedLambdaNames.contains(helper);
+    }
+
     /** The position to stamp on a rebuilt node: the override {@code at} for a prelude helper, or the
-     * node's own position when {@code at} is null (a module-own helper keeps its positions). */
+     * node's own position when {@code at} is null (see {@link #keepsItsPositions}). */
     private static SourcePos at(SourcePos at, SourcePos own) {
         return at != null ? at : own;
     }
