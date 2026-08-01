@@ -59,11 +59,11 @@ public sealed interface BindingOwner {
     /**
      * A copy of {@code expanded}'s body, placed inside {@code within}.
      *
-     * <p>Expanding a helper puts a second copy of its bindings in one body, so the copy owns them
-     * rather than the definition they were written in: a binding of the original keeps the ordinal it
-     * was given and changes owner. {@code ordinal} tells apart two expansions of the same thing in
-     * one place, so adding an expansion elsewhere moves nothing here, and an expansion inside an
-     * expansion is told apart by {@code within} without anything counting across the two.
+     * <p>Expanding a helper puts a second copy of its bindings into one body, so the copy owns them
+     * rather than the definition they were written in — otherwise two copies of one {@code let} would
+     * answer as one binding. {@code ordinal} tells apart two copies of the same body in one place, so
+     * expanding something elsewhere moves nothing here, and a copy inside a copy is told apart by
+     * {@code within} without anything counting across the two.
      */
     record Expansion(BindingOwner within, ValueName expanded, int ordinal) implements BindingOwner {
 
