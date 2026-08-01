@@ -59,7 +59,8 @@ import java.util.function.Consumer;
  * non-owning thread therefore copies once and owns the copy, which costs nothing on the fold path
  * (single-threaded) and keeps the hot path free of any atomic instruction.
  */
-public final class PersistentVector<E> extends AbstractList<E> implements RandomAccess {
+public final class PersistentVector<E> extends AbstractList<E>
+        implements RandomAccess, ValueSemantics {
 
     private static final int BITS = 5;
     private static final int WIDTH = 1 << BITS;   // 32
@@ -326,7 +327,11 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
 
     /** Order-sensitive list equality (the {@code List} contract), compared through the chunked
      *  iterator so a persistent-vector comparison stays O(n) — and cross-type against any other
-     *  {@code List} (e.g. an {@code ArrayList} from a literal). */
+     *  {@code List} (e.g. an {@code ArrayList} from a literal).
+     *
+     *  <p>Elements are compared with their own {@code equals}, as the interface says. A foreign List
+     *  on the other side compares them that way too, and one that answered otherwise here would be
+     *  equal to a list that was not equal back. The language's question is {@link #valueEquals}. */
     @Override
     public boolean equals(@Nullable Object o) {
         if (o == this) {
@@ -360,6 +365,40 @@ public final class PersistentVector<E> extends AbstractList<E> implements Random
             for (int j = 0; j < n; j++) {
                 Object e = leaf[j];
                 h = 31 * h + (e == null ? 0 : e.hashCode());
+            }
+        }
+        return h;
+    }
+
+    /** Whether {@code o} is the same list the language means: the same elements in the same order,
+     *  each compared through {@link Values}. */
+    @Override
+    public boolean valueEquals(Object o) {
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof List<?> other) || other.size() != cnt) {
+            return false;
+        }
+        Iterator<E> a = iterator();
+        Iterator<?> b = other.iterator();
+        while (a.hasNext() && b.hasNext()) {
+            if (!Values.equal(a.next(), b.next())) {
+                return false;
+            }
+        }
+        return !a.hasNext() && !b.hasNext();
+    }
+
+    /** The same formula {@link #hashCode} uses, over the elements' language hashes. */
+    @Override
+    public int valueHash() {
+        int h = 1;
+        for (int base = 0; base < cnt; base += WIDTH) {
+            @Nullable Object[] leaf = arrayFor(base);
+            int n = Math.min(WIDTH, cnt - base);
+            for (int j = 0; j < n; j++) {
+                h = 31 * h + Values.hash(leaf[j]);
             }
         }
         return h;

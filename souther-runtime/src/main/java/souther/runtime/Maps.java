@@ -76,12 +76,13 @@ public final class Maps {
         return acc;
     }
 
-    /** {@code m} without {@code key}; {@code m} unchanged when the key is absent. The {@code containsKey}
-     *  probe is worth the extra lookup: when the key is absent it returns the original map untouched,
-     *  which avoids normalizing a still-JDK input map (a just-decoded {@code LinkedHashMap}) into a
-     *  {@code PersistentHashMap} for a no-op removal. */
+    /** {@code m} without {@code key}; {@code m} unchanged when the key is absent. Which key that is
+     *  is the language's question, so the probe reads {@link PersistentHashMap#indexed} rather than
+     *  asking a still-JDK input map (a just-decoded {@code LinkedHashMap}), which would answer with
+     *  the key's own equality and miss an amount that arrived at another scale. A map Souther built is
+     *  already indexed that way and is read as it is. */
     public static <K, V> Map<K, V> remove(K key, Map<K, V> m) {
-        if (!m.containsKey(key)) {
+        if (!PersistentHashMap.indexed(m).containsKey(key)) {
             return m;
         }
         return PersistentHashMap.from(m).without(key);
@@ -118,14 +119,17 @@ public final class Maps {
 
     /** {@code Some(value)} when {@code key} is present, else {@code None}. A Souther map never stores a
      *  null value — absence is {@code None}, not a null entry — so a single lookup distinguishes the
-     *  two, no {@code containsKey} probe before {@code get}. */
+     *  two, no {@code containsKey} probe before {@code get}.
+     *
+     *  <p>Which key is present is the language's question, so a still-JDK map is normalized before it
+     *  is asked ({@link PersistentHashMap#indexed}); a map Souther built is read as it is. */
     public static <V> Option<V> get(Map<?, V> map, Object key) {
-        @Nullable V value = map.get(key);   // a JDK map's `get`: absent is null, which this reads as None
+        @Nullable V value = PersistentHashMap.indexed(map).get(key);
         return value != null ? Option.some(value) : Option.none();
     }
 
     public static boolean containsKey(Map<?, ?> map, Object key) {
-        return map.containsKey(key);
+        return PersistentHashMap.indexed(map).containsKey(key);
     }
 
     public static List<Object> keys(Map<?, ?> map) {

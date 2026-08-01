@@ -7,7 +7,22 @@ package souther.runtime;
  */
 public sealed interface Option<T> permits Option.Some, Option.None {
 
-    record Some<T>(T value) implements Option<T> {}
+    /** A present value. Its equality is the language's directly rather than the record default: a
+     *  {@code Some} is only ever compared with another {@code Some}, so there is no foreign
+     *  implementation to disagree with, and what it holds is a Souther value — an amount inside one
+     *  is the amount it is at either scale. */
+    record Some<T>(T value) implements Option<T> {
+
+        @Override
+        public boolean equals(Object o) {
+            return o instanceof Some<?> other && Values.equal(value, other.value());
+        }
+
+        @Override
+        public int hashCode() {
+            return Values.hash(value);
+        }
+    }
 
     record None<T>() implements Option<T> {}
 

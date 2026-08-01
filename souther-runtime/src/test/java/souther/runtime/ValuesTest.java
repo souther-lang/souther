@@ -3,6 +3,7 @@ package souther.runtime;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -39,20 +40,20 @@ class ValuesTest {
 
     @Test
     void aValueThatCarriesItsOwnSemanticsIsAskedForThem() {
-        ValueSemantics always = new ValueSemantics() {
-            @Override
-            public boolean valueEquals(Object other) {
-                return true;
-            }
+        List<BigDecimal> owned = PersistentVector.from(List.of(new BigDecimal("1.0")));
+        List<BigDecimal> foreign = List.of(new BigDecimal("1"));
+        assertTrue(Values.equal(owned, foreign));
+        assertTrue(Values.equal(foreign, owned));   // either side may carry them
+        assertEquals(Values.hash(owned), Values.hash(PersistentVector.from(foreign)));
+    }
 
-            @Override
-            public int valueHash() {
-                return 7;
-            }
-        };
-        assertTrue(Values.equal(always, "anything"));
-        assertTrue(Values.equal("anything", always));   // either side may carry them
-        assertEquals(7, Values.hash(always));
+    @Test
+    void aCarrierThatAnswersForItselfIsNotAskedTwice() {
+        // a Long or a String is never the same value as a container, so answering from its own
+        // equality is the same answer the ValueSemantics route would give, one test sooner
+        List<String> anyContainer = PersistentVector.from(List.of("x"));
+        assertFalse(Values.equal("x", anyContainer));
+        assertFalse(Values.equal(1L, anyContainer));
     }
 
     @Test

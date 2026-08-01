@@ -28,16 +28,25 @@ public final class Values {
     private Values() {}
 
     public static boolean equal(Object a, Object b) {
+        if (a == b) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        if (answersForItself(a.getClass())) {
+            return a.equals(b);
+        }
+        if (a instanceof BigDecimal x) {
+            return b instanceof BigDecimal y && equal(x, y);
+        }
         if (a instanceof ValueSemantics s) {
             return s.valueEquals(b);
         }
         if (b instanceof ValueSemantics s) {
             return s.valueEquals(a);
         }
-        if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
-            return equal(x, y);
-        }
-        return Objects.equals(a, b);
+        return a.equals(b);
     }
 
     /** Two amounts are the same amount when they differ only in scale. */
@@ -46,13 +55,35 @@ public final class Values {
     }
 
     public static int hash(Object v) {
-        if (v instanceof ValueSemantics s) {
-            return s.valueHash();
+        if (v == null) {
+            return 0;
+        }
+        if (answersForItself(v.getClass())) {
+            return v.hashCode();
         }
         if (v instanceof BigDecimal d) {
             return hash(d);
         }
-        return Objects.hashCode(v);
+        if (v instanceof ValueSemantics s) {
+            return s.valueHash();
+        }
+        return v.hashCode();
+    }
+
+    /**
+     * Whether a carrier's own {@code equals} and {@code hashCode} are already what the language
+     * means, decided by the exact class so the check is a load and a compare.
+     *
+     * <p>Almost every carrier qualifies, so this is a shortcut past the two tests below rather than a
+     * list of what is allowed — these two are named because they are what a Map is keyed by and a
+     * List holds in the walks that decide how the runtime performs, and a class check against a final
+     * class costs a fraction of the interface check {@link ValueSemantics} needs.
+     *
+     * <p>A class listed here is one whose equality this class then never inspects, so a carrier whose
+     * own equality is not the language's — {@code BigDecimal} is the one there is — MUST NOT be added.
+     */
+    static boolean answersForItself(Class<?> carrier) {
+        return carrier == Long.class || carrier == String.class;
     }
 
     /** The hash of an amount, taken after dropping the scale its equality ignores. */
