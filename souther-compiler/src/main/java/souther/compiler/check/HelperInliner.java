@@ -365,6 +365,32 @@ public final class HelperInliner {
         };
     }
 
+    /**
+     * {@code e} with every construction in it marked as one a value made.
+     *
+     * <p>A value is substituted at each reference, so what its definition built ends up standing in
+     * the body that named it, as the node that body's own construction would be. The mark is what
+     * keeps the permission check reading the model rather than the substitution: a behavior stating a
+     * rule against a named limit compares against a value, and originates none of it. A limit is
+     * written as a value so that the figure has one place to live and one comment saying where it
+     * comes from, and naming it is not supposed to cost every rule that reads it an authority it does
+     * not use.
+     *
+     * <p>Unlike a published body's mark this names no module. What the value built is the value
+     * definition's however the type got its declaration, and a behavior reading the name is not the
+     * one that made it either way. A helper is the other case and stays the other case: its body is
+     * checked as though it had been written inline, which is what tells a helper from a behavior.
+     */
+    private static Ast.Expr carriedByValue(Ast.Expr e) {
+        Ast.Expr rebuilt = Ast.mapChildren(e, HelperInliner::carriedByValue);
+        return switch (rebuilt) {
+            case Ast.NewData nd -> nd.carriedByValue();
+            case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
+                    v.denoting(named.carriedByValue());
+            default -> rebuilt;
+        };
+    }
+
     /** How a definition of {@code module} is named outside it. */
     public static String qualified(String module, String name) {
         return module + "." + name;
@@ -493,7 +519,7 @@ public final class HelperInliner {
                 }
                 yield changed
                         ? new Ast.NewData(nd.typeName(), nd.inits(), spreads,
-                                nd.publishedBy(), nd.pos())
+                                nd.origin(), nd.pos())
                         : nd;
             }
             default -> rebuilt;
@@ -1065,7 +1091,7 @@ public final class HelperInliner {
         if (recursive.contains(v.name())) {
             return v;
         }
-        return inline(value.body());
+        return carriedByValue(inline(value.body()));
     }
 
     /**
@@ -1088,11 +1114,11 @@ public final class HelperInliner {
             }
             String name = "$s" + counter++ + "_" + spread.bare();
             bound.add(name);
-            values.add(inline(value.body()));
+            values.add(carriedByValue(inline(value.body())));
             spreads.add(Ast.ValueRef.local(name, spread.pos()));
         }
         Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
-                nd.publishedBy(), nd.pos());
+                nd.origin(), nd.pos());
         for (int i = bound.size() - 1; i >= 0; i--) {
             built = new Ast.LetIn(bound.get(i), values.get(i), null, false, null, built, nd.pos());
         }
@@ -1204,7 +1230,7 @@ public final class HelperInliner {
                     String renamed = subst.get(s.bare());
                     spreads.add(renamed == null ? s : Ast.ValueRef.local(renamed, at(at, s.pos())));
                 }
-                yield new Ast.NewData(nd.typeName(), inits, spreads, nd.publishedBy(), at(at, nd.pos()));
+                yield new Ast.NewData(nd.typeName(), inits, spreads, nd.origin(), at(at, nd.pos()));
             }
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();

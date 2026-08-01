@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 
@@ -80,7 +81,7 @@ public final class NewtypeDesugar {
                     yield new Ast.NewData(
                             new Ast.Name(call.fn(), built, call.pos()),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
-                            List.of(), null, call.pos());
+                            List.of(), ConstructionOrigin.own(), call.pos());
                 }
                 yield new Ast.Call(call.fn(), call.denotes(), args, call.pos());
             }
@@ -89,7 +90,7 @@ public final class NewtypeDesugar {
                 for (Ast.FieldInit fi : nd.inits()) {
                     inits.add(new Ast.FieldInit(fi.name(), go(fi.value(), symbols), fi.pos()));
                 }
-                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.publishedBy(), nd.pos());
+                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.pos());
             }
             case Ast.Neg neg -> new Ast.Neg(go(neg.operand(), symbols), neg.pos());
             case Ast.Binary bin ->

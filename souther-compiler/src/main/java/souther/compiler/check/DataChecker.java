@@ -144,10 +144,9 @@ public final class DataChecker {
         out.putAll(all.originated());
     }
 
-    /** Whether {@code nd} was carried here by a published body of the module that declares
-     * {@code built} — the one case where the origination is already stated elsewhere. */
-    private static boolean declaredBy(Ast.NewData nd, TypeName built) {
-        return nd.publishedBy() != null && nd.publishedBy().equals(built.module());
+    /** Whether {@code nd} arrived here already made, rather than being written here. */
+    private static boolean carried(Ast.NewData nd, TypeName built) {
+        return nd.origin().carried(built);
     }
 
     static void collectConstructs(Ast.Expr e, Constructs out, Symbols symbols,
@@ -161,13 +160,16 @@ public final class DataChecker {
                 collectConstructs(li.body(), out, symbols, inner, recConstructs);
             }
             case Ast.NewData nd -> {
-                // A construction carried in by a module's published value or helper is that module's,
-                // not this body's: publishing the definition is what states the origination, and the
-                // reader has no name to declare a type the module keeps to itself by. What the mark
-                // does not cover is a type of some *other* module the published body happened to
-                // build — that origination is neither the reader's nor the publisher's to state, so it
-                // stays this behavior's to declare, which it can (ADR-0059).
-                Map<TypeName, String> side = declaredBy(nd, nd.typeName().denotes())
+                // A construction this body was handed is not this body's. It is handed one two ways.
+                // A module's published value or helper carries its own: publishing the definition is
+                // what states that origination, and the reader has no name to declare a type the
+                // module keeps to itself by. What that does not cover is a type of some *other*
+                // module the published body happened to build — that origination is neither the
+                // reader's nor the publisher's to state, so it stays this behavior's to declare,
+                // which it can. A value carries the construction its definition made, whatever module
+                // declares the type: the definition is where the value is made, and a body that names
+                // it compares against a limit rather than setting one.
+                Map<TypeName, String> side = carried(nd, nd.typeName().denotes())
                         ? out.carried() : out.originated();
                 side.putIfAbsent(nd.typeName().denotes(), nd.typeName().written());
                 for (Ast.FieldInit init : nd.inits()) {
@@ -237,8 +239,7 @@ public final class DataChecker {
             case Ast.Var v when !bound.contains(v.name())
                     && v.denotes() instanceof ValueName.OfType named
                     && symbols.get(named.type()) instanceof Ast.UnitData -> {
-                Map<TypeName, String> side = named.publishedBy() != null
-                        && named.publishedBy().equals(named.type().module())
+                Map<TypeName, String> side = named.origin().carried(named.type())
                         ? out.carried() : out.originated();
                 side.putIfAbsent(named.type(), v.name());
             }

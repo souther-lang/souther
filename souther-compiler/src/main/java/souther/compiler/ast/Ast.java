@@ -1,6 +1,7 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -690,22 +691,26 @@ public interface Ast {
      * not go back to matching the spelling against the module's own definitions.
      */
     /**
-     * A construction. {@code publishedBy} is the module whose published value or helper carried it
-     * here, and null where the body being read wrote it.
+     * A construction. {@code origin} says where it came from: written here, or carried in by a
+     * published body or by a value this body named.
      *
-     * <p>Expansion makes the two look alike: a construction spliced in from another module's
-     * published body is the same node the reader's own would be, and the permission check reading
-     * that body would ask the reader to declare `constructs` for a type it may have no name for. So
-     * the construction says where it came from. Every rebuild of this node carries it — the component
-     * has no default, which is what stops a pass from quietly dropping it and turning a carried
-     * construction back into the reader's own.
+     * <p>Expansion makes the two look alike: a construction spliced in from another body is the same
+     * node the reader's own would be, and the permission check reading that body would ask the
+     * reader to answer for it. So the construction says where it came from. Every rebuild of this
+     * node carries it — the component has no default, which is what stops a pass from quietly
+     * dropping it and turning a carried construction back into the reader's own.
      */
-    record NewData(Name typeName, List<FieldInit> inits, List<ValueRef> spreads, String publishedBy,
-                   SourcePos pos) implements Expr {
+    record NewData(Name typeName, List<FieldInit> inits, List<ValueRef> spreads,
+                   ConstructionOrigin origin, SourcePos pos) implements Expr {
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
         public NewData publishedBy(String module) {
-            return new NewData(typeName, inits, spreads, module, pos);
+            return new NewData(typeName, inits, spreads, origin.publishedIn(module), pos);
+        }
+
+        /** The same construction, carried into a body by a value that body named. */
+        public NewData carriedByValue() {
+            return new NewData(typeName, inits, spreads, origin.carriedByValue(), pos);
         }
     }
 
@@ -805,7 +810,7 @@ public interface Ast {
                 for (FieldInit i : nd.inits()) {
                     inits.add(new FieldInit(i.name(), f.apply(i.value()), i.pos()));
                 }
-                yield new NewData(nd.typeName(), inits, nd.spreads(), nd.publishedBy(), nd.pos());
+                yield new NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.pos());
             }
             case Match m -> {
                 List<Case> cases = new ArrayList<>();

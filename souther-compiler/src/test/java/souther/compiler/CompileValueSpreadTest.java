@@ -1,14 +1,11 @@
 package souther.compiler;
 
-import souther.compiler.diag.CompileException;
-
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A spread names a value the same way any other position does. An {@code example} row and a behavior
@@ -109,10 +106,12 @@ class CompileValueSpreadTest {
         assertEquals("local", out.get("name"));
     }
 
-    /** A spread builds the value it copies, so what the value constructs is constructed here. */
+    /** A spread names a value the way any other position does, so what that value built came in
+     * with it. The spreading behavior copies fields out of something already made, and the `Person`
+     * behind the spread is the value definition's. */
     @Test
-    void aValueSpreadContributesItsConstructions() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void aValueSpreadIsNotTheSpreadingBehaviorsConstruction() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
 
                 data In = { n: Int }
@@ -124,7 +123,5 @@ class CompileValueSpreadTest {
                 behavior go : (i: In) -> Stamped constructs Stamped
                 let go (i) = Stamped { ...base, age = 21 }
                 """));
-
-        assertTrue(e.getMessage().contains("constructs Person"), e.getMessage());
     }
 }
