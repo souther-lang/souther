@@ -69,8 +69,15 @@ public final class Shapes {
             try {
                 Ast.Module declared = onlyWhatItDeclares(resolved.value());
                 Ast.Module derived = Deriver.derive(declared, scope.value());
-                return Answer.of(
-                        HelperInliner.withSettledInvariants(derived, scope.value(), published));
+                // The invariants are whole here — spread in, imports substituted, helpers expanded —
+                // and this is where a newtype construction written `金額(500)` becomes the
+                // construction it is. A construction reaching an invariant through a helper is
+                // written in that helper's body, which this module has not desugared yet, so
+                // normalizing here rather than with the bodies is what leaves one spelling for every
+                // check over an invariant to read.
+                return Answer.of(NewtypeDesugar.rewriteInvariants(
+                        HelperInliner.withSettledInvariants(derived, scope.value(), published),
+                        scope.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

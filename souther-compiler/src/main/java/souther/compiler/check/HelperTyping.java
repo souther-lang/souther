@@ -226,21 +226,41 @@ public final class HelperTyping {
         TypeChecker.forEachChild(e, c -> rejectPartialHelperInInvariant(c, data, partial));
     }
 
-    /** Rejects a data construction inside an invariant: an invariant is pure — it observes the value
-     * being built, it does not build another (spec §invariant-expressions, "Forbidden: data
-     * construction"). Walks the inlined invariant, so a construction smuggled through a quantifier's
-     * closure (e.g. {@code List.all(x -> Made { ... }.ok, xs)}) is caught too. */
-    static void rejectConstructionInInvariant(Ast.Expr e, String data) {
+    /**
+     * Rejects a data construction inside one invariant clause: an invariant is pure — it observes the
+     * value being built, it does not build another (spec §invariant-expressions, "Forbidden: data
+     * construction"). Walks the inlined clause, so a construction smuggled through a quantifier's
+     * closure (e.g. {@code List.all(x -> Made { ... }.ok, xs)}) is caught too, and so is one written
+     * in a helper the clause names however many helpers away it is — the clause arrives here with
+     * them expanded into it, carrying each construction at the position it was written.
+     *
+     * <p>That is also why the diagnostic carries two places. What is wrong is at the construction,
+     * which may be in a helper that reads perfectly well on its own; what makes it wrong is the
+     * clause that reaches it, which may be pages away. The clause is named as the second only when it
+     * is somewhere else — a construction written in the clause itself has one place, and labelling it
+     * twice says nothing.
+     */
+    static void rejectConstructionInInvariant(Ast.Expr e, String data, Ast.InvariantClause clause) {
         if (e instanceof Ast.NewData nd) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.invariant.construct").title("check.invariant.invalid.title")
-                            .at(nd.pos(), nd.typeName().written().length())
-                            .args(data, nd.typeName().written()).build(),
-                    "the invariant of `" + data + "` constructs `" + nd.typeName().written()
+            String constructed = nd.typeName().written();
+            String named = clause.name().orElse(null);
+            Diagnostic.Builder b = Diagnostic
+                    .of(null, named == null ? "check.invariant.construct" : "check.invariant.construct.named")
+                    .title("check.invariant.invalid.title")
+                    .at(nd.pos(), constructed.length())
+                    .args(data, constructed, named);
+            if (nd.pos().line() != clause.pos().line()) {
+                b.secondary(Region.point(clause.pos()),
+                        named == null ? "check.invariant.construct.here.unnamed"
+                                : "check.invariant.construct.here", named);
+            }
+            throw CompileException.of(b.build(),
+                    "the invariant " + (named == null ? "" : "`" + named + "` ") + "of `" + data
+                            + "` constructs `" + constructed
                             + "`, but an invariant may not construct a data — it observes the value being"
                             + " built, it does not build another (spec §invariant-expressions)");
         }
-        TypeChecker.forEachChild(e, c -> rejectConstructionInInvariant(c, data));
+        TypeChecker.forEachChild(e, c -> rejectConstructionInInvariant(c, data, clause));
     }
 
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec 13.1). */
