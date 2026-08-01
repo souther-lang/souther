@@ -26,6 +26,7 @@ import souther.compiler.types.ValueName;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -726,7 +727,7 @@ public final class Bodies {
             }
             try {
                 return Answer.of(Lower.body(def.value(), HelperInliner.forHelpers(helpers.value()),
-                        recursive.value().contains(fn)));
+                        recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -755,7 +756,7 @@ public final class Bodies {
             try {
                 return Answer.of(Lower.body(def.value(),
                         HelperInliner.forHelpers(helpers.value(), InliningPolicy.DISCHARGE),
-                        recursive.value().contains(fn)));
+                        recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -888,6 +889,20 @@ public final class Bodies {
             return settled.present()
                     ? Answer.of(Names.behaviorNames(settled.value())) : Answer.absent();
         }
+    }
+
+    /** What {@code fn}'s behavior declares in {@code depends on}, or nothing where {@code fn}
+     * implements no behavior — a helper has no such parameters (spec §depends-on). */
+    private static Set<String> dependencyParams(Db db, String module, String fn) {
+        Answer<Ast.SpecBehavior> spec = db.ask(new Spec(module, fn));
+        if (!spec.present()) {
+            return Set.of();
+        }
+        Set<String> names = new HashSet<>();
+        for (Ast.ValueRef req : spec.value().dependsOn()) {
+            names.add(req.bare());
+        }
+        return names;
     }
 
     /** One behavior's declaration, so what a body is checked against is the behavior it implements

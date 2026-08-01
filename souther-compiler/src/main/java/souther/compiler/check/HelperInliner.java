@@ -882,6 +882,60 @@ public final class HelperInliner {
      * A {@code $}-name from a function argument is one too, and is told apart by its prefix. */
     private final Set<String> scopedLambdaNames = new HashSet<>();
 
+    /**
+     * The arguments of a call that stays a call, with a dependency handed over by name replaced by
+     * the block that forwards to it: {@code depth(code, fetch)} becomes {@code depth(code, (c) ->
+     * fetch(c))}, which spec §blocks says is the same thing.
+     *
+     * <p>Where the callee is expanded the two already are the same thing — the expansion substitutes
+     * the argument's name into the parameter's applications, so the name only ever stands in a call.
+     * A recursive helper is lowered to a method instead (spec 13.1), which leaves the argument
+     * standing as a value, and a {@code depends on} parameter is reached through the behavior it
+     * names rather than bound to a slot. Forwarding here is what makes the two callees say the same
+     * thing about the same argument.
+     */
+    private List<Ast.Expr> forwardDependencies(Ast.FnDef callee, List<Ast.Expr> args) {
+        if (callee == null || dependencies.isEmpty()) {
+            return args;
+        }
+        List<Ast.Expr> out = new ArrayList<>(args);
+        for (int i = 0; i < callee.params().size() && i < out.size(); i++) {
+            Ast.RetType declared = callee.params().get(i).type();
+            Ast.FnType want = declared == null ? null : declared.asFn();
+            if (want == null || !(out.get(i) instanceof Ast.Var v) || !dependencies.contains(v.name())) {
+                continue;
+            }
+            List<String> params = new ArrayList<>();
+            List<Ast.Expr> forwarded = new ArrayList<>();
+            for (int j = 0; j < want.params().size(); j++) {
+                // a source identifier never starts with `$`, so these cannot capture a caller local
+                String p = "$" + counter++ + "_" + v.name();
+                params.add(p);
+                forwarded.add(new Ast.Var(p, new ValueName.Local(p, v.pos()), v.pos()));
+            }
+            out.set(i, new Ast.Block(params,
+                    new Ast.Call(v.name(), v.denotes(), forwarded, ConstructionOrigin.own(), v.pos()),
+                    v.pos()));
+        }
+        return out;
+    }
+
+    /** The {@code depends on} parameters of the behavior {@code let} whose body is being expanded.
+     * Empty while expanding anything else: only a behavior's {@code let} has them (spec §depends-on). */
+    private Set<String> dependencies = Set.of();
+
+    /** As {@link #inline(Ast.Expr)}, for the body of a behavior {@code let} whose {@code depends on}
+     * names {@code dependencies} — the names that arrive as its trailing parameters. */
+    public Ast.Expr inline(Ast.Expr e, Set<String> dependencies) {
+        Set<String> outer = this.dependencies;
+        this.dependencies = dependencies;
+        try {
+            return inline(e);
+        } finally {
+            this.dependencies = outer;
+        }
+    }
+
     /** Rewrites every helper call in {@code e} to its inlined body. */
     public Ast.Expr inline(Ast.Expr e) {
         return switch (e) {
@@ -897,7 +951,8 @@ public final class HelperInliner {
                     // builtin, injected behavior, a function-typed parameter, or a recursive helper —
                     // a recursive helper is lowered to a method, so its call stays a Call (spec 13.1);
                     // only its args inline.
-                    yield new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
+                    yield new Ast.Call(call.fn(), call.denotes(), forwardDependencies(helper, args),
+                            call.origin(), call.pos());
                 }
                 if (args.size() != helper.params().size()) {
                     LambdaOrigin origin = lambdaOrigins.get(helper.name());

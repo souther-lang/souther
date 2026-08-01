@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The Lower stage (ADR-0021): rewrites the surface AST toward the form the backend emits, so the
@@ -55,7 +56,18 @@ public final class Lower {
      * neither is fully inlined at its call sites and never emitted, so nothing asks for it here.
      */
     public static Ast.FnDef body(Ast.FnDef fn, HelperInliner inliner, boolean recursive) {
-        Ast.Expr expanded = recursive ? inliner.inlineRecursiveBody(fn) : inliner.inline(fn.body());
+        return body(fn, inliner, recursive, Set.of());
+    }
+
+    /**
+     * The same, for a behavior's implementation, told what its behavior declares in {@code depends
+     * on} — the names that arrive as the {@code let}'s trailing parameters (spec §depends-on). A
+     * helper has none, and neither has a recursive helper's own body.
+     */
+    public static Ast.FnDef body(Ast.FnDef fn, HelperInliner inliner, boolean recursive,
+                                 Set<String> dependencies) {
+        Ast.Expr expanded = recursive
+                ? inliner.inlineRecursiveBody(fn) : inliner.inline(fn.body(), dependencies);
         return new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
                 desugar(expanded), fn.partial(), fn.pos());
     }
