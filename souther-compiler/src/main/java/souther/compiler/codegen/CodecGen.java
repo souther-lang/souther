@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.MatchElaborator;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.ast.Ast;
@@ -1524,6 +1525,149 @@ final class CodecGen {
                 MethodTypeDesc.of(CD_Object, CD_Object),                 // samMethodType: (Object) -> Object
                 impl,
                 MethodTypeDesc.of(CD_Map, CD_Map));                      // instantiatedMethodType: (Map) -> Map
+    }
+
+    // --- a behavior output union's encoder (spec 19.8) -------------------------------------------
+
+    /**
+     * The encoder of a behavior's anonymous output union: dispatch on the member, encode it as that
+     * member writes itself, and write the discriminator {@code "type"} — what a named sum over the
+     * same leaves does (spec 11.2). Without it the same value would travel two ways depending on
+     * where it sat, since a member's own encoder writes no discriminator.
+     *
+     * <p>A member this module declared is the case itself; any other arrives in its bridge case, and
+     * the value is read out of that before its own encoder sees it. The bridge case still carries no
+     * codec of its own — belonging to a union does not change a member's external representation,
+     * only what wraps it here.
+     */
+    byte[] generateResultUnionEncoder(String resultName, List<TypeName> members) {
+        ClassDesc cdEnc = cd(resultName + "$Enc");
+        boolean enumeration = isEnumeration(members);
+        return build(cdEnc, cb -> {
+            cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withInterfaceSymbols(CD_REncoder);
+            emitDefaultCtor(cb);
+            emitSharedInstance(cb, cdEnc);
+            cb.withMethodBody("encode", MTD_Rencode, ClassFile.ACC_PUBLIC, code -> {
+                for (TypeName member : members) {
+                    Label next = code.newLabel();
+                    code.aload(1);
+                    code.instanceOf(ctx.resultMemberClass(member));
+                    code.ifeq(next);
+                    if (enumeration) {
+                        code.loadConstant(member.name());
+                    } else {
+                        emitMemberEncode(code, member);
+                    }
+                    code.areturn();
+                    code.labelBinding(next);
+                }
+                code.new_(CD_IllegalStateException);
+                code.dup();
+                code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
+                code.athrow();
+            });
+        });
+    }
+
+    /** Leaves the member on the stack encoded and tagged, the value in slot 1. */
+    private void emitMemberEncode(CodeBuilder code, TypeName member) {
+        if (flatMember(member)) {
+            pushMemberEncoder(code, member);
+            pushMemberValue(code, member);
+            code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+            code.checkcast(CD_Map);
+            code.dup();
+            code.loadConstant("type");
+            code.loadConstant(member.name());
+            code.invokeinterface(CD_Map, "put", MTD_Map_put);
+            code.pop();
+            return;
+        }
+        // A member whose own representation is not an object cannot carry `"type"` on itself, so it
+        // goes under `"value"` beside it — where a newtype case of a named sum goes (spec 11.2).
+        code.new_(CD_LinkedHashMap);
+        code.dup();
+        code.invokespecial(CD_LinkedHashMap, "<init>", MTD_void);
+        code.dup();
+        code.loadConstant("type");
+        code.loadConstant(member.name());
+        code.invokeinterface(CD_Map, "put", MTD_Map_put);
+        code.pop();
+        code.dup();
+        code.loadConstant("value");
+        pushMemberEncoder(code, member);
+        pushMemberValue(code, member);
+        code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+        code.invokeinterface(CD_Map, "put", MTD_Map_put);
+        code.pop();
+    }
+
+    /** Pushes the encoder a member writes itself with: its own derived one, or the Raoh leaf encoder
+     * for a primitive, which declares none. */
+    private void pushMemberEncoder(CodeBuilder code, TypeName member) {
+        if (member.isPrimitive()) {
+            code.invokestatic(CD_ObjectEncoders, leafEncoderName(primKind(member)), MTD_Rencode_leaf);
+            return;
+        }
+        // a member is one of the union's effective members, every named sum already expanded to its
+        // leaves (spec 19.2), so its encoder() is on a class and never on a sealed interface
+        code.invokestatic(cd(member), "encoder", MTD_Rencoder, false);
+    }
+
+    /** Pushes the Souther value the member holds: the union value itself for a member this module
+     * declared, and what the bridge case wraps for any other. */
+    private void pushMemberValue(CodeBuilder code, TypeName member) {
+        code.aload(1);
+        if (ctx.isLocalMember(member)) {
+            return;
+        }
+        ClassDesc bridge = ctx.bridgeCaseClass(member);
+        Type held = MatchElaborator.caseBindType(member);
+        code.checkcast(bridge);
+        code.invokevirtual(bridge, "value", MethodTypeDesc.of(JvmTypes.jvmType(held, ctx)));
+        JvmTypes.box(code, held);
+    }
+
+    /** Whether a member's own encoder writes an object, which the discriminator can be put into. */
+    private boolean flatMember(TypeName member) {
+        if (member.isPrimitive()) {
+            return false;   // a primitive writes a bare scalar, which carries no key
+        }
+        return switch (symbols.get(member)) {
+            case Ast.Data data -> encoderOutput(data).equals(CD_Map);
+            case Ast.UnitData _ -> true;   // an empty object, which the tag alone then fills
+            case null, default -> throw new IllegalStateException("not a union member: " + member);
+        };
+    }
+
+    /** Whether every member is a unit, so the union carries nothing but which member it is and
+     * travels as that member's name — the form a named sum of units has (spec 11.2). */
+    private boolean isEnumeration(List<TypeName> members) {
+        for (TypeName member : members) {
+            if (!(symbols.get(member) instanceof Ast.UnitData)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** The static {@code encoder()} factory on the union's sealed interface. */
+    void emitResultUnionEncoderFactory(ClassBuilder cb, String resultName, List<TypeName> members) {
+        emitCodecFactory(cb, "encoder", CD_REncoder, cd(resultName + "$Enc"),
+                encoderSig(cd(resultName), isEnumeration(members) ? CD_String : CD_Map));
+    }
+
+    private static Ast.PrimKind primKind(TypeName member) {
+        return switch (member.name()) {
+            case "String" -> Ast.PrimKind.STRING;
+            case "Int" -> Ast.PrimKind.INT;
+            case "Bool" -> Ast.PrimKind.BOOL;
+            case "Decimal" -> Ast.PrimKind.DECIMAL;
+            case "Date" -> Ast.PrimKind.DATE;
+            case "DateTime" -> Ast.PrimKind.DATETIME;
+            default -> throw new IllegalStateException("no leaf encoder for the member " + member);
+        };
     }
 
     /** The Raoh {@code ObjectEncoders} leaf method for each primitive (matches the leaf decoders). */

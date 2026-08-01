@@ -43,6 +43,37 @@ class CompileBehaviorNameCollisionTest {
     }
 
     @Test
+    void aResultUnionWhoseClassCollidesWithADataIsRejected() {
+        String src = """
+                module demo
+                data Req = { n: Int }
+                data Ok = { v: Int }
+                data NotFound
+                data BillResult = { x: Int }
+                behavior bill : (r: Req) -> Ok | NotFound constructs Ok, NotFound
+                let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("BillResult"), e.getMessage());
+    }
+
+    @Test
+    void aResultUnionWhoseClassCollidesWithABehaviorIsRejected() {
+        String src = """
+                module demo
+                data Req = { n: Int }
+                data Ok = { v: Int }
+                data NotFound
+                behavior bill : (r: Req) -> Ok | NotFound constructs Ok, NotFound
+                let bill (r) = if r.n > 0 then Ok { v = r.n } else NotFound
+                behavior billResult : (r: Req) -> Ok constructs Ok
+                let billResult (r) = Ok { v = r.n }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("BillResult"), e.getMessage());
+    }
+
+    @Test
     void distinctBehaviorAndDataNamesCompile() {
         // The idiomatic split: a verb behavior and its noun output that do not share a base name.
         String src = """

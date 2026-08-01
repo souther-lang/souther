@@ -5,6 +5,7 @@ import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.query.Compilation;
+import souther.compiler.codegen.Backend;
 import souther.compiler.diag.Messages;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issues;
@@ -168,7 +169,7 @@ public final class Runner {
         }
 
         Object result = invoke(loader, module.name(), spec.name(), args);
-        Object encoded = encode(module.name(), sig.out(), result);
+        Object encoded = encode(loader, module.name(), spec.name(), sig.out(), result);
         return writeJson(encoded);
     }
 
@@ -416,39 +417,64 @@ public final class Runner {
         };
     }
 
-    private static Object encode(String pkg, Type out, Object result) {
+    /**
+     * The output as its declared type writes it. Which encoder that is follows the type the behavior
+     * declared, never the class the answer happens to have arrived in: a case of a sum carries no
+     * discriminator on its own encoder — only the sum's writes one — so taking the encoder off the
+     * runtime value would answer a form the same sum's decoder then refuses.
+     */
+    private static Object encode(MemoryClassLoader loader, String pkg, String behavior, Type out,
+                                 Object result) {
         if (out instanceof Type.Prim prim) {
             return encodeLeaf(prim, result);
         }
         // A collection output is encoded element by element: the runtime value is a plain
         // Collection/Map, so it carries no encoder() of its own — its elements do.
         if (out instanceof Type.ListOf list) {
-            return encodeElements(pkg, list.element(), (java.util.Collection<?>) result);
+            return encodeElements(loader, pkg, behavior, list.element(), (java.util.Collection<?>) result);
         }
         if (out instanceof Type.SetOf set) {
-            return encodeElements(pkg, set.element(), (java.util.Collection<?>) result);
+            return encodeElements(loader, pkg, behavior, set.element(), (java.util.Collection<?>) result);
         }
         if (out instanceof Type.MapOf map && map.key() == Type.STRING) {
             Map<String, Object> encoded = new java.util.LinkedHashMap<>();
-            ((Map<?, ?>) result).forEach((k, v) -> encoded.put((String) k, encode(pkg, map.value(), v)));
+            ((Map<?, ?>) result).forEach((k, v) ->
+                    encoded.put((String) k, encode(loader, pkg, behavior, map.value(), v)));
             return encoded;
         }
-        // A sum output is one concrete case at run time; its own class carries the right encoder.
+        if (out instanceof Type.Ref ref) {
+            return encodeThrough(loader, ref.name().qualified(), ref.name().name(), result);
+        }
+        // An anonymous union is generated as the behavior's result type, which is where its encoder
+        // is (spec 19.8). It is the only output type with no name in the source.
+        if (out instanceof Type.Union) {
+            String className = pkg + "." + Backend.behaviorResultClass(behavior);
+            return encodeThrough(loader, className, Type.show(out), result);
+        }
+        throw fail("run.encode.unsupported", "the output has type `" + Type.show(out)
+                + "`, which `run` cannot encode yet (only a data type, a primitive, or a"
+                + " collection of those).", Type.show(out));
+    }
+
+    /** {@code result} through the derived {@code encoder()} of the named generated class. */
+    private static Object encodeThrough(MemoryClassLoader loader, String className, String shown,
+                                        Object result) {
         try {
             @SuppressWarnings("unchecked")   // the generated class's encoder() erases at the reflection boundary
-            Encoder<Object, ?> encoder = (Encoder<Object, ?>) result.getClass().getMethod("encoder").invoke(null);
+            Encoder<Object, ?> encoder = (Encoder<Object, ?>)
+                    loader.loadClass(className).getMethod("encoder").invoke(null);
             return encoder.encode(result);
         } catch (ReflectiveOperationException e) {
-            throw fail("run.encode.noencoder", "cannot obtain an encoder for the output `"
-                    + result.getClass().getSimpleName() + "`: " + e,
-                    result.getClass().getSimpleName(), e.toString());
+            throw fail("run.encode.noencoder",
+                    "cannot obtain an encoder for the output `" + shown + "`: " + e, shown, e.toString());
         }
     }
 
-    private static List<Object> encodeElements(String pkg, Type element, java.util.Collection<?> values) {
+    private static List<Object> encodeElements(MemoryClassLoader loader, String pkg, String behavior,
+                                               Type element, java.util.Collection<?> values) {
         List<Object> encoded = new java.util.ArrayList<>(values.size());
         for (Object v : values) {
-            encoded.add(encode(pkg, element, v));
+            encoded.add(encode(loader, pkg, behavior, element, v));
         }
         return encoded;
     }

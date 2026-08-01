@@ -569,6 +569,28 @@ public final class TypeOps {
         return null;
     }
 
+    /**
+     * The first leaf of {@code out} that declares a field named {@code key}, or null when none does.
+     * A leaf lays its fields flatly beside the discriminator, so a field of that name and the tag
+     * want one key: whichever is written second is the only one left. Asked of the leaves, since a
+     * nested sum contributes its cases rather than itself.
+     */
+    static TypeName memberCarryingField(Type out, String key, Symbols symbols) {
+        for (TypeName member : leafCases(out, symbols)) {
+            if (declaresField(member, key, symbols)) {
+                return member;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code name} declares a field called {@code key}, spread fields included. A newtype's
+     * one field is named {@code value} and a unit has none, so only a record can. */
+    static boolean declaresField(TypeName name, String key, Symbols symbols) {
+        return symbols.get(name) instanceof Ast.Data data && !data.newtype()
+                && fieldTypes(data, symbols).containsKey(key);
+    }
+
     public static Set<TypeName> leafCases(Type t, Symbols symbols) {
         Set<TypeName> out = new LinkedHashSet<>();
         collectLeafCases(t, symbols, out, new HashSet<>());

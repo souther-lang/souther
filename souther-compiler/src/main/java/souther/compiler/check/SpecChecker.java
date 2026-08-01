@@ -483,6 +483,34 @@ public final class SpecChecker {
     }
 
     /**
+     * A member of an output union lays its fields flatly beside the `"type"` discriminator the union
+     * writes (spec 19.8), so a member declaring a field of that name and the tag want one key. The
+     * same rule a sum's cases are under, asked of the signature so a composition is subject to it too.
+     */
+    static void checkUnionMemberFields(Ast.Module module, Map<String, Sig> sigs, Symbols symbols) {
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            Sig sig = sigs.get(b.name());
+            if (sig == null || !(sig.out() instanceof Type.Union)) {
+                continue;
+            }
+            TypeName carrying = TypeOps.memberCarryingField(sig.out(), DISCRIMINATOR, symbols);
+            if (carrying == null) {
+                continue;
+            }
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.member.discriminatorfield").title("check.boundary.title")
+                            .at(b.pos()).args(carrying.name(), DISCRIMINATOR, b.name())
+                            .hint("check.case.discriminatorfield.hint", DISCRIMINATOR).build(),
+                    "`" + carrying.name() + "` is a member of the output of `" + b.name() + "` and"
+                            + " declares a field `" + DISCRIMINATOR + "`, which is the discriminator"
+                            + " that union writes beside the fields; rename the field");
+        }
+    }
+
+    /** The key a derived codec writes the case name under (spec 11.2). */
+    private static final String DISCRIMINATOR = "type";
+
+    /**
      * A behavior's input is decoded and its output encoded, so neither may carry a function — at any
      * depth, since a function hides as easily inside a {@code List} or a {@code Map} as it stands on
      * its own. Asked of the type rather than of the syntax: what the position requires is an external

@@ -59,7 +59,7 @@ class RunnerTest {
     }
 
     @Test
-    void encodesTheRuntimeCaseOfASumOutput() throws Exception {
+    void encodesAUnionOutputThroughTheUnionItDeclared() throws Exception {
         Path file = write("classify.sou", """
                 data Adult = { name: String }
                 data Minor = { age: Int }
@@ -69,8 +69,64 @@ class RunnerTest {
                     Adult { name = "adult" }
                 }
                 """);
-        assertEquals("{\"name\":\"adult\"}", Runner.run(file, "classify", "20"));
-        assertEquals("{\"age\":10}", Runner.run(file, "classify", "10"));
+        assertEquals("{\"name\":\"adult\",\"type\":\"Adult\"}", Runner.run(file, "classify", "20"));
+        assertEquals("{\"age\":10,\"type\":\"Minor\"}", Runner.run(file, "classify", "10"));
+    }
+
+    @Test
+    void encodesANamedSumOutputThroughTheSumItDeclared() throws Exception {
+        // The case's own encoder writes no discriminator — only the sum's does, and the sum is what
+        // the behavior declared. Taking the encoder off the runtime case would answer a value the
+        // same sum's decoder then refuses.
+        Path file = write("answer.sou", """
+                data Hit = { score: Int }
+                data Miss = { reason: String }
+                data Answer = Hit | Miss
+                behavior ask : (n: Int) -> Answer constructs Hit, Miss
+                let ask (n) = if n > 0 then Hit { score = n } else Miss { reason = "no" }
+                """);
+        assertEquals("{\"score\":5,\"type\":\"Hit\"}", Runner.run(file, "ask", "5"));
+    }
+
+    @Test
+    void encodesASumInsideACollectionThroughItsElementType() throws Exception {
+        Path file = write("many.sou", """
+                data Hit = { score: Int }
+                data Miss = { reason: String }
+                data Answer = Hit | Miss
+                behavior many : (n: Int) -> List<Answer> constructs Hit, Miss
+                let many (n) = [ Hit { score = n }, Miss { reason = "no" } ]
+                """);
+        assertEquals("[{\"score\":5,\"type\":\"Hit\"},{\"reason\":\"no\",\"type\":\"Miss\"}]",
+                Runner.run(file, "many", "5"));
+    }
+
+    @Test
+    void encodesAPrimitiveMemberOfAUnionUnderValue() throws Exception {
+        Path file = write("len.sou", """
+                data NotFound
+                behavior lengthOf : (key: String) -> Int | NotFound
+                    constructs NotFound
+                let lengthOf (key) = {
+                    guard String.length(key) > 0 else NotFound
+                    String.length(key)
+                }
+                """);
+        assertEquals("{\"type\":\"Int\",\"value\":4}", Runner.run(file, "lengthOf", "\"abcd\""));
+        assertEquals("{\"type\":\"NotFound\"}", Runner.run(file, "lengthOf", "\"\""));
+    }
+
+    @Test
+    void encodesAnOutcomeCarryingNothingAsItsCaseName() throws Exception {
+        Path file = write("decide.sou", """
+                data Approved
+                data Rejected
+                behavior decide : (n: Int) -> Approved | Rejected
+                    constructs Approved, Rejected
+                let decide (n) = if n > 0 then Approved else Rejected
+                """);
+        assertEquals("\"Approved\"", Runner.run(file, "decide", "1"));
+        assertEquals("\"Rejected\"", Runner.run(file, "decide", "0"));
     }
 
     @Test
