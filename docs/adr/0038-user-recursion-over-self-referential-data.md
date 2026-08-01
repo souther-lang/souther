@@ -47,9 +47,13 @@ helpers.
 - **Mutual recursion is allowed.** Every member of a call cycle is lowered together, so
   `ping`/`pong` calling each other work the same as a self-call — the cycle detector already
   identifies the whole group.
-- **A recursive helper is pure.** It is a `static` method with no injected fields, so it cannot
-  call an injected behavior (a `depends on`); the effect belongs in the behavior that calls the
-  helper. Recursion is for traversing data, not for reaching the outside world.
+- **A recursive helper is pure.** Its own body may not call an injected behavior (a `depends on`);
+  the effect belongs in the behavior that calls the helper. Recursion is for traversing data, not
+  for reaching the outside world. What the helper may do is apply a function it is handed, and the
+  caller may hand it a dependency — the effect is then the caller's, declared in the caller's
+  `depends on` and carried in by the closure. The emitted form follows: the helper is a `static`
+  method with no injected fields, and the closure that holds the dependency is built by the
+  behavior and passed in as an argument.
 - **A recursive helper may construct data**, and its constructions are attributed to the behavior
   that calls it. Because the helper is not inlined, a caller's body shows only a call, not the
   construction inside it; the `constructs` inference follows the call into the helper (transitively,
