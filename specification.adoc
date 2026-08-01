@@ -736,7 +736,7 @@ A case names a data; an inline record MUST NOT be written in a case position. A 
 
 *A case value is a value of its sum.* As in functional languages, a value of a case type (e.g. `+Submitted+`) may be used transparently wherever its sum type (`+TravelRequest+`) is expected — field assignment, argument, or return value. Only the upward direction (case→sum) is allowed; the downward direction (sum→specific case) requires `+match+`. A nested sum (`+data OwnCost = Reimbursement | Advance+` being a case of `+CostBearer+`) is decided the same way, folding to the leaf case.
 
-*What holds of every case is a property of the sum.* A sum has no fields of its own, so reading one is an error and the value must be opened with `+match+` — except for a field that *every* case spreads (<<field-spread>>): the sum exposes the fields of a data all of its cases include, and `+d.id+` reads it without opening the value.
+*What holds of every case is a property of the sum.* A sum has no fields of its own, so reading one is an error and the value must be opened with `+match+` — except for a field that *every* case spreads (<<field-spread>>): the sum exposes the fields of a data all of its cases include, and `+d.id+` reads it without opening the value. The same part is spread from the sum into a construction, so `+Filed { ...d, filedOn = on }+` writes at once what a `+match+` arm per case would write alike.
 
 [,text]
 ----
@@ -744,13 +744,15 @@ data DocumentCommon = { id: String }
 data Draft = { ...DocumentCommon }
 data Sent  = { ...DocumentCommon, at: DateTime }
 data Document = Draft | Sent
+data Filed = { ...DocumentCommon, filedOn: Date }
 
 let idOf (d: Document): String = d.id
+let file (d: Document, on: Date): Filed = Filed { ...d, filedOn = on }
 ----
 
 The shared part is what the author wrote: a spread is nominal (<<field-spread>>), so two cases that happen to declare a field of the same name have not shared it, and reading it stays an error. A spread reached through another spread counts, and a case that is itself a sum contributes its own leaves. When a case stops spreading the common data the field is no longer exposed, and the error appears at the read.
 
-The read is all this gives. A sum is still not assignment-compatible with the data its cases spread, and it is still opened with `+match+` to construct anything from it.
+The read and the spread reach the same part and no more. What a single case carries of its own is not spread from the sum, so a construction wanting it is the missing-field error it would be from any other source (<<e1005>>), and a sum whose cases share no spread is not a spread source at all. A sum is still not assignment-compatible with the data its cases spread, and constructing one of its cases — deciding which case a value is — is still `+match+`.
 
 [#unit-data]
 === Unit data
