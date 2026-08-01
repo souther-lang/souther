@@ -76,8 +76,16 @@ let unzip (ps: List<('a, 'b)>) =
 // prepending (`[x] ++ acc`), and a prepend copies the whole accumulator on an array-backed list, so
 // the fold form is O(n²). The intrinsic walks the input from the end in O(n) (like `sort`).
 let reverse (xs: List<'a>) : List<'a> = intrinsic "list.reverse"
-let sum (xs: List<Int>) = List.fold((acc, x) -> acc + x, 0, xs)
-let product (xs: List<Int>) = List.fold((acc, x) -> acc * x, 1, xs)
+
+// `sum`/`product` are primitives rather than folds because a fold written here would have to write
+// its seed, and a written seed is `0` or `0.0m` — one of the two numeric types, never both. The
+// element decides which kernel runs and which seed it starts from. The `List<'a> -> 'a` signature
+// states no numeric constraint, for the reason `sort`'s states no ordered one: Souther has no type
+// classes, so the constraint is a check in the compiler. It admits `Int` and `Decimal` and nothing
+// else — a newtype over one of them declares neither an addition nor a zero of its own, so a list
+// of them is summed by mapping to the wrapped value first.
+let sum (xs: List<'a>) : 'a = intrinsic "list.sum"
+let product (xs: List<'a>) : 'a = intrinsic "list.product"
 let concat (xss: List<List<'a>>) = List.fold((acc, xs) -> acc ++ xs, [], xss)
 let member (e: 'a, xs: List<'a>) = List.fold((acc, x) -> acc || x == e, false, xs)
 let isEmpty (xs: List<'a>) = List.length(xs) == 0

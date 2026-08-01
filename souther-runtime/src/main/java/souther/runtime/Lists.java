@@ -1,5 +1,6 @@
 package souther.runtime;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -141,6 +142,45 @@ public final class Lists {
                 return out;
             }
         }
+    }
+
+    /** The sum of a list of {@code Int} (Elm {@code List.sum}); the empty list is 0. Adds through
+     *  the kernel the {@code +} operator uses, so a total past the range of an {@code Int} aborts
+     *  here rather than wrapping. */
+    public static long sumInt(List<?> xs) {
+        long acc = 0;
+        for (Object x : xs) {
+            acc = IntMath.addExact(acc, (Long) x);
+        }
+        return acc;
+    }
+
+    /** The product of a list of {@code Int} (Elm {@code List.product}); the empty list is 1. */
+    public static long productInt(List<?> xs) {
+        long acc = 1;
+        for (Object x : xs) {
+            acc = IntMath.multiplyExact(acc, (Long) x);
+        }
+        return acc;
+    }
+
+    /** The sum of a list of {@code Decimal}; the empty list is 0. {@code BigDecimal.add} keeps the
+     *  larger scale of its two operands, so the elements' own scales carry through the walk. */
+    public static BigDecimal sumDecimal(List<?> xs) {
+        BigDecimal acc = BigDecimal.ZERO;
+        for (Object x : xs) {
+            acc = acc.add((BigDecimal) x);
+        }
+        return acc;
+    }
+
+    /** The product of a list of {@code Decimal}; the empty list is 1. */
+    public static BigDecimal productDecimal(List<?> xs) {
+        BigDecimal acc = BigDecimal.ONE;
+        for (Object x : xs) {
+            acc = acc.multiply((BigDecimal) x);
+        }
+        return acc;
     }
 
     /** Sorts by the elements' natural order (Elm {@code List.sort}). The element type is a

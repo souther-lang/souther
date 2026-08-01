@@ -166,8 +166,12 @@ class CompileEmptyListTest {
      * An arithmetic fold over the empty-list literal is the seed. The element type of {@code []} is
      * a {@code Nothing} bottom, so the step's element operand ({@code x} in {@code acc + x}) has no
      * JVM form; but the source is statically empty, so the loop body is dead code — {@code fold f z
-     * []} is {@code z}. This is Elm's {@code List.sum [] == 0} / {@code List.product [] == 1}. The
-     * backend must emit no body rather than unbox the {@code Nothing} element and crash.
+     * []} is {@code z}. The backend must emit no body rather than unbox the {@code Nothing} element
+     * and crash.
+     *
+     * <p>{@code sum} / {@code product} answer the same way (Elm's {@code List.sum [] == 0} /
+     * {@code List.product [] == 1}), by a different route: they are primitives over a numeric
+     * element, and the field each fills says which of {@code Int} and {@code Decimal} that is.
      */
     @Test
     void arithmeticFoldOverTheEmptyLiteralIsTheSeed() throws Exception {
