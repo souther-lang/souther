@@ -5,8 +5,6 @@ import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -384,6 +382,7 @@ public final class TypeChecker {
         // (spec 14.5, ADR-0024), so a far-away change cannot grow a published output silently.
         // `signatures` builds the map `checkExposedPipeOutputs` reads, so it stays fail-fast.
         Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);
+        collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, symbols));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
                 exposed, sigs, symbols));
         // What this module reaches out with may not rest on what it keeps to itself — a name in

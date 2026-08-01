@@ -8,7 +8,6 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
-import souther.compiler.codegen.Backend;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
@@ -405,9 +404,35 @@ public final class ExampleVerifier {
                     .at(row.pos()).args(nt.getMessage()).build());
             return;
         }
+        result = projected(result, sig.out());
         if (!matches(row.expected(), result, expectedValue)) {
             out.add(mismatch(row, describeExpected(row.expected(), sig.out()), describeActual(result)));
         }
+    }
+
+    /**
+     * The Souther value behind a behavior's answer. A member this module declared is the answer
+     * itself; a primitive or an imported type reached the union through a bridge case (spec 19.8),
+     * and a row writes the value, not the bridge case — which is a name this source does not have.
+     * The same projection a Souther caller does, done on the loaded classes.
+     */
+    private Object projected(Object result, Type out) {
+        if (result == null || !(out instanceof Type.Union)) {
+            return result;
+        }
+        for (TypeName member : TypeOps.leafCases(out, symbols)) {
+            if (!member.isPrimitive() && member.module().equals(module.name())) {
+                continue;
+            }
+            if (result.getClass().getName().equals(module.name() + "." + member.name() + "Case")) {
+                try {
+                    return result.getClass().getMethod("value").invoke(result);
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException("a bridge case with no `value`: " + result.getClass(), e);
+                }
+            }
+        }
+        return result;
     }
 
     // --- fakes for what a behavior depends on ---------------------------------------------------

@@ -1,7 +1,5 @@
 package souther.compiler;
 
-import souther.compiler.diag.CompileException;
-
 import org.junit.jupiter.api.Test;
 
 import java.lang.classfile.ClassFile;
@@ -11,20 +9,20 @@ import java.lang.classfile.instruction.InvokeInstruction;
 import java.lang.reflect.Proxy;
 import java.util.Arrays;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A behavior's output union is built from its own module's cases (E1606, ADR-0057). The reason is
- * not the JVM's same-package rule for {@code permits} — that one is javac's, and only when it
- * declares a sealed type in source (issue #95). It is that a case class receives the unions it
- * belongs to when its own module is generated, so a class an imported module already emitted cannot
- * implement an interface declared here.
+ * A behavior's output union whose members are not all this module's own. A case class receives the
+ * unions it belongs to when its own module is generated, so a class an imported module already
+ * emitted cannot implement an interface declared here — the reason is not the JVM's same-package
+ * rule for {@code permits}, which is javac's and only when it declares a sealed type in source
+ * (issue #95). The member joins through a bridge case this module emits instead, and a Java consumer
+ * still receives one value and switches over it without a {@code default}.
  */
 class CompileCrossModuleUnionTest {
 
@@ -49,9 +47,13 @@ class CompileCrossModuleUnionTest {
     }
 
     @Test
-    void aDepartedImportedCaseIsRejected() {
+    void aDepartedImportedCaseJoinsThroughABridgeCase() throws Exception {
+        String inventory = INVENTORY + """
+                let allocate (sku) =
+                    if String.length(sku.value) > 0 then Allocated { sku = sku } else Shortage { sku = sku }
+                """;
         String shipping = """
-                module ship
+                module ship exposing ( Shipped, allocateAndShip : Shipped | Shortage )
                 import inv ( Sku, Allocated, Shortage, allocate )
                 data Shipped = { sku: Sku }
                 behavior instruct : (a: Allocated) -> Shipped
@@ -59,31 +61,67 @@ class CompileCrossModuleUnionTest {
                 let instruct (a) = Shipped { sku = a.sku }
                 behavior allocateAndShip = allocate >-> instruct
                 """;
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(INVENTORY, shipping)));
-        assertEquals("E1606", e.code(), e.getMessage());
-        assertTrue(e.getMessage().contains("Shortage"), e.getMessage());
-        assertFalse(e.getMessage().contains("permit"),
-                "the reason is module generation order, not the `permits` rule: " + e.getMessage());
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
+        BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+        assertEquals(List.of(loader.loadClass("ship.Shipped"), loader.loadClass("ship.ShortageCase")),
+                Arrays.asList(loader.loadClass("ship.AllocateAndShipResult").getPermittedSubclasses()));
+
+        Object composed = loader.loadClass("ship.AllocateAndShip").getMethod("of").invoke(null);
+        assertEquals("ship.Shipped",
+                Codecs.apply(composed, Codecs.decoded(loader, "inv.Sku", "SKU-1")).getClass().getName());
+        Object departed = Codecs.apply(composed, Codecs.decoded(loader, "inv.Sku", ""));
+        assertEquals("ship.ShortageCase", departed.getClass().getName());
+        assertEquals("inv.Shortage",
+                departed.getClass().getMethod("value").invoke(departed).getClass().getName(),
+                "the bridge case holds the imported value as it is");
     }
 
+    /**
+     * Writing the imported case in the declared output, and receiving it in Java. The switch has no
+     * {@code default} and every value is actually put through it: javac accepting an exhaustive
+     * switch says nothing on its own — the shape this replaces compiled and then threw
+     * {@code ClassCastException} at the first value (ADR-0057).
+     */
     @Test
-    void anImportedCaseDeclaredInAnOutputIsRejectedToo() {
-        // not only a `>->` departure: writing the imported case in the declared output is the same
+    void anImportedCaseDeclaredInAnOutputIsReceivedByAnExhaustiveSwitch() throws Exception {
+        String inventory = INVENTORY + """
+                let allocate (sku) =
+                    if String.length(sku.value) > 0 then Allocated { sku = sku } else Shortage { sku = sku }
+                """;
         String shipping = """
-                module ship
+                module ship exposing ( Shipped, ship )
                 import inv ( Sku, Allocated, Shortage, allocate )
                 data Shipped = { sku: Sku }
                 behavior ship : (sku: Sku) -> Shipped | Shortage
-                    depends on allocate
                     constructs Shipped
-                let ship (sku, allocate) =
+                let ship (sku) =
                     match allocate(sku) with
                     | Allocated as a -> Shipped { sku = a.sku }
                     | Shortage as s -> s
                 """;
-        assertEquals("E1606", assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(INVENTORY, shipping))).code());
+        Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, shipping));
+        byte[] reader = Subclasses.compile(classes, "consumer.Reader", """
+                package consumer;
+                import inv.Sku;
+                import ship.Ship;
+                import ship.ShipResult;
+                public final class Reader {
+                    public static String read(Sku sku) {
+                        ShipResult r = Ship.of().apply(sku);
+                        return switch (r) {
+                            case ship.Shipped s      -> "shipped " + s.sku().value();
+                            case ship.ShortageCase c -> "short of " + c.value().sku().value();
+                        };
+                    }
+                }
+                """);
+        Map<String, byte[]> all = new LinkedHashMap<>(classes);
+        all.put("consumer.Reader", reader);
+        BytesClassLoader loader = new BytesClassLoader(all, getClass().getClassLoader());
+        java.lang.reflect.Method read = loader.loadClass("consumer.Reader")
+                .getMethod("read", loader.loadClass("inv.Sku"));
+        assertEquals("shipped SKU-1", read.invoke(null, Codecs.decoded(loader, "inv.Sku", "SKU-1")));
+        assertEquals("short of ", read.invoke(null, Codecs.decoded(loader, "inv.Sku", "")));
     }
 
     @Test

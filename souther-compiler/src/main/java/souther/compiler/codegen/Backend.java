@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.PipelineSigs;
@@ -33,7 +34,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -167,43 +167,30 @@ public final class Backend {
         // <behavior名>Result that its cases implement (spec 19.8). Register those case->interface links
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
-        Map<String, List<String>> behaviorResults = b.behaviorResultInterfaces(module, importedSigs);
+        Map<String, List<TypeName>> behaviorResults = b.behaviorResultInterfaces(module, importedSigs);
         // A case class carries the result unions it belongs to as interfaces it implements, and that
-        // list is settled when its own module is generated. A union declared here whose cases include
-        // an imported one would need that case class to implement this interface, which this module
-        // cannot give it: emitted anyway, the union permits only the local cases, the imported value
-        // is not a member of it, and a Java caller's exhaustive switch compiles and then throws
-        // ClassCastException. Adding it from here would make a module's bytecode depend on which
-        // modules import it — the mirror of what ADR-0024 refuses. Reject it instead (E1606, ADR-0057).
-        for (Map.Entry<String, List<String>> e : behaviorResults.entrySet()) {
-            for (String caseName : e.getValue()) {
-                if (localTypes.contains(caseName)) {
-                    continue;
+        // list is settled when its own module is generated. A member this module declared takes the
+        // interface on itself. A primitive and a type another module emitted cannot: `java.lang.Long`
+        // is the JDK's, and giving an imported class an interface from here would make a module's
+        // bytecode depend on which modules import it — the mirror of what ADR-0024 refuses. Such a
+        // member reaches the union through a bridge case this module emits instead (ADR-0057).
+        Map<TypeName, List<String>> bridgeCases = new LinkedHashMap<>();
+        behaviorResults.forEach((resultName, members) -> {
+            for (TypeName member : members) {
+                if (b.ctx.isLocalMember(member)) {
+                    caseToSums.computeIfAbsent(member.name(), k -> new ArrayList<>()).add(resultName);
+                } else {
+                    bridgeCases.computeIfAbsent(member, k -> new ArrayList<>()).add(resultName);
                 }
-                Ast.BehaviorDef owner = module.behaviors().stream()
-                        .filter(bd -> CodegenContext.behaviorResultClass(bd.name()).equals(e.getKey()))
-                        .findFirst().orElse(null);
-                String bname = owner != null ? owner.name() : e.getKey();
-                throw CompileException.of(
-                        Diagnostic.of("E1606", "e1606.msg").title("e1606.title")
-                                .at(owner != null ? owner.pos() : module.pos())
-                                .args(bname, caseName).hint("e1606.hint").build(),
-                        "the output union of `" + bname + "` includes `" + caseName
-                                + "`, a case declared in another module; a case class carries the unions"
-                                + " it belongs to from its own module's generation, so this one cannot"
-                                + " join — give `" + bname + "` a body instead of a composition: call"
-                                + " the stages, open the imported result with `match`, and answer `"
-                                + caseName + "` with a case this module declares");
-            }
-        }
-        behaviorResults.forEach((resultName, cases) -> {
-            for (String caseName : cases) {
-                caseToSums.computeIfAbsent(caseName, k -> new ArrayList<>()).add(resultName);
             }
         });
+        b.rejectBridgeCaseCollisions(module, bridgeCases, behaviorResults, localTypes, behaviorClassOwner);
         Map<String, byte[]> out = new LinkedHashMap<>();
-        behaviorResults.forEach((resultName, cases) ->
-                out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, cases)));
+        behaviorResults.forEach((resultName, members) ->
+                out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, members)));
+        bridgeCases.forEach((member, unions) ->
+                out.put(module.name() + "." + CodegenContext.bridgeCaseName(member),
+                        b.value.generateBridgeCase(member, unions, out)));
         for (Ast.Def def : module.defs()) {
             switch (def) {
                 case Ast.Data data -> b.value.generateData(data, out);
@@ -683,21 +670,74 @@ public final class Backend {
      * interface (19.3) and a single-case output uses that case's own type, so neither gets one. Case
      * order is sorted for deterministic bytecode.
      */
-    private Map<String, List<String>> behaviorResultInterfaces(Ast.Module module,
-                                                               Map<String, Sig> importedSigs) {
+    /**
+     * A bridge case takes a class name in this module (spec 19.8), so it is subject to the same rule
+     * as every other name this module emits: no two of them may be one class. {@code YenCase} is a
+     * name a model may well have declared, and {@code IntCase} / {@code DateCase} the same, so this
+     * is reported rather than reserved — the collision is decided by what the module holds, and a
+     * name nothing collides with stays available.
+     *
+     * <p>Three ways to collide: with a data this module declares, with the class a behavior
+     * capitalizes into (spec 19.5), and with another bridge case. The last is two members of one
+     * spelling from two modules — refused within a union by the member-name rule, and reaching here
+     * when they are members of two different unions of this module.
+     */
+    private void rejectBridgeCaseCollisions(Ast.Module module, Map<TypeName, List<String>> bridgeCases,
+                                            Map<String, List<TypeName>> behaviorResults,
+                                            Set<String> localTypes, Map<String, String> behaviorClassOwner) {
+        Map<String, TypeName> byBridgeName = new LinkedHashMap<>();
+        for (Map.Entry<TypeName, List<String>> e : bridgeCases.entrySet()) {
+            TypeName member = e.getKey();
+            String bridge = CodegenContext.bridgeCaseName(member);
+            Ast.BehaviorDef owner = behaviorOf(module, e.getValue().get(0));
+            SourcePos pos = owner != null ? owner.pos() : module.pos();
+            String what = owner != null ? owner.name() : e.getValue().get(0);
+            TypeName sameName = byBridgeName.put(bridge, member);
+            if (sameName != null) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.bridge.collision.member").title("check.duplicate.title")
+                                .at(pos).args(sameName.qualified(), member.qualified(), bridge)
+                                .hint("check.bridge.collision.member.hint").build(),
+                        "`" + sameName + "` and `" + member + "` both join a union of this module"
+                                + " through a generated case class `" + bridge + "`");
+            }
+            String collidesWith = localTypes.contains(bridge) ? "check.bridge.collision.data"
+                    : behaviorClassOwner.containsKey(bridge) ? "check.bridge.collision.behavior" : null;
+            if (collidesWith != null) {
+                String other = localTypes.contains(bridge) ? bridge : behaviorClassOwner.get(bridge);
+                throw CompileException.of(
+                        Diagnostic.of(null, collidesWith).title("check.duplicate.title")
+                                .at(pos).args(what, member.name(), bridge, other)
+                                .hint("check.bridge.collision.hint", bridge).build(),
+                        "the output of `" + what + "` has the member `" + member.name() + "`, which"
+                                + " joins the union through a generated case class `" + bridge
+                                + "` (spec 19.8), and `" + other + "` already takes that class name");
+            }
+        }
+    }
+
+    /** The behavior whose generated result union is {@code resultName}, or null when none is. */
+    private Ast.BehaviorDef behaviorOf(Ast.Module module, String resultName) {
+        for (Ast.BehaviorDef bd : module.behaviors()) {
+            if (CodegenContext.behaviorResultClass(bd.name()).equals(resultName)) {
+                return bd;
+            }
+        }
+        return null;
+    }
+
+    private Map<String, List<TypeName>> behaviorResultInterfaces(Ast.Module module,
+                                                                 Map<String, Sig> importedSigs) {
         Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);
-        Map<String, List<String>> results = new LinkedHashMap<>();
+        Map<String, List<TypeName>> results = new LinkedHashMap<>();
         for (Ast.BehaviorDef bd : module.behaviors()) {
             Sig sig = sigs.get(bd.name());
             if (sig == null || !(sig.out() instanceof Type.Union)) {
                 continue;
             }
-            List<String> cases = new ArrayList<>();
-            for (TypeName c : TypeOps.leafCases(sig.out(), symbols)) {
-                cases.add(c.name());
-            }
-            Collections.sort(cases);
-            results.put(CodegenContext.behaviorResultClass(bd.name()), cases);
+            List<TypeName> members = new ArrayList<>(TypeOps.leafCases(sig.out(), symbols));
+            Collections.sort(members);
+            results.put(CodegenContext.behaviorResultClass(bd.name()), members);
         }
         return results;
     }
@@ -705,19 +745,21 @@ public final class Backend {
     /**
      * Generates the sealed interface for a behavior's anonymous union output (spec 19.8). The body
      * is empty: Java consumers receive a value and {@code switch} over the permitted cases, each of
-     * which carries its own codec, so the interface itself needs no members.
+     * which carries its own codec, so the interface itself needs no members. A member this module
+     * declared is permitted as itself; any other is permitted as its bridge case.
      */
-    private byte[] generateBehaviorResult(String resultName, List<String> cases) {
+    private byte[] generateBehaviorResult(String resultName, List<TypeName> members) {
         ClassDesc cdR = cd(resultName);
         List<ClassDesc> caseCds = new ArrayList<>();
-        for (String caseName : cases) {
-            caseCds.add(cd(caseName));
+        for (TypeName member : members) {
+            caseCds.add(ctx.resultMemberClass(member));
         }
         return build(cdR, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
         });
     }
+
 
     private Type successType(Ast.RetType ret) {
         return ctx.successType(ret);
@@ -811,6 +853,7 @@ public final class Backend {
             emitInjection(cb, cdB, injected);
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
+                gen.injectsInto(successType(spec.ret()));
                 gen.requireds(requiredNames, requiredSuccess, requiredParam);
                 for (int i = 0; i < n; i++) {
                     // the fn's leading param names the input; its type comes from the behavior
@@ -887,8 +930,9 @@ public final class Backend {
                 // slot 1 always holds the running value (an output case, as an Object).
                 List<Ast.ValueRef> stages = flat;
                 // stage 0 consumes the pipeline's arguments unconditionally
-                applyFirstStage(code, cdP, stages.get(0).bare(), arity, requiredNames, behaviorDeps);
                 Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).out();
+                applyFirstStage(code, cdP, stages.get(0).bare(), arity, requiredNames, behaviorDeps,
+                        mainline, arity + 1);
                 Label end = code.newLabel();
                 for (int i = 1; i < stages.size(); i++) {
                     String stage = stages.get(i).bare();
@@ -908,15 +952,18 @@ public final class Backend {
                         }
                         code.goto_(end);
                         code.labelBinding(doApply);
-                        applyStage(code, cdP, stage, requiredNames, behaviorDeps);
+                        applyStage(code, cdP, stage, requiredNames, behaviorDeps, g.out(), arity + 1);
                     } else {
-                        applyStage(code, cdP, stage, requiredNames, behaviorDeps);
+                        applyStage(code, cdP, stage, requiredNames, behaviorDeps, g.out(), arity + 1);
                     }
                     mainline = PipelineSigs.stageOut(mainline, g, symbols, pipe.pos());
                 }
                 code.labelBinding(end);
                 code.aload(1);
-                code.areturn();
+                // The composition's own return: the running value is a Souther value, and this is
+                // where it becomes a member of the union this composition answers with.
+                ResultBoundary.inject(code, ctx, ctx.bridgedMembers(declaredSig(pipe, sigs).out()),
+                        arity + 1);
             });
             if (arity != 1) {
                 Sig sig = declaredSig(pipe, sigs);
@@ -936,9 +983,10 @@ public final class Backend {
      * zero-input stage takes that same path with nothing to cast.
      */
     private void applyFirstStage(CodeBuilder code, ClassDesc cdP, String stage, int arity,
-                                 Set<String> requiredNames, Map<String, List<String>> behaviorDeps) {
+                                 Set<String> requiredNames, Map<String, List<String>> behaviorDeps,
+                                 Type stageOut, int slot) {
         if (arity == 1) {
-            applyStage(code, cdP, stage, requiredNames, behaviorDeps);
+            applyStage(code, cdP, stage, requiredNames, behaviorDeps, stageOut, slot);
             return;
         }
         pushStage(code, cdP, stage, requiredNames, behaviorDeps);
@@ -952,6 +1000,7 @@ public final class Backend {
                 }
             }
             code.invokevirtual(cdBehavior(stage), "apply", desc);
+            projectStage(code, stage, stageOut, slot);
             code.astore(1);
             return;
         }
@@ -962,19 +1011,27 @@ public final class Backend {
         java.util.Arrays.fill(params, CD_Object);
         // a multi-input first stage with a `let` is a fn/pipe behavior; call the erased apply on its $Impl
         code.invokevirtual(cdBehaviorImpl(stage), "apply", MethodTypeDesc.of(CD_Object, params));
+        projectStage(code, stage, stageOut, slot);
         code.astore(1);
     }
 
     /** Applies one pipeline stage to the running value in slot 1, storing the result back. A stage
      * is a behavior, or a {@code Type.decoder}/{@code Type.encoder} boundary codec (spec 14.1). */
     private void applyStage(CodeBuilder code, ClassDesc cdP, String stage, Set<String> requiredNames,
-                            Map<String, List<String>> behaviorDeps) {
+                            Map<String, List<String>> behaviorDeps, Type stageOut, int slot) {
         // decode/encode are boundary edges, not pipeline stages (spec 14.1): `>->` composes
         // behaviors only.
         pushStage(code, cdP, stage, requiredNames, behaviorDeps);
         code.aload(1);
         code.invokeinterface(CD_Behavior, "apply", MTD_apply);
+        projectStage(code, stage, stageOut, slot);
         code.astore(1);
+    }
+
+    /** A stage answered with a member of its own result union; the running value the next stage sees
+     * is a Souther value again (spec 19.8). The same conversion a body does after a call. */
+    private void projectStage(CodeBuilder code, String stage, Type stageOut, int slot) {
+        ResultBoundary.project(code, ctx, stage, ctx.bridgedMembersOf(stage, stageOut), slot);
     }
 
     /** Pushes the behavior object for a pipeline stage: an injected required field, or a fresh

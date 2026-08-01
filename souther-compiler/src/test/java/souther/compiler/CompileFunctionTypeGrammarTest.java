@@ -47,7 +47,6 @@ class CompileFunctionTypeGrammarTest {
             """;
 
     @Test
-    @SuppressWarnings("unchecked")
     void aFunctionMayTakeAFunctionAndReturnOne() throws Exception {
         BytesClassLoader loader =
                 new BytesClassLoader(Compiler.compile(NESTED), getClass().getClassLoader());

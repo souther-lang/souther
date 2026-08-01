@@ -254,6 +254,9 @@ public final class Elaborator {
                 Type tt = then.type();
                 Type et = els.type();
                 Type joined = TypeOps.join(tt, et);
+                if (joined == null) {
+                    joined = TypeOps.joinAt(expected, tt, et);
+                }
                 if (joined != null) {
                     yield new Core.If(cond, then, els, joined, iff.pos());
                 }

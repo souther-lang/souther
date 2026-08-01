@@ -9,6 +9,7 @@ import javax.tools.ToolProvider;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.HashMap;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -179,10 +180,10 @@ class CompileImportedBehaviorUseTest {
     }
 
     @Test
-    void anImportedCaseInTheOutputUnionIsWhatEitherPositionReports() {
+    void anImportedCaseInTheOutputUnionReachesItFromEitherPosition() throws Exception {
         // Both of issue #96's reproductions keep an imported case in the consuming behavior's own
-        // output union. That is E1606's rule, and it is what they must be told — not that the name
-        // was not found (the stage) or that this was an arbitrary JVM call (the dependency).
+        // output union: one reaches it as a `>->` departure, the other from a body that matched the
+        // dependency's result. The two roads produce the same union, bridged the same way.
         String inventory = """
                 module probe.inv2 exposing ( Sku, Allocated, Shortage, allocate )
                 data Sku = String
@@ -211,10 +212,16 @@ class CompileImportedBehaviorUseTest {
                     | Allocated as a -> Shipped { sku = a.sku }
                     | Shortage as s -> s
                 """;
-        assertEquals("E1606", assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(inventory, asAStage))).code());
-        assertEquals("E1606", assertThrows(CompileException.class,
-                () -> Compiler.compileModules(List.of(inventory, asADependency))).code());
+        for (String consumer : List.of(asAStage, asADependency)) {
+            Map<String, byte[]> classes = Compiler.compileModules(List.of(inventory, consumer));
+            String pkg = consumer == asAStage ? "probe.ship2" : "probe.ship3";
+            String result = consumer == asAStage ? "AllocateAndShipResult" : "ShipResult";
+            BytesClassLoader loader = new BytesClassLoader(classes, getClass().getClassLoader());
+            assertEquals(List.of(loader.loadClass(pkg + ".Shipped"),
+                            loader.loadClass(pkg + ".ShortageCase")),
+                    Arrays.asList(loader.loadClass(pkg + "." + result).getPermittedSubclasses()),
+                    "the imported case is bridged, this module's own case is itself");
+        }
     }
 
     /** Compiles {@code source} against the generated classes and returns the class bytes. */

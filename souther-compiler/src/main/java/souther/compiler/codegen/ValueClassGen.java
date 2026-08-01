@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.MatchElaborator;
 
 import java.lang.classfile.Attribute;
 import java.lang.classfile.ClassBuilder;
@@ -294,6 +295,40 @@ final class ValueClassGen {
             code.invokespecial(CD_IllegalStateException, "<init>", MTD_void);
             code.athrow();
         }));
+    }
+
+    /**
+     * The bridge case a non-local union member reaches its result unions through: a record of one
+     * component, {@code value}, holding the member as it is, implementing every result union of this
+     * module the member belongs to (spec 19.8). A member this module declared carries those
+     * interfaces on itself; a primitive is the JDK's class and an imported type is a class another
+     * module already emitted, so neither can be given one from here.
+     *
+     * <p>It has no codec. Belonging to a union does not change a member's external representation, so
+     * a consumer that has switched to this case takes the value out and uses the member's own codec.
+     */
+    byte[] generateBridgeCase(TypeName member, List<String> unions, Map<String, byte[]> out) {
+        ClassDesc cdB = ctx.bridgeCaseClass(member);
+        Map<String, Type> held = Map.of("value", MatchElaborator.caseBindType(member));
+        List<ClassDesc> ifaces = new ArrayList<>();
+        for (String union : unions) {
+            ifaces.add(cd(union));
+        }
+        return build(cdB, cb -> {
+            cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
+            cb.withSuperclass(CD_Record);
+            cb.with(recordComponents(held));
+            cb.withInterfaceSymbols(ifaces);
+            emitField(cb, "value", held.get("value"));
+            // Public, unlike a case class's: a bridge case carries no invariant of its own and the
+            // value it holds was already built through that type's own checking path, so there is
+            // nothing here for a non-public constructor to guard. A Java implementation of an
+            // injected behavior has to be able to answer with this member.
+            emitCtor(cb, cdB, held, ClassFile.ACC_PUBLIC);
+            emitValueEquality(cb, cdB, held);
+            emitToString(cb, cdB, CodegenContext.bridgeCaseName(member), held);
+            emitAccessors(cb, cdB, held);
+        });
     }
 
     void generateUnit(Ast.UnitData unit, Map<String, byte[]> out) {
@@ -592,7 +627,11 @@ final class ValueClassGen {
      * by a Java caller writing {@code new} (spec 8.5).
      */
     private void emitCtor(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields) {
-        cb.withMethodBody("<init>", MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)), 0, code -> {
+        emitCtor(cb, cdName, fields, 0);
+    }
+
+    private void emitCtor(ClassBuilder cb, ClassDesc cdName, Map<String, Type> fields, int flags) {
+        cb.withMethodBody("<init>", MethodTypeDesc.of(ConstantDescs.CD_void, fieldDescs(fields)), flags, code -> {
             code.aload(0);
             code.invokespecial(CD_Record, "<init>", MTD_void);
             int slot = 1;

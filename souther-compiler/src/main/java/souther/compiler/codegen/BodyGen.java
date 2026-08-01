@@ -12,6 +12,7 @@ import souther.compiler.check.ReqSig;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
+import souther.compiler.check.MatchElaborator;
 import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 
@@ -47,10 +48,6 @@ final class BodyGen {
     /** Aliases of {@link CodegenContext#pkg}/{@link CodegenContext#symbols}, read as bare names. */
     private final String pkg;
     private final Symbols symbols;
-
-    private ClassDesc cd(String typeName) {
-        return ctx.cd(typeName);
-    }
 
     private ClassDesc cd(TypeName typeName) {
         return ctx.cd(typeName);
@@ -102,6 +99,9 @@ final class BodyGen {
         private String tcoName;
         private List<Ast.FnParam> tcoParams;
         private Label tcoEntry;
+        /** Members of this body's declared output union that reach it through a bridge case; empty
+         * for every other body. @see #injectsInto */
+        private List<TypeName> injectMembers = List.of();
 
         BodyGen(CodegenContext ctx, CodeBuilder code, Ast.Data data, ClassDesc cdName, int firstSlot) {
             this.ctx = ctx;
@@ -111,6 +111,19 @@ final class BodyGen {
             this.data = data;
             this.cdName = cdName;
             this.nextSlot = firstSlot;
+        }
+
+        /**
+         * Makes this body the implementation of a behavior whose declared output is a union, so its
+         * returns leave the union's JVM representation rather than a bare Souther value.
+         *
+         * <p>Inside a body every value is a Souther value. It becomes a member of the result union at
+         * the return, and a caller turns it back at the call. The two conversions are the only places
+         * the two forms meet — nothing in between ever holds a bridge case, so no return can wrap one
+         * a second time.
+         */
+        void injectsInto(Type out) {
+            this.injectMembers = ctx.bridgedMembers(out);
         }
 
         /** Makes injected required behaviors callable inline from this body (spec 12.2, 13). */
@@ -376,14 +389,24 @@ final class BodyGen {
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
                     code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
-                    code.areturn();
+                    returnValue();
                 }
                 default -> {
                     Type rt = genExpr(e, expected);
                     box(code, rt);
-                    code.areturn();
+                    returnValue();
                 }
             }
+        }
+
+        /**
+         * Returns the Souther value on the stack as a member of the declared output union: a member
+         * this module declared is the member itself, any other is put into its bridge case. The
+         * dispatch runs over the union's members, which are known here, so nothing is guessed from
+         * the value alone.
+         */
+        private void returnValue() {
+            ResultBoundary.inject(code, ctx, injectMembers, slot(Type.NOTHING));
         }
 
         /** Marks the entry of a self-tail-recursive helper. The parameters are already bound to their
@@ -1422,6 +1445,7 @@ final class BodyGen {
                 Type at = genExpr(call.args().get(0));
                 box(code, at);
                 code.invokeinterface(CD_Behavior, "apply", MTD_apply);
+                project(call.fn(), sig.success());
                 stackCast(sig.success());
                 return;
             }
@@ -1431,6 +1455,7 @@ final class BodyGen {
             }
             code.invokeinterface(ctx.cdBehavior(call.fn()), "apply",
                     ctx.typedApplyDesc(call.fn(), sig.params(), sig.success()));
+            project(call.fn(), sig.success());
             stackCast(sig.success());
         }
 
@@ -1448,6 +1473,7 @@ final class BodyGen {
                     box(code, at);   // a primitive boxes to its apply-param type; a reference already matches
                 }
                 code.invokevirtual(ctx.cdBehavior(call.fn()), "apply", desc);
+                project(call.fn(), success);
                 stackCast(success);
                 return;
             }
@@ -1456,7 +1482,24 @@ final class BodyGen {
             Type at = genExpr(call.args().get(0));
             box(code, at);
             code.invokeinterface(CD_Behavior, "apply", MTD_apply);
+            project(call.fn(), success);
             stackCast(success);
+        }
+
+        /**
+         * Turns the result of a behavior call back into a Souther value: a member the callee's module
+         * declared arrives as itself, one that reached the union through a bridge case has its value
+         * taken out. Runs over the callee's union members, which are known at the call, so the value
+         * is never asked whether it happens to be wrapped.
+         *
+         * <p>Done at the call rather than at the {@code match} arm that reads it, because not every
+         * result is matched: a body may answer with a call's result directly, and the bridge cases of
+         * the callee's module are not members of this module's union. Projected here, the value is a
+         * Souther value again and this behavior's own return puts it into its own bridge case.
+         */
+        private void project(String callee, Type calleeOut) {
+            List<TypeName> bridged = ctx.bridgedMembersOf(callee, calleeOut);
+            ResultBoundary.project(code, ctx, callee, bridged, slot(Type.NOTHING));
         }
 
         /** Casts the {@code Object} on the stack to {@code type}, unboxing primitives. */

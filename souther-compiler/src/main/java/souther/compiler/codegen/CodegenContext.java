@@ -245,6 +245,73 @@ final class CodegenContext {
     }
 
     /**
+     * The bridge case a non-local union member reaches its result unions through, in the module that
+     * declares the union. A member this module declared implements the union itself; a primitive or
+     * a type another module emitted cannot be given that interface, so this module emits a record
+     * holding the value and implementing the union in its stead. One per member per module: it
+     * carries every result union of this module the member belongs to, which is the rule a local case
+     * class already follows (spec 19.8).
+     */
+    ClassDesc bridgeCaseClass(TypeName member) {
+        return ClassDesc.of(pkg + "." + bridgeCaseName(member));
+    }
+
+    /** @see #bridgeCaseClass */
+    static String bridgeCaseName(TypeName member) {
+        return member.name() + "Case";
+    }
+
+    /** The class a union member occupies in the union: itself when this module declared it, its
+     * bridge case otherwise. What {@code permits} lists, and what a value of the union is at the
+     * {@code apply} boundary. */
+    ClassDesc resultMemberClass(TypeName member) {
+        return isLocalMember(member) ? cd(member) : bridgeCaseClass(member);
+    }
+
+    /** Whether {@code member} is a type this module declares, and so carries its result unions
+     * itself. A primitive never is; nor is a type another module emitted. */
+    boolean isLocalMember(TypeName member) {
+        return !member.isPrimitive() && member.module().equals(pkg);
+    }
+
+    /** The members of {@code out} that reach their union through a bridge case, in the order the
+     * union lists them. Empty when {@code out} is not a union, or when every member of it is a type
+     * this module declared — then the union's JVM form and its Souther form are the same values and
+     * neither boundary converts anything. */
+    List<TypeName> bridgedMembers(Type out) {
+        return bridgedMembersIn(pkg, out);
+    }
+
+    /** The bridged members of a behavior's output, decided in the module that declares that behavior:
+     * a member is local to the union's own module, which for a call is the callee's, not this one's. */
+    List<TypeName> bridgedMembersOf(String behavior, Type out) {
+        return bridgedMembersIn(moduleOf(behavior), out);
+    }
+
+    private List<TypeName> bridgedMembersIn(String module, Type out) {
+        if (!(out instanceof Type.Union)) {
+            return List.of();
+        }
+        List<TypeName> bridged = new ArrayList<>();
+        for (TypeName member : TypeOps.leafCases(out, symbols)) {
+            if (member.isPrimitive() || !member.module().equals(module)) {
+                bridged.add(member);
+            }
+        }
+        return bridged;
+    }
+
+    /** The bridge case of {@code member} in the module that declares {@code behavior}. */
+    ClassDesc bridgeCaseClassOf(String behavior, TypeName member) {
+        return ClassDesc.of(moduleOf(behavior) + "." + bridgeCaseName(member));
+    }
+
+    /** The module a behavior is declared in: another module for an imported one, this one otherwise. */
+    private String moduleOf(String behavior) {
+        return typePackage.getOrDefault(behavior, pkg);
+    }
+
+    /**
      * The generated class simple-name for a behavior: its name with the first letter capitalized
      * (spec 19.5). A Japanese leading character has no upper-case form, so a Japanese-named behavior
      * is emitted unchanged. The behavior's name stays lower-case wherever it is an identity — an

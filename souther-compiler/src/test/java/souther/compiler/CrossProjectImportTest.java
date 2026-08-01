@@ -336,4 +336,26 @@ class CrossProjectImportTest {
         Object out = Codecs.apply(impl, Codecs.decoded(loader, "app.billing.Req", Map.of("n", 1L)));
         assertEquals("shared.terms.Net30", out.getClass().getName());
     }
+
+    /**
+     * The library's type as a member of the consumer's output union. The bridge case is the
+     * consumer's own class, so nothing of the library is regenerated — the property that made
+     * whole-program union membership unavailable does not arise here (ADR-0057).
+     */
+    @Test
+    void anImportedTypeIsAUnionMemberWithoutTouchingTheLibrary() throws Exception {
+        Map<String, byte[]> app = Compiler.compileModules(List.of("""
+                module app.billing exposing ( NothingOwed, owed )
+                import shared.money ( Amount )
+                data NothingOwed
+                behavior owed : (a: Amount, b: Amount) -> Amount | NothingOwed
+                    constructs Amount, NothingOwed
+                let owed (a, b) = if a.value >= b.value then Amount(a.value - b.value) else NothingOwed
+                """), published(LIBRARY));
+
+        assertTrue(app.containsKey("app.billing.AmountCase"),
+                "the bridge case is this project's own class");
+        assertFalse(app.containsKey("shared.money.Amount"),
+                "and the library is not emitted again to carry the interface");
+    }
 }

@@ -30,7 +30,7 @@ class ASignatureThatDoesNotBuildTest {
 
             data A = Int
 
-            behavior fetch : (a: A) -> Int | A
+            behavior fetch : (a: A) -> List<Int> | A
 
             behavior use : (a: A) -> A
                 depends on fetch

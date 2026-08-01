@@ -1,6 +1,6 @@
 # ADR-0057: A behavior's output union is built from its own module's cases
 
-Status: Accepted (decided 2026-07-26). Records the reason behind E1606, replacing the JVM claim that stood in for it.
+Status: Accepted (decided 2026-07-26). Amended by ADR-0081, which takes the wrapper-case alternative below. Records the reason behind E1606, replacing the JVM claim that stood in for it.
 
 ## Context
 
@@ -36,7 +36,7 @@ A module that consumes another's failure case translates it: match the imported 
 
 **A non-sealed generated interface.** Rejected: it does not address this. Sealed or not, a class that does not implement the interface is not a subtype — the `ClassCastException` above is unchanged.
 
-**Wrapper cases.** Generate, in the consuming module's package, a record wrapping each imported case (`ship.ShortageCase(inv.Shortage value)`) and put that in the union. This keeps the exhaustive `switch` and leaves the imported module untouched. Rejected for now: within one `switch`, a local case arrives as the value itself and an imported one arrives wrapped, so the Java surface of a union depends on where each case came from. It stays available if cross-context unions turn out to be worth that.
+**Wrapper cases.** Generate, in the consuming module's package, a record wrapping each imported case (`ship.ShortageCase(inv.Shortage value)`) and put that in the union. This keeps the exhaustive `switch` and leaves the imported module untouched. Rejected for now: within one `switch`, a local case arrives as the value itself and an imported one arrives wrapped, so the Java surface of a union depends on where each case came from. It stays available if cross-context unions turn out to be worth that. **Taken in ADR-0081**, which measured the cost of the workaround in a real model: every such behavior declared a type whose only job was to hold the value, and the type travelled downstream.
 
 ## Consequences
 
