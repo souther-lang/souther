@@ -314,4 +314,78 @@ class CompileOutputUnionMemberTest {
         Object held = answered.getClass().getMethod("value").invoke(answered);
         assertEquals(250L, held.getClass().getMethod("value").invoke(held));
     }
+
+    /**
+     * A bridge case takes a class name in this module, so it is subject to the rule every other name
+     * this module emits is subject to. `+YenCase+` is a name a model may well have declared, and so
+     * are `+IntCase+` and `+DateCase+`, so the collision is reported rather than the names reserved.
+     */
+    @Test
+    void aBridgeCaseCollidingWithALocalDataTypeIsRejected() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module up exposing ( Yen )
+                        data Yen = Int
+                        """, """
+                        module down exposing ( YenCase, NothingOwed, owed )
+                        import up ( Yen )
+                        data YenCase = String
+                        data NothingOwed
+                        behavior owed : (a: Yen) -> Yen | NothingOwed
+                            constructs NothingOwed
+                        let owed (a) = if a.value > 0 then a else NothingOwed
+                        """)));
+        assertTrue(e.getMessage().contains("`YenCase`"), e.getMessage());
+    }
+
+    @Test
+    void aPrimitiveBridgeCaseCollidingWithALocalDataTypeIsRejected() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module m exposing ( IntCase, NoAnswer, half )
+                data IntCase = String
+                data NoAnswer
+                behavior half : (n: Int) -> Int | NoAnswer
+                    constructs NoAnswer
+                let half (n) = if n >= 0 then n / 2 else NoAnswer
+                """));
+        assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());
+    }
+
+    /** A behavior capitalizes into a class name too (spec 19.5), and it is the same table. */
+    @Test
+    void aBridgeCaseCollidingWithABehaviorsClassIsRejected() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module m exposing ( NoAnswer, half, intCase )
+                data NoAnswer
+                behavior intCase : (n: Int) -> Int
+                let intCase (n) = n
+                behavior half : (n: Int) -> Int | NoAnswer
+                    constructs NoAnswer
+                let half (n) = if n >= 0 then n / 2 else NoAnswer
+                """));
+        assertTrue(e.getMessage().contains("`IntCase`"), e.getMessage());
+    }
+
+    /**
+     * Two types of one spelling from two modules. The member-name rule refuses them within a union;
+     * here they are members of two different unions of this module, and both want one bridge case.
+     */
+    @Test
+    void twoMembersOfOneSpellingInDifferentUnionsAreRejected() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module a exposing ( Yen )
+                        data Yen = Int
+                        """, """
+                        module b exposing ( Yen )
+                        data Yen = String
+                        """, """
+                        module down exposing ( NoneA, NoneB, first, second )
+                        data NoneA
+                        data NoneB
+                        behavior first : (n: Int) -> a.Yen | NoneA
+                        behavior second : (n: Int) -> b.Yen | NoneB
+                        """)));
+        assertTrue(e.getMessage().contains("`YenCase`"), e.getMessage());
+    }
 }

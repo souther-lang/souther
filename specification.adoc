@@ -2948,6 +2948,8 @@ The bridge case is named `+<MemberName>Case+`, and there is one per member per m
 | a primitive, or an imported data | a bridge case this module emits
 |===
 
+A bridge case takes a class name in this module, so it is subject to the rule every other name this module emits is subject to: no two of them may be one class. `+YenCase+` is a name a model may well have declared, and so are `+IntCase+` and `+DateCase+`, so the collision is reported where it happens rather than the names reserved — a name nothing collides with stays available. Three ways to collide: with a data this module declares, with the class a behavior capitalizes into (<<jvm-behavior>>), and with another bridge case, which is two types of one spelling from two modules, members of two different unions of this module. Within one union the member-name rule (<<union-member>>) has already refused them.
+
 A bridge case has no codec. Belonging to a union does not change a member's external representation, so a consumer that has switched to a bridge case takes the value out and uses the codec the member itself carries (<<jvm-codec>>).
 
 The bridge case is a JVM form. It is not a Souther type, it is not written in a `+match+` arm or an `+example+` row, and it does not appear in an external representation. What each side sees:

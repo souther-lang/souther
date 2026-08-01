@@ -3,6 +3,7 @@ package souther.compiler.codegen;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.PipelineSigs;
@@ -183,6 +184,7 @@ public final class Backend {
                 }
             }
         });
+        b.rejectBridgeCaseCollisions(module, bridgeCases, behaviorResults, localTypes, behaviorClassOwner);
         Map<String, byte[]> out = new LinkedHashMap<>();
         behaviorResults.forEach((resultName, members) ->
                 out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, members)));
@@ -668,6 +670,62 @@ public final class Backend {
      * interface (19.3) and a single-case output uses that case's own type, so neither gets one. Case
      * order is sorted for deterministic bytecode.
      */
+    /**
+     * A bridge case takes a class name in this module (spec 19.8), so it is subject to the same rule
+     * as every other name this module emits: no two of them may be one class. {@code YenCase} is a
+     * name a model may well have declared, and {@code IntCase} / {@code DateCase} the same, so this
+     * is reported rather than reserved — the collision is decided by what the module holds, and a
+     * name nothing collides with stays available.
+     *
+     * <p>Three ways to collide: with a data this module declares, with the class a behavior
+     * capitalizes into (spec 19.5), and with another bridge case. The last is two members of one
+     * spelling from two modules — refused within a union by the member-name rule, and reaching here
+     * when they are members of two different unions of this module.
+     */
+    private void rejectBridgeCaseCollisions(Ast.Module module, Map<TypeName, List<String>> bridgeCases,
+                                            Map<String, List<TypeName>> behaviorResults,
+                                            Set<String> localTypes, Map<String, String> behaviorClassOwner) {
+        Map<String, TypeName> byBridgeName = new LinkedHashMap<>();
+        for (Map.Entry<TypeName, List<String>> e : bridgeCases.entrySet()) {
+            TypeName member = e.getKey();
+            String bridge = CodegenContext.bridgeCaseName(member);
+            Ast.BehaviorDef owner = behaviorOf(module, e.getValue().get(0));
+            SourcePos pos = owner != null ? owner.pos() : module.pos();
+            String what = owner != null ? owner.name() : e.getValue().get(0);
+            TypeName sameName = byBridgeName.put(bridge, member);
+            if (sameName != null) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.bridge.collision.member").title("check.duplicate.title")
+                                .at(pos).args(sameName.qualified(), member.qualified(), bridge)
+                                .hint("check.bridge.collision.member.hint").build(),
+                        "`" + sameName + "` and `" + member + "` both join a union of this module"
+                                + " through a generated case class `" + bridge + "`");
+            }
+            String collidesWith = localTypes.contains(bridge) ? "check.bridge.collision.data"
+                    : behaviorClassOwner.containsKey(bridge) ? "check.bridge.collision.behavior" : null;
+            if (collidesWith != null) {
+                String other = localTypes.contains(bridge) ? bridge : behaviorClassOwner.get(bridge);
+                throw CompileException.of(
+                        Diagnostic.of(null, collidesWith).title("check.duplicate.title")
+                                .at(pos).args(what, member.name(), bridge, other)
+                                .hint("check.bridge.collision.hint", bridge).build(),
+                        "the output of `" + what + "` has the member `" + member.name() + "`, which"
+                                + " joins the union through a generated case class `" + bridge
+                                + "` (spec 19.8), and `" + other + "` already takes that class name");
+            }
+        }
+    }
+
+    /** The behavior whose generated result union is {@code resultName}, or null when none is. */
+    private Ast.BehaviorDef behaviorOf(Ast.Module module, String resultName) {
+        for (Ast.BehaviorDef bd : module.behaviors()) {
+            if (CodegenContext.behaviorResultClass(bd.name()).equals(resultName)) {
+                return bd;
+            }
+        }
+        return null;
+    }
+
     private Map<String, List<TypeName>> behaviorResultInterfaces(Ast.Module module,
                                                                  Map<String, Sig> importedSigs) {
         Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);

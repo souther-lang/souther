@@ -29,6 +29,8 @@ Bridge cases introduce no new module-wide membership dependency. Souther already
 | a data this module declares | the case class itself |
 | a primitive, or an imported data | a bridge case this module emits |
 
+A bridge case takes a class name in the module, so it is subject to the rule every other emitted name is subject to: no two of them may be one class. `YenCase` is a name a model may well have declared, and so are `IntCase` and `DateCase`, so this is reported rather than the names reserved — the collision is decided by what the module holds, and a name nothing collides with stays available. Three ways to collide: with a data the module declares, with the class a behavior capitalizes into, and with another bridge case, which is two types of one spelling from two modules that are members of two different unions here. Within one union the member-name rule has already refused them.
+
 Belonging to a union does not change a member's external representation. A bridge case therefore has no codec of its own: a consumer switches to it, takes the value out, and uses the codec the member already carries.
 
 The bridge case is a JVM form and nothing else. It is not a Souther type, it is not written in a `match` arm or an `example` row, and it does not appear in an external representation.
