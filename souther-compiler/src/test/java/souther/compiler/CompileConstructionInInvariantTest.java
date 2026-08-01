@@ -167,14 +167,13 @@ class CompileConstructionInInvariantTest {
     }
 
     /**
-     * A helper the clause reaches through a combinator is pointed at the combinator rather than at
-     * its own body, because expanding a prelude helper stamps the call site on everything it splices
-     * in — the caller''s lambda and the helper inlined into it included. That is the inliner''s rule
-     * for every diagnostic inside a combinator, not this one''s; it is pinned here so the day it is
-     * made finer this test says so.
+     * A combinator between the clause and the construction changes nothing about where the error is
+     * put. Expanding a prelude helper stamps the call site on the prelude''s own body, so a diagnostic
+     * from there points at the user''s call rather than at the shipped source of {@code souther.*};
+     * what the caller handed it keeps the positions the author wrote it at.
      */
     @Test
-    void aConstructionReachedThroughACombinatorIsPointedAtTheCombinator() {
+    void aConstructionReachedThroughACombinatorIsPointedAtTheConstruction() {
         CompileException e = err("""
                 module m
                 data Yen = Int invariant value >= 0
@@ -183,7 +182,27 @@ class CompileConstructionInInvariantTest {
                     invariant ok = List.all(x -> atLeastZero(x), value)
                 """);
         assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
+        assertEquals(3, e.diagnostic().region().start().line());
+        assertEquals(34, e.diagnostic().region().start().column(),
+                "the construction in the helper, not the combinator the clause calls");
+    }
+
+    /** With no helper anywhere, the lambda handed to the combinator is caller code all the way down.
+     *  It is written on a line of its own, so a call site stamped over it shows up in the line and
+     *  not only in the column. */
+    @Test
+    void aConstructionWrittenInTheLambdaGivenToACombinatorKeepsItsPlace() {
+        CompileException e = err("""
+                module m
+                data Yen = Int invariant value >= 0
+                data Table = List<Int>
+                    invariant ok = List.all(
+                        x -> Yen(0).value <= x,
+                        value)
+                """);
+        assertEquals("check.invariant.construct.named", e.diagnostic().messageKey());
         assertEquals(5, e.diagnostic().region().start().line());
+        assertEquals(14, e.diagnostic().region().start().column());
     }
 
     /** Written in the clause itself there is one place, and labelling it twice says nothing. */
