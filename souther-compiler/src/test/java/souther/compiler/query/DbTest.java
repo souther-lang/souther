@@ -182,10 +182,72 @@ class DbTest {
         assertFalse(db.isComputed(new Ping(1)));
     }
 
+    /** A key that only asks: it reaches the knot below and takes no part in the cycle there. */
+    record Asks(int step) implements Key<String> {
+        @Override
+        public Answer<String> compute(Db db) {
+            return step < 2 ? db.ask(new Asks(step + 1)) : db.ask(new Knot(0));
+        }
+    }
+
+    /** Two keys that read each other, with nothing to say about it. */
+    record Knot(int step) implements Key<String> {
+        @Override
+        public Answer<String> compute(Db db) {
+            return db.ask(new Knot(1 - step));
+        }
+    }
+
     @Test
     void aCycleWithNoAnswerIsAProgrammingError() {
         Db db = new Db();
         assertThrows(IllegalStateException.class, () -> db.ask(new Loop()));
+    }
+
+    @Test
+    void aCycleSaysWhichKeysOnlyAskedAndWhereItClosed() {
+        Db db = new Db();
+        IllegalStateException raised =
+                assertThrows(IllegalStateException.class, () -> db.ask(new Asks(0)));
+
+        // The three Asks are on the chain because they were being answered, not because they are
+        // part of anything that depends on itself. Only what follows the closing key is the cycle.
+        assertEquals("""
+                the query Knot[step=0] depends on itself and says nothing about what that means.
+                  asked by:
+                    Asks[step=0]
+                    Asks[step=1]
+                    Asks[step=2]
+                  cycle:
+                    Knot[step=0]
+                    Knot[step=1]
+                    -> back to Knot[step=0]""", raised.getMessage());
+    }
+
+    @Test
+    void aCycleReachedFirstThingHasNoAskers() {
+        Db db = new Db();
+        IllegalStateException raised =
+                assertThrows(IllegalStateException.class, () -> db.ask(new Loop()));
+
+        assertEquals("""
+                the query Loop[] depends on itself and says nothing about what that means.
+                  cycle:
+                    Loop[]
+                    -> back to Loop[]""", raised.getMessage());
+    }
+
+    @Test
+    void aChainWithoutTheKeyThatClosedIsReportedAsThat() {
+        // Db hands over the chain it found the key on, so this cannot arise from asking. What it
+        // guards is the reader: a chain like this says nothing about what depends on what, and a
+        // report that claimed a query depends on itself from it would be claiming what it cannot
+        // show.
+        IllegalStateException raised = assertThrows(IllegalStateException.class,
+                () -> new Knot(0).onCycle(List.of(new Asks(0))));
+
+        assertEquals("a query cycle was reported for Knot[step=0], but its dependency chain does"
+                + " not contain it: [Asks[step=0]]", raised.getMessage());
     }
 
     /** Two files joined, so an edit to one can be watched for its effect on the other. */
