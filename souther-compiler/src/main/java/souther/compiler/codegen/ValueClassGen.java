@@ -453,7 +453,7 @@ final class ValueClassGen {
      * by natural order, and a Java reader can put it in a {@code TreeSet}. */
     private boolean isOrderedNewtype(Ast.Data data, Map<String, Type> fields) {
         return data.newtype() && fields.size() == 1
-                && TypeOps.isOrderedValue(fields.values().iterator().next(), symbols);
+                && TypeOps.supportsOrdering(fields.values().iterator().next(), symbols);
     }
 
     /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a

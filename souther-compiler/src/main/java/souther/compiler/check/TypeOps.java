@@ -34,36 +34,110 @@ public final class TypeOps {
     }
 
     /**
-     * Whether a value of this type has an external representation — what a boundary requires of it
-     * (ADR-0004). A boundary is where a codec is derived or a value crosses one: a data's field, a
-     * newtype's base, a behavior's input and its output.
+     * What a position may require of a type. {@link #EQUALITY} is what {@code ==} requires and what a
+     * {@code Set} requires of its element and a {@code Map} of its key; {@link #ORDERING} is what
+     * {@code sort} and a {@code sortBy} key require; {@link #EXTERNAL_FORM} is what a data's field, a
+     * newtype's base and a behavior's input and output require.
      */
-    public static boolean isBoundaryRepresentable(Type t) {
-        return !carriesFunction(t);
+    public enum Requires { EQUALITY, ORDERING, EXTERNAL_FORM }
+
+    /**
+     * Whether {@code t} answers {@code required}. One table, so all three answers for a type
+     * constructor are read in one place, and neither switch carries a {@code default}: a constructor
+     * added to {@link Type}, or a fourth question added here, stops compiling until it is answered —
+     * which is where "can the representation actually do this?" gets asked.
+     *
+     * <p>The three are separate questions, and the arms combine their children differently. Equality
+     * and the external form descend into what a collection holds. An ordering does not: a collection
+     * has none of its own whatever it holds.
+     *
+     * <p>They are also asked at different times, which is why the question is a parameter rather than
+     * three fields computed together. Equality and the external form are answered by the shape of the
+     * type alone; only an ordering consults the module, to learn what a {@code Ref} denotes. A
+     * {@code Set}'s element is asked for equality while its own type is still being resolved, and
+     * there is no answer about ordering to be had yet.
+     *
+     * <p>{@code Raw} answers yes to equality because its value's own {@code equals} answers, and that
+     * is the only answer available: a Raw is an arbitrary Java object and the language promises
+     * nothing about it. It is the one place a capability is claimed that the representation does not
+     * guarantee.
+     *
+     * <p>{@code Var}, {@code Nothing}, {@code Never} and {@code Erroneous} stand for a type rather
+     * than being one. They answer the way an unconstrained type does, so a generic core signature and
+     * a module that already reported an error are not refused a second time for what they hold.
+     */
+    public static boolean answers(Type t, Requires required, Symbols symbols) {
+        return switch (t) {
+            case Type.Prim p -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> true;
+                case ORDERING -> isOrdered(p);
+            };
+            case Type.Ref r -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> true;
+                case ORDERING -> isOrdered(base(r, symbols)) || orderingEnumeration(r, symbols) != null;
+            };
+            case Type.Union u -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> true;
+                case ORDERING -> orderingEnumeration(u, symbols) != null;
+            };
+            case Type.ListOf l -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> answers(l.element(), required, symbols);
+                case ORDERING -> false;
+            };
+            case Type.SetOf s -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> answers(s.element(), required, symbols);
+                case ORDERING -> false;
+            };
+            case Type.OptionOf o -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> answers(o.element(), required, symbols);
+                case ORDERING -> false;
+            };
+            case Type.MapOf m -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> answers(m.key(), required, symbols)
+                        && answers(m.value(), required, symbols);
+                case ORDERING -> false;
+            };
+            case Type.TupleOf tu -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> {
+                    for (Type e : tu.elements()) {
+                        if (!answers(e, required, symbols)) {
+                            yield false;
+                        }
+                    }
+                    yield true;
+                }
+                case ORDERING -> false;
+            };
+            case Type.FnOf _ -> false;
+            case Type.Var _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> switch (required) {
+                case EQUALITY, EXTERNAL_FORM -> true;
+                case ORDERING -> false;
+            };
+        };
     }
 
     /**
      * Whether values of this type can be compared for equality — what {@code ==} requires, and what
      * a {@code Set} requires of its element and a {@code Map} of its key (ADR-0009, ADR-0039).
      */
-    public static boolean supportsEquality(Type t) {
-        return !carriesFunction(t);
+    public static boolean supportsEquality(Type t, Symbols symbols) {
+        return answers(t, Requires.EQUALITY, symbols);
     }
 
     /** Whether values of this type have an ordering — what {@code sort} and a {@code sortBy} key
-     * require of what they order. */
-    public static boolean supportsOrdering(Type t) {
-        return !carriesFunction(t);
+     * require of what they order. A single-value newtype is ordered by the value it wraps
+     * (ADR-0047), and an enumeration by the order its cases are declared in. */
+    public static boolean supportsOrdering(Type t, Symbols symbols) {
+        return answers(t, Requires.ORDERING, symbols);
     }
 
     /**
-     * The one walk the three capability predicates above share today. They are separate questions
-     * and are asked separately; that a function is the only answer to all three is a fact about the
-     * types there are now, not a statement that the three are one predicate. A type that carried an
-     * external representation but no ordering would split them, and only this method would move.
+     * Whether a value of this type has an external representation — what a boundary requires of it
+     * (ADR-0004). A boundary is where a codec is derived or a value crosses one: a data's field, a
+     * newtype's base, a behavior's input and its output.
      */
-    private static boolean carriesFunction(Type t) {
-        return Type.mentions(t, x -> x instanceof Type.FnOf);
+    public static boolean hasExternalForm(Type t, Symbols symbols) {
+        return answers(t, Requires.EXTERNAL_FORM, symbols);
     }
 
     /** The type a field's written type stands for. A field whose type is not representable at the
@@ -876,14 +950,6 @@ public final class TypeOps {
                 || t == Type.DATE || t == Type.DATETIME;
     }
 
-    /** Whether a value of {@code t} is ordered: an ordered primitive, or a single-value newtype over
-     * one — it is ordered by the value it wraps (ADR-0047), which is what both the comparison
-     * operators and the sort family read. The generated wrapper carries that ordering as
-     * {@link Comparable}, so the runtime's natural-order compare reaches it. */
-    public static boolean isOrderedValue(Type t, Symbols symbols) {
-        return isOrdered(base(t, symbols)) || orderingEnumeration(t, symbols) != null;
-    }
-
     /**
      * The enumeration two operands of {@code <}/{@code <=}/{@code >}/{@code >=} are ordered by, or
      * null when they are not both values of one. Either side may name it: {@code stage < Won}
@@ -1061,7 +1127,7 @@ public final class TypeOps {
                 // a set holds no duplicates, which is a question about equality of its elements
                 Type element = typeArg(ref, symbols, "set", 3,
                         "Set needs a type argument, e.g. Set<String>");
-                requireEquality(element, ref, "check.set.function",
+                requireEquality(element, symbols, ref, "check.set.function",
                         "a Set has no duplicate elements, and a function has no value to compare");
                 yield Type.set(element);
             }
@@ -1074,7 +1140,7 @@ public final class TypeOps {
                 Type value = typeArg(ref, symbols, "map", 3, "Map needs a value type, e.g. Map<String, Int>");
                 Type key = ref.tupleElems() == null
                         ? Type.STRING : resolveTerm(ref.tupleElems().get(0), symbols);
-                requireEquality(key, ref, "check.map.key.function",
+                requireEquality(key, symbols, ref, "check.map.key.function",
                         "a Map finds a value by its key, and a function has no value to compare");
                 yield Type.map(key, value);
             }
@@ -1110,20 +1176,20 @@ public final class TypeOps {
      * when every one of them can. Walks the whole type, so a set nested in a list or under a map's
      * value is asked the same question as one written on its own.
      */
-    public static UncomparableIn uncomparableCollection(Type t) {
+    public static UncomparableIn uncomparableCollection(Type t, Symbols symbols) {
         return switch (t) {
-            case Type.SetOf s -> !supportsEquality(s.element())
+            case Type.SetOf s -> !supportsEquality(s.element(), symbols)
                     ? new UncomparableIn.SetElement(s.element())
-                    : uncomparableCollection(s.element());
-            case Type.MapOf m -> !supportsEquality(m.key())
+                    : uncomparableCollection(s.element(), symbols);
+            case Type.MapOf m -> !supportsEquality(m.key(), symbols)
                     ? new UncomparableIn.MapKey(m.key())
-                    : firstNonNull(uncomparableCollection(m.key()),
-                            uncomparableCollection(m.value()));
-            case Type.ListOf l -> uncomparableCollection(l.element());
-            case Type.OptionOf o -> uncomparableCollection(o.element());
+                    : firstNonNull(uncomparableCollection(m.key(), symbols),
+                            uncomparableCollection(m.value(), symbols));
+            case Type.ListOf l -> uncomparableCollection(l.element(), symbols);
+            case Type.OptionOf o -> uncomparableCollection(o.element(), symbols);
             case Type.TupleOf tu -> {
                 for (Type e : tu.elements()) {
-                    UncomparableIn bad = uncomparableCollection(e);
+                    UncomparableIn bad = uncomparableCollection(e, symbols);
                     if (bad != null) {
                         yield bad;
                     }
@@ -1139,8 +1205,9 @@ public final class TypeOps {
     }
 
     /** Refuses a collection whose element or key a function makes uncomparable. */
-    private static void requireEquality(Type t, Ast.TypeRef at, String key, String message) {
-        if (!supportsEquality(t)) {
+    private static void requireEquality(Type t, Symbols symbols, Ast.TypeRef at, String key,
+                                        String message) {
+        if (!supportsEquality(t, symbols)) {
             throw CompileException.of(
                     Diagnostic.of(null, key).title("check.boundary.title")
                             .at(at.pos()).args(Type.show(t)).build(),

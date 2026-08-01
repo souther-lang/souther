@@ -158,8 +158,9 @@ public final class BinaryElaborator {
                 // (`金額 == 数量`) have disjoint case sets and still fail.
                 // `==` is value equality, and a function value has none: comparing two would fall
                 // back to whether they are the same object, which is not a question the language asks
-                if (!TypeOps.supportsEquality(lt) || !TypeOps.supportsEquality(rt)) {
-                    Type carrier = TypeOps.supportsEquality(lt) ? rt : lt;
+                if (!TypeOps.supportsEquality(lt, ctx.symbols())
+                        || !TypeOps.supportsEquality(rt, ctx.symbols())) {
+                    Type carrier = TypeOps.supportsEquality(lt, ctx.symbols()) ? rt : lt;
                     throw CompileException.of(
                             Diagnostic.of(null, "check.equality.function")
                                     .title("check.compare.title")

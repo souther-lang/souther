@@ -521,7 +521,7 @@ public final class SpecChecker {
     static void rejectFunctionIO(Ast.SpecBehavior spec, Symbols symbols) {
         for (Ast.Param p : spec.params()) {
             Type t = TypeOps.successType(p.type(), symbols);
-            if (!TypeOps.isBoundaryRepresentable(t)) {
+            if (!TypeOps.hasExternalForm(t, symbols)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.param.function").title("check.boundary.title")
                                 .at(p.pos(), p.name().length()).args(p.name(), Type.show(t)).build(),
@@ -531,7 +531,7 @@ public final class SpecChecker {
             }
         }
         Type out = TypeOps.successType(spec.ret(), symbols);
-        if (!TypeOps.isBoundaryRepresentable(out)) {
+        if (!TypeOps.hasExternalForm(out, symbols)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.output.function").title("check.boundary.title")
                             .at(spec.pos()).args(spec.name(), Type.show(out)).build(),
