@@ -37,8 +37,11 @@ longer be in the code.
 * Exhaustiveness counts the arm like any other. No arm may be omitted, and there is still no `_`.
 * Reaching it aborts, throwing `UnreachableReached`. Souther cannot catch it, and a boundary maps it
   to a 500, apart from a business failure's 400.
-* An `example` row that reaches it is a compile error, E1911, carrying the reason and the place it
-  was written.
+* An `example` row that reaches it is a compile error, E1911, carrying the reason and the line and
+  column it was written at. Not a file name: this compiler is not given one — a generated class's
+  `SourceFile` is derived from its module name — and deriving one would name a file that need not
+  exist, and the reading module's when the `unreachable` arrived with another module's inlined
+  helper.
 * It may not be written in an `invariant`, and an `example` expectation is a value, so not there
   either. Everywhere else an expression may stand, it may — provided the position states what it
   holds, or a branch beside it does. Written where nothing does, it is E1307.

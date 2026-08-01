@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.InvocationTargetException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -79,6 +80,10 @@ class CompileUnreachableTest {
         assertEquals("E1911", e.diagnostics().get(0).code(), e.getMessage());
         assertTrue(e.getMessage().contains("twenty insured years cannot precede the age of thirty"),
                 e.getMessage());
+        // the line and column the reason was written at, and no file name: this compiler is given
+        // none, so one derived here would name a file that need not exist
+        assertTrue(e.getMessage().contains("(22:21)"), e.getMessage());
+        assertFalse(e.getMessage().contains(".sou"), e.getMessage());
     }
 
     @Test

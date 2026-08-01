@@ -694,12 +694,17 @@ final class BodyGen {
             stackCast(shape);
         }
 
-        /** What the abort says: the reason the model wrote, and where it wrote it. The stack trace
-         * gives the line through the {@code LineNumberTable}, and a compile-time reader (an
-         * {@code example} that reached it) has only this string. */
+        /**
+         * What the abort says: the reason the model wrote, and the line and column it wrote it at.
+         *
+         * <p>No file name. This compiler is not given one — a generated class's {@code SourceFile}
+         * is derived from its module name rather than threaded down from a path — and deriving one
+         * here would name a file that need not exist, and would name the reading module's when the
+         * {@code unreachable} came in with an inlined helper of another. A reader at run time has
+         * the frame's own file and line; a reader of E1911 has the row's place beside this one.
+         */
         private String abortMessage(Core.Unreachable u) {
-            String file = pkg.substring(pkg.lastIndexOf('.') + 1) + ".sou";
-            return u.pos() == null ? u.reason() : u.reason() + " (" + file + ":" + u.pos() + ")";
+            return u.pos() == null ? u.reason() : u.reason() + " (" + u.pos() + ")";
         }
 
         private void match(Core.Match m, Type expected) {

@@ -3446,12 +3446,12 @@ Emitted when a row's evaluation exceeds the step budget the example runner holds
 [,text]
 ----
 This row reached a point the model declares cannot arise: twenty insured years cannot
-precede the age of thirty (employmentinsurance.sou:42:17)
+precede the age of thirty (42:17)
 Hint: Either the row states a combination the model rules out, or the reason written at
 that `unreachable` does not hold.
 ----
 
-Emitted when a row's evaluation reaches an `+unreachable+` (<<unreachable>>). The reason the model wrote is shown with the place it was written, because the row and the declaration are usually in different rules. It is not a failed comparison: the row produced no answer to compare, and what it found is a premise that does not hold.
+Emitted when a row's evaluation reaches an `+unreachable+` (<<unreachable>>). The reason the model wrote is shown with the line and column it was written at, because the row and the declaration are usually in different rules; the diagnostic's own place is the row's. It is not a failed comparison: the row produced no answer to compare, and what it found is a premise that does not hold.
 
 [#e2001]
 === A recursive helper is not proven total
