@@ -46,7 +46,7 @@ final class Intrinsics {
         return e.emit(g, call);
     }
 
-    sealed interface Emit permits RuntimeStatic, JdkVirtual {
+    sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold {
         Type emit(BodyGen g, Core.Call call);
     }
 
@@ -94,6 +94,23 @@ final class Intrinsics {
                 }
             }
             g.emitInvokeVirtual(owner, method, desc);
+            return result;
+        }
+    }
+
+    /**
+     * {@code List.sum} / {@code List.product}. The two numeric elements run different kernels and
+     * answer different JVM types (a {@code long}, a {@code BigDecimal}), so the method is read off
+     * the result the checker settled rather than named in the row. The list argument alone cannot
+     * say which: over the empty-list literal its element is the bottom, and the answer came from the
+     * position the call was written in.
+     */
+    record NumericFold(String intMethod, String decimalMethod) implements Emit {
+        public Type emit(BodyGen g, Core.Call call) {
+            Type result = call.type();
+            g.genExpr(call.args().get(0));
+            String method = result == Type.DECIMAL ? decimalMethod : intMethod;
+            g.emitInvokeStatic(CD_Lists, method, MethodTypeDesc.of(boundaryDesc(result), CD_List));
             return result;
         }
     }
@@ -186,6 +203,8 @@ final class Intrinsics {
         t.put("list.sort", rt(CD_Lists, "sort", order(0), ts -> ts.get(0)));
         t.put("list.reverse", rt(CD_Lists, "reverse", order(0), ts -> ts.get(0)));
         t.put("list.range", rt(CD_Lists, "range", order(0, 1), ts -> Type.list(Type.INT)));
+        t.put("list.sum", new NumericFold("sumInt", "sumDecimal"));
+        t.put("list.product", new NumericFold("productInt", "productDecimal"));
 
         // Map — keys/values are erased to Object; the map argument stays a raw Map.
         t.put("map.containsKey", rtErased(CD_Maps, "containsKey", order(1, 0), Set.of(0), ts -> Type.BOOL));

@@ -225,6 +225,9 @@ public final class CallElaborator {
                                 + " a newtype over one of these), but the element is " + lo.element()
                                 + " — sort its ordered field instead (e.g. map to it first)");
             }
+            if (intrinsic.key().equals("list.sum") || intrinsic.key().equals("list.product")) {
+                return numericFold(call, result, expected);
+            }
             if (intrinsic.key().equals("string.matches")) {
                 validateRegexPattern(args.get(0));
             }
@@ -582,6 +585,53 @@ public final class CallElaborator {
                 Diagnostic.of(null, "check.expects").title("check.type.mismatch.title").at(pos)
                         .args(subject, Localizable.of(kindKey), Type.show(actual)).build(),
                 legacy);
+    }
+
+    /**
+     * The element {@code List.sum} / {@code List.product} answers with. It is {@code Int} or
+     * {@code Decimal} — the two types {@code +} and {@code *} are defined for — and nothing else:
+     * a newtype over one of them declares neither an addition nor a zero, so it is rejected here
+     * rather than folded as the value it wraps.
+     *
+     * <p>Over the empty-list literal there is no element to read, and the seed the fold answers with
+     * is {@code 0} or {@code 0.0m} by which of the two this is. That comes from the position the call
+     * is written in — the field, the annotated binding, the declared output it feeds. With no
+     * position to read, the answer is asked for rather than defaulted: defaulting to {@code Int}
+     * would make a numeric-literal default rule out of one library function.
+     */
+    private static Type numericFold(Ast.Call call, Type element, Type expected) {
+        if (element == Type.INT || element == Type.DECIMAL) {
+            return element;
+        }
+        if (BottomInfer.isBottom(element)) {
+            if (expected == Type.INT || expected == Type.DECIMAL) {
+                return expected;
+            }
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.numeric.empty").title("check.fold.seed.title")
+                            .at(call.pos(), call.fn().length()).args(call.fn())
+                            .hint("check.numeric.empty.hint").build(),
+                    call.fn() + " over the empty list answers with its seed, and whether that seed is"
+                            + " the Int 0 or the Decimal 0.0m follows from an element the empty list"
+                            + " does not have —"
+                            + " annotate the position it feeds (`let total: Decimal = " + call.fn()
+                            + "([])`)");
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.numeric").title("check.type.mismatch.title")
+                        .at(call.pos(), call.fn().length())
+                        .args(call.fn(), Localizable.of("kind.numeric.list"), Type.show(element))
+                        .hint("check.numeric.hint").build(),
+                shortName(call.fn()) + " needs a list of Int or Decimal, but the element is "
+                        + Type.show(element) + " — sum its numeric field instead (e.g. map to it"
+                        + " first)");
+    }
+
+    /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
+     * function itself, and a call may be written either way. */
+    private static String shortName(String fn) {
+        int dot = fn.indexOf('.');
+        return dot < 0 ? fn : fn.substring(dot + 1);
     }
 
     /** A stdlib error where a list's element (or a key) must be an ordered primitive to sort/compare. */
