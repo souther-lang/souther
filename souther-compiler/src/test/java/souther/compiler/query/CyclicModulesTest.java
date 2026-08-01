@@ -101,6 +101,21 @@ class CyclicModulesTest {
     }
 
     @Test
+    void whatAModuleReachesIsWorkedOutWithoutAskingAboutEachModuleReached() {
+        Compilation compilation = Compilation.ofDocuments(documents(A, B), Set.of(),
+                souther.compiler.meta.ModulePath.EMPTY);
+        compilation.diagnostics();
+
+        Output.Reaches reaches = new Output.Reaches("m.a");
+        assertEquals(List.of("m.a", "m.b"), compilation.db().ask(reaches).value(),
+                "the walk follows the imports round to a module it has seen and stops there");
+        assertTrue(compilation.db().isComputed(reaches),
+                "it answered without being asked through itself, so the answer is kept — a walk"
+                        + " that asked about each module it reached would be one of these two"
+                        + " modules asking what it reaches through the other");
+    }
+
+    @Test
     void aBatchCompileStopsAtTheCycle() {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(A, B)));
