@@ -511,6 +511,31 @@ class CompileRecursiveHelperTest {
     }
 
     @Test
+    void aLetSpelledLikeTheParameterDoesNotMakeARecursiveCallDecrease() {
+        // The size a structural recursion decreases is the parameter's, and `t` here is not the
+        // parameter: it is a value built from it, which may be bigger. Read as the parameter, the
+        // arm binding counted as a strictly smaller part of it and `flatten(k)` was accepted as
+        // walking the tree down — a program that never bottoms out.
+        String src = """
+                module demo
+                data Node = { n: Int, kids: List<Node> }
+                data Out = { xs: List<Int> }
+
+                let grow (t: Node): Node = Node { n = t.n, kids = [t, t] }
+
+                let flatten (t: Node): List<Int> = {
+                    let t = grow(t)
+                    [t.n] ++ List.concatMap(k -> flatten(k), t.kids)
+                }
+
+                behavior go : (t: Node) -> Out constructs Out, Node
+                let go (t) = Out { xs = flatten(t) }
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(ex.getMessage().contains("flatten"), ex.getMessage());
+    }
+
+    @Test
     void applyingAFunctionParameterSpelledLikeAHelperIsNotACallToThatHelper() {
         // The function-argument check reads what a call applies, not how it is spelled: `apply` is
         // the parameter here, so `apply(n)` applies the function it was given. The helper of that

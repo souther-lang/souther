@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
@@ -160,11 +162,13 @@ final class TotalityChecker {
         for (String f : group) {
             Ast.FnDef def = own.get(f);
             List<Ast.FnParam> params = def.params();
-            Set<String> paramNames = new HashSet<>();
-            Map<String, Integer> idxOf = new HashMap<>();
+            // which bindings the parameters are, not what they are spelled: a `let` inside the
+             // body may write a parameter's name, and it is another value
+            Set<BindingId> paramNames = new HashSet<>();
+            Map<BindingId, Integer> idxOf = new HashMap<>();
             for (int i = 0; i < params.size(); i++) {
-                paramNames.add(params.get(i).name());
-                idxOf.put(params.get(i).name(), i);
+                paramNames.add(params.get(i).binder().id());
+                idxOf.put(params.get(i).binder().id(), i);
             }
             List<RecCall> calls = new ArrayList<>();
             walk(def.body(), group, paramNames, Map.of(), Map.of(), calls);
@@ -175,12 +179,12 @@ final class TotalityChecker {
                 int cols = Math.min(toArity, rc.call().args().size());
                 for (int j = 0; j < cols; j++) {
                     Ast.Expr arg = rc.call().args().get(j);
-                    Set<String> strict = strictSmaller(arg, rc.lt(), rc.eq(), paramNames);
-                    Set<String> root = rootParams(arg, rc.lt(), rc.eq(), paramNames);
-                    for (String p : strict) {
+                    Set<BindingId> strict = strictSmaller(arg, rc.lt(), rc.eq(), paramNames);
+                    Set<BindingId> root = rootParams(arg, rc.lt(), rc.eq(), paramNames);
+                    for (BindingId p : strict) {
                         m[idxOf.get(p)][j] = Rel.LT;
                     }
-                    for (String p : root) {
+                    for (BindingId p : root) {
                         if (!strict.contains(p) && m[idxOf.get(p)][j] == null) {
                             m[idxOf.get(p)][j] = Rel.EQ;
                         }
@@ -277,7 +281,8 @@ final class TotalityChecker {
     /** A recorded recursive call to a group member, with the callee and the smaller-than / equal-to
      * relations ({@code lt} / {@code eq}) in scope where it appears. */
     private record RecCall(String callee, Ast.Call call,
-                           Map<String, Set<String>> lt, Map<String, Set<String>> eq) {}
+                           Map<BindingId, Set<BindingId>> lt,
+                           Map<BindingId, Set<BindingId>> eq) {}
 
     /**
      * A standard-library combinator that hands the contents of its container argument to a closure:
@@ -337,27 +342,29 @@ final class TotalityChecker {
      * strictly smaller part of the parameters the scrutinee is rooted at; a {@code let} carries the
      * strict or equal relation of its value forward.
      */
-    private static void walk(Ast.Expr e, Set<String> group, Set<String> paramNames,
-                             Map<String, Set<String>> lt, Map<String, Set<String>> eq,
+    private static void walk(Ast.Expr e, Set<String> group, Set<BindingId> paramNames,
+                             Map<BindingId, Set<BindingId>> lt, Map<BindingId, Set<BindingId>> eq,
                              List<RecCall> calls) {
         switch (e) {
             case Ast.Match m -> {
                 walk(m.scrutinee(), group, paramNames, lt, eq, calls);
-                Set<String> rooted = rootParams(m.scrutinee(), lt, eq, paramNames);
+                Set<BindingId> rooted = rootParams(m.scrutinee(), lt, eq, paramNames);
                 for (Ast.Case c : m.cases()) {
-                    Map<String, Set<String>> inner = lt;
+                    Map<BindingId, Set<BindingId>> inner = lt;
                     if (c.binding() != null && !rooted.isEmpty()) {
-                        inner = with(lt, c.bindingName(), rooted);   // the bound value is smaller than each root
+                        inner = with(lt, c.binding().id(), rooted);   // the bound value is smaller than each root
                     }
                     walk(c.body(), group, paramNames, inner, eq, calls);
                 }
             }
             case Ast.LetIn li -> {
                 walk(li.value(), group, paramNames, lt, eq, calls);
-                Set<String> smaller = strictSmaller(li.value(), lt, eq, paramNames);
-                Set<String> equal = eqRoots(li.value(), eq, paramNames);
-                Map<String, Set<String>> ltInner = smaller.isEmpty() ? lt : with(lt, li.name(), smaller);
-                Map<String, Set<String>> eqInner = equal.isEmpty() ? eq : with(eq, li.name(), equal);
+                Set<BindingId> smaller = strictSmaller(li.value(), lt, eq, paramNames);
+                Set<BindingId> equal = eqRoots(li.value(), eq, paramNames);
+                Map<BindingId, Set<BindingId>> ltInner =
+                        smaller.isEmpty() ? lt : with(lt, li.binder().id(), smaller);
+                Map<BindingId, Set<BindingId>> eqInner =
+                        equal.isEmpty() ? eq : with(eq, li.binder().id(), equal);
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
             case Ast.Call call -> {
@@ -374,11 +381,11 @@ final class TotalityChecker {
                         // element, or an option's unwrapped payload) is a sub-term of that container, so
                         // if the container is (part of) a parameter, the value is a strictly smaller
                         // part of it. Bind the element parameter accordingly for the step body.
-                        Set<String> elemRoots =
+                        Set<BindingId> elemRoots =
                                 rootParams(call.args().get(combo.containerArg()), lt, eq, paramNames);
-                        Map<String, Set<String>> inner = elemRoots.isEmpty()
+                        Map<BindingId, Set<BindingId>> inner = elemRoots.isEmpty()
                                 ? lt
-                                : with(lt, step.params().get(combo.elementParam()).name(), elemRoots);
+                                : with(lt, step.params().get(combo.elementParam()).id(), elemRoots);
                         walk(step.body(), group, paramNames, inner, eq, calls);
                     } else {
                         walk(arg, group, paramNames, lt, eq, calls);
@@ -393,16 +400,16 @@ final class TotalityChecker {
      * alias of one (through {@code eq}), a field chain rooted at one, or a local already known to be
      * smaller than one. Used for a {@code match} scrutinee: unwrapping a case of such a value yields a
      * strictly smaller part. */
-    private static Set<String> rootParams(Ast.Expr e, Map<String, Set<String>> lt,
-                                          Map<String, Set<String>> eq, Set<String> paramNames) {
+    private static Set<BindingId> rootParams(Ast.Expr e, Map<BindingId, Set<BindingId>> lt,
+                                          Map<BindingId, Set<BindingId>> eq, Set<BindingId> paramNames) {
         return switch (e) {
-            case Ast.Var v -> {
-                Set<String> s = new HashSet<>();
-                if (paramNames.contains(v.name())) {
-                    s.add(v.name());
+            case Ast.Var v when v.denotes() instanceof ValueName.Local local -> {
+                Set<BindingId> s = new HashSet<>();
+                if (paramNames.contains(local.id())) {
+                    s.add(local.id());
                 }
-                s.addAll(lt.getOrDefault(v.name(), Set.of()));
-                s.addAll(eq.getOrDefault(v.name(), Set.of()));
+                s.addAll(lt.getOrDefault(local.id(), Set.of()));
+                s.addAll(eq.getOrDefault(local.id(), Set.of()));
                 yield s;
             }
             case Ast.FieldAccess fa -> rootParams(fa.target(), lt, eq, paramNames);
@@ -413,10 +420,11 @@ final class TotalityChecker {
     /** The parameters {@code e} is a <em>strictly</em> smaller part of — a field access (a field is
      * strictly smaller than its target), or a local already known to be smaller. A bare parameter, or
      * an exact alias of one, is not strictly smaller than itself. */
-    private static Set<String> strictSmaller(Ast.Expr e, Map<String, Set<String>> lt,
-                                             Map<String, Set<String>> eq, Set<String> paramNames) {
+    private static Set<BindingId> strictSmaller(Ast.Expr e, Map<BindingId, Set<BindingId>> lt,
+                                             Map<BindingId, Set<BindingId>> eq, Set<BindingId> paramNames) {
         return switch (e) {
-            case Ast.Var v -> lt.getOrDefault(v.name(), Set.of());
+            case Ast.Var v when v.denotes() instanceof ValueName.Local local ->
+                    lt.getOrDefault(local.id(), Set.of());
             case Ast.FieldAccess fa -> rootParams(fa.target(), lt, eq, paramNames);
             default -> Set.of();
         };
@@ -424,21 +432,23 @@ final class TotalityChecker {
 
     /** The parameters {@code e} is <em>exactly equal</em> to — a bare parameter or an alias of one. A
      * field access is strictly smaller, not equal, so it is not here (it is in {@link #strictSmaller}). */
-    private static Set<String> eqRoots(Ast.Expr e, Map<String, Set<String>> eq, Set<String> paramNames) {
-        if (e instanceof Ast.Var v) {
-            Set<String> s = new HashSet<>();
-            if (paramNames.contains(v.name())) {
-                s.add(v.name());
+    private static Set<BindingId> eqRoots(Ast.Expr e, Map<BindingId, Set<BindingId>> eq,
+                                          Set<BindingId> paramNames) {
+        if (e instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local) {
+            Set<BindingId> s = new HashSet<>();
+            if (paramNames.contains(local.id())) {
+                s.add(local.id());
             }
-            s.addAll(eq.getOrDefault(v.name(), Set.of()));
+            s.addAll(eq.getOrDefault(local.id(), Set.of()));
             return s;
         }
         return Set.of();
     }
 
-    private static Map<String, Set<String>> with(Map<String, Set<String>> env, String name, Set<String> params) {
-        Map<String, Set<String>> copy = new HashMap<>(env);
-        copy.put(name, params);
+    private static Map<BindingId, Set<BindingId>> with(Map<BindingId, Set<BindingId>> env,
+                                                       BindingId binding, Set<BindingId> params) {
+        Map<BindingId, Set<BindingId>> copy = new HashMap<>(env);
+        copy.put(binding, params);
         return copy;
     }
 
