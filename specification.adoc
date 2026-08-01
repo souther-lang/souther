@@ -308,8 +308,10 @@ souther compile app/order.sou -d out-app -cp out-lib
 ----
 
 What crosses that boundary is what crosses a boundary within one compilation: `+exposing+` is the
-gate, and an imported case may not join a union declared here (<<e1606>>). A module read this way is
-not generated again — its classes and its examples belong to the build that produced them.
+gate, and an imported type may not be a case of a sum declared here (<<e1606>>). An imported type in
+a behavior's output union is unaffected — it joins through a bridge case this module emits
+(<<bridge-case>>), so nothing of the imported module has to be regenerated for it. A module read this
+way is not generated again — its classes and its examples belong to the build that produced them.
 
 A compiled module records the version of what an importing module reaches. A module whose version is
 not this compiler's is refused, naming the compiler that built it, rather than read and
@@ -777,7 +779,7 @@ behavior quote : (c: Cart) -> PricedCart | EmptyCart     // EmptyCart is a unit
 
 Everywhere else a type is *referred to*, and a name nothing declares is unknown there and reported: a parameter type, a field's type, `+constructs+`, `+depends on+`, a `+match+` arm, a codec variant, a `+let+`'s declared return type.
 
-Whether a name is declared is answered within the module — its own declarations and the names its `+import+` lines list. A qualified name (`+inventory.InsufficientStock+`) names another module's declaration, so it is a reference wherever it is written. A sum's case is module-local in any event (<<e1606>>).
+Whether a name is declared is answered within the module — its own declarations and the names its `+import+` lines list. A qualified name (`+inventory.InsufficientStock+`) names another module's declaration, so it is a reference wherever it is written. A sum's cases are declared with the sum, so they are module-local in any event (<<e1606>>).
 
 The explicit declaration stays available, and is how a case that carries a comment of its own is written.
 
@@ -822,6 +824,13 @@ Souther has union types. They appear in three forms.
 * anonymous union with failure cases in a behavior output `+-> Out | E1 | E2+` (<<type-routing>>)
 
 An anonymous union appears *only in a behavior's output*. An anonymous union MUST NOT be written in an input (parameter) type. To pass a sum, make a named data (<<unmarked-output>>); naming it makes it sealed, with exhaustiveness checking and a JVM type (<<jvm-sum>>). Where the spec DSL writes `+(A OR B)+` in an input, the sum is named as a `+data+` and then referenced. A JVM type is generated for an output anonymous union (<<jvm-anonymous-union>>).
+
+[#union-member]
+A member of an anonymous union MUST be nominal and MUST tell itself apart from the other members at run time, and it MUST have a form a `+match+` arm can write. The primitives (`+Int+` / `+Bool+` / `+Decimal+` / `+String+` / `+Date+` / `+DateTime+`) and named data types meet both, a data whether this module declares it or imports it. A collection meets neither: its type argument is erased, so `+List<Order>+` and `+List<Item>+` are one type at run time and no arm could choose between them, and no arm form names one. `+Option+` and a function type are outside for the same reason. What a member may be does not depend on where the union came from — a union written as a behavior's output and one a `+>->+` composition arrived at (<<type-routing>>) are the same union.
+
+A named sum member contributes its cases and not itself, as it does in an external representation (<<sum-discrimination>>). The members a union is checked and generated from are therefore its *effective* members: every member written, with each named sum expanded to its leaves.
+
+Each effective member goes by a name of its own. A `+match+` arm names a member by the name written for it, and so does the `+"type"+` discriminator (<<sum-discrimination>>), so one name cannot stand for two members. `+-> up.Yen | other.Yen+` is refused, and so is a `+Yen+` this module declares beside an imported one — including where one of them arrives as the leaf of a named sum member.
 
 Structural intersection types (`+A & B+`, a type operator for "a value that is both A and B") are *not* provided. The spec DSL's `+AND+` means "has all of A's fields, plus more", not "is both A and B", and is fully expressed by the `+...+` spread of <<field-spread>> (take fields in flatly, inherit invariants, not a subtype).
 
@@ -1421,6 +1430,24 @@ behavior preApprove : (
 ) -> PreApproved | NotAuthorized
     constructs PreApproved, NotAuthorized
 ----
+
+The commonest shape a model asks for is "the amount, or the reason there is none", and the value it answers with is usually a primitive or a type another module owns. Both are members (<<union-member>>), so the behavior answers with the value itself and no type is declared to hold it.
+
+[,text]
+----
+// spec DSL: behavior computeTaxableAmount = Remuneration AND UpliftPay AND SocialInsurance -> Yen OR DeductionsExceedGross
+behavior computeTaxableAmount : (
+    remuneration:    Remuneration,
+    upliftPay:       Yen,
+    socialInsurance: Yen
+) -> Yen | DeductionsExceedGross          // Yen is imported; it is the answer, not a wrapper around it
+    constructs Yen, DeductionsExceedGross
+
+behavior half : (n: Int) -> Int | NoAnswer   // a primitive is a member the same way
+    constructs NoAnswer
+----
+
+The value is read back with the arm that names it — `+| Yen as y+`, `+| Int as n+` (<<primitive-arm>>) — and binds bare.
 
 Which case "departs as a failure" is not decided by this behavior alone. When composed with `+>->+`, the case the immediately following stage does not consume departs the mainline (<<composition>>). If a downstream stage takes `+NotAuthorized+` as input, that case is processed; if not, it departs and is carried to the output. The same value departs in one composition and stays on the mainline in another.
 
@@ -2269,7 +2296,7 @@ match m with
 ----
 
 [#primitive-arm]
-An arm may name a primitive type. A standard-library function that answers a value or a failure returns a union headed by a primitive — `+Int.divide+` / `+Int.remainder+` return `+Int | DivisionByZero+` (<<stdlib-int>>), `+Decimal.divide+` returns `+Decimal | DivisionByZero+` (<<stdlib-decimal>>), `+String.toInt+` / `+String.toDecimal+` return `+Int | NotANumber+` / `+Decimal | NotANumber+` (<<stdlib-string>>) — and the arm that takes the value names that primitive. Nothing wraps it: the matched value is the number itself, so `+as+` binds it as it binds any other case.
+An arm may name a primitive type. A behavior or a standard-library function that answers a value or a reason there is none returns a union with a primitive as a member (<<union-member>>) — a model's own `+-> Int | NoAnswer+`, and the core's `+Int.divide+` / `+Int.remainder+` returning `+Int | DivisionByZero+` (<<stdlib-int>>), `+Decimal.divide+` returning `+Decimal | DivisionByZero+` (<<stdlib-decimal>>), `+String.toInt+` / `+String.toDecimal+` returning `+Int | NotANumber+` / `+Decimal | NotANumber+` (<<stdlib-string>>) — and the arm that takes the value names that primitive. Nothing wraps it: the matched value is the number itself, so `+as+` binds it as it binds any other case.
 
 [,text]
 ----
@@ -2492,7 +2519,7 @@ Every standard-library function is declared in a core module this way, whether i
 
 * the operators (`{plus}` `+-+` `+*+` `+/+` `+==+` `+<+` `+<=+` `+>+` `+>=+`) — they are syntax, and the arithmetic ones carry the closed-newtype rules (<<newtype>>) a plain function does not;
 * the ordered-constrained generics (`+List.sort+` / `+max+` / `+min+` / `+sortBy+` and the comparison operators) — Souther has no `+comparable+` type class, so "the element is an ordered value" is checked in the compiler rather than expressed in the signature;
-* the functions returning a primitive-headed union (`+Int.divide+` / `+Int.remainder+` / `+Decimal.divide+` / `+String.toInt+` / `+String.toDecimal+`, returning `+Int | DivisionByZero+` or `+Decimal | NotANumber+`) — a core return type cannot yet name a union whose first member is a primitive;
+* the functions returning a primitive-headed union (`+Int.divide+` / `+Int.remainder+` / `+Decimal.divide+` / `+String.toInt+` / `+String.toDecimal+`, returning `+Int | DivisionByZero+` or `+Decimal | NotANumber+`) — a primitive is a union member a declaration may name (<<union-member>>), so these are candidates for a core declaration; moving them there is a separate change;
 * the functions taking a rounding mode (`+Decimal.divide+` / `+Decimal.toInt+` / `+Decimal.round+`) — the mode is a bare built-in identifier (<<stdlib-decimal>>), not a value a parameter type can name.
 
 Everything else — including `+Int+` / `+Decimal+` `+add+` / `+subtract+` / `+multiply+` / `+compare+` / `+modBy+` — is a core declaration.
@@ -2548,7 +2575,7 @@ The middle row is the rest of what Souther's types allow, which have no `+Char+`
 
 `+fromDecimal(d)+` renders a `+Decimal+` in plain notation, never in exponent form, keeping the scale the value carries: `+1000.00m+` is `+"1000.00"+`. Scale is incidental to the number (<<primitives>>) but not to how it is written, so a caller wanting a fixed number of places sets it first with `+Decimal.round(d, scale, mode)+` and names the rounding there. Grouping separators and a currency symbol are presentation and stay outside the domain. `+toDecimal(s)+` parses back, returning `+Decimal | NotANumber+` — the sibling of `+toInt+`, and a compiler built-in for the same reason.
 
-The bottom row gives character access without a `+Char+` type — a character is a length-1 `+String+`. `+toChars(s)+` gives the characters of `+s+`, one per Unicode code point, as single-character strings (`+toChars("a12")+` is `+["a", "1", "2"]+`), so `+List.fold+` can walk them. `+toCode(ch)+` is such a character's first code point, `+-1+` for the empty string. `+toInt(s)+` returns `+Int | NotANumber+`: a named case, since `+Maybe+` has no surface form — the same case-return the `+/+` operator and `+Int.divide+` draw between abort and case. `+toInt("007")+` is `+7+` (leading zeros kept, unlike a numeric parse-and-reformat); `+toInt("12x")+` is `+NotANumber+`, and the parsed value is taken out with `+| Int as n+` (<<primitive-arm>>). Because `+toInt+` returns a primitive-headed union it is a compiler built-in, not a core declaration; `+toChars+` / `+toCode+` are ordinary intrinsics.
+The bottom row gives character access without a `+Char+` type — a character is a length-1 `+String+`. `+toChars(s)+` gives the characters of `+s+`, one per Unicode code point, as single-character strings (`+toChars("a12")+` is `+["a", "1", "2"]+`), so `+List.fold+` can walk them. `+toCode(ch)+` is such a character's first code point, `+-1+` for the empty string. `+toInt(s)+` returns `+Int | NotANumber+`: a named case, since `+Maybe+` has no surface form — the same case-return the `+/+` operator and `+Int.divide+` draw between abort and case. `+toInt("007")+` is `+7+` (leading zeros kept, unlike a numeric parse-and-reformat); `+toInt("12x")+` is `+NotANumber+`, and the parsed value is taken out with `+| Int as n+` (<<primitive-arm>>). `+toInt+` is a compiler built-in rather than a core declaration (<<intrinsics>>); `+toChars+` / `+toCode+` are ordinary intrinsics.
 
 Together these make a checksum (Luhn, EAN, a mod-10 check digit) a plain `+let+` over `+List.fold+` in a behavior: validate the digits with `+matches("[0-9]+", value)+` in the type's invariant, read each digit as `+toCode(ch) - toCode("0")+` (total, because the invariant proved every character is a digit), and take the remainder with `+Int.modBy+`. A checksum is *not* an invariant — it folds, and an invariant may not recurse (<<invariant-expressions>>) — so it lives in a behavior, but a short one.
 
@@ -2902,6 +2929,39 @@ There are two cases where it is not generated. If the output is a named sum data
 
 One data type may appear in the output of multiple behaviors, so it may implement several `+<BehaviorName>Result+` at once. The output of a `+>->+` composition behavior (the folded sum of mainline and departed; <<type-routing>>) is also an anonymous union, generated by the same rule from the composition name. The generated type's encode dispatches cases by the discriminator `+"type"+` like a sum (<<sum-discrimination>>).
 
+[#bridge-case]
+A case class receives the unions it belongs to when *its own* module is generated. A member this module declared therefore carries the interface itself. A primitive cannot — `+Int+` is `+java.lang.Long+`, the JDK's class — and neither can an imported type, whose class the module that declared it has already emitted; giving it an interface from here would make a module's bytecode a function of who imports it, the mirror of what ADR-0024 refuses. Such a member joins the union through a *bridge case*: a record of one component, `+value+`, that this module emits and that implements the union in the member's stead.
+
+[,java]
+----
+// when owed is -> Yen | NothingOwed, with Yen imported from `up`
+sealed interface OwedResult permits NothingOwed, YenCase {}
+public record YenCase(up.Yen value) implements OwedResult {}
+----
+
+The bridge case is named `+<MemberName>Case+`, and there is one per member per module: it implements every `+<BehaviorName>Result+` of this module the member belongs to. That is the rule a local case class already follows — what differs between the two is not what membership means but which module owns a class it can be put on.
+
+|===
+| Member | Where its result-union membership sits
+
+| a data this module declares | the case class itself
+| a primitive, or an imported data | a bridge case this module emits
+|===
+
+A bridge case has no codec. Belonging to a union does not change a member's external representation, so a consumer that has switched to a bridge case takes the value out and uses the codec the member itself carries (<<jvm-codec>>).
+
+The bridge case is a JVM form. It is not a Souther type, it is not written in a `+match+` arm or an `+example+` row, and it does not appear in an external representation. What each side sees:
+
+|===
+| Where | What a value of the union is
+
+| Souther source, a `+match+` binding, an `+example+` row | the member's own value
+| the external representation | the member's own, decided by its Souther type (<<sum-discrimination>>)
+| a Java `+switch+` and the `+apply+` that returned it | the case class, or the bridge case for a member this module could not put the interface on
+|===
+
+The two forms meet at exactly two places. A behavior's return puts the Souther value it answers with into its declared union's JVM form; a call takes it back out before the result is used. Both walk the union's members, which are known where they are emitted, so neither asks a value whether it happens to be wrapped — and because everything between the two is a Souther value, nothing is ever put into a bridge case twice. Reading a value out and putting it back gives the value that was there.
+
 The model author does not write this type name in Souther source; they only write `+-> Member | NoSuchMember+`. A Java consumer declares the behavior by its interface name (<<jvm-behavior>>) and calls `+apply+`, whose return type is `+<BehaviorName>Result+` by inheritance, then matches the cases with `+switch+` — so the consumer never writes the `+Result+` name either. It surfaces explicitly only in an injected behavior's Java implementation, which writes it as the `+apply+` return type (<<java-example>>).
 
 [#compiler-pipeline]
@@ -3151,21 +3211,21 @@ Hint: Write `exposing ( placeOrder : PlacedOrder | OutOfStock )`.
 A `+>->+` composition exposed with `+exposing+` requires an output signature (<<declared-composition-output>>). Its absence is this error. Writing a signature in `+exposing+` for a non-composition behavior is also E1605, since the type is fixed at the definition.
 
 [#e1606]
-=== A behavior's output union includes an imported case
+=== A declared sum's case is imported
 
 [,text]
 ----
-The output union of `allocateAndShip` includes `OutOfStock`, a case declared in another
-module.
-Hint: A case class carries the unions it belongs to, decided when its own module is
-generated, so an imported case cannot join a union declared here. Give `allocateAndShip`
-a body instead of a composition: call the stages, open the imported result with `match`,
-and answer `OutOfStock` with a case this module declares.
+`OutOfStock` is declared in `inventory`, so it cannot be a case of `ShipmentResult`.
+Hint: A sum's cases are declared with it: the generated sum is a sealed interface, and
+only its own module can implement it. Consume `OutOfStock` at the boundary, or re-express
+it as a case of this module.
 ----
 
-A behavior's output union is generated as a sealed interface its leaf cases implement (<<jvm-anonymous-union>>), and a case class receives that interface when *its own* module is generated. A union declared here cannot take a case from an imported module: the class the other module emitted would have to implement an interface this one declares. This is not the JVM's same-package rule for `+permits+` — that rule is enforced by javac when it declares a sealed type in source, not when one is read from the classpath — but the ordering of separate module generation.
+A `+data S = A | B+` declares a type this module owns and publishes. Its cases are its vocabulary, and they are written with it. A case from an imported module cannot be one of them: the generated sum is a sealed interface, the class the other module emitted cannot implement it, and the case would be permitted without being a member — no value satisfies the type and an exhaustive `+switch+` over it has no arms.
 
-The move is to translate: match the imported behavior's result and return a case of this module. A module boundary is where another context's vocabulary is restated in this one's. An operation that spans two contexts is written this way, and is one behavior — the composition is what cannot cross, not the operation.
+An anonymous output union takes an imported member (<<union-member>>), and the difference is not the JVM. A named sum introduces a type name: it is written in a parameter, in a field, in another sum. An anonymous union introduces none — it is the shape of one behavior's answer and nobody names it. Taking another context's type into a shape is answering with the value that context owns; taking it into a declared sum is making it a word of this module's own vocabulary, and that is what a bounded context does not do.
+
+The move for a sum is to translate: match the imported result and return a case of this module. A module boundary is where another context's vocabulary is restated in this one's.
 
 [,text]
 ----
