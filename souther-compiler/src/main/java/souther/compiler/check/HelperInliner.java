@@ -701,11 +701,17 @@ public final class HelperInliner {
         return List.of(e);
     }
 
-    /** Looks up a helper by name across the prelude and the module's own helpers, or null if the
-     * name is not a helper (a builtin, injected behavior, or unknown). Used to type-check a function
-     * passed to a helper's function parameter against the declared type, at the call site. */
+    /** The declaration reached by {@code name} across the prelude and the module's own helpers, or
+     * null where the name reaches none. For a reader walking a set of names this pass answered with —
+     * the recursive helpers, say. A reader holding a call asks {@link #applied} instead, because what
+     * a call applies is not decided by how it is spelled. */
     public Ast.FnDef helper(String name) {
         return helpers.get(name);
+    }
+
+    /** The body {@code call} applies, or null where it applies something no body stands behind. */
+    public Ast.FnDef applied(Ast.Call call) {
+        return appliedHelper(call);
     }
 
     /** {@code fold} is the one privileged loop primitive that takes a block (spec 18.4); its block is
@@ -1122,7 +1128,8 @@ public final class HelperInliner {
                 // a prelude helper's body is stamped with the call site, so errors inside it point at
                 // the user's call, not at the shipped source of souther.*
                 SourcePos at = keepsItsPositions(call) ? null : call.pos();
-                Copy copy = new Copy(new BindingOwner.Expansion(into, call.denotes(), k));
+                Copy copy = new Copy(helper.body(),
+                        new BindingOwner.Expansion(into, call.denotes(), k));
                 Ast.Expr body = inline(rename(helper.body(), subst, substDenotes, fnParams, at, copy));   // expand nested helpers too
                 given.forEach(scopedLambdas::remove);
                 body = keepDeclaredReturn(helper, body, call.pos(), k);
@@ -1316,23 +1323,30 @@ public final class HelperInliner {
      * in the copy is answered with the copy's, and every name that read it in the original reads the
      * copy's too; a name the substitution answers is the caller's and is left alone.
      */
-    private final class Copy {
+    private static final class Copy {
 
-        private final Ast.Binders binders;
         private final Map<BindingId, BindingId> mine = new HashMap<>();
 
-        private Copy(BindingOwner owner) {
-            this.binders = new Ast.Binders(owner);
+        /**
+         * Every binding the body introduces, given one of this copy's, before any of it is written.
+         *
+         * <p>Assigned in one pass so that a binder and the names that read it are moved together
+         * whatever order the copy is written in: a read met before its binder would otherwise be
+         * left on the original while the binder moved, and the two would no longer be one binding.
+         */
+        private Copy(Ast.Expr body, BindingOwner owner) {
+            Ast.Binders binders = new Ast.Binders(owner);
+            eachBinder(body, binder ->
+                    mine.put(binder.id(), binders.binder(binder.name(), binder.pos()).id()));
         }
 
         /** This copy's binder for one the body has. */
         Ast.Binder of(Ast.Binder binder) {
-            BindingId here = mine.computeIfAbsent(binder.id(),
-                    original -> binders.binder(binder.name(), binder.pos()).id());
-            return new Ast.Binder.Bound(binder.name(), here, binder.pos());
+            return new Ast.Binder.Bound(binder.name(), mine.get(binder.id()), binder.pos());
         }
 
-        /** The same, for a name that reads one. Anything else is not this body's to answer. */
+        /** The same, for a name that reads one. A name bound outside the body — a parameter, which
+         * the substitution answers — is not this copy's to move. */
         ValueName of(ValueName denotes) {
             if (!(denotes instanceof ValueName.Local local)) {
                 return denotes;
@@ -1340,6 +1354,30 @@ public final class HelperInliner {
             BindingId here = mine.get(local.id());
             return here == null ? denotes : new ValueName.Local(local.name(), here);
         }
+    }
+
+    /**
+     * Every binder written inside {@code e}, itself included where {@code e} is one.
+     *
+     * <p>The node kinds that introduce a binding are named here and nowhere else in this pass, so a
+     * kind added later is added once. The walk into the children is {@link Ast#forEachChild}, which
+     * is exhaustive over the expression kinds, so a new one cannot be missed.
+     */
+    private static void eachBinder(Ast.Expr e, java.util.function.Consumer<Ast.Binder> f) {
+        switch (e) {
+            case Ast.LetIn li -> f.accept(li.binder());
+            case Ast.Block b -> b.params().forEach(f);
+            case Ast.IfConstructed ic -> f.accept(ic.binder());
+            case Ast.Match m -> {
+                for (Ast.Case c : m.cases()) {
+                    if (c.binding() != null) {
+                        f.accept(c.binding());
+                    }
+                }
+            }
+            default -> { }
+        }
+        forEachChild(e, child -> eachBinder(child, f));
     }
 
     /**
@@ -1691,9 +1729,7 @@ public final class HelperInliner {
         // Applying a function-typed parameter, or a binding holding a function, is not a call to
         // whatever else bears that name. The call carries what it resolved to, so it is asked rather
         // than matched against the helper table — a parameter named like a helper was reaching the
-        // graph as a call to that helper, which made `let f (g: (Int) -> Int) = g(1)` recursive. A
-        // call that resolved to nothing keeps the table's answer: the prelude's own bodies are read
-        // here before their names have been through resolution.
+        // graph as a call to that helper, which made `let f (g: (Int) -> Int) = g(1)` recursive.
         if (e instanceof Ast.Call call && !(call.denotes() instanceof ValueName.Local)) {
             // `List.fold` desugars to `List.foldFrom` before inlining, so a body that folds reaches the
             // recursive `foldFrom` — recursion classification and prelude-injection must see that.

@@ -511,6 +511,24 @@ class CompileRecursiveHelperTest {
     }
 
     @Test
+    void applyingAFunctionParameterSpelledLikeAHelperIsNotACallToThatHelper() {
+        // The function-argument check reads what a call applies, not how it is spelled: `apply` is
+        // the parameter here, so `apply(n)` applies the function it was given. The helper of that
+        // name takes a function of two parameters, and holding the argument against it would refuse
+        // a program the language allows.
+        String src = """
+                module demo
+                data In = { n: Int }
+                data Out = { d: Int }
+                let apply (f: (Int) -> Int, a: Int): Int = f(a)
+                let once (apply: (Int, Int) -> Int, n: Int): Int = apply(n, n)
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { d = once((x, y) -> x + y, i.n) }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
     void applyingAParameterThatShadowsARecursiveHelperIsRejected() {
         // The other direction of the same rule, and the one that costs something: `count(2)` reaches
         // the parameter, which is an Int, so it is not applied to anything. The helper spelled that

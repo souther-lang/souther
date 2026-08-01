@@ -329,9 +329,11 @@ public final class HelperTyping {
 
     private static void checkHelperCallFnArgs(Ast.Call call, Map<String, Type> env, Symbols symbols,
                                               Map<String, ReqSig> reqs, HelperInliner inliner) {
-        Ast.FnDef h = inliner.helper(call.fn());
+        // what the call applies, which a binding of a helper's spelling is not: applying a
+        // function-typed parameter is not a call to the helper it happens to be named after
+        Ast.FnDef h = inliner.applied(call);
         if (h == null || call.args().size() != h.params().size()) {
-            return;   // not a helper, or an arity mismatch the inliner reports
+            return;   // applies no body, or an arity mismatch the inliner reports
         }
         List<Type> declared = new ArrayList<>();
         boolean hasFn = false;
