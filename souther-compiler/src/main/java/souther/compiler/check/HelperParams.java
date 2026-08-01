@@ -275,9 +275,9 @@ final class HelperParams {
             // A recursive helper's call is left standing rather than expanded, so the neighbouring
             // expression a parameter takes its type from can be one — `x + count(t)` reads `count(t)`
             // to type `x`. Its signature goes in here, once, and every inner scope is derived from
-            // this one (spec 13.1).
-            Map<String, Type> scope = new HashMap<>(env);
-            scope.putAll(recursiveHelperFns);
+            // this one (spec 13.1). What is bound wins over it, as it does everywhere else.
+            Map<String, Type> scope = new HashMap<>(recursiveHelperFns);
+            scope.putAll(env);
             visit(body, scope, name);
             return pinned;
         }

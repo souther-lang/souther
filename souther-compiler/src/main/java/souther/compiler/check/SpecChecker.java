@@ -297,8 +297,10 @@ public final class SpecChecker {
         Type output = TypeOps.successType(spec.ret(), symbols);
         // recursive helpers this behavior calls resolve through their signatures (spec 13.1); merged
         // only for typing, so the construction and dependency walks below still see the business params alone.
-        Map<String, Type> tenv = new HashMap<>(env);
-        tenv.putAll(recursiveHelperFns);
+        // A parameter of the same name wins: a binding in force wins over the declaration it shadows
+        // (spec §fn-rules), so an input written `depth` is the input and not the helper spelled that way.
+        Map<String, Type> tenv = new HashMap<>(recursiveHelperFns);
+        tenv.putAll(env);
         // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
         // declared types first, so a mismatch names the parameter, not the derivation it expands to.
         // A nested fold reaches `List.foldFrom` inside a block, so its signature must be in scope here.

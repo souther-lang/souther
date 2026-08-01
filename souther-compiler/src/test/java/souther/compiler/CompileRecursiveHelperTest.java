@@ -481,6 +481,55 @@ class CompileRecursiveHelperTest {
     }
 
     @Test
+    void aParameterSpelledLikeARecursiveHelperIsTheParameter() {
+        // A recursive helper's signature is in scope wherever its call may stand, but a binding in
+        // force wins over the declaration it shadows (spec §fn-rules). `depth` here is the Int
+        // parameter, so `depth + 1` is arithmetic — not a function where a number goes.
+        String src = ORG.replace("let measureDepth (e) = Depth(depth(e))", """
+                let bump (depth: Int): Int = depth + 1
+                let measureDepth (e) = Depth(bump(depth(e)))
+                """);
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void aBehaviorInputSpelledLikeARecursiveHelperIsTheInput() {
+        // The same rule on the behavior side: the input named `depth` is an Employee, so its field
+        // reads, rather than being read as the helper spelled that way.
+        String src = """
+                module demo
+                data Employee = { boss: Employee?, name: String }
+                data Out = { name: String }
+                let depth (e: Employee): Int =
+                    match e.boss with
+                        | Some b -> depth(b) + 1
+                        | None -> 1
+                behavior go : (depth: Employee) -> Out constructs Out
+                let go (depth) = Out { name = depth.name }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void applyingAParameterThatShadowsARecursiveHelperIsRejected() {
+        // The other direction of the same rule, and the one that costs something: `count(2)` reaches
+        // the parameter, which is an Int, so it is not applied to anything. The helper spelled that
+        // way is out of reach here — a name is one thing at a time, and the binding is what it is.
+        String src = """
+                module demo
+                data In = { n: Int }
+                data Out = { d: Int }
+                partial let count (n: Int): Int = if n == 0 then 0 else count(n - 1) + 1
+                let use (count: Int): Int = count(2)
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { d = use(i.n) }
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(ex.getMessage().contains("count") && ex.getMessage().contains("not a function"),
+                ex.getMessage());
+    }
+
+    @Test
     void anUnannotatedParameterTakesItsTypeFromANeighbouringRecursiveHelperCall() {
         // The type a parameter is left to take from the body can come from a call that is left
         // standing — `x + depth(e)` types `x` from what `depth` returns (spec 13.1).
