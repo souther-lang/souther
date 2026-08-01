@@ -1685,18 +1685,11 @@ final class BodyGen {
                         }
                         return;
                     }
-                    if (lt == Type.DECIMAL) {
-                        emitDecimalEquals(code);          // by value, ignoring scale (spec 7.1)
-                        if (bin.op() == Ast.BinOp.NE) {
-                            code.iconst_1();
-                            code.ixor();
-                        }
-                        return;
-                    }
                     if (isReference(lt)) {
-                        // a data (or any boxed value) compares by its fields — the generated
-                        // equals (spec 7.1). Objects.equals keeps it null-tolerant.
-                        code.invokestatic(CD_Objects, "equals", MTD_Objects_equals);
+                        // What sameness is, is the runtime's to say: a data compares by its fields,
+                        // an amount ignores its scale, a collection asks that of what it holds
+                        // (spec 7.1). A pair of Decimals takes the overload for them.
+                        emitValueEquals(code, lt == Type.DECIMAL);
                         if (bin.op() == Ast.BinOp.NE) {
                             code.iconst_1();
                             code.ixor();

@@ -1,7 +1,10 @@
 package souther.runtime;
 
 import java.math.BigDecimal;
-import java.util.Objects;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Whether two Souther values are the same one, and the hash that agrees with it. This is the one
@@ -12,9 +15,14 @@ import java.util.Objects;
  * class — their own {@code equals} already is the language's equality, so this asks them. Two kinds
  * cannot. A {@code BigDecimal}'s {@code equals} calls 1.0 and 1.00 different, and the same amount
  * arrives with a different scale depending on whether it was read from JSON or from a DB column; the
- * rule that scale is not part of a Decimal's identity lives here. A container that implements a JDK
- * collection interface owes that interface its {@code equals} and {@code hashCode}, so it carries
- * the language's semantics on {@link ValueSemantics} and this asks for them there.
+ * rule that scale is not part of a Decimal's identity lives here. A container's {@code equals} asks
+ * its elements theirs, so an amount inside one is compared by a rule that is not the language's.
+ *
+ * <p>A container is reached one of two ways. One Souther built implements {@link ValueSemantics} and
+ * is asked directly. One that arrived otherwise — a list literal is a {@code List.copyOf}, a decoded
+ * map is a {@code LinkedHashMap} — is walked here by the interface it implements. Both routes give
+ * the same answer and the same hash; the first is there because it is the one taken in a loop, not
+ * because the second is a special case.
  *
  * <p>Equality ignoring scale forces the hash to ignore it too. A value that compares equal and
  * hashes differently lands in another bucket and stops being findable by its own key — Groovy
@@ -46,7 +54,74 @@ public final class Values {
         if (b instanceof ValueSemantics s) {
             return s.valueEquals(a);
         }
+        if (a instanceof List<?> xs) {
+            return b instanceof List<?> ys && equalLists(xs, ys);
+        }
+        if (a instanceof Set<?> xs) {
+            return b instanceof Set<?> ys && equalSets(xs, ys);
+        }
+        if (a instanceof Map<?, ?> xs) {
+            return b instanceof Map<?, ?> ys && equalMaps(xs, ys);
+        }
         return a.equals(b);
+    }
+
+    private static boolean equalLists(List<?> a, List<?> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        Iterator<?> xs = a.iterator();
+        Iterator<?> ys = b.iterator();
+        while (xs.hasNext()) {
+            if (!equal(xs.next(), ys.next())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** A scan per element, because a foreign set is indexed by its elements' own hashes and cannot be
+     *  asked where one of ours would be. One of ours answers through {@link ValueSemantics} above and
+     *  never reaches here. */
+    private static boolean equalSets(Set<?> a, Set<?> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (Object x : a) {
+            boolean found = false;
+            for (Object y : b) {
+                if (equal(x, y)) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean equalMaps(Map<?, ?> a, Map<?, ?> b) {
+        if (a.size() != b.size()) {
+            return false;
+        }
+        for (Map.Entry<?, ?> e : a.entrySet()) {
+            boolean found = false;
+            for (Map.Entry<?, ?> f : b.entrySet()) {
+                if (equal(e.getKey(), f.getKey())) {
+                    if (!equal(e.getValue(), f.getValue())) {
+                        return false;
+                    }
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Two amounts are the same amount when they differ only in scale. */
@@ -66,6 +141,27 @@ public final class Values {
         }
         if (v instanceof ValueSemantics s) {
             return s.valueHash();
+        }
+        if (v instanceof List<?> xs) {
+            int h = 1;                     // the formula PersistentVector.valueHash uses, so a list
+            for (Object e : xs) {          // lands in one bucket whichever implementation carries it
+                h = 31 * h + hash(e);
+            }
+            return h;
+        }
+        if (v instanceof Set<?> xs) {
+            int h = 0;                     // summed: a set is unordered
+            for (Object e : xs) {
+                h += hash(e);
+            }
+            return h;
+        }
+        if (v instanceof Map<?, ?> m) {
+            int h = 0;
+            for (Map.Entry<?, ?> e : m.entrySet()) {
+                h += hash(e.getKey()) ^ hash(e.getValue());
+            }
+            return h;
         }
         return v.hashCode();
     }

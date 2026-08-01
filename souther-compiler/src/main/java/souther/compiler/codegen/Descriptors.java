@@ -348,19 +348,21 @@ final class Descriptors {
     static final MethodTypeDesc MTD_optFieldJooq =
             MethodTypeDesc.of(CD_JooqRecordDecoder, CD_String, CD_RDecoder);
 
-    // Value-equality / hashCode targets, shared by the value-class equality codegen and the `==`
-    // match arm (a Decimal compares by value, a reference through Objects.equals).
-    static final ClassDesc CD_Objects = ClassDesc.of("java.util.Objects");
-    static final MethodTypeDesc MTD_BD_compareTo =
-            MethodTypeDesc.of(ConstantDescs.CD_int, CD_BigDecimal);
-    static final MethodTypeDesc MTD_BD_strip = MethodTypeDesc.of(CD_BigDecimal);
-    static final MethodTypeDesc MTD_Objects_equals =
+    // Value-equality / hashCode targets, shared by the value-class equality codegen and `==`. The
+    // rule is the runtime's: what a Decimal's identity ignores and what a container answers is
+    // written once in `Values`, and the emitted call selects the overload the static type allows.
+    static final ClassDesc CD_Values = ClassDesc.of("souther.runtime.Values");
+    static final MethodTypeDesc MTD_Values_equal =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object, CD_Object);
+    static final MethodTypeDesc MTD_Values_equalDecimal =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_BigDecimal, CD_BigDecimal);
+    static final MethodTypeDesc MTD_Values_hash =
+            MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
+    static final MethodTypeDesc MTD_Values_hashDecimal =
+            MethodTypeDesc.of(ConstantDescs.CD_int, CD_BigDecimal);
     /** {@code Object.equals(Object)} — a constant receiver compares against a value that may be null. */
     static final MethodTypeDesc MTD_equalsObject =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
-    static final MethodTypeDesc MTD_Objects_hashCode =
-            MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
     static final MethodTypeDesc MTD_Long_hashCode =
             MethodTypeDesc.of(ConstantDescs.CD_int, ConstantDescs.CD_long);
 }
