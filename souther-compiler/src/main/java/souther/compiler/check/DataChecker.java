@@ -656,12 +656,15 @@ public final class DataChecker {
             }
         }
         Map<String, Type> provided = new HashMap<>();
-        String fromSum = null;   // the sum a field the construction still wants would have come from
+        // the sums spread here, which a field the construction still wants was not in the shared part
+        // of — all of them, because naming one of several would pick by position and send the author
+        // to open a sum whose cases never had the field
+        Set<String> fromSums = new LinkedHashSet<>();
         for (String sp : spreads) {
             Type bound = env.get(sp);
             if (bound instanceof Type.Ref ref
                     && ctx.symbols().get(ref.name()) instanceof Ast.SumData sum) {
-                fromSum = Type.show(bound);
+                fromSums.add(Type.show(bound));
                 provided.putAll(spreadOfSum(sp, sum, bound, pos, ctx));
             } else if (bound instanceof Type.Ref ref
                     && ctx.symbols().get(ref.name()) instanceof Ast.Data sd) {
@@ -684,9 +687,13 @@ public final class DataChecker {
             if (pv == null) {
                 Diagnostic.Builder d = Diagnostic.of("E1005", "e1005.msg").at(pos)
                         .args(typeName, f.getKey());
-                d = fromSum == null
-                        ? d.hint("e1005.hint")
-                        : d.hint("e1005.hint.sum", typeName, f.getKey(), fromSum);
+                d = switch (fromSums.size()) {
+                    case 0 -> d.hint("e1005.hint");
+                    case 1 -> d.hint("e1005.hint.sum", typeName, f.getKey(),
+                            fromSums.iterator().next());
+                    default -> d.hint("e1005.hint.sums", typeName, f.getKey(),
+                            String.join(", ", fromSums));
+                };
                 throw CompileException.of(d.build(),
                         "construction of `" + typeName + "` is missing field `" + f.getKey() + "`");
             }

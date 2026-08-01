@@ -13,6 +13,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -212,6 +213,33 @@ class CompileSumSpreadConstructionTest {
         assertTrue(out.contains("`at`"), out);
         // the plain hint says to supply it; this one says why the spread did not
         assertTrue(out.contains("every case of `Doc` spreads"), out);
+    }
+
+    @Test
+    void severalSumsInOneConstructionAreAllNamedRatherThanOnePickedByPosition() {
+        String src = """
+                module demo
+
+                data CommonA = { id: String }
+                data CommonB = { at: String }
+                data A1 = { ...CommonA }
+                data A2 = { ...CommonA, x: String }
+                data S1 = A1 | A2
+                data B1 = { ...CommonB }
+                data B2 = { ...CommonB, y: String }
+                data S2 = B1 | B2
+                data Out = { id: String, at: String, x: String }
+
+                behavior run : (s1: S1, s2: S2) -> Out constructs Out
+
+                let run (s1, s2) = Out { ...s1, ...s2 }
+                """;
+        String out = rendered(src, Locale.ENGLISH);
+
+        // `x` is a field of A2, a case of S1. Naming the last sum spread would send the author to open
+        // S2, whose cases never had it.
+        assertTrue(out.contains("S1, S2"), out);
+        assertFalse(out.contains("open `S2` with `match`"), out);
     }
 
     @Test
