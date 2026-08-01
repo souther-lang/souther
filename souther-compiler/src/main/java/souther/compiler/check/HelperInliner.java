@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
@@ -380,6 +381,13 @@ public final class HelperInliner {
      * definition's however the type got its declaration, and a behavior reading the name is not the
      * one that made it either way. A helper is the other case and stays the other case: its body is
      * checked as though it had been written inline, which is what tells a helper from a behavior.
+     *
+     * <p>Three things can stand for a construction and each takes the mark. A construction node
+     * carries its own; a unit data is constructed by being named, so the name carries it; and a
+     * recursive helper is lowered to a method rather than expanded, so what it builds stays behind a
+     * call, and the call carries it. Without the third, whether a value's constructions belonged to
+     * the value would turn on whether a helper on the way could be expanded — the substitution
+     * showing through the rule again, in the one place expansion cannot reach.
      */
     private static Ast.Expr carriedByValue(Ast.Expr e) {
         Ast.Expr rebuilt = Ast.mapChildren(e, HelperInliner::carriedByValue);
@@ -387,6 +395,7 @@ public final class HelperInliner {
             case Ast.NewData nd -> nd.carriedByValue();
             case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
                     v.denoting(named.carriedByValue());
+            case Ast.Call call -> call.carriedByValue();
             default -> rebuilt;
         };
     }
@@ -501,6 +510,7 @@ public final class HelperInliner {
         return switch (rebuilt) {
             case Ast.Call call when foreign(call.denotes(), which) ->
                     new Ast.Call(qualifiedName(call.denotes()), call.denotes(), call.args(),
+                            call.origin(),
                             call.pos());
             case Ast.Var v when foreign(v.denotes(), which) ->
                     new Ast.Var(qualifiedName(v.denotes()), v.denotes(), v.pos());
@@ -685,6 +695,7 @@ public final class HelperInliner {
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.add(new Ast.IntLit(0, call.pos()));
         return new Ast.Call("List.foldFrom", new ValueName.Stdlib("List.foldFrom"), args,
+                ConstructionOrigin.own(),
                 call.pos());
     }
 
@@ -886,7 +897,7 @@ public final class HelperInliner {
                     // builtin, injected behavior, a function-typed parameter, or a recursive helper —
                     // a recursive helper is lowered to a method, so its call stays a Call (spec 13.1);
                     // only its args inline.
-                    yield new Ast.Call(call.fn(), call.denotes(), args, call.pos());
+                    yield new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
                 }
                 if (args.size() != helper.params().size()) {
                     LambdaOrigin origin = lambdaOrigins.get(helper.name());
@@ -1086,7 +1097,7 @@ public final class HelperInliner {
                 args.add(Ast.Var.local(p, v.pos()));
             }
             return inline(new Ast.Block(params,
-                    new Ast.Call(v.name(), v.denotes(), args, v.pos()), v.pos()));
+                    new Ast.Call(v.name(), v.denotes(), args, ConstructionOrigin.own(), v.pos()), v.pos()));
         }
         if (recursive.contains(v.name())) {
             return v;
@@ -1169,10 +1180,10 @@ public final class HelperInliner {
             callArgs.add(Ast.Var.local(p, v.pos()));
         }
         Ast.Block block = new Ast.Block(params,
-                new Ast.Call(v.name(), v.denotes(), callArgs, v.pos()), v.pos());
+                new Ast.Call(v.name(), v.denotes(), callArgs, ConstructionOrigin.own(), v.pos()), v.pos());
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
-        return new Ast.Call(call.fn(), call.denotes(), args, call.pos());
+        return new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
     }
 
     /**
@@ -1215,6 +1226,7 @@ public final class HelperInliner {
                         ? substDenotes.getOrDefault(call.fn(), new ValueName.Local(callee, at(at, call.pos())))
                         : call.denotes();
                 yield new Ast.Call(callee, denotes, renameList(call.args(), subst, substDenotes, fnParams, at),
+                        call.origin(),
                         at(at, call.pos()));
             }
             case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), subst, substDenotes, fnParams, at), rename(bin.right(), subst, substDenotes, fnParams, at), at(at, bin.pos()));

@@ -115,6 +115,14 @@ public final class DataChecker {
             return new Constructs(new LinkedHashMap<>(originated), new LinkedHashMap<>(carried));
         }
 
+        /** The same set with everything counted as carried — what a body reached through something
+         * it was handed rather than wrote, and so answers for none of. */
+        public Constructs allCarried() {
+            Map<TypeName, String> all = new LinkedHashMap<>(carried);
+            originated.forEach(all::putIfAbsent);
+            return new Constructs(new LinkedHashMap<>(), all);
+        }
+
         /** Takes on everything {@code other} builds, each kind staying the kind it is, and answers
          * whether that added anything. */
         public boolean absorb(Constructs other) {
@@ -183,10 +191,13 @@ public final class DataChecker {
                 // a recursive helper is not inlined, so its own (transitive) constructions are
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be —
                 // each as the kind it already is, so one another module published stays that
-                // module's here as it does when the body is expanded.
+                // module's here as it does when the body is expanded. Where the call itself came in
+                // on a value, none of them are this body's: the value's definition is what reached
+                // the helper, and the call is standing in for constructions that would have been
+                // marked had the helper been expandable.
                 Constructs viaHelper = recConstructs.get(call.fn());
                 if (viaHelper != null) {
-                    out.absorb(viaHelper);
+                    out.absorb(call.origin().viaValueReference() ? viaHelper.allCarried() : viaHelper);
                 }
                 call.args().forEach(a -> collectConstructs(a, out, symbols, bound, recConstructs));
             }

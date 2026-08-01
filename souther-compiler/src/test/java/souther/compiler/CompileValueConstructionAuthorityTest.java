@@ -177,6 +177,77 @@ class CompileValueConstructionAuthorityTest {
                 """));
     }
 
+    /** A recursive helper is lowered to a method rather than expanded, so a value reaching one
+     * leaves a call standing where the constructions would have been. What the value made is the
+     * value's either way — whether a helper on the way could be expanded into it is not something
+     * the reading behavior's declaration should turn on. */
+    @Test
+    void aValueReachingARecursiveHelperCarriesWhatItBuilds() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module m
+
+                data Hours = Decimal invariant value >= 0.0m
+                data TooShort
+
+                partial let makeFloor (n: Int) : Hours =
+                    if n == 0 then Hours(20.0m) else makeFloor(n - 1)
+
+                let floorHours = makeFloor(1)
+
+                behavior judge : (h: Hours) -> Hours | TooShort
+                    constructs TooShort
+                let judge (h) = {
+                    guard h >= floorHours else TooShort
+                    h
+                }
+                """));
+    }
+
+    /** The same helper called by the behavior itself. The mark is on the call the value brought in,
+     * not on the helper, so one module may do both and each call answers for what it is. */
+    @Test
+    void callingThatRecursiveHelperDirectlyStillNeedsAuthority() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module m
+
+                data Hours = Decimal invariant value >= 0.0m
+                data TooShort
+
+                partial let makeFloor (n: Int) : Hours =
+                    if n == 0 then Hours(20.0m) else makeFloor(n - 1)
+
+                let floorHours = makeFloor(1)
+
+                behavior judge : (h: Hours) -> Hours | TooShort
+                    constructs TooShort
+                let judge (h) = {
+                    guard h >= floorHours else TooShort
+                    makeFloor(2)
+                }
+                """));
+
+        assertEquals("E1002", e.code(), e.getMessage());
+    }
+
+    /** A unit data is constructed by being named, so it has no construction node to carry the mark
+     * — the name carries it. A value standing for one reaches the reading behavior by that path. */
+    @Test
+    void aUnitDataNamedByAValueIsCarriedToo() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module m
+
+                data Marker
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                let mark = Marker
+
+                behavior go : (i: In) -> Out | Marker
+                    constructs Out
+                let go (i) = if i.n > 0 then Out { n = i.n } else mark
+                """));
+    }
+
     /** A behavior that writes the construction itself still answers for it. */
     @Test
     void constructingTheLimitInTheBodyStillNeedsAuthority() {

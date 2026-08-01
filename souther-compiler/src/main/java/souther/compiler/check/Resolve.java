@@ -465,7 +465,7 @@ public final class Resolve {
                     valueName(v.name(), v.pos(), bound)));
             case Ast.Call call -> new Ast.Call(call.fn(),
                     answered(call.fn(), call.pos(), calledName(call, bound)),
-                    exprs(call.args(), bound), call.pos());
+                    exprs(call.args(), bound), call.origin(), call.pos());
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
                 for (Ast.FieldInit i : nd.inits()) {

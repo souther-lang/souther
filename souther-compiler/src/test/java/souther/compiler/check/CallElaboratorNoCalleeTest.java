@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -31,7 +32,8 @@ class CallElaboratorNoCalleeTest {
 
     private static RuntimeException answerFor(ValueName denotes) {
         return CallElaborator.noCallee(
-                new Ast.Call("f", denotes, List.of(new Ast.IntLit(1, AT)), AT));
+                new Ast.Call("f", denotes, List.of(new Ast.IntLit(1, AT)),
+                        ConstructionOrigin.own(), AT));
     }
 
     /** A behavior named from a helper `let` or a `>->` composition, neither of which reaches one. */

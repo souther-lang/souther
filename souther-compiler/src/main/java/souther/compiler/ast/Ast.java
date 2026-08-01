@@ -761,15 +761,23 @@ public interface Ast {
      * behavior, a function-typed parameter, or the type a newtype construction wraps — answered once
      * during resolution.
      */
-    record Call(String fn, ValueName denotes, List<Expr> args, SourcePos pos) implements Expr {
+    record Call(String fn, ValueName denotes, List<Expr> args, ConstructionOrigin origin,
+                SourcePos pos) implements Expr {
 
         /** A call as the parser read it, before resolution has said what {@code fn} denotes. */
         public Call(String fn, List<Expr> args, SourcePos pos) {
-            this(fn, null, args, pos);
+            this(fn, null, args, ConstructionOrigin.own(), pos);
         }
 
         public Call denoting(ValueName resolved) {
-            return new Call(fn, resolved, args, pos);
+            return new Call(fn, resolved, args, origin, pos);
+        }
+
+        /** The same call, carried into a body by a value that body named. A recursive helper is
+         * lowered to a method rather than expanded, so a value reaching one leaves a call where its
+         * constructions would otherwise stand, and the call is what has to say where it came from. */
+        public Call carriedByValue() {
+            return new Call(fn, denotes, args, origin.carriedByValue(), pos);
         }
     }
 
@@ -794,7 +802,7 @@ public interface Ast {
             case Neg n -> new Neg(f.apply(n.operand()), n.pos());
             case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.pos());
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
-            case Call c -> new Call(c.fn(), c.denotes(), mapExprs(c.args(), f), c.pos());
+            case Call c -> new Call(c.fn(), c.denotes(), mapExprs(c.args(), f), c.origin(), c.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
             case IfConstructed ic -> new IfConstructed(f.apply(ic.construct()), ic.binder(),
                     f.apply(ic.then()), mapArms(ic.els(), f), ic.pos());
