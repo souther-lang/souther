@@ -219,7 +219,7 @@ public final class CallElaborator {
             // `Nothing`) is fine: it sorts to itself, so let it through.
             if (intrinsic.key().equals("list.sort") && result instanceof Type.ListOf lo
                     && !(lo.element() instanceof Type.Nothing)
-                    && !TypeOps.isOrderedValue(lo.element(), ctx.symbols())) {
+                    && !TypeOps.supportsOrdering(lo.element(), ctx.symbols())) {
                 throw needsOrdered(call.pos(), "sort", lo.element(),
                         "sort needs a list of ordered values (Int, String, Decimal, Date, DateTime, or"
                                 + " a newtype over one of these), but the element is " + lo.element()
@@ -272,7 +272,7 @@ public final class CallElaborator {
                 // value (Souther has no type classes); a product data is not Comparable. The
                 // empty-list literal (element `Nothing`) is fine — its result is `None`.
                 if (!BottomInfer.isBottom(lo.element())
-                        && !TypeOps.isOrderedValue(lo.element(), ctx.symbols())) {
+                        && !TypeOps.supportsOrdering(lo.element(), ctx.symbols())) {
                     throw needsOrdered(call.pos(), call.fn(), lo.element(),
                             call.fn() + " needs a list of ordered values (Int, String, Decimal, Date,"
                                     + " DateTime, a newtype over one of these, or an enumeration), but"
@@ -317,7 +317,7 @@ public final class CallElaborator {
                             "List.sortBy expects a List, got " + t);
                 }
                 Type keyT = ca.block(0, call.fn(), List.of(lo.element()));
-                if (!BottomInfer.isBottom(keyT) && !TypeOps.isOrderedValue(keyT, ctx.symbols())) {
+                if (!BottomInfer.isBottom(keyT) && !TypeOps.supportsOrdering(keyT, ctx.symbols())) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.ordered.key").title("check.type.mismatch.title")
                                     .at(call.pos()).args("List.sortBy", Type.show(keyT))

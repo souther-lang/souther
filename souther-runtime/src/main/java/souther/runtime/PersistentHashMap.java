@@ -21,10 +21,19 @@ import java.util.Set;
  * a {@code groupBy} that grows a map O(n log n) instead of the O(n²) a whole-map copy would cost.
  *
  * <p>It implements {@link java.util.Map} so it flows through codegen and the boundary unchanged.
- * Extending {@link AbstractMap} supplies the immutable, mutator-throwing defaults and the
- * order-INSENSITIVE {@code Map.equals}/{@code hashCode} — the contract Souther value equality
- * ({@code ==} via {@code Objects.equals}, ADR-0009) relies on. Keys use their own {@code hashCode}/
- * {@code equals}; value-class keys already generate contract-correct ones.
+ * Extending {@link AbstractMap} supplies the immutable, mutator-throwing defaults.
+ *
+ * <p>Which key a lookup finds is the language's question. Keys and values are compared and hashed
+ * through {@link Values}, so a Decimal key is found by the amount it is rather than by the scale it
+ * arrived with, and the trie is indexed by that hash — there is one index, not two, so {@code get}
+ * cannot also answer the JDK's question. {@code equals} and {@code hashCode} follow the same rule
+ * rather than being inherited, because a map whose {@code get} is the language's and whose hash was
+ * the JDK's would call two maps equal and hash them apart.
+ *
+ * <p>The cost is stated rather than hidden: against a foreign {@code java.util.Map} holding the same
+ * amount at another scale, {@code equals} is not symmetric. Only Java interop can construct that
+ * pair. A {@link PersistentVector} keeps the {@code List} contract instead, because a list compares
+ * positionally and has no index to be indexed by.
  *
  * <p>Iteration order is a deterministic, implementation-defined hash order (not insertion order):
  * the same set of keys always yields the same order, so boundary encoding stays reproducible.
@@ -37,7 +46,7 @@ import java.util.Set;
  * would otherwise become a lone-entry inner node). So a key set reached by deletions has the same
  * shape — and the same deterministic iteration order — as one built directly.
  */
-public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
+public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements ValueSemantics {
 
     private static final int BITS = 5;
     private static final int MASK = (1 << BITS) - 1;   // 31
@@ -78,8 +87,23 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
         return h ^ (h >>> 16);
     }
 
+    /**
+     * The trie index for {@code key}: {@link Values#hash}, spread.
+     *
+     * <p>The carriers that answer for themselves are taken here rather than inside {@code Values} so
+     * that their {@code hashCode} is called from this site. Routed through the shared function, that
+     * one call would see every key type in the program and go megamorphic; called here it sees the
+     * key type of the map being walked. Which carriers those are is still {@code Values}'s to say —
+     * only the call is moved, not the rule.
+     */
     private static int hashOf(@Nullable Object key) {
-        return key == null ? 0 : spread(key.hashCode());
+        if (key == null) {
+            return 0;
+        }
+        if (Values.answersForItself(key.getClass())) {
+            return spread(key.hashCode());
+        }
+        return spread(Values.hash(key));
     }
 
     @Override
@@ -100,6 +124,63 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
     @Override
     public boolean containsKey(@Nullable Object key) {
         return root.find(key, hashOf(key), 0) != NOT_FOUND;
+    }
+
+    @Override
+    public boolean equals(@Nullable Object o) {
+        return valueEquals(o);
+    }
+
+    @Override
+    public int hashCode() {
+        return valueHash();
+    }
+
+    /**
+     * Whether {@code o} is the same map the language means: the same keys, each mapped to the same
+     * value. Both questions are asked of {@link Values}, so an amount is the amount it is at either
+     * scale, on the key side and on the value side.
+     *
+     * <p>The other map is taken through {@link #from} first, because a foreign map is keyed by
+     * Java's equality, which is finer than the language's: a map holding 1.0 and 1.00 has two
+     * entries and the language sees one key. Counted as it stands, both would find the same entry
+     * here and nothing would notice the key this map has that it does not. Where such a map maps its
+     * duplicate keys to different values, {@code from} keeps the later one in iteration order, and
+     * that is the value the comparison sees — the language cannot hold both, and which of them a
+     * foreign map meant is not a question the boundary can answer.
+     */
+    @Override
+    public boolean valueEquals(Object o) {
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof Map<?, ?> m)) {
+            return false;
+        }
+        PersistentHashMap<?, ?> other = PersistentHashMap.from(m);
+        if (other.size() != size) {
+            return false;
+        }
+        for (Map.Entry<?, ?> e : other.entrySet()) {
+            // asked as two questions rather than reading an absent key off a null answer: a map
+            // Souther built never stores one, but `from` will build a map from a foreign map that
+            // does, and "not here" and "here, holding nothing" are not the same answer
+            if (!containsKey(e.getKey()) || !Values.equal(get(e.getKey()), e.getValue())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Summed over the entries, so it does not depend on the order they are walked in — two maps
+     *  built by different routes hold the same entries in different places. */
+    @Override
+    public int valueHash() {
+        int h = 0;
+        for (Map.Entry<K, V> e : entrySet()) {
+            h += Values.hash(e.getKey()) ^ Values.hash(e.getValue());
+        }
+        return h;
     }
 
     /** This map with {@code key} mapped to {@code val} (added, or overwriting an equal-keyed entry).
@@ -277,7 +358,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
-                return Objects.equals(keyAt(i), key) ? valAt(i) : NOT_FOUND;
+                return Values.equal(keyAt(i), key) ? valAt(i) : NOT_FOUND;
             }
             if ((nodeMap & bitpos) != 0) {
                 return nodeAt(nodeIndex(bitpos)).find(key, keyHash, shift + BITS);
@@ -290,7 +371,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
-                if (!Objects.equals(keyAt(i), key)) {
+                if (!Values.equal(keyAt(i), key)) {
                     return false;
                 }
                 probe.holder = contents;
@@ -309,8 +390,8 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
                 Object currentKey = keyAt(i);
-                if (Objects.equals(currentKey, key)) {
-                    if (Objects.equals(valAt(i), val)) {
+                if (Values.equal(currentKey, key)) {
+                    if (Values.equal(valAt(i), val)) {
                         return this;
                     }
                     return copyAndSetValue(bitpos, val, owned);
@@ -335,7 +416,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
             int bitpos = 1 << ((keyHash >>> shift) & MASK);
             if ((dataMap & bitpos) != 0) {
                 int i = dataIndex(bitpos);
-                if (Objects.equals(keyAt(i), key)) {
+                if (Values.equal(keyAt(i), key)) {
                     return copyAndRemoveValue(bitpos);
                 }
                 return this;
@@ -484,7 +565,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
                 return NOT_FOUND;
             }
             for (int i = 0; i < pairs.length; i += 2) {
-                if (Objects.equals(pairs[i], key)) {
+                if (Values.equal(pairs[i], key)) {
                     return pairs[i + 1];
                 }
             }
@@ -506,8 +587,8 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
                 return wrapper.put(key, keyHash, val, shift, addedLeaf, owned);
             }
             for (int i = 0; i < pairs.length; i += 2) {
-                if (Objects.equals(pairs[i], key)) {
-                    if (Objects.equals(pairs[i + 1], val)) {
+                if (Values.equal(pairs[i], key)) {
+                    if (Values.equal(pairs[i + 1], val)) {
                         return this;
                     }
                     Object[] p = pairs.clone();
@@ -528,7 +609,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
                 return this;
             }
             for (int i = 0; i < pairs.length; i += 2) {
-                if (Objects.equals(pairs[i], key)) {
+                if (Values.equal(pairs[i], key)) {
                     if (pairs.length == 4) {
                         int other = i == 0 ? 2 : 0;
                         // Fall back to a one-entry bitmap node at this level for the surviving key.
@@ -676,7 +757,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> {
                 throw new IllegalStateException("this builder has already been built");
             }
             @Nullable Object @Nullable [] held = probe.holder;
-            if (held != null && Objects.equals(probe.key, key)) {
+            if (held != null && Values.equal(probe.key, key)) {
                 held[probe.index] = val;
                 probe.holder = null;
                 probe.key = null;

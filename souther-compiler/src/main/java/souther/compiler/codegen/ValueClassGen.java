@@ -403,11 +403,11 @@ final class ValueClassGen {
                                 code.ifne(differs);
                             } else if (t == Type.BOOL) {
                                 code.if_icmpne(differs);
-                            } else if (t == Type.DECIMAL) {
-                                emitDecimalEquals(code);   // by value, not by scale (spec 7.1)
-                                code.ifeq(differs);
                             } else {
-                                code.invokestatic(CD_Objects, "equals", MTD_Objects_equals);
+                                // What a field's sameness means is the runtime's to say (spec 7.1):
+                                // an amount ignores its scale wherever it sits, including inside a
+                                // collection this field holds.
+                                emitValueEquals(code, t == Type.DECIMAL);
                                 code.ifeq(differs);
                             }
                         }
@@ -433,14 +433,12 @@ final class ValueClassGen {
                             code.invokestatic(CD_Long, "hashCode", MTD_Long_hashCode);
                         } else if (t == Type.BOOL) {
                             // already an int 0/1
-                        } else if (t == Type.DECIMAL) {
-                            // equality ignores scale, so the hash must too, or 1.0 and 1.00 land
-                            // in different buckets and a Map keyed by this data stops working.
-                            // Groovy changed `==` and left hashCode alone; that bug is still open.
-                            code.invokevirtual(CD_BigDecimal, "stripTrailingZeros", MTD_BD_strip);
-                            code.invokestatic(CD_Objects, "hashCode", MTD_Objects_hashCode);
                         } else {
-                            code.invokestatic(CD_Objects, "hashCode", MTD_Objects_hashCode);
+                            // The hash the equality above agrees with, from the same place. A field
+                            // whose equality ignores a scale and whose hash did not would land 1.0
+                            // and 1.00 in different buckets, and a Map keyed by this data would stop
+                            // working. Groovy changed `==` and left hashCode alone; that bug is open.
+                            emitValueHash(code, t == Type.DECIMAL);
                         }
                         code.iadd();
                     }
@@ -453,7 +451,7 @@ final class ValueClassGen {
      * by natural order, and a Java reader can put it in a {@code TreeSet}. */
     private boolean isOrderedNewtype(Ast.Data data, Map<String, Type> fields) {
         return data.newtype() && fields.size() == 1
-                && TypeOps.isOrderedValue(fields.values().iterator().next(), symbols);
+                && TypeOps.supportsOrdering(fields.values().iterator().next(), symbols);
     }
 
     /** {@code Record} plus each interface, with {@code Comparable} bound to the class itself, so a

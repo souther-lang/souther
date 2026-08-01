@@ -38,6 +38,11 @@ public final class Sets {
         return PersistentHashSet.from(s).without(value);
     }
 
+    /** Whether {@code s} holds {@code value}, by the index {@code s} carries. Every set Souther
+     *  builds — including the one a {@code Set} field decodes into — is indexed by the language
+     *  ({@link Values}), so an amount is found at either scale. A {@code java.util.Set} handed in
+     *  from Java carries Java's index and is answered by it, as a foreign collection is anywhere
+     *  else (ADR-0085). */
     public static boolean contains(Object value, Set<?> s) {
         return s.contains(value);
     }

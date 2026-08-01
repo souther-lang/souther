@@ -76,10 +76,10 @@ public final class Maps {
         return acc;
     }
 
-    /** {@code m} without {@code key}; {@code m} unchanged when the key is absent. The {@code containsKey}
-     *  probe is worth the extra lookup: when the key is absent it returns the original map untouched,
-     *  which avoids normalizing a still-JDK input map (a just-decoded {@code LinkedHashMap}) into a
-     *  {@code PersistentHashMap} for a no-op removal. */
+    /** {@code m} without {@code key}; {@code m} unchanged when the key is absent. The
+     *  {@code containsKey} probe is worth the extra lookup: when the key is absent it returns the
+     *  original map untouched, which avoids normalizing a still-JDK input map (a just-decoded one)
+     *  into a {@code PersistentHashMap} for a no-op removal. */
     public static <K, V> Map<K, V> remove(K key, Map<K, V> m) {
         if (!m.containsKey(key)) {
             return m;
@@ -95,12 +95,12 @@ public final class Maps {
         return m.size();
     }
 
-    /** The entries as a list of {@code (key, value)} tuples, each an {@code Object[]} (ADR-0036),
-     *  in the map's iteration order. */
-    public static <K, V> List<Object[]> toList(Map<K, V> m) {
-        List<Object[]> out = new ArrayList<>(m.size());
+    /** The entries as a list of {@code (key, value)} tuples (ADR-0036), in the map's iteration
+     *  order. */
+    public static <K, V> List<Tuple> toList(Map<K, V> m) {
+        List<Tuple> out = new ArrayList<>(m.size());
         for (Map.Entry<K, V> e : m.entrySet()) {
-            out.add(new Object[]{e.getKey(), e.getValue()});
+            out.add(Tuple.of(e.getKey(), e.getValue()));
         }
         return PersistentVector.from(out);
     }
@@ -108,19 +108,27 @@ public final class Maps {
     /** A map from a list of {@code (key, value)} tuples; a later entry overwrites an earlier one
      *  with the same key. */
     @SuppressWarnings("unchecked")
-    public static <K, V> Map<K, V> fromList(List<Object[]> entries) {
+    public static <K, V> Map<K, V> fromList(List<Tuple> entries) {
         PersistentHashMap.Builder<K, V> out = new PersistentHashMap.Builder<>();
-        for (Object[] e : entries) {
-            out.set((K) e[0], (V) e[1]);
+        for (Tuple e : entries) {
+            out.set((K) e.get(0), (V) e.get(1));
         }
         return out.build();
     }
 
     /** {@code Some(value)} when {@code key} is present, else {@code None}. A Souther map never stores a
      *  null value — absence is {@code None}, not a null entry — so a single lookup distinguishes the
-     *  two, no {@code containsKey} probe before {@code get}. */
+     *  two, no {@code containsKey} probe before {@code get}.
+     *
+     *  <p>The map is read as it stands, by the index it carries. Every map Souther builds is indexed
+     *  by the language ({@link Values}), so a Decimal key is found by the amount it is. A map that
+     *  arrived from outside carries Java's index instead, and a boundary map's key is a String, a
+     *  String-backed newtype, a temporal or an enumeration (ADR-0040) — for every one of those the
+     *  two indexes agree, so nothing is bought by rebuilding it and a lookup would cost the whole
+     *  map. A {@code java.util.Map} handed in from Java with some other key is answered by its own
+     *  index, as a foreign collection is anywhere else (ADR-0085). */
     public static <V> Option<V> get(Map<?, V> map, Object key) {
-        @Nullable V value = map.get(key);   // a JDK map's `get`: absent is null, which this reads as None
+        @Nullable V value = map.get(key);
         return value != null ? Option.some(value) : Option.none();
     }
 

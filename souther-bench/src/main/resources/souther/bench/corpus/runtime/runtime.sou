@@ -61,6 +61,18 @@ let keyed (xs) = Map.size(keying(xs))
 behavior modded : (xs: List<Int>) -> Int
 let modded (xs) = List.fold((acc, x) -> acc + Int.modBy(16, x), 0, xs)
 
+// Accumulating into a tuple: `partition` carries a pair of lists and writes one of them per element,
+// which is the shape `take`, `drop`, `indexedMap` and `distinct` all fold. A tuple is a value, so
+// one is built per element, and this is where that costs what it costs. It answers a size for the
+// reason `tally` does — what is measured is the walk, not the encoding.
+behavior parted : (xs: List<Int>) -> Int
+let parting (xs: List<Int>) : (List<Int>, List<Int>) =
+    List.partition(x -> Int.modBy(2, x) == 0, xs)
+let parted (xs) = {
+    let (evens, _) = parting(xs)
+    List.length(evens)
+}
+
 // One construction, with the invariant checked as a run-time construction checks it.
 behavior amountOf : (n: Int) -> Amount | Negative
 let amountOf (n) = if n >= 0 then Amount(n) else Negative { given = n }
@@ -81,6 +93,8 @@ example keyed
     | ([1, 2, 17, 33]) -> 2
 example modded
     | ([1, 2, 17, 33]) -> 5
+example parted
+    | ([1, 2, 3, 4]) -> 2
 example amountOf
     | (7) -> Amount(7)
     | (-1) -> Negative { given = -1 }

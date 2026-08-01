@@ -62,7 +62,7 @@ public final class Elaborator {
      * empty collection has its accumulator pinned by context before the step is checked.
      */
     public static Core elaborate(Ast.Expr e, Map<String, Type> env, CheckContext ctx, Type expected) {
-        return equatableCollections(elaborating(e, env, ctx, expected));
+        return equatableCollections(elaborating(e, env, ctx, expected), ctx);
     }
 
     /**
@@ -71,8 +71,8 @@ public final class Elaborator {
      * written to exist: {@code List.distinct} grows a seen-set of its elements, and only the
      * elaborated type says what those are.
      */
-    private static Core equatableCollections(Core c) {
-        TypeOps.UncomparableIn bad = TypeOps.uncomparableCollection(c.type());
+    private static Core equatableCollections(Core c, CheckContext ctx) {
+        TypeOps.UncomparableIn bad = TypeOps.uncomparableCollection(c.type(), ctx.symbols());
         if (bad == null) {
             return c;
         }

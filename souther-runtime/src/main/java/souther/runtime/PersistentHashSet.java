@@ -13,8 +13,19 @@ import java.util.Set;
  * An immutable set backed by a {@link PersistentHashMap} whose values are a shared sentinel, so it
  * reuses the CHAMP trie, structural sharing, deterministic hash-order iteration, and value-equality
  * key handling. It implements {@link java.util.Set}, extending {@link AbstractSet} for the immutable,
- * mutator-throwing defaults and the order-INSENSITIVE {@code Set.equals}/{@code hashCode} that Souther
- * value equality (ADR-0009) relies on.
+ * mutator-throwing defaults.
+ *
+ * <p>Membership here is the language's. Two amounts that differ only in scale are one element, and
+ * the trie is indexed by the hash that says so, so {@code contains} answers that question and cannot
+ * answer another: there is one index, not two. {@code equals} and {@code hashCode} follow membership
+ * rather than being inherited, because a set whose {@code contains} is the language's and whose hash
+ * was the JDK's would call two sets equal and hash them apart.
+ *
+ * <p>The cost is stated rather than hidden: against a foreign {@code java.util.Set} holding the same
+ * amount at another scale, {@code equals} is not symmetric — this one finds the element and the
+ * other does not. Only Java interop can construct that pair; a set Souther built is compared with a
+ * set Souther built. A {@link PersistentVector} keeps the {@code List} contract instead, because a
+ * list compares positionally and has no index to be indexed by.
  *
  * <p>Iteration order is a deterministic, implementation-defined hash order (not first-seen order),
  * stable for the same element set so boundary encoding stays reproducible.
@@ -22,7 +33,7 @@ import java.util.Set;
  * <p>A dedicated key-only CHAMP node (no value slots) would save memory; the sentinel-map form is
  * behaviorally identical and is the minimal first cut.
  */
-public final class PersistentHashSet<E> extends AbstractSet<E> {
+public final class PersistentHashSet<E> extends AbstractSet<E> implements ValueSemantics {
 
     private static final Object PRESENT = new Object();
 
@@ -91,6 +102,57 @@ public final class PersistentHashSet<E> extends AbstractSet<E> {
     @Override
     public Iterator<E> iterator() {
         return map.keySet().iterator();
+    }
+
+    @Override
+    public boolean equals(@Nullable Object o) {
+        return valueEquals(o);
+    }
+
+    @Override
+    public int hashCode() {
+        return valueHash();
+    }
+
+    /**
+     * Whether {@code o} holds the same elements the language means.
+     *
+     * <p>The other set is taken through {@link #from} first, because a foreign set is indexed by
+     * Java's equality, which is finer than the language's: a {@code HashSet} of 1.0 and 1.00 has two
+     * elements and the language sees one. Counted as it stands, both of those would find the same
+     * element here and nothing would notice the element this set has that it does not. Normalized,
+     * the sizes are the sizes the language means and one lookup each decides it. {@code from} shares
+     * when the set already is one, so a set Souther built pays nothing.
+     */
+    @Override
+    public boolean valueEquals(Object o) {
+        if (o == this) {
+            return true;
+        }
+        if (!(o instanceof Set<?> s)) {
+            return false;
+        }
+        PersistentHashSet<?> other = PersistentHashSet.from(s);
+        if (other.size() != size()) {
+            return false;
+        }
+        for (Object e : other) {
+            if (!contains(e)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Summed over the elements, so it does not depend on the order they are walked in — a set is
+     *  unordered, and two holding the same elements reach them in different places. */
+    @Override
+    public int valueHash() {
+        int h = 0;
+        for (E e : this) {
+            h += Values.hash(e);
+        }
+        return h;
     }
 
     /** All elements of {@code a} and {@code b} (adds the smaller into the larger). */

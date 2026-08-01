@@ -473,6 +473,7 @@ guard approverId == request.applicant.managerId      // two EmployeeId built sep
 * sums are equal when they are the same case and their contents are equal
 * `+List<T>+` compares elements in order; `+Map<String,T>+` compares keys and values
 * `+T?+` is equal when both are `+None+`, or both are `+Some+` with equal contents
+* a tuple compares its elements left to right (<<tuple>>)
 
 Only *values of the same type* may be compared. Comparing different types is a compile error. A sum may also be compared with one of its *cases* (`+Rank == Staff+`): a case value is a value of its sum (case→sum is transparent, <<sum-data>>), so this is a sum-vs-sum comparison — true when the sum value is that case. Pure case membership is written this way for a case with no fields (a unit data, the usual state / role enum); a field-bearing case compared with `+==+` compares its fields too.
 
@@ -1724,6 +1725,8 @@ Behaviors do not recurse. A behavior MUST NOT reach itself, through calls, throu
 
 A tuple *type* `+(A, B, ...)+` may be written in a helper or standard-library signature — a parameter, a return type, or a type argument such as `+List<(String, 'a)>+` — since a signature is not a codec boundary. It is still rejected in the two boundary positions above: a data field and a behavior's input/output, where a codec would have to be derived. A one-element `+(T)+` is not a tuple type.
 
+A tuple is compared by its elements (<<equality>>), so two built separately from the same values are one value. It is therefore a `+Set+`'s element and a `+Map+`'s key like any other, which is how a rule over a composite key is written: `+allUniqueBy(t -> (t.from, t.event), transitions)+` says one row per `+(from, event)+`. A tuple has no *ordering*, so it is not a `+sort+`'s element or a `+sortBy+`'s key (<<stdlib-list>>) — order by one key and then the other instead.
+
 [,text]
 ----
 let stats (xs: List<Int>) = (List.sum(xs), List.length(xs))   // return multiple values
@@ -2897,6 +2900,17 @@ A field MUST NOT be named after a no-argument method of `+Object+` (`+toString+`
 A framework that constructs records reflectively — Jackson, given a generated type as a request body — can reach the canonical constructor and build a value without passing the invariant `+__construct+` runs. Construction authority is governed by declaration rather than by visibility, and the same value was already reachable through `+setAccessible+`; what is guaranteed is what a decoder admits (<<decoder>>), not what reflection cannot forge.
 
 A single-value newtype over an ordered type implements `+Comparable+` against itself, comparing the value it wraps. That is what `+sort+` / `+max+` / `+min+` / `+sortBy+` compare by, and it makes the type usable as a `+TreeMap+` key or a `+Collections.sort+` element from Java. A newtype over an unordered type (`+Bool+`) and a product data get no `+Comparable+`.
+
+[#jvm-collection-equality]
+=== A collection's equality, seen from Java
+
+A generated data, a newtype and a tuple compare with their own kind and nothing else, so their `+equals+` is the language's value equality (<<equality>>) and a Java reader sees exactly what Souther means.
+
+A `+List+`, a `+Set+` and a `+Map+` implement the JDK interfaces of those names, and a foreign implementation may be on the other side of an `+equals+`. A `+List+` therefore keeps the `+List+` contract — elements compared by their own `+equals+` — because a list that compared them by value equality would be equal to a JDK list that was not equal back. The language's question is answered by a separate pair of methods the runtime calls.
+
+Reading one is not comparing two. `+Map.get+`, `+Map.containsKey+` and `+Set.member+` read the collection they are given by the index it carries: every collection Souther builds is indexed by value equality, and so is the `+Set+` a field decodes into. A `+Map+` a field decodes into is a JDK map, and a boundary map's key is a `+String+`, a String-backed newtype, a temporal or an enumeration (<<collections>>) — for each of those the two agree. A `+java.util.Map+` handed in from Java with some other key is answered by its own index. Comparing two collections normalizes both first, since Java's equality is finer and a foreign collection may hold two elements the language calls one.
+
+A `+Set+` and a `+Map+` cannot do both. Which element a set holds and which key a map finds is decided by the hash the trie is indexed by, and there is one index, not two: `+contains+` and `+get+` answer the language's question, and `+equals+` and `+hashCode+` follow them rather than the elements' own. Against a foreign `+java.util.Set+` holding the same `+Decimal+` at another scale, `+equals+` is therefore not symmetric. Only Java interop can build that pair — a set Souther built is compared with a set Souther built — and the alternative would be a set whose `+contains+` found an element and whose hash said it was not there.
 
 [#jvm-sum]
 === Sum data

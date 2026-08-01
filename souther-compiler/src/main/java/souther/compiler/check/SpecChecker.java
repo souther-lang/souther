@@ -430,10 +430,10 @@ public final class SpecChecker {
     /** A tuple is expression-level only (ADR-0036): it has no external representation and cannot
      * cross a decoder/encoder boundary, so it may not be a behavior's input or output. Tuple types in
      * a helper/stdlib signature are fine — they never touch a codec. */
-    static void rejectTupleIO(Ast.SpecBehavior spec) {
+    static void rejectTupleIO(Ast.SpecBehavior spec, Symbols symbols) {
         for (Ast.Param p : spec.params()) {
             for (Ast.TypeTerm c : p.type().cases()) {
-                if (refHasTuple(c)) {
+                if (carriesTuple(c, symbols)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.param.tuple").title("check.boundary.title")
                                     .at(p.pos(), p.name().length()).args(p.name()).build(),
@@ -444,7 +444,7 @@ public final class SpecChecker {
             }
         }
         for (Ast.TypeTerm c : spec.ret().cases()) {
-            if (refHasTuple(c)) {
+            if (carriesTuple(c, symbols)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.output.tuple").title("check.boundary.title")
                                 .at(spec.pos()).args(spec.name()).build(),
@@ -521,7 +521,7 @@ public final class SpecChecker {
     static void rejectFunctionIO(Ast.SpecBehavior spec, Symbols symbols) {
         for (Ast.Param p : spec.params()) {
             Type t = TypeOps.successType(p.type(), symbols);
-            if (!TypeOps.isBoundaryRepresentable(t)) {
+            if (!TypeOps.hasExternalForm(t, symbols)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.param.function").title("check.boundary.title")
                                 .at(p.pos(), p.name().length()).args(p.name(), Type.show(t)).build(),
@@ -531,7 +531,7 @@ public final class SpecChecker {
             }
         }
         Type out = TypeOps.successType(spec.ret(), symbols);
-        if (!TypeOps.isBoundaryRepresentable(out)) {
+        if (!TypeOps.hasExternalForm(out, symbols)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.output.function").title("check.boundary.title")
                             .at(spec.pos()).args(spec.name(), Type.show(out)).build(),
@@ -596,18 +596,17 @@ public final class SpecChecker {
         }
     }
 
-    private static boolean refHasTuple(Ast.TypeTerm term) {
-        return term instanceof Ast.TypeRef ref
-                && (ref.isTuple() || (ref.arg() != null && refHasTuple(ref.arg())));
+    /** Whether a tuple is what stops {@code term} crossing the boundary. Asked of the type the term
+     * stands for, so the walk and the rule live where every other capability question does; a term
+     * that names no type answers no, and the function check below reports it. */
+    private static boolean carriesTuple(Ast.TypeTerm term, Symbols symbols) {
+        return TypeOps.withoutExternalForm(TypeOps.resolveTerm(term, symbols), symbols)
+                instanceof Type.TupleOf;
     }
 
     /** How a written term reads in a diagnostic that quotes the source. */
     private static String termName(Ast.TypeTerm term) {
         return term instanceof Ast.TypeRef ref ? ref.name() : "a function";
-    }
-
-    static boolean containsTuple(Type t) {
-        return Type.mentions(t, x -> x instanceof Type.TupleOf);
     }
 
     static void checkInjectionConstructs(Ast.SpecBehavior spec, Symbols symbols,

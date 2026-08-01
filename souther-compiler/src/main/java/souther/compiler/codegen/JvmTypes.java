@@ -151,24 +151,33 @@ final class JvmTypes {
     }
 
     /**
-     * Emits value equality for two {@code Decimal}s on the stack, leaving a boolean.
+     * Emits value equality for two values on the stack, leaving a boolean.
+     *
+     * <p>What sameness means is the runtime's to say, so this calls {@code Values.equal} rather than
+     * emitting the rule a second time. {@code decimal} picks the overload the static type allows: a
+     * pair of Decimals goes to the one that takes them, which skips the tests the general form makes
+     * to find out what it was handed.
      *
      * <p>{@code BigDecimal.equals} also compares the scale, so it calls 1.0 and 1.00 different.
      * Scale is how a number was written, not what it is (spec 7.1): the same amount arrives with
      * a different scale depending on whether it was read from JSON or a DB column, and a money
-     * type whose equality turns on that is a trap. Compare by value instead — as Clojure, Scala
-     * and Ceylon all chose for the same reason.
+     * type whose equality turns on that is a trap. Clojure, Scala and Ceylon all chose the same way.
      */
-    static void emitDecimalEquals(CodeBuilder code) {
-        code.invokevirtual(CD_BigDecimal, "compareTo", MTD_BD_compareTo);
-        Label eq = code.newLabel();
-        Label done = code.newLabel();
-        code.ifeq(eq);
-        code.iconst_0();
-        code.goto_(done);
-        code.labelBinding(eq);
-        code.iconst_1();
-        code.labelBinding(done);
+    static void emitValueEquals(CodeBuilder code, boolean decimal) {
+        if (decimal) {
+            code.invokestatic(CD_Values, "equal", MTD_Values_equalDecimal);
+        } else {
+            code.invokestatic(CD_Values, "equal", MTD_Values_equal);
+        }
+    }
+
+    /** Emits the hash that agrees with {@link #emitValueEquals}, for a value on the stack. */
+    static void emitValueHash(CodeBuilder code, boolean decimal) {
+        if (decimal) {
+            code.invokestatic(CD_Values, "hash", MTD_Values_hashDecimal);
+        } else {
+            code.invokestatic(CD_Values, "hash", MTD_Values_hash);
+        }
     }
 
     // --- reference-resolving members: these reach the module's package map through the context ---
@@ -190,7 +199,11 @@ final class JvmTypes {
         if (type instanceof Type.Var) return CD_Object;   // a type variable is erased to Object
         if (type instanceof Type.Nothing) return CD_Object;   // an empty collection's element bottom
         if (type instanceof Type.FnOf) return CD_Fn;
-        if (type instanceof Type.TupleOf) return CD_Object.arrayType();   // a tuple is an Object[]
+        // a pair is typed as the pair, so its elements are read as fields rather than through the
+        // Tuple interface: every fold-carried tuple is one, and that read is per element
+        if (type instanceof Type.TupleOf tu) {
+            return tu.elements().size() == 2 ? CD_TuplePair : CD_Tuple;
+        }
         return ctx.caseClass(((Type.Ref) type).name());
     }
 

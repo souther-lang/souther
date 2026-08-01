@@ -497,10 +497,21 @@ final class BodyGen {
             code.invokestatic(CD_List, "copyOf", MTD_List_copyOf, true);
         }
 
-        /** Builds a tuple {@code (e1, e2, ...)} as an {@code Object[]}, boxing each element (ADR-0036).
-         * A pushed-down tuple type reaches each element, as it does in the checker, so a written
-         * {@code (Map<String, Int>, List<String>)} seed materialises at those types (issue #74). */
+        /** Builds a tuple {@code (e1, e2, ...)}, boxing each element (ADR-0036). The elements go into
+         * an array and the array is handed to {@code Tuple.of}, which takes ownership of it: it was
+         * built one instruction earlier and nothing else holds it. A pushed-down tuple type reaches
+         * each element, as it does in the checker, so a written {@code (Map<String, Int>,
+         * List<String>)} seed materialises at those types (issue #74). */
         private void tuple(Core.Tuple t) {
+            if (t.elements().size() == 2) {
+                // the arity every fold-carried tuple has: built outright, with no array between
+                code.new_(CD_TuplePair);
+                code.dup();
+                box(code, genExpr(t.elements().get(0)));
+                box(code, genExpr(t.elements().get(1)));
+                code.invokespecial(CD_TuplePair, "<init>", MTD_TuplePair_init);
+                return;
+            }
             pushInt(code, t.elements().size());
             code.anewarray(CD_Object);
             for (int i = 0; i < t.elements().size(); i++) {
@@ -509,13 +520,18 @@ final class BodyGen {
                 box(code, genExpr(t.elements().get(i)));
                 code.aastore();
             }
+            code.invokestatic(CD_Tuple, "ofOwned", MTD_Tuple_ofOwned, true);
         }
 
-        /** Reads a tuple element by index: {@code arr[i]}, cast back to the element's type. */
+        /** Reads a tuple element by index, cast back to the element's type. */
         private void tupleGet(Core.TupleGet tg) {
             genExpr(tg.tuple());
-            pushInt(code, tg.index());
-            code.aaload();
+            if (tg.tuple().type() instanceof Type.TupleOf tu && tu.elements().size() == 2) {
+                code.getfield(CD_TuplePair, tg.index() == 0 ? "first" : "second", CD_Object);
+            } else {
+                pushInt(code, tg.index());
+                code.invokeinterface(CD_Tuple, "get", MTD_Tuple_get);
+            }
             castFromObject(code, tg.type());
         }
 
@@ -1685,18 +1701,11 @@ final class BodyGen {
                         }
                         return;
                     }
-                    if (lt == Type.DECIMAL) {
-                        emitDecimalEquals(code);          // by value, ignoring scale (spec 7.1)
-                        if (bin.op() == Ast.BinOp.NE) {
-                            code.iconst_1();
-                            code.ixor();
-                        }
-                        return;
-                    }
                     if (isReference(lt)) {
-                        // a data (or any boxed value) compares by its fields — the generated
-                        // equals (spec 7.1). Objects.equals keeps it null-tolerant.
-                        code.invokestatic(CD_Objects, "equals", MTD_Objects_equals);
+                        // What sameness is, is the runtime's to say: a data compares by its fields,
+                        // an amount ignores its scale, a collection asks that of what it holds
+                        // (spec 7.1). A pair of Decimals takes the overload for them.
+                        emitValueEquals(code, lt == Type.DECIMAL);
                         if (bin.op() == Ast.BinOp.NE) {
                             code.iconst_1();
                             code.ixor();
