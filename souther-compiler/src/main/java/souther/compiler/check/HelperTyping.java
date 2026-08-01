@@ -86,10 +86,20 @@ public final class HelperTyping {
                 // body is caught here, at the helper, not only where it is later inlined.
                 typeFromBody(h, inferred, env, body, symbols, reqSigs, recursiveHelperFns);
             }
+            // A recursive helper is lowered to a method, so a self- or mutual call is left standing
+            // rather than expanded; its signature is what a call to it is typed against, so it goes
+            // into the environment before anything reads the body (spec 13.1). Every reader of the
+            // body needs it, not just the elaboration below: a call to a method-lowered helper can sit
+            // in a lambda handed to a combinator, and the check of that lambda reads the environment
+            // it is given. A parameter of the same name wins: a binding in force wins over the
+            // declaration it shadows (spec §fn-rules), so `let use (depth: Int)` reads its `depth` as
+            // the Int it declares and not as the helper it is spelled like.
+            Map<String, Type> tenv = new HashMap<>(recursiveHelperFns);
+            tenv.putAll(env);
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
-            checkFunctionArgs(h.body(), env, symbols, reqSigs, inliner);
+            checkFunctionArgs(h.body(), tenv, symbols, reqSigs, inliner);
             if (Elaborator.producesFunction(body)) {
                 continue;
             }
@@ -98,10 +108,6 @@ public final class HelperTyping {
                 // cannot reach an injected behavior — put the effect in the behavior that calls it.
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
-            // self- and mutual calls resolve through the helper signatures, so the recursion type-checks
-            // without a fixpoint (each declares its return type, spec 13.1).
-            Map<String, Type> tenv = new HashMap<>(env);
-            tenv.putAll(recursiveHelperFns);
             // push a declared return type into the body so an empty-collection body (Map.empty(), [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn(), symbols);
