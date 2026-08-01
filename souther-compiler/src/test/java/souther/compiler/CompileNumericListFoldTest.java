@@ -3,12 +3,16 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.SourceContext;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -247,7 +251,7 @@ class CompileNumericListFoldTest {
 
     @Test
     void aNonNumericElementIsRejected() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+        String module = """
                 module demo
 
                 import List ( product )
@@ -258,9 +262,39 @@ class CompileNumericListFoldTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out { total = product(i.xs) }
-                """));
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(module));
         assertTrue(e.getMessage().contains("product needs a list of Int or Decimal"), e.getMessage());
         assertTrue(e.getMessage().contains("String"), e.getMessage());
+        assertProductIsNotCalledSum(e, module);
+    }
+
+    @Test
+    void anEmptyProductInANonNumericPositionIsReportedAboutProduct() {
+        String module = """
+                module demo
+
+                import List ( product )
+
+                data In = { xs: List<Int> }
+                data Out = { name: String }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { name = product([]) }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(module));
+        assertProductIsNotCalledSum(e, module);
+    }
+
+    /** The two folds share their reports, so the reports must name the one that was written. A hint
+     * telling the author of `product` to sum something sends them to a different operation. */
+    private static void assertProductIsNotCalledSum(CompileException e, String module) {
+        String rendered = new HumanRenderer(false)
+                .render(e.diagnostic(), new SourceContext("demo.sou", module), Locale.ENGLISH);
+        assertTrue(rendered.contains("product"), rendered);
+        assertFalse(rendered.contains("sum"), "the report is about `product`: " + rendered);
+        assertFalse(e.getMessage().contains("sum"), e.getMessage());
     }
 
     private static Map<?, ?> run(BytesClassLoader loader, List<BigDecimal> xs) throws Exception {

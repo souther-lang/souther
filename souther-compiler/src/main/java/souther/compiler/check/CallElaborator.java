@@ -621,8 +621,8 @@ public final class CallElaborator {
                                 .at(call.pos(), call.fn().length()).args(call.fn())
                                 .hint("check.numeric.empty.hint").build(),
                         call.fn() + " over the empty list answers with its seed, and whether that"
-                                + " seed is the Int 0 or the Decimal 0.0m follows from an element the"
-                                + " empty list does not have — annotate the position it feeds"
+                                + " seed is an Int or a Decimal follows from an element the empty"
+                                + " list does not have — annotate the position it feeds"
                                 + " (`let total: Decimal = " + call.fn() + "([])`)");
             }
             throw CompileException.of(
@@ -632,8 +632,8 @@ public final class CallElaborator {
                             .hint("check.numeric.result.hint").build(),
                     call.fn() + " answers with an Int or a Decimal, but this position needs "
                             + Type.show(position) + " — a newtype over one of them is built from the"
-                            + " sum (`Hours(" + call.fn() + "(xs))`) rather than being it, and any"
-                            + " other type has no sum to take here");
+                            + " result (`Hours(" + call.fn() + "(xs))`) rather than being it, and any"
+                            + " other type has no place for one");
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.numeric").title("check.type.mismatch.title")
@@ -641,8 +641,8 @@ public final class CallElaborator {
                         .args(call.fn(), Localizable.of("kind.numeric.list"), Type.show(element))
                         .hint("check.numeric.hint").build(),
                 shortName(call.fn()) + " needs a list of Int or Decimal, but the element is "
-                        + Type.show(element) + " — sum its numeric field instead (e.g. map to it"
-                        + " first)");
+                        + Type.show(element) + " — map to its numeric field first and apply "
+                        + call.fn() + " to that");
     }
 
     /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
