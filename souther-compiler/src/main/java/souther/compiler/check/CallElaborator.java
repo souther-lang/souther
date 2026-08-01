@@ -115,6 +115,66 @@ public final class CallElaborator {
     }
 
     /**
+     * The answer for a call this module has no callee for. Resolution already said what the name is,
+     * and by here every answer it can give is something: a name it could not place is thrown out at
+     * the top of {@link #typeOfCall}, where the report belongs to the position it was written at.
+     * Telling the author of a name the compiler classified that it "is not a behavior or a builtin"
+     * is discarding what the compiler knows and sending them after a typo they did not make — what is
+     * wrong is the position, not the name.
+     *
+     * <p>Exhaustive over {@link ValueName} on purpose, with no default: a classification added later
+     * cannot quietly fall through to a sentence that would be false about it. The three that reach an
+     * author are the three a program can be written into. The rest name a call that should have been
+     * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
+     * with itself and not something an author can act on.
+     */
+    static RuntimeException noCallee(Ast.Call call) {
+        return switch (call.denotes()) {
+            // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
+            // one (spec [#calling-a-behavior])
+            case ValueName.Behavior _ -> CompileException.of(
+                    Diagnostic.of("E1401", "e1401.behavior")
+                            .title("e1401.title").at(call.pos(), call.fn().length())
+                            .args(call.fn()).hint("e1401.behavior.hint", call.fn())
+                            .build(),
+                    "`" + call.fn() + "` is a behavior, and it cannot be called from here: a helper"
+                            + " `let` does not reach one, and a `>->` composition is composed with"
+                            + " rather than called (spec [#calling-a-behavior])");
+            // A type applied to an argument is a construction, and every place a construction is
+            // allowed rewrites it before the check reads it. Reaching here means it was written
+            // somewhere no rewrite covers, so say what it is rather than what it is not.
+            case ValueName.OfType named -> CompileException.of(
+                    Diagnostic.of(null, "check.construct.position")
+                            .title("check.construct.position.title")
+                            .at(call.pos(), call.fn().length()).args(named.name()).build(),
+                    "`" + named.name() + "` is a type, so `" + named.name()
+                            + "(...)` constructs one, and a construction cannot be written here");
+            // A binding applied to arguments, whose type here is not a function. Either it is not one
+            // — a value applied as though it were — or it has no type yet, which is what an inference
+            // probe sees when it types a body before the binding it asks about has one and reads the
+            // report to find out. The same sentence answers both: at the point of the report, this
+            // name is not a function here.
+            case ValueName.Local _ -> CompileException.of(
+                    Diagnostic.of(null, "check.apply.notfunction")
+                            .title("check.apply.notfunction.title")
+                            .at(call.pos(), call.fn().length()).args(call.fn()).build(),
+                    "`" + call.fn() + "` is not a function here, so it cannot be applied to"
+                            + " arguments");
+            case ValueName.Helper _ -> unelaborated("a helper", call);
+            case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
+            case ValueName.Builtin _ -> unelaborated("a builtin", call);
+            // thrown out at the top of typeOfCall, before any of the work above
+            case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
+            case null -> unelaborated("nothing", call);
+        };
+    }
+
+    private static IllegalStateException unelaborated(String what, Ast.Call call) {
+        return new IllegalStateException("`" + call.fn() + "` denotes " + what
+                + " and reached call elaboration unexpanded, at " + call.pos());
+    }
+
+    /**
      * The type of a call, by what the name it applies denotes.
      *
      * <p>Which of these a name is was answered when the module's names were resolved, so the order
@@ -449,31 +509,7 @@ public final class CallElaborator {
                                 "`" + call.fn() + "` is a standard-library function and must be called"
                                         + " qualified, as `" + qualified + "` (spec §stdlib).");
                     }
-                    // The name may be a behavior all the same — resolution said so. Saying it is not
-                    // one sends the author looking for a typo they did not make: what is wrong is the
-                    // position, which is a helper `let` or a composition, and neither reaches a
-                    // behavior (spec [#calling-a-behavior]).
-                    if (call.denotes() instanceof ValueName.Behavior) {
-                        throw CompileException.of(
-                                Diagnostic.of("E1401", "e1401.behavior")
-                                        .title("e1401.title").at(call.pos(), call.fn().length())
-                                        .args(call.fn()).hint("e1401.behavior.hint", call.fn())
-                                        .build(),
-                                "`" + call.fn() + "` is a behavior, and it cannot be called from"
-                                        + " here: a helper `let` does not reach one, and a `>->`"
-                                        + " composition is composed with rather than called (spec"
-                                        + " [#calling-a-behavior])");
-                    }
-                    throw CompileException.of(
-                            Diagnostic.of("E1401", "e1401.msg").at(call.pos(), call.fn().length())
-                                    .args(call.fn())
-                                    .suggestion(Suggest.candidate(call.fn(), ctx.reqs().keySet()))
-                                    .hint("e1401.hint")
-                                    .build(),
-                            "`" + call.fn() + "` is not a behavior or builtin"
-                                    + Suggest.hint(call.fn(), ctx.reqs().keySet())
-                                    + ". Calling arbitrary JVM methods is not allowed; declare a behavior"
-                                    + " without a `let` and implement it from Java.");
+                    throw noCallee(call);
                 }
                 arity(call, callee.params().size());
                 for (int i = 0; i < callee.params().size(); i++) {

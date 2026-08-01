@@ -16,6 +16,12 @@ import java.util.List;
  * and the backend — sees only {@code NewData}, so the two spellings of a newtype construction get
  * identical treatment and no stage special-cases the call form (ADR-0032; the implicit field is
  * {@code value}, ADR-0014).
+ *
+ * <p>A module's fn bodies and its invariants are rewritten at different points, because they are
+ * settled at different points: an invariant is spread, qualified and inlined before the bodies are,
+ * so {@link #rewriteInvariants} runs where that settling ends and {@link #rewrite} runs one question
+ * later. Both spellings reach every stage as a {@code NewData} either way, which is the property a
+ * stage is written against.
  */
 public final class NewtypeDesugar {
     private NewtypeDesugar() {}
@@ -30,6 +36,27 @@ public final class NewtypeDesugar {
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                 m.defs(), m.behaviors(), fns, m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
+    }
+
+    /**
+     * Rewrites every {@code Call(newtype, [arg])} in each declaration's {@code invariant} to a
+     * {@code NewData}. Run where the invariants are settled — after the helpers an invariant names
+     * are expanded into it — so a construction written in a helper arrives here as the construction
+     * it is, and every check over an invariant reads one spelling rather than two.
+     */
+    public static Ast.Module rewriteInvariants(Ast.Module m, Symbols symbols) {
+        List<Ast.Def> defs = new ArrayList<>();
+        for (Ast.Def def : m.defs()) {
+            if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
+                defs.add(new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
+                        Ast.mapClauses(d.invariants(), inv -> go(inv, symbols)),
+                        d.decoder(), d.encoder(), d.pos()));
+            } else {
+                defs.add(def);
+            }
+        }
+        return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
+                defs, m.behaviors(), m.fns(), m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());
     }
 
     private static Ast.Expr go(Ast.Expr e, Symbols symbols) {

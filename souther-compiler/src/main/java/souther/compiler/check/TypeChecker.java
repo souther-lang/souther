@@ -209,13 +209,19 @@ public final class TypeChecker {
             }
         }
         // The invariant checks run before the data check, so a partial call or a construction is named
-        // before it is otherwise reported as an unknown function or type-checked.
+        // before it is otherwise reported as an unknown function or type-checked. A clause is a unit
+        // of its own — it is what an attempt answers by name and what discharge answers about — so a
+        // wrong one is recorded and the next is still checked, and a declaration with two wrong
+        // clauses says so about both. Within one clause the first construction is the answer: naming
+        // every one of them tells the author nothing the first does not.
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.Data data) {
                 for (Ast.InvariantClause clause : data.invariants()) {
-                    HelperTyping.rejectPartialHelperInInvariant(
-                            clause.expr(), data.name(), partialRecursiveFns);
-                    HelperTyping.rejectConstructionInInvariant(clause.expr(), data.name());
+                    collect(errors, abandoned, () -> {
+                        HelperTyping.rejectPartialHelperInInvariant(
+                                clause.expr(), data.name(), partialRecursiveFns);
+                        HelperTyping.rejectConstructionInInvariant(clause.expr(), data.name(), clause);
+                    });
                 }
             }
         }
