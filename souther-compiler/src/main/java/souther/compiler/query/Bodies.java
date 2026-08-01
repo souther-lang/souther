@@ -570,7 +570,7 @@ public final class Bodies {
         HelperInliner inliner = null;
         for (Ast.FnDef fn : publishable(from, wanted)) {
             if (inliner == null) {
-                inliner = HelperInliner.forHelpers(table);
+                inliner = HelperInliner.forHelpers(from.name(), table);
             }
             Ast.FnDef closed = inliner.closeAcross(fn, from.name());
             out.put(closed.name(), closed);
@@ -594,7 +594,7 @@ public final class Bodies {
         if (out.isEmpty()) {
             return out;
         }
-        HelperInliner inliner = HelperInliner.forHelpers(table);
+        HelperInliner inliner = HelperInliner.forHelpers(from.name(), table);
         Deque<String> work = new ArrayDeque<>(out.keySet());
         while (!work.isEmpty()) {
             for (ValueName.Helper reached : HelperInliner.helpersReached(out.get(work.poll()).body())) {
@@ -657,7 +657,7 @@ public final class Bodies {
             if (!helpers.present()) {
                 return Answer.absent();
             }
-            return Answer.of(HelperInliner.forHelpers(helpers.value()).recursiveHelpers());
+            return Answer.of(HelperInliner.forHelpers(name, helpers.value()).recursiveHelpers());
         }
     }
 
@@ -726,7 +726,8 @@ public final class Bodies {
                 return Answer.absent();
             }
             try {
-                return Answer.of(Lower.body(def.value(), HelperInliner.forHelpers(helpers.value()),
+                return Answer.of(Lower.body(def.value(),
+                        HelperInliner.forHelpers(module, helpers.value()),
                         recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -755,7 +756,7 @@ public final class Bodies {
             }
             try {
                 return Answer.of(Lower.body(def.value(),
-                        HelperInliner.forHelpers(helpers.value(), InliningPolicy.DISCHARGE),
+                        HelperInliner.forHelpers(module, helpers.value(), InliningPolicy.DISCHARGE),
                         recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -832,7 +833,7 @@ public final class Bodies {
             }
             try {
                 return Answer.of(TypeChecker.recursiveHelperSigs(
-                        HelperInliner.forHelpers(helpers.value()), scope.value()));
+                        HelperInliner.forHelpers(name, helpers.value()), scope.value()));
             } catch (CompileException e) {
                 // A recursive helper that does not say what it returns costs the signatures of all of
                 // them, and there is no module to check without them.
@@ -868,7 +869,7 @@ public final class Bodies {
             }
             try {
                 return Answer.of(TypeChecker.recursiveHelperConstructs(sigs.value().keySet(), bodies,
-                        HelperInliner.forHelpers(helpers.value()), scope.value()));
+                        HelperInliner.forHelpers(name, helpers.value()), scope.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -964,7 +965,7 @@ public final class Bodies {
             try {
                 Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().body(),
                         dischargeSource, scope.value(), calleeSigs.value(), reqSigs.value(),
-                        HelperInliner.forHelpers(helpers.value()), sigs.value(), constructs.value(),
+                        HelperInliner.forHelpers(module, helpers.value()), sigs.value(), constructs.value(),
                         warnings);
                 List<Report> reports = new ArrayList<>();
                 for (Diagnostic warning : warnings) {

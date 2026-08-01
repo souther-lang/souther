@@ -112,9 +112,9 @@ public final class MatchElaborator {
                 checkUnwrapAsserts(c, ctx.symbols());
             }
             Core body = Elaborator.liftIntoOption(
-                    Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx, expected),
+                    Elaborator.elaborate(c.body(), bound(env, c.bindingName(), bindType), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(denoted(c.caseTypes()), c.binding(), body, bindType, c.pos()));
+            arms.add(new Core.Case(denoted(c.caseTypes()), c.bindingName(), body, bindType, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
@@ -179,9 +179,9 @@ public final class MatchElaborator {
                         "`" + caseType + "` is matched by more than one case");
             }
             Core body = Elaborator.liftIntoOption(
-                    Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
+                    Elaborator.elaborate(c.body(), bound(env, c.bindingName(), bind), ctx, expected),
                     expected, ctx.symbols());
-            arms.add(new Core.Case(denoted(c.caseTypes()), c.binding(), body, bind, c.pos()));
+            arms.add(new Core.Case(denoted(c.caseTypes()), c.bindingName(), body, bind, c.pos()));
             branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();

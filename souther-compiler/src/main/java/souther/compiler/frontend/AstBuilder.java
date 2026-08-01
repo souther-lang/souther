@@ -434,8 +434,8 @@ public final class AstBuilder {
         // would name a definition's parameter something the author never wrote.
         if (params.isEmpty() && bodyNode.kind() == SyntaxKind.LAMBDA_EXPR
                 && body instanceof Ast.Block lambda) {
-            for (String p : lambda.params()) {
-                params.add(new Ast.FnParam(p, null, false, lambda.pos()));
+            for (Ast.Binder p : lambda.params()) {
+                params.add(new Ast.FnParam(p, null, false));
             }
             body = lambda.body();
         }
@@ -465,7 +465,7 @@ public final class AstBuilder {
             // only repeat what the pattern already named
             SourcePos at = pos(pat);
             type = new Ast.RetType(List.of(new Ast.TypeRef(qualifiedNameText(pat), null, at)), at);
-            return new Ast.FnParam(name, type, true, pos(p));
+            return new Ast.FnParam(Ast.Binder.written(name, pos(p)), type, true);
         }
         return new Ast.FnParam(name, type, pos(p));
     }
@@ -747,7 +747,8 @@ public final class AstBuilder {
         String binder = attemptBinder(n);
         List<Ast.ElseArm> arms = elseArms(n, binder);
         if (arms != null) {
-            return new Ast.IfConstructed(expr(exprs.get(0)), binder, expr(exprs.get(1)), arms, pos(n));
+            return new Ast.IfConstructed(expr(exprs.get(0)), Ast.Binder.written(binder, pos(n)),
+                    expr(exprs.get(1)), arms, pos(n));
         }
         return binder == null
                 ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n))
@@ -826,7 +827,7 @@ public final class AstBuilder {
                 body = bindPattern(pats.get(i), new Ast.Var(params.get(i), at), body, at);
             }
         }
-        return new Ast.Block(params, body, pos);
+        return Ast.Block.written(params, body, pos);
     }
 
     private Ast.Expr fieldGetter(SyntaxNode n) {
@@ -838,7 +839,7 @@ public final class AstBuilder {
         SourcePos pos = pos(n);
         String param = "$g" + (getterCounter++);
         Ast.Expr body = new Ast.FieldAccess(new Ast.Var(param, pos), field.text(), posOf(field));
-        return new Ast.Block(List.of(param), body, pos);
+        return Ast.Block.written(List.of(param), body, pos);
     }
 
     private Ast.Expr newData(SyntaxNode n) {
@@ -863,8 +864,9 @@ public final class AstBuilder {
                     }
                     pathNames.add(bound);
                     pathValues.add(value);
-                    // the path was bound just above, so what the construction spreads is that binding
-                    spreads.add(Ast.ValueRef.local(bound, posOf(path.get(0))));
+                    // the path is bound just outside the construction, so this name is answered
+                    // against that binding like any other the source wrote
+                    spreads.add(Ast.ValueRef.written(bound, posOf(path.get(0))));
                 }
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 String field = firstIdentText(c);
@@ -1046,7 +1048,7 @@ public final class AstBuilder {
         List<Ast.Name> unwrapAsserts = unwrapNames.isEmpty()
                 ? null
                 : new ArrayList<>(unwrapNames.subList(0, unwrapNames.size() - 1));
-        return new Ast.Case(caseTypes, binding, body, unwrapAsserts, casePos);
+        return Ast.Case.written(caseTypes, binding, body, unwrapAsserts, casePos);
     }
 
     /** A brace block: its {@code let}/{@code guard} statements folded into the result expression. */
@@ -1083,7 +1085,8 @@ public final class AstBuilder {
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
                 List<Ast.ElseArm> arms = elseArms(s, binder);
                 if (arms != null) {
-                    yield new Ast.IfConstructed(expr(exprs.get(0)), binder, rest, arms, pos);
+                    yield new Ast.IfConstructed(expr(exprs.get(0)), Ast.Binder.written(binder, pos),
+                            rest, arms, pos);
                 }
                 yield binder == null
                         ? new Ast.If(expr(exprs.get(0)), rest, expr(exprs.get(1)), pos)

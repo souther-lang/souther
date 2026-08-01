@@ -1,6 +1,8 @@
 package souther.compiler.ast;
 
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -22,6 +24,91 @@ public interface Ast {
 
     /** The source position of this node. Every record below provides it. */
     SourcePos pos();
+
+    /**
+     * A name a body binds: a parameter, a {@code let}, a lambda's parameter, a {@code match} arm's
+     * binding. Every node below that introduces one holds this rather than a bare spelling, so what a
+     * name under it means is the binding and not the text.
+     *
+     * <p>The two forms are the two states a binder is in. The parser writes {@link Written}, which is
+     * the spelling and nothing more; {@code Resolve} answers it with {@link Bound}, which carries the
+     * {@link BindingId} every name that resolves to it also carries. There is no third state and no
+     * absent identity: a binder with an identity and a binder without one are different types, so a
+     * reader cannot mistake one for the other, and nothing downstream tests for a missing one.
+     */
+    sealed interface Binder extends Ast {
+
+        /** How the binding was written. A diagnostic quotes this, and a generated local is named
+         * after it; nothing decides identity by it. */
+        String name();
+
+        /** A binder as the parser read it, before resolution has said which binding it is. */
+        static Binder written(String name, SourcePos pos) {
+            return new Written(name, pos);
+        }
+
+        /**
+         * The binding, for a reader that is asking which one this is.
+         *
+         * <p>A binder still {@link Written} here is a pass reading a body it was handed before
+         * resolution answered it, which is a fault in the compiler rather than in the source, so it
+         * is refused outright. This is the one place that says so.
+         */
+        default BindingId id() {
+            if (this instanceof Bound bound) {
+                return bound.binding();
+            }
+            throw new IllegalStateException("`" + name() + "` at " + pos()
+                    + " was read as a binding before it was resolved");
+        }
+
+        /** A binder as the parser read it. */
+        record Written(String name, SourcePos pos) implements Binder {
+
+            @Override
+            public String toString() {
+                return name;
+            }
+        }
+
+        /** A binder resolution answered, and the binding it introduces. */
+        record Bound(String name, BindingId binding, SourcePos pos) implements Binder {
+
+            public Bound {
+                if (binding == null) {
+                    throw new IllegalArgumentException("a bound binder is a binding: " + name);
+                }
+            }
+
+            @Override
+            public String toString() {
+                return name;
+            }
+        }
+    }
+
+    /**
+     * Mints the binders a pass writes into a body that has already been resolved.
+     *
+     * <p>Such a pass cannot leave a binder {@link Binder.Written}: nothing runs after it to answer
+     * one. So it says which binding each is, and the bindings it makes belong to it — to
+     * {@code owner} — rather than to the definition whose text it is writing into, which is what
+     * keeps two of them apart when one body is written into twice.
+     */
+    final class Binders {
+
+        private final BindingOwner owner;
+        private int next;
+
+        public Binders(BindingOwner owner) {
+            this.owner = owner;
+        }
+
+        /** A binding nothing else has, under this pass's owner. */
+        public Binder binder(String name, SourcePos pos) {
+            return new Binder.Bound(name, new BindingId(owner, next++), pos);
+        }
+    }
 
     /**
      * A name that denotes a declared type, in both forms it has: {@code written} as the source spelled
@@ -75,9 +162,10 @@ public interface Ast {
             return new ValueRef(written, null, pos);
         }
 
-        /** A name a pass introduced, bound where it put it — the counterpart of {@link Var#local}. */
-        public static ValueRef local(String name, SourcePos pos) {
-            return new ValueRef(name, new ValueName.Local(name, pos), pos);
+        /** A name a pass introduced, reading the binding it bound it to — the counterpart of
+         * {@link Var#local}. */
+        public static ValueRef local(Binder binder, SourcePos pos) {
+            return new ValueRef(binder.name(), new ValueName.Local(binder.name(), binder.id()), pos);
         }
 
         /** The same name, resolved to what it denotes. */
@@ -248,10 +336,24 @@ public interface Ast {
      * carries no type ({@code type} is null). {@code typeFromPattern} marks a type read off a
      * constructor pattern in parameter position rather than written beside the name — a behavior's
      * implementation may write the pattern, and its type still comes from the behavior. */
-    record FnParam(String name, RetType type, boolean typeFromPattern, SourcePos pos) implements Ast {
+    record FnParam(Binder binder, RetType type, boolean typeFromPattern) implements Ast {
         /** A parameter whose type, if any, the author wrote (the common case). */
+        public FnParam(Binder binder, RetType type) {
+            this(binder, type, false);
+        }
+
+        /** A parameter as the parser read it. */
         public FnParam(String name, RetType type, SourcePos pos) {
-            this(name, type, false, pos);
+            this(Binder.written(name, pos), type, false);
+        }
+
+        public String name() {
+            return binder.name();
+        }
+
+        @Override
+        public SourcePos pos() {
+            return binder.pos();
         }
     }
 
@@ -402,10 +504,15 @@ public interface Ast {
 
     /** {@code decoder from Text|Int as <input> { <stmts> <construct> }} (single value). */
     record PrimDecoder(RawKind from,
-                       String inputName,
+                       Binder input,
                        List<DecStmt> stmts,
                        Construct result,
-                       SourcePos pos) implements DecoderDef {}
+                       SourcePos pos) implements DecoderDef {
+
+        public String inputName() {
+            return input.name();
+        }
+    }
 
     /** {@code decoder from Object { <binds> <construct> }} (multi-field, accumulating). */
     record ObjectDecoder(List<Bind> binds, Construct result, SourcePos pos) implements DecoderDef {}
@@ -416,11 +523,21 @@ public interface Ast {
      * {@code X}. {@code X}'s external representation is {@code Y}'s — an object or a discriminated
      * sum, not {@code {value: ...}}.
      */
-    record NewtypeDecoder(DecRef inner, String inputName, Construct result, SourcePos pos)
-            implements DecoderDef {}
+    record NewtypeDecoder(DecRef inner, Binder input, Construct result, SourcePos pos)
+            implements DecoderDef {
+
+        public String inputName() {
+            return input.name();
+        }
+    }
 
     /** {@code name <- field("key", <decRef>)} inside an object decoder. */
-    record Bind(String name, String key, DecRef ref, SourcePos pos) implements Ast {}
+    record Bind(Binder binder, String key, DecRef ref, SourcePos pos) implements Ast {
+
+        public String name() {
+            return binder.name();
+        }
+    }
 
     /** The decoder referenced by a bind: a primitive, another data's {@code .decoder}, or a list. */
     sealed interface DecRef extends Ast
@@ -451,7 +568,12 @@ public interface Ast {
     /** A statement in a single-value decoder body. */
     sealed interface DecStmt extends Ast permits Let {}
 
-    record Let(String name, Expr value, SourcePos pos) implements DecStmt {}
+    record Let(Binder binder, Expr value, SourcePos pos) implements DecStmt {
+
+        public String name() {
+            return binder.name();
+        }
+    }
 
     /** A typed record literal {@code TypeName { ..src, field: expr, ... }} — a construction. */
     record Construct(Name typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
@@ -462,7 +584,12 @@ public interface Ast {
 
     // --- encoders ---
 
-    record EncoderDef(String selfName, RawExpr result, SourcePos pos) implements Ast {}
+    record EncoderDef(Binder self, RawExpr result, SourcePos pos) implements Ast {
+
+        public String selfName() {
+            return self.name();
+        }
+    }
 
     /** A Raw-building expression. */
     sealed interface RawExpr extends Ast
@@ -477,7 +604,12 @@ public interface Ast {
 
     /** Encodes an optional field: {@code None} becomes {@code Raw.Null}, {@code Some(v)} encodes
      * {@code v} via {@code inner}, which reads the unwrapped value bound to {@code elemVar}. */
-    record OptionRaw(Expr access, RawExpr inner, String elemVar, SourcePos pos) implements RawExpr {}
+    record OptionRaw(Expr access, RawExpr inner, Binder elem, SourcePos pos) implements RawExpr {
+
+        public String elemVar() {
+            return elem.name();
+        }
+    }
 
     record TextRaw(Expr arg, SourcePos pos) implements RawExpr {}
 
@@ -548,7 +680,26 @@ public interface Ast {
      * field, or bound by {@code let}. The parser only accepts one in an argument position, and
      * because it cannot escape, the backend inlines it rather than building a closure.
      */
-    record Block(List<String> params, Expr body, SourcePos pos) implements Expr {}
+    record Block(List<Binder> params, Expr body, SourcePos pos) implements Expr {
+
+        /** A block as the parser read it. */
+        public static Block written(List<String> params, Expr body, SourcePos pos) {
+            List<Binder> binders = new ArrayList<>();
+            for (String p : params) {
+                binders.add(Binder.written(p, pos));
+            }
+            return new Block(binders, body, pos);
+        }
+
+        /** How the parameters were written, in order. */
+        public List<String> paramNames() {
+            List<String> names = new ArrayList<>();
+            for (Binder p : params) {
+                names.add(p.name());
+            }
+            return names;
+        }
+    }
 
     /**
      * {@code let name = value} followed by {@code body} — what a body's {@code let} desugars to
@@ -562,21 +713,30 @@ public interface Ast {
      * declared type, bound to the argument at the call site) is not: the argument's own type and
      * the call-site check already cover it.
      */
-    record LetIn(String name, Expr value, RetType declaredType, boolean annotated, Name opens,
+    record LetIn(Binder binder, Expr value, RetType declaredType, boolean annotated, Name opens,
                  Expr body, SourcePos pos) implements Expr {
         /** An ordinary {@code let x = e}: the bound name takes {@code e}'s inferred type. */
+        public LetIn(Binder binder, Expr value, Expr body, SourcePos pos) {
+            this(binder, value, null, false, null, body, pos);
+        }
+
+        /** The same, as the parser read it. */
         public LetIn(String name, Expr value, Expr body, SourcePos pos) {
-            this(name, value, null, false, null, body, pos);
+            this(Binder.written(name, pos), value, null, false, null, body, pos);
         }
 
         /** A binding carrying an inlined helper parameter's declared type. */
-        public LetIn(String name, Expr value, RetType declaredType, Expr body, SourcePos pos) {
-            this(name, value, declaredType, false, null, body, pos);
+        public LetIn(Binder binder, Expr value, RetType declaredType, Expr body, SourcePos pos) {
+            this(binder, value, declaredType, false, null, body, pos);
         }
 
         /** {@code let x: T = value} — a binding the source annotated. */
         public static LetIn annotated(String name, Expr value, RetType type, Expr body, SourcePos pos) {
-            return new LetIn(name, value, type, true, null, body, pos);
+            return new LetIn(Binder.written(name, pos), value, type, true, null, body, pos);
+        }
+
+        public String name() {
+            return binder.name();
         }
 
         /**
@@ -586,7 +746,7 @@ public interface Ast {
          * behind it, so the name is carried here for the checker to hold against the value's type.
          */
         public static LetIn opening(String name, Expr value, Name opens, Expr body, SourcePos pos) {
-            return new LetIn(name, value, null, false, opens, body, pos);
+            return new LetIn(Binder.written(name, pos), value, null, false, opens, body, pos);
         }
 
         /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
@@ -634,12 +794,22 @@ public interface Ast {
      * That it is one, and that its type carries an invariant to attempt, are checked once the names
      * are resolved.
      */
-    record IfConstructed(Expr construct, String binder, Expr then, List<ElseArm> els, SourcePos pos)
+    record IfConstructed(Expr construct, Binder binder, Expr then, List<ElseArm> els, SourcePos pos)
             implements Expr {
 
         /** The attempt whose failure is not told apart: one arm, naming no clause. */
-        public IfConstructed(Expr construct, String binder, Expr then, Expr els, SourcePos pos) {
+        public IfConstructed(Expr construct, Binder binder, Expr then, Expr els, SourcePos pos) {
             this(construct, binder, then, List.of(ElseArm.any(els)), pos);
+        }
+
+        /** The same, as the parser read it. */
+        public IfConstructed(Expr construct, String binder, Expr then, Expr els, SourcePos pos) {
+            this(construct, Binder.written(binder, pos), then, List.of(ElseArm.any(els)), pos);
+        }
+
+        /** How the binding was written. */
+        public String binderName() {
+            return binder.name();
         }
 
         /** Whether the failure is departed from per clause, rather than by one value for any of them. */
@@ -686,10 +856,22 @@ public interface Ast {
      * destructure; an empty list is the single-layer form {@code X(v)}. The {@code TypeChecker}
      * verifies every opened layer is a newtype and that each name matches the layer it opens.
      */
-    record Case(List<Name> caseTypes, String binding, Expr body, List<Name> unwrapAsserts,
+    record Case(List<Name> caseTypes, Binder binding, Expr body, List<Name> unwrapAsserts,
                 SourcePos pos) implements Ast {
-        public Case(List<Name> caseTypes, String binding, Expr body, SourcePos pos) {
+        public Case(List<Name> caseTypes, Binder binding, Expr body, SourcePos pos) {
             this(caseTypes, binding, body, null, pos);
+        }
+
+        /** An arm as the parser read it; {@code binding} is null where the arm binds nothing. */
+        public static Case written(List<Name> caseTypes, String binding, Expr body,
+                                   List<Name> unwrapAsserts, SourcePos pos) {
+            return new Case(caseTypes, binding == null ? null : Binder.written(binding, pos), body,
+                    unwrapAsserts, pos);
+        }
+
+        /** How the binding was written, or null where the arm binds nothing. */
+        public String bindingName() {
+            return binding == null ? null : binding.name();
         }
     }
 
@@ -751,12 +933,11 @@ public interface Ast {
          * A read of something bound in the body, as a pass that put the binding there writes it.
          *
          * <p>A pass that runs after resolution says what it means rather than leaving a spelling for
-         * a reader to work out. The binder it gives is where this pass put the name, which is
-         * identity within the tree it built and nothing beyond it — an editor reads the resolved
-         * tree, where a binder is where the author wrote it.
+         * a reader to work out, so it is given the binder it is reading and answers with that
+         * binding. There is no way to write one of these without having the binding in hand.
          */
-        public static Var local(String name, SourcePos pos) {
-            return new Var(name, new ValueName.Local(name, pos), pos);
+        public static Var local(Binder binder, SourcePos pos) {
+            return new Var(binder.name(), new ValueName.Local(binder.name(), binder.id()), pos);
         }
 
         public Var denoting(ValueName resolved) {
@@ -817,7 +998,7 @@ public interface Ast {
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
             case IfConstructed ic -> new IfConstructed(f.apply(ic.construct()), ic.binder(),
                     f.apply(ic.then()), mapArms(ic.els(), f), ic.pos());
-            case LetIn li -> new LetIn(li.name(), f.apply(li.value()), li.declaredType(), li.annotated(),
+            case LetIn li -> new LetIn(li.binder(), f.apply(li.value()), li.declaredType(), li.annotated(),
                     li.opens(), f.apply(li.body()), li.pos());
             case Block bl -> new Block(bl.params(), f.apply(bl.body()), bl.pos());
             case ListLit l -> new ListLit(mapExprs(l.elements(), f), l.pos());

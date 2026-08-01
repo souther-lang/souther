@@ -72,7 +72,7 @@ public final class HelperTyping {
             // expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
             // Expanded once: the body an un-annotated parameter takes its type from is the same tree.
             Ast.Expr emitted = loweredBodies.get(h.name());
-            Ast.Expr body = emitted != null ? emitted : inliner.inline(h.body());
+            Ast.Expr body = emitted != null ? emitted : inliner.inline(h.body(), inliner.bodyOf(h.name()));
             if (recursive && body == null) {
                 // Lower keeps every recursive helper as a fn of the lowered module, and the backend
                 // emits from that same list, so a recursive helper without a lowered body would leave
@@ -353,7 +353,8 @@ public final class HelperTyping {
                 continue;
             }
             try {
-                Type at = Elaborator.typeOf(inliner.inline(call.args().get(i)), env, new CheckContext(symbols, null, reqs));
+                Type at = Elaborator.typeOf(inliner.inline(call.args().get(i), inliner.bodyOf(h.name())),
+                        env, new CheckContext(symbols, null, reqs));
                 TypeOps.unify(declared.get(i), at, bind, symbols, call.pos(), "argument " + (i + 1));
             } catch (CompileException _) {
                 return;   // can't pin the types here; leave it to the inlined check
@@ -427,11 +428,12 @@ public final class HelperTyping {
                 if (isOpen(want.params().get(j))) {
                     return;   // the parameter type is still open; nothing concrete to check
                 }
-                lenv.put(lambda.params().get(j), want.params().get(j));
+                lenv.put(lambda.params().get(j).name(), want.params().get(j));
             }
             Type got;
             try {
-                got = Elaborator.typeOf(inliner.inline(lambda.body()), lenv, new CheckContext(symbols, null, reqs));
+                got = Elaborator.typeOf(inliner.inline(lambda.body(), inliner.bodyOf(h.name())), lenv,
+                        new CheckContext(symbols, null, reqs));
             } catch (CompileException _) {
                 return;   // best-effort; the inlined check reports a genuine error with full context
             }

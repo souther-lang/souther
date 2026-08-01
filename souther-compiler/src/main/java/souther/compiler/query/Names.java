@@ -913,15 +913,23 @@ public final class Names {
             return switch (denoted) {
                 case ValueName.Helper h -> h.module();
                 case ValueName.Behavior b -> b.module();
-                case ValueName.Local _, ValueName.Stdlib _, ValueName.OfType _,
+                case ValueName.Local l -> l.id().owner().module();
+                case ValueName.Stdlib _, ValueName.OfType _,
                         ValueName.Builtin _, ValueName.Unresolved _ -> null;
             };
         }
 
         @Override
         public Answer<SourcePos> compute(Db db) {
+            // a binding is not a position, so where it was written is asked of the pass that
+            // answered it rather than read off the name
             if (denoted instanceof ValueName.Local local) {
-                return local.binder() == null ? Answer.absent() : Answer.of(local.binder());
+                Answer<Resolve.Resolved> resolution = db.ask(new Resolution(local.id().owner().module()));
+                if (!resolution.present()) {
+                    return Answer.absent();
+                }
+                SourcePos binder = resolution.value().binders().get(local.id());
+                return binder == null ? Answer.absent() : Answer.of(binder);
             }
             String in = module();
             if (in == null) {

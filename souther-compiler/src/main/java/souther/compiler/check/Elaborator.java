@@ -306,7 +306,7 @@ public final class Elaborator {
                 // The binder names the built value, so the success branch reads it at the data's own
                 // type — with the invariant established, which is why the discharge check may seed it.
                 Map<String, Type> inner = new HashMap<>(env);
-                inner.put(ic.binder(), construct.type());
+                inner.put(ic.binderName(), construct.type());
                 Core then = liftIntoOption(elaborate(ic.then(), inner, ctx, expected), expected,
                         ctx.symbols());
                 List<Core.ElseArm> arms = new ArrayList<>();
@@ -331,7 +331,7 @@ public final class Elaborator {
                     }
                     joined = next;
                 }
-                yield new Core.IfConstructed(construct, ic.binder(), then, arms, joined, ic.pos());
+                yield new Core.IfConstructed(construct, ic.binderName(), then, arms, joined, ic.pos());
             }
             case Ast.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
@@ -534,10 +534,10 @@ public final class Elaborator {
         }
         Map<String, Type> inner = new HashMap<>(env);
         for (int i = 0; i < paramTypes.size(); i++) {
-            inner.put(block.params().get(i), paramTypes.get(i));
+            inner.put(block.params().get(i).name(), paramTypes.get(i));
         }
         Core body = elaborate(block.body(), inner, ctx);
-        return new Core.Block(block.params(), body, Type.fn(paramTypes, body.type()), block.pos());
+        return new Core.Block(block.paramNames(), body, Type.fn(paramTypes, body.type()), block.pos());
     }
 
     /** Whether an expression bound to a {@code let} is a function value: a lambda, or an {@code if}
@@ -730,7 +730,7 @@ public final class Elaborator {
         }
         switch (e) {
             case Ast.Block b -> collectApplications(name, b.body(), env, ctx, out,
-                    with(inner, b.params()));
+                    with(inner, b.paramNames()));
             case Ast.LetIn li -> {
                 collectApplications(name, li.value(), env, ctx, out, inner);
                 collectApplications(name, li.body(), env, ctx, out, with(inner, List.of(li.name())));
@@ -738,7 +738,7 @@ public final class Elaborator {
             case Ast.IfConstructed ic -> {
                 collectApplications(name, ic.construct(), env, ctx, out, inner);
                 collectApplications(name, ic.then(), env, ctx, out,
-                        with(inner, List.of(ic.binder())));
+                        with(inner, List.of(ic.binderName())));
                 for (Ast.ElseArm arm : ic.els()) {
                     collectApplications(name, arm.body(), env, ctx, out, inner);
                 }
@@ -747,7 +747,7 @@ public final class Elaborator {
                 collectApplications(name, m.scrutinee(), env, ctx, out, inner);
                 for (Ast.Case c : m.cases()) {
                     collectApplications(name, c.body(), env, ctx, out,
-                            c.binding() == null ? inner : with(inner, List.of(c.binding())));
+                            c.binding() == null ? inner : with(inner, List.of(c.bindingName())));
                 }
             }
             default -> TypeChecker.forEachChild(e,
@@ -782,11 +782,11 @@ public final class Elaborator {
             return true;
         }
         return switch (e) {
-            case Ast.Block b -> reaches(b.body(), without(inner, b.params()));
+            case Ast.Block b -> reaches(b.body(), without(inner, b.paramNames()));
             case Ast.LetIn li -> reaches(li.value(), inner)
                     || reaches(li.body(), without(inner, List.of(li.name())));
             case Ast.IfConstructed ic -> reaches(ic.construct(), inner)
-                    || reaches(ic.then(), without(inner, List.of(ic.binder())))
+                    || reaches(ic.then(), without(inner, List.of(ic.binderName())))
                     || ic.els().stream().anyMatch(arm -> reaches(arm.body(), inner));
             case Ast.Match m -> {
                 if (reaches(m.scrutinee(), inner)) {
@@ -794,7 +794,7 @@ public final class Elaborator {
                 }
                 for (Ast.Case c : m.cases()) {
                     Set<String> arm = c.binding() == null
-                            ? inner : without(inner, List.of(c.binding()));
+                            ? inner : without(inner, List.of(c.bindingName()));
                     if (reaches(c.body(), arm)) {
                         yield true;
                     }
@@ -843,10 +843,10 @@ public final class Elaborator {
                 }
                 Map<String, Type> inner = new HashMap<>(env);
                 for (int i = 0; i < paramTypes.size(); i++) {
-                    inner.put(b.params().get(i), paramTypes.get(i));
+                    inner.put(b.params().get(i).name(), paramTypes.get(i));
                 }
                 Core body = elaborate(b.body(), inner, ctx);
-                yield new Core.Block(b.params(), body, Type.fn(paramTypes, body.type()), b.pos());
+                yield new Core.Block(b.paramNames(), body, Type.fn(paramTypes, body.type()), b.pos());
             }
             case Ast.If iff -> {
                 Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
@@ -909,7 +909,7 @@ public final class Elaborator {
                 rejectBuiltinShadowing(li.body());
             }
             case Ast.Block b -> {
-                for (String p : b.params()) {
+                for (String p : b.paramNames()) {
                     rejectBuiltinShadow(p, b.pos());
                 }
                 rejectBuiltinShadowing(b.body());
@@ -918,7 +918,7 @@ public final class Elaborator {
                 rejectBuiltinShadowing(m.scrutinee());
                 for (Ast.Case c : m.cases()) {
                     if (c.binding() != null) {
-                        rejectBuiltinShadow(c.binding(), c.pos());
+                        rejectBuiltinShadow(c.bindingName(), c.pos());
                     }
                     rejectBuiltinShadowing(c.body());
                 }

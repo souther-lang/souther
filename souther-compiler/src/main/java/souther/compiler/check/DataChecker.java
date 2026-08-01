@@ -211,7 +211,7 @@ public final class DataChecker {
                 for (Ast.Case c : m.cases()) {
                     Set<String> inner = new HashSet<>(bound);
                     if (c.binding() != null) {
-                        inner.add(c.binding());
+                        inner.add(c.bindingName());
                     }
                     collectConstructs(c.body(), out, symbols, inner, recConstructs);
                 }
@@ -226,7 +226,7 @@ public final class DataChecker {
             case Ast.IfConstructed ic -> {
                 collectConstructs(ic.construct(), out, symbols, bound, recConstructs);
                 Set<String> inner = new HashSet<>(bound);
-                inner.add(ic.binder());
+                inner.add(ic.binderName());
                 collectConstructs(ic.then(), out, symbols, inner, recConstructs);
                 ic.els().forEach(arm ->
                         collectConstructs(arm.body(), out, symbols, bound, recConstructs));
@@ -239,7 +239,7 @@ public final class DataChecker {
             case Ast.Block block -> {
                 // a block builds under the enclosing behavior's permission (spec 12.5)
                 Set<String> inner = new HashSet<>(bound);
-                inner.addAll(block.params());
+                inner.addAll(block.paramNames());
                 collectConstructs(block.body(), out, symbols, inner, recConstructs);
             }
             // a bare name that denotes a unit data is that unit's construction (spec 8.4). Read off

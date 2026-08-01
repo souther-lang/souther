@@ -1,7 +1,5 @@
 package souther.compiler.types;
 
-import souther.compiler.diag.SourcePos;
-
 /**
  * What a name written in the value namespace denotes — the answer {@link TypeName} gives for the
  * type namespace.
@@ -23,10 +21,10 @@ public sealed interface ValueName {
 
     /**
      * A name bound inside a body: a parameter, a {@code let}, a {@code match} arm's binding, or a
-     * block's parameter. {@code binder} is where the binding that introduced it is written, which is
-     * what tells two bindings of one spelling apart.
+     * block's parameter. {@code id} is the binding it was answered with, which is what tells two
+     * bindings of one spelling apart; {@code name} is only how it was written.
      */
-    record Local(String name, SourcePos binder) implements ValueName {
+    record Local(String name, BindingId id) implements ValueName {
 
         @Override
         public String toString() {

@@ -347,7 +347,7 @@ final class TotalityChecker {
                 for (Ast.Case c : m.cases()) {
                     Map<String, Set<String>> inner = lt;
                     if (c.binding() != null && !rooted.isEmpty()) {
-                        inner = with(lt, c.binding(), rooted);   // the bound value is smaller than each root
+                        inner = with(lt, c.bindingName(), rooted);   // the bound value is smaller than each root
                     }
                     walk(c.body(), group, paramNames, inner, eq, calls);
                 }
@@ -378,7 +378,7 @@ final class TotalityChecker {
                                 rootParams(call.args().get(combo.containerArg()), lt, eq, paramNames);
                         Map<String, Set<String>> inner = elemRoots.isEmpty()
                                 ? lt
-                                : with(lt, step.params().get(combo.elementParam()), elemRoots);
+                                : with(lt, step.params().get(combo.elementParam()).name(), elemRoots);
                         walk(step.body(), group, paramNames, inner, eq, calls);
                     } else {
                         walk(arg, group, paramNames, lt, eq, calls);

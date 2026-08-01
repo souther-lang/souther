@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.derive.Deriver;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
@@ -275,7 +276,7 @@ public final class Shapes {
                     // The clause is classified in the representation the check reads, and reported at
                     // the position it is written — an expansion carries positions of its own, and the
                     // author is looking at the source.
-                    HelperInliner inliner = HelperInliner.forHelpers(
+                    HelperInliner inliner = HelperInliner.forHelpers(name,
                             HelperInliner.helpersOf(declaring), published, InliningPolicy.DISCHARGE);
                     List<ClauseDischarge> clauses = new ArrayList<>();
                     // A declared clause is one rule to depart by and may still be several conjuncts to
@@ -283,7 +284,9 @@ public final class Shapes {
                     // discharges each half is what an author needs, and the name is what a caller reads.
                     for (Ast.InvariantClause declared : data.invariants()) {
                         for (Ast.Expr written : HelperInliner.conjunctsOf(declared.expr())) {
-                            clauses.add(InvariantChecker.capabilityOf(inliner.inline(written),
+                            clauses.add(InvariantChecker.capabilityOf(
+                                    inliner.inline(written, new BindingOwner.OfData(
+                                            new TypeName(name, data.name()))),
                                     leftmost(written), data, scope.value()).named(declared.name()));
                         }
                     }
