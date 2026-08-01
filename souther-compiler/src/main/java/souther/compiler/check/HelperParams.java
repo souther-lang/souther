@@ -272,7 +272,13 @@ final class HelperParams {
         Type typeOf(String name, Ast.Expr body, Map<String, Type> env) {
             this.pinned = null;
             this.openUse = null;
-            visit(body, env, name);
+            // A recursive helper's call is left standing rather than expanded, so the neighbouring
+            // expression a parameter takes its type from can be one — `x + count(t)` reads `count(t)`
+            // to type `x`. Its signature goes in here, once, and every inner scope is derived from
+            // this one (spec 13.1).
+            Map<String, Type> scope = new HashMap<>(env);
+            scope.putAll(recursiveHelperFns);
+            visit(body, scope, name);
             return pinned;
         }
 
