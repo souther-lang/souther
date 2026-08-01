@@ -390,6 +390,7 @@ public final class TypeChecker {
         // `signatures` builds the map `checkExposedPipeOutputs` reads, so it stays fail-fast.
         Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);
         collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, symbols));
+        collect(errors, abandoned, () -> SpecChecker.checkUnionMemberFields(module, sigs, symbols));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
                 exposed, sigs, symbols));
         // What this module reaches out with may not rest on what it keeps to itself — a name in

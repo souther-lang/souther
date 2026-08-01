@@ -47,10 +47,10 @@ class CompileExampleSumInputTest {
     }
 
     @Test
-    void aFieldTheFixtureWroteIsNotReplacedByTheTag() {
-        // A case whose own field is named like its sum's discriminator is already ambiguous at the
-        // boundary. The fixture's value stays, so the row fails on the tag it cannot match instead of
-        // passing while decoding something the author did not write.
+    void aCaseWhoseFieldIsNamedLikeTheTagIsRefusedWhereItIsDeclared() {
+        // The tag and the field want one key, so one of the two is all that is left. It is refused at
+        // the declaration rather than resolved in the fixture: whichever way a row read such a value,
+        // it would be reading something the author did not write.
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
 
@@ -70,7 +70,7 @@ class CompileExampleSumInputTest {
                     | "the written `type` is what is decoded" : (A { type = "wat", n = 7 })
                         -> Out { v = 7 }
                 """));
-        assertTrue(e.getMessage().contains("A") && e.getMessage().contains("B"), e.getMessage());
+        assertTrue(e.getMessage().contains("`A`") && e.getMessage().contains("`type`"), e.getMessage());
     }
 
     @Test

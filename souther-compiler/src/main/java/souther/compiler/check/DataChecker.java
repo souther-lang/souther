@@ -398,6 +398,20 @@ public final class DataChecker {
             }
         });
         sum.encoder().ifPresent(enc -> {
+            // A case lays its fields flatly beside the discriminator the sum writes, so a case
+            // declaring a field of that name and the tag want one key. Refused here rather than
+            // written over where it is encoded, which would lose the value with nothing said.
+            TypeName carrying = TypeOps.memberCarryingField(
+                    Type.ref(symbols.own(sum.name())), enc.key(), symbols);
+            if (carrying != null) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.case.discriminatorfield").title("check.codec.title")
+                                .at(sum.pos()).args(carrying.name(), enc.key(), sum.name())
+                                .hint("check.case.discriminatorfield.hint", enc.key()).build(),
+                        "`" + carrying.name() + "` is a case of `" + sum.name() + "` and declares a"
+                                + " field `" + enc.key() + "`, which is the discriminator its sum"
+                                + " writes beside the fields; rename the field");
+            }
             Set<TypeName> covered = new HashSet<>();
             Set<TypeName> encodable = TypeOps.leafCases(Type.ref(symbols.own(sum.name())), symbols);
             for (Ast.EncVariant v : enc.variants()) {

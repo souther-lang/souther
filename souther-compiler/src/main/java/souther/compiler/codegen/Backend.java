@@ -168,6 +168,7 @@ public final class Backend {
         // in caseToSums before the data classes are generated, so each case class picks the interface
         // up in withInterfaceSymbols. The interface classes themselves are emitted below.
         Map<String, List<TypeName>> behaviorResults = b.behaviorResultInterfaces(module, importedSigs);
+        b.rejectResultUnionCollisions(module, behaviorResults, localTypes, behaviorClassOwner);
         // A case class carries the result unions it belongs to as interfaces it implements, and that
         // list is settled when its own module is generated. A member this module declared takes the
         // interface on itself. A primitive and a type another module emitted cannot: `java.lang.Long`
@@ -186,8 +187,11 @@ public final class Backend {
         });
         b.rejectBridgeCaseCollisions(module, bridgeCases, behaviorResults, localTypes, behaviorClassOwner);
         Map<String, byte[]> out = new LinkedHashMap<>();
-        behaviorResults.forEach((resultName, members) ->
-                out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, members)));
+        behaviorResults.forEach((resultName, members) -> {
+            out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, members));
+            out.put(module.name() + "." + resultName + "$Enc",
+                    b.codec.generateResultUnionEncoder(resultName, members));
+        });
         bridgeCases.forEach((member, unions) ->
                 out.put(module.name() + "." + CodegenContext.bridgeCaseName(member),
                         b.value.generateBridgeCase(member, unions, out)));
@@ -716,6 +720,41 @@ public final class Backend {
         }
     }
 
+    /**
+     * A behavior with a union output is generated as a sealed interface named after it, so that name
+     * is subject to the rule every other name this module emits is subject to: no two of them may be
+     * one class. Two ways to collide — with a data this module declares, and with the class another
+     * behavior capitalizes into. Two result unions cannot collide with each other, their behaviors
+     * having already been rejected for capitalizing into one class.
+     */
+    private void rejectResultUnionCollisions(Ast.Module module, Map<String, List<TypeName>> behaviorResults,
+                                             Set<String> localTypes, Map<String, String> behaviorClassOwner) {
+        for (String resultName : behaviorResults.keySet()) {
+            Ast.BehaviorDef owner = behaviorOf(module, resultName);
+            SourcePos pos = owner != null ? owner.pos() : module.pos();
+            String what = owner != null ? owner.name() : resultName;
+            if (localTypes.contains(resultName)) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.result.collision.data").title("check.duplicate.title")
+                                .at(pos).args(what, resultName)
+                                .hint("check.result.collision.hint", resultName).build(),
+                        "the output of `" + what + "` is a union, generated as a sealed interface `"
+                                + resultName + "` (spec 19.8), and `" + resultName
+                                + "` already takes that class name");
+            }
+            String behavior = behaviorClassOwner.get(resultName);
+            if (behavior != null) {
+                throw CompileException.of(
+                        Diagnostic.of(null, "check.result.collision.behavior").title("check.duplicate.title")
+                                .at(pos).args(what, resultName, behavior)
+                                .hint("check.result.collision.hint", resultName).build(),
+                        "the output of `" + what + "` is a union, generated as a sealed interface `"
+                                + resultName + "` (spec 19.8), and `" + behavior
+                                + "` already capitalizes into that class name");
+            }
+        }
+    }
+
     /** The behavior whose generated result union is {@code resultName}, or null when none is. */
     private Ast.BehaviorDef behaviorOf(Ast.Module module, String resultName) {
         for (Ast.BehaviorDef bd : module.behaviors()) {
@@ -743,10 +782,11 @@ public final class Backend {
     }
 
     /**
-     * Generates the sealed interface for a behavior's anonymous union output (spec 19.8). The body
-     * is empty: Java consumers receive a value and {@code switch} over the permitted cases, each of
-     * which carries its own codec, so the interface itself needs no members. A member this module
-     * declared is permitted as itself; any other is permitted as its bridge case.
+     * Generates the sealed interface for a behavior's anonymous union output (spec 19.8). A member
+     * this module declared is permitted as itself; any other is permitted as its bridge case. The
+     * interface carries the union's {@code encoder()}: a Java consumer that switches reads a case
+     * and uses that case's own codec, and one that wants the answer as it crosses a boundary asks
+     * the union, which writes the discriminator no member writes on itself.
      */
     private byte[] generateBehaviorResult(String resultName, List<TypeName> members) {
         ClassDesc cdR = cd(resultName);
@@ -757,6 +797,7 @@ public final class Backend {
         return build(cdR, cb -> {
             cb.withFlags(ClassFile.ACC_PUBLIC | ClassFile.ACC_INTERFACE | ClassFile.ACC_ABSTRACT);
             cb.with(PermittedSubclassesAttribute.ofSymbols(caseCds));
+            codec.emitResultUnionEncoderFactory(cb, resultName, members);
         });
     }
 
@@ -774,6 +815,12 @@ public final class Backend {
      * repeating the rule, so the name a reader is sent to is the name that was emitted. */
     public static String behaviorClass(String name) {
         return CodegenContext.behaviorClass(name);
+    }
+
+    /** The class a behavior's anonymous union output is emitted under (spec 19.8), for the same
+     * reason {@link #behaviorClass} is public: the name is decided here. */
+    public static String behaviorResultClass(String name) {
+        return CodegenContext.behaviorResultClass(name);
     }
 
     /**
@@ -794,7 +841,7 @@ public final class Backend {
      * souther.compiler.meta.PublishedModule} refuses a jar that disagrees, so the disagreement is
      * reported as what it is instead of surfacing as an unresolved name inside a body nobody wrote.
      */
-    public static final int BOUNDARY_VERSION = 4;
+    public static final int BOUNDARY_VERSION = 5;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

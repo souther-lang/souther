@@ -244,7 +244,7 @@ data Account =
     , domain: DomainName?         // an honest optional: an account may have no website on file
     , industry: Industry
     , employees: EmployeeCount
-    , type: AccountType
+    , accountType: AccountType
     , owner: UserId
     , currency: CurrencyCode
     }
@@ -397,7 +397,7 @@ let acmeAccount = Account
     , domain = DomainName("acme.example.com")
     , industry = Technology
     , employees = EmployeeCount(1000)
-    , type = Prospect
+    , accountType = Prospect
     , owner = UserId("u-001")
     , currency = CurrencyCode("JPY")
     }
@@ -408,7 +408,7 @@ let betaAccount = Account
     , domain = DomainName("beta.example.com")
     , industry = Manufacturing
     , employees = EmployeeCount(999)
-    , type = Customer { since = Date("2024-04-01") }
+    , accountType = Customer { since = Date("2024-04-01") }
     , owner = UserId("u-001")
     , currency = CurrencyCode("JPY")
     }
@@ -419,7 +419,7 @@ let gammaAccount = Account
     , domain = None
     , industry = Retail
     , employees = EmployeeCount(99)
-    , type = Prospect
+    , accountType = Prospect
     , owner = UserId("u-002")
     , currency = CurrencyCode("USD")
     }
@@ -855,7 +855,7 @@ let convertLead (lead, request, accounts, contacts) =
                             , domain = List.get(0, domainsOf(lead.reach))
                             , industry = request.industry
                             , employees = request.employees
-                            , type = request.accountType
+                            , accountType = request.accountType
                             , owner = lead.owner
                             , currency = request.currency
                             }
