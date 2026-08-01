@@ -352,6 +352,14 @@ final class Descriptors {
     // rule is the runtime's: what a Decimal's identity ignores and what a container answers is
     // written once in `Values`, and the emitted call selects the overload the static type allows.
     static final ClassDesc CD_Values = ClassDesc.of("souther.runtime.Values");
+    static final ClassDesc CD_Tuple = ClassDesc.of("souther.runtime.Tuple");
+    static final MethodTypeDesc MTD_Tuple_of =
+            MethodTypeDesc.of(CD_Tuple, CD_Object.arrayType());
+    static final ClassDesc CD_TuplePair = ClassDesc.of("souther.runtime.Tuple$Pair");
+    static final MethodTypeDesc MTD_TuplePair_init =
+            MethodTypeDesc.of(ConstantDescs.CD_void, CD_Object, CD_Object);
+    static final MethodTypeDesc MTD_Tuple_get =
+            MethodTypeDesc.of(CD_Object, ConstantDescs.CD_int);
     static final MethodTypeDesc MTD_Values_equal =
             MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object, CD_Object);
     static final MethodTypeDesc MTD_Values_equalDecimal =

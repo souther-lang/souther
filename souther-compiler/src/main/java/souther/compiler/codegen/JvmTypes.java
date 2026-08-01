@@ -199,7 +199,11 @@ final class JvmTypes {
         if (type instanceof Type.Var) return CD_Object;   // a type variable is erased to Object
         if (type instanceof Type.Nothing) return CD_Object;   // an empty collection's element bottom
         if (type instanceof Type.FnOf) return CD_Fn;
-        if (type instanceof Type.TupleOf) return CD_Object.arrayType();   // a tuple is an Object[]
+        // a pair is typed as the pair, so its elements are read as fields rather than through the
+        // Tuple interface: every fold-carried tuple is one, and that read is per element
+        if (type instanceof Type.TupleOf tu) {
+            return tu.elements().size() == 2 ? CD_TuplePair : CD_Tuple;
+        }
         return ctx.caseClass(((Type.Ref) type).name());
     }
 

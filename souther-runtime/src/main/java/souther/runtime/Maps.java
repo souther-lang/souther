@@ -96,12 +96,12 @@ public final class Maps {
         return m.size();
     }
 
-    /** The entries as a list of {@code (key, value)} tuples, each an {@code Object[]} (ADR-0036),
-     *  in the map's iteration order. */
-    public static <K, V> List<Object[]> toList(Map<K, V> m) {
-        List<Object[]> out = new ArrayList<>(m.size());
+    /** The entries as a list of {@code (key, value)} tuples (ADR-0036), in the map's iteration
+     *  order. */
+    public static <K, V> List<Tuple> toList(Map<K, V> m) {
+        List<Tuple> out = new ArrayList<>(m.size());
         for (Map.Entry<K, V> e : m.entrySet()) {
-            out.add(new Object[]{e.getKey(), e.getValue()});
+            out.add(Tuple.of(e.getKey(), e.getValue()));
         }
         return PersistentVector.from(out);
     }
@@ -109,10 +109,10 @@ public final class Maps {
     /** A map from a list of {@code (key, value)} tuples; a later entry overwrites an earlier one
      *  with the same key. */
     @SuppressWarnings("unchecked")
-    public static <K, V> Map<K, V> fromList(List<Object[]> entries) {
+    public static <K, V> Map<K, V> fromList(List<Tuple> entries) {
         PersistentHashMap.Builder<K, V> out = new PersistentHashMap.Builder<>();
-        for (Object[] e : entries) {
-            out.set((K) e[0], (V) e[1]);
+        for (Tuple e : entries) {
+            out.set((K) e.get(0), (V) e.get(1));
         }
         return out.build();
     }

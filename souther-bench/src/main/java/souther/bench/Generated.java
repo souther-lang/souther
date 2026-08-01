@@ -51,6 +51,7 @@ final class Generated {
         Behavior<Object, Object> held = behavior(loader, "Held");
         Behavior<Object, Object> keyed = behavior(loader, "Keyed");
         Behavior<Object, Object> modded = behavior(loader, "Modded");
+        Behavior<Object, Object> parted = behavior(loader, "Parted");
         Behavior<Object, Object> amountOf = behavior(loader, "AmountOf");
 
         for (int elements : SIZES) {
@@ -63,6 +64,7 @@ final class Generated {
             perElement(report, "held", elements, held, input);
             perElement(report, "keyed", elements, keyed, input);
             perElement(report, "modded", elements, modded, input);
+            perElement(report, "parted", elements, parted, input);
         }
         perElement(report, "amountOf", 1, amountOf, 42L);
     }
