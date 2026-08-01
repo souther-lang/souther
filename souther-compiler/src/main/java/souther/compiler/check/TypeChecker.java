@@ -221,6 +221,7 @@ public final class TypeChecker {
                         HelperTyping.rejectPartialHelperInInvariant(
                                 clause.expr(), data.name(), partialRecursiveFns);
                         HelperTyping.rejectConstructionInInvariant(clause.expr(), data.name(), clause);
+                        HelperTyping.rejectUnreachableInInvariant(clause.expr(), data.name(), clause);
                     });
                 }
             }

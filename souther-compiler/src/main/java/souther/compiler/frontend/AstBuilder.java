@@ -629,6 +629,7 @@ public final class AstBuilder {
             case FIELD_GETTER -> fieldGetter(n);
             case NEW_DATA_EXPR -> newData(n);
             case BLOCK_EXPR -> block(n);
+            case UNREACHABLE_EXPR -> unreachable(n);
             default -> throw error(pos(n), "parse.expr", "expected an expression");
         };
     }
@@ -644,6 +645,15 @@ public final class AstBuilder {
             case FALSE_KW -> new Ast.BoolLit(false, pos);
             default -> throw error(pos, "parse.expr", "expected a literal");
         };
+    }
+
+    /** {@code unreachable "reason"} — the reason is the literal the parser required beside it. */
+    private Ast.Expr unreachable(SyntaxNode n) {
+        Ast.Expr reason = expr(firstExprChild(n));
+        if (!(reason instanceof Ast.StringLit lit)) {
+            throw error(pos(n), "parse.unreachable.reason", "`unreachable` states a reason");
+        }
+        return new Ast.Unreachable(lit.value(), pos(n));
     }
 
     private Ast.Expr fieldAccess(SyntaxNode n) {
@@ -1204,7 +1214,7 @@ public final class AstBuilder {
         return switch (k) {
             case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, BINARY_EXPR, UNARY_EXPR, PIPE_EXPR,
                  PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR, MATCH_EXPR, LAMBDA_EXPR,
-                 FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR -> true;
+                 FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR, UNREACHABLE_EXPR -> true;
             default -> false;
         };
     }

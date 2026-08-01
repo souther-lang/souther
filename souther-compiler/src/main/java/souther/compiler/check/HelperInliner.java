@@ -1061,6 +1061,7 @@ public final class HelperInliner {
             case Ast.DecimalLit _ -> e;
             case Ast.StringLit _ -> e;
             case Ast.BoolLit _ -> e;
+            case Ast.Unreachable _ -> e;
             case Ast.Var v -> valueOf(v);
         };
     }
@@ -1288,6 +1289,8 @@ public final class HelperInliner {
             case Ast.DecimalLit _ -> e;
             case Ast.StringLit _ -> e;
             case Ast.BoolLit _ -> e;
+            // it names nothing, so a substitution has nothing to rewrite in it
+            case Ast.Unreachable _ -> e;
         };
     }
 

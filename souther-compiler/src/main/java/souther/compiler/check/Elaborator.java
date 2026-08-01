@@ -95,6 +95,12 @@ public final class Elaborator {
             case Ast.DecimalLit x -> new Core.Decimal(x.value(), Type.DECIMAL, x.pos());
             case Ast.StringLit x -> new Core.Str(x.value(), Type.STRING, x.pos());
             case Ast.BoolLit x -> new Core.Bool(x.value(), Type.BOOL, x.pos());
+            // It answers no value, so its type is `Never` — but the position it stands in still has a
+            // shape to leave behind, and where the position states one that is what is recorded. A
+            // position that states none leaves `Never`, and a sibling branch may still fix it at the
+            // join (a `match` arm beside one that answers a value).
+            case Ast.Unreachable u ->
+                    new Core.Unreachable(u.reason(), expected == null ? Type.NEVER : expected, u.pos());
             case Ast.Tuple tup -> {
                 // A pushed-down tuple type reaches each element, so a written `(Set<Int>, List<Int>)`
                 // fixes the empty collections the tuple seeds rather than leaving them bottoms (#74).

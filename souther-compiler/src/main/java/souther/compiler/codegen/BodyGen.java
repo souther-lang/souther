@@ -2,6 +2,7 @@ package souther.compiler.codegen;
 
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.CheckContext;
@@ -595,11 +596,12 @@ final class BodyGen {
                     genExpr(iff.cond());
                     Label elseL = code.newLabel();
                     Label end = code.newLabel();
+                    Type want = shapeOf(iff, expected);
                     code.ifeq(elseL);
-                    genExpr(iff.then(), expected);
+                    genExpr(iff.then(), want);
                     code.goto_(end);
                     code.labelBinding(elseL);
-                    genExpr(iff.els(), expected);
+                    genExpr(iff.els(), want);
                     code.labelBinding(end);
                 }
                 case Core.IfConstructed ic -> {
@@ -607,12 +609,12 @@ final class BodyGen {
                     Label end = code.newLabel();
                     Var shadowed = env.get(ic.binder());
                     bind(ic.binder(), a.slot(), ic.construct().type());
-                    genExpr(ic.then(), expected);
+                    genExpr(ic.then(), shapeOf(ic, expected));
                     restore(ic.binder(), shadowed);
                     code.goto_(end);
 
                     code.labelBinding(a.elseLabel());
-                    emitDepartures(ic, a, body -> genExpr(body, expected), end);
+                    emitDepartures(ic, a, body -> genExpr(body, shapeOf(ic, expected)), end);
                     code.labelBinding(end);
                 }
                 case Core.OptionSome s -> {
@@ -625,6 +627,7 @@ final class BodyGen {
                 }
                 case Core.OptionNone _ ->
                         code.invokestatic(CD_Option, "none", MethodTypeDesc.of(CD_Option), true);
+                case Core.Unreachable u -> unreachable(u, expected);
                 case Core.ListLit lit -> listLit(lit);
                 case Core.Tuple t -> tuple(t);
                 case Core.TupleGet tg -> tupleGet(tg);
@@ -650,7 +653,58 @@ final class BodyGen {
                 // a block has no value of its own; it is inlined by the call it is passed to
                 case Core.Block b -> throw new CompileException(b.pos(), "a block is not a value");
             }
+            // `unreachable` is typed Never, and what is on the stack is the shape the position asked
+            // for, so that is what the caller is told is there.
+            if (e instanceof Core.Unreachable && expected != null && !(expected instanceof Type.Never)) {
+                return expected;
+            }
             return e.type();
+        }
+
+        /** The type the branches of {@code e} leave on the stack: what the position asked for, or —
+         * where it asked for nothing — the one the checker joined the branches at. A branch that
+         * answers {@code unreachable} has no type of its own to merge with the others, so it takes
+         * this one. */
+        private Type shapeOf(Core e, Type expected) {
+            return expected != null ? expected : e.type();
+        }
+
+        /**
+         * {@code unreachable "reason"}: the abort, and the shape the position it stands in holds.
+         *
+         * <p>The abort is a call rather than an {@code athrow} so that the arm leaves a value where
+         * its siblings leave one, and the code around it verifies as any other arm's does. The shape
+         * is what the position asked for, or what the checker recorded when it asked for nothing;
+         * neither leaves one where {@code Never} survives to here, and that position is refused
+         * rather than emitted.
+         */
+        private void unreachable(Core.Unreachable u, Type expected) {
+            Type shape = expected != null ? expected : u.type();
+            if (shape instanceof Type.Never) {
+                throw CompileException.of(
+                        Diagnostic.of("E1307", "check.unreachable.untyped")
+                                .title("check.type.mismatch.title")
+                                .at(u.pos(), "unreachable".length())
+                                .hint("check.unreachable.untyped.hint").build(),
+                        "nothing here says what this position holds, and `unreachable` answers no"
+                                + " value to say it with");
+            }
+            code.loadConstant(abortMessage(u));
+            code.invokestatic(CD_UnreachableReached, "reached", MTD_reached);
+            stackCast(shape);
+        }
+
+        /**
+         * What the abort says: the reason the model wrote, and the line and column it wrote it at.
+         *
+         * <p>No file name. This compiler is not given one — a generated class's {@code SourceFile}
+         * is derived from its module name rather than threaded down from a path — and deriving one
+         * here would name a file that need not exist, and would name the reading module's when the
+         * {@code unreachable} came in with an inlined helper of another. A reader at run time has
+         * the frame's own file and line; a reader of E1911 has the row's place beside this one.
+         */
+        private String abortMessage(Core.Unreachable u) {
+            return u.pos() == null ? u.reason() : u.reason() + " (" + u.pos() + ")";
         }
 
         private void match(Core.Match m, Type expected) {
@@ -659,13 +713,14 @@ final class BodyGen {
             store(code, sSlot, st);
             Type element = st instanceof Type.OptionOf oo ? oo.element() : null;
             Label end = code.newLabel();
+            Type want = shapeOf(m, expected);
             for (Core.Case c : m.cases()) {
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm: save any outer binding it shadows and restore it
                 // after the arm, or a later arm reusing the name would resolve to this arm's slot.
                 Var prevBinding = c.binding() != null ? env.get(c.binding()) : null;
                 emitCaseGuard(c, sSlot, st, element, nextCase);
-                genExpr(c.body(), expected);
+                genExpr(c.body(), want);
                 if (c.binding() != null) {
                     restore(c.binding(), prevBinding);
                 }
@@ -1888,6 +1943,7 @@ final class BodyGen {
                 case Core.Decimal _ -> { }
                 case Core.Str _ -> { }
                 case Core.Bool _ -> { }
+                case Core.Unreachable _ -> { }
             }
         }
 

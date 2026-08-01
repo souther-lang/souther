@@ -1192,7 +1192,7 @@ public final class Analyzer {
         return switch (k) {
             case MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, GUARD_KW,
                  ELSE_KW, TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW,
-                 MATCH_KW, WITH_KW -> true;
+                 MATCH_KW, WITH_KW, UNREACHABLE_KW -> true;
             default -> false;
         };
     }

@@ -259,6 +259,8 @@ public final class DataChecker {
             case Ast.StringLit _ -> { }
             case Ast.BoolLit _ -> { }
             case Ast.Var _ -> { }
+            // it builds nothing: no value is made where it stands
+            case Ast.Unreachable _ -> { }
         }
     }
 

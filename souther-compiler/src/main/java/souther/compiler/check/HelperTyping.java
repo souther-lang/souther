@@ -263,6 +263,30 @@ public final class HelperTyping {
         TypeChecker.forEachChild(e, c -> rejectConstructionInInvariant(c, data, clause));
     }
 
+    /**
+     * Rejects an {@code unreachable} inside an invariant clause. An invariant answers whether the
+     * value being built is admissible, and every path through it has to answer that; a path that
+     * aborts instead would decide a construction by ending the computation, which is the invariant's
+     * own abort taken for a reason the clause never stated (spec §invariant-expressions).
+     *
+     * <p>Walks the inlined clause, so one written in a helper the clause names is caught where it
+     * was written, as a construction is.
+     */
+    static void rejectUnreachableInInvariant(Ast.Expr e, String data, Ast.InvariantClause clause) {
+        if (e instanceof Ast.Unreachable u) {
+            String named = clause.name().orElse(null);
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.invariant.unreachable")
+                            .title("check.invariant.invalid.title")
+                            .at(u.pos(), "unreachable".length())
+                            .args(data, named).build(),
+                    "the invariant " + (named == null ? "" : "`" + named + "` ") + "of `" + data
+                            + "` answers `unreachable`, but an invariant says whether the value holds"
+                            + " on every path (spec §invariant-expressions)");
+        }
+        TypeChecker.forEachChild(e, c -> rejectUnreachableInInvariant(c, data, clause));
+    }
+
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec 13.1). */
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
         if (e instanceof Ast.Call call && injected.contains(call.fn())) {

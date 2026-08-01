@@ -545,10 +545,11 @@ Unit                       // a type with exactly one value
 
 Souther has no `+Result+` / `+Either+` type. A behavior's output is a bare domain sum with no two-slot type separating success and failure (<<behavior>>, <<composition>>).
 
-`+Never+` and `+Unit+` are not type names writable at the surface; they are reading aids. `+Never+` denotes an impossible case: a single-case output (`+-> A+`) can be read as having an empty failure row. `+Unit+` corresponds to the spec DSL's `+Unit+`, but it is never provided as a way to write a field; it is always expressed as a "data with no fields" (<<sum-data>>).
+`+Never+` and `+Unit+` are not type names writable at the surface. `+Never+` denotes an impossible case: a single-case output (`+-> A+`) can be read as having an empty failure row, and it is the type of `+unreachable+` (<<unreachable>>) — the one expression that answers no value, and so fits every position. `+Unit+` is a reading aid only; it corresponds to the spec DSL's `+Unit+`, but it is never provided as a way to write a field, and is always expressed as a "data with no fields" (<<sum-data>>).
 
 The only polymorphic types are the stdlib ones (`+Option+`, `+List+`, `+Map+`, `+Set+`). There are no user-defined generics. Neither `+data+` nor `+behavior+` takes a type parameter.
 
+[#invariant-abort]
 ==== An invariant violation aborts
 
 When the construction of a data with an invariant violates it inside the domain (<<invariant-mvp>>), the computation *aborts*. It returns no value and no case.
@@ -958,7 +959,7 @@ The first is decided by reading the declaration. `+let preApprove+` does not tou
 
 A helper `+let+` always satisfies the first and second. To touch the outside world it can only receive a function as an argument (<<fn-declaration>>), and an invariant has no way to pass one. The third is about termination: an invariant is checked on every construction and must terminate. A `+partial+` helper disclaims totality and may loop, so it cannot appear in an invariant. A *total* helper is admissible even when it recurses — the compiler has proven it terminates (<<fn-declaration>>). This is what lets the list quantifiers `+List.all+` / `+List.any+` / `+List.member+` and the uniqueness checks `+List.distinct+` / `+List.allUniqueBy+` appear in an invariant: each derives from the total stdlib fold `+List.foldFrom+`, which is bounded by the finite list. Only a `+partial+` helper in an invariant is a compile error.
 
-Forbidden: Decoder, Encoder, data construction, `+partial+` recursion, non-deterministic processing. Data construction is barred throughout the invariant expression, including inside a quantifier's closure — an invariant observes the value being built, it does not build another. A behavior call is barred by the rule above, whether written in the invariant or reached through a `+let+` it calls; and a `+let+` that goes through a behavior touching the outside world has that much of a requirement set and is rejected by condition 1 as well. Only pure (empty-requirement-set) computation enters an invariant.
+Forbidden: Decoder, Encoder, data construction, `+partial+` recursion, `+unreachable+` (<<unreachable>>), non-deterministic processing. Data construction is barred throughout the invariant expression, including inside a quantifier's closure — an invariant observes the value being built, it does not build another. `+unreachable+` is barred for the neighbouring reason: an invariant answers whether the value holds, and it answers on every path through itself, so a path that aborts instead decides a construction by a premise the clause never stated. A behavior call is barred by the rule above, whether written in the invariant or reached through a `+let+` it calls; and a `+let+` that goes through a behavior touching the outside world has that much of a requirement set and is rejected by condition 1 as well. Only pure (empty-requirement-set) computation enters an invariant.
 
 [#violation-destination]
 === A violation's destination differs inside and outside the boundary
@@ -2341,6 +2342,36 @@ let approverLabel (c: TravelCompleted) =
 
 A match on sum data MUST be exhaustive. Exhaustiveness is decided over the direct cases the sum declared. A nested sum (`+OwnCost+` of `+data CostBearer = OwnCost | ClientCost+` being further `+Reimbursement | Advance | CorporateCard+`) does not flatten leaf cases; receive `+OwnCost+` and split with a nested `+match+`. Exhaustiveness is checked independently per layer, so cases never overlap. Case→sum assignment (<<sum-data>>) folds to the leaf; match is the reverse, descending the layers.
 
+[#unreachable]
+==== An arm may say its combination cannot arise
+
+A table indexed by two sums has a cell for every pair, and some of those pairs the model does not admit. `+unreachable "reason"+` is what such an arm answers: it produces no value, and reaching it aborts.
+
+[,text]
+----
+match age with
+    | UnderThirty ->
+        match period with
+            | UnderOneYear      -> BenefitDays(90)
+            | TenToTwentyYears  -> BenefitDays(180)
+            | TwentyYearsOrMore ->
+                unreachable "twenty insured years cannot precede the age of thirty"
+    ...
+----
+
+This is not a proof. The compiler does not decide that the point cannot be reached — it could not, since what rules the pair out is a fact about the world or a check some caller already made, and neither is written in the types this rule sees. What the form does is state that premise where it is relied on, and make its failure an abort rather than a number a report goes on to print.
+
+The rules it obeys:
+
+* The reason is a string literal and MUST be written. It is read without running the model — by a reader, by the diagnostic an `+example+` gets (<<e1911>>), and by the abort's message — so it is not an expression that builds one.
+* Its type is `+Never+` (<<algebraic-types>>), which fits whatever the position expects. An arm answering it contributes no case to what the `+match+` answers: the type is the one the other arms agree on.
+* The position it stands in MUST state what it holds, or a branch beside it MUST — a field, a declared return, an annotated binding, an arm beside one that answers a value. Written where nothing does (`+let n = unreachable "..."+`, `+1 + unreachable "..."+`), it is <<e1307>>: the value it stands for is never made, but the code around it is still compiled, and nothing there says what shape that code reads.
+* Exhaustiveness counts the arm like any other. Nothing here relaxes <<e1201>>, and there is still no `+_+`.
+* Reaching it *aborts*, as an invariant violation does (<<invariant-abort>>) and for the same reason: what failed is the model, not the business. It is not catchable, and a boundary maps it to a 500, apart from a business failure's 400.
+* It is not written in an `+invariant+` (<<invariant-expressions>>): an invariant answers whether the value being built holds, on every path through it.
+
+What it is not for is a case the model can produce. `+| InsufficientFunds -> unreachable "the caller checked the balance"+` states an assumption no type carries, and if the caller ever does not check, the rule aborts where it should have answered. Where the combination is one the model admits as input, the arm answers a value or the input types change; `+unreachable+` is for what the model rules out.
+
 [#guard]
 === guard
 
@@ -3133,6 +3164,19 @@ kind does not reach `List.filterMap`, whose step has to answer an optional: use
 
 A pattern is unaffected by either: `+| Some v+` matches an optional the model was given.
 
+[#e1307]
+=== unreachable where the position states no type
+
+[,text]
+----
+Nothing here says what this position holds, and `unreachable` answers no value to say it
+with.
+Hint: Write it where the type is stated — an arm beside one that answers a value, a
+field, a declared return, an annotated binding.
+----
+
+Reported where an `+unreachable+` (<<unreachable>>) stands in a position that states no type and has no branch beside it that does — `+let n = unreachable "..."+`, or an arithmetic operand. No value is made there, but the code that would read one is still compiled, and it has no shape to read.
+
 [#e1401]
 === Arbitrary Java calls
 
@@ -3395,6 +3439,19 @@ may not stop. Make it structural, or reduce it.
 ----
 
 Emitted when a row's evaluation exceeds the step budget the example runner holds it to. A helper proven total cannot reach this, so what a row reaches is a `+partial+` one (<<fn-rules>>).
+
+[#e1911]
+=== An example reached a point declared unreachable
+
+[,text]
+----
+This row reached a point the model declares cannot arise: twenty insured years cannot
+precede the age of thirty (42:17)
+Hint: Either the row states a combination the model rules out, or the reason written at
+that `unreachable` does not hold.
+----
+
+Emitted when a row's evaluation reaches an `+unreachable+` (<<unreachable>>). The reason the model wrote is shown with the line and column it was written at, because the row and the declaration are usually in different rules; the diagnostic's own place is the row's. It is not a failed comparison: the row produced no answer to compare, and what it found is a premise that does not hold.
 
 [#e2001]
 === A recursive helper is not proven total

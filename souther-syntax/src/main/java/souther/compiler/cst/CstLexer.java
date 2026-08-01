@@ -39,7 +39,8 @@ public final class CstLexer {
             Map.entry("depends", SyntaxKind.DEPENDS_KW),
             Map.entry("constructs", SyntaxKind.CONSTRUCTS_KW),
             Map.entry("match", SyntaxKind.MATCH_KW),
-            Map.entry("with", SyntaxKind.WITH_KW));
+            Map.entry("with", SyntaxKind.WITH_KW),
+            Map.entry("unreachable", SyntaxKind.UNREACHABLE_KW));
 
     /** The reserved keywords, the single source of truth a syntax-highlighter grammar derives from. */
     public static Set<String> keywords() {

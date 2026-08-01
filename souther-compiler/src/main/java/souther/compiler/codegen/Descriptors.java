@@ -108,6 +108,10 @@ final class Descriptors {
             MethodTypeDesc.of(ClassDesc.of("java.lang.Object"), ClassDesc.of("java.lang.Object").arrayType());
     static final ClassDesc CD_ConstraintViolation =
             ClassDesc.of("souther.runtime.ConstraintViolation");
+    static final ClassDesc CD_UnreachableReached =
+            ClassDesc.of("souther.runtime.UnreachableReached");
+    /** {@code UnreachableReached.reached(String)}: aborts, typed as answering the position's value. */
+    static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String);
     /** The failure side of {@code __construct}: which clause of which type did not hold. */
     static final ClassDesc CD_InvariantFailure = ClassDesc.of("souther.runtime.InvariantFailure");
     static final MethodTypeDesc MTD_failureOf =

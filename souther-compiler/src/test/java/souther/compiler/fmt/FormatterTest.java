@@ -311,6 +311,42 @@ class FormatterTest {
     }
 
     @Test
+    void formattingKeepsAnUnreachableArmAndItsReason() {
+        String source = "module demo\n"
+                + "data A\n"
+                + "data B\n"
+                + "data AB = A | B\n"
+                + "data Out = Int\n"
+                + "behavior run : (v: AB) -> Out constructs Out\n"
+                + "let run (v) =\n"
+                + "    match v with\n"
+                + "        | A -> Out(1)\n"
+                + "        | B -> unreachable \"a B never reaches this rule\"\n";
+        String formatted = Formatter.format(source);
+        assertEquals(code(source), code(formatted), "the code token stream changed");
+        assertTrue(formatted.contains("unreachable \"a B never reaches this rule\""),
+                "formatter lost the reason:\n" + formatted);
+        assertEquals(formatted, Formatter.format(formatted), "formatting is not idempotent");
+        assertTrue(CstParser.parse(formatted).errors().isEmpty(), "formatted output does not re-parse");
+    }
+
+    @Test
+    void unreachableIsOneSpaceFromItsReason() {
+        String messy = "module demo\n"
+                + "data A\n"
+                + "data B\n"
+                + "data AB = A | B\n"
+                + "data Out = Int\n"
+                + "behavior run : (v: AB) -> Out constructs Out\n"
+                + "let run (v) =\n"
+                + "    match v with\n"
+                + "        | A -> Out(1)\n"
+                + "        | B ->     unreachable      \"a B never reaches this rule\"\n";
+        assertTrue(Formatter.format(messy).contains("| B -> unreachable \"a B never reaches this rule\""),
+                "the reason is not one space from the keyword:\n" + Formatter.format(messy));
+    }
+
+    @Test
     void formattingKeepsACollectionNewtypeBase() {
         // the newtype body used to be one identifier, so the type arguments had nowhere to be
         // written; dropping them would turn `List<String>` into a `List` with no element type

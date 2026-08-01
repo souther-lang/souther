@@ -985,6 +985,7 @@ public final class CstParser {
         switch (k) {
             case MATCH_KW -> matchExpr();
             case IF_KW -> ifExpr();
+            case UNREACHABLE_KW -> unreachableExpr();
             case INT_LIT, DECIMAL_LIT, STRING_LIT, TRUE_KW, FALSE_KW -> {
                 start(SyntaxKind.LITERAL_EXPR);
                 bump();
@@ -1000,6 +1001,22 @@ public final class CstParser {
                 finish();   // zero-width error node; the caller resynchronises
             }
         }
+    }
+
+    /** {@code unreachable "reason"} — the reason is a string literal rather than an expression, so
+     * it is readable without running the model. */
+    private void unreachableExpr() {
+        start(SyntaxKind.UNREACHABLE_EXPR);
+        bump();   // unreachable
+        if (at(SyntaxKind.STRING_LIT)) {
+            start(SyntaxKind.LITERAL_EXPR);
+            bump();
+            finish();
+        } else {
+            error("parse.unreachable.reason",
+                    "`unreachable` states why the point cannot be reached: unreachable \"...\"");
+        }
+        finish();
     }
 
     /** {@code (p, ...) -> body} — the caller has confirmed the shape via {@link #isBlockParams}.

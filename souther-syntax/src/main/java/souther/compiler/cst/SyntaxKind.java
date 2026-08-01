@@ -25,6 +25,7 @@ public enum SyntaxKind {
     // the same way, so a field or parameter may still be named on.
     MODULE_KW, IMPORT_KW, EXPOSING_KW, DATA_KW, INVARIANT_KW, AS_KW, LET_KW, GUARD_KW, ELSE_KW,
     TRUE_KW, FALSE_KW, IF_KW, THEN_KW, BEHAVIOR_KW, DEPENDS_KW, CONSTRUCTS_KW, MATCH_KW, WITH_KW,
+    UNREACHABLE_KW,
 
     // --- literals and identifiers ---
     IDENT, INT_LIT, DECIMAL_LIT, STRING_LIT, TYPEVAR,
@@ -127,7 +128,8 @@ public enum SyntaxKind {
     LAMBDA_EXPR,        // x -> e  and  (a, b) -> e
     FIELD_GETTER,       // .field  = the getter (x) -> x.field
     NEW_DATA_EXPR,      // TypeName { field = e, ... }
-    FIELD_INIT;
+    FIELD_INIT,
+    UNREACHABLE_EXPR;   // unreachable "reason"
 
     /** Whitespace and comments: kept in the tree, invisible to the parser's token cursor. */
     public boolean isTrivia() {
@@ -194,6 +196,7 @@ public enum SyntaxKind {
             case CONSTRUCTS_KW -> "`constructs`";
             case MATCH_KW -> "`match`";
             case WITH_KW -> "`with`";
+            case UNREACHABLE_KW -> "`unreachable`";
             default -> "`" + name().toLowerCase(Locale.ROOT) + "`";
         };
     }

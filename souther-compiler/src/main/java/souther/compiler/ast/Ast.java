@@ -529,7 +529,17 @@ public interface Ast {
     sealed interface Expr extends Ast
             permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Call, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Block, Tuple,
-                    TupleGet {}
+                    TupleGet, Unreachable {}
+
+    /**
+     * {@code unreachable "reason"} — the point the model says cannot arise (spec 16.3).
+     *
+     * <p>It answers no value, so it has no type of its own to check against the position it is
+     * written in: it types at {@code Never} and fits whatever is expected. The reason is a literal
+     * rather than an expression so that the compiler and a reader both have it without running the
+     * model; at run time it is the message the abort carries.
+     */
+    record Unreachable(String reason, SourcePos pos) implements Expr {}
 
     /**
      * {@code x -> expr}, or {@code (acc, x) -> expr} — a block (spec 12.5).
@@ -799,6 +809,7 @@ public interface Ast {
             case StringLit x -> x;
             case BoolLit x -> x;
             case Var x -> x;
+            case Unreachable x -> x;
             case Neg n -> new Neg(f.apply(n.operand()), n.pos());
             case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.pos());
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
@@ -843,6 +854,7 @@ public interface Ast {
             case StringLit _ -> { }
             case BoolLit _ -> { }
             case Var _ -> { }
+            case Unreachable _ -> { }
             case Neg n -> f.accept(n.operand());
             case FieldAccess fa -> f.accept(fa.target());
             case Binary b -> {

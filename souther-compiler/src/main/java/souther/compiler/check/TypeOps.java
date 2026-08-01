@@ -345,6 +345,10 @@ public final class TypeOps {
         if (from == Type.NOTHING) {
             return true;   // the empty list's bottom element assigns into any element type (ADR-0028)
         }
+        if (from instanceof Type.Never) {
+            // nothing arrives from there, so no value of the wrong type can (spec 16.3)
+            return true;
+        }
         // immutable collections are element-covariant: A <: S makes a List/Map/Option of A
         // assignable to one of S. Sound because they cannot be mutated (spec 6), so no write can
         // smuggle a sibling case in — the same reason Scala's immutable List and Kotlin's read-only
@@ -396,6 +400,14 @@ public final class TypeOps {
             return b;
         }
         if (BottomInfer.isBottom(b)) {
+            return a;
+        }
+        // An arm that answers `unreachable` contributes no case to the join: what the position holds
+        // is what the arms that answer a value hold (spec 16.3).
+        if (a instanceof Type.Never) {
+            return b;
+        }
+        if (b instanceof Type.Never) {
             return a;
         }
         if (a instanceof Type.ListOf la && b instanceof Type.ListOf lb) {
