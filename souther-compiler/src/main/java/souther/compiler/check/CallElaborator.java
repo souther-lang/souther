@@ -38,6 +38,14 @@ public final class CallElaborator {
                                       Type expected) {
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         Type result = typeOfCall(ca, call, env, ctx, expected);
+        // applying something this body binds is a different operation from calling something
+        // declared elsewhere, and it is the only one that carries a binding into the emitted tree
+        if (call.denotes() instanceof ValueName.Local local
+                && env.get(call.fn()) instanceof Type.FnOf) {
+            return new Core.Apply(
+                    new Core.Read(call.fn(), local.id(), env.get(call.fn()), call.pos()),
+                    ca.cores(), result, call.pos());
+        }
         return new Core.Call(call.fn(), ca.cores(), result, call.pos());
     }
 

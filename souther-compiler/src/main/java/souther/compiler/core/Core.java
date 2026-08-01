@@ -74,8 +74,21 @@ public sealed interface Core {
 
     record Binary(Ast.BinOp op, Core left, Core right, Type type, SourcePos pos) implements Core {}
 
-    /** A call to a builtin, an injected behavior, or an intrinsic (a helper fn is already inlined). */
+    /** A call to a builtin, an injected behavior, an intrinsic, or a recursive helper emitted as a
+     * method — each reached by the name it is declared under, none of them bound by this body. A
+     * non-recursive helper is already inlined. */
     record Call(String fn, List<Core> args, Type type, SourcePos pos) implements Core {}
+
+    /**
+     * Applying a function value the body holds: a helper's function parameter, or a lambda a
+     * {@code let} bound that escaped.
+     *
+     * <p>Apart from {@link Call} because it is a different operation — one loads a value and invokes
+     * it, the other names something declared elsewhere — and because only this one applies something
+     * the body binds. Held together, which of the two a node was had to be worked out downstream by
+     * looking the name up among the locals, and the binding was lost on the way.
+     */
+    record Apply(Read fn, List<Core> args, Type type, SourcePos pos) implements Core {}
 
     record If(Core cond, Core then, Core els, Type type, SourcePos pos) implements Core {}
 
@@ -138,8 +151,16 @@ public sealed interface Core {
 
     record FieldInit(String name, Core value, SourcePos pos) {}
 
-    record NewData(TypeName typeName, List<FieldInit> inits, List<String> spreads, Type type,
-                   SourcePos pos) implements Core {}
+    /** {@code spreads} are the bindings the construction copies fields from — reads, not binders:
+     * a spread names a value in force, it does not introduce one. */
+    record NewData(TypeName typeName, List<FieldInit> inits, List<Read> spreads, Type type,
+                   SourcePos pos) implements Core {
+
+        /** How each spread source was written, in order. */
+        public List<String> spreadNames() {
+            return spreads.stream().map(Read::name).toList();
+        }
+    }
 
     /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
      * narrows to, or the element a {@code Some x} opens. */
@@ -179,6 +200,7 @@ public sealed interface Core {
             case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.type(), fa.pos());
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.type(), b.pos());
             case Call c -> new Call(c.fn(), c.args().stream().map(f).toList(), c.type(), c.pos());
+            case Apply a -> new Apply(a.fn(), a.args().stream().map(f).toList(), a.type(), a.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()),
                     iff.type(), iff.pos());
             case IfConstructed ic -> new IfConstructed((NewData) mapChildren(ic.construct(), f),

@@ -394,7 +394,7 @@ final class BodyGen {
                 case Core.NewData nd when DataChecker.isInvariantBearing(nd.typeName(), symbols) -> {
                     ClassDesc cdType = cd(nd.typeName());
                     Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
-                    emitFieldValues(flds, nd.inits(), nd.spreads());
+                    emitFieldValues(flds, nd.inits(), nd.spreadNames());
                     emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                     code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
                     code.invokestatic(CD_ConstraintViolation, "orThrow", MTD_orThrow);
@@ -656,6 +656,7 @@ final class BodyGen {
                 case Core.NewData nd -> newData(nd);
                 case Core.Match m -> match(m, expected);
                 case Core.Call c -> call(c, expected);
+                case Core.Apply a -> applyFn(a, (Type.FnOf) a.fn().type());
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
                     Type vt = li.value().type();
@@ -849,7 +850,7 @@ final class BodyGen {
                 // construction goes through __construct just as it does in tail (see emitTail): the
                 // invariant runs and orThrow either yields the value or aborts with a
                 // ConstraintViolation. orThrow returns Object, so narrow it back to the value type.
-                emitFieldValues(flds, nd.inits(), nd.spreads());
+                emitFieldValues(flds, nd.inits(), nd.spreadNames());
                 emitLine(nd);   // re-pin: a field init may have moved the line off the construction
                 finishInvariantConstruct(cdType, flds);
                 return;
@@ -858,7 +859,7 @@ final class BodyGen {
             if (!walksInside(nd)) {
                 code.new_(cdType);
                 code.dup();
-                emitFieldValues(flds, nd.inits(), nd.spreads());
+                emitFieldValues(flds, nd.inits(), nd.spreadNames());
                 code.invokespecial(cdType, "<init>", ctor);
                 return;
             }
@@ -867,7 +868,7 @@ final class BodyGen {
             // `<init>`, and the verifier will not carry one over a jump. So the fields are built first
             // and held in slots, exactly as a newtype's single field already is, and the construction
             // itself is the straight line at the end.
-            emitFieldValues(flds, nd.inits(), nd.spreads());
+            emitFieldValues(flds, nd.inits(), nd.spreadNames());
             List<Type> fieldTypes = new ArrayList<>(flds.values());
             int[] held = new int[fieldTypes.size()];
             for (int i = fieldTypes.size() - 1; i >= 0; i--) {
@@ -914,7 +915,7 @@ final class BodyGen {
             Core.NewData nd = ic.construct();
             Map<String, Type> flds = fieldTypes((Ast.Data) symbols.get(nd.typeName()));
             ClassDesc cdType = cd(nd.typeName());
-            emitFieldValues(flds, nd.inits(), nd.spreads());
+            emitFieldValues(flds, nd.inits(), nd.spreadNames());
             emitLine(ic);   // re-pin: a field init may have moved the line off the construction
             code.invokestatic(cdType, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(flds)));
 
@@ -1179,9 +1180,13 @@ final class BodyGen {
                 case "Decimal.toInt" -> decimalToInt(call);
                 case "Decimal.round" -> decimalRound(call);
                 default -> {
-                    Var fv = env.get(call.fn());
-                    if (fv != null && fv.type() instanceof Type.FnOf fnType) {
-                        applyFn(call, fnType);
+                    // an injected behavior a lambda captured arrives in a slot rather than in a
+                    // field of the enclosing behavior, and is applied as the value it is. This asks
+                    // where the value is, not what the name means: what it means was settled when
+                    // the call was elaborated, and an injected behavior is not a binding.
+                    Var captured = env.get(call.fn());
+                    if (captured != null && captured.type() instanceof Type.FnOf fnType) {
+                        applyCaptured(call, fnType);
                     } else if (ctx.emittedHelpers.containsKey(call.fn())) {
                         // The one loop the language has is emitted where it stands, not called.
                         if (!call.fn().equals(FOLD) || !folded(call)) {
@@ -1872,15 +1877,23 @@ final class BodyGen {
 
         /** Applies a first-class function value: {@code f.apply(new Object[]{args...})}, then casts
          * the {@code Object} result back to the function's result type. */
-        private void applyFn(Core.Call call, Type.FnOf fnType) {
-            Var fv = env.get(call.fn());
+        private void applyFn(Core.Apply call, Type.FnOf fnType) {
+            applyValue(env.get(call.fn().name()), call.args(), fnType);
+        }
+
+        /** The same, for an injected behavior a lambda captured into a slot of its own class. */
+        private void applyCaptured(Core.Call call, Type.FnOf fnType) {
+            applyValue(env.get(call.fn()), call.args(), fnType);
+        }
+
+        private void applyValue(Var fv, List<Core> args, Type.FnOf fnType) {
             load(code, fv.slot(), fv.type());   // the Fn receiver
-            pushInt(code, call.args().size());
+            pushInt(code, args.size());
             code.anewarray(CD_Object);
-            for (int i = 0; i < call.args().size(); i++) {
+            for (int i = 0; i < args.size(); i++) {
                 code.dup();
                 pushInt(code, i);
-                Type at = genExpr(call.args().get(i));
+                Type at = genExpr(args.get(i));
                 box(code, at);
                 code.aastore();
             }
@@ -1900,8 +1913,14 @@ final class BodyGen {
             switch (e) {
                 case Core.Read v -> maybeFree(v.name(), bound, free);
                 case Core.Call c -> {
-                    maybeFree(c.fn(), bound, free);   // an applied function value is captured too
+                    // an injected behavior the body calls is captured too: the lambda is a class of
+                    // its own, and what it reaches has to be handed to it
+                    maybeFree(c.fn(), bound, free);
                     c.args().forEach(a -> collectFree(a, bound, free));
+                }
+                case Core.Apply a -> {
+                    maybeFree(a.fn().name(), bound, free);   // the function value is captured too
+                    a.args().forEach(x -> collectFree(x, bound, free));
                 }
                 case Core.FieldAccess fa -> collectFree(fa.target(), bound, free);
                 case Core.Binary bin -> {
@@ -1911,7 +1930,7 @@ final class BodyGen {
                 case Core.Neg neg -> collectFree(neg.operand(), bound, free);
                 case Core.NewData nd -> {
                     nd.inits().forEach(i -> collectFree(i.value(), bound, free));
-                    nd.spreads().forEach(sp -> maybeFree(sp, bound, free));
+                    nd.spreads().forEach(sp -> maybeFree(sp.name(), bound, free));
                 }
                 case Core.If iff -> {
                     collectFree(iff.cond(), bound, free);

@@ -238,13 +238,19 @@ public final class Elaborator {
                             "cannot construct `" + built.written() + "`");
                 }
                 // by here every spread names a binding in force: a value spread was bound ahead of
-                // the construction when it was inlined, so Core reads the name it copies
-                List<String> spreads = new ArrayList<>();
+                // the construction when it was inlined, so Core reads the binding it copies from
+                List<Core.Read> spreads = new ArrayList<>();
+                List<String> spreadNames = new ArrayList<>();
                 for (Ast.ValueRef s : nd.spreads()) {
-                    spreads.add(s.bare());
+                    if (!(s.denotes() instanceof ValueName.Local local)) {
+                        throw new IllegalStateException("`" + s.written()
+                                + "` is spread but names no binding, at " + s.pos());
+                    }
+                    spreads.add(new Core.Read(s.bare(), local.id(), env.get(s.bare()), s.pos()));
+                    spreadNames.add(s.bare());
                 }
                 List<Core.FieldInit> inits = DataChecker.checkConstruction(built.written(), nd.inits(),
-                        spreads, nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
+                        spreadNames, nd.pos(), TypeOps.fieldTypes(owner, ctx.symbols()), env, ctx);
                 yield new Core.NewData(built.denotes(), inits, spreads,
                         Type.ref(built.denotes()), nd.pos());
             }
