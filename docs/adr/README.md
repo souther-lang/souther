@@ -5,6 +5,12 @@ alternatives weighed, and the prior art consulted. The language specification
 ([`../../specification.adoc`](../../specification.adoc)) states *what* the language does;
 these ADRs state *why*.
 
+An ADR records a decision that is architecturally **significant**: one that is expensive
+to reverse, or that constrains the decisions that come after it. A rule the specification
+can simply state, a standard-library signature, or an implementation caught up with a rule
+already stated is not one — those live in the specification and in the pull request that
+made the change.
+
 Referencing is one-directional: each ADR points back to the spec sections whose
 rationale it holds, but the specification itself does not link to ADRs — it states
 the rules and examples, nothing more.
