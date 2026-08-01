@@ -10,6 +10,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ConstructionOrigin;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -864,7 +865,7 @@ public final class AstBuilder {
                 inits.add(new Ast.FieldInit(field, v, pos(c)));
             }
         }
-        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, null, pos(n));
+        Ast.Expr built = new Ast.NewData(typeName, inits, spreads, ConstructionOrigin.own(), pos(n));
         for (int i = pathNames.size() - 1; i >= 0; i--) {
             built = new Ast.LetIn(pathNames.get(i), pathValues.get(i), built, pos(n));
         }

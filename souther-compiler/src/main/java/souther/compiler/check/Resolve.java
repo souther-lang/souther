@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -464,7 +465,7 @@ public final class Resolve {
                     valueName(v.name(), v.pos(), bound)));
             case Ast.Call call -> new Ast.Call(call.fn(),
                     answered(call.fn(), call.pos(), calledName(call, bound)),
-                    exprs(call.args(), bound), call.pos());
+                    exprs(call.args(), bound), call.origin(), call.pos());
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
                 for (Ast.FieldInit i : nd.inits()) {
@@ -477,7 +478,7 @@ public final class Resolve {
                     spreads.add(s.denotes() != null ? s : s.denoting(
                             answered(s.written(), s.pos(), valueName(s.written(), s.pos(), bound))));
                 }
-                yield new Ast.NewData(type(nd.typeName()), inits, spreads, nd.publishedBy(), nd.pos());
+                yield new Ast.NewData(type(nd.typeName()), inits, spreads, nd.origin(), nd.pos());
             }
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
@@ -543,7 +544,7 @@ public final class Resolve {
         }
         TypeName type = symbols.resolve(written);
         if (type != null && !type.isUnresolved()) {
-            return new ValueName.OfType(written, type, null);
+            return new ValueName.OfType(written, type, ConstructionOrigin.own());
         }
         // a helper or a behavior named without being applied — handed to a combinator by name,
         // which the inliner expands into a block that applies it

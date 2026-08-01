@@ -1203,7 +1203,7 @@ public final class InvariantChecker {
     private static Ast.Call withArg(Ast.Call call, int at, Ast.Expr arg) {
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(at, arg);
-        return new Ast.Call(call.fn(), call.denotes(), args, call.pos());
+        return new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
     }
 
     /** An emptiness check as the comparison it means, or {@code e} unchanged. */
@@ -1211,6 +1211,7 @@ public final class InvariantChecker {
         if (e instanceof Ast.Call call && call.args().size() == 1
                 && EMPTINESS.containsKey(call.fn())) {
             Ast.Call size = new Ast.Call(EMPTINESS.get(call.fn()), call.denotes(), call.args(),
+                    call.origin(),
                     call.pos());
             return new Ast.Binary(Ast.BinOp.EQ, size, new Ast.IntLit(0, call.pos()), call.pos());
         }

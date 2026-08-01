@@ -254,6 +254,8 @@ A published definition MAY reach a *recursive* helper. Closing cannot remove one
 
 A published value is substituted where it is named and a published helper expanded where it is called, exactly as one of the reader's own is (<<fn-value-semantics>>, <<fn-rules>>). What such a body builds is *not* the reader's to declare in `+constructs+`: publishing the definition is what states that origination, and the reader may have no name for the type. A type of some *third* module that the body happens to build is neither the reader's nor the publisher's to hand over, so that one stays the reader's to declare — which it can, since the module declaring it exposed it (<<closed-construction>>).
 
+A published *value* rests on none of that. What a value builds belongs to its definition whatever module declares the type, so reading one across a boundary answers the same as reading one within a module (<<fn-value-semantics>>). Crossing the boundary is what the paragraph above is about, and a value never needed it.
+
 A published body's source travels in the jar and is read back by the importing compiler (<<published-modules>>). What that source means is therefore part of what a compiled module promises, and is recorded under the same boundary version as the rest of it.
 
 [#exposed-surface]
@@ -1509,6 +1511,8 @@ Creating a type that does not appear in the output also shows here. The `+constr
 
 A helper `+let+` (with no corresponding behavior) may also construct data, but a helper `+let+` is not a specification statement and does not declare its own `+constructs+`. Its *construction set is inferred transitively* (folding in any helper `+let+` it calls). If the calling behavior writes `+constructs+`, it MUST include that set (E1002 if it does not); if omitted, that set is folded into the inference. A block is the same, constructing under the enclosing behavior's authority (<<blocks>>).
 
+A *value* is the other case. It too is substituted where it is named (<<fn-value-semantics>>), but what it builds is built by its definition: a behavior stating a rule against a named limit originates none of it, and the limit does not belong in that behavior's `+constructs+`. This is what lets a threshold be named at all — the figure gets one place to live and one comment saying where it comes from, and the rules reading it go on saying what they do. Writing the entry anyway is accepted, the same answer a construction another module's published body carried in gets (<<exposed-values>>).
+
 A dependency (`+depends on+`) is different and MUST *always* be written (<<depends-on>>). `+depends on+` is an outward contract to the caller and injector; leaving it to inference would let the contract change silently. `+constructs+` is an internal authority invisible to callers, so they diverge here. Thus `+depends on+` is a declaration and `+constructs+` (for a behavior with a `+let+` implementation) is optional. A `+>->+` composition infers both output and requirements (<<composition-with-requirements>>).
 
 [#record-literal]
@@ -1791,7 +1795,7 @@ A value is not module state. Its expression is elaborated in the module that dec
 * It is evaluated at each reference. A value's body obeys a helper's rules — it cannot call an injected behavior (<<depends-on>>) — so it is pure and total, and re-evaluation is not observable.
 * Two references may yield distinct values. Nothing observes that: there is no reference identity in the language, and comparison is structural (<<newtype-comparison>>).
 * An invariant a value breaks is reported at the value, whether or not anything names it.
-* What a value constructs is constructed by the behavior that names it, and belongs in that behavior's `+constructs+` — the transitive rule a helper's body already follows (<<constructs>>). A spread of a value constructs it too, so it contributes the same way.
+* What a value constructs is the value's own. A behavior that names one reads something already made, so the construction stays with the definition and is not required in that behavior's `+constructs+` (<<constructs>>). A spread of a value reads one the same way. This is where a value parts from a helper, whose construction set does fold into its caller.
 * A spread names a value like any other position: `+Drafting { ...standardRequest, estimatedCost = Amount(50000) }+` reads the same in a behavior's body and in an `+example+` row. A binding in force wins there too, so a parameter or a `+let+` sharing a value's name is what the spread copies.
 * A value MUST NOT reach itself, through naming another value, spreading one, or calling a helper that does. A helper on a call cycle is lowered to a method and recurses (<<fn-rules>>); a value has no such form, so a cycle through one is a compile error naming the path it goes round. This is reported apart from the recursion check, which would ask for a return type the author never wrote.
 

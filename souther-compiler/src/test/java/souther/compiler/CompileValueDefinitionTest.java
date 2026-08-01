@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -65,11 +66,12 @@ class CompileValueDefinitionTest {
         assertEquals(101L, bumped(loader, 1));
     }
 
-    /** A value is substituted where it is named, so what it builds is built by the behavior that
-     * names it — the same transitive construction set a helper's body contributes. */
+    /** A value is substituted where it is named, but what it builds is built by the definition it
+     * was substituted from. The behavior that names it reads a value it did not make and answers for
+     * none of it — a helper is the other case, and its body's constructions are its caller's. */
     @Test
-    void whatAValueConstructsIsTheConstructionSetOfTheBehaviorThatNamesIt() {
-        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+    void whatAValueBuildsIsNotTheNamingBehaviorsToDeclare() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module demo
 
                 data In = { n: Int }
@@ -80,8 +82,6 @@ class CompileValueDefinitionTest {
                 behavior bump : (i: In) -> Out constructs Out
                 let bump (i) = Out { n = i.n + origin.n }
                 """));
-
-        assertTrue(e.getMessage().contains("constructs In"), e.getMessage());
     }
 
     @Test
