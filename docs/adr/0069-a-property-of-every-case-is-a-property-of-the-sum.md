@@ -80,9 +80,13 @@ both list has no order of its own, and comparing it takes the order from the sum
 Reordering an enumeration's cases changes its order, which is the cost F#, Haskell, Rust and Java
 all accept for the same feature.
 
-None of the three changes what a sum is. It is still opened with `match` to construct anything from
-it, still not assignment-compatible with the data its cases spread, and still exhaustively checked
-per layer.
+None of the three changes what a sum is. It is still not assignment-compatible with the data its
+cases spread, and still exhaustively checked per layer. Deciding which case a value is stays `match`.
+
+The construction side followed under issue #237: the shared part is spread from the sum as well as
+read off it, so `Filed { ...d, filedOn = on }` writes at once what an arm per case would write alike.
+The shared part is derived the same way and a named sum stays the only source, so that is this rule
+reaching the other side of the boundary rather than a decision of its own.
 
 ## References
 

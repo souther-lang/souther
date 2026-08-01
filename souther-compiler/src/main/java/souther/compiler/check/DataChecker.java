@@ -656,15 +656,25 @@ public final class DataChecker {
             }
         }
         Map<String, Type> provided = new HashMap<>();
+        String fromSum = null;   // the sum a field the construction still wants would have come from
         for (String sp : spreads) {
-            if (!(env.get(sp) instanceof Type.Ref ref)
-                    || !(ctx.symbols().get(ref.name()) instanceof Ast.Data sd)) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.spread.notdata").title("check.construct.title")
-                                .at(pos).args(sp).build(),
+            Type bound = env.get(sp);
+            if (bound instanceof Type.Ref ref
+                    && ctx.symbols().get(ref.name()) instanceof Ast.SumData sum) {
+                fromSum = Type.show(bound);
+                provided.putAll(spreadOfSum(sp, sum, bound, pos, ctx));
+            } else if (bound instanceof Type.Ref ref
+                    && ctx.symbols().get(ref.name()) instanceof Ast.Data sd) {
+                provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
+            } else {
+                Diagnostic.Builder d = Diagnostic.of(null, "check.spread.notdata")
+                        .title("check.construct.title").at(pos).args(sp);
+                if (bound instanceof Type.Union) {
+                    d = d.hint("check.spread.union.hint", sp);
+                }
+                throw CompileException.of(d.build(),
                         "spread `.." + sp + "` must be a data value");
             }
-            provided.putAll(TypeOps.fieldTypes(sd, ctx.symbols()));
         }
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             if (byName.containsKey(f.getKey())) {
@@ -672,9 +682,12 @@ public final class DataChecker {
             }
             Type pv = provided.get(f.getKey());
             if (pv == null) {
-                throw CompileException.of(
-                        Diagnostic.of("E1005", "e1005.msg").at(pos)
-                                .args(typeName, f.getKey()).hint("e1005.hint").build(),
+                Diagnostic.Builder d = Diagnostic.of("E1005", "e1005.msg").at(pos)
+                        .args(typeName, f.getKey());
+                d = fromSum == null
+                        ? d.hint("e1005.hint")
+                        : d.hint("e1005.hint.sum", typeName, f.getKey(), fromSum);
+                throw CompileException.of(d.build(),
                         "construction of `" + typeName + "` is missing field `" + f.getKey() + "`");
             }
             if (!TypeOps.assignable(pv, f.getValue(), ctx.symbols())) {
@@ -687,6 +700,25 @@ public final class DataChecker {
             }
         }
         return elaborated;
+    }
+
+    /** What a spread of a sum copies: the fields of the data every one of its cases spreads. This is
+     * the construction side of reading such a field off the sum, and takes its shared part from the
+     * same place the read does, so the two answer alike. A sum whose cases share no spread has nothing
+     * to copy — cases that merely declare a field of the same name have not shared it — and that is
+     * reported here rather than left to the missing-field report, which would name a field the author
+     * can see in every case. */
+    private static Map<String, Type> spreadOfSum(String name, Ast.SumData sum, Type bound,
+                                                 SourcePos pos, CheckContext ctx) {
+        Map<String, Type> shared = TypeOps.commonSpreadFields(sum, ctx.symbols());
+        if (shared.isEmpty()) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.spread.sum.unshared").title("check.construct.title")
+                            .at(pos).args(name, Type.show(bound)).build(),
+                    "spread `.." + name + "` copies what the cases of " + Type.show(bound)
+                            + " share, and they share none");
+        }
+        return shared;
     }
 
     private static void checkEncoder(Ast.EncoderDef enc, CheckContext ctx) {

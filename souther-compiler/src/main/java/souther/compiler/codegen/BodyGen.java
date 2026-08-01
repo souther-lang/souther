@@ -62,6 +62,14 @@ final class BodyGen {
         return ctx.fieldTypes(data);
     }
 
+    /** The fields a construction spread copies from a value of {@code src}: a data's own, or the part
+     * every case of a sum spreads, which the sum's sealed interface declares as accessors. */
+    private Map<String, Type> spreadableFields(TypeName src) {
+        return symbols.get(src) instanceof Ast.SumData sum
+                ? TypeOps.commonSpreadFields(sum, symbols)
+                : fieldTypes((Ast.Data) symbols.get(src));
+    }
+
     private Type successType(Ast.RetType ret) {
         return ctx.successType(ret);
     }
@@ -458,8 +466,7 @@ final class BodyGen {
                     continue;
                 }
                 for (String sp : spreads) {
-                    Ast.Data src = (Ast.Data) symbols.get(((Type.Ref) varType(sp)).name());
-                    if (fieldTypes(src).containsKey(field)) {
+                    if (spreadableFields(((Type.Ref) varType(sp)).name()).containsKey(field)) {
                         spreadField(sp, field);
                         break;
                     }
@@ -1012,9 +1019,8 @@ final class BodyGen {
         void spreadField(String spreadVar, String field) {
             Var v = env.get(spreadVar);
             TypeName srcName = ((Type.Ref) v.type()).name();
-            Ast.Data src = (Ast.Data) symbols.get(srcName);
             load(code, v.slot(), v.type());
-            emitFieldRead(code, srcName, field, fieldTypes(src).get(field));
+            emitFieldRead(code, srcName, field, spreadableFields(srcName).get(field));
         }
 
         // --- the surface Intrinsics drives to emit a shipped primitive (ADR-0028) ---
