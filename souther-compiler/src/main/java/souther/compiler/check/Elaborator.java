@@ -187,7 +187,7 @@ public final class Elaborator {
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(li.name(), bindType);
                 Core body = elaborate(li.body(), inner, ctx, expected);
-                yield new Core.LetIn(li.name(), value, body, body.type(), li.pos());
+                yield new Core.LetIn(li.binder(), value, body, body.type(), li.pos());
             }
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
@@ -209,11 +209,11 @@ public final class Elaborator {
                         "`" + v.name() + "` reached the check unresolved, at " + v.pos());
                 // A binding with no type here is not a naming question: an inference probe types a
                 // body before the binding it asks about has one, and reads the report to find out.
-                case ValueName.Local _ when env.get(v.name()) != null ->
-                        new Core.Var(v.name(), env.get(v.name()), v.pos());
+                case ValueName.Local local when env.get(v.name()) != null ->
+                        new Core.Read(v.name(), local.id(), env.get(v.name()), v.pos());
                 case ValueName.OfType named
                         when ctx.symbols().get(named.type()) instanceof Ast.UnitData ->
-                        new Core.Var(v.name(), Type.ref(named.type()), v.pos());
+                        new Core.UnitValue(named.type(), Type.ref(named.type()), v.pos());
                 // `None` where a `?` field is being given a value: the empty optional (spec 7.3).
                 // What puts it here is the field, which the context says (ADR-0011) — not the expected
                 // type, since a model may name `Option<T>` where it reads one and an expectation would
@@ -331,7 +331,7 @@ public final class Elaborator {
                     }
                     joined = next;
                 }
-                yield new Core.IfConstructed(construct, ic.binderName(), then, arms, joined, ic.pos());
+                yield new Core.IfConstructed(construct, ic.binder(), then, arms, joined, ic.pos());
             }
             case Ast.ListLit lit -> {
                 if (lit.elements().isEmpty()) {
@@ -537,7 +537,7 @@ public final class Elaborator {
             inner.put(block.params().get(i).name(), paramTypes.get(i));
         }
         Core body = elaborate(block.body(), inner, ctx);
-        return new Core.Block(block.paramNames(), body, Type.fn(paramTypes, body.type()), block.pos());
+        return new Core.Block(block.params(), body, Type.fn(paramTypes, body.type()), block.pos());
     }
 
     /** Whether an expression bound to a {@code let} is a function value: a lambda, or an {@code if}
@@ -846,7 +846,7 @@ public final class Elaborator {
                     inner.put(b.params().get(i).name(), paramTypes.get(i));
                 }
                 Core body = elaborate(b.body(), inner, ctx);
-                yield new Core.Block(b.paramNames(), body, Type.fn(paramTypes, body.type()), b.pos());
+                yield new Core.Block(b.params(), body, Type.fn(paramTypes, body.type()), b.pos());
             }
             case Ast.If iff -> {
                 Core cond = requireTyped(iff.cond(), Type.BOOL, env, ctx, "if condition");
@@ -868,7 +868,7 @@ public final class Elaborator {
                 Map<String, Type> inner = new HashMap<>(env);
                 inner.put(li.name(), bound.type());
                 Core body = elaborateFunctionValue(li.body(), paramTypes, inner, ctx);
-                yield new Core.LetIn(li.name(), bound, body, body.type(), li.pos());
+                yield new Core.LetIn(li.binder(), bound, body, body.type(), li.pos());
             }
             default -> elaborate(value, env, ctx);
         };

@@ -96,7 +96,7 @@ public final class CallElaborator {
          * reads its name and never asks for its type. */
         void untyped(int i) {
             Ast.Var name = (Ast.Var) args.get(i);
-            cores[i] = new Core.Var(name.name(), null, name.pos());
+            cores[i] = new Core.Builtin(name.name(), name.pos());
         }
 
         /** The elaborated arguments. Every argument must have been reached: a rule that yields a type

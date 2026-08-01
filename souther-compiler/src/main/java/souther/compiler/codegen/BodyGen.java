@@ -377,10 +377,10 @@ final class BodyGen {
                 // the value emitter would leave the recursive call a real call and grow the stack.
                 case Core.IfConstructed ic -> {
                     Attempt a = emitAttempt(ic);
-                    Var shadowed = env.get(ic.binder());
-                    bind(ic.binder(), a.slot(), ic.construct().type());
+                    Var shadowed = env.get(ic.binder().name());
+                    bind(ic.binder().name(), a.slot(), ic.construct().type());
                     emitTail(ic.then(), cdB, requiredNames, requiredSuccess, expected);
-                    restore(ic.binder(), shadowed);
+                    restore(ic.binder().name(), shadowed);
                     code.labelBinding(a.elseLabel());
                     // Each departure is in tail position too, so it returns on its own and needs no
                     // jump past the ones emitted after it.
@@ -587,23 +587,21 @@ final class BodyGen {
                 case Core.Bool x -> {
                     if (x.value()) code.iconst_1(); else code.iconst_0();
                 }
-                case Core.Var v -> {
+                case Core.Read v -> {
                     Var var = env.get(v.name());
-                    if (var != null) {
-                        load(code, var.slot(), var.type());
-                    } else if (v.type() instanceof Type.Ref ref
-                            && symbols.get(ref.name()) instanceof Ast.UnitData) {
-                        // A unit data name in an expression constructs it (spec §unit-data), and a
-                        // unit type has exactly one value. Which unit is read off the type the name
-                        // was given rather than resolved again from its spelling: a body expanded in
-                        // from another module's published helper names that module's unit, which this
-                        // module need not declare at all — and, if it declares one spelled the same,
-                        // is not the same unit.
-                        loadSharedInstance(code, cd(ref.name()));
-                    } else {
+                    if (var == null) {
                         throw new CompileException(v.pos(), "unbound identifier `" + v.name() + "`");
                     }
+                    load(code, var.slot(), var.type());
                 }
+                // a unit type has exactly one value, and naming it is that value (spec §unit-data).
+                // Which unit is on the node: a body expanded in from another module's published
+                // helper names that module's unit, which this module need not declare at all — and,
+                // if it declares one spelled the same, is not the same unit.
+                case Core.UnitValue u -> loadSharedInstance(code, cd(u.data()));
+                case Core.Builtin b -> throw new IllegalStateException(
+                        "`" + b.name() + "` is read by the operation that takes it, not emitted, at "
+                                + b.pos());
                 case Core.Neg n -> {
                     if (genExpr(n.operand()) == Type.DECIMAL) {
                         code.invokevirtual(CD_BigDecimal, "negate", MethodTypeDesc.of(CD_BigDecimal));
@@ -630,10 +628,10 @@ final class BodyGen {
                 case Core.IfConstructed ic -> {
                     Attempt a = emitAttempt(ic);
                     Label end = code.newLabel();
-                    Var shadowed = env.get(ic.binder());
-                    bind(ic.binder(), a.slot(), ic.construct().type());
+                    Var shadowed = env.get(ic.binder().name());
+                    bind(ic.binder().name(), a.slot(), ic.construct().type());
                     genExpr(ic.then(), shapeOf(ic, expected));
-                    restore(ic.binder(), shadowed);
+                    restore(ic.binder().name(), shadowed);
                     code.goto_(end);
 
                     code.labelBinding(a.elseLabel());
@@ -741,11 +739,11 @@ final class BodyGen {
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm: save any outer binding it shadows and restore it
                 // after the arm, or a later arm reusing the name would resolve to this arm's slot.
-                Var prevBinding = c.binding() != null ? env.get(c.binding()) : null;
+                Var prevBinding = c.binding() != null ? env.get(c.bindingName()) : null;
                 emitCaseGuard(c, sSlot, st, element, nextCase);
                 genExpr(c.body(), want);
                 if (c.binding() != null) {
-                    restore(c.binding(), prevBinding);
+                    restore(c.bindingName(), prevBinding);
                 }
                 code.goto_(end);
                 code.labelBinding(nextCase);
@@ -768,11 +766,11 @@ final class BodyGen {
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm (see {@link #match}): restore any outer binding it
                 // shadows before the next arm's dispatch.
-                Var prevBinding = c.binding() != null ? env.get(c.binding()) : null;
+                Var prevBinding = c.binding() != null ? env.get(c.bindingName()) : null;
                 emitCaseGuard(c, sSlot, st, element, nextCase);
                 emitTail(c.body(), cdB, requiredNames, requiredSuccess, expected);
                 if (c.binding() != null) {
-                    restore(c.binding(), prevBinding);
+                    restore(c.bindingName(), prevBinding);
                 }
                 code.labelBinding(nextCase);
             }
@@ -798,7 +796,7 @@ final class BodyGen {
                     int bslot = slot(element);
                     unbox(code, element, bslot);
                     if (c.binding() != null) {
-                        bind(c.binding(), bslot, element);
+                        bind(c.bindingName(), bslot, element);
                     }
                 }
             } else if (cases.size() == 1) {
@@ -811,7 +809,7 @@ final class BodyGen {
                     code.aload(sSlot);
                     int bslot = slot(bt);
                     unbox(code, bt, bslot);
-                    bind(c.binding(), bslot, bt);
+                    bind(c.bindingName(), bslot, bt);
                 }
             } else {
                 // or-pattern: run the body if the value is any of the cases; the binding (if any)
@@ -825,7 +823,7 @@ final class BodyGen {
                 code.goto_(nextCase);
                 code.labelBinding(body);
                 if (c.binding() != null) {
-                    bind(c.binding(), sSlot, st);
+                    bind(c.bindingName(), sSlot, st);
                 }
             }
         }
@@ -1342,9 +1340,9 @@ final class BodyGen {
             // binds ordinary names (`let (i, ys) = acc`), which are the caller's names as often as not.
             // The whole scope is put back, the slots it took staying taken.
             Map<String, Var> enclosing = new HashMap<>(env);
-            bind(step.params().get(0), acc, accType);
+            bind(step.params().get(0).name(), acc, accType);
             int element = slot(elementType);
-            bind(step.params().get(1), element, elementType);
+            bind(step.params().get(1).name(), element, elementType);
 
             Label next = code.newLabel();
             Label done = code.newLabel();
@@ -1467,7 +1465,7 @@ final class BodyGen {
             code.aload(bSlot);
             genExpr(call.args().get(2));              // scale (Int, a long)
             code.l2i();
-            String mode = ((Core.Var) call.args().get(3)).name();
+            String mode = ((Core.Builtin) call.args().get(3)).name();
             code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
             code.invokevirtual(CD_BigDecimal, "divide", MTD_bdDivide);
             code.goto_(end);
@@ -1480,7 +1478,7 @@ final class BodyGen {
          * the call as `divide`'s is. The kernel aborts on a value too large for an Int. */
         private void decimalToInt(Core.Call call) {
             genExpr(call.args().get(0));
-            String mode = ((Core.Var) call.args().get(1)).name();
+            String mode = ((Core.Builtin) call.args().get(1)).name();
             code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
             code.invokestatic(CD_DecimalMath, "toInt",
                     MethodTypeDesc.of(ConstantDescs.CD_long, CD_BigDecimal, CD_RoundingMode));
@@ -1493,7 +1491,7 @@ final class BodyGen {
             genExpr(call.args().get(0));
             genExpr(call.args().get(1));   // scale (Int, a long)
             code.l2i();
-            String mode = ((Core.Var) call.args().get(2)).name();
+            String mode = ((Core.Builtin) call.args().get(2)).name();
             code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
             code.invokevirtual(CD_BigDecimal, "setScale",
                     MethodTypeDesc.of(CD_BigDecimal, ConstantDescs.CD_int, CD_RoundingMode));
@@ -1827,7 +1825,7 @@ final class BodyGen {
          * captured free variables (and any injected behaviors it calls) to its constructor. Its
          * parameter and result types are the ones the checker put on the block (issue #81). */
         private void emitLambda(Core.Block block, List<Type> paramTypes) {
-            emitLambda(block.params(), block.body(), paramTypes,
+            emitLambda(block.paramNames(), block.body(), paramTypes,
                     ((Type.FnOf) block.type()).result(), freeVars(block));
         }
 
@@ -1894,13 +1892,13 @@ final class BodyGen {
          * scope (so must be captured), in first-seen order. */
         private List<String> freeVars(Core.Block block) {
             LinkedHashSet<String> free = new LinkedHashSet<>();
-            collectFree(block.body(), new HashSet<>(block.params()), free);
+            collectFree(block.body(), new HashSet<>(block.paramNames()), free);
             return new ArrayList<>(free);
         }
 
         private void collectFree(Core e, Set<String> bound, LinkedHashSet<String> free) {
             switch (e) {
-                case Core.Var v -> maybeFree(v.name(), bound, free);
+                case Core.Read v -> maybeFree(v.name(), bound, free);
                 case Core.Call c -> {
                     maybeFree(c.fn(), bound, free);   // an applied function value is captured too
                     c.args().forEach(a -> collectFree(a, bound, free));
@@ -1923,7 +1921,7 @@ final class BodyGen {
                 case Core.IfConstructed ic -> {
                     collectFree(ic.construct(), bound, free);
                     Set<String> inner = new HashSet<>(bound);
-                    inner.add(ic.binder());
+                    inner.add(ic.binder().name());
                     collectFree(ic.then(), inner, free);
                     ic.els().forEach(arm -> collectFree(arm.body(), bound, free));
                 }
@@ -1939,14 +1937,14 @@ final class BodyGen {
                         Set<String> inner = bound;
                         if (c.binding() != null) {
                             inner = new HashSet<>(bound);
-                            inner.add(c.binding());
+                            inner.add(c.bindingName());
                         }
                         collectFree(c.body(), inner, free);
                     }
                 }
                 case Core.Block b -> {
                     Set<String> inner = new HashSet<>(bound);
-                    inner.addAll(b.params());
+                    inner.addAll(b.paramNames());
                     collectFree(b.body(), inner, free);
                 }
                 case Core.ListLit lit -> lit.elements().forEach(x -> collectFree(x, bound, free));
@@ -1959,6 +1957,9 @@ final class BodyGen {
                 case Core.Str _ -> { }
                 case Core.Bool _ -> { }
                 case Core.Unreachable _ -> { }
+                // neither reads anything the enclosing body binds
+                case Core.UnitValue _ -> { }
+                case Core.Builtin _ -> { }
             }
         }
 

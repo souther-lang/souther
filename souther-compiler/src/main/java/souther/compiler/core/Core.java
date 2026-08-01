@@ -1,5 +1,6 @@
 package souther.compiler.core;
 
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.diag.SourcePos;
@@ -21,8 +22,13 @@ import java.util.Optional;
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
  * checker is the only producer of Core — it builds the tree as it types a body
  * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of inferring the
- * same types a second time. The one node with no type is the rounding mode of {@code divide}, a
- * built-in identifier the emitter reads by name rather than as a value (spec 18.3).
+ * same types a second time. The one node with no type is {@link Builtin}, a name the language gives
+ * a meaning that the emitter reads rather than evaluates (spec 18.3).
+ *
+ * <p>A name in a body is one of three nodes, not one: a read of something the body binds, a unit
+ * data written as its own value, and a name the language defines. They were one, and the emitter
+ * told them apart by looking the spelling up in its slots and falling back when it found nothing —
+ * which is an answer about a name, decided by its text.
  *
  * <p>A surface-only node (a list comprehension) never appears — the Lower stage has already
  * rewritten it.
@@ -43,7 +49,24 @@ public sealed interface Core {
 
     record Bool(boolean value, Type type, SourcePos pos) implements Core {}
 
-    record Var(String name, Type type, SourcePos pos) implements Core {}
+    /** A read of something the body binds: a parameter, a {@code let}, a lambda's parameter, a
+     * {@code match} arm's binding. {@code binding} is which one; {@code name} is what to call the
+     * local it is emitted as, and what a diagnostic quotes. */
+    record Read(String name, BindingId binding, Type type, SourcePos pos) implements Core {}
+
+    /** A unit data written where a value goes: the type has one value, and naming it is that value
+     * (spec §unit-data). Which unit is on the node, so nothing resolves a spelling again. */
+    record UnitValue(TypeName data, Type type, SourcePos pos) implements Core {}
+
+    /** A name the language gives a meaning, which the emitter reads rather than evaluates: the
+     * rounding mode of {@code divide} (spec 18.3). It is not a value, so it has no type. */
+    record Builtin(String name, SourcePos pos) implements Core {
+
+        @Override
+        public Type type() {
+            return null;
+        }
+    }
 
     record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
@@ -67,8 +90,8 @@ public sealed interface Core {
      * the {@code Result} carries selects one; the checker has already established that every named
      * clause is answered, so one always matches.
      */
-    record IfConstructed(NewData construct, String binder, Core then, List<ElseArm> els, Type type,
-                         SourcePos pos) implements Core {}
+    record IfConstructed(NewData construct, Ast.Binder binder, Core then, List<ElseArm> els,
+                         Type type, SourcePos pos) implements Core {}
 
     /** One departure of an attempted construction: the clause it answers ({@link Optional#empty()}
      * for any failure) and the value taken. */
@@ -77,13 +100,24 @@ public sealed interface Core {
     /** A local binding. What the source wrote as its type — {@code let x: T = e} — is already in
      * {@code value}'s type: the checker pushed the annotation into the value when it typed it, so an
      * empty collection bound here materialises at the written type rather than a bottom (issue #71). */
-    record LetIn(String name, Core value, Core body, Type type, SourcePos pos) implements Core {}
+    record LetIn(Ast.Binder binder, Core value, Core body, Type type, SourcePos pos) implements Core {
+
+        public String name() {
+            return binder.name();
+        }
+    }
 
     /** A second-class block: a step passed to a recursive combinator, or an escaping lambda a {@code
      * let} binds (a closure). Kept as its own node until closure conversion gets an explicit Core form.
      * Its {@code type} is the {@link Type.FnOf} the checker gave it — the parameter types the context
      * fixed, and the body's result type. */
-    record Block(List<String> params, Core body, Type type, SourcePos pos) implements Core {}
+    record Block(List<Ast.Binder> params, Core body, Type type, SourcePos pos) implements Core {
+
+        /** How the parameters were written, in order. */
+        public List<String> paramNames() {
+            return params.stream().map(Ast.Binder::name).toList();
+        }
+    }
 
     record ListLit(List<Core> elements, Type type, SourcePos pos) implements Core {}
 
@@ -109,7 +143,14 @@ public sealed interface Core {
 
     /** {@code bindType} is the type the case binding takes inside the arm — the case type a union
      * narrows to, or the element a {@code Some x} opens. */
-    record Case(List<TypeName> caseTypes, String binding, Core body, Type bindType, SourcePos pos) {}
+    record Case(List<TypeName> caseTypes, Ast.Binder binding, Core body, Type bindType,
+                SourcePos pos) {
+
+        /** How the binding was written, or null where the arm binds nothing. */
+        public String bindingName() {
+            return binding == null ? null : binding.name();
+        }
+    }
 
     record Match(Core scrutinee, List<Case> cases, Type type, SourcePos pos) implements Core {}
 
@@ -129,7 +170,9 @@ public sealed interface Core {
             case Decimal x -> x;
             case Str x -> x;
             case Bool x -> x;
-            case Var x -> x;
+            case Read x -> x;
+            case UnitValue x -> x;
+            case Builtin x -> x;
             case OptionNone x -> x;
             case Unreachable x -> x;
             case Neg n -> new Neg(f.apply(n.operand()), n.type(), n.pos());
@@ -142,7 +185,7 @@ public sealed interface Core {
                     ic.binder(), f.apply(ic.then()),
                     ic.els().stream().map(arm -> new ElseArm(arm.clause(), f.apply(arm.body()))).toList(),
                     ic.type(), ic.pos());
-            case LetIn li -> new LetIn(li.name(), f.apply(li.value()), f.apply(li.body()),
+            case LetIn li -> new LetIn(li.binder(), f.apply(li.value()), f.apply(li.body()),
                     li.type(), li.pos());
             case Block b -> new Block(b.params(), f.apply(b.body()), b.type(), b.pos());
             case ListLit lit -> new ListLit(lit.elements().stream().map(f).toList(), lit.type(), lit.pos());
