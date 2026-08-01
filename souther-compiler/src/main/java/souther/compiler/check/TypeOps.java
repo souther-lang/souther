@@ -98,7 +98,7 @@ public final class TypeOps {
                 case ORDERING -> false;
             };
             case Type.TupleOf tu -> switch (required) {
-                case EQUALITY, EXTERNAL_FORM -> {
+                case EQUALITY -> {
                     for (Type e : tu.elements()) {
                         if (!answers(e, required, symbols)) {
                             yield false;
@@ -106,7 +106,8 @@ public final class TypeOps {
                     }
                     yield true;
                 }
-                case ORDERING -> false;
+                // a tuple carries values through a computation and is never encoded, whatever it holds
+                case ORDERING, EXTERNAL_FORM -> false;
             };
             case Type.FnOf _ -> false;
             case Type.Var _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> switch (required) {
@@ -138,6 +139,31 @@ public final class TypeOps {
      */
     public static boolean hasExternalForm(Type t, Symbols symbols) {
         return answers(t, Requires.EXTERNAL_FORM, symbols);
+    }
+
+    /**
+     * The part of {@code t} that has no external form, or null when the whole of it has one. What it
+     * is, is part of the answer: a function and a tuple are both refused at a boundary and for the
+     * same reason, but what an author should write instead differs, so a reader that reports one must
+     * not report it as the other.
+     *
+     * <p>The decision is {@link #answers}'s; this only walks to where it was made. A type that
+     * answers no and is not a collection is itself the part that cannot cross.
+     */
+    public static Type withoutExternalForm(Type t, Symbols symbols) {
+        if (answers(t, Requires.EXTERNAL_FORM, symbols)) {
+            return null;
+        }
+        return switch (t) {
+            case Type.ListOf l -> withoutExternalForm(l.element(), symbols);
+            case Type.SetOf s -> withoutExternalForm(s.element(), symbols);
+            case Type.OptionOf o -> withoutExternalForm(o.element(), symbols);
+            case Type.MapOf m -> {
+                Type inKey = withoutExternalForm(m.key(), symbols);
+                yield inKey != null ? inKey : withoutExternalForm(m.value(), symbols);
+            }
+            default -> t;
+        };
     }
 
     /** The type a field's written type stands for. A field whose type is not representable at the

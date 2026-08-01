@@ -521,7 +521,7 @@ public final class DataChecker {
                                 + " generated class reads its fields through accessors of the same name,"
                                 + " and `" + e.getKey() + "()` is already a method every JVM value has");
             }
-            if (SpecChecker.containsTuple(e.getValue())) {
+            if (TypeOps.withoutExternalForm(e.getValue(), ctx.symbols()) instanceof Type.TupleOf) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.field.tuple").title("check.boundary.title")
                                 .at(fieldRegion(ctx.data(), e.getKey()))

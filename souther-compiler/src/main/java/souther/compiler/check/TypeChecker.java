@@ -254,7 +254,7 @@ public final class TypeChecker {
             if (b instanceof Ast.SpecBehavior spec) {
                 specNames.add(b.name());
                 SpecChecker.rejectAnonymousUnionParams(spec);
-                SpecChecker.rejectTupleIO(spec);
+                SpecChecker.rejectTupleIO(spec, symbols);
                 SpecChecker.rejectFunctionIO(spec, symbols);
                 SpecChecker.rejectOptionalOutput(spec, symbols);
                 SpecChecker.rejectNonBoundaryMapKeyIO(spec, symbols);
