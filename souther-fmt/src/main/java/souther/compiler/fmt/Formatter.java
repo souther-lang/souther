@@ -551,6 +551,7 @@ public final class Formatter {
             case LAMBDA_EXPR -> lambda(n);
             case NEW_DATA_EXPR -> newData(n);
             case BLOCK_EXPR -> block(n);
+            case UNREACHABLE_EXPR -> concat(text("unreachable "), expr(onlyExpr(n)));
             default -> text(n.text().strip());
         };
     }
@@ -996,7 +997,7 @@ public final class Formatter {
         return switch (k) {
             case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, BINARY_EXPR, UNARY_EXPR, PIPE_EXPR,
                  PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR, MATCH_EXPR, LAMBDA_EXPR,
-                 FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR -> true;
+                 FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR, UNREACHABLE_EXPR -> true;
             default -> false;
         };
     }

@@ -113,6 +113,10 @@ public sealed interface Core {
 
     record Match(Core scrutinee, List<Case> cases, Type type, SourcePos pos) implements Core {}
 
+    /** {@code unreachable "reason"}: the position it stands in gets no value, and the reason is the
+     * message the abort carries. Its type is {@link Type.Never}, which fits whatever was expected. */
+    record Unreachable(String reason, Type type, SourcePos pos) implements Core {}
+
     /**
      * {@code e} with {@code f} applied to each of its immediate children, the node's own kind, type
      * and position kept. A Core-to-Core pass recurses through this rather than hand-copying every
@@ -127,6 +131,7 @@ public sealed interface Core {
             case Bool x -> x;
             case Var x -> x;
             case OptionNone x -> x;
+            case Unreachable x -> x;
             case Neg n -> new Neg(f.apply(n.operand()), n.type(), n.pos());
             case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.type(), fa.pos());
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.type(), b.pos());

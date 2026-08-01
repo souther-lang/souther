@@ -396,6 +396,11 @@ public final class ExampleVerifier {
             out.add(Diagnostic.of("E1909", "check.fake.miss").title("check.example.title")
                     .at(row.pos()).args(fm.getMessage()).build());
             return;
+        } catch (UnreachableException ue) {
+            out.add(Diagnostic.of("E1911", "check.example.unreachable").title("check.example.title")
+                    .at(row.pos()).args(ue.getMessage())
+                    .hint("check.example.unreachable.hint").build());
+            return;
         } catch (AbortException ae) {
             out.add(mismatch(row, describeExpected(row.expected(), sig.out()), "aborted: " + ae.getMessage()));
             return;
@@ -1580,6 +1585,13 @@ public final class ExampleVerifier {
             if (cause instanceof FakeMissException fm) {
                 throw fm;   // a fake did not cover an input — reported as its own diagnostic
             }
+            // a point the model declared could not arise: what the row found is not a wrong answer
+            // but a premise that does not hold, so it is reported as that rather than as a mismatch.
+            // Matched by name: the generated code runs under its own loader, and this class only
+            // needs to know which abort it was.
+            if (cause != null && "souther.runtime.UnreachableReached".equals(cause.getClass().getName())) {
+                throw new UnreachableException(cause.getMessage());
+            }
             if (cause instanceof StackOverflowError) {
                 // a non-tail `partial` recursion that does not terminate — a non-termination, not a
                 // failed example (a tail-looping one is caught by the timeout instead)
@@ -1598,6 +1610,13 @@ public final class ExampleVerifier {
     /** The behavior aborted while evaluating a row (e.g. an invariant violation) — a failed example. */
     private static final class AbortException extends RuntimeException {
         AbortException(String message) {
+            super(message);
+        }
+    }
+
+    /** The row reached an {@code unreachable} — the reason the model wrote is the message. */
+    private static final class UnreachableException extends RuntimeException {
+        UnreachableException(String message) {
             super(message);
         }
     }

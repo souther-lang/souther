@@ -6,7 +6,7 @@ package souther.compiler.types;
  */
 public sealed interface Type
         permits Type.Prim, Type.Ref, Type.ListOf, Type.MapOf, Type.SetOf, Type.OptionOf, Type.Union,
-                Type.FnOf, Type.Var, Type.Nothing, Type.TupleOf, Type.Erroneous {
+                Type.FnOf, Type.Var, Type.Nothing, Type.Never, Type.TupleOf, Type.Erroneous {
 
     enum Prim implements Type { INT, STRING, BOOL, DECIMAL, DATE, DATETIME, RAW }
 
@@ -16,6 +16,21 @@ public sealed interface Type
      * {@code List<T>} a position expects). It never reaches codegen: an empty list is element-agnostic
      * at runtime. */
     record Nothing() implements Type {}
+
+    /**
+     * The type of an expression that answers no value: {@code unreachable "reason"}, and nothing
+     * else. It fits every expected type, and joining it with a type yields that type, so an arm
+     * that cannot arise leaves the {@code match} typed by the arms that can.
+     *
+     * <p>It is not {@link Nothing}. That one is an inference result waiting to be filled in — the
+     * element of {@code []} — and a pass that meets it asks what the context makes it. This one is
+     * an answer: nothing arrives here.
+     *
+     * <p>Fitting every type is not being one. The code around the abort is still emitted and still
+     * reads a shape, so where this survives to codegen — the position stated no type and no branch
+     * beside it supplied one — that position is refused rather than emitted.
+     */
+    record Never() implements Type {}
 
     /**
      * A type the compiler could not work out, and has already said so about.
@@ -95,6 +110,8 @@ public sealed interface Type
     Type NOTHING = new Nothing();
     /** The type of the empty-list literal {@code []}: a list whose element type is not yet fixed. */
     Type EMPTY_LIST = new ListOf(NOTHING);
+    /** The type of {@code unreachable "reason"} (see {@link Never}). */
+    Type NEVER = new Never();
 
     static Type ref(TypeName name) {
         return new Ref(name);
@@ -219,6 +236,7 @@ public sealed interface Type
             // the name carries the `'` it was written with (`'a`), so it is not added twice
             case Var v -> v.name().startsWith("'") ? v.name() : "'" + v.name();
             case Nothing _ -> "_";
+            case Never _ -> "Never";
             // An error type should not reach a message: it absorbs, so nothing compares against it
             // and finds a mismatch to describe. If one does, say what it is rather than a shape the
             // author could go looking for.

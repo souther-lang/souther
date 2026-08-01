@@ -47,7 +47,7 @@ public final class TmLanguageGenerator {
     /** Control and clause keywords. */
     private static final Set<String> CONTROL =
             Set.of("if", "then", "else", "match", "with", "guard", "constructs", "depends",
-                    "as", "invariant");
+                    "as", "invariant", "unreachable");
 
     /** Boolean literals (scoped as language constants, not keywords). */
     private static final Set<String> BOOLEANS = Set.of("true", "false");
