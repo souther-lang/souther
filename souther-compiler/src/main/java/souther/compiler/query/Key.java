@@ -53,14 +53,50 @@ public interface Key<T> {
      * it, once, at the point the chain came back round to it; it is not repeated at the end. The
      * keys before it are the ones that asked, which need not be part of the cycle at all.
      *
+     * <p>An answer given here is handed to the caller that asked and nothing more. Every key in
+     * progress when the cycle was found is left uncomputed — the ones that only asked as much as
+     * the ones the cycle runs through — so this answer is not kept, and the reports it carries are
+     * not there afterwards to be collected through {@link Db#allReports()}. A caller
+     * reading reports off the answer it was handed sees them; one reading them back from the store
+     * does not. This is not a way to turn a cycle into a diagnostic.
+     *
      * <p>A key kind that can be part of a cycle must say what a cycle means for it: modules that
      * import each other, helpers that call each other. Left unimplemented it is a programming error,
      * because the alternative is answering with something arbitrary and letting a later pass make
      * sense of it.
      */
     default Answer<T> onCycle(List<Key<?>> cycle) {
-        throw new IllegalStateException(
-                "the query " + this + " depends on itself and says nothing about what that means: "
-                        + cycle);
+        throw new IllegalStateException(describeCycle(cycle));
+    }
+
+    /**
+     * What the default answer to a cycle says: the keys that only asked, then the cycle itself,
+     * closing where it came back round.
+     */
+    private String describeCycle(List<Key<?>> cycle) {
+        // Where this key first appears is where the chain closes, and there is only one place to
+        // find: the ask that would put a key on the chain a second time is the ask that is answered
+        // here instead, so no two keys in the chain are equal.
+        int closes = cycle.indexOf(this);
+        if (closes < 0) {
+            // Not a shape of cycle: a chain that does not hold the key it closed on says nothing
+            // about what depends on what, and whether this key depends on itself is not something
+            // it can be read for.
+            return "a query cycle was reported for " + this
+                    + ", but its dependency chain does not contain it: " + cycle;
+        }
+        StringBuilder said = new StringBuilder("the query ").append(this)
+                .append(" depends on itself and says nothing about what that means.");
+        if (closes > 0) {
+            said.append("\n  asked by:");
+            for (Key<?> asker : cycle.subList(0, closes)) {
+                said.append("\n    ").append(asker);
+            }
+        }
+        said.append("\n  cycle:");
+        for (Key<?> member : cycle.subList(closes, cycle.size())) {
+            said.append("\n    ").append(member);
+        }
+        return said.append("\n    -> back to ").append(this).toString();
     }
 }
