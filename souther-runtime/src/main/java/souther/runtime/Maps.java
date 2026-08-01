@@ -76,13 +76,12 @@ public final class Maps {
         return acc;
     }
 
-    /** {@code m} without {@code key}; {@code m} unchanged when the key is absent. Which key that is
-     *  is the language's question, so the probe reads {@link PersistentHashMap#indexed} rather than
-     *  asking a still-JDK input map (a just-decoded {@code LinkedHashMap}), which would answer with
-     *  the key's own equality and miss an amount that arrived at another scale. A map Souther built is
-     *  already indexed that way and is read as it is. */
+    /** {@code m} without {@code key}; {@code m} unchanged when the key is absent. The
+     *  {@code containsKey} probe is worth the extra lookup: when the key is absent it returns the
+     *  original map untouched, which avoids normalizing a still-JDK input map (a just-decoded one)
+     *  into a {@code PersistentHashMap} for a no-op removal. */
     public static <K, V> Map<K, V> remove(K key, Map<K, V> m) {
-        if (!PersistentHashMap.indexed(m).containsKey(key)) {
+        if (!m.containsKey(key)) {
             return m;
         }
         return PersistentHashMap.from(m).without(key);
@@ -121,15 +120,20 @@ public final class Maps {
      *  null value — absence is {@code None}, not a null entry — so a single lookup distinguishes the
      *  two, no {@code containsKey} probe before {@code get}.
      *
-     *  <p>Which key is present is the language's question, so a still-JDK map is normalized before it
-     *  is asked ({@link PersistentHashMap#indexed}); a map Souther built is read as it is. */
+     *  <p>The map is read as it stands, by the index it carries. Every map Souther builds is indexed
+     *  by the language ({@link Values}), so a Decimal key is found by the amount it is. A map that
+     *  arrived from outside carries Java's index instead, and a boundary map's key is a String, a
+     *  String-backed newtype, a temporal or an enumeration (ADR-0040) — for every one of those the
+     *  two indexes agree, so nothing is bought by rebuilding it and a lookup would cost the whole
+     *  map. A {@code java.util.Map} handed in from Java with some other key is answered by its own
+     *  index, as a foreign collection is anywhere else (ADR-0085). */
     public static <V> Option<V> get(Map<?, V> map, Object key) {
-        @Nullable V value = PersistentHashMap.indexed(map).get(key);
+        @Nullable V value = map.get(key);
         return value != null ? Option.some(value) : Option.none();
     }
 
     public static boolean containsKey(Map<?, ?> map, Object key) {
-        return PersistentHashMap.indexed(map).containsKey(key);
+        return map.containsKey(key);
     }
 
     public static List<Object> keys(Map<?, ?> map) {

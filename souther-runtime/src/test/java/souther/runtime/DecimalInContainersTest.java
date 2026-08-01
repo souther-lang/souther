@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -115,10 +116,31 @@ class DecimalInContainersTest {
         assertEquals(Values.hash(ma), Values.hash(mb));
     }
 
+    /**
+     * A probe reads the container it was given, by the index that container carries. Every set
+     * Souther builds — including the one a {@code Set} field decodes into — is indexed by the
+     * language, so the amount is found at either scale. A {@code java.util.Set} handed in from Java
+     * carries Java's index, and rebuilding it to ask would cost the whole set on every membership
+     * test while buying nothing at the boundary, where a key or element is a String, a temporal or
+     * an enumeration and the two indexes agree.
+     */
     @Test
-    void aJdkSetHandedInStillDecidesTheLanguageWay() {
-        Set<BigDecimal> jdk = new HashSet<>(List.of(ONE_SCALED));
-        assertTrue(Sets.contains(ONE, jdk));
-        assertEquals(0, Sets.remove(ONE, jdk).size());
+    void aProbeReadsTheIndexTheContainerCarries() {
+        Set<BigDecimal> owned = Sets.fromList(List.of(ONE_SCALED));
+        assertTrue(Sets.contains(ONE, owned));
+        assertEquals(0, Sets.remove(ONE, owned).size());
+
+        Set<BigDecimal> foreign = new HashSet<>(List.of(ONE_SCALED));
+        assertFalse(Sets.contains(ONE, foreign));
+    }
+
+    /** Comparing two containers is a different question from probing one, and there both sides are
+     *  normalized: a foreign set is a value here, not an index being read. */
+    @Test
+    void comparingAForeignSetStillAnswersTheLanguagesWay() {
+        Set<BigDecimal> foreign = new HashSet<>(List.of(ONE_SCALED));
+        Set<BigDecimal> owned = Sets.fromList(List.of(ONE));
+        assertTrue(Values.equal(foreign, owned));
+        assertEquals(Values.hash(foreign), Values.hash(owned));
     }
 }

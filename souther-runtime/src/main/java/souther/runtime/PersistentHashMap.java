@@ -82,19 +82,6 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
         return b.build();
     }
 
-    /**
-     * {@code m} in a form that looks a key up the way the language does, without copying one that
-     * already does. A persistent map and the {@link Builder} a fold carries are both indexed by
-     * {@link Values#hash}, so a probe reads them as they are; anything else — a just-decoded
-     * {@code LinkedHashMap}, a map from Java — is indexed by the keys' own hashes and is rebuilt.
-     *
-     * <p>The builder has to be recognised, not just the finished map. A fold that grows a map reads
-     * its accumulator once per element, and rebuilding it there would turn the walk into O(n²).
-     */
-    static <K, V> Map<K, V> indexed(Map<K, V> m) {
-        return m instanceof PersistentHashMap<?, ?> || m instanceof Builder<?, ?> ? m : from(m);
-    }
-
     /** Spreads the key's hash so that low-order bits (the first chunk consumed) carry entropy. */
     private static int spread(int h) {
         return h ^ (h >>> 16);
@@ -175,8 +162,10 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
             return false;
         }
         for (Map.Entry<?, ?> e : other.entrySet()) {
-            Object mine = get(e.getKey());
-            if (mine == null || !Values.equal(mine, e.getValue())) {
+            // asked as two questions rather than reading an absent key off a null answer: a map
+            // Souther built never stores one, but `from` will build a map from a foreign map that
+            // does, and "not here" and "here, holding nothing" are not the same answer
+            if (!containsKey(e.getKey()) || !Values.equal(get(e.getKey()), e.getValue())) {
                 return false;
             }
         }

@@ -41,6 +41,22 @@ own index decides membership.
 - A type that implements no JDK collection interface — a generated data, a newtype, an `Option`, a
   tuple — compares only with its own kind, so its `equals` is the language's directly.
 
+A probe — `Map.get`, `Map.containsKey`, `Set.member` — reads the container it was given, by the index
+that container carries. Every container Souther builds is indexed by the language, and so is the
+`Set` a field decodes into. A map a field decodes into is a JDK map, and its keys are the ones a
+boundary map may have — a String, a String-backed newtype, a temporal, an enumeration (ADR-0040) —
+for every one of which Java's index and the language's agree. So the probe is already answering the
+language's question wherever the language can produce the container, and normalizing it first would
+cost the whole map on every lookup to buy nothing there. A `java.util.Map` handed in from Java with
+some other key is answered by its own index, which is the same thing this ADR already says about
+comparing one.
+
+Comparing two containers is a different question and is answered differently: there both sides are
+normalized first, because a foreign container is a value being compared rather than an index being
+read, and Java's equality being finer than the language's means it may hold two elements the language
+calls one. Counted as it stands, both of those would find the same element of the other side and
+nothing would notice what the other side has and it does not.
+
 Clojure reached the same place from the same starting point: `clojure.lang.Util/equiv` and
 `Util/hasheq` are one definition every collection calls, and `IHashEq` is the parallel hash that
 leaves `Object.hashCode` to Java — `(hash 1M)` and `(.hashCode 1M)` disagree there for the reason

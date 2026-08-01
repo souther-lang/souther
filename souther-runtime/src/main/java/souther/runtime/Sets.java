@@ -28,21 +28,23 @@ public final class Sets {
         return PersistentHashSet.from(s).with(value);
     }
 
-    /** {@code s} without {@code value}; {@code s} unchanged when absent. Which element that is is the
-     *  language's question, so the probe goes through a {@code PersistentHashSet} rather than asking
-     *  a still-JDK input set, which would answer with the element's own equality and miss an amount
-     *  that arrived at another scale. {@code from} shares when the set already is one, so a set built
-     *  inside Souther pays nothing for this. */
+    /** {@code s} without {@code value}; {@code s} unchanged when absent. The {@code contains} probe
+     *  returns the original set untouched when the value is absent, avoiding normalizing a still-JDK
+     *  input set into a {@code PersistentHashSet} for a no-op removal. */
     public static <T> Set<T> remove(T value, Set<T> s) {
-        PersistentHashSet<T> owned = PersistentHashSet.from(s);
-        if (!owned.contains(value)) {
+        if (!s.contains(value)) {
             return s;
         }
-        return owned.without(value);
+        return PersistentHashSet.from(s).without(value);
     }
 
+    /** Whether {@code s} holds {@code value}, by the index {@code s} carries. Every set Souther
+     *  builds — including the one a {@code Set} field decodes into — is indexed by the language
+     *  ({@link Values}), so an amount is found at either scale. A {@code java.util.Set} handed in
+     *  from Java carries Java's index and is answered by it, as a foreign collection is anywhere
+     *  else (ADR-0085). */
     public static boolean contains(Object value, Set<?> s) {
-        return PersistentHashSet.from(s).contains(value);
+        return s.contains(value);
     }
 
     public static <T> Set<T> union(Set<T> a, Set<T> b) {
