@@ -884,7 +884,7 @@ final class CodecGen {
         code.invokevirtual(CD_ROk, "value", MTD_Object);
         int inputSlot = gen.slot(inputType);
         unbox(code, inputType, inputSlot);
-        gen.bind(prim.inputName(), inputSlot, inputType);
+        gen.bind(prim.input(), inputSlot, inputType);
 
         for (Ast.DecStmt stmt : prim.stmts()) {
             switch (stmt) {
@@ -892,7 +892,7 @@ final class CodecGen {
                     Type t = gen.expr(let.value());
                     int slot = gen.slot(t);
                     store(code, slot, t);
-                    gen.bind(let.name(), slot, t);
+                    gen.bind(let.binder(), slot, t);
                 }
             }
         }
@@ -928,7 +928,7 @@ final class CodecGen {
         Type innerType = bindType(dec.inner());
         int inSlot = gen.slot(innerType);
         unbox(code, innerType, inSlot);                             // cast Object -> Y, store
-        gen.bind(dec.inputName(), inSlot, innerType);
+        gen.bind(dec.input(), inSlot, innerType);
         emitConstructCall(code, gen, cdName, dec.result(), fields);
     }
 
@@ -991,11 +991,11 @@ final class CodecGen {
                 code.invokestatic(CD_Option, "ofOptional", MTD_ofOptional, true);
                 int vSlot = gen.slot(t);
                 code.astore(vSlot);
-                gen.bind(bind.name(), vSlot, t);
+                gen.bind(bind.binder(), vSlot, t);
             } else {
                 int vSlot = gen.slot(t);
                 unbox(code, t, vSlot);
-                gen.bind(bind.name(), vSlot, t);
+                gen.bind(bind.binder(), vSlot, t);
             }
         }
         emitConstructCall(code, gen, cdName, obj.result(), fields);
@@ -1299,7 +1299,9 @@ final class CodecGen {
             inits.add(new Core.FieldInit(init.name(),
                     gen.elaborate(init.value(), fields.get(init.name())), init.pos()));
         }
-        gen.emitFieldValues(fields, inits, construct.spreads());
+        // a decoder's construction gives every field a value of its own; nothing builds one with a
+        // spread, so there is no binding to copy from here
+        gen.emitFieldValues(fields, inits, List.of());
         code.invokestatic(cdName, "__construct", MethodTypeDesc.of(CD_Result, fieldDescs(fields)));
         // Souther construction Result -> Raoh boundary Result. An invariant failure becomes a
         // Raoh failure (spec 9.4, 10.1); success wraps the constructed value.
@@ -1348,7 +1350,7 @@ final class CodecGen {
                 code.checkcast(cdName);
                 int selfSlot = gen.slot(Type.ref(symbols.own(data.name())));
                 code.astore(selfSlot);
-                gen.bind(enc.selfName(), selfSlot, Type.ref(symbols.own(data.name())));
+                gen.bind(enc.self(), selfSlot, Type.ref(symbols.own(data.name())));
                 emitRawExpr(code, gen, enc.result());
                 code.areturn();
             });
@@ -1388,7 +1390,7 @@ final class CodecGen {
                 code.invokevirtual(CD_OptionSome, "value", MTD_Object);
                 int slot = gen.slot(elemType);
                 unbox(code, elemType, slot);
-                gen.bind(o.elemVar(), slot, elemType);
+                gen.bind(o.elem(), slot, elemType);
                 emitRawExpr(code, gen, o.inner());          // Some(v) -> encode v
                 code.goto_(end);
                 code.labelBinding(none);
@@ -1457,7 +1459,7 @@ final class CodecGen {
         code.invokevirtual(CD_OptionSome, "value", MTD_Object);   // map, valueObj
         int slot = gen.slot(elemType);
         unbox(code, elemType, slot);                    // map (value bound to local)
-        gen.bind(o.elemVar(), slot, elemType);
+        gen.bind(o.elem(), slot, elemType);
         code.dup();                                     // map, map
         code.loadConstant(key);                         // map, map, key
         emitRawExpr(code, gen, o.inner());              // map, map, key, encoded

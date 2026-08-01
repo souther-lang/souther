@@ -20,6 +20,7 @@ public sealed interface BindingOwner {
         return switch (this) {
             case OfValue v -> v.module();
             case OfData d -> d.declared().module();
+            case OfFields f -> f.declared().module();
             case Expansion e -> e.within().module();
             case Synthesized s -> s.within().module();
         };
@@ -44,6 +45,23 @@ public sealed interface BindingOwner {
         @Override
         public String toString() {
             return module + "." + name;
+        }
+    }
+
+    /**
+     * The fields of a data declaration, which its own invariant reads as bindings.
+     *
+     * <p>Apart from {@link OfData} because these are not numbered by reading the declaration's text:
+     * a field spread in from elsewhere is bound here too, and the declaration it came from may not
+     * have been resolved. They are numbered by the one walk that says what fields a declaration has,
+     * so the pass that resolves the invariant and the pass that emits it agree without either
+     * repeating the other.
+     */
+    record OfFields(TypeName declared) implements BindingOwner {
+
+        @Override
+        public String toString() {
+            return declared + ".fields";
         }
     }
 

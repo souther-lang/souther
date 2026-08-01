@@ -390,7 +390,7 @@ public final class Backend {
                         code.aload(i);
                         int slot = gen.slot(pt);
                         unbox(code, pt, slot);
-                        gen.bind(h.params().get(i).name(), slot, pt);
+                        gen.bind(h.params().get(i).binder(), slot, pt);
                     }
                     // A tail-position call to this same helper loops back here instead of recursing,
                     // so a self-tail-recursive helper runs in constant stack.
@@ -908,7 +908,7 @@ public final class Backend {
                     code.aload(i + 1);
                     int slot = gen.slot(pt);
                     unbox(code, pt, slot);
-                    gen.bind(fn.params().get(i).name(), slot, pt);
+                    gen.bind(fn.params().get(i).binder(), slot, pt);
                 }
                 // thread the behavior's declared output so a tail-position fold over an empty seed
                 // materialises its step at the output type, not a bottom (issue #70)

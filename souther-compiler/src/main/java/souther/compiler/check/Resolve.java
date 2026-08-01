@@ -371,22 +371,11 @@ public final class Resolve {
      * (and are what a spread-in invariant was written against).
      */
     private Bindings boundFields(Ast.Data d) {
-        return boundFields(d, Bindings.NONE, new LinkedHashSet<>());
-    }
-
-    private Bindings boundFields(Ast.Data d, Bindings bound, Set<TypeName> spread) {
-        for (Ast.Field f : d.fields()) {
-            bound = binding(bound, Ast.Binder.written(f.name(), f.pos()));
-        }
-        for (Ast.Name include : d.includes()) {
-            TypeName source = include.denotes() != null
-                    ? include.denotes() : symbols.resolve(include.written());
-            // a spread of a spread reaches the fields underneath; a spread that names nothing, or
-            // names its way back round, is reported where the declaration is checked
-            if (source != null && spread.add(source)
-                    && symbols.get(source) instanceof Ast.Data src) {
-                bound = boundFields(src, bound, spread);
-            }
+        Bindings bound = Bindings.NONE;
+        // the one walk that says what fields a declaration has, so the emitter reaches the same
+        // bindings without walking the includes again on its own account
+        for (Map.Entry<String, BindingId> f : TypeOps.fieldBindings(d, symbols).entrySet()) {
+            bound = bound.and(f.getKey(), new ValueName.Local(f.getKey(), f.getValue()));
         }
         return bound;
     }

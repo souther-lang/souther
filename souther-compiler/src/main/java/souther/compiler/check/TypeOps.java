@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -714,6 +716,53 @@ public final class TypeOps {
     }
 
     /** Effective field name → type (included data flattened first, then own fields). */
+    /**
+     * The binding each of {@code data}'s fields introduces inside its own invariant, in the order
+     * {@link #fieldTypes} lists them.
+     *
+     * <p>An invariant reads its declaration's fields, and reads them as the bindings they are. Which
+     * binding each is follows from the one walk that says what fields a declaration has — the same
+     * one that gives their types — so the pass that resolves the invariant and the pass that emits it
+     * do not each work it out. A field name is unique within a declaration, which is what lets the
+     * walk be keyed by it.
+     */
+    public static Map<String, BindingId> fieldBindings(Ast.Data data, Symbols symbols) {
+        Map<String, BindingId> bindings = new LinkedHashMap<>();
+        walkFields(data, symbols.own(data.name()), symbols, new LinkedHashSet<>(), bindings);
+        return bindings;
+    }
+
+    /**
+     * Every field {@code data} has, each with the binding the declaration that declares it gives it.
+     *
+     * <p>A field brought in by an include keeps the binding of the declaration it was written in,
+     * because the invariant that reads it was written there too and is carried in with it. So a
+     * declaration binds its own fields and the fields underneath, and an invariant reads the same
+     * binding wherever it is checked or emitted.
+     *
+     * <p>Apart from {@link #fieldTypes} because it answers where that one cannot: this runs while the
+     * declaration is being resolved, where an include may not yet say what it denotes, and a field
+     * has a name whether or not its type has been worked out. An include that names nothing is
+     * skipped — the declaration is refused where it is checked, and refusing it twice says nothing
+     * more.
+     */
+    private static void walkFields(Ast.Data data, TypeName declared, Symbols symbols,
+                                   Set<TypeName> seen, Map<String, BindingId> out) {
+        BindingOwner owner = new BindingOwner.OfFields(declared);
+        int ordinal = 0;
+        for (Ast.Field field : data.fields()) {
+            out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
+        }
+        for (Ast.Name include : data.includes()) {
+            TypeName source = include.denotes() != null
+                    ? include.denotes() : symbols.resolve(include.written());
+            if (source != null && seen.add(source)
+                    && symbols.get(source) instanceof Ast.Data included) {
+                walkFields(included, source, symbols, seen, out);
+            }
+        }
+    }
+
     public static Map<String, Type> fieldTypes(Ast.Data data, Symbols symbols) {
         Map<String, Type> types = new LinkedHashMap<>();
         for (Ast.Name inc : data.includes()) {
