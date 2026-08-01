@@ -893,16 +893,23 @@ public final class HelperInliner {
      * standing as a value, and a {@code depends on} parameter is reached through the behavior it
      * names rather than bound to a slot. Forwarding here is what makes the two callees say the same
      * thing about the same argument.
+     *
+     * <p>What is forwarded is the parameter, not every name spelled like it: the argument is matched
+     * against the binder its name was answered with. A binding in force wins over the declaration it
+     * shadows (spec §fn-rules), so a local named after a dependency is a local, and wrapping it would
+     * both call the wrong thing and report a value as an uncallable name.
      */
     private List<Ast.Expr> forwardDependencies(Ast.FnDef callee, List<Ast.Expr> args) {
-        if (callee == null || dependencies.isEmpty()) {
+        if (callee == null || dependencyBinders.isEmpty()) {
             return args;
         }
         List<Ast.Expr> out = new ArrayList<>(args);
         for (int i = 0; i < callee.params().size() && i < out.size(); i++) {
             Ast.RetType declared = callee.params().get(i).type();
             Ast.FnType want = declared == null ? null : declared.asFn();
-            if (want == null || !(out.get(i) instanceof Ast.Var v) || !dependencies.contains(v.name())) {
+            if (want == null || !(out.get(i) instanceof Ast.Var v)
+                    || !(v.denotes() instanceof ValueName.Local local)
+                    || !dependencyBinders.contains(local.binder())) {
                 continue;
             }
             List<String> params = new ArrayList<>();
@@ -920,19 +927,19 @@ public final class HelperInliner {
         return out;
     }
 
-    /** The {@code depends on} parameters of the behavior {@code let} whose body is being expanded.
+    /** Where the {@code depends on} parameters of the behavior {@code let} being expanded are bound.
      * Empty while expanding anything else: only a behavior's {@code let} has them (spec §depends-on). */
-    private Set<String> dependencies = Set.of();
+    private Set<SourcePos> dependencyBinders = Set.of();
 
     /** As {@link #inline(Ast.Expr)}, for the body of a behavior {@code let} whose {@code depends on}
-     * names {@code dependencies} — the names that arrive as its trailing parameters. */
-    public Ast.Expr inline(Ast.Expr e, Set<String> dependencies) {
-        Set<String> outer = this.dependencies;
-        this.dependencies = dependencies;
+     * parameters are bound at {@code binders}. */
+    public Ast.Expr inline(Ast.Expr e, Set<SourcePos> binders) {
+        Set<SourcePos> outer = this.dependencyBinders;
+        this.dependencyBinders = binders;
         try {
             return inline(e);
         } finally {
-            this.dependencies = outer;
+            this.dependencyBinders = outer;
         }
     }
 

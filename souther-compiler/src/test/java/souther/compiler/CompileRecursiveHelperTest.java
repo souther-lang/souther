@@ -304,6 +304,30 @@ class CompileRecursiveHelperTest {
     }
 
     @Test
+    void aLocalThatShadowsADependencyIsNotForwarded() {
+        // What is forwarded is the dependency parameter, not every name spelled like it. A binding in
+        // force wins over the declaration it shadows (spec §fn-rules), so this `twice` is the local —
+        // an `N` written where a function goes, which must stay that mismatch rather than become a
+        // block that calls a value.
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior twice : (n: N) -> N
+                behavior run : (n: N) -> Out depends on twice constructs Out
+                partial let applyTimes (f: (N) -> N, x: N, k: Int): N =
+                    if k == 0 then x else applyTimes(f, f(x), k - 1)
+                let run (n, twice) = {
+                    let twice = n
+                    Out(applyTimes(twice, n, 3).value)
+                }
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertFalse(ex.getMessage().contains("unknown function"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("expects a block"), ex.getMessage());
+    }
+
+    @Test
     void aClosureCallingAnInjectedBehaviorStillNeedsTheBehaviorToDeclareRequires() {
         // The effect a closure performs is attributed to the behavior that builds it: `run` reaches
         // `now` through the closure but does not declare `depends on now`, so it is E1602 — the same rule
