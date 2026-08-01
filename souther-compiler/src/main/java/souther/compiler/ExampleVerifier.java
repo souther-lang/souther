@@ -558,7 +558,9 @@ public final class ExampleVerifier {
         java.util.function.Function<Object[], Object> body = a -> {
             Object[] key = java.util.Arrays.copyOf(a, arity);
             for (Object[] e : entries) {
-                if (java.util.Arrays.equals((Object[]) e[0], key)) {
+                // by value equality (spec 22), which is the language's: a row written 1.0m is the
+                // row a call arriving with 1m wants. Arrays.equals would ask the arguments' own.
+                if (sameArguments((Object[]) e[0], key)) {
                     return e[1];
                 }
             }
@@ -568,6 +570,20 @@ public final class ExampleVerifier {
             throw new FakeMissException("`" + depName + "` has no output for " + java.util.Arrays.toString(key));
         };
         return fakeInstance(dep, body, out);
+    }
+
+    /** Whether a fake's row states the arguments a call arrived with, each by the language's
+     * equality. A multi-input dependency is matched as a tuple (spec 22), so this walks them. */
+    private static boolean sameArguments(Object[] row, Object[] key) {
+        if (row.length != key.length) {
+            return false;
+        }
+        for (int i = 0; i < row.length; i++) {
+            if (!souther.runtime.Values.equal(row[i], key[i])) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Wraps a fake's {@code Object[] -> Object} body as the injected instance: a unary {@code Behavior}
@@ -720,7 +736,7 @@ public final class ExampleVerifier {
         if (arm != null) {
             return NeutralForm.simpleName(result).equals(arm);
         }
-        return expectedValue != null && expectedValue.equals(result);
+        return expectedValue != null && souther.runtime.Values.equal(expectedValue, result);
     }
 
     /**
