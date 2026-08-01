@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.runtime.Behavior;
 
 import org.junit.jupiter.api.Test;
 
@@ -8,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -229,6 +231,100 @@ class CompileRecursiveHelperTest {
                 }, n.value))
                 """;
         assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void anInjectedBehaviorIsHandedToARecursiveHelperByName() throws Exception {
+        // A `depends on` parameter is an argument of the `let` like any other, so it may be handed to
+        // a helper by name — the same thing as wrapping it in `(x) -> twice(x)`. The helper is
+        // recursive and so is lowered to a method, which is the one shape where the argument stays a
+        // value instead of being rewritten into a call by inlining.
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior twice : (n: N) -> N
+                behavior run : (n: N) -> Out depends on twice constructs Out
+                partial let applyTimes (f: (N) -> N, x: N, k: Int): N =
+                    if k == 0 then x else applyTimes(f, f(x), k - 1)
+                let run (n, twice) = Out(applyTimes(twice, n, 3).value)
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Behavior<Object, Object> twice = n -> {
+            try {
+                long v = (long) Codecs.encode(loader, "demo.N", n);
+                return Codecs.decoded(loader, "demo.N", v * 2);
+            } catch (Exception e) {
+                throw new AssertionError(e);
+            }
+        };
+        Object run = loader.loadClass("demo.Run" + "$Impl").getConstructor(Behavior.class).newInstance(twice);
+
+        Object out = Codecs.apply(run, Codecs.decoded(loader, "demo.N", 1L));
+
+        assertEquals(8L, (long) Codecs.encode(loader, "demo.Out", out));
+    }
+
+    @Test
+    void aMultiArgumentDependencyIsHandedToARecursiveHelperByName() {
+        // The forwarding takes as many arguments as the parameter's declared function type does, so a
+        // two-input dependency is handed over whole rather than losing its second argument.
+        String src = """
+                module demo
+                data A = { x: Int }
+                data B = { y: Int }
+                data R = { z: Int }
+                behavior send : (a: A, b: B) -> R constructs R
+                behavior use : (a: A, b: B) -> R depends on send
+                partial let retry (f: (A, B) -> R, a: A, b: B, k: Int): R =
+                    if k == 0 then f(a, b) else retry(f, a, b, k - 1)
+                let use (a, b, send) = retry(send, a, b, 1)
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
+    void aBusinessParameterWhereAFunctionIsExpectedIsNotForwarded() {
+        // Only a `depends on` parameter is forwarded. A business input cannot be a function at all, so
+        // one written where a function goes stays the mismatch it is — it must not be turned into a
+        // block that calls it and reported as an uncallable name.
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior run : (n: N) -> Out constructs Out
+                partial let applyTimes (f: (N) -> N, x: N, k: Int): N =
+                    if k == 0 then x else applyTimes(f, f(x), k - 1)
+                let run (n) = Out(applyTimes(n, n, 3).value)
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertFalse(ex.getMessage().contains("unknown identifier"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("n") || ex.getMessage().contains("applyTimes"),
+                ex.getMessage());
+    }
+
+    @Test
+    void aLocalThatShadowsADependencyIsNotForwarded() {
+        // What is forwarded is the dependency parameter, not every name spelled like it. A binding in
+        // force wins over the declaration it shadows (spec §fn-rules), so this `twice` is the local —
+        // an `N` written where a function goes, which must stay that mismatch rather than become a
+        // block that calls a value.
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior twice : (n: N) -> N
+                behavior run : (n: N) -> Out depends on twice constructs Out
+                partial let applyTimes (f: (N) -> N, x: N, k: Int): N =
+                    if k == 0 then x else applyTimes(f, f(x), k - 1)
+                let run (n, twice) = {
+                    let twice = n
+                    Out(applyTimes(twice, n, 3).value)
+                }
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertFalse(ex.getMessage().contains("unknown function"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("expects a block"), ex.getMessage());
     }
 
     @Test

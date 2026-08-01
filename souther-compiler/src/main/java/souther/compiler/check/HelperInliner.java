@@ -882,6 +882,67 @@ public final class HelperInliner {
      * A {@code $}-name from a function argument is one too, and is told apart by its prefix. */
     private final Set<String> scopedLambdaNames = new HashSet<>();
 
+    /**
+     * The arguments of a call that stays a call, with a dependency handed over by name replaced by
+     * the block that forwards to it: {@code depth(code, fetch)} becomes {@code depth(code, (c) ->
+     * fetch(c))}, which spec §blocks says is the same thing.
+     *
+     * <p>Where the callee is expanded the two already are the same thing — the expansion substitutes
+     * the argument's name into the parameter's applications, so the name only ever stands in a call.
+     * A recursive helper is lowered to a method instead (spec 13.1), which leaves the argument
+     * standing as a value, and a {@code depends on} parameter is reached through the behavior it
+     * names rather than bound to a slot. Forwarding here is what makes the two callees say the same
+     * thing about the same argument.
+     *
+     * <p>What is forwarded is the parameter, not every name spelled like it: the argument is matched
+     * against the binder its name was answered with. A binding in force wins over the declaration it
+     * shadows (spec §fn-rules), so a local named after a dependency is a local, and wrapping it would
+     * both call the wrong thing and report a value as an uncallable name.
+     */
+    private List<Ast.Expr> forwardDependencies(Ast.FnDef callee, List<Ast.Expr> args) {
+        if (callee == null || dependencyBinders.isEmpty()) {
+            return args;
+        }
+        List<Ast.Expr> out = new ArrayList<>(args);
+        for (int i = 0; i < callee.params().size() && i < out.size(); i++) {
+            Ast.RetType declared = callee.params().get(i).type();
+            Ast.FnType want = declared == null ? null : declared.asFn();
+            if (want == null || !(out.get(i) instanceof Ast.Var v)
+                    || !(v.denotes() instanceof ValueName.Local local)
+                    || !dependencyBinders.contains(local.binder())) {
+                continue;
+            }
+            List<String> params = new ArrayList<>();
+            List<Ast.Expr> forwarded = new ArrayList<>();
+            for (int j = 0; j < want.params().size(); j++) {
+                // a source identifier never starts with `$`, so these cannot capture a caller local
+                String p = "$" + counter++ + "_" + v.name();
+                params.add(p);
+                forwarded.add(new Ast.Var(p, new ValueName.Local(p, v.pos()), v.pos()));
+            }
+            out.set(i, new Ast.Block(params,
+                    new Ast.Call(v.name(), v.denotes(), forwarded, ConstructionOrigin.own(), v.pos()),
+                    v.pos()));
+        }
+        return out;
+    }
+
+    /** Where the {@code depends on} parameters of the behavior {@code let} being expanded are bound.
+     * Empty while expanding anything else: only a behavior's {@code let} has them (spec §depends-on). */
+    private Set<SourcePos> dependencyBinders = Set.of();
+
+    /** As {@link #inline(Ast.Expr)}, for the body of a behavior {@code let} whose {@code depends on}
+     * parameters are bound at {@code binders}. */
+    public Ast.Expr inline(Ast.Expr e, Set<SourcePos> binders) {
+        Set<SourcePos> outer = this.dependencyBinders;
+        this.dependencyBinders = binders;
+        try {
+            return inline(e);
+        } finally {
+            this.dependencyBinders = outer;
+        }
+    }
+
     /** Rewrites every helper call in {@code e} to its inlined body. */
     public Ast.Expr inline(Ast.Expr e) {
         return switch (e) {
@@ -897,7 +958,8 @@ public final class HelperInliner {
                     // builtin, injected behavior, a function-typed parameter, or a recursive helper —
                     // a recursive helper is lowered to a method, so its call stays a Call (spec 13.1);
                     // only its args inline.
-                    yield new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
+                    yield new Ast.Call(call.fn(), call.denotes(), forwardDependencies(helper, args),
+                            call.origin(), call.pos());
                 }
                 if (args.size() != helper.params().size()) {
                     LambdaOrigin origin = lambdaOrigins.get(helper.name());
