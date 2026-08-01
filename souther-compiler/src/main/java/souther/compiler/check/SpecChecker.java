@@ -454,6 +454,35 @@ public final class SpecChecker {
     }
 
     /**
+     * Every effective member of a behavior's output goes by a name of its own. A member is named by
+     * a {@code match} arm and by the {@code "type"} discriminator of the external representation, and
+     * both take the name as written, so two types that are written the same cannot be members of one
+     * union. Asked after a named sum is expanded to its leaves, since a sum contributes its cases.
+     *
+     * <p>Asked of the signature rather than of what was written, so a composition is subject to it as
+     * well: two stages may depart cases of one spelling from two modules.
+     */
+    static void checkUnionMemberNames(Ast.Module module, Map<String, Sig> sigs, Symbols symbols) {
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            Sig sig = sigs.get(b.name());
+            if (sig == null) {
+                continue;
+            }
+            TypeName[] clash = TypeOps.ambiguousMembers(sig.out(), symbols);
+            if (clash == null) {
+                continue;
+            }
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.union.samename").title("check.boundary.title")
+                            .at(b.pos()).args(clash[1].name(), clash[0].module(), clash[1].module())
+                            .hint("check.union.samename.hint").build(),
+                    "the output of `" + b.name() + "` has two members written `" + clash[1].name()
+                            + "`: the one `" + clash[0].module() + "` declares and the one `"
+                            + clash[1].module() + "` declares");
+        }
+    }
+
+    /**
      * A behavior's input is decoded and its output encoded, so neither may carry a function — at any
      * depth, since a function hides as easily inside a {@code List} or a {@code Map} as it stands on
      * its own. Asked of the type rather than of the syntax: what the position requires is an external

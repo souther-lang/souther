@@ -95,17 +95,45 @@ public final class TypeOps {
         if (members.size() == 1) {
             return members.get(0);
         }
-        Set<TypeName> names = new HashSet<>();
+        Set<TypeName> names = new LinkedHashSet<>();
         for (Type m : members) {
-            if (!(m instanceof Type.Ref r)) {
+            TypeName name = memberName(m);
+            if (name == null) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.union.members").title("check.boundary.title")
-                                .at(ret.pos()).build(),
-                        "union members must be data types");
+                                .at(ret.pos()).args(Type.show(m)).build(),
+                        "`" + Type.show(m) + "` cannot be a union member: a member is a type that is"
+                                + " nominal, tells itself apart at run time, and can be written as a"
+                                + " `match` type arm");
             }
-            names.add(r.name());
+            names.add(name);
         }
         return Type.union(names);
+    }
+
+    /**
+     * The case name a union member goes by: a data type's own name, or the name a primitive is
+     * written under in a match arm ({@code Int} in {@code Int | NoAnswer}). Null for a type that
+     * cannot be a member.
+     *
+     * <p>A member has to be nominal and has to tell itself apart from the other members at run time,
+     * because that is what a {@code match} arm and a Java {@code switch} both dispatch on. A
+     * collection fails the second: its type argument is erased, so {@code List<Order>} and
+     * {@code List<Item>} are one runtime type and no arm could choose between them. An
+     * {@code Option} and a function fail it the same way. That they also have no arm form to write
+     * is the surface showing the same fact.
+     */
+    static TypeName memberName(Type m) {
+        if (m instanceof Type.Ref r) {
+            return r.name();
+        }
+        if (m == Type.INT) return TypeName.primitive("Int");
+        if (m == Type.STRING) return TypeName.primitive("String");
+        if (m == Type.BOOL) return TypeName.primitive("Bool");
+        if (m == Type.DECIMAL) return TypeName.primitive("Decimal");
+        if (m == Type.DATE) return TypeName.primitive("Date");
+        if (m == Type.DATETIME) return TypeName.primitive("DateTime");
+        return null;
     }
 
     /** Builds a Ref (one name) or Union (two or more) from a set of case names. */
@@ -121,13 +149,11 @@ public final class TypeOps {
     }
 
     public static Set<TypeName> namesOf(Type t) {
-        if (t instanceof Type.Ref r) {
-            return Set.of(r.name());
-        }
         if (t instanceof Type.Union u) {
             return u.members();
         }
-        return Set.of();
+        TypeName name = memberName(t);
+        return name == null ? Set.of() : Set.of(name);
     }
 
     /** Case names of a stage output, treating a {@code Raw} encoder output as the case {@code "Raw"}
@@ -144,7 +170,8 @@ public final class TypeOps {
         if (sub.equals(sup)) {
             return true;
         }
-        return sup instanceof Type.Union u && u.members().containsAll(namesOf(sub));
+        Set<TypeName> names = namesOf(sub);
+        return !names.isEmpty() && sup instanceof Type.Union u && u.members().containsAll(names);
     }
 
     /** The sum type that {@code t}'s case belongs to, or null when {@code t} is not a case of a named
@@ -409,6 +436,22 @@ public final class TypeOps {
     }
 
     /**
+     * The type two branches take when they do not join on their own but the position expects a union
+     * both are members of. A primitive joins nothing by itself — {@code Int} against {@code Decimal}
+     * is a mistake wherever no union was asked for, and that error is worth keeping — so a branch
+     * answering the value and a branch answering the reason there is none are settled by the output
+     * that was written. Null when {@code expected} does not admit both.
+     */
+    static Type joinAt(Type expected, Type a, Type b) {
+        if (!(expected instanceof Type.Union) || !subtypeOf(a, expected) || !subtypeOf(b, expected)) {
+            return null;
+        }
+        Set<TypeName> names = new LinkedHashSet<>(namesOf(a));
+        names.addAll(namesOf(b));
+        return caseSetType(names);
+    }
+
+    /**
      * Matches an intrinsic's declared parameter type against an actual argument type, binding any
      * type variables it carries (spec §intrinsics). A variable binds on first sight and every later
      * occurrence must agree; a composite ({@code List<'a>}, {@code Map<String, 'a>}) recurses into
@@ -497,6 +540,23 @@ public final class TypeOps {
     }
 
     /** The set of leaf (non-sum) case names a data-like type covers, flattening nested sums. */
+    /**
+     * Two effective members of {@code out} that go by one written name, or null when every member's
+     * name is its own. Asked after a named sum is expanded to its leaves, since the leaves are what a
+     * {@code match} arm names and what the {@code "type"} discriminator carries — a sum contributes
+     * its cases, not itself.
+     */
+    static TypeName[] ambiguousMembers(Type out, Symbols symbols) {
+        Map<String, TypeName> byName = new LinkedHashMap<>();
+        for (TypeName member : leafCases(out, symbols)) {
+            TypeName seen = byName.put(member.name(), member);
+            if (seen != null && !seen.equals(member)) {
+                return new TypeName[] {seen, member};
+            }
+        }
+        return null;
+    }
+
     public static Set<TypeName> leafCases(Type t, Symbols symbols) {
         Set<TypeName> out = new LinkedHashSet<>();
         collectLeafCases(t, symbols, out, new HashSet<>());

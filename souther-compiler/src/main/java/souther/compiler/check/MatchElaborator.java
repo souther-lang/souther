@@ -115,7 +115,7 @@ public final class MatchElaborator {
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bindType), ctx, expected),
                     expected, ctx.symbols());
             arms.add(new Core.Case(denoted(c.caseTypes()), c.binding(), body, bindType, c.pos()));
-            branchType = mergeBranch(m, branchType, body.type(), c);
+            branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
         for (TypeName caseName : cases) {
@@ -182,7 +182,7 @@ public final class MatchElaborator {
                     Elaborator.elaborate(c.body(), bound(env, c.binding(), bind), ctx, expected),
                     expected, ctx.symbols());
             arms.add(new Core.Case(denoted(c.caseTypes()), c.binding(), body, bind, c.pos()));
-            branchType = mergeBranch(m, branchType, body.type(), c);
+            branchType = mergeBranch(m, branchType, body.type(), c, expected);
         }
         List<String> missing = new ArrayList<>();
         for (TypeName caseName : List.of(TypeName.SOME, TypeName.NONE)) {
@@ -300,13 +300,17 @@ public final class MatchElaborator {
         return benv;
     }
 
-    static Type mergeBranch(Ast.Match m, Type branchType, Type bt, Ast.Case c) {
+    static Type mergeBranch(Ast.Match m, Type branchType, Type bt, Ast.Case c, Type expected) {
         if (branchType == null) {
             return bt;
         }
         // arms merge by the join `if` branches use — equal types collapse, data-like ones widen to
-        // their union, and both hold under a collection or a tuple as well (spec 16.2)
+        // their union, and both hold under a collection or a tuple as well (spec 16.2). An arm
+        // answering a primitive joins only where the output written for this behavior says so.
         Type joined = TypeOps.join(branchType, bt);
+        if (joined == null) {
+            joined = TypeOps.joinAt(expected, branchType, bt);
+        }
         if (joined != null) {
             return joined;
         }

@@ -382,6 +382,7 @@ public final class TypeChecker {
         // (spec 14.5, ADR-0024), so a far-away change cannot grow a published output silently.
         // `signatures` builds the map `checkExposedPipeOutputs` reads, so it stays fail-fast.
         Map<String, Sig> sigs = PipelineSigs.signatures(module, symbols, importedSigs);
+        collect(errors, abandoned, () -> SpecChecker.checkUnionMemberNames(module, sigs, symbols));
         collect(errors, abandoned, () -> SpecChecker.checkExposedPipeOutputs(module,
                 exposed, sigs, symbols));
         // What this module reaches out with may not rest on what it keeps to itself — a name in
