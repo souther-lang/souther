@@ -53,9 +53,10 @@ public interface Key<T> {
      * it, once, at the point the chain came back round to it; it is not repeated at the end. The
      * keys before it are the ones that asked, which need not be part of the cycle at all.
      *
-     * <p>An answer given here is handed to the caller that asked and nothing more. Every key that
-     * took part in the cycle is left uncomputed, so this answer is not kept, and the reports it
-     * carries are not there afterwards to be collected through {@link Db#allReports()}. A caller
+     * <p>An answer given here is handed to the caller that asked and nothing more. Every key in
+     * progress when the cycle was found is left uncomputed — the ones that only asked as much as
+     * the ones the cycle runs through — so this answer is not kept, and the reports it carries are
+     * not there afterwards to be collected through {@link Db#allReports()}. A caller
      * reading reports off the answer it was handed sees them; one reading them back from the store
      * does not. This is not a way to turn a cycle into a diagnostic.
      *
