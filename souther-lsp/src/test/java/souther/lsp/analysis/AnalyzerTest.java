@@ -154,6 +154,40 @@ class AnalyzerTest {
         assertEquals(4, typeAt(tokens, 3, 10), "`n` is the name it binds, a variable (index 4)");
     }
 
+    /**
+     * What an application applies is the function, and a qualified callee is a read whose last name
+     * is the one. Every application is now an argument list written after an expression (issue
+     * #274), so a call is no longer a node of its own to classify by — the callee position is
+     * carried down instead, to the field a read takes and not to what it is taken off.
+     */
+    @Test
+    void whatAnApplicationAppliesIsTheFunctionAndTheQualifierInFrontOfItIsNot() {
+        //                     0         1         2         3         4
+        //                     0123456789012345678901234567890123456789012345
+        String body = "let g (d: D, xs: List<Int>) = List.map(f, xs)\n";
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata D = { n: Int }\nlet f (x: Int) = x\n" + body);
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(6, typeAt(tokens, 3, 35), "`map` is what is applied, so it is a function (index 6)");
+        assertEquals(4, typeAt(tokens, 3, 30), "`List` is the qualifier, not the function");
+        assertEquals(4, typeAt(tokens, 3, 39), "`f` is an argument, not what is applied");
+    }
+
+    @Test
+    void aBareCalleeIsAFunctionAndAFieldReadThatIsNotAppliedIsAProperty() {
+        //                     0         1         2         3
+        //                     012345678901234567890123456789012345
+        String body = "let g (d: D) = f(d.n)\n";
+        int[] data = analyzer.semanticTokens(
+                "module demo\ndata D = { n: Int }\nlet f (x: Int) = x\n" + body);
+        List<int[]> tokens = decodeSemanticTokens(data);
+
+        assertEquals(6, typeAt(tokens, 3, 15), "`f` is what is applied (index 6)");
+        assertEquals(4, typeAt(tokens, 3, 17), "`d` is what the read is taken off, a variable here");
+        assertEquals(5, typeAt(tokens, 3, 19), "`n` is a field read, not a function (index 5)");
+    }
+
     /** Reverses the LSP delta encoding into absolute {@code {line, char, length, type}} tokens. */
     private static List<int[]> decodeSemanticTokens(int[] data) {
         List<int[]> out = new java.util.ArrayList<>();

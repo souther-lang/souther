@@ -47,17 +47,24 @@ class CstCallResultFieldAccessTest {
     void aCallResultCarriesTheFieldAccess() {
         SyntaxNode access = onlyOf(parsed("amountOf(i).value"), SyntaxKind.FIELD_ACCESS);
 
-        assertEquals(SyntaxKind.CALL_EXPR, access.childNodes().get(0).kind());
+        assertEquals(SyntaxKind.APPLY_EXPR, access.childNodes().get(0).kind());
         assertEquals("amountOf(i).value", access.text().strip());
     }
 
+    /**
+     * A qualified callee is a read like any other, and the argument list is written after it. The
+     * outermost read is the one the call's result carries; the inner one is how the name was
+     * written. Which of the two {@code up.amountOf} is — a member of a namespace or a field taken
+     * off a binding named {@code up} — is not a question the parser answers (issue #274).
+     */
     @Test
-    void aQualifiedCallIsTheCallAndNotAFieldReadOnTheModule() {
-        SyntaxNode access = onlyOf(parsed("up.amountOf(i).value"), SyntaxKind.FIELD_ACCESS);
+    void aQualifiedCallIsAnArgumentListAfterAReadAndTheResultCarriesAnother() {
+        List<SyntaxNode> reads = allOf(parsed("up.amountOf(i).value"), SyntaxKind.FIELD_ACCESS);
 
-        // one FIELD_ACCESS only: `up.amountOf` is the call's name, so `.value` is the sole read
-        assertEquals(SyntaxKind.CALL_EXPR, access.childNodes().get(0).kind());
-        assertEquals("up.amountOf(i)", access.childNodes().get(0).text().strip());
+        assertEquals(2, reads.size(), () -> "expected the callee's read and the result's, found " + reads);
+        assertEquals("up.amountOf(i).value", reads.get(0).text().strip());
+        assertEquals(SyntaxKind.APPLY_EXPR, reads.get(0).childNodes().get(0).kind());
+        assertEquals("up.amountOf", reads.get(1).text().strip());
     }
 
     @Test
