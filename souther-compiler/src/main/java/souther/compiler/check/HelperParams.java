@@ -406,8 +406,11 @@ final class HelperParams {
             if (recursiveHelperFns.get(fn) instanceof Type.FnOf sig) {
                 return sig.params();
             }
-            Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(fn);
-            return intrinsic == null ? null : intrinsic.params();
+            // Only a kernel's signature: a Souther-bodied library callee here is a recursive
+            // helper, and those are answered above with the types their call site instantiated.
+            Prelude.PreludeEntry entry = Prelude.entry(fn);
+            return entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic
+                    ? entry.signature().params() : null;
         }
 
         private boolean isParam(Ast.Expr e, String name) {

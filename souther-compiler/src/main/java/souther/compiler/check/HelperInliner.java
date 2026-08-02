@@ -1302,7 +1302,8 @@ public final class HelperInliner {
      * already the value it is and is left alone.
      */
     private Ast.Expr libraryValueOf(Ast.Var v, ValueName.Stdlib lib) {
-        Ast.FnDef declared = Prelude.declarationOf(lib.qualified());
+        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
+        Ast.FnDef declared = entry == null ? null : entry.declaration();
         int arity = declared == null ? -1 : declared.params().size();
         if (arity <= 0) {
             return v;   // a value, or a name the library does not declare — reported where it is used

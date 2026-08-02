@@ -65,8 +65,8 @@ public final class BottomInfer {
         if (!(e instanceof Ast.Var v && v.denotes() instanceof ValueName.Stdlib lib)) {
             return false;
         }
-        Prelude.IntrinsicSig declared = Prelude.intrinsics().get(lib.qualified());
-        return declared != null && declared.params().isEmpty();
+        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
+        return entry != null && entry.declaration().params().isEmpty();
     }
 
     /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context

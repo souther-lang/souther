@@ -19,20 +19,15 @@ import java.util.Set;
 
 /**
  * The standard library the compiler ships in the reserved {@code souther} namespace (ADR-0028,
- * spec §reserved-namespace). Its modules are packaged as resources and parsed once, and split into:
- *
- * <ul>
- *   <li>{@linkplain #helpers() helpers} — ordinary generic functions (e.g. {@code not}), expanded
- *       inline at each call site (see {@code check.HelperInliner});</li>
- *   <li>{@linkplain #intrinsics() intrinsics} — functions whose body is a named primitive
- *       ({@code = intrinsic "key"}). These behave like built-ins: the checker verifies a call against
- *       the declared signature and the backend emits the primitive for the key. They are neither
- *       inlined nor lowered.</li>
- * </ul>
+ * spec §reserved-namespace). Its modules are packaged as resources and parsed once, into one
+ * {@linkplain #entry(String) entry} per qualified name: the declaration as it was written and its
+ * resolved signature. What is behind the name — a Souther body, expanded inline at each call site
+ * (see {@code check.HelperInliner}), or a named kernel the backend emits — is the declaration's
+ * {@linkplain Ast.FnBody body}, not a second registry.
  *
  * <p>Everything is reached through a module qualifier — {@code List.map}, {@code String.trim} — since
- * the standard library carries no bare names (spec §stdlib). Helpers and intrinsics are therefore
- * keyed by their qualified name, e.g. {@code "List.map"} / {@code "String.trim"}.
+ * the standard library carries no bare names (spec §stdlib). Entries are therefore keyed by their
+ * qualified name.
  */
 public final class Prelude {
 
@@ -60,26 +55,43 @@ public final class Prelude {
     private static final Set<String> QUALIFIERS =
             Set.of("List", "String", "Map", "Set", "Bool", "Int", "Decimal", "Date", "DateTime", "Option");
 
-    /** A shipped primitive: its declared signature and the backend key naming its bytecode. */
-    public record IntrinsicSig(String name, List<Type> params, Type result, String key) {
+    /** A declaration's resolved signature: its parameter types, and the success type of its declared
+     *  return — or null where the declaration writes no return type and leaves its result to its
+     *  body, which a Souther-bodied helper may and a kernel never does. Resolved once at load; what
+     *  the failure cases of the return are is the checker's question about the call, not the
+     *  signature's. */
+    public record Signature(List<Type> params, Type result) {
+        public Signature {
+            params = List.copyOf(params);
+        }
     }
 
-    /** Every declaration the library ships, keyed by qualified name — the {@code let} as it was
-     *  written, whether its implementation is a Souther body or a shipped kernel. What is on the
-     *  other side of the name is not the name's business, so a reader asking what a library function
-     *  takes and answers asks this and stops. */
-    private static final Map<String, Ast.FnDef> DECLARATIONS = new LinkedHashMap<>();
+    /** Everything the library says under one qualified name: the {@code let} as it was written and
+     *  its resolved signature. Existence, declaration, signature and implementation are one answer —
+     *  a reader takes the projection it wants rather than picking a map. */
+    public record PreludeEntry(Ast.FnDef declaration, Signature signature) {
+    }
 
-    /** Helpers keyed by qualified name, e.g. {@code "List.map"}. */
-    private static final Map<String, Ast.FnDef> HELPERS = new LinkedHashMap<>();
-    /** Intrinsics keyed by qualified name, e.g. {@code "String.trim"}. */
-    private static final Map<String, IntrinsicSig> INTRINSICS = new LinkedHashMap<>();
+    /** Every declaration the library ships, keyed by qualified name ({@code "List.map"}). */
+    private static final Map<String, PreludeEntry> ENTRIES = new LinkedHashMap<>();
+
     /** Bare stdlib name → a qualified suggestion, so a bare call gets a "did you mean" hint. The
      *  checker built-ins (which are not in the prelude sources) are listed here explicitly. */
     private static final Map<String, String> BARE_TO_QUALIFIED = new LinkedHashMap<>();
 
+    /** The Souther-bodied declarations, as the inliner's table wants them: a materialized projection
+     *  of {@link #ENTRIES}, derived once after loading and never written again. */
+    private static final Map<String, Ast.FnDef> HELPERS;
+
     static {
         load();
+        Map<String, Ast.FnDef> helpers = new LinkedHashMap<>();
+        for (Map.Entry<String, PreludeEntry> e : ENTRIES.entrySet()) {
+            if (e.getValue().declaration().body() instanceof Ast.FnBody.Written) {
+                helpers.put(e.getKey(), e.getValue().declaration());
+            }
+        }
+        HELPERS = Map.copyOf(helpers);
     }
 
     private Prelude() {
@@ -109,28 +121,27 @@ public final class Prelude {
     }
 
     /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function — a
-     *  prelude helper, a prelude intrinsic, or a sugar for one. Every one of them is declared in a
-     *  core module: there is no longer a set of names whose signature lives only in the compiler
-     *  (ADR-0053). */
-    public static boolean hasQualified(String qualifiedName) {
-        return HELPERS.containsKey(qualifiedName)
-                || INTRINSICS.containsKey(qualifiedName)
-                || SUGARED.contains(qualifiedName);
+     *  declared one, or a sugar for one. Sugar has no declaration of its own, so this is wider than
+     *  {@link #entry(String)} answering: {@code List.fold} is a library function and has no entry. */
+    public static boolean isLibraryFunction(String qualifiedName) {
+        return ENTRIES.containsKey(qualifiedName) || SUGARED.contains(qualifiedName);
     }
 
-    /** The declaration of a library function, or null where the library declares no such name. */
-    public static Ast.FnDef declarationOf(String qualifiedName) {
-        return DECLARATIONS.get(qualifiedName);
+    /** The library's entry for {@code qualifiedName}, or null where the library declares no such
+     *  name — including for {@linkplain #sugared(String) sugar}, which is a rewrite, not a
+     *  declaration. */
+    public static PreludeEntry entry(String qualifiedName) {
+        return ENTRIES.get(qualifiedName);
     }
 
-    /** The helper functions of the prelude (inlined at call sites), keyed by qualified name. */
+    /** Every entry, keyed by qualified name, in declaration order. */
+    public static Map<String, PreludeEntry> entries() {
+        return java.util.Collections.unmodifiableMap(ENTRIES);
+    }
+
+    /** The Souther-bodied declarations (inlined at call sites), keyed by qualified name. */
     public static Map<String, Ast.FnDef> helpers() {
         return HELPERS;
-    }
-
-    /** The shipped primitives, keyed by their qualified name ({@code "String.trim"}). */
-    public static Map<String, IntrinsicSig> intrinsics() {
-        return INTRINSICS;
     }
 
     /** A qualified suggestion for a bare standard-library name ({@code "map"} → {@code "List.map"}),
@@ -157,21 +168,17 @@ public final class Prelude {
                 // reads two ways would have to be chosen between, and nothing at a value position
                 // could do the choosing. Put into a map, a second one would replace the first in
                 // silence, so it is refused where it is loaded.
-                if (INTRINSICS.containsKey(qualified) || HELPERS.containsKey(qualified)) {
+                if (ENTRIES.containsKey(qualified)) {
                     throw new IllegalStateException(
                             "the standard library declares `" + qualified + "` twice");
                 }
-                DECLARATIONS.put(qualified, fn);
-                if (fn.body() instanceof Ast.FnBody.Intrinsic intrinsic) {
-                    List<Type> params = new ArrayList<>();
-                    for (Ast.FnParam p : fn.params()) {
-                        params.add(TypeOps.resolveParamType(p.type(), noSymbols));
-                    }
-                    Type result = TypeOps.successType(fn.declaredReturn(), noSymbols);
-                    INTRINSICS.put(qualified, new IntrinsicSig(fn.name(), params, result, intrinsic.key()));
-                } else {
-                    HELPERS.put(qualified, fn);
+                List<Type> params = new ArrayList<>();
+                for (Ast.FnParam p : fn.params()) {
+                    params.add(TypeOps.resolveParamType(p.type(), noSymbols));
                 }
+                Type result = fn.declaredReturn() == null
+                        ? null : TypeOps.successType(fn.declaredReturn(), noSymbols);
+                ENTRIES.put(qualified, new PreludeEntry(fn, new Signature(params, result)));
                 BARE_TO_QUALIFIED.putIfAbsent(fn.name(), qualified);
             }
         }

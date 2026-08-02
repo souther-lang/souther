@@ -1289,7 +1289,7 @@ public final class ExampleVerifier {
      * A helper that has one is applied; the ones that never do are the standard library's intrinsics
      * and a helper whose body produces a function, and both read as this. */
     private boolean noMethod(String name) {
-        if (Prelude.hasQualified(name)) {
+        if (Prelude.isLibraryFunction(name)) {
             return true;   // a standard-library function: an intrinsic, or one nothing emitted here
         }
         for (Ast.FnDef fn : module.fns()) {
