@@ -13,9 +13,4 @@ public record Located(Diagnostic diagnostic, int sourceIndex) {
 
     /** The index a diagnostic that names no source carries. */
     public static final int NO_SOURCE = -1;
-
-    /** A diagnostic that names no source. */
-    public static Located of(Diagnostic diagnostic) {
-        return new Located(diagnostic, NO_SOURCE);
-    }
 }

@@ -66,7 +66,7 @@ public final class Analyzer {
     private souther.compiler.meta.ModulePath compiledAgainst;
 
     /** All diagnostics for a document: every syntax error, or — when there are none — the first
-     * semantic error a compile turns up. */
+     * semantic error a compile turns up, or the warnings a clean compile found. */
     public List<LspDiagnostic> diagnostics(String text) {
         LineIndex lines = new LineIndex(text);
         List<LspDiagnostic> out = new ArrayList<>();
