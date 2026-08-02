@@ -162,13 +162,13 @@ public final class Prelude {
                             "the standard library declares `" + qualified + "` twice");
                 }
                 DECLARATIONS.put(qualified, fn);
-                if (fn.isIntrinsic()) {
+                if (fn.body() instanceof Ast.FnBody.Intrinsic intrinsic) {
                     List<Type> params = new ArrayList<>();
                     for (Ast.FnParam p : fn.params()) {
                         params.add(TypeOps.resolveParamType(p.type(), noSymbols));
                     }
                     Type result = TypeOps.successType(fn.declaredReturn(), noSymbols);
-                    INTRINSICS.put(qualified, new IntrinsicSig(fn.name(), params, result, fn.intrinsicKey()));
+                    INTRINSICS.put(qualified, new IntrinsicSig(fn.name(), params, result, intrinsic.key()));
                 } else {
                     HELPERS.put(qualified, fn);
                 }

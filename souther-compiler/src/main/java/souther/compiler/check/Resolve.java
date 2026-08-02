@@ -257,8 +257,12 @@ public final class Resolve {
             params.add(new Ast.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()));
             bound = a.bound();
         }
-        return new Ast.FnDef(f.name(), params, retType(f.declaredReturn()), f.intrinsicKey(),
-                f.body() == null ? null : expr(f.body(), bound), f.partial(), f.pos());
+        Ast.FnBody body = switch (f.body()) {
+            case Ast.FnBody.Written w -> new Ast.FnBody.Written(expr(w.expr(), bound));
+            case Ast.FnBody.Intrinsic i -> i;
+        };
+        return new Ast.FnDef(f.name(), params, retType(f.declaredReturn()), body, f.partial(),
+                f.pos());
     }
 
     // --- written types ---

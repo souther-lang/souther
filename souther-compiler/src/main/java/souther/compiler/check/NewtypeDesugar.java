@@ -31,9 +31,12 @@ public final class NewtypeDesugar {
     public static Ast.Module rewrite(Ast.Module m, Symbols symbols) {
         List<Ast.FnDef> fns = new ArrayList<>();
         for (Ast.FnDef fn : m.fns()) {
-            Ast.Expr body = fn.body() == null ? null : go(fn.body(), symbols);
-            fns.add(new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
-                    body, fn.partial(), fn.pos()));
+            Ast.FnBody body = switch (fn.body()) {
+                case Ast.FnBody.Written w -> new Ast.FnBody.Written(go(w.expr(), symbols));
+                case Ast.FnBody.Intrinsic i -> i;
+            };
+            fns.add(new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), body, fn.partial(),
+                    fn.pos()));
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
                 m.defs(), m.behaviors(), fns, m.examples(), m.fakes(), m.exampleFileTarget(), m.pos());

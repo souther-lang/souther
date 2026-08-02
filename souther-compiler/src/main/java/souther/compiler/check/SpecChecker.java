@@ -59,7 +59,7 @@ public final class SpecChecker {
                     }
                     Ast.FnDef fn = fns.get(spec.name());
                     if (fn != null) {
-                        for (String called : requiredCalls(fn.body(), names)) {
+                        for (String called : requiredCalls(fn.written(), names)) {
                             if (!out.contains(called)) {
                                 out.add(called);
                             }
@@ -290,7 +290,7 @@ public final class SpecChecker {
         for (Ast.FnParam p : fn.params()) {
             Elaborator.rejectBuiltinShadow(p.name(), p.pos());
         }
-        Elaborator.rejectBuiltinShadowing(fn.body());
+        Elaborator.rejectBuiltinShadowing(fn.written());
         for (int i = 0; i < nBusiness; i++) {
             env = env.with(fn.params().get(i).binder(),
                     TypeOps.successType(spec.params().get(i).type(), symbols));
@@ -304,7 +304,7 @@ public final class SpecChecker {
         // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
         // declared types first, so a mismatch names the parameter, not the derivation it expands to.
         // A nested fold reaches `List.foldFrom` inside a block, so its signature must be in scope here.
-        HelperTyping.checkFunctionArgs(fn.body(), tenv, symbols, reqSigs, inliner);
+        HelperTyping.checkFunctionArgs(fn.written(), tenv, symbols, reqSigs, inliner);
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
         // behavior's permission and dependencies — exactly as if the code had been written inline (12.5).
@@ -688,7 +688,7 @@ public final class SpecChecker {
         // A behavior's input and output are asked below, under its own name; a behavior's own `let`
         // is an implementation and not one of the module's definitions.
         for (Ast.FnDef fn : HelperInliner.helpersOf(module).values()) {
-            if (fn.body() == null || !exposed.contains(fn.name())) {
+            if (!(fn.body() instanceof Ast.FnBody.Written) || !exposed.contains(fn.name())) {
                 continue;
             }
             for (Ast.FnParam p : fn.params()) {

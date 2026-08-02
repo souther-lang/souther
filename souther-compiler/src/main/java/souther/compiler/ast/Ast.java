@@ -309,25 +309,47 @@ public interface Ast {
      * sees one expression tree and has exactly one place where a value can be constructed.
      */
     /**
-     * A {@code let} definition. A behavior fn or a helper carries a {@code body} and no
-     * {@code declaredReturn}/{@code intrinsicKey}. A core intrinsic (spec §primitives) instead
-     * declares its return type and names a primitive: {@code let trim (s: String): String =
-     * intrinsic "string.trim"} — its {@code body} is null, {@code declaredReturn} its result type,
-     * and {@code intrinsicKey} the backend key. Intrinsics are written only in the {@code souther}
+     * What stands to the right of a definition's {@code =}: the expression the author wrote, or —
+     * in the reserved {@code souther} namespace only (spec §primitives) — the name of a shipped
+     * kernel, {@code intrinsic "string.trim"}. One or the other, never neither, so a reader
+     * switches rather than testing two fields for null.
+     */
+    sealed interface FnBody {
+        /** A written body. */
+        record Written(Expr expr) implements FnBody {
+        }
+
+        /** A named kernel; {@code key} is what the backend emits for. */
+        record Intrinsic(String key) implements FnBody {
+        }
+    }
+
+    /**
+     * A {@code let} definition. A behavior fn or a helper carries a {@link FnBody.Written written}
+     * body and no {@code declaredReturn}. A core intrinsic (spec §primitives) instead declares its
+     * return type and names a primitive: {@code let trim (s: String): String = intrinsic
+     * "string.trim"} — its body is {@link FnBody.Intrinsic}, written only in the {@code souther}
      * namespace. {@code partial} marks a helper that opts out of the totality check (spec
      * §fn-declaration): a recursive helper is checked for structural recursion unless it is
      * {@code partial}.
      */
-    record FnDef(String name, List<FnParam> params, RetType declaredReturn, String intrinsicKey,
-                 Expr body, boolean partial, SourcePos pos) implements Ast {
+    record FnDef(String name, List<FnParam> params, RetType declaredReturn, FnBody body,
+                 boolean partial, SourcePos pos) implements Ast {
         /** A fn with no {@code partial} marker (the common case; totality-checked if recursive). */
-        public FnDef(String name, List<FnParam> params, RetType declaredReturn, String intrinsicKey,
-                     Expr body, SourcePos pos) {
-            this(name, params, declaredReturn, intrinsicKey, body, false, pos);
+        public FnDef(String name, List<FnParam> params, RetType declaredReturn, FnBody body,
+                     SourcePos pos) {
+            this(name, params, declaredReturn, body, false, pos);
         }
 
-        public boolean isIntrinsic() {
-            return intrinsicKey != null;
+        /** The expression the author wrote. Asked from positions an intrinsic cannot reach — a
+         *  user module, or a helper already known written — which is said here rather than by a
+         *  silent null. */
+        public Expr written() {
+            return switch (body) {
+                case FnBody.Written w -> w.expr();
+                case FnBody.Intrinsic i -> throw new IllegalStateException(
+                        "`" + name + "` is an intrinsic and has no written body");
+            };
         }
     }
 

@@ -132,7 +132,7 @@ final class HelperParams {
             if (open.isEmpty()) {
                 return null;
             }
-            body = inliner.inline(h.body(), inliner.bodyOf(h.name()));
+            body = inliner.inline(h.written(), inliner.bodyOf(h.name()));
         } catch (CompileException _) {
             return null;   // a written type or a call that does not resolve; the check reports it
         }
@@ -150,7 +150,7 @@ final class HelperParams {
                             new Ast.RetType(List.of(Ast.TypeRef.of(t, p.pos())), p.pos()),
                             p.typeFromPattern()));
         }
-        return new Ast.FnDef(h.name(), params, h.declaredReturn(), h.intrinsicKey(), h.body(),
+        return new Ast.FnDef(h.name(), params, h.declaredReturn(), h.body(),
                 h.partial(), h.pos());
     }
 

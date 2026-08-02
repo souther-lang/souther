@@ -63,7 +63,7 @@ public final class HelperTyping {
                 }
                 env = env.with(p.binder(), TypeOps.resolveParamType(p.type(), symbols));
             }
-            Elaborator.rejectBuiltinShadowing(h.body());
+            Elaborator.rejectBuiltinShadowing(h.written());
             // A helper the lowered module carries is one the backend emits — a recursive one, and one
             // an example row applies (ADR-0077) — so it is typed on the tree the backend emits from,
             // and the Core this check produces is what is emitted (issue #81). One that is only
@@ -72,7 +72,7 @@ public final class HelperTyping {
             // expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
             // Expanded once: the body an un-annotated parameter takes its type from is the same tree.
             Ast.Expr emitted = loweredBodies.get(h.name());
-            Ast.Expr body = emitted != null ? emitted : inliner.inline(h.body(), inliner.bodyOf(h.name()));
+            Ast.Expr body = emitted != null ? emitted : inliner.inline(h.written(), inliner.bodyOf(h.name()));
             if (recursive && body == null) {
                 // Lower keeps every recursive helper as a fn of the lowered module, and the backend
                 // emits from that same list, so a recursive helper without a lowered body would leave
@@ -98,7 +98,7 @@ public final class HelperTyping {
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
-            checkFunctionArgs(h.body(), tenv, symbols, reqSigs, inliner);
+            checkFunctionArgs(h.written(), tenv, symbols, reqSigs, inliner);
             if (Elaborator.producesFunction(body)) {
                 continue;
             }

@@ -39,7 +39,7 @@ class BodyForInvariantDischargeTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", SOURCE);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        return c.db().ask(key).value().body();
+        return c.db().ask(key).value().written();
     }
 
     private static List<String> calls(Ast.Expr e) {

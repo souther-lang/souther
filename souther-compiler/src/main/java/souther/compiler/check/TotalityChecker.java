@@ -171,7 +171,7 @@ final class TotalityChecker {
                 idxOf.put(params.get(i).binder().id(), i);
             }
             List<RecCall> calls = new ArrayList<>();
-            walk(def.body(), group, paramNames, Map.of(), Map.of(), calls);
+            walk(def.written(), group, paramNames, Map.of(), Map.of(), calls);
             for (RecCall rc : calls) {
                 firstCall.putIfAbsent(f, rc.call());
                 int toArity = own.get(rc.callee()).params().size();
@@ -471,7 +471,7 @@ final class TotalityChecker {
         Map<String, Set<String>> edges = new HashMap<>();
         for (Ast.FnDef h : own.values()) {
             Set<String> called = new HashSet<>();
-            collectOwnCalls(h.body(), own.keySet(), called);
+            collectOwnCalls(h.written(), own.keySet(), called);
             edges.put(h.name(), called);
         }
         return edges;

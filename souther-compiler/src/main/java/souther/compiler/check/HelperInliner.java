@@ -196,7 +196,7 @@ public final class HelperInliner {
         Set<String> reachable = new HashSet<>();
         java.util.Deque<String> work = new java.util.ArrayDeque<>();
         for (Ast.FnDef fn : module.fns()) {
-            collectHelperCalls(fn.body(), reachable);
+            collectHelperCalls(fn.written(), reachable);
         }
         for (Ast.Def d : module.defs()) {
             if (d instanceof Ast.Data data) {
@@ -280,17 +280,18 @@ public final class HelperInliner {
             reader.collectValueRefs(e, named);
             for (String value : named) {
                 Ast.FnDef def = table.get(value);
-                if (def != null && def.params().isEmpty() && def.body() != null
+                if (def != null && def.params().isEmpty()
+                        && def.body() instanceof Ast.FnBody.Written w
                         && valuesRead.add(value)) {
-                    work.add(def.body());
+                    work.add(w.expr());
                 }
             }
         }
         Set<String> out = new LinkedHashSet<>();
         for (String name : called) {
             Ast.FnDef helper = table.get(name);
-            if (helper != null && helper.body() != null && helper.intrinsicKey() == null
-                    && !helper.params().isEmpty() && !Elaborator.producesFunction(helper.body())) {
+            if (helper != null && helper.body() instanceof Ast.FnBody.Written w
+                    && !helper.params().isEmpty() && !Elaborator.producesFunction(w.expr())) {
                 out.add(name);
             }
         }
@@ -313,7 +314,7 @@ public final class HelperInliner {
                 continue;
             }
             Ast.FnDef def = helpers.get(name);
-            out.put(name, new Ast.FnDef(name, def.params(), def.declaredReturn(), def.intrinsicKey(),
+            out.put(name, new Ast.FnDef(name, def.params(), def.declaredReturn(),
                     def.body(), def.partial(), def.pos()));
         }
         return out;
@@ -342,7 +343,7 @@ public final class HelperInliner {
         for (String qualified : referencedPreludeRecursive) {
             Ast.FnDef def = helpers.get(qualified);
             out.put(qualified, new Ast.FnDef(qualified, def.params(), def.declaredReturn(),
-                    def.intrinsicKey(), def.body(), def.partial(), def.pos()));
+                    def.body(), def.partial(), def.pos()));
         }
         return out;
     }
@@ -370,9 +371,10 @@ public final class HelperInliner {
      */
     public Ast.FnDef closeAcross(Ast.FnDef fn, String module) {
         Ast.Expr closed = recursive.contains(fn.name())
-                ? inlineRecursiveBody(fn) : inline(fn.body(), bodyOf(fn.name()));
-        return new Ast.FnDef(qualified(module, fn.name()), fn.params(), fn.declaredReturn(), null,
-                publishedBy(qualifyHelpersOf(closed, module), module), fn.partial(), fn.pos());
+                ? inlineRecursiveBody(fn) : inline(fn.written(), bodyOf(fn.name()));
+        return new Ast.FnDef(qualified(module, fn.name()), fn.params(), fn.declaredReturn(),
+                new Ast.FnBody.Written(publishedBy(qualifyHelpersOf(closed, module), module)),
+                fn.partial(), fn.pos());
     }
 
     /**
@@ -449,9 +451,11 @@ public final class HelperInliner {
     public static Ast.Module qualifyImports(Ast.Module m) {
         List<Ast.FnDef> fns = new ArrayList<>();
         for (Ast.FnDef fn : m.fns()) {
-            fns.add(fn.body() == null ? fn
-                    : new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
-                            qualifyForeign(fn.body(), m.name()), fn.partial(), fn.pos()));
+            fns.add(fn.body() instanceof Ast.FnBody.Written w
+                    ? new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(),
+                            new Ast.FnBody.Written(qualifyForeign(w.expr(), m.name())),
+                            fn.partial(), fn.pos())
+                    : fn);
         }
         List<Ast.Def> defs = qualifiedInvariants(m);
         List<Ast.Example> examples = new ArrayList<>();
@@ -752,7 +756,7 @@ public final class HelperInliner {
             }
         }
         try {
-            return inline(h.body(), bodyOf(h.name()));
+            return inline(h.written(), bodyOf(h.name()));
         } finally {
             helpers.putAll(shadowed);
         }
@@ -1114,7 +1118,8 @@ public final class HelperInliner {
                             // the lambda's body is caller code, so it is not renamed by this helper's
                             // substitution — only the enclosing helper body is.
                             scopedLambdas.put(f.id(),
-                                    new Ast.FnDef(f.name(), lparams, null, null, lambda.body(), lambda.pos()));
+                                    new Ast.FnDef(f.name(), lparams, null,
+                                            new Ast.FnBody.Written(lambda.body()), lambda.pos()));
                             lambdaOrigins.put(f.name(), new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
                         } else {
                             // Neither a name nor a lambda: a value written where the function goes —
@@ -1154,9 +1159,9 @@ public final class HelperInliner {
                 // a prelude helper's body is stamped with the call site, so errors inside it point at
                 // the user's call, not at the shipped source of souther.*
                 SourcePos at = keepsItsPositions(call) ? null : call.pos();
-                Copy copy = new Copy(helper.body(),
+                Copy copy = new Copy(helper.written(),
                         new BindingOwner.Expansion(into, call.denotes(), k));
-                Ast.Expr body = inline(rename(helper.body(), subst, substDenotes, fnParams, at, copy));   // expand nested helpers too
+                Ast.Expr body = inline(rename(helper.written(), subst, substDenotes, fnParams, at, copy));   // expand nested helpers too
                 given.forEach(scopedLambdas::remove);
                 body = keepDeclaredReturn(helper, body, call.pos(), k);
                 // wrap innermost-first so the value parameters bind in declared order
@@ -1216,7 +1221,8 @@ public final class HelperInliner {
                 }
                 BindingId bound = li.binder().id();
                 scopedLambdas.put(bound,
-                        new Ast.FnDef(li.name(), params, null, null, lambda.body(), li.pos()));
+                        new Ast.FnDef(li.name(), params, null,
+                                new Ast.FnBody.Written(lambda.body()), li.pos()));
                 Ast.Expr body = inline(li.body());
                 scopedLambdas.remove(bound);
                 // if the binding is still read, the function was used as a value, not just applied —
@@ -1281,7 +1287,7 @@ public final class HelperInliner {
         if (recursive.contains(v.name())) {
             return v;
         }
-        return carriedByValue(inline(value.body()));
+        return carriedByValue(inline(value.written()));
     }
 
     /**
@@ -1358,7 +1364,7 @@ public final class HelperInliner {
             }
             Ast.Binder name = binders.binder("$s" + counter++ + "_" + spread.bare(), spread.pos());
             bound.add(name);
-            values.add(carriedByValue(inline(value.body())));
+            values.add(carriedByValue(inline(value.written())));
             spreads.add(Ast.ValueRef.local(name, spread.pos()));
         }
         Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
@@ -1655,7 +1661,7 @@ public final class HelperInliner {
         // self-call forever.
         for (Map.Entry<String, Ast.FnDef> e : helpers.entrySet()) {
             Set<String> called = new HashSet<>();
-            collectHelperCalls(e.getValue().body(), called);
+            collectHelperCalls(e.getValue().written(), called);
             callsOf.put(e.getKey(), called);
         }
         for (String name : helpers.keySet()) {
@@ -1679,7 +1685,7 @@ public final class HelperInliner {
         Map<String, Set<String>> edges = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
             Set<String> out = new LinkedHashSet<>(callsOf.getOrDefault(e.getKey(), Set.of()));
-            collectValueRefs(e.getValue().body(), out);
+            collectValueRefs(e.getValue().written(), out);
             edges.put(e.getKey(), out);
         }
         for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
@@ -1693,7 +1699,7 @@ public final class HelperInliner {
             // and its parameters are the ones the written type names.
             boolean declaredAFunction = e.getValue().declaredReturn() != null
                     && e.getValue().declaredReturn().asFn() != null;
-            if (!declaredAFunction && e.getValue().body() instanceof Ast.Block block) {
+            if (!declaredAFunction && e.getValue().written() instanceof Ast.Block block) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
                                 .at(block.pos()).build(),

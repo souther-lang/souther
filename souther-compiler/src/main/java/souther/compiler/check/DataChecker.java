@@ -51,7 +51,7 @@ public final class DataChecker {
     public static List<ConstCheck> constNewtypeChecks(Ast.Module module, Symbols symbols) {
         List<ConstCheck> out = new ArrayList<>();
         for (Ast.FnDef fn : module.fns()) {
-            collectConstChecks(fn.body(), symbols, out);
+            collectConstChecks(fn.written(), symbols, out);
         }
         return out;
     }

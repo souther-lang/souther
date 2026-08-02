@@ -1206,12 +1206,14 @@ public final class ExampleVerifier {
      */
     private Ast.Expr valueBody(String name) {
         for (Ast.FnDef fn : module.fns()) {
-            if (fn.name().equals(name) && fn.params().isEmpty() && fn.body() != null) {
-                return fn.body();
+            if (fn.name().equals(name) && fn.params().isEmpty()
+                    && fn.body() instanceof Ast.FnBody.Written w) {
+                return w.expr();
             }
         }
         Ast.FnDef imported = values.get(name);
-        return imported != null && imported.params().isEmpty() ? imported.body() : null;
+        return imported != null && imported.params().isEmpty()
+                && imported.body() instanceof Ast.FnBody.Written w ? w.expr() : null;
     }
 
     /**

@@ -188,7 +188,7 @@ public final class TypeChecker {
                                         Map<String, Ast.FnDef> publishedToHere) {
         Map<String, Ast.Expr> loweredBodies = new HashMap<>();
         for (Ast.FnDef fn : lowered.fns()) {
-            loweredBodies.put(fn.name(), fn.body());
+            loweredBodies.put(fn.name(), fn.written());
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,
@@ -357,7 +357,7 @@ public final class TypeChecker {
         // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {
-            collect(errors, abandoned, () -> Elaborator.checkAnnotatedLambdaBindings(fn.body(), symbols));
+            collect(errors, abandoned, () -> Elaborator.checkAnnotatedLambdaBindings(fn.written(), symbols));
         }
         // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
         // helper is checked standalone against its own parameter types, which its body settles
