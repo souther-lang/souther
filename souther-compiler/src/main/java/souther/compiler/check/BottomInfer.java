@@ -1,10 +1,12 @@
 package souther.compiler.check;
 
+import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 
 import java.util.HashMap;
 import java.util.List;
@@ -13,7 +15,7 @@ import java.util.Map;
 /**
  * The bottom an empty collection literal carries, and how a concrete type replaces it.
  *
- * <p>`[]`, `Map.empty()` and `Set.empty()` have no element type of their own (ADR-0028), so they
+ * <p>`[]`, `Map.empty` and `Set.empty` have no element type of their own (ADR-0028), so they
  * type at a bottom that a later step refines: a fold seeded with `[]` learns its accumulator from
  * what the step returns, and a branch that yields an empty collection absorbs into the branch that
  * yields a populated one.
@@ -49,12 +51,22 @@ public final class BottomInfer {
         return t instanceof Type.Nothing;
     }
 
-    /** A syntactic empty-collection literal — {@code []}, {@code Map.empty()}, {@code Set.empty()} —
-     * whose element/value type is fixed by context rather than written. */
+    /**
+     * An empty collection whose element/value type is fixed by context rather than written: the
+     * literal {@code []}, and a library value that takes no argument to learn its type from.
+     *
+     * <p>Which library names those are is the library's to say, so this asks what the name denotes
+     * and whether its declaration was written with a parameter list — not how it was spelled.
+     */
     static boolean isEmptyCollectionLiteral(Ast.Expr e) {
-        return (e instanceof Ast.ListLit l && l.elements().isEmpty())
-                || (e instanceof Ast.Apply c && c.args().isEmpty()
-                        && (c.fn().equals("Map.empty") || c.fn().equals("Set.empty")));
+        if (e instanceof Ast.ListLit l) {
+            return l.elements().isEmpty();
+        }
+        if (!(e instanceof Ast.Var v && v.denotes() instanceof ValueName.Stdlib lib)) {
+            return false;
+        }
+        Prelude.IntrinsicSig declared = Prelude.intrinsics().get(lib.qualified());
+        return declared != null && declared.params().isEmpty();
     }
 
     /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context

@@ -225,7 +225,7 @@ class CompileMapKeyBoundaryTest {
                 data In = { n: Int }
 
                 behavior run : (i: In) -> Map<EmployeeNo, String>
-                let run (i) = Map.empty()
+                let run (i) = Map.empty
                 """));
 
         assertTrue(e.getMessage().contains("EmployeeNo"), e.getMessage());

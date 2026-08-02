@@ -236,7 +236,7 @@ let labelKeys (issues: List<Issue>): List<String> =
 // into its body wherever it expands, so the empty-map seed takes its value type from
 // `Map<String, Int>` — including under `Map.toList`, whose parameter says nothing concrete.
 let labelCounts (issues: List<Issue>): Map<String, Int> =
-    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), labelKeys(issues))
+    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, labelKeys(issues))
 
 let countByLabel (board) = LabelCounts { counts = labelCounts(board.issues) }
 

@@ -8,14 +8,14 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Issue #70: a {@code fold} whose seed is an empty collection ({@code Map.empty()}) must type-check
+ * Issue #70: a {@code fold} whose seed is an empty collection ({@code Map.empty}) must type-check
  * when the step reads and writes the accumulator's value type — the idiomatic "count occurrences into
  * a map" ({@code fold} + {@code Map.upsert}). The surrounding declared type (a record field, a helper
  * return) pins the accumulator so the empty seed no longer forces its value type to a bottom.
  */
 class CompileMapUpsertFoldTest {
 
-    // REPRO 1 (primary): fold + Map.upsert with a Map.empty() seed, in a record-field context.
+    // REPRO 1 (primary): fold + Map.upsert with a Map.empty seed, in a record-field context.
     @Test
     void countByLabelWithUpsertAndEmptySeed() throws Exception {
         String src = """
@@ -24,7 +24,7 @@ class CompileMapUpsertFoldTest {
                 data In = { keys: List<String> }
                 data Out = { m: Map<String, Int> }
                 behavior run : (i: In) -> Out constructs Out
-                let run (i) = Out { m = fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), i.keys) }
+                let run (i) = Out { m = fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, i.keys) }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
         Object in = Codecs.decoded(loader, "demo.In",
@@ -49,7 +49,7 @@ class CompileMapUpsertFoldTest {
                 data In = { ns: List<Int> }
                 data Out = { distinct: Int, ones: Int }
                 let counted (ns: List<Int>) : Map<Int, Int> =
-                    fold((acc, n) -> Map.upsert(n, 1, c -> c + 1, acc), Map.empty(), ns)
+                    fold((acc, n) -> Map.upsert(n, 1, c -> c + 1, acc), Map.empty, ns)
                 let countOf (k: Int, ns: List<Int>) : Int =
                     match Map.get(k, counted(ns)) with | Some c -> c | None -> 0
                 behavior run : (i: In) -> Out constructs Out
@@ -74,7 +74,7 @@ class CompileMapUpsertFoldTest {
                 import List ( fold )
                 data In = { keys: List<String> }
                 data Out = { m: Map<String, Int> }
-                let empty : Map<String, Int> = Map.empty()
+                let empty : Map<String, Int> = Map.empty
                 let cur (m: Map<String, Int>, k: String): Int =
                     match Map.get(k, m) with | Some n -> n | None -> 0
                 behavior run : (i: In) -> Out constructs Out
@@ -101,8 +101,8 @@ class CompileMapUpsertFoldTest {
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = Out {
                     m = if i.on
-                        then fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), i.keys)
-                        else Map.empty()
+                        then fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
+                        else Map.empty
                 }
                 """;
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
@@ -126,7 +126,7 @@ class CompileMapUpsertFoldTest {
                 data In = { keys: List<String>, n: Int }
                 data Out = { m: Map<String, Int> }
                 partial let build (keys: List<String>, n: Int): Map<String, Int> =
-                    if n <= 0 then fold((acc, k) -> Map.upsert(k, 1, x -> x + 1, acc), Map.empty(), keys)
+                    if n <= 0 then fold((acc, k) -> Map.upsert(k, 1, x -> x + 1, acc), Map.empty, keys)
                     else build(keys, n - 1)
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = Out { m = build(i.keys, i.n) }

@@ -398,7 +398,7 @@ class FormatterTest {
                 + "data Out = { m: Map<String, Int> }\n"
                 + "behavior run : (i: In) -> Out constructs Out\n"
                 + "let run (i) = {\n"
-                + "let counted:Map<String,Int> = Map.empty()\n"
+                + "let counted:Map<String,Int> = Map.empty\n"
                 + "Out { m = counted }\n"
                 + "}\n";
         String formatted = Formatter.format(source);

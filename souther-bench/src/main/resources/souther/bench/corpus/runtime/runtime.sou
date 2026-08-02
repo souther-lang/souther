@@ -30,7 +30,7 @@ let evensDoubled (xs) = List.map(x -> x * 2, List.filter(x -> Int.modBy(2, x) ==
 // drops the map, leaving the walk and the arithmetic.
 behavior tally : (xs: List<Int>) -> Int
 let counted (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> c + 1, acc), Map.empty(), xs)
+    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> c + 1, acc), Map.empty, xs)
 let tally (xs) = Map.size(counted(xs))
 
 // `flipped` writes a different number every element, as `tally` does, but one the JVM keeps a boxed
@@ -40,22 +40,22 @@ let tally (xs) = Map.size(counted(xs))
 // about what a write costs.
 behavior flipped : (xs: List<Int>) -> Int
 let flipping (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> 127 - c, acc), Map.empty(), xs)
+    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> 127 - c, acc), Map.empty, xs)
 let flipped (xs) = Map.size(flipping(xs))
 
 behavior kept : (xs: List<Int>) -> Int
 let keeping (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> c, acc), Map.empty(), xs)
+    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> c, acc), Map.empty, xs)
 let kept (xs) = Map.size(keeping(xs))
 
 behavior held : (xs: List<Int>) -> Int
 let holding (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> 1, acc), Map.empty(), xs)
+    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> 1, acc), Map.empty, xs)
 let held (xs) = Map.size(holding(xs))
 
 behavior keyed : (xs: List<Int>) -> Int
 let keying (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.insert(Int.modBy(16, x), 1, acc), Map.empty(), xs)
+    List.fold((acc, x) -> Map.insert(Int.modBy(16, x), 1, acc), Map.empty, xs)
 let keyed (xs) = Map.size(keying(xs))
 
 behavior modded : (xs: List<Int>) -> Int

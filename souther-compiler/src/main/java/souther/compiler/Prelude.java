@@ -68,7 +68,7 @@ public final class Prelude {
     private static final Set<String> BUILTINS = Set.of(
             "List.length", "List.get", "List.max", "List.min", "List.find", "List.sortBy",
             "String.length", "String.toInt", "String.toDecimal",
-            "Map.get", "Map.empty", "Set.empty",
+            "Map.get",
             "Option.map",
             "Int.remainder", "Int.divide", "Decimal.divide", "Decimal.toInt", "Decimal.round");
 

@@ -34,6 +34,32 @@ public final class CallElaborator {
                 List.of(TypeName.primitive(Type.show(head)), TypeName.runtime(errorCase)));
     }
 
+    /**
+     * A library name written where a value goes, or null where the name is not a library value.
+     *
+     * <p>A declaration with no parameter list is a value ([#fn-declaration]), and the library's are
+     * the two empty collections. Their type comes from the context the way {@code []}'s does: the
+     * expected type pins what the declaration left open, and what it does not pin is the bottom that
+     * a later position fixes (ADR-0028).
+     *
+     * <p>The Core is the one the application spelling produced, so nothing downstream of here tells
+     * the two apart — which is what keeps a growing fold's seed the seed it was.
+     */
+    static Core libraryValue(Ast.Var v, Scope env, CheckContext ctx, Type expected) {
+        if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
+            return null;
+        }
+        Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(lib.qualified());
+        if (intrinsic == null || !intrinsic.params().isEmpty()) {
+            return null;
+        }
+        Map<String, Type> bindings = new HashMap<>();
+        BottomInfer.pinResultTypeVars(intrinsic.result(), expected, bindings, ctx.symbols(),
+                v.pos(), "the type of " + lib.qualified());
+        return new Core.Call(lib.qualified(), List.of(),
+                TypeOps.toBottom(TypeOps.substitute(intrinsic.result(), bindings)), v.pos());
+    }
+
     static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
                                       Type expected) {
         CallArgs ca = new CallArgs(call.args(), env, ctx);
@@ -212,6 +238,18 @@ public final class CallElaborator {
         // A shipped intrinsic behaves like a built-in: check the call against its declared signature
         // (from the prelude) and yield its result type; the backend emits the primitive for its key.
         Prelude.IntrinsicSig intrinsic = library ? Prelude.intrinsics().get(call.fn()) : null;
+        // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
+        // `()` would be a second spelling of it. The library was the last place that spelling was
+        // still accepted.
+        if (intrinsic != null && intrinsic.params().isEmpty()) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.apply.notfunction")
+                            .title("check.apply.notfunction.title")
+                            .at(call.pos(), call.fn().length()).args(call.fn())
+                            .hint("check.stdlib.value.hint", call.fn()).build(),
+                    "`" + call.fn() + "` is a value, not a function, so it takes no `()` — write `"
+                            + call.fn() + "` on its own");
+        }
         if (intrinsic != null) {
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(
@@ -371,19 +409,6 @@ public final class CallElaborator {
                 }
                 yield Type.option(mo.value());
             }
-            case "Map.empty" -> {
-                arity(call, 0);
-                // like `[]`, the empty map's key and value are bottoms fixed by context (ADR-0028).
-                // When the context supplies an expected map type, adopt it directly so the value type
-                // is concrete from the start — a Map.empty()-seeded fold no longer forces its
-                // accumulator (and any updater closure) to a bottom.
-                yield expected instanceof Type.MapOf me ? me : Type.map(Type.NOTHING, Type.NOTHING);
-            }
-            case "Set.empty" -> {
-                arity(call, 0);
-                // empty set's element type fixed by context (ADR-0028); adopt an expected set type
-                yield expected instanceof Type.SetOf se ? se : Type.set(Type.NOTHING);
-            }
             case "Date", "DateTime" -> {
                 arity(call, 1);
                 ca.type(0);   // the literal text, which temporalLiteral parses
@@ -454,7 +479,7 @@ public final class CallElaborator {
                     // type, so a function argument's result refines the binding (as the old fold did).
                     Map<String, Type> bind = new HashMap<>();
                     // Pin the result-type variables from the surrounding context first (issue #70): a
-                    // fold whose seed is Map.empty()/[] has its accumulator `'acc` bound to the expected
+                    // fold whose seed is Map.empty/[] has its accumulator `'acc` bound to the expected
                     // result BEFORE the step (and any inlined Map.upsert closure) is checked, so the
                     // seed's bottom no longer drives the step's parameter types.
                     BottomInfer.pinResultTypeVars(fn.result(), expected, bind, ctx.symbols(), call.pos(),

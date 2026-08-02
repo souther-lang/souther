@@ -221,6 +221,11 @@ public final class Elaborator {
                 case ValueName.Builtin b when b.name().equals("None")
                         && ctx.makingAnOptional() && expected instanceof Type.OptionOf ->
                         new Core.OptionNone(expected, v.pos());
+                // a library name written with no parameter list where it was declared: a value,
+                // typed from the context as `[]` is
+                case ValueName.Stdlib _
+                        when CallElaborator.libraryValue(v, env, ctx, expected) != null ->
+                        CallElaborator.libraryValue(v, env, ctx, expected);
                 default -> throw notAValue(v, env);
             };
             case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);

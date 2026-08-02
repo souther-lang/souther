@@ -488,8 +488,8 @@ public final class TypeOps {
      * gets applies under one too: two data-like types widen to the union of their cases, and a list
      * of one case joins a list of another as a list of both — the same direction {@code ++} takes
      * on its elements (spec 12.2, 16.2). An empty collection's bottom takes on the other side's
-     * type, at the top or at any depth, so a bare {@code Set.empty()} accumulator joins the
-     * {@code Set<Int>} the other arm grows and a {@code (Set.empty(), [])} joins position by
+     * type, at the top or at any depth, so a bare {@code Set.empty} accumulator joins the
+     * {@code Set<Int>} the other arm grows and a {@code (Set.empty, [])} joins position by
      * position. */
     public static Type join(Type a, Type b) {
         if (a.equals(b)) {
@@ -628,6 +628,27 @@ public final class TypeOps {
     }
 
     /** Replaces the type variables bound by {@link #unify} in a result type. */
+    /**
+     * {@code t} with every type variable still free read as the bottom.
+     *
+     * <p>A declaration's arguments are what bind its variables, so one with no arguments leaves any
+     * the context did not pin standing. That is the same situation an empty {@code []} is in, and it
+     * takes the same answer: the bottom unifies with whatever a later position fixes (ADR-0028).
+     *
+     * <p>Only for a declaration written with no parameter list. Elsewhere a variable left free is a
+     * signature that could not be worked out, and reading it as the bottom would hide that.
+     */
+    public static Type toBottom(Type t) {
+        return switch (t) {
+            case Type.Var _ -> Type.NOTHING;
+            case Type.ListOf l -> Type.list(toBottom(l.element()));
+            case Type.MapOf m -> Type.map(toBottom(m.key()), toBottom(m.value()));
+            case Type.SetOf s -> Type.set(toBottom(s.element()));
+            case Type.OptionOf o -> Type.option(toBottom(o.element()));
+            default -> t;
+        };
+    }
+
     public static Type substitute(Type t, Map<String, Type> bindings) {
         return switch (t) {
             case Type.Var v -> bindings.getOrDefault(v.name(), v);

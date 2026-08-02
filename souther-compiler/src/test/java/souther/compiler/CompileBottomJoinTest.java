@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Issue #74: where two branches of an {@code if} or {@code match} join, an empty-collection bottom
- * takes on the other branch's type. This held for {@code []} but not for {@code Set.empty()} or
- * {@code Map.empty()}, so a branchy fold step that returns the bare accumulator on one side was
+ * takes on the other branch's type. This held for {@code []} but not for {@code Set.empty} or
+ * {@code Map.empty}, so a branchy fold step that returns the bare accumulator on one side was
  * rejected as soon as the accumulator was a set or a map. The same join now recurses through every
  * container — sets, maps, options, and tuples of them — in both {@code if} and {@code match}.
  */
@@ -26,7 +26,7 @@ class CompileBottomJoinTest {
         return (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
     }
 
-    /** A {@code Set.empty()}-seeded fold whose step returns the bare accumulator on one branch. */
+    /** A {@code Set.empty}-seeded fold whose step returns the bare accumulator on one branch. */
     @Test
     void setSeedWithBranchReturningTheAccumulator() throws Exception {
         BytesClassLoader loader = loader("""
@@ -40,14 +40,14 @@ class CompileBottomJoinTest {
                 behavior work : (i: In) -> Out constructs Out
                 let work (i) = {
                     let seen = fold((acc, x) -> if x > 0 then Set.insert(x, acc) else acc,
-                        Set.empty(), i.xs)
+                        Set.empty, i.xs)
                     Out { n = Set.size(seen) }
                 }
                 """);
         assertEquals(2L, run(loader, Map.of("xs", List.of(1, -1, 2, -2, 1))).get("n"));
     }
 
-    /** The same shape with a {@code Map.empty()} seed. */
+    /** The same shape with a {@code Map.empty} seed. */
     @Test
     void mapSeedWithBranchReturningTheAccumulator() throws Exception {
         BytesClassLoader loader = loader("""
@@ -61,7 +61,7 @@ class CompileBottomJoinTest {
                 behavior work : (i: In) -> Out constructs Out
                 let work (i) = {
                     let m = fold((acc, x) -> if x > 0 then Map.insert(x, x, acc) else acc,
-                        Map.empty(), i.xs)
+                        Map.empty, i.xs)
                     Out { n = Map.size(m) }
                 }
                 """);
@@ -85,7 +85,7 @@ class CompileBottomJoinTest {
                     let (_, out) = fold((acc, x) -> {
                         let (seen, ys) = acc
                         if Set.contains(x, seen) then (seen, ys) else (Set.insert(x, seen), ys ++ [x])
-                    }, (Set.empty(), []), i.xs)
+                    }, (Set.empty, []), i.xs)
                     Out { ys = out }
                 }
                 """);
@@ -119,7 +119,7 @@ class CompileBottomJoinTest {
     }
 
     /** A written type on the seed reaches the backend too: the closure is materialised at the
-     * annotated element type rather than at the bottom {@code Set.empty()} carries on its own. */
+     * annotated element type rather than at the bottom {@code Set.empty} carries on its own. */
     @Test
     void annotatedSetSeedReachesTheBackend() throws Exception {
         BytesClassLoader loader = loader("""
@@ -132,7 +132,7 @@ class CompileBottomJoinTest {
 
                 behavior work : (i: In) -> Out constructs Out
                 let work (i) = {
-                    let seed: Set<Int> = Set.empty()
+                    let seed: Set<Int> = Set.empty
                     let seen = fold((acc, x) -> if x > 0 then Set.insert(x, acc) else acc, seed, i.xs)
                     Out { n = Set.size(seen) }
                 }
@@ -155,7 +155,7 @@ class CompileBottomJoinTest {
 
                 behavior work : (i: In) -> Out constructs Out
                 let work (i) = {
-                    let seed: Map<String, Int> = Map.empty()
+                    let seed: Map<String, Int> = Map.empty
                     let counts = fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), seed, i.ks)
                     Out { n = Map.size(counts) }
                 }
@@ -177,7 +177,7 @@ class CompileBottomJoinTest {
 
                 behavior work : (i: In) -> Out constructs Out
                 let work (i) = {
-                    let seed: (Map<String, Int>, List<String>) = (Map.empty(), [])
+                    let seed: (Map<String, Int>, List<String>) = (Map.empty, [])
                     let (counts, _) = fold((acc, k) -> {
                         let (m, order) = acc
                         let grown = Map.upsert(k, 1, n -> n + 1, m)
@@ -263,7 +263,7 @@ class CompileBottomJoinTest {
 
                 behavior work : (i: In) -> Out constructs Out
                 let work (i) = {
-                    let seed: (Set<Int>, List<Int>) = (Set.empty(), [])
+                    let seed: (Set<Int>, List<Int>) = (Set.empty, [])
                     let (_, out) = fold((acc, x) -> {
                         let (seen, ys) = acc
                         if Set.contains(x, seen) then (seen, ys) else (Set.insert(x, seen), ys ++ [x])

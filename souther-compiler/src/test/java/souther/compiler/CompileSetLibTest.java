@@ -6,7 +6,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import souther.compiler.diag.CompileException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /** The Set standard library ([#stdlib-set]): building and the set algebra, exercised in a behavior
  *  body (a Set is not yet a data field until its codec lands). */
@@ -32,7 +35,7 @@ class CompileSetLibTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = {
-                    let s = insert("c", insert("b", insert("a", Set.empty())))
+                    let s = insert("c", insert("b", insert("a", Set.empty)))
                     let t = fromList(i.xs)
                     Out {
                         n = size(s),
@@ -40,7 +43,7 @@ class CompileSetLibTest {
                         unionList = toList(union(s, t)),
                         interList = toList(intersect(s, t)),
                         diffList = toList(difference(s, t)),
-                        emptyFlag = isEmpty(Set.empty())
+                        emptyFlag = isEmpty(Set.empty)
                     }
                 }
                 """), getClass().getClassLoader());
@@ -107,5 +110,19 @@ class CompileSetLibTest {
         assertEquals(Set.of("ab", "ac"), Set.copyOf((List<?>) m.get("yes")));
         assertEquals(Set.of("bd"), Set.copyOf((List<?>) m.get("no")));
         assertEquals(2L, m.get("collapsed"), "ab and ac share the first letter, so {a, b} is left");
+    }
+
+    /** The empty set is a value, for the reason the empty map is: no parameter list, no argument list. */
+    @Test
+    void applyingTheEmptySetIsRefusedAsApplyingAValue() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Out = { s: Set<String> }
+                data Req = { n: Int }
+                behavior go : (r: Req) -> Out
+                    constructs Out
+                let go (r) = Out { s = Set.empty() }
+                """));
+        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
     }
 }

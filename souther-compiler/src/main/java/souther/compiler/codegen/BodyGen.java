@@ -1172,8 +1172,6 @@ final class BodyGen {
                     code.invokestatic(CD_Maps, "get",
                             MethodTypeDesc.of(CD_Option, CD_Map, ConstantDescs.CD_Object));
                 }
-                case "Map.empty" -> code.invokestatic(CD_Maps, "empty", MethodTypeDesc.of(CD_Map));
-                case "Set.empty" -> code.invokestatic(CD_Sets, "empty", MethodTypeDesc.of(CD_Set));
                 case "Date", "DateTime" -> {
                     // a written date: the checker has already parsed the literal, so the text is
                     // known good and this is a plain parse of a constant string.

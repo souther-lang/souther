@@ -122,7 +122,7 @@ let distinct (xs: List<'a>) = {
     let (_, out) = List.fold((acc, x) -> {
         let (seen, ys) = acc
         if Set.contains(x, seen) then acc else (Set.insert(x, seen), ys ++ [x])
-    }, (Set.empty(), []), xs)
+    }, (Set.empty, []), xs)
     out
 }
 
@@ -153,7 +153,7 @@ let groupBy (key: ('a) -> 'k, xs: List<'a>) =
                 | None -> [x]
                 | Some bucket -> bucket ++ [x],
             acc),
-        Map.empty(), xs)
+        Map.empty, xs)
 
 // `filterMap` maps and drops in one pass (Elm's `List.filterMap`, F#'s `List.choose`): `f` answers
 // with an optional, and only what is there joins the result. This is how an optional field becomes a
@@ -190,7 +190,7 @@ let foldr (step: ('acc, 'a) -> 'acc, seed: 'acc, xs: List<'a>) : 'acc =
 // same key collapse and the later one wins, as `Map.fromList` does — say the key is an id with
 // `List.allUniqueBy` and the collapse cannot happen.
 let indexBy (key: ('a) -> 'k, xs: List<'a>) =
-    List.fold((acc, x) -> Map.insert(key(x), x, acc), Map.empty(), xs)
+    List.fold((acc, x) -> Map.insert(key(x), x, acc), Map.empty, xs)
 
 // `sort` orders by the elements' natural order (Elm `List.sort`). Like Elm it is a native
 // primitive, not a fold: an in-language sort needs comparison plus a place to remember the

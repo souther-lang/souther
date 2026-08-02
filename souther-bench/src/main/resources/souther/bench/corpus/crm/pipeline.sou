@@ -872,7 +872,7 @@ example closeAndSummarize
 // exhaustive match. What is left of finding F3.
 
 let countByStage (opps: List<Opportunity>): Map<StageName, Int> =
-    List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty(), opps)
+    List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty, opps)
 
 // A call's result is reached into, so the amount arrives as `amountOf(opp).value` and neither the helper
 // that opened the newtype nor the one that chained the two calls is here any more.
@@ -882,7 +882,7 @@ let totalByStage (opps: List<Opportunity>): Map<StageName, Amount> =
                              amountOf(opp),
                              running -> Amount(Decimal.add(running.value, amountOf(opp).value)),
                              acc),
-              Map.empty(), opps)
+              Map.empty, opps)
 
 behavior pipelineByStage : (opps: List<Opportunity>) -> StageBreakdown
     constructs StageBreakdown, StageName, Amount

@@ -1789,7 +1789,7 @@ let applyAll (xs: List<Int>, p: (Int) -> Bool) = List.all(p, xs)
 
 The return type is inferred. However, a *recursive helper* MUST declare its return type — `+let depth (s: OrgMember): Int = ...+` — because the result type cannot be inferred through the cycle, and only with a declaration can a self-call be type-checked. The declaration is required only for a recursive helper. A non-recursive helper is inferred as before, and a `+let+` with a same-named behavior cannot write a return type (the type comes from the behavior).
 
-A written return type is a declaration into the body, and it stays one where the helper is expanded: it is pushed into the body at each call site, so a value only its context can type — an empty `+[]+` / `+Map.empty()+` / `+Set.empty()+`, or a `+fold+` over one — takes the declared element type even where the call site itself expects nothing concrete (a generic parameter such as `+Map.toList+`'s). This is the same direction a binding's `+let x: T = v+` has (<<block-expression>>).
+A written return type is a declaration into the body, and it stays one where the helper is expanded: it is pushed into the body at each call site, so a value only its context can type — an empty `+[]+` / `+Map.empty+` / `+Set.empty+`, or a `+fold+` over one — takes the declared element type even where the call site itself expects nothing concrete (a generic parameter such as `+Map.toList+`'s). This is the same direction a binding's `+let x: T = v+` has (<<block-expression>>).
 
 The body is an expression. `+{ ... }+` is a block expression (<<block-expression>>), written to place a `+let+` or `+guard+`.
 
@@ -2232,14 +2232,14 @@ The base form is written inline, in the same source as the behavior. To keep fix
 [,text]
 ----
 let normalized = String.trim(input)
-let counted: Map<String, Int> = List.fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), keys)
+let counted: Map<String, Int> = List.fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, keys)
 ----
 
 Reassignment is forbidden. A `+let+` is placed inside a block expression (<<block-expression>>). What follows `+let x = v+` is the scope of that binding, nested at desugaring time.
 
 A `+let+` at the top level is a definition (<<fn-declaration>>); a `+let+` inside a block is a binding. Which one a `+let+` is follows from where it is written, not from how it is spelled, and the two are typed from different places. A definition takes its parameter types from its own body and its call sites are not read (<<fn-rules>>). A binding has no declaration to read, so a lambda bound here takes its parameter types from the applications in the body that binds it. A block holds no parameter list — `+let f (x) = …+` is written at the top level — so the two forms never meet in one place.
 
-A binding may carry its type, `+let x: T = v+`. The type is optional — a binding otherwise takes the type of its value — and writing it does two things: the declared type is pushed into the value, so a value only its context can type (an empty `+[]+`, `+Map.empty()+`, `+Set.empty()+`, including one produced by a `+fold+` over such a seed) takes the declared element type instead of staying undetermined (<<algebraic-types>>); and the value is checked against it, so a declared type the value does not have is a compile error rather than an ignored comment. This is the same declaration-into-body direction a helper's declared return type has (<<fn-declaration>>) — it is a declaration, not an extension of inference. As with a helper's return, `+T+` is an ordinary type: a function type belongs only in a helper's parameter position (<<fn-declaration>>), so a binding whose value is a lambda takes no annotation, and neither does a tuple destructure (`+let (a, b) = t+`).
+A binding may carry its type, `+let x: T = v+`. The type is optional — a binding otherwise takes the type of its value — and writing it does two things: the declared type is pushed into the value, so a value only its context can type (an empty `+[]+`, `+Map.empty+`, `+Set.empty+`, including one produced by a `+fold+` over such a seed) takes the declared element type instead of staying undetermined (<<algebraic-types>>); and the value is checked against it, so a declared type the value does not have is a compile error rather than an ignored comment. This is the same declaration-into-body direction a helper's declared return type has (<<fn-declaration>>) — it is a declaration, not an extension of inference. As with a helper's return, `+T+` is an ordinary type: a function type belongs only in a helper's parameter position (<<fn-declaration>>), so a binding whose value is a lambda takes no annotation, and neither does a tuple destructure (`+let (a, b) = t+`).
 
 [#if]
 === if

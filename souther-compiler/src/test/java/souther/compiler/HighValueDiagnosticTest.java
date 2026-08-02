@@ -85,18 +85,18 @@ class HighValueDiagnosticTest {
                 data Out = { m: Map<String, Int> }
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = {
-                    let counts = fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), i.keys)
+                    let counts = fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
                     Out { m = counts }
                 }
                 """);
         assertEquals("check.fold.seed.title", d.titleKey());
-        // the primary caret is on the Map.empty() seed (line 7), not the `+` inside upsert
+        // the primary caret is on the Map.empty seed (line 7), not the `+` inside upsert
         assertEquals(7, d.pos().line());
     }
 
     @Test
     void anUnrelatedErrorInAFoldStepIsNotReattributedToTheSeed() {
-        // The step over a Map.empty() seed references an undefined identifier `bogus`. Even though the
+        // The step over a Map.empty seed references an undefined identifier `bogus`. Even though the
         // accumulator is a bottom, the failure is NOT the unresolved-bottom error, so it must surface
         // as the unknown-identifier error at `bogus`, not be masked by the seed-inference message.
         Diagnostic d = diagnosticOf("""
@@ -106,7 +106,7 @@ class HighValueDiagnosticTest {
                 data Out = { m: Map<String, Int> }
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = {
-                    let counts = fold((acc, k) -> Map.upsert(k, 1, n -> bogus, acc), Map.empty(), i.keys)
+                    let counts = fold((acc, k) -> Map.upsert(k, 1, n -> bogus, acc), Map.empty, i.keys)
                     Out { m = counts }
                 }
                 """);

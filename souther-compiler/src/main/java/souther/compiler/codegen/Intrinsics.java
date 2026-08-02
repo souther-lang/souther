@@ -215,6 +215,7 @@ final class Intrinsics {
         t.put("list.product", new NumericFold("productInt", "productDecimal"));
 
         // Map — keys/values are erased to Object; the map argument stays a raw Map.
+        t.put("map.empty", rt(CD_Maps, "empty", order(), ts -> Type.map(Type.NOTHING, Type.NOTHING)));
         t.put("map.containsKey", rtErased(CD_Maps, "containsKey", order(1, 0), Set.of(0), ts -> Type.BOOL));
         t.put("map.keys", rt(CD_Maps, "keys", order(0), ts -> Type.list(mapOf(ts, 0).key())));
         t.put("map.values", rt(CD_Maps, "values", order(0), ts -> Type.list(mapOf(ts, 0).value())));
@@ -232,6 +233,7 @@ final class Intrinsics {
         t.put("map.fromList", rt(CD_Maps, "fromList", order(0), Intrinsics::mapFromListResult));
 
         // Set — the element is erased to Object; a set argument stays a raw Set.
+        t.put("set.empty", rt(CD_Sets, "empty", order(), ts -> Type.set(Type.NOTHING)));
         t.put("set.singleton", rtErased(CD_Sets, "singleton", order(0), Set.of(0), ts -> Type.set(ts.get(0))));
         t.put("set.insert", rtErased(CD_Sets, "insert", order(0, 1), Set.of(0), Intrinsics::setInsertResult));
         t.put("set.remove", rtErased(CD_Sets, "remove", order(0, 1), Set.of(0), ts -> ts.get(1)));

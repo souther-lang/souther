@@ -31,7 +31,7 @@ class CompileHelperReturnPushdownTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let tally (keys: List<String>): Map<String, Int> =
-                    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), keys)
+                    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, keys)
 
                 let entryKey (e: (String, Int)): String = {
                     let (k, _) = e
@@ -87,7 +87,7 @@ class CompileHelperReturnPushdownTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let tally (keys: List<String>): Map<String, Int> =
-                    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), keys)
+                    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, keys)
 
                 let entryKey (e: (String, Int)): String = {
                     let (k, _) = e

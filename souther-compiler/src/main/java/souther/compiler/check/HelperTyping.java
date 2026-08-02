@@ -107,7 +107,7 @@ public final class HelperTyping {
                 // cannot reach an injected behavior — put the effect in the behavior that calls it.
                 rejectInjectedCalls(body, h.name(), reqSigs.keySet());
             }
-            // push a declared return type into the body so an empty-collection body (Map.empty(), [])
+            // push a declared return type into the body so an empty-collection body (Map.empty, [])
             // takes the declared element/value type rather than a bottom
             Type declaredReturn = h.declaredReturn() == null ? null : TypeOps.successType(h.declaredReturn(), symbols);
             Core elaboratedBody = Elaborator.elaborate(body, tenv, new CheckContext(symbols, null, reqSigs), declaredReturn);
@@ -378,7 +378,7 @@ public final class HelperTyping {
     }
 
     /** Whether a step's signature still carries an empty-collection bottom in a parameter or in its
-     * result — the accumulator of a fold seeded with {@code []} / {@code Map.empty()}, which only the
+     * result — the accumulator of a fold seeded with {@code []} / {@code Map.empty}, which only the
      * step itself grows to a concrete type. */
     private static boolean carriesBottom(Type.FnOf fn) {
         if (Type.mentions(fn.result(), BottomInfer::isBottom)) {
