@@ -477,12 +477,8 @@ public final class HelperTyping {
         Map<String, Set<String>> calls = new HashMap<>();
         for (String h : recursive) {
             Ast.Expr body = loweredBodies.get(h);
-            Set<String> bound = new HashSet<>();
-            for (Ast.FnParam p : inliner.helper(h).params()) {
-                bound.add(p.name());
-            }
             DataChecker.Constructs c = DataChecker.Constructs.empty();
-            DataChecker.collectConstructs(body, c, symbols, bound, Map.of());   // recursive calls opaque here
+            DataChecker.collectConstructs(body, c, symbols, Map.of());   // recursive calls opaque here
             own.put(h, c);
             Set<String> callees = new LinkedHashSet<>();
             collectCalls(body, callees, recursive);

@@ -326,8 +326,7 @@ public final class SpecChecker {
         // One expression (spec 16.4): this single walk sees every construction, including under a
         // desugared `guard`.
         DataChecker.Constructs constructed = DataChecker.Constructs.empty();
-        DataChecker.collectConstructs(body, constructed, symbols, new HashSet<>(env.spellings()),
-                recHelperConstructs);
+        DataChecker.collectConstructs(body, constructed, symbols, recHelperConstructs);
         // `constructs` on an fn-backed behavior is optional: its construction permission is internal
         // (invisible to callers, unlike `depends on`), so with the body visible the set can be inferred
         // (ADR-0002). Omit it and inference stands. Declare it and it must match the body exactly —

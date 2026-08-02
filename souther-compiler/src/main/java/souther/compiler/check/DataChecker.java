@@ -146,10 +146,9 @@ public final class DataChecker {
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
     static void collectConstructs(Ast.Expr e, Map<TypeName, String> out, Symbols symbols,
-                                  Set<String> bound,
                                   Map<String, Constructs> recConstructs) {
         Constructs all = Constructs.empty();
-        collectConstructs(e, all, symbols, bound, recConstructs);
+        collectConstructs(e, all, symbols, recConstructs);
         out.putAll(all.originated());
     }
 
@@ -159,14 +158,11 @@ public final class DataChecker {
     }
 
     static void collectConstructs(Ast.Expr e, Constructs out, Symbols symbols,
-                                          Set<String> bound,
                                           Map<String, Constructs> recConstructs) {
         switch (e) {
             case Ast.LetIn li -> {
-                collectConstructs(li.value(), out, symbols, bound, recConstructs);
-                Set<String> inner = new HashSet<>(bound);
-                inner.add(li.name());
-                collectConstructs(li.body(), out, symbols, inner, recConstructs);
+                collectConstructs(li.value(), out, symbols, recConstructs);
+                collectConstructs(li.body(), out, symbols, recConstructs);
             }
             case Ast.NewData nd -> {
                 // A construction this body was handed is not this body's. It is handed one two ways.
@@ -182,12 +178,12 @@ public final class DataChecker {
                         ? out.carried() : out.originated();
                 side.putIfAbsent(nd.typeName().denotes(), nd.typeName().written());
                 for (Ast.FieldInit init : nd.inits()) {
-                    collectConstructs(init.value(), out, symbols, bound, recConstructs);
+                    collectConstructs(init.value(), out, symbols, recConstructs);
                 }
             }
-            case Ast.FieldAccess fa -> collectConstructs(fa.target(), out, symbols, bound, recConstructs);
-            case Ast.Tuple tup -> tup.elements().forEach(el -> collectConstructs(el, out, symbols, bound, recConstructs));
-            case Ast.TupleGet tg -> collectConstructs(tg.tuple(), out, symbols, bound, recConstructs);
+            case Ast.FieldAccess fa -> collectConstructs(fa.target(), out, symbols, recConstructs);
+            case Ast.Tuple tup -> tup.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
+            case Ast.TupleGet tg -> collectConstructs(tg.tuple(), out, symbols, recConstructs);
             case Ast.Call call -> {
                 // a recursive helper is not inlined, so its own (transitive) constructions are
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be —
@@ -200,56 +196,45 @@ public final class DataChecker {
                 if (viaHelper != null) {
                     out.absorb(call.origin().viaValueReference() ? viaHelper.allCarried() : viaHelper);
                 }
-                call.args().forEach(a -> collectConstructs(a, out, symbols, bound, recConstructs));
+                call.args().forEach(a -> collectConstructs(a, out, symbols, recConstructs));
             }
             case Ast.Binary bin -> {
-                collectConstructs(bin.left(), out, symbols, bound, recConstructs);
-                collectConstructs(bin.right(), out, symbols, bound, recConstructs);
+                collectConstructs(bin.left(), out, symbols, recConstructs);
+                collectConstructs(bin.right(), out, symbols, recConstructs);
             }
-            case Ast.Neg neg -> collectConstructs(neg.operand(), out, symbols, bound, recConstructs);
+            case Ast.Neg neg -> collectConstructs(neg.operand(), out, symbols, recConstructs);
             case Ast.Match m -> {
-                collectConstructs(m.scrutinee(), out, symbols, bound, recConstructs);
+                collectConstructs(m.scrutinee(), out, symbols, recConstructs);
                 for (Ast.Case c : m.cases()) {
-                    Set<String> inner = new HashSet<>(bound);
-                    if (c.binding() != null) {
-                        inner.add(c.bindingName());
-                    }
-                    collectConstructs(c.body(), out, symbols, inner, recConstructs);
+                    collectConstructs(c.body(), out, symbols, recConstructs);
                 }
             }
             case Ast.If iff -> {
-                collectConstructs(iff.cond(), out, symbols, bound, recConstructs);
-                collectConstructs(iff.then(), out, symbols, bound, recConstructs);
-                collectConstructs(iff.els(), out, symbols, bound, recConstructs);
+                collectConstructs(iff.cond(), out, symbols, recConstructs);
+                collectConstructs(iff.then(), out, symbols, recConstructs);
+                collectConstructs(iff.els(), out, symbols, recConstructs);
             }
             // an attempt builds the value on its success branch, so it needs the same permission a
             // plain construction does — what it does not do is abort when it fails
             case Ast.IfConstructed ic -> {
-                collectConstructs(ic.construct(), out, symbols, bound, recConstructs);
-                Set<String> inner = new HashSet<>(bound);
-                inner.add(ic.binderName());
-                collectConstructs(ic.then(), out, symbols, inner, recConstructs);
+                collectConstructs(ic.construct(), out, symbols, recConstructs);
+                collectConstructs(ic.then(), out, symbols, recConstructs);
                 ic.els().forEach(arm ->
-                        collectConstructs(arm.body(), out, symbols, bound, recConstructs));
+                        collectConstructs(arm.body(), out, symbols, recConstructs));
             }
-            case Ast.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, bound, recConstructs));
+            case Ast.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
             case Ast.ListComp comp -> {
-                collectConstructs(comp.element(), out, symbols, bound, recConstructs);
-                comp.guards().forEach(g -> collectConstructs(g, out, symbols, bound, recConstructs));
+                collectConstructs(comp.element(), out, symbols, recConstructs);
+                comp.guards().forEach(g -> collectConstructs(g, out, symbols, recConstructs));
             }
-            case Ast.Block block -> {
-                // a block builds under the enclosing behavior's permission (spec 12.5)
-                Set<String> inner = new HashSet<>(bound);
-                inner.addAll(block.paramNames());
-                collectConstructs(block.body(), out, symbols, inner, recConstructs);
-            }
+            // a block builds under the enclosing behavior's permission (spec 12.5)
+            case Ast.Block block -> collectConstructs(block.body(), out, symbols, recConstructs);
             // a bare name that denotes a unit data is that unit's construction (spec 8.4). Read off
             // what the name denotes rather than resolved again from its spelling: a reader with a
             // unit data spelled like the one another module's published body builds was recording
             // its own type as the one built. Carried or not is asked of the name for the same reason
             // it is asked of a construction node — it is the same question about the same thing.
-            case Ast.Var v when !bound.contains(v.name())
-                    && v.denotes() instanceof ValueName.OfType named
+            case Ast.Var v when v.denotes() instanceof ValueName.OfType named
                     && symbols.get(named.type()) instanceof Ast.UnitData -> {
                 Map<TypeName, String> side = named.origin().carried(named.type())
                         ? out.carried() : out.originated();
