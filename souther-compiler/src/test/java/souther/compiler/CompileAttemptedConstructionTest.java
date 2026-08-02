@@ -186,7 +186,7 @@ class CompileAttemptedConstructionTest {
                 }
                 """;
         Compiler.Compiled c = Compiler.compileWithWarnings(src);
-        assertEquals(0, c.warnings().stream().map(Located::diagnostic)
+        assertEquals(0, c.warnings().stream()
                         .filter(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code())).count(),
                 "the attempt cannot abort, so there is no possible violation to warn about");
     }

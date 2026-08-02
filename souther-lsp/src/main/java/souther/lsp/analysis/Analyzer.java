@@ -93,7 +93,7 @@ public final class Analyzer {
             }
             // A self-contained module compiles fully here, so its inline `example`s are evaluated
             // on save and a failing one (E1805) surfaces as an editor diagnostic.
-            for (Located w : Compiler.compileWithWarnings(text, "Main").warnings()) {
+            for (Located w : Compiler.compileWithWarnings(text, "Main").locatedWarnings()) {
                 out.add(fromDiagnostic(lines, w.diagnostic()));
             }
         } catch (CompileException e) {

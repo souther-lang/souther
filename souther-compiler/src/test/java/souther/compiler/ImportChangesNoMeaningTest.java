@@ -186,7 +186,7 @@ class ImportChangesNoMeaningTest {
     }
 
     private static List<String> codes(Compiler.Compiled c) {
-        return c.warnings().stream().map(Located::diagnostic).map(Diagnostic::code).sorted().toList();
+        return c.warnings().stream().map(Diagnostic::code).sorted().toList();
     }
 
     /**

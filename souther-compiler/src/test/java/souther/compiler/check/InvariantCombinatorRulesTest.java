@@ -248,7 +248,7 @@ class InvariantCombinatorRulesTest {
     void theElementCarriesItsInvariantIntoEachClosure() {
         for (Fires f : FIRES) {
             Compiler.Compiled c = Compiler.compileWithWarnings(PREAMBLE + f.body());
-            long warnings = c.warnings().stream().map(Located::diagnostic)
+            long warnings = c.warnings().stream()
                     .filter(d -> d.severity() == Severity.WARNING).count();
             assertEquals(0, warnings,
                     f.fn() + ": the construction in the closure should discharge from the element's"

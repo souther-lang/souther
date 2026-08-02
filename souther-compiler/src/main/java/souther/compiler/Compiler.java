@@ -34,8 +34,20 @@ public final class Compiler {
         return compile(source, "Main");
     }
 
-    /** A compiled module with any non-fatal diagnostics (invariant-discharge warnings, etc.). */
-    public record Compiled(Map<String, byte[]> classes, List<Located> warnings) {}
+    /**
+     * A compiled module with any non-fatal diagnostics (invariant-discharge warnings, etc.), each
+     * carrying the source it belongs to so a caller can quote the line it is about.
+     *
+     * @param classes the generated classes, by binary name
+     * @param locatedWarnings the warnings, each with the source that holds it
+     */
+    public record Compiled(Map<String, byte[]> classes, List<Located> locatedWarnings) {
+
+        /** The warnings on their own, for a caller that only reads what they say. */
+        public List<Diagnostic> warnings() {
+            return locatedWarnings.stream().map(Located::diagnostic).toList();
+        }
+    }
 
     /** Compiles and returns the classes together with any invariant-discharge warnings. */
     public static Compiled compileWithWarnings(String source) {

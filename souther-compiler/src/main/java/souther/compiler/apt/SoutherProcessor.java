@@ -92,7 +92,7 @@ public final class SoutherProcessor extends AbstractProcessor {
                     : Compiler.compileModulesWithWarnings(texts, path);
             // A warning is the whole of what the checker has to say about an unproven construction,
             // so a build that never reports one lets them accumulate while staying green.
-            for (String reported : render(compiled.warnings(), sources)) {
+            for (String reported : render(compiled.locatedWarnings(), sources)) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, reported);
             }
             Map<String, byte[]> classes = compiled.classes();

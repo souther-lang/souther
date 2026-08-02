@@ -222,7 +222,7 @@ class CompileImportedNameTest {
                     Out { v = NonEmpty(i.s) }
                 }
                 """);
-        assertEquals(0, c.warnings().stream().map(Located::diagnostic)
+        assertEquals(0, c.warnings().stream()
                         .filter(d -> d.severity() == Severity.WARNING).count(),
                 c.warnings().toString());
     }

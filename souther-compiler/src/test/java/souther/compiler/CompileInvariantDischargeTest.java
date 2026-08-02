@@ -21,12 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompileInvariantDischargeTest {
 
     private static long warnings(Compiler.Compiled c) {
-        return c.warnings().stream().map(Located::diagnostic)
+        return c.warnings().stream()
                 .filter(d -> d.severity() == Severity.WARNING).count();
     }
 
     private static boolean hasWarning(Compiler.Compiled c, String code) {
-        return c.warnings().stream().map(Located::diagnostic)
+        return c.warnings().stream()
                 .anyMatch(d -> d.severity() == Severity.WARNING && code.equals(d.code()));
     }
 
