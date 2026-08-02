@@ -22,8 +22,7 @@ import java.util.Set;
  * emits from the lowered module instead of re-running the inliner or shaping these constructs
  * itself, and the type checker's body check consumes the same lowered form. Helper fns are left
  * untouched — they are inlined at their call sites, so a comprehension inside one is desugared once
- * it lands in a behavior body. Later slices grow this stage into a typed Core IR and move the
- * remaining backend-side rewrites (fold shaping, {@code match} lowering, closure conversion) here.
+ * it lands in a behavior body.
  */
 public final class Lower {
 

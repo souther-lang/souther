@@ -16,8 +16,7 @@ import java.util.Optional;
  * <p>Core is the surface expression AST after the {@link souther.compiler.check.Lower}
  * stage has inlined helpers and desugared surface-only forms. It differs from the AST in what it
  * makes explicit: a construct the backend used to re-detect and shape during emission becomes its
- * own node here, so the backend only emits. Later slices add explicit nodes for {@code match}
- * lowering and closure conversion, and drop the corresponding special cases from the emitter.
+ * own node here, so the backend only emits.
  *
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
  * checker is the only producer of Core — it builds the tree as it types a body
@@ -109,9 +108,10 @@ public sealed interface Core {
     }
 
     /** A second-class block: a step passed to a recursive combinator, or an escaping lambda a {@code
-     * let} binds (a closure). Kept as its own node until closure conversion gets an explicit Core form.
-     * Its {@code type} is the {@link Type.FnOf} the checker gave it — the parameter types the context
-     * fixed, and the body's result type. */
+     * let} binds (a closure). It has no value of its own: the call it is passed to emits its body
+     * inline, and only a block that escapes into a first-class position becomes a class. Its {@code
+     * type} is the {@link Type.FnOf} the checker gave it — the parameter types the context fixed, and
+     * the body's result type. */
     record Block(List<Ast.Binder> params, Core body, Type type, SourcePos pos) implements Core {
 
         /** How the parameters were written, in order. */
