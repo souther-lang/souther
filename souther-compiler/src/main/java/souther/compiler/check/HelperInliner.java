@@ -277,7 +277,7 @@ public final class HelperInliner {
             Ast.Expr e = work.poll();
             reader.collectHelperCalls(e, called);
             Set<String> named = new LinkedHashSet<>();
-            reader.collectValueRefs(e, named);
+            reader.collectValueNames(e, named);
             for (String value : named) {
                 Ast.FnDef def = table.get(value);
                 if (def != null && def.params().isEmpty()
@@ -1641,7 +1641,7 @@ public final class HelperInliner {
         Map<String, Set<String>> edges = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
             Set<String> out = new LinkedHashSet<>(callsOf.getOrDefault(e.getKey(), Set.of()));
-            collectValueRefs(e.getValue().written(), out);
+            collectValueNames(e.getValue().written(), out);
             edges.put(e.getKey(), out);
         }
         for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
@@ -1696,7 +1696,7 @@ public final class HelperInliner {
 
     /** The names of this module's values that {@code e} reads. A value is written bare, so a
      * reference to one is a {@code Var} and never reaches the call graph. */
-    private void collectValueRefs(Ast.Expr e, Set<String> out) {
+    private void collectValueNames(Ast.Expr e, Set<String> out) {
         if (e == null) {
             return;
         }
@@ -1706,7 +1706,7 @@ public final class HelperInliner {
                 out.add(v.name());
             }
         }
-        forEachChild(e, c -> collectValueRefs(c, out));
+        forEachChild(e, c -> collectValueNames(c, out));
     }
 
     /** Records into {@code path} a route from {@code from} back to {@code target}, or answers false. */
