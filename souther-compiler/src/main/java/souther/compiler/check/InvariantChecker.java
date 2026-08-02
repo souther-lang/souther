@@ -261,6 +261,54 @@ public final class InvariantChecker {
     }
 
     /**
+     * What the body's names mean where the walk is: the type of each, and, for a binding given a
+     * location, the location it reads.
+     *
+     * <p>A binding given a location <em>is</em> that location — the rule {@link #pathKey} already
+     * applies to a newtype's {@code .value}, read here of a name instead of a field. It is what lets
+     * a construction survive being moved into a helper: an expansion binds each argument and answers
+     * the parameter's reads with that binding (see {@link HelperInliner}), so without it the body of
+     * a helper taking a record names locations the seeding never wrote, and everything an input's
+     * type guarantees stops at the call.
+     */
+    private record Scope(Map<String, Type> types, Map<String, String> locations) {
+
+        static Scope of(Map<String, Type> types) {
+            return new Scope(types, Map.of());
+        }
+
+        Type typeOf(String name) {
+            return types.get(name);
+        }
+
+        /** The location {@code name} reads, which is itself unless it was given another. */
+        String locationOf(String name) {
+            return locations.getOrDefault(name, name);
+        }
+
+        /**
+         * This scope with {@code name} bound to {@code type}, reading {@code location} where it was
+         * given one. A binding that read a location rooted at {@code name} loses it: the name it was
+         * written as denotes something else from here, so what it stood for can no longer be said.
+         */
+        Scope binding(String name, Type type, String location) {
+            Map<String, Type> t = new HashMap<>(types);
+            if (type == null) {
+                t.remove(name);
+            } else {
+                t.put(name, type);
+            }
+            Map<String, String> at = new HashMap<>(locations);
+            at.values().removeIf(read -> mentions(read, name));
+            at.remove(name);
+            if (location != null && !location.equals(name)) {
+                at.put(name, location);
+            }
+            return new Scope(Map.copyOf(t), Map.copyOf(at));
+        }
+    }
+
+    /**
      * How a clause of {@code data}'s invariant can be discharged, read on its own — the construction
      * is assumed to name what it is given, so what is left is the clause's own shape. {@code at} is
      * where the clause is written, which is the pre-expansion position; {@code clause} is that clause
@@ -346,7 +394,7 @@ public final class InvariantChecker {
         return termKey(e, x -> rootName(x) != null ? "?" : null, Map.of(), 0) == null ? e : null;
     }
 
-    /** Analyzes one behavior body against its input types. Never throws. A {@code null} source is a
+    /** Analyzes one behavior body against its input scope. Never throws. A {@code null} source is a
      * body the analysis representation could not be built for, and is not analyzed at all. */
     static Findings analyze(Source source, Map<String, Type> params, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, source == null ? Map.of() : source.invariants());
@@ -358,7 +406,7 @@ public final class InvariantChecker {
             for (Map.Entry<String, Type> p : params.entrySet()) {
                 k = c.seedParam(p.getKey(), p.getValue(), k);
             }
-            c.walk(source.body(), k, new HashMap<>(params));
+            c.walk(source.body(), k, Scope.of(params));
         } catch (RuntimeException _) {
             // fail-open: the run-time invariant check remains the backstop
         }
@@ -367,72 +415,68 @@ public final class InvariantChecker {
 
     // --- the walk ------------------------------------------------------------------------------
 
-    private void walk(Ast.Expr e, Known k, Map<String, Type> types) {
-        checkIfConstruction(e, k, types, false);
+    private void walk(Ast.Expr e, Known k, Scope scope) {
+        checkIfConstruction(e, k, scope, false);
         switch (e) {
             case Ast.If iff -> {
-                walk(iff.cond(), k, types);
-                walk(iff.then(), assumeCond(iff.cond(), k, types, true), types);
-                walk(iff.els(), assumeCond(iff.cond(), k, types, false), types);
+                walk(iff.cond(), k, scope);
+                walk(iff.then(), assumeCond(iff.cond(), k, scope, true), scope);
+                walk(iff.els(), assumeCond(iff.cond(), k, scope, false), scope);
             }
             case Ast.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else
                 // branch — so it is checked for a decided violation and never warned about as a
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
-                checkIfConstruction(ic.construct(), k, types, true);
-                Ast.forEachChild(ic.construct(), child -> walk(child, k, types));
-                Map<String, Type> t2 = new HashMap<>(types);
+                checkIfConstruction(ic.construct(), k, scope, true);
+                Ast.forEachChild(ic.construct(), child -> walk(child, k, scope));
                 Known k2 = rebind(k, ic.binderName());
-                Type built = typeExpr(ic.construct(), types);
+                Type built = typeExpr(ic.construct(), scope);
+                // The attempt built the value, so the binding is that construction and no location
                 if (built != null) {
-                    t2.put(ic.binderName(), built);
                     k2 = seedParam(ic.binderName(), built, k2);   // on this branch the invariant holds
                 }
-                walk(ic.then(), k2, t2);
+                walk(ic.then(), k2, scope.binding(ic.binderName(), built, null));
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
-                ic.els().forEach(arm -> walk(arm.body(), k, types));
+                ic.els().forEach(arm -> walk(arm.body(), k, scope));
             }
             case Ast.LetIn li -> {
-                walk(li.value(), k, types);
-                Map<String, Type> t2 = new HashMap<>(types);
-                Type vt = typeExpr(li.value(), types);
-                if (vt != null) {
-                    t2.put(li.name(), vt);
-                }
-                LinearForm vf = affineOf(li.value(), types);
+                walk(li.value(), k, scope);
+                Type vt = typeExpr(li.value(), scope);
+                // Given a location, the binding is that location; given anything else, it is a term
+                // of its own, and only a number can be related to what it was computed from.
+                LinearForm vf = affineOf(li.value(), scope);
                 Known k2 = rebind(k, li.name());
                 if (isNumeric(vt) && vf != null) {
                     k2 = k2.with(k2.numbers().assign(li.name(), vf));
                 }
-                walk(li.body(), k2, t2);
+                walk(li.body(), k2, scope.binding(li.name(), vt, pathKey(li.value(), scope)));
             }
             case Ast.Match m -> {
-                walk(m.scrutinee(), k, types);
+                walk(m.scrutinee(), k, scope);
                 for (Ast.Case c : m.cases()) {
-                    Map<String, Type> t2 = new HashMap<>(types);
+                    Scope s2 = scope;
                     Known k2 = k;
                     if (c.binding() != null) {
                         k2 = rebind(k, c.bindingName());
-                        if (c.caseTypes().size() == 1) {
-                            Type bound = MatchElaborator.caseBindType(c.caseTypes().get(0).denotes());
-                            if (bound != null) {
-                                t2.put(c.bindingName(), bound);
-                            }
-                        }
+                        Type bound = c.caseTypes().size() == 1
+                                ? MatchElaborator.caseBindType(c.caseTypes().get(0).denotes()) : null;
+                        // A sum has no fields of its own, so the scrutinee is not a location any
+                        // clause could have named — the case's value names only itself.
+                        s2 = scope.binding(c.bindingName(), bound, null);
                     }
-                    walk(c.body(), k2, t2);
+                    walk(c.body(), k2, s2);
                 }
             }
-            case Ast.Apply call -> walkCall(call, k, types);
-            default -> Ast.forEachChild(e, child -> walk(child, k, types));
+            case Ast.Apply call -> walkCall(call, k, scope);
+            default -> Ast.forEachChild(e, child -> walk(child, k, scope));
         }
     }
 
     /** Walks a call, binding a combinator closure's element parameter to the list's element type (and
      * seeding its invariant) so a construction inside the closure is analyzed rather than left opaque. */
-    private void walkCall(Ast.Apply call, Known k, Map<String, Type> types) {
+    private void walkCall(Ast.Apply call, Known k, Scope scope) {
         Combinator combo = COMBINATORS.get(call.reaches());
         for (int i = 0; i < call.args().size(); i++) {
             Ast.Expr arg = call.args().get(i);
@@ -440,17 +484,17 @@ public final class InvariantChecker {
                     && combo.elementParam() < step.params().size()
                     && combo.listArg() < call.args().size()) {
                 Ast.Expr container = call.args().get(combo.listArg());
-                Type elem = elementType(typeExpr(container, types));
+                Type elem = elementType(typeExpr(container, scope));
                 // The container is read where the call is written, so what is known of its elements
                 // is looked up before the closure's parameter takes any name over. Reading it after
                 // would make an argument spelling that name — `List.map(cart -> ..., cart.items)` —
                 // answer differently from one spelling any other, which is nothing the program says.
-                List<Quantified> relations = elementRelations(container, k, types);
-                Map<String, Type> t2 = new HashMap<>(types);
+                List<Quantified> relations = elementRelations(container, k, scope);
                 String p = step.params().get(combo.elementParam()).name();
+                // an element of a container is not a location the body can otherwise name
+                Scope s2 = scope.binding(p, elem, null);
                 Known k2 = rebind(k, p);
                 if (elem != null) {
-                    t2.put(p, elem);
                     k2 = seedParam(p, elem, k2);   // the element carries its type's invariant
                 }
                 for (Quantified q : relations) {
@@ -461,21 +505,21 @@ public final class InvariantChecker {
                         k2 = instantiate(q, p, elem, k2);
                     }
                 }
-                walk(step.body(), k2, t2);
+                walk(step.body(), k2, s2);
             } else {
-                walk(arg, k, types);
+                walk(arg, k, scope);
             }
         }
     }
 
     /** The relations known of every element of {@code container}: those stated of it as written, and
      * those stated of a container it was built from that travel every construction in between. */
-    private List<Quantified> elementRelations(Ast.Expr container, Known k, Map<String, Type> types) {
+    private List<Quantified> elementRelations(Ast.Expr container, Known k, Scope scope) {
         List<Quantified> found = new ArrayList<>();
         Set<Shape> crossed = java.util.EnumSet.noneOf(Shape.class);
         Ast.Expr source = container;
         while (true) {
-            String key = bodyKey(source, types);
+            String key = bodyKey(source, scope);
             if (key != null) {
                 for (Quantified q : k.quantified()) {
                     if (key.equals(q.container()) && q.through().containsAll(crossed)) {
@@ -578,7 +622,7 @@ public final class InvariantChecker {
 
     // --- construction detection & discharge check ----------------------------------------------
 
-    private void checkIfConstruction(Ast.Expr e, Known k, Map<String, Type> types,
+    private void checkIfConstruction(Ast.Expr e, Known k, Scope scope,
                                      boolean attempted) {
         switch (e) {
             case Ast.NewData nd when nd.spreads().isEmpty() -> {
@@ -586,9 +630,9 @@ public final class InvariantChecker {
                     Map<String, LinearForm> forms = new HashMap<>();
                     Map<String, String> paths = new HashMap<>();
                     Map<String, Ast.Expr> given = new HashMap<>();
-                    Function<Ast.Expr, String> bodyKey = value -> siteKey(value, types);
+                    Function<Ast.Expr, String> bodyKey = value -> siteKey(value, scope);
                     for (Ast.FieldInit fi : nd.inits()) {
-                        LinearForm f = affineOf(fi.value(), types);
+                        LinearForm f = affineOf(fi.value(), scope);
                         if (f != null) {
                             forms.put(fi.name(), f);
                         }
@@ -605,9 +649,9 @@ public final class InvariantChecker {
                 }
             }
             case Ast.Binary bin when isArith(bin.op()) -> {
-                if (typeExpr(bin, types) instanceof Type.Ref r
+                if (typeExpr(bin, scope) instanceof Type.Ref r
                         && symbols.get(r.name()) instanceof Ast.Data type && type.newtype()) {
-                    LinearForm value = affineOf(bin, types);
+                    LinearForm value = affineOf(bin, scope);
                     if (value != null) {
                         // an arithmetic result is a form, not a location, so it names no path
                         check(r.name(), type,
@@ -641,8 +685,9 @@ public final class InvariantChecker {
 
         /** A clause written in the body's own scope, where every name already stands for itself —
          * what a guard states, read by the rule a type's clause is read by. */
-        static Bindings ofScope(Map<String, Type> types) {
-            return ofPaths(LinearForm::atom, name -> name, types);
+        static Bindings ofScope(Scope scope) {
+            return ofPaths(name -> LinearForm.atom(scope.locationOf(name)), scope::locationOf,
+                    scope.types());
         }
     }
 
@@ -813,40 +858,40 @@ public final class InvariantChecker {
     /** Refines {@code k} by asserting {@code cond} (or its negation): a comparison tightens the
      * numeric domain, a stdlib predicate settles a fact. A condition of neither shape, and an operand
      * outside the affine fragment, leave {@code k} unchanged (sound). */
-    private Known assumeCond(Ast.Expr rawCond, Known k, Map<String, Type> types, boolean positive) {
+    private Known assumeCond(Ast.Expr rawCond, Known k, Scope scope, boolean positive) {
         Ast.Expr cond = asSizeComparison(rawCond);
         // `&&` asserted true gives both sides; `||` asserted false gives both sides negated.
         if (cond instanceof Ast.Binary b
                 && (b.op() == Ast.BinOp.AND && positive || b.op() == Ast.BinOp.OR && !positive)) {
-            return assumeCond(b.right(), assumeCond(b.left(), k, types, positive), types, positive);
+            return assumeCond(b.right(), assumeCond(b.left(), k, scope, positive), scope, positive);
         }
         Ast.Expr under = negated(cond);
         if (under != null) {
-            return assumeCond(under, k, types, !positive);
+            return assumeCond(under, k, scope, !positive);
         }
         Known out = k;
         // What holds of the sizes the condition names, whichever way the condition itself is read.
         List<Constraint> known = new ArrayList<>();
-        sizeFacts(cond, types, known);
+        sizeFacts(cond, scope, known);
         for (Constraint c : known) {
             out = out.with(out.numbers().assume(c.form(), c.rel()));
         }
         if (cond instanceof Ast.Binary b) {
             Rel rel = relOf(b.op());
             Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
-            LinearForm la = eff == null ? null : affineOf(b.left(), types);
-            LinearForm ra = eff == null ? null : affineOf(b.right(), types);
+            LinearForm la = eff == null ? null : affineOf(b.left(), scope);
+            LinearForm ra = eff == null ? null : affineOf(b.right(), scope);
             if (la != null && ra != null) {
                 out = out.with(out.numbers().assume(la.minus(ra), eff));
             }
         }
         List<Quantified> quantified = new ArrayList<>();
-        quantifiedBy(cond, Bindings.ofScope(types), positive, quantified);
+        quantifiedBy(cond, Bindings.ofScope(scope), positive, quantified);
         out = out.and(quantified);
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
         Polar polar = polar(cond, positive);
-        String key = bodyKey(polar.expr(), types);
+        String key = bodyKey(polar.expr(), scope);
         return key == null ? out : out.with(out.facts().assume(key, polar.positive()));
     }
 
@@ -1010,14 +1055,14 @@ public final class InvariantChecker {
 
     /** The affine form of a body expression: a numeric atom, a newtype construct's wrapped value, or
      * {@code null}. */
-    private LinearForm affineOf(Ast.Expr e, Map<String, Type> types) {
+    private LinearForm affineOf(Ast.Expr e, Scope scope) {
         return affine(e, n -> {
             if (n instanceof Ast.NewData nd && nd.spreads().isEmpty() && nd.inits().size() == 1
                     && nd.inits().get(0).name().equals("value")
                     && numericNewtype(Type.ref(nd.typeName().denotes()))) {
-                return affineOf(nd.inits().get(0).value(), types);
+                return affineOf(nd.inits().get(0).value(), scope);
             }
-            String atom = atomOf(n, types);
+            String atom = atomOf(n, scope);
             return atom == null ? null : LinearForm.atom(atom);
         });
     }
@@ -1076,7 +1121,7 @@ public final class InvariantChecker {
         // read by — so a newtype's `.value` is the same location on both sides — and then the field it
         // is rooted at is replaced by what the construction is giving that field. One rule for what a
         // location is, applied twice, rather than two rules that have to be kept agreeing.
-        String local = pathKey(e, binds.fields());
+        String local = pathKey(e, Scope.of(binds.fields()));
         if (local == null) {
             return null;
         }
@@ -1102,18 +1147,18 @@ public final class InvariantChecker {
 
     /** The canonical atom key of a numeric location ({@code x}, {@code p.a}, a newtype's value) or of
      * a size call over a nameable container, or {@code null} if {@code e} is neither. */
-    private String atomOf(Ast.Expr e, Map<String, Type> types) {
-        String size = sizeAtom(e, arg -> bodyKey(arg, types));
+    private String atomOf(Ast.Expr e, Scope scope) {
+        String size = sizeAtom(e, arg -> bodyKey(arg, scope));
         if (size != null) {
             return size;
         }
-        return isNumeric(typeExpr(e, types)) ? pathKey(e, types) : null;
+        return isNumeric(typeExpr(e, scope)) ? pathKey(e, scope) : null;
     }
 
     /** A body expression's canonical key: a location names itself, and everything else is read
      * structurally. */
-    private String bodyKey(Ast.Expr e, Map<String, Type> types) {
-        return termKey(e, x -> pathKey(x, types), Map.of(), 0);
+    private String bodyKey(Ast.Expr e, Scope scope) {
+        return termKey(e, x -> pathKey(x, scope), Map.of(), 0);
     }
 
     /**
@@ -1126,16 +1171,16 @@ public final class InvariantChecker {
      * from rendering it, and reporting its construction would be reporting a possible violation the
      * author has no reasonable guard for.
      */
-    private String siteKey(Ast.Expr e, Map<String, Type> types) {
-        String path = pathKey(e, types);
+    private String siteKey(Ast.Expr e, Scope scope) {
+        String path = pathKey(e, scope);
         if (path != null) {
             return path;
         }
         if (e instanceof Ast.Apply call) {
             Built built = BUILT_FROM.get(call.reaches());
             if (built != null && built.from() < call.args().size()
-                    && siteKey(call.args().get(built.from()), types) != null) {
-                return bodyKey(e, types);
+                    && siteKey(call.args().get(built.from()), scope) != null) {
+                return bodyKey(e, scope);
             }
         }
         return null;
@@ -1186,8 +1231,8 @@ public final class InvariantChecker {
     }
 
     /** The same, over a body expression, where a term is only ever itself. */
-    private void sizeFacts(Ast.Expr e, Map<String, Type> types, List<Constraint> out) {
-        sizeFacts(e, Bindings.ofBody(x -> bodyKey(x, types)), out);
+    private void sizeFacts(Ast.Expr e, Scope scope, List<Constraint> out) {
+        sizeFacts(e, Bindings.ofBody(x -> bodyKey(x, scope)), out);
     }
 
     /** {@code size(c) <= size(what c was built from)}, down the chain, wherever the building can only
@@ -1559,15 +1604,16 @@ public final class InvariantChecker {
         return e instanceof Ast.FieldAccess fa ? chainOn(head, fa.target()) + "." + fa.field() : head;
     }
 
-    private String pathKey(Ast.Expr e, Map<String, Type> types) {
+    private String pathKey(Ast.Expr e, Scope scope) {
         return switch (e) {
-            case Ast.Var v -> v.name();
+            // a name given a location is that location, as a newtype's `.value` is its own
+            case Ast.Var v -> scope.locationOf(v.name());
             case Ast.FieldAccess fa -> {
-                Type owner = typeExpr(fa.target(), types);
+                Type owner = typeExpr(fa.target(), scope);
                 if (fa.field().equals("value") && TypeOps.isSingleValueNewtype(owner, symbols)) {
-                    yield pathKey(fa.target(), types);   // a newtype's .value is the same location
+                    yield pathKey(fa.target(), scope);   // a newtype's .value is the same location
                 }
-                String base = pathKey(fa.target(), types);
+                String base = pathKey(fa.target(), scope);
                 yield base == null ? null : base + "." + fa.field();
             }
             default -> null;
@@ -1597,38 +1643,33 @@ public final class InvariantChecker {
 
     // --- a minimal local typer (enough for atom/affine detection) ------------------------------
 
-    private Type typeExpr(Ast.Expr e, Map<String, Type> types) {
+    private Type typeExpr(Ast.Expr e, Scope scope) {
         return switch (e) {
             case Ast.IntLit _ -> Type.INT;
             case Ast.DecimalLit _ -> Type.DECIMAL;
-            case Ast.Var v -> types.get(v.name());
+            case Ast.Var v -> scope.typeOf(v.name());
             case Ast.FieldAccess fa -> {
-                Type owner = typeExpr(fa.target(), types);
+                Type owner = typeExpr(fa.target(), scope);
                 yield owner instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.Data d
                         ? TypeOps.fieldTypes(d, symbols).get(fa.field()) : null;
             }
             case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
             case Ast.LetIn li -> {
-                Map<String, Type> inner = new HashMap<>(types);
-                Type bound = typeExpr(li.value(), types);
-                if (bound == null) {
-                    inner.remove(li.name());
-                } else {
-                    inner.put(li.name(), bound);
-                }
-                yield typeExpr(li.body(), inner);
+                Type bound = typeExpr(li.value(), scope);
+                yield typeExpr(li.body(),
+                        scope.binding(li.name(), bound, pathKey(li.value(), scope)));
             }
-            case Ast.Neg n -> typeExpr(n.operand(), types);
-            case Ast.Binary b when isArith(b.op()) -> arithType(b, types);
+            case Ast.Neg n -> typeExpr(n.operand(), scope);
+            case Ast.Binary b when isArith(b.op()) -> arithType(b, scope);
             default -> null;
         };
     }
 
     /** The result type of an arithmetic binary: the newtype for closed {@code +}/{@code -}
      * (via the checker's shared rule), else the numeric base, else {@code null}. */
-    private Type arithType(Ast.Binary b, Map<String, Type> types) {
-        Type lt = typeExpr(b.left(), types);
-        Type rt = typeExpr(b.right(), types);
+    private Type arithType(Ast.Binary b, Scope scope) {
+        Type lt = typeExpr(b.left(), scope);
+        Type rt = typeExpr(b.right(), scope);
         // Closed `+`/`-` and scalar `*`/`/` both yield the newtype (the checker has already validated
         // admissibility, so a newtype operand here means the result is that newtype).
         if (isArith(b.op())) {
