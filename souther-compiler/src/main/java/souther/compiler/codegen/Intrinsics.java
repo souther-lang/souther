@@ -129,7 +129,7 @@ final class Intrinsics {
                 byArg[src] = t;
                 params[j] = erased ? CD_Object : boundaryDesc(t);
             }
-            Type resultType = result.apply(List.of(byArg));
+            Type resultType = result == null ? call.type() : result.apply(List.of(byArg));
             g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(resultType), params));
             return resultType;
         }
@@ -214,12 +214,25 @@ final class Intrinsics {
 
     private static final Map<String, Emit> TABLE = buildTable();
 
+    /** Every kernel key this table emits. A key here with no declaration naming it is a kernel the
+     *  library ships and no signature describes, which is what {@code BUILTINS} used to be. */
+    static Set<String> keys() {
+        return TABLE.keySet();
+    }
+
     private static int[] order(int... a) {
         return a;
     }
 
     private static Emit rt(ClassDesc owner, String method, int[] argOrder, Function<List<Type>, Type> result) {
         return new RuntimeStatic(owner, method, argOrder, Set.of(), result);
+    }
+
+    /** The same, for a kernel whose result the declaration already states outright — nothing about
+     *  the arguments narrows it, so the type the checker settled is the answer rather than one this
+     *  table works out again. */
+    private static Emit rtDeclared(ClassDesc owner, String method, int[] argOrder) {
+        return new RuntimeStatic(owner, method, argOrder, Set.of(), null);
     }
 
     private static Emit rtErased(ClassDesc owner, String method, int[] argOrder, Set<Integer> objectSlots,
@@ -242,6 +255,8 @@ final class Intrinsics {
         Map<String, Emit> t = new java.util.LinkedHashMap<>();
 
         // String — JDK-native instance methods (explicit descriptor); receiver is the last Souther arg.
+        t.put("string.toInt", rtDeclared(CD_Strings, "toInt", order(0)));
+        t.put("string.toDecimal", rtDeclared(CD_Strings, "toDecimal", order(0)));
         t.put("string.length", rt(CD_Strings, "length", order(0), ts -> Type.INT));
         t.put("string.trim", jdk(CD_String, "trim", mtd(CD_String), order(0), Type.STRING));
         t.put("string.lowercase", jdk(CD_String, "toLowerCase", mtd(CD_String), order(0), Type.STRING));

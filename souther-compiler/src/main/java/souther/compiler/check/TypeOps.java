@@ -1257,9 +1257,16 @@ public final class TypeOps {
                 if (resolved != null) {
                     yield resolved.isUnresolved() ? Type.ERRONEOUS : Type.ref(resolved);
                 }
+                // A union's case names a type where a type goes. A `match` arm has always read it
+                // that way; a declaration reads it the same, which is what lets `Int |
+                // DivisionByZero` be written rather than only met. Asked after the module's own
+                // declarations, so a name a model declares keeps its meaning.
+                TypeName asCase = symbols.resolveCase(ref.name());
+                if (asCase != null && !asCase.isUnresolved()) {
+                    yield Type.ref(asCase);
+                }
                 // A rounding mode is a name the language gives, and the operations taking one are
-                // core declarations, so their parameter type has to be nameable there. Asked after
-                // the module's own declarations, so a model that declares this name keeps it.
+                // core declarations, so their parameter type has to be nameable there.
                 if (ref.name().equals(ROUNDING_MODE.name())) {
                     yield Type.ref(ROUNDING_MODE);
                 }

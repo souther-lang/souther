@@ -8,6 +8,8 @@
 // declaration cannot yet express. See the stdlib implementation-location policy.
 module souther.int
 
+let divide (a: Int, b: Int) : Int | DivisionByZero = intrinsic "int.divide"
+let remainder (a: Int, b: Int) : Int | DivisionByZero = intrinsic "int.remainder"
 let add (a: Int, b: Int) : Int = intrinsic "int.add"
 let subtract (a: Int, b: Int) : Int = intrinsic "int.subtract"
 let multiply (a: Int, b: Int) : Int = intrinsic "int.multiply"

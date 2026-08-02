@@ -1112,23 +1112,30 @@ final class BodyGen {
                         MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
                 return;
             }
+            // A partial division answers a case rather than a number when its divisor is zero, so
+            // it emits a branch. The table's row shape is one call with one result; these are
+            // written out here, and their declarations still say what they take and answer.
+            switch (call.fn()) {
+                case "Int.divide" -> {
+                    intDivide(call, true);
+                    return;
+                }
+                case "Int.remainder" -> {
+                    intDivide(call, false);
+                    return;
+                }
+                case "Decimal.divide" -> {
+                    decimalDivide(call);
+                    return;
+                }
+                default -> { }
+            }
             Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(call.fn());
             if (intrinsic != null) {
                 Intrinsics.emit(this, intrinsic.key(), call);
                 return;
             }
             switch (call.fn()) {
-                case "String.toInt" -> {
-                    // Strings.toInt returns a boxed Long or NotANumber.INSTANCE — the Int | NotANumber
-                    // union, carried as Object (like intDivide's DivisionByZero result).
-                    genExpr(call.args().get(0));
-                    code.invokestatic(CD_Strings, "toInt", MethodTypeDesc.of(CD_Object, CD_String));
-                }
-                case "String.toDecimal" -> {
-                    // the sibling of toInt: a boxed BigDecimal or NotANumber.INSTANCE, carried as Object
-                    genExpr(call.args().get(0));
-                    code.invokestatic(CD_Strings, "toDecimal", MethodTypeDesc.of(CD_Object, CD_String));
-                }
                 case GrowingFold.BUILD -> buildList(call);
                 case GrowingFold.GROW -> growList(call);
                 case GrowingFold.MAP_BUILD -> buildMap(call);
@@ -1140,14 +1147,6 @@ final class BodyGen {
                     code.loadConstant(((Core.Str) call.args().get(0)).value());
                     code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
                 }
-                case "Int.divide", "Decimal.divide" -> {
-                    if (call.args().size() == 4) {
-                        decimalDivide(call);
-                    } else {
-                        intDivide(call, true);
-                    }
-                }
-                case "Int.remainder" -> intDivide(call, false);
                 default -> {
                     // an injected behavior a lambda captured arrives in a slot rather than in a
                     // field of the enclosing behavior, and is applied as the value it is. This asks

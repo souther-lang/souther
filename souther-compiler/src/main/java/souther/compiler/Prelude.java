@@ -55,20 +55,6 @@ public final class Prelude {
             Map.entry("souther.decimal", "Decimal"),
             Map.entry("souther.option", "Option"));
 
-    /** The checker built-ins, by qualified name — the primitives that have no prelude source because
-     *  they are overloaded (length/get) or need bespoke codegen (get/find/sortBy). Two other groups
-     *  stay here too, each because a core declaration cannot yet write their signature: the ones
-     *  returning a primitive-headed union ({@code Int | DivisionByZero}, {@code Decimal | NotANumber})
-     *  and the ones taking a rounding mode, which is a bare built-in identifier and not a value a
-     *  parameter type can name ({@code Decimal.toInt}/{@code round}). The rest of Int/Decimal
-     *  (add/subtract/multiply/compare/modBy) is now declared in {@code souther.int}/{@code
-     *  souther.decimal}. {@code fold} is not among them: it is an ordinary recursive helper in
-     *  {@code souther.list} ({@code foldFrom}) that takes its step as a closure. They are reached
-     *  qualified like everything else (spec §stdlib). */
-    private static final Set<String> BUILTINS = Set.of(
-            "String.toInt", "String.toDecimal",
-            "Int.remainder", "Int.divide", "Decimal.divide");
-
     /** Every qualifier a call may carry: the four prelude modules plus the arithmetic built-in
      *  namespaces {@code Int}/{@code Decimal} (spec §stdlib). */
     private static final Set<String> QUALIFIERS =
@@ -116,12 +102,13 @@ public final class Prelude {
         return SUGARED.contains(qualifiedName);
     }
 
-    /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function —
-     *  a prelude helper, a prelude intrinsic, a checker built-in, or a sugar for one. */
+    /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function — a
+     *  prelude helper, a prelude intrinsic, or a sugar for one. Every one of them is declared in a
+     *  core module: there is no longer a set of names whose signature lives only in the compiler
+     *  (ADR-0053). */
     public static boolean hasQualified(String qualifiedName) {
         return HELPERS.containsKey(qualifiedName)
                 || INTRINSICS.containsKey(qualifiedName)
-                || BUILTINS.contains(qualifiedName)
                 || SUGARED.contains(qualifiedName);
     }
 

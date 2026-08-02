@@ -372,45 +372,10 @@ public final class CallElaborator {
             return result;
         }
         return switch (library ? call.fn() : "") {
-            case "String.toInt" -> {
-                arity(call, 1);
-                ca.require(0, Type.STRING, "argument of String.toInt");
-                // a non-numeric string produces the NotANumber case; a primitive-headed union a core
-                // declaration cannot name, so this stays a built-in like Int.divide
-                yield Type.union(primitiveHeaded(Type.INT, "NotANumber"));
-            }
-            case "String.toDecimal" -> {
-                arity(call, 1);
-                ca.require(0, Type.STRING, "argument of String.toDecimal");
-                // the sibling of toInt, and here for the same reason: a primitive-headed union
-                yield Type.union(primitiveHeaded(Type.DECIMAL, "NotANumber"));
-            }
             case "Date", "DateTime" -> {
                 arity(call, 1);
                 ca.type(0);   // the literal text, which temporalLiteral parses
                 yield temporalLiteral(call);
-            }
-            case "Int.remainder" -> {
-                arity(call, 2);
-                ca.require(0, Type.INT, "argument 1 of remainder");
-                ca.require(1, Type.INT, "argument 2 of remainder");
-                // partial: a zero divisor produces the DivisionByZero case (spec 18.2)
-                yield Type.union(primitiveHeaded(Type.INT, "DivisionByZero"));
-            }
-            case "Int.divide", "Decimal.divide" -> {
-                if (args.size() == 4) {
-                    // Decimal divide states its rounding: divide(a, b, scale, mode) (spec 18.3)
-                    ca.require(0, Type.DECIMAL, "argument 1 of divide");
-                    ca.require(1, Type.DECIMAL, "argument 2 of divide");
-                    ca.require(2, Type.INT, "scale of divide");
-                    requireRoundingMode(call.fn(), args.get(3));
-                    ca.untyped(3);   // a built-in identifier, not an expression
-                    yield Type.union(primitiveHeaded(Type.DECIMAL, "DivisionByZero"));
-                }
-                arity(call, 2);
-                ca.require(0, Type.INT, "argument 1 of divide");
-                ca.require(1, Type.INT, "argument 2 of divide");
-                yield Type.union(primitiveHeaded(Type.INT, "DivisionByZero"));
             }
             default -> {
                 // a function-typed value in scope (a helper's function parameter) applied to
