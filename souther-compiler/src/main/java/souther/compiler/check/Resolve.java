@@ -549,20 +549,6 @@ public final class Resolve {
      * else recurses through {@link Ast#mapChildren}, so a new expression kind is carried without
      * being named here.
      */
-    /**
-     * One name in the value namespace, answered against the bindings in force where it is written —
-     * what this pass does at a name slot, wherever a node has one. A binding in force wins over a
-     * declaration in a spread as everywhere else.
-     *
-     * <p>A name a pass synthesized already knowing what it means is left as it is, as a synthesized
-     * type name is.
-     */
-    private Ast.Var name(Ast.Var written, Bindings bound) {
-        return written.denotes() != null ? written
-                : written.denoting(answered(written.name(), written.pos(),
-                        valueName(written.name(), written.pos(), bound)));
-    }
-
     private Ast.Expr expr(Ast.Expr e, Bindings bound) {
         return switch (e) {
             case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
@@ -623,6 +609,20 @@ public final class Resolve {
             }
             default -> Ast.mapChildren(e, x -> expr(x, bound), s -> name(s, bound));
         };
+    }
+
+    /**
+     * One name in the value namespace, answered against the bindings in force where it is written —
+     * what this pass does at a name slot, wherever a node has one. A binding in force wins over a
+     * declaration in a spread as everywhere else.
+     *
+     * <p>A name a pass synthesized already knowing what it means is left as it is, as a synthesized
+     * type name is.
+     */
+    private Ast.Var name(Ast.Var written, Bindings bound) {
+        return written.denotes() != null ? written
+                : written.denoting(answered(written.name(), written.pos(),
+                        valueName(written.name(), written.pos(), bound)));
     }
 
     private List<Ast.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {

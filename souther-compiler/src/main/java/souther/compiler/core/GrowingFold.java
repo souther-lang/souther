@@ -80,7 +80,8 @@ public final class GrowingFold {
     /** {@code body} with every growing fold in it rewritten, innermost first — so a {@code map} over
      *  a {@code filter} builds both, and the two builds are then joined into one. */
     public static Core rewrite(Core body) {
-        Core mapped = Core.mapChildren(body, GrowingFold::rewrite, s -> s, c -> c);
+        Core mapped = Core.mapChildren(body, GrowingFold::rewrite, s -> s,
+                nd -> Core.mapChildren(nd, GrowingFold::rewrite, s -> s));
         if (mapped instanceof Core.Call call) {
             Core built = built(call);
             if (built != null) {
@@ -329,7 +330,8 @@ public final class GrowingFold {
             return new Core.LetIn(outer.params().get(0), c.args().get(0), element,
                     body.type(), c.pos());
         }
-        return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s, c -> c);
+        return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s,
+                nd -> Core.mapChildren(nd, child -> piped(child, outer, refused), s -> s));
     }
 
     /** The step with its appends turned into adds, or null when the step does something else with the

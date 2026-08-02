@@ -270,15 +270,7 @@ public sealed interface Core {
                 yield tuple == tg.tuple() ? tg
                         : new TupleGet(tuple, tg.index(), tg.arity(), tg.type(), tg.pos());
             }
-            case NewData nd -> {
-                List<Read> spreads = each(nd.spreads(), atName);
-                List<FieldInit> inits = each(nd.inits(), i -> {
-                    Core value = atExpr.apply(i.value());
-                    return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
-                });
-                yield spreads == nd.spreads() && inits == nd.inits() ? nd
-                        : new NewData(nd.typeName(), inits, spreads, nd.type(), nd.pos());
-            }
+            case NewData nd -> atSlots(nd, atExpr, atName);
             case Match m -> {
                 Core scrutinee = atExpr.apply(m.scrutinee());
                 List<Case> cases = each(m.cases(), c -> {
@@ -290,6 +282,26 @@ public sealed interface Core {
                         : new Match(scrutinee, cases, m.type(), m.pos());
             }
         };
+    }
+
+    /**
+     * The same for a construction, whose type is kept: it has an expression slot per field and a name
+     * slot per spread, and no others.
+     *
+     * <p>Said once and read twice — by the walk above, where a construction is an expression like any
+     * other, and by {@link #mapChildren(NewData, java.util.function.UnaryOperator,
+     * java.util.function.UnaryOperator)}, which is how a pass recurses through the one an attempt
+     * holds.
+     */
+    private static NewData atSlots(NewData nd, java.util.function.UnaryOperator<Core> atExpr,
+                                   java.util.function.UnaryOperator<Read> atName) {
+        List<Read> spreads = each(nd.spreads(), atName);
+        List<FieldInit> inits = each(nd.inits(), i -> {
+            Core value = atExpr.apply(i.value());
+            return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
+        });
+        return spreads == nd.spreads() && inits == nd.inits() ? nd
+                : new NewData(nd.typeName(), inits, spreads, nd.type(), nd.pos());
     }
 
     /** {@code xs} with {@code f} applied to each, or {@code xs} itself where none of them changed. */
@@ -320,6 +332,19 @@ public sealed interface Core {
                             java.util.function.UnaryOperator<Read> onNameSlot,
                             java.util.function.UnaryOperator<NewData> onConstructionSlot) {
         return atSlots(e, onExprSlot, onNameSlot, onConstructionSlot);
+    }
+
+    /**
+     * The same over a construction, answering one — what a recursive pass does at a construction
+     * slot.
+     *
+     * <p>A construction slot is not a leaf the way a name slot is, so a pass that recurses has to say
+     * how it recurses into one. Handing it back unchanged stops the pass at an attempt, which no pass
+     * means: what an attempt tries to build is as much part of the body as anything else.
+     */
+    static NewData mapChildren(NewData nd, java.util.function.UnaryOperator<Core> onExprSlot,
+                               java.util.function.UnaryOperator<Read> onNameSlot) {
+        return atSlots(nd, onExprSlot, onNameSlot);
     }
 
     /**
