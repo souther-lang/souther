@@ -168,33 +168,28 @@ public sealed interface Core {
     record Unreachable(String reason, Type type, SourcePos pos) implements Core {}
 
     /**
-     * What a walk does at each slot the children of a node occupy — the Core counterpart of
-     * {@code Ast.Slots}.
+     * {@code e} with each of its slots replaced by what the operator for that slot answers, the
+     * node's own kind, type and position kept — or {@code e} itself where every slot answered what it
+     * was given, so a walk that only reads allocates nothing.
      *
-     * <p>An expression slot takes any Core expression. A name slot takes only a {@link Read}: a
-     * construction's spread copies the fields of a binding, and the backend loads that binding's
-     * slot, so an expression there would have nothing to be loaded from.
+     * <p>The children of a node occupy three kinds of slot, which differ in what may stand there.
      *
-     * <p>{@link #atSlots} is the one place that says which slots a node has, and both
-     * {@link #mapChildren} and {@link #forEachChild} are derived from it.
+     * <ul>
+     *   <li>An expression slot takes any Core expression.</li>
+     *   <li>A name slot takes only a {@link Read}: a construction's spread copies the fields of a
+     *       binding and an applied function is a binding holding one, and the backend loads that
+     *       binding's slot, so an expression there would have nothing to be loaded from.</li>
+     *   <li>A construction slot takes only a {@link NewData}: an attempt tests whether a construction
+     *       holds, and there is no other kind of expression whose invariant could fail.</li>
+     * </ul>
+     *
+     * <p>This is the one place that says which slots a node has, and both {@link #mapChildren} and
+     * {@link #forEachChild} are derived from it. Exhaustive over {@code Core}: a node kind added
+     * later stops the build here.
      */
-    interface Slots {
-
-        /** A slot any expression may stand in. */
-        Core expr(Core child);
-
-        /** A slot only a read of a binding may stand in. */
-        Read name(Read child);
-    }
-
-    /**
-     * {@code e} with {@code at} applied to each of its slots, the node's own kind, type and position
-     * kept — or {@code e} itself where every slot answered what it was given, so a walk that only
-     * reads allocates nothing.
-     *
-     * <p>Exhaustive over {@code Core}: a node kind added later stops the build here.
-     */
-    private static Core atSlots(Core e, Slots at) {
+    private static Core atSlots(Core e, java.util.function.UnaryOperator<Core> atExpr,
+                                java.util.function.UnaryOperator<Read> atName,
+                                java.util.function.UnaryOperator<NewData> atConstruction) {
         return switch (e) {
             case Int x -> x;
             case Decimal x -> x;
@@ -205,86 +200,89 @@ public sealed interface Core {
             case OptionNone x -> x;
             case Unreachable x -> x;
             case Neg n -> {
-                Core operand = at.expr(n.operand());
+                Core operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.type(), n.pos());
             }
             case FieldAccess fa -> {
-                Core target = at.expr(fa.target());
+                Core target = atExpr.apply(fa.target());
                 yield target == fa.target() ? fa
                         : new FieldAccess(target, fa.field(), fa.type(), fa.pos());
             }
             case Binary b -> {
-                Core left = at.expr(b.left());
-                Core right = at.expr(b.right());
+                Core left = atExpr.apply(b.left());
+                Core right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
                         : new Binary(b.op(), left, right, b.type(), b.pos());
             }
             case Call c -> {
-                List<Core> args = each(c.args(), at::expr);
+                List<Core> args = each(c.args(), atExpr);
                 yield args == c.args() ? c : new Call(c.fn(), args, c.type(), c.pos());
             }
+            // what is applied is a binding holding a function: a name slot, the same kind a spread is
             case Apply a -> {
-                List<Core> args = each(a.args(), at::expr);
-                yield args == a.args() ? a : new Apply(a.fn(), args, a.type(), a.pos());
+                Read fn = atName.apply(a.fn());
+                List<Core> args = each(a.args(), atExpr);
+                yield fn == a.fn() && args == a.args() ? a
+                        : new Apply(fn, args, a.type(), a.pos());
             }
             case If iff -> {
-                Core cond = at.expr(iff.cond());
-                Core then = at.expr(iff.then());
-                Core els = at.expr(iff.els());
+                Core cond = atExpr.apply(iff.cond());
+                Core then = atExpr.apply(iff.then());
+                Core els = atExpr.apply(iff.els());
                 yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
                         : new If(cond, then, els, iff.type(), iff.pos());
             }
             case IfConstructed ic -> {
-                NewData construct = (NewData) atSlots(ic.construct(), at);
-                Core then = at.expr(ic.then());
+                NewData construct = atConstruction.apply(ic.construct());
+                Core then = atExpr.apply(ic.then());
                 List<ElseArm> els = each(ic.els(), arm -> {
-                    Core body = at.expr(arm.body());
+                    Core body = atExpr.apply(arm.body());
                     return body == arm.body() ? arm : new ElseArm(arm.clause(), body);
                 });
                 yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
                         : new IfConstructed(construct, ic.binder(), then, els, ic.type(), ic.pos());
             }
             case LetIn li -> {
-                Core value = at.expr(li.value());
-                Core body = at.expr(li.body());
+                Core value = atExpr.apply(li.value());
+                Core body = atExpr.apply(li.body());
                 yield value == li.value() && body == li.body() ? li
                         : new LetIn(li.binder(), value, body, li.type(), li.pos());
             }
             case Block b -> {
-                Core body = at.expr(b.body());
+                Core body = atExpr.apply(b.body());
                 yield body == b.body() ? b : new Block(b.params(), body, b.type(), b.pos());
             }
             case ListLit lit -> {
-                List<Core> elements = each(lit.elements(), at::expr);
+                List<Core> elements = each(lit.elements(), atExpr);
                 yield elements == lit.elements() ? lit
                         : new ListLit(elements, lit.type(), lit.pos());
             }
             case OptionSome s -> {
-                Core value = at.expr(s.value());
+                Core value = atExpr.apply(s.value());
                 yield value == s.value() ? s : new OptionSome(value, s.type(), s.pos());
             }
             case Tuple t -> {
-                List<Core> elements = each(t.elements(), at::expr);
+                List<Core> elements = each(t.elements(), atExpr);
                 yield elements == t.elements() ? t : new Tuple(elements, t.type(), t.pos());
             }
             case TupleGet tg -> {
-                Core tuple = at.expr(tg.tuple());
+                Core tuple = atExpr.apply(tg.tuple());
                 yield tuple == tg.tuple() ? tg
                         : new TupleGet(tuple, tg.index(), tg.arity(), tg.type(), tg.pos());
             }
             case NewData nd -> {
-                List<Read> spreads = each(nd.spreads(), at::name);
+                List<Read> spreads = each(nd.spreads(), atName);
                 List<FieldInit> inits = each(nd.inits(), i -> {
-                    Core value = at.expr(i.value());
+                    Core value = atExpr.apply(i.value());
                     return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
                 });
                 yield spreads == nd.spreads() && inits == nd.inits() ? nd
                         : new NewData(nd.typeName(), inits, spreads, nd.type(), nd.pos());
             }
             case Match m -> {
-                Core scrutinee = at.expr(m.scrutinee());
+                Core scrutinee = atExpr.apply(m.scrutinee());
                 List<Case> cases = each(m.cases(), c -> {
-                    Core body = at.expr(c.body());
+                    Core body = atExpr.apply(c.body());
                     return body == c.body() ? c
                             : new Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos());
                 });
@@ -315,43 +313,31 @@ public sealed interface Core {
      * node's own kind, type and position kept. A Core-to-Core pass recurses through this rather than
      * hand-copying every node kind.
      *
-     * <p>{@code onNameSlot} answers a {@link Read} because that is all a spread may hold.
+     * <p>An operator per slot kind, so a rewrite cannot put an expression where the backend can only
+     * load a binding, or something other than a construction where an attempt tests one.
      */
     static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
-                            java.util.function.UnaryOperator<Read> onNameSlot) {
-        return atSlots(e, new Slots() {
-
-            @Override
-            public Core expr(Core child) {
-                return onExprSlot.apply(child);
-            }
-
-            @Override
-            public Read name(Read child) {
-                return onNameSlot.apply(child);
-            }
-        });
+                            java.util.function.UnaryOperator<Read> onNameSlot,
+                            java.util.function.UnaryOperator<NewData> onConstructionSlot) {
+        return atSlots(e, onExprSlot, onNameSlot, onConstructionSlot);
     }
 
     /**
      * Applies {@code f} to each direct child of {@code e} — the read-only counterpart of
-     * {@link #mapChildren}. The binding a spread reads is a child like any other, so a pass that asks
-     * what a body reads reaches one without knowing that spreads exist.
+     * {@link #mapChildren}. Every slot is a child whatever kind it is, so a pass that asks what a
+     * body reads reaches the binding a spread copies and the binding an application invokes without
+     * knowing that either position exists.
      */
     static void forEachChild(Core e, java.util.function.Consumer<Core> f) {
-        atSlots(e, new Slots() {
-
-            @Override
-            public Core expr(Core child) {
-                f.accept(child);
-                return child;
-            }
-
-            @Override
-            public Read name(Read child) {
-                f.accept(child);
-                return child;
-            }
+        atSlots(e, child -> {
+            f.accept(child);
+            return child;
+        }, child -> {
+            f.accept(child);
+            return child;
+        }, child -> {
+            f.accept(child);
+            return child;
         });
     }
 

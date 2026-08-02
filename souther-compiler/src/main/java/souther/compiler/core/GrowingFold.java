@@ -80,7 +80,7 @@ public final class GrowingFold {
     /** {@code body} with every growing fold in it rewritten, innermost first — so a {@code map} over
      *  a {@code filter} builds both, and the two builds are then joined into one. */
     public static Core rewrite(Core body) {
-        Core mapped = Core.mapChildren(body, GrowingFold::rewrite, s -> s);
+        Core mapped = Core.mapChildren(body, GrowingFold::rewrite, s -> s, c -> c);
         if (mapped instanceof Core.Call call) {
             Core built = built(call);
             if (built != null) {
@@ -329,7 +329,7 @@ public final class GrowingFold {
             return new Core.LetIn(outer.params().get(0), c.args().get(0), element,
                     body.type(), c.pos());
         }
-        return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s);
+        return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s, c -> c);
     }
 
     /** The step with its appends turned into adds, or null when the step does something else with the
@@ -442,19 +442,15 @@ public final class GrowingFold {
      * How many times {@code binding} is reached anywhere in {@code e} — read as a value, applied, or
      * spread.
      *
-     * <p>Every one of the three says which binding it is, so a binding of the same spelling further
-     * in is not one of these. Undercounting is what this must not do: the rewrite is allowed when
-     * every way the accumulator is reached is one of the growths found, so a way that went uncounted
-     * would let it through.
+     * <p>All three are one node: reading a value, applying one and spreading one each hold a
+     * {@link Core.Read} saying which binding it is, so a binding of the same spelling further in is
+     * not one of these and there is one thing to count. Undercounting is what this must not do: the
+     * rewrite is allowed when every way the accumulator is reached is one of the growths found, so a
+     * way that went uncounted would let it through.
      */
     private static int uses(Core e, BindingId binding) {
         int[] n = {0};
-        // a spread reads the binding it names, and the walk hands that read over like any other
-        count(e, node -> switch (node) {
-            case Core.Read v -> v.binding().equals(binding);
-            case Core.Apply a -> a.fn().binding().equals(binding);
-            default -> false;
-        }, n);
+        count(e, node -> node instanceof Core.Read v && v.binding().equals(binding), n);
         return n[0];
     }
 

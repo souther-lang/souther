@@ -1054,38 +1054,22 @@ public interface Ast {
     enum BinOp { EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT }
 
     /**
-     * What a walk does at each slot the children of an expression occupy.
+     * {@code e} with each of its slots replaced by what the operator for that slot answers, its own
+     * kind and position kept — or {@code e} itself where every slot answered what it was given, so a
+     * walk that only reads allocates nothing.
      *
-     * <p>There are two kinds, and they differ in what may stand there. An expression slot takes any
-     * expression — an argument, a field's value, the thing an {@code if} tests. A name slot takes
-     * only a name: a construction's spread {@code T { ..base }} copies the fields of what the name
-     * stands for, so there is nothing there to evaluate and nothing else that could be written.
+     * <p>The children of an expression occupy two kinds of slot, and they differ in what may stand
+     * there. An expression slot takes any expression — an argument, a field's value, the thing an
+     * {@code if} tests. A name slot takes only a name: a construction's spread {@code T { ..base }}
+     * copies the fields of what the name stands for, so there is nothing there to evaluate and
+     * nothing else that could be written.
      *
-     * <p>{@link #atSlots} is the one place that says which slots a node has. Both
-     * {@link #mapChildren} and {@link #forEachChild} are derived from it, so a slot a node gains
-     * later is written once and neither walk can be left behind.
-     *
-     * <p>Nothing outside this file implements one: {@link #atSlots} is where it is used, and the two
-     * walks derived from it are the whole surface. A nested type of an interface cannot say so.
+     * <p>This is the one place that says which slots a node has. Both {@link #mapChildren} and
+     * {@link #forEachChild} are derived from it, so a slot a node gains later is written once and
+     * neither walk can be left behind. Being exhaustive over {@code Expr}, a node kind added later
+     * stops the build here, which is the one place it has to be accounted for.
      */
-    interface Slots {
-
-        /** A slot any expression may stand in. */
-        Expr expr(Expr child);
-
-        /** A slot only a name may stand in. */
-        Var name(Var child);
-    }
-
-    /**
-     * {@code e} with {@code at} applied to each of its slots, its own kind and position kept — or
-     * {@code e} itself where every slot answered what it was given, so a walk that only reads
-     * allocates nothing.
-     *
-     * <p>Exhaustive over {@code Expr}: a node kind added later stops the build here, which is the
-     * one place it has to be accounted for.
-     */
-    private static Expr atSlots(Expr e, Slots at) {
+    private static Expr atSlots(Expr e, UnaryOperator<Expr> atExpr, UnaryOperator<Var> atName) {
         return switch (e) {
             case IntLit x -> x;
             case DecimalLit x -> x;
@@ -1094,87 +1078,87 @@ public interface Ast {
             case Var x -> x;
             case Unreachable x -> x;
             case Neg n -> {
-                Expr operand = at.expr(n.operand());
+                Expr operand = atExpr.apply(n.operand());
                 yield operand == n.operand() ? n : new Neg(operand, n.pos());
             }
             case FieldAccess fa -> {
-                Expr target = at.expr(fa.target());
+                Expr target = atExpr.apply(fa.target());
                 yield target == fa.target() ? fa : new FieldAccess(target, fa.field(), fa.pos());
             }
             case Binary b -> {
-                Expr left = at.expr(b.left());
-                Expr right = at.expr(b.right());
+                Expr left = atExpr.apply(b.left());
+                Expr right = atExpr.apply(b.right());
                 yield left == b.left() && right == b.right() ? b
                         : new Binary(b.op(), left, right, b.pos());
             }
             case Apply a -> {
-                Expr function = at.expr(a.function());
-                List<Expr> args = each(a.args(), at::expr);
+                Expr function = atExpr.apply(a.function());
+                List<Expr> args = each(a.args(), atExpr);
                 yield function == a.function() && args == a.args() ? a
                         : new Apply(function, args, a.origin(), a.pos());
             }
             case If iff -> {
-                Expr cond = at.expr(iff.cond());
-                Expr then = at.expr(iff.then());
-                Expr els = at.expr(iff.els());
+                Expr cond = atExpr.apply(iff.cond());
+                Expr then = atExpr.apply(iff.then());
+                Expr els = atExpr.apply(iff.els());
                 yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
                         : new If(cond, then, els, iff.pos());
             }
             case IfConstructed ic -> {
-                Expr construct = at.expr(ic.construct());
-                Expr then = at.expr(ic.then());
+                Expr construct = atExpr.apply(ic.construct());
+                Expr then = atExpr.apply(ic.then());
                 List<ElseArm> els = each(ic.els(), arm -> {
-                    Expr body = at.expr(arm.body());
+                    Expr body = atExpr.apply(arm.body());
                     return body == arm.body() ? arm : arm.with(body);
                 });
                 yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
                         : new IfConstructed(construct, ic.binder(), then, els, ic.pos());
             }
             case LetIn li -> {
-                Expr value = at.expr(li.value());
-                Expr body = at.expr(li.body());
+                Expr value = atExpr.apply(li.value());
+                Expr body = atExpr.apply(li.body());
                 yield value == li.value() && body == li.body() ? li
                         : new LetIn(li.binder(), value, li.declaredType(), li.annotated(),
                                 li.opens(), body, li.pos());
             }
             case Block bl -> {
-                Expr body = at.expr(bl.body());
+                Expr body = atExpr.apply(bl.body());
                 yield body == bl.body() ? bl : new Block(bl.params(), body, bl.pos());
             }
             case ListLit l -> {
-                List<Expr> elements = each(l.elements(), at::expr);
+                List<Expr> elements = each(l.elements(), atExpr);
                 yield elements == l.elements() ? l : new ListLit(elements, l.pos());
             }
             case ListComp comp -> {
-                Expr element = at.expr(comp.element());
-                List<Expr> guards = each(comp.guards(), at::expr);
+                Expr element = atExpr.apply(comp.element());
+                List<Expr> guards = each(comp.guards(), atExpr);
                 yield element == comp.element() && guards == comp.guards() ? comp
                         : new ListComp(element, guards, comp.pos());
             }
             case Tuple tup -> {
-                List<Expr> elements = each(tup.elements(), at::expr);
+                List<Expr> elements = each(tup.elements(), atExpr);
                 yield elements == tup.elements() ? tup : new Tuple(elements, tup.pos());
             }
             case TupleGet tg -> {
-                Expr tuple = at.expr(tg.tuple());
+                Expr tuple = atExpr.apply(tg.tuple());
                 yield tuple == tg.tuple() ? tg
                         : new TupleGet(tuple, tg.index(), tg.arity(), tg.pos());
             }
             case NewData nd -> {
                 // the spreads first: `..base` is written before the fields that replace what it
                 // brought, and a walk that records the first thing it sees should see them that way
-                List<Var> spreads = each(nd.spreads(), at::name);
+                List<Var> spreads = each(nd.spreads(), atName);
                 List<FieldInit> inits = each(nd.inits(), i -> {
-                    Expr value = at.expr(i.value());
+                    Expr value = atExpr.apply(i.value());
                     return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
                 });
                 yield spreads == nd.spreads() && inits == nd.inits() ? nd
                         : new NewData(nd.typeName(), inits, spreads, nd.origin(), nd.pos());
             }
             case Match m -> {
-                Expr scrutinee = at.expr(m.scrutinee());
+                Expr scrutinee = atExpr.apply(m.scrutinee());
                 List<Case> cases = each(m.cases(), c -> {
-                    Expr body = at.expr(c.body());
+                    Expr body = atExpr.apply(c.body());
                     return body == c.body() ? c
                             : new Case(c.caseTypes(), c.binding(), body, c.unwrapAsserts(), c.pos());
                 });
@@ -1213,18 +1197,7 @@ public interface Ast {
      * rewrite does to a name is a decision, and it is made where the rewrite is written.
      */
     static Expr mapChildren(Expr e, UnaryOperator<Expr> onExprSlot, UnaryOperator<Var> onNameSlot) {
-        return atSlots(e, new Slots() {
-
-            @Override
-            public Expr expr(Expr child) {
-                return onExprSlot.apply(child);
-            }
-
-            @Override
-            public Var name(Var child) {
-                return onNameSlot.apply(child);
-            }
-        });
+        return atSlots(e, onExprSlot, onNameSlot);
     }
 
     /**
@@ -1236,19 +1209,12 @@ public interface Ast {
      * names reaches one without knowing that spreads exist.
      */
     public static void forEachChild(Expr e, java.util.function.Consumer<Expr> f) {
-        atSlots(e, new Slots() {
-
-            @Override
-            public Expr expr(Expr child) {
-                f.accept(child);
-                return child;
-            }
-
-            @Override
-            public Var name(Var child) {
-                f.accept(child);
-                return child;
-            }
+        atSlots(e, child -> {
+            f.accept(child);
+            return child;
+        }, child -> {
+            f.accept(child);
+            return child;
         });
     }
 

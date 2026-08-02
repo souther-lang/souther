@@ -549,6 +549,20 @@ public final class Resolve {
      * else recurses through {@link Ast#mapChildren}, so a new expression kind is carried without
      * being named here.
      */
+    /**
+     * One name in the value namespace, answered against the bindings in force where it is written —
+     * what this pass does at a name slot, wherever a node has one. A binding in force wins over a
+     * declaration in a spread as everywhere else.
+     *
+     * <p>A name a pass synthesized already knowing what it means is left as it is, as a synthesized
+     * type name is.
+     */
+    private Ast.Var name(Ast.Var written, Bindings bound) {
+        return written.denotes() != null ? written
+                : written.denoting(answered(written.name(), written.pos(),
+                        valueName(written.name(), written.pos(), bound)));
+    }
+
     private Ast.Expr expr(Ast.Expr e, Bindings bound) {
         return switch (e) {
             case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
@@ -570,14 +584,11 @@ public final class Resolve {
                 yield member != null ? member
                         : new Ast.FieldAccess(expr(fa.target(), bound), fa.field(), fa.pos());
             }
-            // the type being built is this case's business; its fields and its spreads are slots like
-            // any other, and a spread names a value the way a bare name does — a binding in force
-            // wins over a declaration there too
+            // the type being built is this case's business; everything under it is a slot like any
+            // other
             case Ast.NewData nd -> Ast.mapChildren(
                     new Ast.NewData(type(nd.typeName()), nd.inits(), nd.spreads(), nd.origin(), nd.pos()),
-                    x -> expr(x, bound),
-                    s -> s.denotes() != null ? s
-                            : s.denoting(answered(s.name(), s.pos(), valueName(s.name(), s.pos(), bound))));
+                    x -> expr(x, bound), s -> name(s, bound));
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
             case Ast.LetIn li -> {
@@ -610,7 +621,7 @@ public final class Resolve {
                 }
                 yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.pos());
             }
-            default -> Ast.mapChildren(e, x -> expr(x, bound), s -> s);
+            default -> Ast.mapChildren(e, x -> expr(x, bound), s -> name(s, bound));
         };
     }
 

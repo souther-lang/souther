@@ -1470,20 +1470,6 @@ public final class HelperInliner {
      * null} and keep the positions their bodies have ({@link #keepsItsPositions}). The caller's
      * argument expressions, spliced in separately, keep their own positions either way.
      */
-    /**
-     * One name renamed — what {@link #rename} does wherever a name stands, whether that is an
-     * expression of its own or the name a spread holds.
-     *
-     * <p>A substituted name keeps what the argument resolved to, so a named function handed to a
-     * combinator stays the helper it is rather than becoming a binding of that spelling.
-     */
-    private Ast.Var renameVar(Ast.Var v, Map<BindingId, String> subst,
-                              Map<BindingId, ValueName> substDenotes, SourcePos at, Copy copy) {
-        return v.denotes() instanceof ValueName.Local p && subst.containsKey(p.id())
-                ? new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()))
-                : new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
-    }
-
     private Ast.Expr rename(Ast.Expr e, Map<BindingId, String> subst,
                             Map<BindingId, ValueName> substDenotes, SourcePos at, Copy copy) {
         return switch (e) {
@@ -1579,6 +1565,20 @@ public final class HelperInliner {
      * node's own position when {@code at} is null (see {@link #keepsItsPositions}). */
     private static SourcePos at(SourcePos at, SourcePos own) {
         return at != null ? at : own;
+    }
+
+    /**
+     * One name renamed — what {@link #rename} does wherever a name stands, whether that is an
+     * expression of its own or the name a spread holds.
+     *
+     * <p>A substituted name keeps what the argument resolved to, so a named function handed to a
+     * combinator stays the helper it is rather than becoming a binding of that spelling.
+     */
+    private Ast.Var renameVar(Ast.Var v, Map<BindingId, String> subst,
+                              Map<BindingId, ValueName> substDenotes, SourcePos at, Copy copy) {
+        return v.denotes() instanceof ValueName.Local p && subst.containsKey(p.id())
+                ? new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()))
+                : new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
     }
 
     private List<Ast.Expr> renameList(List<Ast.Expr> es, Map<BindingId, String> subst,
