@@ -177,10 +177,26 @@ public final class Front {
                     return Answer.absent(reserved);
                 }
             }
-            Exposing.Validated imports = Exposing.read(raw);
-            Ast.Module m = Exposing.withoutLibraryImports(raw, imports.kept());
-            return Answer.of(withAttachedRows(db, m, layout.exampleFilesOf()
-                    .getOrDefault(name, List.of())));
+            // The attached files join before the imports are read, because their values are the
+            // module's values: a name one of them declares reaches the value namespace exactly as a
+            // name in the model file does, so an import of that spelling collides with it the same
+            // way. They bring no imports of their own — an attached file writes none — so what is
+            // read here is still the model file's lines.
+            Ast.Module joined = withAttachedRows(db, raw, layout.exampleFilesOf()
+                    .getOrDefault(name, List.of()));
+            Exposing.Validated imports = Exposing.read(joined);
+            Ast.Module whole = Exposing.withoutLibraryImports(joined, imports.kept());
+            if (imports.conflicts().isEmpty()) {
+                return Answer.of(whole);
+            }
+            // A library import naming something this module declares. Reported here because this is
+            // where the import lines are read, and reported rather than raised so the rest of the
+            // module — and every other file beside it — is still read and still answers.
+            List<Report> reports = new ArrayList<>();
+            for (Diagnostic conflict : imports.conflicts()) {
+                reports.add(Report.of(conflict));
+            }
+            return Answer.of(whole, reports);
         }
 
         /**

@@ -20,8 +20,11 @@ import java.util.Set;
  * <p>What the imports bring in is answered as a table ({@link #read}) and nothing in the
  * module is rewritten. A name written bare stays written bare, and what it means where it is written
  * is settled once, by resolution, with the bindings in force — an import is the last thing consulted
- * and a binding or the module's own declaration wins over it. The {@code import List ( ... )} lines
- * are then dropped ({@link #withoutLibraryImports}), having been checked.
+ * and a binding in force wins over it. A declaration of that name does not shadow it: the two are a
+ * conflict, refused on the import line, and the declaration standing as the name's meaning after
+ * that is what recovery does with a module that will not be emitted. The
+ * {@code import List ( ... )} lines are then dropped ({@link #withoutLibraryImports}), having been
+ * checked.
  *
  * <p>It mirrors Elm's {@code import List exposing (map)}: the qualified access always works, and the
  * import merely lets a name be written without its qualifier. A name exposed from two libraries at
@@ -31,8 +34,18 @@ public final class Exposing {
 
     private Exposing() {}
 
-    /** What the imports bring in, and the imports that are not the library's. */
-    public record Validated(Map<String, String> exposed, List<Ast.Import> kept) {}
+    /**
+     * What the imports bring in, the imports that are not the library's, and the import lines that
+     * name something this module already declares.
+     *
+     * <p>A collision is answered rather than thrown because it is one module's mistake and not a
+     * reason to stop reading. Thrown, it escaped the question that asked for this module and took
+     * every other file's diagnostics with it — an editor showed "the compiler could not finish
+     * reading this file" for the whole workspace while the author was part-way through writing a
+     * {@code let}.
+     */
+    public record Validated(Map<String, String> exposed, List<Ast.Import> kept,
+                            List<Diagnostic> conflicts) {}
 
     /** Both answers at once, for a reader that wants them both and should ask once. */
     public static Validated read(Ast.Module module) {
@@ -42,12 +55,13 @@ public final class Exposing {
     /**
      * The library names an import brings in, with the three things an import can get wrong reported:
      * a name the library does not have, one name brought in from two modules at once, and one that
-     * collides with a data this module declares.
+     * collides with something this module declares.
      *
-     * <p>A module's own {@code let} of that name is not a collision — it is the module's own name,
-     * and one declaration wins over an import, the same way a binding in force wins over both. A
-     * data is: a data is written where a value goes, so the two would be one spelling with two
-     * answers, which is refused wherever a name reaches the value namespace twice.
+     * <p>Which kind of declaration it collides with does not enter into it. A data, a {@code let}
+     * and a behavior all reach the value namespace under the name they are written with, so any of
+     * them beside an import of that name is one spelling with two answers. A binding in force is a
+     * different thing and still wins over both: it is written inside a body, and what an import
+     * says is what a name means where no binding answers it.
      */
     private static Validated validate(Ast.Module module) {
         Set<String> ownNames = new HashSet<>();
@@ -65,6 +79,7 @@ public final class Exposing {
 
         Map<String, String> exposed = new HashMap<>();
         List<Ast.Import> kept = new ArrayList<>();
+        List<Diagnostic> conflicts = new ArrayList<>();
         for (Ast.Import imp : module.imports()) {
             if (!Prelude.isQualifier(imp.module())) {
                 kept.add(imp);   // an ordinary user-module import — resolved elsewhere
@@ -79,15 +94,11 @@ public final class Exposing {
                             "`" + name + "` is not a function in the standard library module `"
                                     + imp.module() + "` (spec §stdlib).");
                 }
-                if (declaredData.contains(name)) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.import.conflict").title("check.module.title")
-                                    .at(imp.pos()).args(name).hint("check.import.conflict.hint")
-                                    .build(),
-                            "imported `" + name + "` conflicts with a local definition");
-                }
-                if (ownNames.contains(name)) {
-                    continue;   // the module defines its own `name`; that shadows the import
+                if (declaredData.contains(name) || ownNames.contains(name)) {
+                    conflicts.add(Diagnostic.of(null, "check.import.conflict")
+                            .title("check.module.title").at(imp.pos()).args(name)
+                            .hint("check.import.conflict.hint").build());
+                    continue;   // the name is refused; what it means until then is the declaration
                 }
                 String prior = exposed.putIfAbsent(name, qualified);
                 if (prior != null && !prior.equals(qualified)) {
@@ -99,7 +110,7 @@ public final class Exposing {
                 }
             }
         }
-        return new Validated(exposed, kept);
+        return new Validated(exposed, kept, conflicts);
     }
 
     /**
