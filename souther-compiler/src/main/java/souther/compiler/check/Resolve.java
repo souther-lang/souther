@@ -484,7 +484,7 @@ public final class Resolve {
         for (Ast.FieldInit i : c.inits()) {
             inits.add(new Ast.FieldInit(i.name(), expr(i.value(), bound), i.pos()));
         }
-        return new Ast.Construct(type(c.typeName()), inits, c.spreads(), c.pos());
+        return new Ast.Construct(type(c.typeName()), inits, c.pos());
     }
 
     // --- encoders ---
@@ -570,20 +570,11 @@ public final class Resolve {
                 yield member != null ? member
                         : new Ast.FieldAccess(expr(fa.target(), bound), fa.field(), fa.pos());
             }
-            case Ast.NewData nd -> {
-                List<Ast.FieldInit> inits = new ArrayList<>();
-                for (Ast.FieldInit i : nd.inits()) {
-                    inits.add(new Ast.FieldInit(i.name(), expr(i.value(), bound), i.pos()));
-                }
-                // a spread names a value, so it is resolved the way a bare name is: a binding in
-                // force wins over a declaration here too
-                List<Ast.ValueRef> spreads = new ArrayList<>();
-                for (Ast.ValueRef s : nd.spreads()) {
-                    spreads.add(s.denotes() != null ? s : s.denoting(
-                            answered(s.written(), s.pos(), valueName(s.written(), s.pos(), bound))));
-                }
-                yield new Ast.NewData(type(nd.typeName()), inits, spreads, nd.origin(), nd.pos());
-            }
+            // the type being built is this case's business; everything under it is a slot like any
+            // other
+            case Ast.NewData nd -> Ast.mapChildren(
+                    new Ast.NewData(type(nd.typeName()), nd.inits(), nd.spreads(), nd.origin(), nd.pos()),
+                    x -> expr(x, bound), s -> name(s, bound));
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
             case Ast.LetIn li -> {
@@ -616,8 +607,22 @@ public final class Resolve {
                 }
                 yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.pos());
             }
-            default -> Ast.mapChildren(e, x -> expr(x, bound));
+            default -> Ast.mapChildren(e, x -> expr(x, bound), s -> name(s, bound));
         };
+    }
+
+    /**
+     * One name in the value namespace, answered against the bindings in force where it is written —
+     * what this pass does at a name slot, wherever a node has one. A binding in force wins over a
+     * declaration in a spread as everywhere else.
+     *
+     * <p>A name a pass synthesized already knowing what it means is left as it is, as a synthesized
+     * type name is.
+     */
+    private Ast.Var name(Ast.Var written, Bindings bound) {
+        return written.denotes() != null ? written
+                : written.denoting(answered(written.name(), written.pos(),
+                        valueName(written.name(), written.pos(), bound)));
     }
 
     private List<Ast.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {

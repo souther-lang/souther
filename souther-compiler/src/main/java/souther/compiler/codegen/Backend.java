@@ -269,7 +269,7 @@ public final class Backend {
             if (!(bd instanceof Ast.SpecBehavior spec)) {
                 continue;
             }
-            for (Ast.ValueRef req : spec.dependsOn()) {
+            for (Ast.Var req : spec.dependsOn()) {
                 String name = req.bare();
                 if (requiredNames.contains(name)) {
                     continue;
@@ -313,7 +313,7 @@ public final class Backend {
         for (Map.Entry<String, List<BehaviorRequirement>> e : requirements.entrySet()) {
             behaviorDeps.put(e.getKey(), Requirements.names(e.getValue()));
         }
-        Map<String, List<Ast.ValueRef>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef bd : module.behaviors()) {
             switch (bd) {
                 case Ast.SpecBehavior spec -> {
@@ -945,7 +945,7 @@ public final class Backend {
     /** The behaviors a spec declares it depends on, by the name each is reached by. */
     private static List<String> requiredBy(Ast.SpecBehavior spec) {
         List<String> names = new ArrayList<>();
-        for (Ast.ValueRef req : spec.dependsOn()) {
+        for (Ast.Var req : spec.dependsOn()) {
             names.add(req.bare());
         }
         return names;
@@ -953,12 +953,12 @@ public final class Backend {
 
     private byte[] generatePipe(Ast.PipeBehavior pipe, Set<String> requiredNames,
                                 Map<String, Sig> sigs, Map<String, List<String>> behaviorDeps,
-                                Map<String, List<Ast.ValueRef>> pipeStages) {
+                                Map<String, List<Ast.Var>> pipeStages) {
         ClassDesc cdP = cdBehaviorImpl(pipe.name());   // the $Impl behind the public interface
         // Flatten nested pipeline stages so the routing is over leaf behaviors (spec 14.2): a named
         // intermediate `half = split >-> work` inlines to `split, work`, which keeps a retired case
         // retired across the composition, making `>->` associative.
-        List<Ast.ValueRef> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<Ast.Var> flat = PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos());
         // the pipeline's injected fields are the union of its stages' requirements (spec 14.3)
         List<String> reqStages = behaviorDeps.getOrDefault(pipe.name(), List.of());
         // the pipeline takes whatever its first stage takes (spec 14.1)
@@ -975,7 +975,7 @@ public final class Backend {
 
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 // slot 1 always holds the running value (an output case, as an Object).
-                List<Ast.ValueRef> stages = flat;
+                List<Ast.Var> stages = flat;
                 // stage 0 consumes the pipeline's arguments unconditionally
                 Type mainline = PipelineSigs.stageSig(stages.get(0), sigs, symbols, pipe.pos()).out();
                 applyFirstStage(code, cdP, stages.get(0).bare(), arity, requiredNames, behaviorDeps,

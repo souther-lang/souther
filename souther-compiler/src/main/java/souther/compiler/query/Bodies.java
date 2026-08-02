@@ -901,7 +901,7 @@ public final class Bodies {
             return Set.of();
         }
         Set<String> names = new HashSet<>();
-        for (Ast.ValueRef req : spec.value().dependsOn()) {
+        for (Ast.Var req : spec.value().dependsOn()) {
             names.add(req.bare());
         }
         return names;

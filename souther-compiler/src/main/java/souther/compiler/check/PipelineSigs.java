@@ -54,7 +54,7 @@ public final class PipelineSigs {
                 sigs.put(spec.name(), new Sig(ins, TypeOps.successType(spec.ret(), symbols)));
             }
         }
-        Map<String, List<Ast.ValueRef>> pipeStages = pipelineStages(module);
+        Map<String, List<Ast.Var>> pipeStages = pipelineStages(module);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.PipeBehavior pipe) {
                 try {
@@ -71,8 +71,8 @@ public final class PipelineSigs {
     }
 
     /** Maps each pipeline behavior's name to its declared stages (for flattening, spec 14.2). */
-    public static Map<String, List<Ast.ValueRef>> pipelineStages(Ast.Module module) {
-        Map<String, List<Ast.ValueRef>> stages = new HashMap<>();
+    public static Map<String, List<Ast.Var>> pipelineStages(Ast.Module module) {
+        Map<String, List<Ast.Var>> stages = new HashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.PipeBehavior pipe) {
                 stages.put(pipe.name(), pipe.stages());
@@ -88,19 +88,19 @@ public final class PipelineSigs {
      * finish}, exactly as the flat form would, so a retired case stays retired across a named
      * intermediate. A pipeline viewed on its own still has the merged output its own stages produce.
      */
-    public static List<Ast.ValueRef> flattenStages(List<Ast.ValueRef> stages,
-                                                   Map<String, List<Ast.ValueRef>> pipeStages,
+    public static List<Ast.Var> flattenStages(List<Ast.Var> stages,
+                                                   Map<String, List<Ast.Var>> pipeStages,
                                                    SourcePos pos) {
-        List<Ast.ValueRef> out = new ArrayList<>();
+        List<Ast.Var> out = new ArrayList<>();
         flattenInto(stages, pipeStages, out, new LinkedHashSet<>(), pos);
         return out;
     }
 
-    private static void flattenInto(List<Ast.ValueRef> stages,
-                                    Map<String, List<Ast.ValueRef>> pipeStages,
-                                    List<Ast.ValueRef> out, Set<String> inProgress, SourcePos pos) {
-        for (Ast.ValueRef s : stages) {
-            List<Ast.ValueRef> sub = pipeStages.get(s.bare());
+    private static void flattenInto(List<Ast.Var> stages,
+                                    Map<String, List<Ast.Var>> pipeStages,
+                                    List<Ast.Var> out, Set<String> inProgress, SourcePos pos) {
+        for (Ast.Var s : stages) {
+            List<Ast.Var> sub = pipeStages.get(s.bare());
             if (sub == null) {
                 out.add(s);
                 continue;
@@ -108,8 +108,8 @@ public final class PipelineSigs {
             if (!inProgress.add(s.bare())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.pipe.selfcompose").title("check.pipe.title")
-                                .at(pos).args(s.written()).build(),
-                        "pipeline `" + s.written() + "` composes with itself (a cycle)");
+                                .at(pos).args(s.name()).build(),
+                        "pipeline `" + s.name() + "` composes with itself (a cycle)");
             }
             flattenInto(sub, pipeStages, out, inProgress, pos);
             inProgress.remove(s.bare());
@@ -124,7 +124,7 @@ public final class PipelineSigs {
      * composition has no meaning to work out: the behavior it belongs to is abandoned, and the
      * definitions around it are checked as they would be without it.
      */
-    public static Sig stageSig(Ast.ValueRef stage, Map<String, Sig> sigs, Symbols symbols,
+    public static Sig stageSig(Ast.Var stage, Map<String, Sig> sigs, Symbols symbols,
                                SourcePos pos) {
         if (stage.unresolved()) {
             throw new Unanswerable(stage.pos());
@@ -139,9 +139,9 @@ public final class PipelineSigs {
     }
 
     private static Sig pipeSig(Ast.PipeBehavior pipe, Map<String, Sig> sigs, Symbols symbols,
-                               Map<String, List<Ast.ValueRef>> pipeStages) {
+                               Map<String, List<Ast.Var>> pipeStages) {
         // flatten nested pipeline stages so `>->` is associative (spec 14.2)
-        List<Ast.ValueRef> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
+        List<Ast.Var> stages = flattenStages(pipe.stages(), pipeStages, pipe.pos());
         Sig first = stageSig(stages.get(0), sigs, symbols, pipe.pos());
         Type mainline = first.out();
         Set<TypeName> retired = new LinkedHashSet<>();
@@ -154,7 +154,7 @@ public final class PipelineSigs {
             if (g.ins().size() != 1) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.pipe.multiinput").title("check.pipe.title")
-                                .at(pipe.pos()).args(stages.get(i).written(), g.ins().size(),
+                                .at(pipe.pos()).args(stages.get(i).name(), g.ins().size(),
                                         pipe.name()).build(),
                         "`" + stages.get(i) + "` takes " + g.ins().size() + " inputs, so it cannot follow"
                                 + " `>->` in `" + pipe.name() + "`. Every stage after the first takes one"

@@ -53,10 +53,7 @@ class ResolvedValueNamesTest {
         if (e instanceof Ast.Var || e instanceof Ast.Apply) {
             out.add(e);
         }
-        Ast.mapChildren(e, child -> {
-            collect(child, out);
-            return child;
-        });
+        Ast.forEachChild(e, child -> collect(child, out));
     }
 
     private static ValueName denotes(Ast.Expr e) {

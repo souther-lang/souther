@@ -74,6 +74,29 @@ class CompileGrowingFoldTest {
         assertEquals(0, callsTo(module("List.map(x -> x * 2, xs)"), "build"));
     }
 
+    /**
+     * A field of a construction an attempt is testing is body like any other, so a walk written there
+     * is rewritten there. The construction is the one child of an expression that is not an
+     * expression, and a pass that stopped at it would leave everything an attempt builds unrewritten
+     * — silently, since the answer is the same either way.
+     */
+    @Test
+    void aWalkInsideAnAttemptedConstructionIsRewritten() {
+        assertEquals(1, callsTo("""
+                module demo
+
+                data Bag = { xs: List<Int> }
+                data Doubled = { ys: List<Int> }
+                    invariant List.length(ys) >= 0
+                data Empty
+                data Out = Doubled | Empty
+
+                behavior run : (b: Bag) -> Out constructs Doubled, Empty
+                let run (b) =
+                    if Doubled { ys = List.map(x -> x * 2, b.xs) } as d then d else Empty
+                """, "builder"));
+    }
+
     @Test
     void aStepAddingAListIsEmittedAsAGrowAll() {
         assertEquals(1, callsTo(module("List.concatMap(x -> [x, x], xs)"), "growAll"));

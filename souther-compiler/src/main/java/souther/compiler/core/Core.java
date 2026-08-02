@@ -168,12 +168,28 @@ public sealed interface Core {
     record Unreachable(String reason, Type type, SourcePos pos) implements Core {}
 
     /**
-     * {@code e} with {@code f} applied to each of its immediate children, the node's own kind, type
-     * and position kept. A Core-to-Core pass recurses through this rather than hand-copying every
-     * node kind; being exhaustive over {@code Core}, a new node kind forces every such pass to
-     * acknowledge it.
+     * {@code e} with each of its slots replaced by what the operator for that slot answers, the
+     * node's own kind, type and position kept — or {@code e} itself where every slot answered what it
+     * was given, so a walk that only reads allocates nothing.
+     *
+     * <p>The children of a node occupy three kinds of slot, which differ in what may stand there.
+     *
+     * <ul>
+     *   <li>An expression slot takes any Core expression.</li>
+     *   <li>A name slot takes only a {@link Read}: a construction's spread copies the fields of a
+     *       binding and an applied function is a binding holding one, and the backend loads that
+     *       binding's slot, so an expression there would have nothing to be loaded from.</li>
+     *   <li>A construction slot takes only a {@link NewData}: an attempt tests whether a construction
+     *       holds, and there is no other kind of expression whose invariant could fail.</li>
+     * </ul>
+     *
+     * <p>This is the one place that says which slots a node has, and both {@link #mapChildren} and
+     * {@link #forEachChild} are derived from it. Exhaustive over {@code Core}: a node kind added
+     * later stops the build here.
      */
-    static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> f) {
+    private static Core atSlots(Core e, java.util.function.UnaryOperator<Core> atExpr,
+                                java.util.function.UnaryOperator<Read> atName,
+                                java.util.function.UnaryOperator<NewData> atConstruction) {
         return switch (e) {
             case Int x -> x;
             case Decimal x -> x;
@@ -183,35 +199,171 @@ public sealed interface Core {
             case UnitValue x -> x;
             case OptionNone x -> x;
             case Unreachable x -> x;
-            case Neg n -> new Neg(f.apply(n.operand()), n.type(), n.pos());
-            case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.type(), fa.pos());
-            case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.type(), b.pos());
-            case Call c -> new Call(c.fn(), c.args().stream().map(f).toList(), c.type(), c.pos());
-            case Apply a -> new Apply(a.fn(), a.args().stream().map(f).toList(), a.type(), a.pos());
-            case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()),
-                    iff.type(), iff.pos());
-            case IfConstructed ic -> new IfConstructed((NewData) mapChildren(ic.construct(), f),
-                    ic.binder(), f.apply(ic.then()),
-                    ic.els().stream().map(arm -> new ElseArm(arm.clause(), f.apply(arm.body()))).toList(),
-                    ic.type(), ic.pos());
-            case LetIn li -> new LetIn(li.binder(), f.apply(li.value()), f.apply(li.body()),
-                    li.type(), li.pos());
-            case Block b -> new Block(b.params(), f.apply(b.body()), b.type(), b.pos());
-            case ListLit lit -> new ListLit(lit.elements().stream().map(f).toList(), lit.type(), lit.pos());
-            case OptionSome s -> new OptionSome(f.apply(s.value()), s.type(), s.pos());
-            case Tuple t -> new Tuple(t.elements().stream().map(f).toList(), t.type(), t.pos());
-            case TupleGet tg -> new TupleGet(f.apply(tg.tuple()), tg.index(), tg.arity(),
-                    tg.type(), tg.pos());
-            case NewData nd -> new NewData(nd.typeName(),
-                    nd.inits().stream()
-                            .map(i -> new FieldInit(i.name(), f.apply(i.value()), i.pos())).toList(),
-                    nd.spreads(), nd.type(), nd.pos());
-            case Match m -> new Match(f.apply(m.scrutinee()),
-                    m.cases().stream()
-                            .map(c -> new Case(c.caseTypes(), c.binding(), f.apply(c.body()),
-                                    c.bindType(), c.pos())).toList(),
-                    m.type(), m.pos());
+            case Neg n -> {
+                Core operand = atExpr.apply(n.operand());
+                yield operand == n.operand() ? n : new Neg(operand, n.type(), n.pos());
+            }
+            case FieldAccess fa -> {
+                Core target = atExpr.apply(fa.target());
+                yield target == fa.target() ? fa
+                        : new FieldAccess(target, fa.field(), fa.type(), fa.pos());
+            }
+            case Binary b -> {
+                Core left = atExpr.apply(b.left());
+                Core right = atExpr.apply(b.right());
+                yield left == b.left() && right == b.right() ? b
+                        : new Binary(b.op(), left, right, b.type(), b.pos());
+            }
+            case Call c -> {
+                List<Core> args = each(c.args(), atExpr);
+                yield args == c.args() ? c : new Call(c.fn(), args, c.type(), c.pos());
+            }
+            // what is applied is a binding holding a function: a name slot, the same kind a spread is
+            case Apply a -> {
+                Read fn = atName.apply(a.fn());
+                List<Core> args = each(a.args(), atExpr);
+                yield fn == a.fn() && args == a.args() ? a
+                        : new Apply(fn, args, a.type(), a.pos());
+            }
+            case If iff -> {
+                Core cond = atExpr.apply(iff.cond());
+                Core then = atExpr.apply(iff.then());
+                Core els = atExpr.apply(iff.els());
+                yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
+                        : new If(cond, then, els, iff.type(), iff.pos());
+            }
+            case IfConstructed ic -> {
+                NewData construct = atConstruction.apply(ic.construct());
+                Core then = atExpr.apply(ic.then());
+                List<ElseArm> els = each(ic.els(), arm -> {
+                    Core body = atExpr.apply(arm.body());
+                    return body == arm.body() ? arm : new ElseArm(arm.clause(), body);
+                });
+                yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
+                        : new IfConstructed(construct, ic.binder(), then, els, ic.type(), ic.pos());
+            }
+            case LetIn li -> {
+                Core value = atExpr.apply(li.value());
+                Core body = atExpr.apply(li.body());
+                yield value == li.value() && body == li.body() ? li
+                        : new LetIn(li.binder(), value, body, li.type(), li.pos());
+            }
+            case Block b -> {
+                Core body = atExpr.apply(b.body());
+                yield body == b.body() ? b : new Block(b.params(), body, b.type(), b.pos());
+            }
+            case ListLit lit -> {
+                List<Core> elements = each(lit.elements(), atExpr);
+                yield elements == lit.elements() ? lit
+                        : new ListLit(elements, lit.type(), lit.pos());
+            }
+            case OptionSome s -> {
+                Core value = atExpr.apply(s.value());
+                yield value == s.value() ? s : new OptionSome(value, s.type(), s.pos());
+            }
+            case Tuple t -> {
+                List<Core> elements = each(t.elements(), atExpr);
+                yield elements == t.elements() ? t : new Tuple(elements, t.type(), t.pos());
+            }
+            case TupleGet tg -> {
+                Core tuple = atExpr.apply(tg.tuple());
+                yield tuple == tg.tuple() ? tg
+                        : new TupleGet(tuple, tg.index(), tg.arity(), tg.type(), tg.pos());
+            }
+            case NewData nd -> atSlots(nd, atExpr, atName);
+            case Match m -> {
+                Core scrutinee = atExpr.apply(m.scrutinee());
+                List<Case> cases = each(m.cases(), c -> {
+                    Core body = atExpr.apply(c.body());
+                    return body == c.body() ? c
+                            : new Case(c.caseTypes(), c.binding(), body, c.bindType(), c.pos());
+                });
+                yield scrutinee == m.scrutinee() && cases == m.cases() ? m
+                        : new Match(scrutinee, cases, m.type(), m.pos());
+            }
         };
+    }
+
+    /**
+     * The same for a construction, whose type is kept: it has an expression slot per field and a name
+     * slot per spread, and no others.
+     *
+     * <p>Said once and read twice — by the walk above, where a construction is an expression like any
+     * other, and by {@link #mapChildren(NewData, java.util.function.UnaryOperator,
+     * java.util.function.UnaryOperator)}, which is how a pass recurses through the one an attempt
+     * holds.
+     */
+    private static NewData atSlots(NewData nd, java.util.function.UnaryOperator<Core> atExpr,
+                                   java.util.function.UnaryOperator<Read> atName) {
+        List<Read> spreads = each(nd.spreads(), atName);
+        List<FieldInit> inits = each(nd.inits(), i -> {
+            Core value = atExpr.apply(i.value());
+            return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
+        });
+        return spreads == nd.spreads() && inits == nd.inits() ? nd
+                : new NewData(nd.typeName(), inits, spreads, nd.type(), nd.pos());
+    }
+
+    /** {@code xs} with {@code f} applied to each, or {@code xs} itself where none of them changed. */
+    private static <T> List<T> each(List<T> xs, java.util.function.UnaryOperator<T> f) {
+        List<T> out = null;
+        for (int i = 0; i < xs.size(); i++) {
+            T before = xs.get(i);
+            T after = f.apply(before);
+            if (out == null && after != before) {
+                out = new java.util.ArrayList<>(xs.subList(0, i));
+            }
+            if (out != null) {
+                out.add(after);
+            }
+        }
+        return out == null ? xs : out;
+    }
+
+    /**
+     * {@code e} with each of its slots replaced by what the operator for that slot answers, the
+     * node's own kind, type and position kept. A Core-to-Core pass recurses through this rather than
+     * hand-copying every node kind.
+     *
+     * <p>An operator per slot kind, so a rewrite cannot put an expression where the backend can only
+     * load a binding, or something other than a construction where an attempt tests one.
+     */
+    static Core mapChildren(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
+                            java.util.function.UnaryOperator<Read> onNameSlot,
+                            java.util.function.UnaryOperator<NewData> onConstructionSlot) {
+        return atSlots(e, onExprSlot, onNameSlot, onConstructionSlot);
+    }
+
+    /**
+     * The same over a construction, answering one — what a recursive pass does at a construction
+     * slot.
+     *
+     * <p>A construction slot is not a leaf the way a name slot is, so a pass that recurses has to say
+     * how it recurses into one. Handing it back unchanged stops the pass at an attempt, which no pass
+     * means: what an attempt tries to build is as much part of the body as anything else.
+     */
+    static NewData mapChildren(NewData nd, java.util.function.UnaryOperator<Core> onExprSlot,
+                               java.util.function.UnaryOperator<Read> onNameSlot) {
+        return atSlots(nd, onExprSlot, onNameSlot);
+    }
+
+    /**
+     * Applies {@code f} to each direct child of {@code e} — the read-only counterpart of
+     * {@link #mapChildren}. Every slot is a child whatever kind it is, so a pass that asks what a
+     * body reads reaches the binding a spread copies and the binding an application invokes without
+     * knowing that either position exists.
+     */
+    static void forEachChild(Core e, java.util.function.Consumer<Core> f) {
+        atSlots(e, child -> {
+            f.accept(child);
+            return child;
+        }, child -> {
+            f.accept(child);
+            return child;
+        }, child -> {
+            f.accept(child);
+            return child;
+        });
     }
 
 }

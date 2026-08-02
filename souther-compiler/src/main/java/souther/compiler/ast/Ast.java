@@ -147,59 +147,6 @@ public interface Ast {
     }
 
     /**
-     * A name in the value namespace, in both forms it has: {@code written} as the source spelled it —
-     * bare {@code price}, qualified {@code billing.price}, or through an import alias — and
-     * {@code denotes} as it resolves. What {@link Name} is for a type.
-     *
-     * <p>A check reads {@link #denotes()}. A name that denotes nothing was reported where it was
-     * written and carries {@link ValueName.Unresolved}, so a reader downstream never has a spelling
-     * to match and never repeats the report.
-     */
-    record ValueRef(String written, ValueName denotes, SourcePos pos) implements Ast {
-
-        /** A name as the parser read it, before resolution has said what it denotes. */
-        public static ValueRef written(String written, SourcePos pos) {
-            return new ValueRef(written, null, pos);
-        }
-
-        /** A name a pass introduced, reading the binding it bound it to — the counterpart of
-         * {@link Var#local}. */
-        public static ValueRef local(Binder binder, SourcePos pos) {
-            return new ValueRef(binder.name(), new ValueName.Local(binder.name(), binder.id()), pos);
-        }
-
-        /** The same name, resolved to what it denotes. */
-        public ValueRef denoting(ValueName resolved) {
-            return new ValueRef(written, resolved, pos);
-        }
-
-        /**
-         * The bare name this reaches its declaration by, whatever the source spelled.
-         *
-         * <p>Every name here has been through resolution by the time anything reads it, including
-         * one that denotes nothing — that is an answer too. A name with no answer at all means a
-         * tree reached a reader without being resolved, which would put this back to matching
-         * spellings, so it says so rather than falling back to the spelling.
-         */
-        public String bare() {
-            if (denotes == null) {
-                throw new IllegalStateException("`" + written + "` was never resolved");
-            }
-            return denotes.name();
-        }
-
-        /** Whether this name denotes nothing — reported where it was written. */
-        public boolean unresolved() {
-            return denotes instanceof ValueName.Unresolved;
-        }
-
-        @Override
-        public String toString() {
-            return written;
-        }
-    }
-
-    /**
      * A whole source file: its public surface, imports, and definitions.
      *
      * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature
@@ -284,7 +231,7 @@ public interface Ast {
                         List<Param> params,
                         RetType ret,
                         List<Name> constructs,
-                        List<ValueRef> dependsOn,
+                        List<Var> dependsOn,
                         SourcePos pos) implements BehaviorDef {}
 
     /** A behavior parameter. Its type may be an anonymous union of cases (spec 12.2). */
@@ -295,7 +242,7 @@ public interface Ast {
      * is the optional trailing output declaration (14.5): null when absent (output is inferred), else
      * the declared cases, which must match the inferred output exactly (E1604).
      */
-    record PipeBehavior(String name, List<ValueRef> stages, RetType declaredOut, SourcePos pos)
+    record PipeBehavior(String name, List<Var> stages, RetType declaredOut, SourcePos pos)
             implements BehaviorDef {}
 
     /**
@@ -599,9 +546,13 @@ public interface Ast {
         }
     }
 
-    /** A typed record literal {@code TypeName { ..src, field: expr, ... }} — a construction. */
-    record Construct(Name typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
-            implements Ast {}
+    /**
+     * The construction a decoder ends in: {@code TypeName { field: expr, ... }}, one value per field.
+     *
+     * <p>Not an expression, and not what a body writes — a decoder is derived or written in the codec
+     * grammar, and nothing there spreads. A construction a body writes is {@link NewData}.
+     */
+    record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Ast {}
 
     /** One {@code field: expr} (or shorthand {@code field}) inside a record literal. */
     record FieldInit(String name, Expr value, SourcePos pos) implements Ast {}
@@ -916,7 +867,7 @@ public interface Ast {
      * node carries it — the component has no default, which is what stops a pass from quietly
      * dropping it and turning a carried construction back into the reader's own.
      */
-    record NewData(Name typeName, List<FieldInit> inits, List<ValueRef> spreads,
+    record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
                    ConstructionOrigin origin, SourcePos pos) implements Expr {
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
@@ -942,15 +893,56 @@ public interface Ast {
     record BoolLit(boolean value, SourcePos pos) implements Expr {}
 
     /**
-     * A name used as a value. {@code denotes} is what it names, answered once during resolution; a
-     * reader asks it rather than deciding for itself whether the spelling is a local, a unit data or
-     * something the language provides.
+     * A name used as a value — the one representation the surface AST has for one. {@code name} is
+     * how the source spelled it (bare {@code price}, qualified {@code billing.price}, or through an
+     * import alias) and {@code denotes} is what it names, answered once during resolution; a reader
+     * asks that rather than deciding for itself whether the spelling is a local, a unit data or
+     * something the language provides. What {@link Name} is for a type.
+     *
+     * <p>It stands in two kinds of slot, which differ in what may replace it:
+     *
+     * <ul>
+     *   <li>an expression slot, where any expression may stand — an argument, a field's value, the
+     *       thing an {@code if} tests;</li>
+     *   <li>a name slot, where only another name may — a construction's spread {@code T { ..base }},
+     *       which copies the fields of what the name stands for and so has nothing to evaluate.</li>
+     * </ul>
+     *
+     * <p>Both are children: {@link #forEachChild} reaches them, so a pass that asks about names sees
+     * a spread without knowing spreads exist. {@link #mapChildren} takes the two slots as separate
+     * operators, so a rewrite cannot put an expression where only a name may stand. A pass that does
+     * substitute an expression for a name — the inliner — binds it ahead of the construction and
+     * spreads the binding.
+     *
+     * <p>A name that denotes nothing was reported where it was written and carries
+     * {@link ValueName.Unresolved}, so a reader downstream never has a spelling to match and never
+     * repeats the report.
      */
     record Var(String name, ValueName denotes, SourcePos pos) implements Expr {
 
         /** A name as the parser read it, before resolution has said what it denotes. */
         public Var(String name, SourcePos pos) {
             this(name, null, pos);
+        }
+
+        /**
+         * The bare name this reaches its declaration by, whatever the source spelled.
+         *
+         * <p>Every name here has been through resolution by the time anything reads it, including
+         * one that denotes nothing — that is an answer too. A name with no answer at all means a
+         * tree reached a reader without being resolved, which would put this back to matching
+         * spellings, so it says so rather than falling back to the spelling.
+         */
+        public String bare() {
+            if (denotes == null) {
+                throw new IllegalStateException("`" + name + "` was never resolved");
+            }
+            return denotes.name();
+        }
+
+        /** Whether this name denotes nothing — reported where it was written. */
+        public boolean unresolved() {
+            return denotes instanceof ValueName.Unresolved;
         }
 
         /**
@@ -975,6 +967,11 @@ public interface Ast {
 
         public Var denoting(ValueName resolved) {
             return new Var(name, resolved, pos);
+        }
+
+        @Override
+        public String toString() {
+            return name;
         }
     }
 
@@ -1057,12 +1054,22 @@ public interface Ast {
     enum BinOp { EQ, NE, LT, LE, GT, GE, AND, OR, ADD, SUB, MUL, DIV, CONCAT }
 
     /**
-     * Rebuilds {@code e} with each direct child expression replaced by {@code f} applied to it; a
-     * leaf (a literal or a variable) is returned unchanged. The single authoritative walk over the
-     * expression tree, so an AST-to-AST pass (a Lower desugar, an optimization) writes only the
-     * cases it rewrites and delegates the rest here, instead of hand-copying every node type.
+     * {@code e} with each of its slots replaced by what the operator for that slot answers, its own
+     * kind and position kept — or {@code e} itself where every slot answered what it was given, so a
+     * walk that only reads allocates nothing.
+     *
+     * <p>The children of an expression occupy two kinds of slot, and they differ in what may stand
+     * there. An expression slot takes any expression — an argument, a field's value, the thing an
+     * {@code if} tests. A name slot takes only a name: a construction's spread {@code T { ..base }}
+     * copies the fields of what the name stands for, so there is nothing there to evaluate and
+     * nothing else that could be written.
+     *
+     * <p>This is the one place that says which slots a node has. Both {@link #mapChildren} and
+     * {@link #forEachChild} are derived from it, so a slot a node gains later is written once and
+     * neither walk can be left behind. Being exhaustive over {@code Expr}, a node kind added later
+     * stops the build here, which is the one place it has to be accounted for.
      */
-    static Expr mapChildren(Expr e, UnaryOperator<Expr> f) {
+    private static Expr atSlots(Expr e, UnaryOperator<Expr> atExpr, UnaryOperator<Var> atName) {
         return switch (e) {
             case IntLit x -> x;
             case DecimalLit x -> x;
@@ -1070,97 +1077,145 @@ public interface Ast {
             case BoolLit x -> x;
             case Var x -> x;
             case Unreachable x -> x;
-            case Neg n -> new Neg(f.apply(n.operand()), n.pos());
-            case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.pos());
-            case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
-            case Apply a -> new Apply(f.apply(a.function()), mapExprs(a.args(), f), a.origin(), a.pos());
-            case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
-            case IfConstructed ic -> new IfConstructed(f.apply(ic.construct()), ic.binder(),
-                    f.apply(ic.then()), mapArms(ic.els(), f), ic.pos());
-            case LetIn li -> new LetIn(li.binder(), f.apply(li.value()), li.declaredType(), li.annotated(),
-                    li.opens(), f.apply(li.body()), li.pos());
-            case Block bl -> new Block(bl.params(), f.apply(bl.body()), bl.pos());
-            case ListLit l -> new ListLit(mapExprs(l.elements(), f), l.pos());
-            case ListComp comp -> new ListComp(f.apply(comp.element()), mapExprs(comp.guards(), f), comp.pos());
-            case Tuple tup -> new Tuple(mapExprs(tup.elements(), f), tup.pos());
-            case TupleGet tg -> new TupleGet(f.apply(tg.tuple()), tg.index(), tg.arity(), tg.pos());
+            case Neg n -> {
+                Expr operand = atExpr.apply(n.operand());
+                yield operand == n.operand() ? n : new Neg(operand, n.pos());
+            }
+            case FieldAccess fa -> {
+                Expr target = atExpr.apply(fa.target());
+                yield target == fa.target() ? fa : new FieldAccess(target, fa.field(), fa.pos());
+            }
+            case Binary b -> {
+                Expr left = atExpr.apply(b.left());
+                Expr right = atExpr.apply(b.right());
+                yield left == b.left() && right == b.right() ? b
+                        : new Binary(b.op(), left, right, b.pos());
+            }
+            case Apply a -> {
+                Expr function = atExpr.apply(a.function());
+                List<Expr> args = each(a.args(), atExpr);
+                yield function == a.function() && args == a.args() ? a
+                        : new Apply(function, args, a.origin(), a.pos());
+            }
+            case If iff -> {
+                Expr cond = atExpr.apply(iff.cond());
+                Expr then = atExpr.apply(iff.then());
+                Expr els = atExpr.apply(iff.els());
+                yield cond == iff.cond() && then == iff.then() && els == iff.els() ? iff
+                        : new If(cond, then, els, iff.pos());
+            }
+            case IfConstructed ic -> {
+                Expr construct = atExpr.apply(ic.construct());
+                Expr then = atExpr.apply(ic.then());
+                List<ElseArm> els = each(ic.els(), arm -> {
+                    Expr body = atExpr.apply(arm.body());
+                    return body == arm.body() ? arm : arm.with(body);
+                });
+                yield construct == ic.construct() && then == ic.then() && els == ic.els() ? ic
+                        : new IfConstructed(construct, ic.binder(), then, els, ic.pos());
+            }
+            case LetIn li -> {
+                Expr value = atExpr.apply(li.value());
+                Expr body = atExpr.apply(li.body());
+                yield value == li.value() && body == li.body() ? li
+                        : new LetIn(li.binder(), value, li.declaredType(), li.annotated(),
+                                li.opens(), body, li.pos());
+            }
+            case Block bl -> {
+                Expr body = atExpr.apply(bl.body());
+                yield body == bl.body() ? bl : new Block(bl.params(), body, bl.pos());
+            }
+            case ListLit l -> {
+                List<Expr> elements = each(l.elements(), atExpr);
+                yield elements == l.elements() ? l : new ListLit(elements, l.pos());
+            }
+            case ListComp comp -> {
+                Expr element = atExpr.apply(comp.element());
+                List<Expr> guards = each(comp.guards(), atExpr);
+                yield element == comp.element() && guards == comp.guards() ? comp
+                        : new ListComp(element, guards, comp.pos());
+            }
+            case Tuple tup -> {
+                List<Expr> elements = each(tup.elements(), atExpr);
+                yield elements == tup.elements() ? tup : new Tuple(elements, tup.pos());
+            }
+            case TupleGet tg -> {
+                Expr tuple = atExpr.apply(tg.tuple());
+                yield tuple == tg.tuple() ? tg
+                        : new TupleGet(tuple, tg.index(), tg.arity(), tg.pos());
+            }
             case NewData nd -> {
-                List<FieldInit> inits = new ArrayList<>();
-                for (FieldInit i : nd.inits()) {
-                    inits.add(new FieldInit(i.name(), f.apply(i.value()), i.pos()));
-                }
-                yield new NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.pos());
+                // the spreads first: `..base` is written before the fields that replace what it
+                // brought, and a walk that records the first thing it sees should see them that way
+                List<Var> spreads = each(nd.spreads(), atName);
+                List<FieldInit> inits = each(nd.inits(), i -> {
+                    Expr value = atExpr.apply(i.value());
+                    return value == i.value() ? i : new FieldInit(i.name(), value, i.pos());
+                });
+                yield spreads == nd.spreads() && inits == nd.inits() ? nd
+                        : new NewData(nd.typeName(), inits, spreads, nd.origin(), nd.pos());
             }
             case Match m -> {
-                List<Case> cases = new ArrayList<>();
-                for (Case c : m.cases()) {
-                    cases.add(new Case(c.caseTypes(), c.binding(), f.apply(c.body()), c.unwrapAsserts(), c.pos()));
-                }
-                yield new Match(f.apply(m.scrutinee()), cases, m.pos());
+                Expr scrutinee = atExpr.apply(m.scrutinee());
+                List<Case> cases = each(m.cases(), c -> {
+                    Expr body = atExpr.apply(c.body());
+                    return body == c.body() ? c
+                            : new Case(c.caseTypes(), c.binding(), body, c.unwrapAsserts(), c.pos());
+                });
+                yield scrutinee == m.scrutinee() && cases == m.cases() ? m
+                        : new Match(scrutinee, cases, m.pos());
             }
         };
     }
 
-    /**
-     * Applies {@code f} to each direct child expression of {@code e} (a leaf has none) — the read-only
-     * counterpart of {@link #mapChildren}. A visiting pass (a checker walk) delegates its default
-     * recursion here rather than hand-copying every node type; being exhaustive over {@code Expr}, a
-     * new node kind forces every such walk to acknowledge it.
-     */
-    public static void forEachChild(Expr e, java.util.function.Consumer<Expr> f) {
-        switch (e) {
-            case IntLit _ -> { }
-            case DecimalLit _ -> { }
-            case StringLit _ -> { }
-            case BoolLit _ -> { }
-            case Var _ -> { }
-            case Unreachable _ -> { }
-            case Neg n -> f.accept(n.operand());
-            case FieldAccess fa -> f.accept(fa.target());
-            case Binary b -> {
-                f.accept(b.left());
-                f.accept(b.right());
+    /** {@code xs} with {@code f} applied to each, or {@code xs} itself where none of them changed. */
+    private static <T> List<T> each(List<T> xs, UnaryOperator<T> f) {
+        List<T> out = null;
+        for (int i = 0; i < xs.size(); i++) {
+            T before = xs.get(i);
+            T after = f.apply(before);
+            if (out == null && after != before) {
+                out = new ArrayList<>(xs.subList(0, i));
             }
-            case Apply a -> {
-                f.accept(a.function());
-                a.args().forEach(f);
-            }
-            case If iff -> {
-                f.accept(iff.cond());
-                f.accept(iff.then());
-                f.accept(iff.els());
-            }
-            case IfConstructed ic -> {
-                f.accept(ic.construct());
-                f.accept(ic.then());
-                ic.els().forEach(arm -> f.accept(arm.body()));
-            }
-            case LetIn li -> {
-                f.accept(li.value());
-                f.accept(li.body());
-            }
-            case Block bl -> f.accept(bl.body());
-            case ListLit l -> l.elements().forEach(f);
-            case ListComp comp -> {
-                f.accept(comp.element());
-                comp.guards().forEach(f);
-            }
-            case Tuple tup -> tup.elements().forEach(f);
-            case TupleGet tg -> f.accept(tg.tuple());
-            case NewData nd -> nd.inits().forEach(i -> f.accept(i.value()));
-            case Match m -> {
-                f.accept(m.scrutinee());
-                m.cases().forEach(c -> f.accept(c.body()));
+            if (out != null) {
+                out.add(after);
             }
         }
+        return out == null ? xs : out;
     }
 
-    private static List<Expr> mapExprs(List<Expr> es, UnaryOperator<Expr> f) {
-        List<Expr> out = new ArrayList<>();
-        for (Expr e : es) {
-            out.add(f.apply(e));
-        }
-        return out;
+    /**
+     * Rebuilds {@code e} with each of its slots replaced by what the operator for that slot answers;
+     * a leaf (a literal, a name) is returned unchanged. The single authoritative rewrite over the
+     * expression tree, so an AST-to-AST pass (a Lower desugar, an optimization) writes only the cases
+     * it rewrites and delegates the rest here, instead of hand-copying every node type.
+     *
+     * <p>The two operators are the two kinds of slot. {@code onNameSlot} answers a {@link Var}
+     * because that is all a spread may hold, so a rewrite cannot put an expression where the language
+     * admits only a name; a pass that does have an expression to put there — the inliner — binds it
+     * ahead of the construction and spreads the binding. There is no one-operator form: what a
+     * rewrite does to a name is a decision, and it is made where the rewrite is written.
+     */
+    static Expr mapChildren(Expr e, UnaryOperator<Expr> onExprSlot, UnaryOperator<Var> onNameSlot) {
+        return atSlots(e, onExprSlot, onNameSlot);
+    }
+
+    /**
+     * Applies {@code f} to each direct child of {@code e} (a leaf has none) — the read-only
+     * counterpart of {@link #mapChildren}. A visiting pass (a checker walk) delegates its default
+     * recursion here rather than hand-copying every node type.
+     *
+     * <p>A name a spread holds is a child like any other, so a pass that asks what an expression
+     * names reaches one without knowing that spreads exist.
+     */
+    public static void forEachChild(Expr e, java.util.function.Consumer<Expr> f) {
+        atSlots(e, child -> {
+            f.accept(child);
+            return child;
+        }, child -> {
+            f.accept(child);
+            return child;
+        });
     }
 
     /** Rewrites each clause's expression, keeping its name. Every stage that rewrites a declaration's

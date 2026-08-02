@@ -277,7 +277,7 @@ public final class HelperInliner {
             Ast.Expr e = work.poll();
             reader.collectHelperCalls(e, called);
             Set<String> named = new LinkedHashSet<>();
-            reader.collectValueRefs(e, named);
+            reader.collectValueNames(e, named);
             for (String value : named) {
                 Ast.FnDef def = table.get(value);
                 if (def != null && def.params().isEmpty()
@@ -388,7 +388,9 @@ public final class HelperInliner {
      * type of a third module, and that one is nobody's to hand over (ADR-0059).
      */
     private static Ast.Expr publishedBy(Ast.Expr e, String module) {
-        Ast.Expr rebuilt = Ast.mapChildren(e, c -> publishedBy(c, module));
+        // a spread names a value, and a value is not a construction: what it built was built where it
+        // was defined, so the mark is already on it
+        Ast.Expr rebuilt = Ast.mapChildren(e, c -> publishedBy(c, module), s -> s);
         return switch (rebuilt) {
             case Ast.NewData nd -> nd.publishedBy(module);
             // a unit data is constructed by being named, so the name is where it says where it came
@@ -423,7 +425,7 @@ public final class HelperInliner {
      * showing through the rule again, in the one place expansion cannot reach.
      */
     private static Ast.Expr carriedByValue(Ast.Expr e) {
-        Ast.Expr rebuilt = Ast.mapChildren(e, HelperInliner::carriedByValue);
+        Ast.Expr rebuilt = Ast.mapChildren(e, HelperInliner::carriedByValue, s -> s);
         return switch (rebuilt) {
             case Ast.NewData nd -> nd.carriedByValue();
             case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
@@ -541,34 +543,25 @@ public final class HelperInliner {
      * once said.
      */
     private static Ast.Expr qualifyHelpers(Ast.Expr e, Predicate<ValueName.Helper> which) {
-        Ast.Expr rebuilt = Ast.mapChildren(e, c -> qualifyHelpers(c, which));
+        // a name slot takes the same rewrite as a name standing on its own: a spread names a value
+        // the way any other position does
+        Ast.Expr rebuilt = Ast.mapChildren(e, c -> qualifyHelpers(c, which),
+                s -> qualified(s, which));
         return switch (rebuilt) {
             case Ast.Apply call when foreign(call.denotes(), which) ->
                     new Ast.Apply(qualifiedName(call.denotes()), call.denotes(), call.args(),
                             call.origin(),
                             call.pos());
-            case Ast.Var v when foreign(v.denotes(), which) ->
-                    new Ast.Var(qualifiedName(v.denotes()), v.denotes(), v.pos());
-            // a spread names a value the way any other position does, and `mapChildren` does not
-            // reach it — it holds a name rather than an expression
-            case Ast.NewData nd -> {
-                List<Ast.ValueRef> spreads = new ArrayList<>();
-                boolean changed = false;
-                for (Ast.ValueRef spread : nd.spreads()) {
-                    boolean qualify = foreign(spread.denotes(), which);
-                    changed |= qualify;
-                    spreads.add(qualify
-                            ? new Ast.ValueRef(qualifiedName(spread.denotes()), spread.denotes(),
-                                    spread.pos())
-                            : spread);
-                }
-                yield changed
-                        ? new Ast.NewData(nd.typeName(), nd.inits(), spreads,
-                                nd.origin(), nd.pos())
-                        : nd;
-            }
+            case Ast.Var v -> qualified(v, which);
             default -> rebuilt;
         };
+    }
+
+    /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
+    private static Ast.Var qualified(Ast.Var name, Predicate<ValueName.Helper> which) {
+        return foreign(name.denotes(), which)
+                ? new Ast.Var(qualifiedName(name.denotes()), name.denotes(), name.pos())
+                : name;
     }
 
     /** Whether {@code denotes} is a helper {@code which} accepts. */
@@ -601,13 +594,6 @@ public final class HelperInliner {
         };
         if (denotes instanceof ValueName.Helper helper) {
             out.add(helper);
-        }
-        if (e instanceof Ast.NewData nd) {
-            for (Ast.ValueRef spread : nd.spreads()) {
-                if (spread.denotes() instanceof ValueName.Helper helper) {
-                    out.add(helper);
-                }
-            }
         }
         Ast.forEachChild(e, c -> collectHelpersOf(c, out));
     }
@@ -1329,8 +1315,8 @@ public final class HelperInliner {
     private Ast.Expr newData(Ast.NewData nd) {
         List<Ast.Binder> bound = new ArrayList<>();
         List<Ast.Expr> values = new ArrayList<>();
-        List<Ast.ValueRef> spreads = new ArrayList<>();
-        for (Ast.ValueRef spread : nd.spreads()) {
+        List<Ast.Var> spreads = new ArrayList<>();
+        for (Ast.Var spread : nd.spreads()) {
             Ast.FnDef value = valueSpread(spread);
             if (value == null) {
                 spreads.add(spread);
@@ -1339,7 +1325,7 @@ public final class HelperInliner {
             Ast.Binder name = binders.binder("$s" + counter++ + "_" + spread.bare(), spread.pos());
             bound.add(name);
             values.add(carriedByValue(inline(value.written())));
-            spreads.add(Ast.ValueRef.local(name, spread.pos()));
+            spreads.add(Ast.Var.local(name, spread.pos()));
         }
         Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
                 nd.origin(), nd.pos());
@@ -1487,12 +1473,7 @@ public final class HelperInliner {
     private Ast.Expr rename(Ast.Expr e, Map<BindingId, String> subst,
                             Map<BindingId, ValueName> substDenotes, SourcePos at, Copy copy) {
         return switch (e) {
-            // a substituted name keeps what the argument resolved to, so a named function handed to a
-            // combinator stays the helper it is rather than becoming a binding of that spelling
-            case Ast.Var v when v.denotes() instanceof ValueName.Local p
-                    && subst.containsKey(p.id()) ->
-                    new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()));
-            case Ast.Var v -> new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
+            case Ast.Var v -> renameVar(v, subst, substDenotes, at, copy);
             case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, substDenotes, at, copy), fa.field(), at(at, fa.pos()));
             // the callee is renamed as the expression it is, like every other subexpression. A name
             // applied is an `Ast.Var` held here, so it goes through the arm above and is substituted
@@ -1508,14 +1489,10 @@ public final class HelperInliner {
                 for (Ast.FieldInit i : nd.inits()) {
                     inits.add(new Ast.FieldInit(i.name(), rename(i.value(), subst, substDenotes, at, copy), at(at, i.pos())));
                 }
-                List<Ast.ValueRef> spreads = new ArrayList<>();
-                for (Ast.ValueRef s : nd.spreads()) {
-                    // `..param` copies the renamed binding, and stays the binding it now names
-                    BindingId spread = s.denotes() instanceof ValueName.Local p ? p.id() : null;
-                    spreads.add(spread == null || !subst.containsKey(spread)
-                            ? s.denoting(copy.of(s.denotes()))
-                            : new Ast.ValueRef(subst.get(spread), substituted(substDenotes, spread),
-                                    at(at, s.pos())));
+                // `..param` copies the renamed binding: a name slot asks what a name asks
+                List<Ast.Var> spreads = new ArrayList<>();
+                for (Ast.Var s : nd.spreads()) {
+                    spreads.add(renameVar(s, subst, substDenotes, at, copy));
                 }
                 yield new Ast.NewData(nd.typeName(), inits, spreads, nd.origin(), at(at, nd.pos()));
             }
@@ -1590,6 +1567,20 @@ public final class HelperInliner {
         return at != null ? at : own;
     }
 
+    /**
+     * One name renamed — what {@link #rename} does wherever a name stands, whether that is an
+     * expression of its own or the name a spread holds.
+     *
+     * <p>A substituted name keeps what the argument resolved to, so a named function handed to a
+     * combinator stays the helper it is rather than becoming a binding of that spelling.
+     */
+    private Ast.Var renameVar(Ast.Var v, Map<BindingId, String> subst,
+                              Map<BindingId, ValueName> substDenotes, SourcePos at, Copy copy) {
+        return v.denotes() instanceof ValueName.Local p && subst.containsKey(p.id())
+                ? new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()))
+                : new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
+    }
+
     private List<Ast.Expr> renameList(List<Ast.Expr> es, Map<BindingId, String> subst,
                                       Map<BindingId, ValueName> substDenotes,
                                       SourcePos at, Copy copy) {
@@ -1650,7 +1641,7 @@ public final class HelperInliner {
         Map<String, Set<String>> edges = new LinkedHashMap<>();
         for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
             Set<String> out = new LinkedHashSet<>(callsOf.getOrDefault(e.getKey(), Set.of()));
-            collectValueRefs(e.getValue().written(), out);
+            collectValueNames(e.getValue().written(), out);
             edges.put(e.getKey(), out);
         }
         for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
@@ -1692,12 +1683,12 @@ public final class HelperInliner {
      * against the module's definitions: a binding in force wins over a declaration, and a spread is
      * no exception.
      */
-    private Ast.FnDef valueSpread(Ast.ValueRef spread) {
+    private Ast.FnDef valueSpread(Ast.Var spread) {
         if (!(spread.denotes() instanceof ValueName.Helper)) {
             return null;
         }
         // by the name it is reached by here, which for another module's value is the qualified one
-        String reached = spread.written();
+        String reached = spread.name();
         Ast.FnDef value = own.get(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
                 || recursive.contains(reached) ? null : value;
@@ -1705,7 +1696,7 @@ public final class HelperInliner {
 
     /** The names of this module's values that {@code e} reads. A value is written bare, so a
      * reference to one is a {@code Var} and never reaches the call graph. */
-    private void collectValueRefs(Ast.Expr e, Set<String> out) {
+    private void collectValueNames(Ast.Expr e, Set<String> out) {
         if (e == null) {
             return;
         }
@@ -1715,14 +1706,7 @@ public final class HelperInliner {
                 out.add(v.name());
             }
         }
-        if (e instanceof Ast.NewData nd) {
-            for (Ast.ValueRef spread : nd.spreads()) {
-                if (valueSpread(spread) != null) {
-                    out.add(spread.written());   // `...base` reads the value a bare name does
-                }
-            }
-        }
-        forEachChild(e, c -> collectValueRefs(c, out));
+        forEachChild(e, c -> collectValueNames(c, out));
     }
 
     /** Records into {@code path} a route from {@code from} back to {@code target}, or answers false. */

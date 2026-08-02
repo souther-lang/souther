@@ -185,7 +185,7 @@ public final class Runner {
     /** The names a behavior depends on, as a message lists them. */
     private static String dependencyNames(Ast.SpecBehavior spec) {
         List<String> names = new java.util.ArrayList<>();
-        for (Ast.ValueRef dep : spec.dependsOn()) {
+        for (Ast.Var dep : spec.dependsOn()) {
             names.add(dep.bare());
         }
         return String.join(", ", names);
@@ -194,7 +194,7 @@ public final class Runner {
     private static Ast.BehaviorDef resolveBehavior(Ast.Module module, String requested) {
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Ast.FnDef::name).collect(Collectors.toSet());
-        Map<String, List<Ast.ValueRef>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         Map<String, Ast.BehaviorDef> runnable = new java.util.LinkedHashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec
@@ -236,14 +236,14 @@ public final class Runner {
      * dependencies would make that constructor take those behaviors, which {@code run} cannot supply.
      */
     private static Blocker pipelineBlocker(Ast.Module module, Ast.PipeBehavior pipe,
-            java.util.Set<String> implemented, Map<String, List<Ast.ValueRef>> pipeStages) {
+            java.util.Set<String> implemented, Map<String, List<Ast.Var>> pipeStages) {
         Map<String, Ast.SpecBehavior> specs = new java.util.HashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (b instanceof Ast.SpecBehavior spec) {
                 specs.put(spec.name(), spec);
             }
         }
-        for (Ast.ValueRef named : PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
+        for (Ast.Var named : PipelineSigs.flattenStages(pipe.stages(), pipeStages, pipe.pos())) {
             String stage = named.bare();
             if (!implemented.contains(stage)) {
                 return new Blocker("run.pipeline.noimpl",
@@ -269,7 +269,7 @@ public final class Runner {
         String available = runnable.isEmpty() ? "none" : String.join(", ", runnable);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Ast.FnDef::name).collect(Collectors.toSet());
-        Map<String, List<Ast.ValueRef>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
                 continue;

@@ -119,12 +119,12 @@ public final class Requirements {
             // An injection target is answered above, so a SpecBehavior here has a body: what it
             // requires is what it declared, in that order (spec 12.6, 13.6).
             case Ast.SpecBehavior spec -> {
-                for (Ast.ValueRef req : spec.dependsOn()) {
+                for (Ast.Var req : spec.dependsOn()) {
                     add(acc, req.bare(), name);
                 }
             }
             case Ast.PipeBehavior pipe -> {
-                for (Ast.ValueRef stage : pipe.stages()) {
+                for (Ast.Var stage : pipe.stages()) {
                     String s = stage.bare();
                     if (injected.contains(s)) {
                         // the stage is the dependency: the composition holds it in a field and
