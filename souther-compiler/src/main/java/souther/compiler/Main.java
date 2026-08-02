@@ -116,6 +116,9 @@ public final class Main {
             reportCompileError(e, sources, render);
             System.exit(1);
         } catch (IOException e) {
+            // The compile itself finished — these warnings are the whole set, and what stopped the
+            // command was writing the classes out, which says nothing about the source.
+            report(warnings, sources, render);
             System.err.println("io error: " + e.getMessage());
             System.exit(1);
         }
@@ -337,8 +340,12 @@ public final class Main {
      * Compiles the given source files together — a single file, or several linked through their
      * imports (spec 4) — and writes each generated class under {@code outDir}. Returns the paths
      * written, in order.
+     *
+     * <p>This is the {@code compile} subcommand's own wiring, not a way to embed the compiler: it
+     * hands its warnings to the caller to render rather than reporting them. Compiling from Java
+     * goes through {@link Compiler} or the annotation processor, both of which say what they found.
      */
-    public static List<Path> compileToDir(List<Path> sources, Path outDir) throws IOException {
+    static List<Path> compileToDir(List<Path> sources, Path outDir) throws IOException {
         return compileToDir(sources, outDir, List.of());
     }
 
@@ -347,7 +354,7 @@ public final class Main {
      * {@code sources} against the compiled modules on {@code classPath} — the directories and jars
      * of the projects this one depends on.
      */
-    public static List<Path> compileToDir(List<Path> sources, Path outDir, List<Path> classPath)
+    static List<Path> compileToDir(List<Path> sources, Path outDir, List<Path> classPath)
             throws IOException {
         return compileToDir(sources, outDir, classPath, new ArrayList<>());
     }
@@ -367,7 +374,7 @@ public final class Main {
         Compiler.Compiled compiled = texts.size() == 1 && classPath.isEmpty()
                 ? Compiler.compileWithWarnings(texts.get(0), Runner.moduleName(sources.get(0)))
                 : Compiler.compileModulesWithWarnings(texts, path);
-        warningsOut.addAll(compiled.warnings());
+        warningsOut.addAll(compiled.locatedWarnings());
         Map<String, byte[]> classes = compiled.classes();
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
