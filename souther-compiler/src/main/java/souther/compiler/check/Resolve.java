@@ -570,20 +570,14 @@ public final class Resolve {
                 yield member != null ? member
                         : new Ast.FieldAccess(expr(fa.target(), bound), fa.field(), fa.pos());
             }
-            case Ast.NewData nd -> {
-                List<Ast.FieldInit> inits = new ArrayList<>();
-                for (Ast.FieldInit i : nd.inits()) {
-                    inits.add(new Ast.FieldInit(i.name(), expr(i.value(), bound), i.pos()));
-                }
-                // a spread names a value, so it is resolved the way a bare name is: a binding in
-                // force wins over a declaration here too
-                List<Ast.Var> spreads = new ArrayList<>();
-                for (Ast.Var s : nd.spreads()) {
-                    spreads.add(s.denotes() != null ? s : s.denoting(
-                            answered(s.name(), s.pos(), valueName(s.name(), s.pos(), bound))));
-                }
-                yield new Ast.NewData(type(nd.typeName()), inits, spreads, nd.origin(), nd.pos());
-            }
+            // the type being built is this case's business; its fields and its spreads are slots like
+            // any other, and a spread names a value the way a bare name does — a binding in force
+            // wins over a declaration there too
+            case Ast.NewData nd -> Ast.mapChildren(
+                    new Ast.NewData(type(nd.typeName()), nd.inits(), nd.spreads(), nd.origin(), nd.pos()),
+                    x -> expr(x, bound),
+                    s -> s.denotes() != null ? s
+                            : s.denoting(answered(s.name(), s.pos(), valueName(s.name(), s.pos(), bound))));
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
             case Ast.LetIn li -> {
@@ -616,7 +610,7 @@ public final class Resolve {
                 }
                 yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.pos());
             }
-            default -> Ast.mapChildren(e, x -> expr(x, bound));
+            default -> Ast.mapChildren(e, x -> expr(x, bound), s -> s);
         };
     }
 

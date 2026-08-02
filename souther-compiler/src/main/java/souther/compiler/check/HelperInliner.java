@@ -388,7 +388,9 @@ public final class HelperInliner {
      * type of a third module, and that one is nobody's to hand over (ADR-0059).
      */
     private static Ast.Expr publishedBy(Ast.Expr e, String module) {
-        Ast.Expr rebuilt = Ast.mapChildren(e, c -> publishedBy(c, module));
+        // a spread names a value, and a value is not a construction: what it built was built where it
+        // was defined, so the mark is already on it
+        Ast.Expr rebuilt = Ast.mapChildren(e, c -> publishedBy(c, module), s -> s);
         return switch (rebuilt) {
             case Ast.NewData nd -> nd.publishedBy(module);
             // a unit data is constructed by being named, so the name is where it says where it came
@@ -423,7 +425,7 @@ public final class HelperInliner {
      * showing through the rule again, in the one place expansion cannot reach.
      */
     private static Ast.Expr carriedByValue(Ast.Expr e) {
-        Ast.Expr rebuilt = Ast.mapChildren(e, HelperInliner::carriedByValue);
+        Ast.Expr rebuilt = Ast.mapChildren(e, HelperInliner::carriedByValue, s -> s);
         return switch (rebuilt) {
             case Ast.NewData nd -> nd.carriedByValue();
             case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
@@ -541,34 +543,25 @@ public final class HelperInliner {
      * once said.
      */
     private static Ast.Expr qualifyHelpers(Ast.Expr e, Predicate<ValueName.Helper> which) {
-        Ast.Expr rebuilt = Ast.mapChildren(e, c -> qualifyHelpers(c, which));
+        // a name slot takes the same rewrite as a name standing on its own: a spread names a value
+        // the way any other position does
+        Ast.Expr rebuilt = Ast.mapChildren(e, c -> qualifyHelpers(c, which),
+                s -> qualified(s, which));
         return switch (rebuilt) {
             case Ast.Apply call when foreign(call.denotes(), which) ->
                     new Ast.Apply(qualifiedName(call.denotes()), call.denotes(), call.args(),
                             call.origin(),
                             call.pos());
-            case Ast.Var v when foreign(v.denotes(), which) ->
-                    new Ast.Var(qualifiedName(v.denotes()), v.denotes(), v.pos());
-            // a spread names a value the way any other position does, and `mapChildren` does not
-            // reach it — it holds a name rather than an expression
-            case Ast.NewData nd -> {
-                List<Ast.Var> spreads = new ArrayList<>();
-                boolean changed = false;
-                for (Ast.Var spread : nd.spreads()) {
-                    boolean qualify = foreign(spread.denotes(), which);
-                    changed |= qualify;
-                    spreads.add(qualify
-                            ? new Ast.Var(qualifiedName(spread.denotes()), spread.denotes(),
-                                    spread.pos())
-                            : spread);
-                }
-                yield changed
-                        ? new Ast.NewData(nd.typeName(), nd.inits(), spreads,
-                                nd.origin(), nd.pos())
-                        : nd;
-            }
+            case Ast.Var v -> qualified(v, which);
             default -> rebuilt;
         };
+    }
+
+    /** {@code name} written qualified where it denotes a helper {@code which} accepts. */
+    private static Ast.Var qualified(Ast.Var name, Predicate<ValueName.Helper> which) {
+        return foreign(name.denotes(), which)
+                ? new Ast.Var(qualifiedName(name.denotes()), name.denotes(), name.pos())
+                : name;
     }
 
     /** Whether {@code denotes} is a helper {@code which} accepts. */

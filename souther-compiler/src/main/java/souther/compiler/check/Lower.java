@@ -116,7 +116,7 @@ public final class Lower {
 
     /** Post-order rewrite: desugar the children first, then the node itself if it is a comprehension. */
     private static Ast.Expr desugar(Ast.Expr e) {
-        Ast.Expr mapped = Ast.mapChildren(e, Lower::desugar);
+        Ast.Expr mapped = Ast.mapChildren(e, Lower::desugar, s -> s);
         return mapped instanceof Ast.ListComp comp ? listCompToIf(comp) : mapped;
     }
 
