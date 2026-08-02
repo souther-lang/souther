@@ -59,9 +59,9 @@ Five passes were rebuilding an application from its name and discarding whatever
 
 What is still refused, and why:
 
-- A behavior's name bound to a `let` — `let f = twice`. Handing the same name to a combinator works and goes through the behavior's class, so this is the decision above with one position missing, not a rule. What blocks it is that η-expansion happens in the inliner, which holds the helper table and not the behavior signatures, so the arity to expand to is not in hand there. Filed separately.
-- The three functions taking a rounding mode, handed over by name. Their argument is an identifier read as itself rather than an expression, so an η-expansion would turn it into a binding and the side condition would reject it. When `RoundingMode` becomes an ordinary value type this restriction goes with it.
-- A function whose type nothing settles, stored in a collection. The measurement that named this is worth recording: a plain lambda and a library name are refused *identically* when stored, so the rule is about a function whose type is unknown at the point it is stored, not about recursion or about escaping.
+- A behavior's name bound to a `let` — `let f = twice`. Handing the same name to a combinator works and goes through the behavior's class, so this is the decision above with one position missing, not a rule. What blocks it is that η-expansion happens in the inliner, which holds the helper table and not the behavior signatures, so the arity to expand to is not in hand there (issue #271).
+- The three functions taking a rounding mode, handed over by name. Their argument is an identifier read as itself rather than an expression, so an η-expansion would turn it into a binding and the side condition would reject it. When `RoundingMode` becomes an ordinary value type this restriction goes with it (issue #270).
+- A function whose type nothing settles, stored in a collection. The measurement that named this is worth recording: a plain lambda and a library name are refused *identically* when stored, so the rule is about a function whose type is unknown at the point it is stored, not about recursion or about escaping. Applying one through a combinator is a separate gap that predates this change (issue #272).
 
 `Core.FunctionRef` was considered and left out. Folding a function reference into a compact IR node rather than expanding it to a `Core.Block` every time is a representation choice, not a semantic one; it belongs with the explicit closure-conversion form `Core.Block`'s javadoc is waiting for. What is permanent is that a function reference in value position becomes a function value.
 
@@ -72,6 +72,6 @@ Let-polymorphism was considered and left out. A reference to a polymorphic decla
 A name that was answered is no longer reported as an unknown one. `notAValue` said "unknown identifier" for everything that fell through its switch, so a behavior's name and a rounding mode — both resolved, both refused for a stated reason — sent the reader looking for a spelling mistake. They name what they denote.
 
 - Specification: `[#blocks]`, `[#fn-declaration]`, `[#fn-rules]`, `[#stdlib]`, `[#reserved-namespace]`, `[#stdlib-map]`, `[#stdlib-set]`, `[#stdlib-decimal]`, `[#let]`
-- Issue #261
+- Issue #261; issues #270 (a rounding mode is not a value), #271 (a behavior's name in a binding), #272 (a lambda parameter over a collection of functions)
 - ADR-0067 (a written name is resolved once, into the tree), ADR-0072 (a `let` with no parameter list is a value), ADR-0053 (the declaration is the single source of truth for a signature), ADR-0081 (a primitive may be a union member)
 - Elm's `import List exposing (map)`, whose qualified access always works and whose import only elides the qualifier
