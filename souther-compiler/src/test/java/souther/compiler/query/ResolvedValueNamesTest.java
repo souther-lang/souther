@@ -66,7 +66,7 @@ class ResolvedValueNamesTest {
     /** The one named {@code written}, which each of these writes once. */
     private static ValueName denotationOf(String source, String written) {
         for (Ast.Expr e : named(resolve(source))) {
-            String spelled = e instanceof Ast.Var v ? v.name() : ((Ast.Apply) e).fn();
+            String spelled = e instanceof Ast.Var v ? v.name() : ((Ast.Apply) e).written();
             if (spelled.equals(written)) {
                 return denotes(e);
             }

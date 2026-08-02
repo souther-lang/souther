@@ -810,9 +810,9 @@ public final class SpecChecker {
     }
 
     private static void collectRequiredCalls(Ast.Expr e, Set<String> requiredNames, List<String> out) {
-        if (e instanceof Ast.Apply call && requiredNames.contains(call.fn())
-                && !out.contains(call.fn())) {
-            out.add(call.fn());
+        if (e instanceof Ast.Apply call && requiredNames.contains(call.written())
+                && !out.contains(call.written())) {
+            out.add(call.written());
         }
         // Every subexpression, through the one exhaustive walk — a call to an injected behavior may
         // sit anywhere. Listing the node kinds here instead left `-dep(x)` and `(dep(x), y)` out of

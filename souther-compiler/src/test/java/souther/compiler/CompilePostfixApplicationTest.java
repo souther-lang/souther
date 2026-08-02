@@ -259,11 +259,11 @@ class CompilePostfixApplicationTest {
                 souther.compiler.types.ConstructionOrigin.own(), at);
 
         assertTrue(named.appliesAName());
-        assertEquals("List.map", named.fn());
+        assertEquals("List.map", named.written());
         assertEquals("List.map", named.namedCallee().orElseThrow().name());
 
         assertFalse(nameless.appliesAName());
-        assertEquals("", nameless.fn(), "a table keyed by name misses");
+        assertEquals("", nameless.written(), "a table keyed by name misses");
         assertTrue(nameless.namedCallee().isEmpty(), "and nothing is handed back to read");
     }
 }

@@ -50,7 +50,7 @@ class BodyForInvariantDischargeTest {
 
     private static void collect(Ast.Expr e, List<String> out) {
         if (e instanceof Ast.Apply call) {
-            out.add(call.fn());
+            out.add(call.written());
         }
         Ast.forEachChild(e, child -> collect(child, out));
     }

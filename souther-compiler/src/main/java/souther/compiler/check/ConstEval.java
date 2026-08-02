@@ -141,7 +141,7 @@ public final class ConstEval {
 
     private static Optional<Object> call(Ast.Apply call) {
         List<Ast.Expr> args = call.args();
-        switch (call.fn()) {
+        switch (call.written()) {
             case "length", "String.length" -> {
                 if (args.size() == 1 && eval(args.get(0)).orElse(null) instanceof String s) {
                     return Optional.of((long) s.length());

@@ -982,6 +982,19 @@ public final class Elaborator {
             return new Unanswerable(v.pos());
         }
         optionCaseWritten(v.name(), v.pos());
+        // A name that was answered is not an unknown one, and saying it is sends the reader looking
+        // for a spelling mistake. What it denotes is what cannot stand here, so that is the report.
+        String denotes = switch (v.denotes()) {
+            case ValueName.Behavior _ -> "a behavior";
+            case ValueName.Builtin _ -> "written at the position that reads it, not evaluated";
+            case null, default -> null;
+        };
+        if (denotes != null) {
+            return CompileException.of(
+                    Diagnostic.of(null, "check.notavalue").title("check.unknown.title")
+                            .at(v.pos(), v.name().length()).args(v.name(), denotes).build(),
+                    "`" + v.name() + "` is " + denotes + ", and cannot be held as a value here");
+        }
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.name.msg")
                         .title("check.unknown.title")
@@ -1112,7 +1125,7 @@ public final class Elaborator {
             case Ast.BoolLit b -> b.value() ? 4 : 5;
             case Ast.DecimalLit d -> d.value().toPlainString().length() + 1;
             case Ast.FieldAccess fa -> fa.field().length();
-            case Ast.Apply c -> c.fn().length();
+            case Ast.Apply c -> c.written().length();
             default -> 1;
         };
     }

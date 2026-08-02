@@ -368,10 +368,10 @@ final class TotalityChecker {
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
             case Ast.Apply call -> {
-                if (group.contains(call.fn())) {
-                    calls.add(new RecCall(call.fn(), call, lt, eq));
+                if (group.contains(call.written())) {
+                    calls.add(new RecCall(call.written(), call, lt, eq));
                 }
-                Combinator combo = COMBINATORS.get(call.fn());
+                Combinator combo = COMBINATORS.get(call.reaches());
                 for (int ai = 0; ai < call.args().size(); ai++) {
                     Ast.Expr arg = call.args().get(ai);
                     if (combo != null && ai == combo.closureArg() && arg instanceof Ast.Block step
@@ -478,8 +478,8 @@ final class TotalityChecker {
     }
 
     private static void collectOwnCalls(Ast.Expr e, Set<String> own, Set<String> out) {
-        if (e instanceof Ast.Apply call && own.contains(call.fn())) {
-            out.add(call.fn());
+        if (e instanceof Ast.Apply call && own.contains(call.written())) {
+            out.add(call.written());
         }
         forEachChild(e, c -> collectOwnCalls(c, own, out));
     }
@@ -526,7 +526,7 @@ final class TotalityChecker {
     private static CompileException error(Ast.Apply call, String name, String key, String message) {
         return CompileException.of(
                 Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(call.pos(), call.fn().length()).args(name).build(),
+                        .at(call.pos(), call.written().length()).args(name).build(),
                 message);
     }
 

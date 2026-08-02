@@ -66,7 +66,7 @@ public final class CallElaborator {
                 || TypeOps.supportsOrdering(element, ctx.symbols())) {
             return;
         }
-        String name = call.fn().substring(call.fn().indexOf('.') + 1);
+        String name = call.written().substring(call.written().indexOf('.') + 1);
         throw needsOrdered(call.pos(), name, element,
                 name + " needs a list of ordered values (Int, String, Decimal, Date, DateTime, a"
                         + " newtype over one of these, or an enumeration), but the element is "
@@ -95,9 +95,9 @@ public final class CallElaborator {
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.ordered.key").title("check.type.mismatch.title")
-                        .at(call.pos()).args(call.fn(), Type.show(answered))
+                        .at(call.pos()).args(call.written(), Type.show(answered))
                         .hint("check.ordered.hint").build(),
-                call.fn() + "'s key must be an ordered value (Int, String, Decimal, Date, DateTime,"
+                call.written() + "'s key must be an ordered value (Int, String, Decimal, Date, DateTime,"
                         + " a newtype over one of these, or an enumeration), but returns " + answered);
     }
 
@@ -136,10 +136,10 @@ public final class CallElaborator {
         if (call.denotes() instanceof ValueName.Local local
                 && env.typeOf(local.id()) instanceof Type.FnOf) {
             return new Core.Apply(
-                    new Core.Read(call.fn(), local.id(), env.typeOf(local.id()), call.pos()),
+                    new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
-        return new Core.Call(call.fn(), ca.cores(), result, call.pos());
+        return new Core.Call(call.reaches(), ca.cores(), result, call.pos());
     }
 
     /**
@@ -235,10 +235,10 @@ public final class CallElaborator {
             // one (spec [#calling-a-behavior])
             case ValueName.Behavior _ -> CompileException.of(
                     Diagnostic.of("E1401", "e1401.behavior")
-                            .title("e1401.title").at(call.pos(), call.fn().length())
-                            .args(call.fn()).hint("e1401.behavior.hint", call.fn())
+                            .title("e1401.title").at(call.pos(), call.written().length())
+                            .args(call.written()).hint("e1401.behavior.hint", call.written())
                             .build(),
-                    "`" + call.fn() + "` is a behavior, and it cannot be called from here: a helper"
+                    "`" + call.written() + "` is a behavior, and it cannot be called from here: a helper"
                             + " `let` does not reach one, and a `>->` composition is composed with"
                             + " rather than called (spec [#calling-a-behavior])");
             // A type applied to an argument is a construction, and every place a construction is
@@ -247,7 +247,7 @@ public final class CallElaborator {
             case ValueName.OfType named -> CompileException.of(
                     Diagnostic.of(null, "check.construct.position")
                             .title("check.construct.position.title")
-                            .at(call.pos(), call.fn().length()).args(named.name()).build(),
+                            .at(call.pos(), call.written().length()).args(named.name()).build(),
                     "`" + named.name() + "` is a type, so `" + named.name()
                             + "(...)` constructs one, and a construction cannot be written here");
             // A binding applied to arguments, whose type here is not a function. Either it is not one
@@ -258,8 +258,8 @@ public final class CallElaborator {
             case ValueName.Local _ -> CompileException.of(
                     Diagnostic.of(null, "check.apply.notfunction")
                             .title("check.apply.notfunction.title")
-                            .at(call.pos(), call.fn().length()).args(call.fn()).build(),
-                    "`" + call.fn() + "` is not a function here, so it cannot be applied to"
+                            .at(call.pos(), call.written().length()).args(call.written()).build(),
+                    "`" + call.written() + "` is not a function here, so it cannot be applied to"
                             + " arguments");
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
@@ -269,7 +269,7 @@ public final class CallElaborator {
             case ValueName.Builtin b -> CompileException.of(
                     Diagnostic.of(null, "check.builtin.notfunction")
                             .title("check.apply.notfunction.title")
-                            .at(call.pos(), call.fn().length()).args(b.name()).build(),
+                            .at(call.pos(), call.written().length()).args(b.name()).build(),
                     "`" + b.name() + "` is a name the language gives, not a function, so it cannot"
                             + " be applied to arguments");
             // thrown out at the top of typeOfCall, before any of the work above
@@ -279,7 +279,7 @@ public final class CallElaborator {
     }
 
     private static IllegalStateException unelaborated(String what, Ast.Apply call) {
-        return new IllegalStateException("`" + call.fn() + "` denotes " + what
+        return new IllegalStateException("`" + call.written() + "` denotes " + what
                 + " and reached call elaboration unexpanded, at " + call.pos());
     }
 
@@ -295,7 +295,7 @@ public final class CallElaborator {
         List<Ast.Expr> args = call.args();
         if (call.denotes() == null) {
             throw new IllegalStateException(
-                    "`" + call.fn() + "` reached the check unresolved, at " + call.pos());
+                    "`" + call.written() + "` reached the check unresolved, at " + call.pos());
         }
         if (call.denotes() instanceof ValueName.Unresolved) {
             // reported where the name was written; this definition has no meaning to work out
@@ -304,7 +304,7 @@ public final class CallElaborator {
         boolean library = call.denotes() instanceof ValueName.Stdlib;
         // A shipped intrinsic behaves like a built-in: check the call against its declared signature
         // (from the prelude) and yield its result type; the backend emits the primitive for its key.
-        Prelude.IntrinsicSig intrinsic = library ? Prelude.intrinsics().get(call.fn()) : null;
+        Prelude.IntrinsicSig intrinsic = library ? Prelude.intrinsics().get(call.reaches()) : null;
         // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
@@ -312,18 +312,18 @@ public final class CallElaborator {
             throw CompileException.of(
                     Diagnostic.of(null, "check.apply.notfunction")
                             .title("check.apply.notfunction.title")
-                            .at(call.pos(), call.fn().length()).args(call.fn())
-                            .hint("check.stdlib.value.hint", call.fn()).build(),
-                    "`" + call.fn() + "` is a value, not a function, so it takes no `()` — write `"
-                            + call.fn() + "` on its own");
+                            .at(call.pos(), call.written().length()).args(call.written())
+                            .hint("check.stdlib.value.hint", call.written()).build(),
+                    "`" + call.written() + "` is a value, not a function, so it takes no `()` — write `"
+                            + call.written() + "` on its own");
         }
         if (intrinsic != null) {
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.arity").title("check.arity.title")
-                                .at(call.pos(), call.fn().length())
-                                .args(call.fn(), intrinsic.params().size(), args.size()).build(),
-                        call.fn() + " takes " + intrinsic.params().size()
+                                .at(call.pos(), call.written().length())
+                                .args(call.written(), intrinsic.params().size(), args.size()).build(),
+                        call.written() + " takes " + intrinsic.params().size()
                                 + " argument(s) but is called with " + args.size());
             }
             // The same three steps a helper's signature takes, for the same reasons: the context
@@ -338,7 +338,7 @@ public final class CallElaborator {
             Map<String, Type> bindings = new HashMap<>();
             if (takesAFunction) {
                 BottomInfer.pinResultTypeVars(intrinsic.result(), expected, bindings, ctx.symbols(),
-                        call.pos(), "result of " + call.fn());
+                        call.pos(), "result of " + call.written());
             }
             for (int i = 0; i < args.size(); i++) {
                 if (intrinsic.params().get(i) instanceof Type.FnOf) {
@@ -347,16 +347,16 @@ public final class CallElaborator {
                 // A rounding mode is not an expression: it is a name the operation taking it reads,
                 // so it is checked as one and carries no type of its own ([#stdlib-decimal]).
                 if (isRoundingMode(intrinsic.params().get(i))) {
-                    requireRoundingMode(call.fn(), args.get(i));
+                    requireRoundingMode(call.written(), args.get(i));
                     ca.untyped(i);
                     continue;
                 }
                 TypeOps.unify(intrinsic.params().get(i), ca.type(i), bindings, ctx.symbols(),
-                        call.pos(), "argument " + (i + 1) + " of " + call.fn());
+                        call.pos(), "argument " + (i + 1) + " of " + call.written());
             }
             for (int i = 0; i < args.size(); i++) {
                 if (intrinsic.params().get(i) instanceof Type.FnOf declaredStep) {
-                    ca.put(i, Elaborator.resolveStepBinding(call.fn(), declaredStep, args.get(i),
+                    ca.put(i, Elaborator.resolveStepBinding(call.written(), declaredStep, args.get(i),
                             bindings, env, ctx));
                     requiresOrderedKey(intrinsic.key(), call, declaredStep, bindings, ctx);
                 }
@@ -371,7 +371,7 @@ public final class CallElaborator {
             }
             return result;
         }
-        return switch (library ? call.fn() : "") {
+        return switch (library ? call.reaches() : "") {
             case "Date", "DateTime" -> {
                 arity(call, 1);
                 ca.type(0);   // the literal text, which temporalLiteral parses
@@ -383,13 +383,13 @@ public final class CallElaborator {
                 // reaches here — NewtypeDesugar has lowered it to a NewData literal.
                 // a function value in force, or a recursive helper's signature: which of the two
                 // is the denotation's to say, and only one of them is bound here
-                if (env.of(call.denotes(), call.fn()) instanceof Type.FnOf fn) {
+                if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
                     if (args.size() != fn.params().size()) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.arity").title("check.arity.title")
-                                        .at(call.pos(), call.fn().length())
-                                        .args(call.fn(), fn.params().size(), args.size()).build(),
-                                "`" + call.fn() + "` takes " + fn.params().size()
+                                        .at(call.pos(), call.written().length())
+                                        .args(call.written(), fn.params().size(), args.size()).build(),
+                                "`" + call.written() + "` takes " + fn.params().size()
                                         + " argument(s) but is applied to " + args.size());
                     }
                     // Resolve the signature's type variables from the value (non-function) arguments
@@ -403,7 +403,7 @@ public final class CallElaborator {
                     // result BEFORE the step (and any inlined Map.upsert closure) is checked, so the
                     // seed's bottom no longer drives the step's parameter types.
                     BottomInfer.pinResultTypeVars(fn.result(), expected, bind, ctx.symbols(), call.pos(),
-                            "result of " + call.fn());
+                            "result of " + call.written());
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
                             Type at = ca.type(i);
@@ -418,7 +418,7 @@ public final class CallElaborator {
                     try {
                         for (int i = 0; i < args.size(); i++) {
                             if (fn.params().get(i) instanceof Type.FnOf fp0) {
-                                ca.put(i, Elaborator.resolveStepBinding(call.fn(), fp0, args.get(i), bind, env, ctx));
+                                ca.put(i, Elaborator.resolveStepBinding(call.written(), fp0, args.get(i), bind, env, ctx));
                             }
                         }
                     } catch (CompileException stepError) {
@@ -440,46 +440,46 @@ public final class CallElaborator {
                         }
                         throw CompileException.of(b.build(),
                                 "cannot infer the element type of the empty collection seeding `"
-                                        + call.fn() + "`; annotate the declaration it feeds");
+                                        + call.written() + "`; annotate the declaration it feeds");
                     }
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
-                            ca.require(i, TypeOps.substitute(fn.params().get(i), bind), "argument " + (i + 1) + " of " + call.fn());
+                            ca.require(i, TypeOps.substitute(fn.params().get(i), bind), "argument " + (i + 1) + " of " + call.written());
                         }
                     }
                     yield TypeOps.substitute(fn.result(), bind);
                 }
                 // a library qualifier that matched no builtin or intrinsic above is a wrong stdlib
                 // call (spec §stdlib) — report it as such, not as a missing behavior.
-                if (library || call.fn().indexOf('.') >= 0) {
+                if (library || call.written().indexOf('.') >= 0) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
-                                    .at(call.pos(), call.fn().length()).args(call.fn()).build(),
-                            "`" + call.fn() + "` is not a standard-library function.");
+                                    .at(call.pos(), call.written().length()).args(call.written()).build(),
+                            "`" + call.written() + "` is not a standard-library function.");
                 }
                 // a required behavior called inline (spec 12.2, 13), or one that requires nothing and
                 // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
                 // declaration; where the behavior comes from at run time is the backend's to know.
-                ReqSig callee = ctx.reqs().get(call.fn());
+                ReqSig callee = ctx.reqs().get(call.written());
                 if (callee == null) {
-                    callee = ctx.callees().get(call.fn());
+                    callee = ctx.callees().get(call.written());
                 }
                 if (callee == null) {
-                    Elaborator.optionCaseWritten(call.fn(), call.pos());
-                    String qualified = Prelude.qualifiedFor(call.fn());
+                    Elaborator.optionCaseWritten(call.written(), call.pos());
+                    String qualified = Prelude.qualifiedFor(call.written());
                     if (qualified != null) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.stdlib.qualified.msg")
-                                        .title("check.unknown.title").at(call.pos(), call.fn().length())
-                                        .args(call.fn(), qualified).build(),
-                                "`" + call.fn() + "` is a standard-library function and must be called"
+                                        .title("check.unknown.title").at(call.pos(), call.written().length())
+                                        .args(call.written(), qualified).build(),
+                                "`" + call.written() + "` is a standard-library function and must be called"
                                         + " qualified, as `" + qualified + "` (spec §stdlib).");
                     }
                     throw noCallee(call);
                 }
                 arity(call, callee.params().size());
                 for (int i = 0; i < callee.params().size(); i++) {
-                    ca.require(i, callee.params().get(i), "argument " + (i + 1) + " of " + call.fn());
+                    ca.require(i, callee.params().get(i), "argument " + (i + 1) + " of " + call.written());
                 }
                 yield callee.success();
             }
@@ -581,31 +581,31 @@ public final class CallElaborator {
             if (position == null || BottomInfer.isBottom(position)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.numeric.empty").title("check.fold.seed.title")
-                                .at(call.pos(), call.fn().length()).args(call.fn())
+                                .at(call.pos(), call.written().length()).args(call.written())
                                 .hint("check.numeric.empty.hint").build(),
-                        call.fn() + " over the empty list answers with its seed, and whether that"
+                        call.written() + " over the empty list answers with its seed, and whether that"
                                 + " seed is an Int or a Decimal follows from an element the empty"
                                 + " list does not have — annotate the position it feeds"
-                                + " (`let total: Decimal = " + call.fn() + "([])`)");
+                                + " (`let total: Decimal = " + call.written() + "([])`)");
             }
             throw CompileException.of(
                     Diagnostic.of(null, "check.numeric.result").title("check.type.mismatch.title")
-                            .at(call.pos(), call.fn().length())
-                            .args(call.fn(), Type.show(position))
+                            .at(call.pos(), call.written().length())
+                            .args(call.written(), Type.show(position))
                             .hint("check.numeric.result.hint").build(),
-                    call.fn() + " answers with an Int or a Decimal, but this position needs "
+                    call.written() + " answers with an Int or a Decimal, but this position needs "
                             + Type.show(position) + " — a newtype over one of them is built from the"
-                            + " result (`Hours(" + call.fn() + "(xs))`) rather than being it, and any"
+                            + " result (`Hours(" + call.written() + "(xs))`) rather than being it, and any"
                             + " other type has no place for one");
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.numeric").title("check.type.mismatch.title")
-                        .at(call.pos(), call.fn().length())
-                        .args(call.fn(), Localizable.of("kind.numeric.list"), Type.show(element))
+                        .at(call.pos(), call.written().length())
+                        .args(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))
                         .hint("check.numeric.hint").build(),
-                shortName(call.fn()) + " needs a list of Int or Decimal, but the element is "
+                shortName(call.written()) + " needs a list of Int or Decimal, but the element is "
                         + Type.show(element) + " — map to its numeric field first and apply "
-                        + call.fn() + " to that");
+                        + call.written() + " to that");
     }
 
     /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
@@ -630,15 +630,15 @@ public final class CallElaborator {
      * carry a date at all). A computed date comes from the boundary or from {@code Date.addDays},
      * not from this form. */
     static Type temporalLiteral(Ast.Apply call) {
-        boolean isDate = "Date".equals(call.fn());
+        boolean isDate = "Date".equals(call.written());
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.temporal.literal").title("check.type.mismatch.title")
-                            .at(call.pos(), call.fn().length()).args(call.fn()).build(),
-                    "`" + call.fn() + "(...)` takes a written string, e.g. "
+                            .at(call.pos(), call.written().length()).args(call.written()).build(),
+                    "`" + call.written() + "(...)` takes a written string, e.g. "
                             + (isDate ? "Date(\"2026-07-01\")" : "DateTime(\"2026-07-01T09:00\")"));
         }
-        parseTemporal(call.fn(), lit.value(), call.pos());
+        parseTemporal(call.written(), lit.value(), call.pos());
         return isDate ? Type.DATE : Type.DATETIME;
     }
 
@@ -662,9 +662,9 @@ public final class CallElaborator {
         if (call.args().size() != n) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.arity").title("check.arity.title")
-                            .at(call.pos(), call.fn().length())
-                            .args(call.fn(), n, call.args().size()).build(),
-                    call.fn() + " expects " + n + " argument(s), got " + call.args().size());
+                            .at(call.pos(), call.written().length())
+                            .args(call.written(), n, call.args().size()).build(),
+                    call.written() + " expects " + n + " argument(s), got " + call.args().size());
         }
     }
 }

@@ -542,19 +542,14 @@ public final class Resolve {
      */
     private Ast.Expr expr(Ast.Expr e, Bindings bound) {
         return switch (e) {
-            case Ast.Var v -> {
-                ValueName denotes = answered(v.name(), v.pos(),
-                        valueName(v.name(), v.pos(), bound));
-                yield new Ast.Var(spelling(v.name(), denotes), denotes, v.pos());
-            }
+            case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
+                    valueName(v.name(), v.pos(), bound)));
             // Applying a name is answered as a name: which of a binding, a helper, a library
             // function or a type it is decides what the application means. Applying anything else
             // is answered as the expression it is, and what may be applied is the check's to say.
-            case Ast.Apply call when call.appliesAName() -> {
-                ValueName denotes = answered(call.fn(), call.pos(), calledName(call, bound));
-                yield new Ast.Apply(spelling(call.fn(), denotes), denotes,
-                        exprs(call.args(), bound), call.origin(), call.pos());
-            }
+            case Ast.Apply call when call.appliesAName() -> new Ast.Apply(call.written(),
+                    answered(call.written(), call.pos(), calledName(call, bound)),
+                    exprs(call.args(), bound), call.origin(), call.pos());
             case Ast.Apply call -> new Ast.Apply(expr(call.function(), bound),
                     exprs(call.args(), bound), call.origin(), call.pos());
             // `Map.empty`, `String.isEmpty` — a namespace and a member of it, which the parser read
@@ -715,19 +710,6 @@ public final class Resolve {
                 answered(written, base.pos(), new ValueName.Stdlib(written)), base.pos());
     }
 
-    /**
-     * How a resolved name is written in the resolved tree: the library name it was answered with,
-     * where an import let it be written without its qualifier, and what was written otherwise.
-     *
-     * <p>An import lets {@code trim} be written for {@code String.trim}. Everything downstream reads
-     * a resolved tree and asks the library about a name by its qualified form, so that is the form
-     * the resolved tree carries. What was written stays with the position recorded by
-     * {@link #answered}, which is what an editor answers from.
-     */
-    private static String spelling(String written, ValueName denotes) {
-        return denotes instanceof ValueName.Stdlib lib ? lib.qualified() : written;
-    }
-
     /** What a name used as a value denotes, and the report for one that denotes nothing. */
     private ValueName valueName(String written, SourcePos pos, Bindings bound) {
         ValueName denotes = lookup(written, false, bound);
@@ -737,9 +719,9 @@ public final class Resolve {
 
     /** The same, for the name an application applies: what is not there is reported differently. */
     private ValueName calledName(Ast.Apply call, Bindings bound) {
-        ValueName denotes = lookup(call.fn(), true, bound);
+        ValueName denotes = lookup(call.written(), true, bound);
         return denotes != null ? denotes
-                : nothing(call.fn(), call.pos(), notCallable(call.fn(), call.pos(), bound));
+                : nothing(call.written(), call.pos(), notCallable(call.written(), call.pos(), bound));
     }
 
     /**

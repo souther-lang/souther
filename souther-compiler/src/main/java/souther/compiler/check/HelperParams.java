@@ -202,7 +202,7 @@ final class HelperParams {
      * is not this parameter.
      */
     static boolean isApplied(Ast.Expr e, String name) {
-        if (e instanceof Ast.Apply call && call.fn().equals(name)) {
+        if (e instanceof Ast.Apply call && call.written().equals(name)) {
             return true;
         }
         boolean[] found = {false};
@@ -364,7 +364,7 @@ final class HelperParams {
 
         /** The parameter passed where a callee declares the type of that argument. */
         private void pinFromCall(Ast.Apply call, String name) {
-            List<Type> params = calleeParams(call.fn());
+            List<Type> params = calleeParams(call.written());
             if (params == null || params.size() != call.args().size()) {
                 return;
             }

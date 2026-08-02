@@ -192,7 +192,7 @@ public final class DataChecker {
                 // on a value, none of them are this body's: the value's definition is what reached
                 // the helper, and the call is standing in for constructions that would have been
                 // marked had the helper been expandable.
-                Constructs viaHelper = recConstructs.get(call.fn());
+                Constructs viaHelper = recConstructs.get(call.written());
                 if (viaHelper != null) {
                     out.absorb(call.origin().viaValueReference() ? viaHelper.allCarried() : viaHelper);
                 }

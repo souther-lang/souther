@@ -33,7 +33,7 @@ Core already drew the distinction the AST was missing. `Core.Call` names a targe
 - A named function written where a value goes is η-expanded to a function value. `String.trim` becomes `Block([$v0], Call("String.trim", [$v0]))`, which is the same `Core.Block` an anonymous lambda produces, so past the type check a named function, an anonymous block and a runtime choice among them are one kind of value.
 - Application is postfix and iterated: `f(x)(y)`, `(if flag then f else g)(x)`, `f(x).field`. An argument list may not cross a line break.
 - A function type is refused where the position requires an external representation — a data field, a newtype's base, a behavior's input and output — and nowhere else. It is refused because a function has no external form, not because a function is a lesser kind of value.
-- A behavior's name is not a value. What a behavior requires is settled where it is injected, and a name carrying it elsewhere would carry the requirement past the statement that declared it.
+- A behavior's name handed over is the behavior, not the `let` that implements it. A Java implementation replaces the behavior, so a value that reached past it to the helper body would be a second answer to the same name; the emitted code goes through the behavior's class. A behavior with a requirement is a binding by the time it can be named, so nothing carries a requirement past its `depends on`.
 
 ### An argument list may not cross a line break
 
@@ -59,7 +59,7 @@ Five passes were rebuilding an application from its name and discarding whatever
 
 What is still refused, and why:
 
-- A behavior's name where a value goes. This is the decision above, not a limitation.
+- A behavior's name bound to a `let` — `let f = twice`. Handing the same name to a combinator works and goes through the behavior's class, so this is the decision above with one position missing, not a rule. What blocks it is that η-expansion happens in the inliner, which holds the helper table and not the behavior signatures, so the arity to expand to is not in hand there. Filed separately.
 - The three functions taking a rounding mode, handed over by name. Their argument is an identifier read as itself rather than an expression, so an η-expansion would turn it into a binding and the side condition would reject it. When `RoundingMode` becomes an ordinary value type this restriction goes with it.
 - A function whose type nothing settles, stored in a collection. The measurement that named this is worth recording: a plain lambda and a library name are refused *identically* when stored, so the rule is about a function whose type is unknown at the point it is stored, not about recursion or about escaping.
 
@@ -68,6 +68,8 @@ What is still refused, and why:
 Let-polymorphism was considered and left out. A reference to a polymorphic declaration is held as an alias to the use site rather than being made monomorphic where it is bound, which is a mechanism standing in for one — when let-polymorphism arrives it replaces the alias.
 
 ## References
+
+A name that was answered is no longer reported as an unknown one. `notAValue` said "unknown identifier" for everything that fell through its switch, so a behavior's name and a rounding mode — both resolved, both refused for a stated reason — sent the reader looking for a spelling mistake. They name what they denote.
 
 - Specification: `[#blocks]`, `[#fn-declaration]`, `[#fn-rules]`, `[#stdlib]`, `[#reserved-namespace]`, `[#stdlib-map]`, `[#stdlib-set]`, `[#stdlib-decimal]`, `[#let]`
 - Issue #261

@@ -73,13 +73,13 @@ public final class NewtypeDesugar {
                     if (args.size() != 1) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.newtype.arity").title("check.arity.title")
-                                        .at(call.pos(), call.fn().length()).args(call.fn(), args.size())
+                                        .at(call.pos(), call.written().length()).args(call.written(), args.size())
                                         .build(),
-                                "`" + call.fn() + "` wraps one value, but is applied to " + args.size()
+                                "`" + call.written() + "` wraps one value, but is applied to " + args.size()
                                         + " argument(s)");
                     }
                     yield new Ast.NewData(
-                            new Ast.Name(call.fn(), built, call.pos()),
+                            new Ast.Name(call.written(), built, call.pos()),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), ConstructionOrigin.own(), call.pos());
                 }

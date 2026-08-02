@@ -221,11 +221,11 @@ public final class HelperTyping {
      * §invariant-expressions). A total helper — including the stdlib fold behind the list
      * quantifiers — is admissible and not in {@code partial}. */
     static void rejectPartialHelperInInvariant(Ast.Expr e, String data, Set<String> partial) {
-        if (e instanceof Ast.Apply call && partial.contains(call.fn())) {
+        if (e instanceof Ast.Apply call && partial.contains(call.written())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.invariant.partial").title("check.invariant.invalid.title")
-                            .at(call.pos(), call.fn().length()).args(data, call.fn()).build(),
-                    "the invariant of `" + data + "` calls the `partial` helper `" + call.fn()
+                            .at(call.pos(), call.written().length()).args(data, call.written()).build(),
+                    "the invariant of `" + data + "` calls the `partial` helper `" + call.written()
                             + "`, which may not terminate; an invariant is checked at construction time"
                             + " and must terminate, so only a total helper may appear in it");
         }
@@ -295,12 +295,12 @@ public final class HelperTyping {
 
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec 13.1). */
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
-        if (e instanceof Ast.Apply call && injected.contains(call.fn())) {
+        if (e instanceof Ast.Apply call && injected.contains(call.written())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.rechelper.pure").title("check.helper.title")
-                            .at(call.pos(), call.fn().length()).args(helper, call.fn()).build(),
+                            .at(call.pos(), call.written().length()).args(helper, call.written()).build(),
                     "recursive helper `let " + helper + "` is pure and cannot call the injected behavior `"
-                            + call.fn() + "` — put the effect in the behavior that calls this helper"
+                            + call.written() + "` — put the effect in the behavior that calls this helper"
                             + " (spec 13.1)");
         }
         TypeChecker.forEachChild(e, c -> rejectInjectedCalls(c, helper, injected));
@@ -508,8 +508,8 @@ public final class HelperTyping {
 
     /** Collects the names in {@code names} that {@code e} calls (a recursive-helper call graph edge). */
     private static void collectCalls(Ast.Expr e, Set<String> out, Set<String> names) {
-        if (e instanceof Ast.Apply call && names.contains(call.fn())) {
-            out.add(call.fn());
+        if (e instanceof Ast.Apply call && names.contains(call.written())) {
+            out.add(call.written());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));
     }

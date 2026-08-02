@@ -830,8 +830,8 @@ public final class ExampleVerifier {
         if (expected instanceof Ast.NewData nd) {
             return nd.typeName().written();
         }
-        if (expected instanceof Ast.Apply c && neutral.isNewtype(c.fn())) {
-            return c.fn();
+        if (expected instanceof Ast.Apply c && neutral.isNewtype(c.written())) {
+            return c.written();
         }
         return null;   // a literal expected (a primitive output)
     }
@@ -873,7 +873,7 @@ public final class ExampleVerifier {
     private TypeName constructedCase(Ast.Expr e, Set<String> followed) {
         return switch (e) {
             case Ast.NewData nd -> nd.typeName().denotes();
-            case Ast.Apply c when neutral.isNewtype(c.fn()) -> symbols.resolveCase(c.fn());
+            case Ast.Apply c when neutral.isNewtype(c.written()) -> symbols.resolveCase(c.written());
             case Ast.LetIn let -> constructedCase(let.body(), followed);
             case Ast.Var v -> namedCase(v, followed);
             case null, default -> null;
@@ -1247,9 +1247,9 @@ public final class ExampleVerifier {
      * value and a fixture. Anything else applied here is a newtype or nothing.
      */
     private Object collectionOrNewtype(Ast.Apply c, Type expected) {
-        if ("Set.fromList".equals(c.fn()) || "Map.fromList".equals(c.fn())) {
+        if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())) {
             if (c.args().size() != 1) {
-                throw new FixtureException("`" + c.fn() + "` takes one argument");
+                throw new FixtureException("`" + c.written() + "` takes one argument");
             }
             return raw(c.args().get(0), expected);
         }
@@ -1264,11 +1264,11 @@ public final class ExampleVerifier {
      * a helper however it is spelled. Asked wherever an application has to be told from a construction,
      * so the two readers of a call cannot come to different answers. */
     private Ast.FnDef appliedHelper(Ast.Apply c) {
-        if ("Set.fromList".equals(c.fn()) || "Map.fromList".equals(c.fn())
-                || neutral.isNewtype(c.fn())) {
+        if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())
+                || neutral.isNewtype(c.written())) {
             return null;
         }
-        return helperDef(c.fn());
+        return helperDef(c.written());
     }
 
     /**
@@ -1305,7 +1305,7 @@ public final class ExampleVerifier {
      * {@link #helperAnswer}: there the value itself is what the row asserts.
      */
     private Object applied(Ast.Apply c, Ast.FnDef helper, Type expected) {
-        return neutral.of(answered(c, helper), expected, c.fn());
+        return neutral.of(answered(c, helper), expected, c.written());
     }
 
     /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
@@ -1313,47 +1313,47 @@ public final class ExampleVerifier {
      * reported as the fixture it is. */
     private Object answered(Ast.Apply c, Ast.FnDef helper) {
         if (c.args().size() != helper.params().size()) {
-            throw new FixtureException("`" + c.fn() + "` takes " + helper.params().size()
+            throw new FixtureException("`" + c.written() + "` takes " + helper.params().size()
                     + " argument(s) but is called with " + c.args().size());
         }
         Object[] args = new Object[helper.params().size()];
         for (int i = 0; i < args.length; i++) {
             Ast.FnParam p = helper.params().get(i);
             if (p.type() == null) {
-                throw new FixtureException("`" + c.fn() + "` parameter `" + p.name()
+                throw new FixtureException("`" + c.written() + "` parameter `" + p.name()
                         + "` has no type a fixture can be built against");
             }
             Type paramType = TypeOps.resolveParamType(p.type(), symbols);
             args[i] = decode(paramType, raw(c.args().get(i), paramType));
         }
-        return helpers.invoke(c.fn(), args);
+        return helpers.invoke(c.written(), args);
     }
 
     private Object newtypeInner(Ast.Apply c) {
-        if ("Date".equals(c.fn()) || "DateTime".equals(c.fn())) {
+        if ("Date".equals(c.written()) || "DateTime".equals(c.written())) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
-                throw new FixtureException("`" + c.fn() + "` takes one written string");
+                throw new FixtureException("`" + c.written() + "` takes one written string");
             }
-            return CallElaborator.parseTemporal(c.fn(), lit.value(), c.pos());
+            return CallElaborator.parseTemporal(c.written(), lit.value(), c.pos());
         }
-        if (!neutral.isNewtype(c.fn())) {
-            if (noMethod(c.fn())) {
+        if (!neutral.isNewtype(c.written())) {
+            if (noMethod(c.written())) {
                 // A function this module cannot run: an intrinsic implemented in Java, or a helper
                 // whose body produces a function. Said as that, so the rule that a fixture may apply a
                 // helper does not appear to have exceptions nothing explains (ADR-0077).
-                throw new FixtureException("`" + c.fn() + "` cannot be called from an example fixture:"
+                throw new FixtureException("`" + c.written() + "` cannot be called from an example fixture:"
                         + " it has no executable helper method");
             }
-            throw new FixtureException("`" + c.fn() + "` is not a newtype; a fixture cannot call it");
+            throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
         }
         if (c.args().size() != 1) {
-            throw new FixtureException("`" + c.fn() + "` takes one argument");
+            throw new FixtureException("`" + c.written() + "` takes one argument");
         }
         // a newtype over a temporal (`data 貸出日 = Date`) wraps the parsed value, so its written
         // string is read here as it would be for a bare `Date("...")`
-        String base = neutral.newtypeBase(c.fn());
+        String base = neutral.newtypeBase(c.written());
         if (("Date".equals(base) || "DateTime".equals(base))
                 && c.args().get(0) instanceof Ast.StringLit lit) {
             return CallElaborator.parseTemporal(base, lit.value(), c.pos());
@@ -1361,9 +1361,9 @@ public final class ExampleVerifier {
         // the argument is shaped against what the newtype wraps, the same way a record fixture
         // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
         // written list stays a list for its decoder to dedupe
-        return neutral.adjacentlyTagged(c.fn(),
-                neutral.shaped(raw(c.args().get(0), neutral.shapeOf(neutral.newtypeBaseType(c.fn()))),
-                        neutral.shapeOf(neutral.newtypeBaseType(c.fn()))));
+        return neutral.adjacentlyTagged(c.written(),
+                neutral.shaped(raw(c.args().get(0), neutral.shapeOf(neutral.newtypeBaseType(c.written()))),
+                        neutral.shapeOf(neutral.newtypeBaseType(c.written()))));
     }
 
     private Object record(Ast.NewData nd) {

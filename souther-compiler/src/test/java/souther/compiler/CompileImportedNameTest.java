@@ -118,6 +118,59 @@ class CompileImportedNameTest {
         assertTrue(e.getMessage().contains("map"), e.getMessage());
     }
 
+    /**
+     * An import lets a name be written without its qualifier; it does not rename it. A report quotes
+     * and underlines what the source has, and a table keyed by a declaration's name finds the
+     * declaration — two questions, and writing one answer over the other loses the other.
+     */
+    @Test
+    void aReportQuotesTheImportedSpelling() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile("""
+                module demo
+                import String ( trim )
+                data In = { n: Int }
+                data Out = { t: String }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { t = trim(i.n) }
+                """));
+        assertTrue(e.getMessage().contains("of trim:"), e.getMessage());
+        assertTrue(!e.getMessage().contains("String.trim"), e.getMessage());
+    }
+
+    /** A name that was answered is not an unknown one, whatever it turns out to denote. */
+    @Test
+    void aNameThatDenotesSomethingUnusableSaysWhatItDenotes() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile("""
+                module demo
+                data In = { n: Int }
+                data Out = { m: Int }
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n * 2
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = {
+                    let f = twice
+                    Out { m = f(i.n) }
+                }
+                """));
+        assertTrue(e.getMessage().contains("is a behavior"), e.getMessage());
+    }
+
+    /** A behavior handed to a combinator is the behavior: what a Java implementation replaces. */
+    @Test
+    void aBehaviorHandedOverReachesTheBehavior() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                data In = { xs: List<Int> }
+                data Out = { ys: List<Int> }
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n * 2
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { ys = List.map(twice, i.xs) }
+                """));
+    }
+
     @Test
     void aFieldOfABindingNamedLikeAQualifierIsAField() {
         assertDoesNotThrow(() -> Compiler.compile("""

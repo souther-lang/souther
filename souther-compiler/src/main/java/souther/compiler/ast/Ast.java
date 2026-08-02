@@ -942,6 +942,15 @@ public interface Ast {
             return new Var(binder.name(), new ValueName.Local(binder.name(), binder.id()), pos);
         }
 
+        /**
+         * The name of the declaration this reference reaches, or what was written where it reaches
+         * none. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is the spelling
+         * the source has, which an import may have let go without its qualifier.
+         */
+        public String reaches() {
+            return denotes instanceof ValueName.Stdlib lib ? lib.qualified() : name;
+        }
+
         public Var denoting(ValueName resolved) {
             return new Var(name, resolved, pos);
         }
@@ -989,17 +998,28 @@ public interface Ast {
         }
 
         /**
-         * The name this applies as it was written, or the empty spelling where what it applies is
-         * not a name.
+         * The name this applies as the source writes it, or the empty spelling where what it
+         * applies is not a name. What a report quotes and underlines.
          *
-         * <p>For a reader that looks the name up in a table keyed by one, and only for that: an
-         * application of something other than a name reaches no declaration, and no name is empty,
-         * so the empty spelling is the miss such a reader wants. A reader that would do anything
-         * else with the absence — read its length, take a prefix, report it — is not asking this
-         * question and asks {@link #namedCallee()}.
+         * <p>Not what a table is keyed by: an import lets a library name be written without its
+         * qualifier, so the spelling and the declaration it reaches are two things. Ask
+         * {@link #reaches()} for the second.
          */
-        public String fn() {
+        public String written() {
             return function instanceof Var v ? v.name() : "";
+        }
+
+        /**
+         * The name of the declaration this application reaches, or the empty spelling where it
+         * reaches none — what a table keyed by a declaration's name is looked up with.
+         *
+         * <p>A library name is filed under its qualifier whether or not an import let it be written
+         * bare, so that is what it answers; every other name is filed as it is written. The empty
+         * answer is not a convention: it is what applying something that is not a name leaves, and
+         * no declaration is named the empty spelling.
+         */
+        public String reaches() {
+            return denotes() instanceof ValueName.Stdlib lib ? lib.qualified() : written();
         }
 
         /** What the name this applies denotes, or null where what it applies is not a name. */
