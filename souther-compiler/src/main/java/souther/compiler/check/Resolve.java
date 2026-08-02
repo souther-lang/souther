@@ -113,7 +113,12 @@ public final class Resolve {
                          Map<String, ValueName.Behavior> behaviors,
                          Map<String, String> exposed) {
 
-        /** What a module reaches when nothing else is in sight. */
+        /**
+         * What a module reaches when nothing else is in sight — the core modules, which the library
+         * resolves as it loads. A core module imports nothing (it declares the library), so the
+         * table of names an import would bring in is empty; a module that does import is resolved
+         * with what the query answered, which reads its imports from the source that wrote them.
+         */
         public static Values of(Ast.Module m) {
             Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
             for (String helper : HelperInliner.helpersOf(m).keySet()) {
@@ -123,7 +128,7 @@ public final class Resolve {
             for (Ast.BehaviorDef b : m.behaviors()) {
                 behaviors.put(b.name(), new ValueName.Behavior(m.name(), b.name()));
             }
-            return new Values(m.name(), helpers, behaviors, Exposing.exposedNames(m));
+            return new Values(m.name(), helpers, behaviors, Map.of());
         }
     }
 

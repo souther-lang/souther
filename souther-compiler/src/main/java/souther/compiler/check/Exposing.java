@@ -17,7 +17,7 @@ import java.util.Set;
  * module reaches the library either qualified ({@code List.map}) or by importing the names it wants
  * — {@code import List ( map, filter )} — after which it may write them bare.
  *
- * <p>What the imports bring in is answered as a table ({@link #exposedNames}) and nothing in the
+ * <p>What the imports bring in is answered as a table ({@link #read}) and nothing in the
  * module is rewritten. A name written bare stays written bare, and what it means where it is written
  * is settled once, by resolution, with the bindings in force — an import is the last thing consulted
  * and a binding or the module's own declaration wins over it. The {@code import List ( ... )} lines
@@ -31,20 +31,13 @@ public final class Exposing {
 
     private Exposing() {}
 
-    /**
-     * The library names {@code module} may write bare, keyed by the bare spelling.
-     *
-     * <p>An import says which names a module may write without their qualifier. It does not say what
-     * any of them means where it is written: a binding in force wins over an import, and only the
-     * pass that knows the bindings can say that. So this answers what the imports bring in, and
-     * resolution decides what each name means with that in hand.
-     */
-    public static Map<String, String> exposedNames(Ast.Module module) {
-        return validate(module).exposed;
-    }
-
     /** What the imports bring in, and the imports that are not the library's. */
-    private record Validated(Map<String, String> exposed, List<Ast.Import> kept) {}
+    public record Validated(Map<String, String> exposed, List<Ast.Import> kept) {}
+
+    /** Both answers at once, for a reader that wants them both and should ask once. */
+    public static Validated read(Ast.Module module) {
+        return validate(module);
+    }
 
     /**
      * The library names an import brings in, with the three things an import can get wrong reported:
@@ -112,12 +105,11 @@ public final class Exposing {
     /**
      * {@code module} with its {@code import List ( ... )} lines dropped, having checked them.
      *
-     * <p>What they brought in is answered by {@link #exposedNames} and settled where the bindings
+     * <p>What they brought in is answered by {@link #read} and settled where the bindings
      * are known. Nothing in the module is rewritten here: a name written bare is still written bare,
      * and what it means is one question asked in one place.
      */
-    public static Ast.Module withoutLibraryImports(Ast.Module module) {
-        List<Ast.Import> kept = validate(module).kept;
+    public static Ast.Module withoutLibraryImports(Ast.Module module, List<Ast.Import> kept) {
         if (kept.size() == module.imports().size()) {
             return module;
         }

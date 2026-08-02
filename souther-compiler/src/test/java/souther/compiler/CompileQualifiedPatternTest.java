@@ -5,7 +5,11 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import souther.compiler.diag.CompileException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * A pattern that opens a newtype names it the way a name is written anywhere else — bare when an
@@ -14,6 +18,30 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * was rejected; both sides are the resolved name now (issue #177).
  */
 class CompileQualifiedPatternTest {
+
+    /**
+     * A qualified case name is reported as the name it is, not as a case that was bound the wrong
+     * way. The parser recognises {@code Some} by its spelling — it runs before any name means
+     * anything, and {@code Some} has only the one spelling — but that recognition has no answer for
+     * a qualified name, so advising {@code as} there would suggest a spelling that does not work
+     * either. What is wrong is the name, which resolution says.
+     */
+    @Test
+    void aQualifiedCaseNameIsReportedAsTheNameItIs() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile("""
+                        module app
+                        data In = { a: Int? }
+                        data Out = { n: Int }
+                        data Missing
+                        behavior go : (i: In) -> Out | Missing constructs Out, Missing
+                        let go (i) = match i.a with
+                            | Option.Some v -> Out { n = v }
+                            | None -> Missing
+                        """));
+        assertTrue(e.getMessage().contains("Option"), e.getMessage());
+        assertTrue(!e.getMessage().contains("bound with"), e.getMessage());
+    }
 
     private static final String UP = """
             module up exposing ( Amount, Wrapped )

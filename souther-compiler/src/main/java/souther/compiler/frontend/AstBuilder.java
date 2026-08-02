@@ -989,7 +989,11 @@ public final class AstBuilder {
         String someBinding = null;
         if (unwrapNames.isEmpty() && i < es.size() && isToken(es.get(i), SyntaxKind.IDENT)) {
             String ident = tokenText(es.get(i));
-            if (!isSome) {
+            // A qualified name is not a case this advice fits: `Some` is the one case with a payload
+            // to bind and it has no qualified spelling, so what is wrong with `Q.C v` is `Q.C`, and
+            // saying so is resolution's to do. The parser has no answer for a name yet.
+            boolean qualified = caseTypes.get(caseTypes.size() - 1).written().indexOf('.') >= 0;
+            if (!isSome && !qualified) {
                 throw error(posOf((SyntaxToken) es.get(i)), "parse.case.positional",
                         "a case value is bound with `as`: write `| " + caseTypes.get(caseTypes.size() - 1).written()
                                 + " as " + ident + "`",

@@ -177,7 +177,8 @@ public final class Front {
                     return Answer.absent(reserved);
                 }
             }
-            Ast.Module m = Exposing.withoutLibraryImports(raw);
+            Exposing.Validated imports = Exposing.read(raw);
+            Ast.Module m = Exposing.withoutLibraryImports(raw, imports.kept());
             return Answer.of(withAttachedRows(db, m, layout.exampleFilesOf()
                     .getOrDefault(name, List.of())));
         }
@@ -277,7 +278,8 @@ public final class Front {
                     reports.add(reserved);
                     continue;
                 }
-                Ast.Module m = Exposing.withoutLibraryImports(published.module());
+                Ast.Module m = Exposing.withoutLibraryImports(published.module(),
+                        Exposing.read(published.module()).kept());
                 found.put(name, m);
                 injected.put(name, published.injectedBehaviors());
                 for (String reach : reaches(m)) {
@@ -377,7 +379,7 @@ public final class Front {
                 return Answer.absent();
             }
             try {
-                return Answer.of(Ordered.map(Exposing.exposedNames(parsed.value().module())));
+                return Answer.of(Ordered.map(Exposing.read(parsed.value().module()).exposed()));
             } catch (CompileException e) {
                 return Answer.absent(e);   // reported where the import is checked
             }
