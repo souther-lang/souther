@@ -170,7 +170,15 @@ public final class CallElaborator {
                             + " arguments");
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
-            case ValueName.Builtin _ -> unelaborated("a builtin", call);
+            // A name the language itself gives, applied. `Some`/`None` are told apart earlier (E1303),
+            // so this is a rounding mode: a bare identifier the operation taking it reads, and not a
+            // function. Reachable from the moment one ladder answers a name wherever it is written.
+            case ValueName.Builtin b -> CompileException.of(
+                    Diagnostic.of(null, "check.builtin.notfunction")
+                            .title("check.apply.notfunction.title")
+                            .at(call.pos(), call.fn().length()).args(b.name()).build(),
+                    "`" + b.name() + "` is a name the language gives, not a function, so it cannot"
+                            + " be applied to arguments");
             // thrown out at the top of typeOfCall, before any of the work above
             case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
             case null -> unelaborated("nothing", call);

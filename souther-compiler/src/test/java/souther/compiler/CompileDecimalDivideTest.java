@@ -73,4 +73,18 @@ class CompileDecimalDivideTest {
                 """;
         assertThrows(CompileException.class, () -> Compiler.compile(src));
     }
+
+    /** A mode is a name the language gives, read by the operation that takes it. Applied, it is told
+     * what it is rather than shown a compiler bug. */
+    @Test
+    void aRoundingModeAppliedToArgumentsIsToldItIsNotAFunction() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data In = { n: Int }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = HALF_UP(i.n) }
+                """));
+        assertEquals("check.builtin.notfunction", e.diagnostic().messageKey());
+    }
 }

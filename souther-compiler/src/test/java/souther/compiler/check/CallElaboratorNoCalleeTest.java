@@ -77,6 +77,19 @@ class CallElaboratorNoCalleeTest {
     }
 
     /**
+     * A name the language itself gives, applied. `Some` and `None` are told apart earlier (E1303),
+     * so what reaches here is a rounding mode — a bare identifier the operation taking one reads
+     * rather than evaluates. An author can write it, so they are told, not shown a compiler bug.
+     */
+    @Test
+    void aBuiltinIsToldItIsNotAFunction() {
+        RuntimeException e = answerFor(new ValueName.Builtin("HALF_UP"));
+        CompileException c = assertInstanceOf(CompileException.class, e);
+        assertEquals("check.builtin.notfunction", c.diagnostic().messageKey());
+        assertEquals(List.of("HALF_UP"), List.of(c.diagnostic().args()));
+    }
+
+    /**
      * The rest name a call that should have been expanded, substituted or rewritten before the check
      * ran. That is the compiler disagreeing with itself, so it is raised as one — an author cannot
      * act on it, and dressing it as a language error would have them try.
@@ -86,7 +99,6 @@ class CallElaboratorNoCalleeTest {
         for (ValueName denotes : List.of(
                 new ValueName.Helper("m", "f"),
                 new ValueName.Stdlib("List.map"),
-                new ValueName.Builtin("Some"),
                 new ValueName.Unresolved("f"))) {
             RuntimeException e = answerFor(denotes);
             assertInstanceOf(IllegalStateException.class, e, denotes.toString());

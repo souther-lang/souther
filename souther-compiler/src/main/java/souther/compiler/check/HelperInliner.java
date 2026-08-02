@@ -1410,7 +1410,7 @@ public final class HelperInliner {
             case Ast.Var v when v.denotes() instanceof ValueName.Local p
                     && subst.containsKey(p.id()) ->
                     new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()));
-            case Ast.Var v -> v.denoting(copy.of(v.denotes()));
+            case Ast.Var v -> new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
             case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, substDenotes, fnParams, at, copy), fa.field(), at(at, fa.pos()));
             case Ast.Apply call -> {
                 // a substituted callee is the function argument this parameter was bound to, under

@@ -619,66 +619,64 @@ public final class Resolve {
     // --- names in a body ---
 
     /**
-     * What a name used as a value denotes. A binding in force wins over everything else — a body may
-     * bind a name a module declares, and the binding is what the name means there.
+     * What a name written in the value namespace denotes, or null where nothing here does.
+     *
+     * <p>One ladder, in one order, so a name means the same thing under an application as beside one.
+     * It was two — a bare name tried the declared types before this module's helpers, an applied one
+     * tried the library first and the types last — and which rung answered therefore depended on
+     * whether a `(` followed. The rungs a spelling could reach twice are refused where the value
+     * namespace is assembled, so the order between them decides nothing.
+     *
+     * <p>{@code applied} is the one thing the position still says. A type written as a value is the
+     * construction of a unit data and records where it came from; applied, it is a newtype taking
+     * what it wraps, and the application is what says that.
      */
-    private ValueName valueName(String written, SourcePos pos, Bindings bound) {
+    private ValueName lookup(String written, boolean applied, Bindings bound) {
+        // a binding in force wins over everything else: a body may bind a name a module declares,
+        // and the binding is what the name means there
         ValueName.Local binding = bound.binderOf(written);
         if (binding != null) {
             return binding;
         }
+        // names the language itself gives: Option's two cases, and the rounding modes an operation
+        // taking one reads rather than evaluates
         if (Elaborator.ROUNDING_MODES.contains(written) || written.equals("None")
                 || written.equals("Some")) {
             return new ValueName.Builtin(written);
         }
-        TypeName type = symbols.resolve(written);
-        if (type != null && !type.isUnresolved()) {
-            return new ValueName.OfType(written, type, ConstructionOrigin.own());
-        }
-        // a helper or a behavior named without being applied — handed to a combinator by name,
-        // which the inliner expands into a block that applies it
-        ValueName.Helper helper = values.helpers().get(written);
-        if (helper != null) {
-            return helper;
-        }
-        ValueName.Behavior behavior = values.behaviors().get(written);
-        if (behavior != null) {
-            return behavior;
-        }
-        return nothing(written, pos, unknownIdentifier(written, pos, bound));
-    }
-
-    /** What the name a call applies denotes. */
-    private ValueName calledName(Ast.Apply call, Bindings bound) {
-        String written = call.fn();
-        ValueName.Local binding = bound.binderOf(written);
-        if (binding != null) {
-            return binding;   // a function-typed parameter, applied
-        }
-        if (written.equals("Some") || written.equals("None")) {
-            return new ValueName.Builtin(written);   // Option's cases, which are not calls (E1303)
-        }
         // A library qualifier makes this a library reference — `Date(...)`, whose namespace is the
-        // whole name, included. Whether the library has a function of that name is the check's to
-        // say: asking here would tie the answer to how much of the library has been loaded, and the
+        // whole name, included. Whether the library has a member of that name is the check's to say:
+        // asking here would tie the answer to how much of the library has been loaded, and the
         // library resolves its own sources while it loads.
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             return new ValueName.Stdlib(written);
         }
+        TypeName type = symbols.resolve(written);
+        if (type != null && !type.isUnresolved()) {
+            return new ValueName.OfType(written, type, applied ? null : ConstructionOrigin.own());
+        }
+        // a helper or a behavior, applied or handed over by name — which the inliner expands into a
+        // block that applies it
         ValueName.Helper helper = values.helpers().get(written);
         if (helper != null) {
             return helper;
         }
-        ValueName.Behavior behavior = values.behaviors().get(written);
-        if (behavior != null) {
-            return behavior;
-        }
-        TypeName type = symbols.resolve(written);
-        if (type != null && !type.isUnresolved()) {
-            return new ValueName.OfType(written, type, null);   // a newtype applied to what it wraps
-        }
-        return nothing(written, call.pos(), notCallable(written, call.pos(), bound));
+        return values.behaviors().get(written);
+    }
+
+    /** What a name used as a value denotes, and the report for one that denotes nothing. */
+    private ValueName valueName(String written, SourcePos pos, Bindings bound) {
+        ValueName denotes = lookup(written, false, bound);
+        return denotes != null ? denotes
+                : nothing(written, pos, unknownIdentifier(written, pos, bound));
+    }
+
+    /** The same, for the name an application applies: what is not there is reported differently. */
+    private ValueName calledName(Ast.Apply call, Bindings bound) {
+        ValueName denotes = lookup(call.fn(), true, bound);
+        return denotes != null ? denotes
+                : nothing(call.fn(), call.pos(), notCallable(call.fn(), call.pos(), bound));
     }
 
     /**
