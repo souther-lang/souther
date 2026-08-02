@@ -117,7 +117,7 @@ public final class GrowingFold {
         if (!(binding.body() instanceof Core.Call outer) || !outer.fn().equals(BUILD)
                 || !(outer.args().get(1) instanceof Core.Read walked)
                 || !walked.binding().equals(binding.binder().id())
-                || uses(binding.body(), binding.binder()) != 1) {
+                || uses(binding.body(), binding.binder().id()) != 1) {
             return null;
         }
         List<Core.LetIn> kept = new ArrayList<>();
@@ -130,7 +130,7 @@ public final class GrowingFold {
             return null;
         }
         for (Core.LetIn k : kept) {
-            if (uses(outer.args().get(0), k.binder()) > 0) {
+            if (uses(outer.args().get(0), k.binder().id()) > 0) {
                 return null;
             }
         }
@@ -193,7 +193,7 @@ public final class GrowingFold {
         if (!(step instanceof Core.Block block) || block.params().size() != 2) {
             return null;
         }
-        Accumulated acc = aliases(block.body(), block.params().get(0));
+        Set<BindingId> acc = aliases(block.body(), block.params().get(0));
         int[] found = {0};
         Core putting = answers(block.body(), acc, found, GrowingFold::inserted);
         if (putting == null
@@ -214,16 +214,16 @@ public final class GrowingFold {
      * see through. A binding of a binding is followed the same way, so the set is closed rather than
      * one level deep.
      */
-    private static Accumulated aliases(Core body, Ast.Binder acc) {
-        Accumulated names = new Accumulated();
-        names.add(acc);
+    private static Set<BindingId> aliases(Core body, Ast.Binder acc) {
+        Set<BindingId> names = new LinkedHashSet<>();
+        names.add(acc.id());
         int before;
         do {
             before = names.size();
             count(body, e -> {
                 if (e instanceof Core.LetIn li && li.value() instanceof Core.Read v
                         && names.contains(v.binding())) {
-                    names.add(li.binder());
+                    names.add(li.binder().id());
                 }
                 return false;
             }, new int[1]);
@@ -231,42 +231,11 @@ public final class GrowingFold {
         return names;
     }
 
-    /**
-     * The accumulator and everything bound to it.
-     *
-     * <p>Which bindings they are is what a read is held against. Core still carries a name where a
-     * call applies one and where a construction spreads one, so those are held against the names as
-     * well; a name that happens to match only ever refuses a rewrite.
-     */
-    private static final class Accumulated {
-
-        private final Set<BindingId> bindings = new LinkedHashSet<>();
-        private final List<Ast.Binder> binders = new ArrayList<>();
-
-        void add(Ast.Binder binder) {
-            if (bindings.add(binder.id())) {
-                binders.add(binder);
-            }
-        }
-
-        boolean contains(BindingId binding) {
-            return bindings.contains(binding);
-        }
-
-        int size() {
-            return bindings.size();
-        }
-
-        List<Ast.Binder> binders() {
-            return binders;
-        }
-    }
-
     /** How many times one of {@code acc}'s bindings is reached anywhere in {@code e}. */
-    private static int mentions(Core e, Accumulated acc) {
+    private static int mentions(Core e, Set<BindingId> acc) {
         int n = 0;
-        for (Ast.Binder binder : acc.binders()) {
-            n += uses(e, binder);
+        for (BindingId binding : acc) {
+            n += uses(e, binding);
         }
         return n;
     }
@@ -274,7 +243,7 @@ public final class GrowingFold {
     /** How many times the accumulator is read as a map rather than written to — the {@code Map.get} of
      *  an {@code upsert}, a {@code containsKey} guarding an insert. Each of those is one of the
      *  mentions {@link #puttingStep} counts, and a mention that is none of the three refuses the walk. */
-    private static int reads(Core e, Accumulated acc) {
+    private static int reads(Core e, Set<BindingId> acc) {
         int[] n = {0};
         count(e, c -> c instanceof Core.Call call && READS.contains(call.fn())
                 && !call.args().isEmpty()
@@ -284,7 +253,7 @@ public final class GrowingFold {
 
     /** How many times the accumulator is mentioned as the value another name is bound to — the
      *  mentions {@link #aliases} followed. */
-    private static int aliased(Core e, Accumulated acc) {
+    private static int aliased(Core e, Set<BindingId> acc) {
         int[] n = {0};
         count(e, c -> c instanceof Core.LetIn li && li.value() instanceof Core.Read v
                 && acc.contains(v.binding()), n);
@@ -378,7 +347,7 @@ public final class GrowingFold {
         if (!(step instanceof Core.Block block) || block.params().size() != 2) {
             return null;
         }
-        Accumulated acc = aliases(block.body(), block.params().get(0));
+        Set<BindingId> acc = aliases(block.body(), block.params().get(0));
         int[] found = {0};
         Core grown = answers(block.body(), acc, found, GrowingFold::appended);
         if (grown == null || found[0] + aliased(block.body(), acc) != mentions(block.body(), acc)) {
@@ -393,11 +362,11 @@ public final class GrowingFold {
     /** What an answering position of a growing step may hold besides the accumulator itself: the one
      *  operation that grows it, rewritten to the one that writes into the builder. Null refuses. */
     private interface Growth {
-        Core at(Core e, Accumulated acc);
+        Core at(Core e, Set<BindingId> acc);
     }
 
     /** {@code acc ++ rhs} as an add to the builder. */
-    private static Core appended(Core e, Accumulated acc) {
+    private static Core appended(Core e, Set<BindingId> acc) {
         if (!(e instanceof Core.Binary b) || b.op() != Ast.BinOp.CONCAT
                 || !(b.left() instanceof Core.Read v) || !acc.contains(v.binding())) {
             return null;
@@ -406,7 +375,7 @@ public final class GrowingFold {
     }
 
     /** {@code Map.insert(key, value, acc)} as a write into the builder. */
-    private static Core inserted(Core e, Accumulated acc) {
+    private static Core inserted(Core e, Set<BindingId> acc) {
         if (!(e instanceof Core.Call c) || !c.fn().equals(INSERT) || c.args().size() != 3
                 || !(c.args().get(2) instanceof Core.Read v) || !acc.contains(v.binding())) {
             return null;
@@ -424,7 +393,7 @@ public final class GrowingFold {
      * ordinary code the rewrite leaves alone — what matters is what the accumulator does there, which
      * the counts in {@link #grownStep} and {@link #puttingStep} settle.
      */
-    private static Core answers(Core e, Accumulated acc, int[] found, Growth growth) {
+    private static Core answers(Core e, Set<BindingId> acc, int[] found, Growth growth) {
         switch (e) {
             case Core.Read v -> {
                 if (!acc.contains(v.binding())) {
@@ -473,19 +442,21 @@ public final class GrowingFold {
     }
 
     /**
-     * How many times the binding {@code binder} introduces is reached anywhere in {@code e} — read
-     * as a value, applied, or spread.
+     * How many times {@code binding} is reached anywhere in {@code e} — read as a value, applied, or
+     * spread.
      *
-     * <p>A read says which binding it is, so a binding of the same spelling further in is not one of
-     * these. A call and a spread still carry a name in Core, so those two are counted by it; a name
-     * that happens to match only ever refuses a rewrite.
+     * <p>Every one of the three says which binding it is, so a binding of the same spelling further
+     * in is not one of these. Undercounting is what this must not do: the rewrite is allowed when
+     * every way the accumulator is reached is one of the growths found, so a way that went uncounted
+     * would let it through.
      */
-    private static int uses(Core e, Ast.Binder binder) {
+    private static int uses(Core e, BindingId binding) {
         int[] n = {0};
         count(e, node -> switch (node) {
-            case Core.Read v -> v.binding().equals(binder.id());
-            case Core.Call c -> c.fn().equals(binder.name());
-            case Core.NewData nd -> nd.spreads().contains(binder.name());
+            case Core.Read v -> v.binding().equals(binding);
+            case Core.Apply a -> a.fn().binding().equals(binding);
+            case Core.NewData nd ->
+                    nd.spreads().stream().anyMatch(s -> s.binding().equals(binding));
             default -> false;
         }, n);
         return n[0];
