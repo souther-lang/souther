@@ -67,7 +67,7 @@ public final class Prelude {
      *  qualified like everything else (spec §stdlib). */
     private static final Set<String> BUILTINS = Set.of(
             "String.toInt", "String.toDecimal",
-            "Int.remainder", "Int.divide", "Decimal.divide", "Decimal.toInt", "Decimal.round");
+            "Int.remainder", "Int.divide", "Decimal.divide");
 
     /** Every qualifier a call may carry: the four prelude modules plus the arithmetic built-in
      *  namespaces {@code Int}/{@code Decimal} (spec §stdlib). */

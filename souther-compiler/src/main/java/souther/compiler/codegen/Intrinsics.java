@@ -46,8 +46,40 @@ final class Intrinsics {
         return e.emit(g, call);
     }
 
-    sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold, TakesAFunction {
+    sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold, TakesAFunction,
+            TakesARoundingMode {
         Type emit(BodyGen g, Core.Call call);
+    }
+
+    /**
+     * A kernel taking a rounding mode. The mode is a name the language gives, read by the operation
+     * that takes it rather than evaluated, so it is emitted as the JDK constant it names rather than
+     * as an expression ([#stdlib-decimal]).
+     *
+     * <p>{@code l2iArgs} narrows an argument from Souther's Int to a JVM {@code int}; {@code owner}
+     * and {@code virtual} say whether the kernel is a static or a method on the value.
+     */
+    record TakesARoundingMode(ClassDesc owner, String method, boolean virtual, int mode,
+                              Set<Integer> l2iArgs, ClassDesc[] params, Type result) implements Emit {
+        public Type emit(BodyGen g, Core.Call call) {
+            for (int i = 0; i < call.args().size(); i++) {
+                if (i == mode) {
+                    g.emitRoundingMode(call.args().get(i));
+                    continue;
+                }
+                g.genExpr(call.args().get(i));
+                if (l2iArgs.contains(i)) {
+                    g.emitL2i();
+                }
+            }
+            MethodTypeDesc desc = MethodTypeDesc.of(boundaryDesc(result), params);
+            if (virtual) {
+                g.emitInvokeVirtual(owner, method, desc);
+            } else {
+                g.emitInvokeStatic(owner, method, desc);
+            }
+            return result;
+        }
     }
 
     /**
@@ -238,6 +270,10 @@ final class Intrinsics {
         t.put("string.fromDecimal", rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
 
         // List
+        t.put("decimal.toInt", new TakesARoundingMode(CD_DecimalMath, "toInt", false, 1,
+                Set.of(), new ClassDesc[] {CD_BigDecimal, CD_RoundingMode}, Type.INT));
+        t.put("decimal.round", new TakesARoundingMode(CD_BigDecimal, "setScale", true, 2,
+                Set.of(1), new ClassDesc[] {ConstantDescs.CD_int, CD_RoundingMode}, Type.DECIMAL));
         t.put("list.sortBy", new TakesAFunction(CD_Lists, "sortBy", 1,
                 held -> List.of(((Type.ListOf) held).element()),
                 ts -> ts.get(1)));

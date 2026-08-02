@@ -184,4 +184,24 @@ class CompileHigherOrderIntrinsicTest {
         assertEquals(List.of(9L, 4L, 2L), out.get("sorted"));
         assertEquals(9L, out.get("first"), "the capture reaches the kernel's Fn");
     }
+
+    /**
+     * A rounding mode is a name the language gives, read by the operation that takes it. A core
+     * declaration says so in its parameter type, and the report names the operation asking.
+     */
+    @Test
+    void aRoundingModeParameterTakesTheNameAndNotAnExpression() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data In = { d: Decimal }
+                data Out = { n: Int }
+
+                behavior run : (i: In) -> Out constructs Out
+
+                let run (i) = Out { n = Decimal.toInt(i.d, i.d) }
+                """));
+        assertTrue(e.getMessage().contains("Decimal.toInt"), e.getMessage());
+        assertTrue(e.getMessage().contains("HALF_UP"), e.getMessage());
+    }
 }

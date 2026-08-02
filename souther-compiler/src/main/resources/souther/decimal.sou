@@ -7,6 +7,9 @@
 // implementation-location policy.
 module souther.decimal
 
+let toInt (d: Decimal, mode: RoundingMode) : Int = intrinsic "decimal.toInt"
+let round (d: Decimal, scale: Int, mode: RoundingMode) : Decimal = intrinsic "decimal.round"
+
 let add (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.add"
 let subtract (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.subtract"
 let multiply (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.multiply"

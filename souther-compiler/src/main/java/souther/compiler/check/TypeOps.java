@@ -28,6 +28,10 @@ import java.util.function.Function;
  */
 public final class TypeOps {
 
+    /** The type of a rounding mode. Declared by no module: the modes are names the language gives
+     *  ([#stdlib-decimal]), and this is what a core declaration writes to take one. */
+    public static final TypeName ROUNDING_MODE = TypeName.runtime("RoundingMode");
+
     private TypeOps() {}
 
     /** Resolves a written type. Kept for the readers that name a parameter's type as such. */
@@ -1252,6 +1256,12 @@ public final class TypeOps {
                 TypeName resolved = symbols.resolve(ref.name());
                 if (resolved != null) {
                     yield resolved.isUnresolved() ? Type.ERRONEOUS : Type.ref(resolved);
+                }
+                // A rounding mode is a name the language gives, and the operations taking one are
+                // core declarations, so their parameter type has to be nameable there. Asked after
+                // the module's own declarations, so a model that declares this name keeps it.
+                if (ref.name().equals(ROUNDING_MODE.name())) {
+                    yield Type.ref(ROUNDING_MODE);
                 }
                 throw unknownType(ref, symbols);
             }

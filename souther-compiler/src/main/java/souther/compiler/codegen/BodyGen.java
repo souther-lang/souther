@@ -1074,6 +1074,12 @@ final class BodyGen {
             emitFunctionValue(value, paramTypes);
         }
 
+        /** Puts the JDK rounding constant a mode names on the stack. The mode is read by name, not
+         * evaluated; see {@link Intrinsics.TakesARoundingMode}. */
+        void emitRoundingMode(Core arg) {
+            code.getstatic(CD_RoundingMode, ((Core.Builtin) arg).name(), CD_RoundingMode);
+        }
+
         void emitL2i() {
             code.l2i();
         }
@@ -1142,8 +1148,6 @@ final class BodyGen {
                     }
                 }
                 case "Int.remainder" -> intDivide(call, false);
-                case "Decimal.toInt" -> decimalToInt(call);
-                case "Decimal.round" -> decimalRound(call);
                 default -> {
                     // an injected behavior a lambda captured arrives in a slot rather than in a
                     // field of the enclosing behavior, and is applied as the value it is. This asks
@@ -1442,29 +1446,6 @@ final class BodyGen {
             code.labelBinding(zero);
             code.getstatic(CD_DivisionByZero, "INSTANCE", CD_DivisionByZero);
             code.labelBinding(end);
-        }
-
-        /** {@code toInt(d, mode)}: the whole number `d` rounds to under `mode`, which is written at
-         * the call as `divide`'s is. The kernel aborts on a value too large for an Int. */
-        private void decimalToInt(Core.Call call) {
-            genExpr(call.args().get(0));
-            String mode = ((Core.Builtin) call.args().get(1)).name();
-            code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
-            code.invokestatic(CD_DecimalMath, "toInt",
-                    MethodTypeDesc.of(ConstantDescs.CD_long, CD_BigDecimal, CD_RoundingMode));
-        }
-
-        /** {@code round(d, scale, mode)}: `d` at the given number of decimal places, the mode written
-         * at the call as `toInt`'s and `divide`'s are. Unlike `toInt` the result stays a Decimal, so
-         * this is a plain {@code BigDecimal.setScale} and needs no kernel. */
-        private void decimalRound(Core.Call call) {
-            genExpr(call.args().get(0));
-            genExpr(call.args().get(1));   // scale (Int, a long)
-            code.l2i();
-            String mode = ((Core.Builtin) call.args().get(2)).name();
-            code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
-            code.invokevirtual(CD_BigDecimal, "setScale",
-                    MethodTypeDesc.of(CD_BigDecimal, ConstantDescs.CD_int, CD_RoundingMode));
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on

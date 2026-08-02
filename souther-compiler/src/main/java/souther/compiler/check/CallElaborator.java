@@ -73,6 +73,11 @@ public final class CallElaborator {
                         + element + " — use its ordered field instead (e.g. map to it first)");
     }
 
+    /** Whether a declared parameter takes a rounding mode rather than a value. */
+    private static boolean isRoundingMode(Type t) {
+        return t instanceof Type.Ref r && r.name().equals(TypeOps.ROUNDING_MODE);
+    }
+
     /**
      * Refuses a sort key with no natural order. The constraint is on what the key answers, not on
      * what the list holds, so it reads the binding the key's declared result took rather than the
@@ -336,10 +341,18 @@ public final class CallElaborator {
                         call.pos(), "result of " + call.fn());
             }
             for (int i = 0; i < args.size(); i++) {
-                if (!(intrinsic.params().get(i) instanceof Type.FnOf)) {
-                    TypeOps.unify(intrinsic.params().get(i), ca.type(i), bindings, ctx.symbols(),
-                            call.pos(), "argument " + (i + 1) + " of " + call.fn());
+                if (intrinsic.params().get(i) instanceof Type.FnOf) {
+                    continue;
                 }
+                // A rounding mode is not an expression: it is a name the operation taking it reads,
+                // so it is checked as one and carries no type of its own ([#stdlib-decimal]).
+                if (isRoundingMode(intrinsic.params().get(i))) {
+                    requireRoundingMode(call.fn(), args.get(i));
+                    ca.untyped(i);
+                    continue;
+                }
+                TypeOps.unify(intrinsic.params().get(i), ca.type(i), bindings, ctx.symbols(),
+                        call.pos(), "argument " + (i + 1) + " of " + call.fn());
             }
             for (int i = 0; i < args.size(); i++) {
                 if (intrinsic.params().get(i) instanceof Type.FnOf declaredStep) {
@@ -384,34 +397,13 @@ public final class CallElaborator {
                 // partial: a zero divisor produces the DivisionByZero case (spec 18.2)
                 yield Type.union(primitiveHeaded(Type.INT, "DivisionByZero"));
             }
-            case "Decimal.toInt" -> {
-                // The narrowing states its rounding, as `divide` does: dropping a fraction is a
-                // domain decision (spec 18.3). The widening `Decimal.fromInt` needs no such word and
-                // is an ordinary stdlib function.
-                arity(call, 2);
-                ca.require(0, Type.DECIMAL, "argument 1 of toInt");
-                requireRoundingMode(args.get(1));
-                ca.untyped(1);   // a built-in identifier, not an expression
-                yield Type.INT;
-            }
-            case "Decimal.round" -> {
-                // Rounding to a scale names its mode for the same reason `toInt` does, and stays in
-                // the compiler for the same reason: the mode is a bare built-in identifier, which a
-                // core declaration's parameter type cannot name (spec 18.3).
-                arity(call, 3);
-                ca.require(0, Type.DECIMAL, "argument 1 of round");
-                ca.require(1, Type.INT, "scale of round");
-                requireRoundingMode(args.get(2));
-                ca.untyped(2);   // a built-in identifier, not an expression
-                yield Type.DECIMAL;
-            }
             case "Int.divide", "Decimal.divide" -> {
                 if (args.size() == 4) {
                     // Decimal divide states its rounding: divide(a, b, scale, mode) (spec 18.3)
                     ca.require(0, Type.DECIMAL, "argument 1 of divide");
                     ca.require(1, Type.DECIMAL, "argument 2 of divide");
                     ca.require(2, Type.INT, "scale of divide");
-                    requireRoundingMode(args.get(3));
+                    requireRoundingMode(call.fn(), args.get(3));
                     ca.untyped(3);   // a built-in identifier, not an expression
                     yield Type.union(primitiveHeaded(Type.DECIMAL, "DivisionByZero"));
                 }
@@ -543,15 +535,15 @@ public final class CallElaborator {
         return Optional.empty();
     }
 
-    /** The rounding-mode argument of {@code divide} is one of the built-in identifiers, written
-     * bare — not an ordinary expression (spec 18.3). */
-    static void requireRoundingMode(Ast.Expr e) {
+    /** A rounding mode is one of the built-in identifiers, written bare — not an ordinary
+     * expression ([#stdlib-decimal]). {@code of} is the operation taking it. */
+    static void requireRoundingMode(String of, Ast.Expr e) {
         if (!(e instanceof Ast.Var v) || !Elaborator.ROUNDING_MODES.contains(v.name())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.divide.rounding").title("check.type.mismatch.title")
-                            .at(e.pos()).build(),
-                    "the rounding mode of `divide` must be one of HALF_UP, HALF_EVEN, HALF_DOWN, UP,"
-                            + " DOWN, CEILING, FLOOR (spec 18.3)");
+                            .at(e.pos()).args(of).build(),
+                    "the rounding mode of `" + of + "` must be one of HALF_UP, HALF_EVEN, HALF_DOWN,"
+                            + " UP, DOWN, CEILING, FLOOR ([#stdlib-decimal])");
         }
     }
 
