@@ -715,16 +715,18 @@ public final class TypeOps {
         }
     }
 
-    /** Effective field name → type (included data flattened first, then own fields). */
     /**
-     * The binding each of {@code data}'s fields introduces inside its own invariant, in the order
-     * {@link #fieldTypes} lists them.
+     * The binding each of {@code data}'s fields introduces inside its own invariant.
      *
      * <p>An invariant reads its declaration's fields, and reads them as the bindings they are. Which
-     * binding each is follows from the one walk that says what fields a declaration has — the same
-     * one that gives their types — so the pass that resolves the invariant and the pass that emits it
-     * do not each work it out. A field name is unique within a declaration, which is what lets the
-     * walk be keyed by it.
+     * binding each is is answered here and nowhere else, so the pass that resolves an invariant and
+     * the pass that emits it reach the same one. A field name is unique within a declaration, which
+     * is what lets the answer be keyed by it; the order the map iterates in says nothing, and no
+     * reader may take one from it.
+     *
+     * <p>What is fixed is the numbering: a field is numbered among the fields of the declaration
+     * that declares it, in the order that declaration writes them. An include brings a field in
+     * without renumbering it, so the two passes agree however either of them reaches it.
      */
     public static Map<String, BindingId> fieldBindings(Ast.Data data, Symbols symbols) {
         Map<String, BindingId> bindings = new LinkedHashMap<>();
@@ -740,11 +742,13 @@ public final class TypeOps {
      * declaration binds its own fields and the fields underneath, and an invariant reads the same
      * binding wherever it is checked or emitted.
      *
-     * <p>Apart from {@link #fieldTypes} because it answers where that one cannot: this runs while the
-     * declaration is being resolved, where an include may not yet say what it denotes, and a field
-     * has a name whether or not its type has been worked out. An include that names nothing is
-     * skipped — the declaration is refused where it is checked, and refusing it twice says nothing
-     * more.
+     * <p>A walk of its own, not the one {@link #fieldTypes} makes, because it answers where that one
+     * cannot: this runs while the declaration is being resolved, where an include may not yet say
+     * what it denotes, and a field has a name whether or not its type has been worked out. It
+     * therefore reaches the fields in an order of its own, which is why nothing reads one off the
+     * result. An include that names nothing is skipped, and a name an include repeats keeps the
+     * declaration's own — both are refused where the declaration is checked, and refusing them twice
+     * says nothing more.
      */
     private static void walkFields(Ast.Data data, TypeName declared, Symbols symbols,
                                    Set<TypeName> seen, Map<String, BindingId> out) {
@@ -763,6 +767,7 @@ public final class TypeOps {
         }
     }
 
+    /** Effective field name → type (included data flattened first, then own fields). */
     public static Map<String, Type> fieldTypes(Ast.Data data, Symbols symbols) {
         Map<String, Type> types = new LinkedHashMap<>();
         for (Ast.Name inc : data.includes()) {

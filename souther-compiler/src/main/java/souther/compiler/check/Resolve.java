@@ -372,8 +372,8 @@ public final class Resolve {
      */
     private Bindings boundFields(Ast.Data d) {
         Bindings bound = Bindings.NONE;
-        // the one walk that says what fields a declaration has, so the emitter reaches the same
-        // bindings without walking the includes again on its own account
+        // which binding each field is is answered in one place, so the pass that emits this
+        // invariant reaches the same ones without working them out again
         for (Map.Entry<String, BindingId> f : TypeOps.fieldBindings(d, symbols).entrySet()) {
             bound = bound.and(f.getKey(), new ValueName.Local(f.getKey(), f.getValue()));
         }
