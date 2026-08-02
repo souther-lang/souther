@@ -955,9 +955,9 @@ public final class CstParser {
      * to it. Both are left-recursive, so each wraps what came before.
      *
      * <p>Application is here rather than at an identifier, so what is applied is any expression —
-     * {@code choose(flag)(x)}, {@code (if c then f else g)(x)}. Souther's grammar is not newline
-     * sensitive, so an argument list on the next line applies to the line above, as a leading `.`
-     * or operator already continues it.
+     * {@code choose(flag)(x)}, {@code (if c then f else g)(x)}. An argument list must begin on the
+     * line its callee ends on: a `(` that opens a line is a parenthesised expression, so a block
+     * whose result is a tuple written under a call reads as that result.
      */
     private void postfixExpr() {
         primaryExpr();
