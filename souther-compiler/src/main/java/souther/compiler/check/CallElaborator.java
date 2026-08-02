@@ -630,7 +630,7 @@ public final class CallElaborator {
      * carry a date at all). A computed date comes from the boundary or from {@code Date.addDays},
      * not from this form. */
     static Type temporalLiteral(Ast.Apply call) {
-        boolean isDate = "Date".equals(call.written());
+        boolean isDate = "Date".equals(call.reaches());
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.temporal.literal").title("check.type.mismatch.title")

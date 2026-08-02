@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -23,6 +24,26 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
  * that way, so the rule is written down here.
  */
 class CompilePostfixApplicationTest {
+
+    /**
+     * A helper is expanded into what calls it, and the expansion renames the body's bindings. A
+     * callee that is not a name is renamed as the expression it is: rebuilding it from a name would
+     * leave nothing behind, and the same application written in a behavior would keep working while
+     * the one reached through a helper did not.
+     */
+    @Test
+    void anAppliedExpressionSurvivesBeingExpandedIntoACallSite() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                let inc (x: Int) = x + 1
+                let dec (x: Int) = x - 1
+                let applySelected (flag: Bool, x: Int) = (if flag then inc else dec)(x)
+                data In = { flag: Bool, n: Int }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = applySelected(i.flag, i.n) }
+                """));
+    }
 
     private static Map<?, ?> run(String source, Map<String, Object> in) throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),

@@ -1513,6 +1513,12 @@ public final class HelperInliner {
                     new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()));
             case Ast.Var v -> new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
             case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, substDenotes, fnParams, at, copy), fa.field(), at(at, fa.pos()));
+            // applying something that is not a name: the callee is renamed as the expression it is,
+            // like every other subexpression. Rebuilding it from a name would leave nothing here.
+            case Ast.Apply call when !call.appliesAName() -> new Ast.Apply(
+                    rename(call.function(), subst, substDenotes, fnParams, at, copy),
+                    renameList(call.args(), subst, substDenotes, fnParams, at, copy),
+                    call.origin(), at(at, call.pos()));
             case Ast.Apply call -> {
                 // a substituted callee is the function argument this parameter was bound to, under
                 // the name this expansion gave it; anything else keeps what the call already denoted

@@ -141,13 +141,13 @@ public final class ConstEval {
 
     private static Optional<Object> call(Ast.Apply call) {
         List<Ast.Expr> args = call.args();
-        switch (call.written()) {
-            case "length", "String.length" -> {
+        switch (call.reaches()) {
+            case "String.length" -> {
                 if (args.size() == 1 && eval(args.get(0)).orElse(null) instanceof String s) {
                     return Optional.of((long) s.length());
                 }
             }
-            case "contains", "String.contains" -> {
+            case "String.contains" -> {
                 // contains(sub, s): the string being searched is the last argument (spec §pipe)
                 if (args.size() == 2
                         && eval(args.get(0)).orElse(null) instanceof String sub

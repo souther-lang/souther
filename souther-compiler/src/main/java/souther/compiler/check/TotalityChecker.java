@@ -368,7 +368,7 @@ final class TotalityChecker {
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
             case Ast.Apply call -> {
-                if (group.contains(call.written())) {
+                if (group.contains(call.reaches())) {
                     calls.add(new RecCall(call.written(), call, lt, eq));
                 }
                 Combinator combo = COMBINATORS.get(call.reaches());
@@ -478,7 +478,7 @@ final class TotalityChecker {
     }
 
     private static void collectOwnCalls(Ast.Expr e, Set<String> own, Set<String> out) {
-        if (e instanceof Ast.Apply call && own.contains(call.written())) {
+        if (e instanceof Ast.Apply call && own.contains(call.reaches())) {
             out.add(call.written());
         }
         forEachChild(e, c -> collectOwnCalls(c, own, out));

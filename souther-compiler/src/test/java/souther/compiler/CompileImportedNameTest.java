@@ -6,7 +6,10 @@ import souther.compiler.diag.CompileException;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import souther.compiler.diag.Severity;
 
 /**
  * An import lets a library name be written without its qualifier (spec §stdlib). What it brings in
@@ -169,6 +172,65 @@ class CompileImportedNameTest {
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = Out { ys = List.map(twice, i.xs) }
                 """));
+    }
+
+    /**
+     * A helper's parameter takes its type from a call whose parameter type is declared, and which
+     * declaration a call reaches is not decided by whether an import let the name be written bare.
+     */
+    @Test
+    void aParameterIsTypedByADeclarationReachedThroughAnImport() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                import String ( length )
+                data In = { s: String }
+                data Out = { n: Int }
+                let size (s) = length(s)
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = size(i.s) }
+                """));
+    }
+
+    /**
+     * An invariant and the guards on the path to a construction are compared by what each call
+     * reaches, so a clause written bare and a guard written qualified are one statement — and the
+     * invariant is discharged rather than left to run time.
+     */
+    @Test
+    void anInvariantDischargesThroughAnImportedName() {
+        Compiler.Compiled c = Compiler.compileWithWarnings("""
+                module demo
+                import String ( length )
+                data Empty
+                data NonEmpty = String
+                    invariant length(value) > 0
+                data In = { s: String }
+                data Out = { v: NonEmpty }
+                behavior go : (i: In) -> Out | Empty constructs Out, NonEmpty, Empty
+                let go (i) = {
+                    guard String.length(i.s) > 0
+                        else Empty
+                    Out { v = NonEmpty(i.s) }
+                }
+                """);
+        assertEquals(0, c.warnings().stream()
+                        .filter(d -> d.severity() == Severity.WARNING).count(),
+                c.warnings().toString());
+    }
+
+    @Test
+    void anImportThatCollidesWithADataIsRejected() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile("""
+                module demo
+                import List ( map )
+                data map
+                data In = { n: Int }
+                data Out = { m: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { m = i.n }
+                """));
+        assertTrue(e.getMessage().contains("map"), e.getMessage());
     }
 
     @Test

@@ -364,7 +364,7 @@ final class HelperParams {
 
         /** The parameter passed where a callee declares the type of that argument. */
         private void pinFromCall(Ast.Apply call, String name) {
-            List<Type> params = calleeParams(call.written());
+            List<Type> params = calleeParams(call.reaches());
             if (params == null || params.size() != call.args().size()) {
                 return;
             }

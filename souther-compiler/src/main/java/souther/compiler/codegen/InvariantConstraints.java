@@ -188,7 +188,7 @@ final class InvariantConstraints {
 
     /** The literal bound {@code size(value)} is compared against, or null when this is not that shape. */
     private static Integer sizeBound(String size, Ast.Expr left, Ast.Expr right) {
-        if (!(left instanceof Ast.Apply call) || !call.written().equals(size)
+        if (!(left instanceof Ast.Apply call) || !call.reaches().equals(size)
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return null;
         }

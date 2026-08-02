@@ -13,11 +13,15 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Resolves standard-library {@code exposing} imports (spec §stdlib). Souther auto-imports nothing:
- * a module reaches the library either qualified ({@code List.map}) or by importing the names it
- * wants — {@code import List ( map, filter )} — after which it may write them bare. This pass turns
- * each such bare call into its qualified form up front, so the rest of the compiler only ever sees
- * qualified library calls; the {@code import List ( ... )} lines are then dropped from the module.
+ * Reads standard-library {@code exposing} imports (spec §stdlib). Souther auto-imports nothing: a
+ * module reaches the library either qualified ({@code List.map}) or by importing the names it wants
+ * — {@code import List ( map, filter )} — after which it may write them bare.
+ *
+ * <p>What the imports bring in is answered as a table ({@link #exposedNames}) and nothing in the
+ * module is rewritten. A name written bare stays written bare, and what it means where it is written
+ * is settled once, by resolution, with the bindings in force — an import is the last thing consulted
+ * and a binding or the module's own declaration wins over it. The {@code import List ( ... )} lines
+ * are then dropped ({@link #withoutLibraryImports}), having been checked.
  *
  * <p>It mirrors Elm's {@code import List exposing (map)}: the qualified access always works, and the
  * import merely lets a name be written without its qualifier. A name exposed from two libraries at
@@ -43,12 +47,14 @@ public final class Exposing {
     private record Validated(Map<String, String> exposed, List<Ast.Import> kept) {}
 
     /**
-     * The library names an import brings in, with the two things an import can get wrong reported:
-     * a name the library does not have, and one name brought in from two modules at once.
+     * The library names an import brings in, with the three things an import can get wrong reported:
+     * a name the library does not have, one name brought in from two modules at once, and one that
+     * collides with a data this module declares.
      *
-     * <p>A name the module declares itself is not brought in. That is the module's own name, and one
-     * declaration wins over an import — the same way a binding in force wins over both, which is
-     * decided where the bindings are known.
+     * <p>A module's own {@code let} of that name is not a collision — it is the module's own name,
+     * and one declaration wins over an import, the same way a binding in force wins over both. A
+     * data is: a data is written where a value goes, so the two would be one spelling with two
+     * answers, which is refused wherever a name reaches the value namespace twice.
      */
     private static Validated validate(Ast.Module module) {
         Set<String> ownNames = new HashSet<>();
@@ -57,6 +63,11 @@ public final class Exposing {
         }
         for (Ast.BehaviorDef b : module.behaviors()) {
             ownNames.add(b.name());
+        }
+
+        Set<String> declaredData = new HashSet<>();
+        for (Ast.Def def : module.defs()) {
+            declaredData.add(def.name());
         }
 
         Map<String, String> exposed = new HashMap<>();
@@ -74,6 +85,13 @@ public final class Exposing {
                                     .at(imp.pos()).args(name, imp.module()).build(),
                             "`" + name + "` is not a function in the standard library module `"
                                     + imp.module() + "` (spec §stdlib).");
+                }
+                if (declaredData.contains(name)) {
+                    throw CompileException.of(
+                            Diagnostic.of(null, "check.import.conflict").title("check.module.title")
+                                    .at(imp.pos()).args(name).hint("check.import.conflict.hint")
+                                    .build(),
+                            "imported `" + name + "` conflicts with a local definition");
                 }
                 if (ownNames.contains(name)) {
                     continue;   // the module defines its own `name`; that shadows the import

@@ -221,7 +221,7 @@ public final class HelperTyping {
      * §invariant-expressions). A total helper — including the stdlib fold behind the list
      * quantifiers — is admissible and not in {@code partial}. */
     static void rejectPartialHelperInInvariant(Ast.Expr e, String data, Set<String> partial) {
-        if (e instanceof Ast.Apply call && partial.contains(call.written())) {
+        if (e instanceof Ast.Apply call && partial.contains(call.reaches())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.invariant.partial").title("check.invariant.invalid.title")
                             .at(call.pos(), call.written().length()).args(data, call.written()).build(),
@@ -295,7 +295,7 @@ public final class HelperTyping {
 
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec 13.1). */
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
-        if (e instanceof Ast.Apply call && injected.contains(call.written())) {
+        if (e instanceof Ast.Apply call && injected.contains(call.reaches())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.rechelper.pure").title("check.helper.title")
                             .at(call.pos(), call.written().length()).args(helper, call.written()).build(),
@@ -508,8 +508,8 @@ public final class HelperTyping {
 
     /** Collects the names in {@code names} that {@code e} calls (a recursive-helper call graph edge). */
     private static void collectCalls(Ast.Expr e, Set<String> out, Set<String> names) {
-        if (e instanceof Ast.Apply call && names.contains(call.written())) {
-            out.add(call.written());
+        if (e instanceof Ast.Apply call && names.contains(call.reaches())) {
+            out.add(call.reaches());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));
     }

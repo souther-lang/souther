@@ -1285,8 +1285,8 @@ public final class InvariantChecker {
                 yield sb.append('}').toString();
             }
             // Only the library's own functions: they are pure, so one written call is one value.
-            case Ast.Apply c when Prelude.hasQualified(c.written()) ->
-                    elementsKey(c.written() + "(", c.args(), site, bound, depth, ")");
+            case Ast.Apply c when Prelude.hasQualified(c.reaches()) ->
+                    elementsKey(c.reaches() + "(", c.args(), site, bound, depth, ")");
             default -> null;
         };
     }

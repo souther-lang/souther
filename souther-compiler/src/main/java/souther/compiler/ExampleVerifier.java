@@ -1330,7 +1330,7 @@ public final class ExampleVerifier {
     }
 
     private Object newtypeInner(Ast.Apply c) {
-        if ("Date".equals(c.written()) || "DateTime".equals(c.written())) {
+        if ("Date".equals(c.reaches()) || "DateTime".equals(c.reaches())) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
