@@ -1054,9 +1054,8 @@ public final class HelperInliner {
                 // applying it applies whatever function that value is — not the declaration, which
                 // takes nothing. The value is substituted and the arguments are applied to it.
                 if (helper.params().isEmpty() && !args.isEmpty()
-                        && call.namedCallee().isPresent()) {
-                    yield inline(new Ast.Apply(valueOf(call.namedCallee().orElseThrow()), args,
-                            call.origin(), call.pos()));
+                        && call.function() instanceof Ast.Var named) {
+                    yield inline(new Ast.Apply(valueOf(named), args, call.origin(), call.pos()));
                 }
                 if (args.size() != helper.params().size()) {
                     LambdaOrigin origin = lambdaOrigins.get(helper.name());

@@ -281,10 +281,10 @@ class CompilePostfixApplicationTest {
 
         assertTrue(named.appliesAName());
         assertEquals("List.map", named.written());
-        assertEquals("List.map", named.namedCallee().orElseThrow().name());
+        assertEquals("List.map", named.reaches());
 
         assertFalse(nameless.appliesAName());
-        assertEquals("", nameless.written(), "a table keyed by name misses");
-        assertTrue(nameless.namedCallee().isEmpty(), "and nothing is handed back to read");
+        assertEquals("", nameless.written(), "there is no spelling to quote");
+        assertEquals("", nameless.reaches(), "and no declaration to look up");
     }
 }

@@ -981,18 +981,8 @@ public interface Ast {
             this(new Var(fn, denotes, pos), args, origin, pos);
         }
 
-        /**
-         * The name this applies, for a reader that is asking which declaration it reaches.
-         *
-         * <p>Absent where what is applied is not a name: that application reaches no declaration, so
-         * there is nothing for such a reader to look up. Every reader that wants the name and would
-         * do something else without it asks this rather than {@link #fn()}.
-         */
-        public Optional<Var> namedCallee() {
-            return function instanceof Var v ? Optional.of(v) : Optional.empty();
-        }
-
-        /** Whether what this applies is a name, which is what the readers keyed by one are asking. */
+        /** Whether what this applies is a name. A reader that wants the name itself matches on
+         * {@link #function()}, which is where it is. */
         public boolean appliesAName() {
             return function instanceof Var;
         }
@@ -1001,9 +991,11 @@ public interface Ast {
          * The name this applies as the source writes it, or the empty spelling where what it
          * applies is not a name. What a report quotes and underlines.
          *
-         * <p>Not what a table is keyed by: an import lets a library name be written without its
-         * qualifier, so the spelling and the declaration it reaches are two things. Ask
-         * {@link #reaches()} for the second.
+         * <p><b>Never a lookup key.</b> An import lets a library name be written without its
+         * qualifier, so a table keyed by a declaration's name misses on the spelling — silently,
+         * because a miss is what a table keyed by names does with one it has not got. Every
+         * question of the form "which declaration is this" asks {@link #reaches()}, whose answer is
+         * this spelling for every name an import cannot have renamed.
          */
         public String written() {
             return function instanceof Var v ? v.name() : "";

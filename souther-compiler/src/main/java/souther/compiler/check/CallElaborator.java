@@ -460,9 +460,9 @@ public final class CallElaborator {
                 // a required behavior called inline (spec 12.2, 13), or one that requires nothing and
                 // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
                 // declaration; where the behavior comes from at run time is the backend's to know.
-                ReqSig callee = ctx.reqs().get(call.written());
+                ReqSig callee = ctx.reqs().get(call.reaches());
                 if (callee == null) {
-                    callee = ctx.callees().get(call.written());
+                    callee = ctx.callees().get(call.reaches());
                 }
                 if (callee == null) {
                     Elaborator.optionCaseWritten(call.written(), call.pos());

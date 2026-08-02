@@ -202,7 +202,7 @@ final class HelperParams {
      * is not this parameter.
      */
     static boolean isApplied(Ast.Expr e, String name) {
-        if (e instanceof Ast.Apply call && call.written().equals(name)) {
+        if (e instanceof Ast.Apply call && call.reaches().equals(name)) {
             return true;
         }
         boolean[] found = {false};
