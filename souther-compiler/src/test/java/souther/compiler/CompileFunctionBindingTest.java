@@ -153,10 +153,14 @@ class CompileFunctionBindingTest {
 
     /**
      * A recursive helper is a static method, reached by the name it is declared under. Bound and
-     * applied that is still what happens; carried off it is not, and that is what stays refused.
+     * applied that is still what happens.
+     *
+     * <p>Storing one is refused, but not for being recursive: a lambda the author wrote is refused
+     * there too, and for the same reason ([#blocks]). The pair below says which of the two rules is
+     * doing the refusing.
      */
     @Test
-    void aRecursiveHelperIsBoundAndAppliedButDoesNotEscape() throws Exception {
+    void aRecursiveHelperIsBoundAndAppliedButIsNotStored() throws Exception {
         String bound = """
                 module demo
 
@@ -238,5 +242,45 @@ class CompileFunctionBindingTest {
                 """, Map.of("ns", List.of(1L, 2L, 3L)));
 
         assertEquals(3L, out.get("m"));
+    }
+
+    /**
+     * Storing a function is refused by one rule, whatever the function was written as. A recursive
+     * helper is not a special case of it: the lambda beside it is refused identically, so nothing
+     * about recursion is what decides this.
+     */
+    @Test
+    void storingAFunctionIsRefusedWhateverItWasWrittenAs() {
+        String lambda = """
+                module demo
+
+                data In = { n: Int }
+                data Out = { m: Int }
+
+                behavior go : (i: In) -> Out constructs Out
+
+                let go (i) = {
+                    let w = (n) -> n + 1
+                    Out { m = List.length([w]) }
+                }
+                """;
+        String libraryName = """
+                module demo
+
+                data In = { n: Int }
+                data Out = { m: Int }
+
+                behavior go : (i: In) -> Out constructs Out
+
+                let go (i) = {
+                    let w = String.trim
+                    Out { m = List.length([w]) }
+                }
+                """;
+
+        for (String src : List.of(lambda, libraryName)) {
+            CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+            assertEquals("check.block.notvalue", e.diagnostic().messageKey(), e.getMessage());
+        }
     }
 }
