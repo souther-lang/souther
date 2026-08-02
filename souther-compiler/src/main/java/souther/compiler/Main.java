@@ -236,19 +236,7 @@ public final class Main {
 
     /** The file the {@code i}-th diagnostic should quote. */
     static Path sourceOf(List<Path> sources, CompileException e, int i) {
-        return sourceAt(sources, e.sourceIndexOf(i));
-    }
-
-    /**
-     * The file a diagnostic tagged with {@code index} should quote. A compile of one file names no
-     * source — the compilation drops the index, since the caller knows the file it handed over — so
-     * the single file it was given is the answer there however the diagnostic is tagged.
-     */
-    static Path sourceAt(List<Path> sources, int index) {
-        if (sources.size() == 1) {
-            return sources.get(0);
-        }
-        return index >= 0 && index < sources.size() ? sources.get(index) : null;
+        return Located.in(sources, e.sourceIndexOf(i));
     }
 
     /** A file as a snippet source, or null when it cannot be read — a snippet-less rendering is the
@@ -282,7 +270,7 @@ public final class Main {
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
         for (String line : DiagnosticRenderer.renderAll(
-                located, index -> read(sourceAt(sources, index)), renderer, locale)) {
+                located, index -> read(Located.in(sources, index)), renderer, locale)) {
             System.err.println(line);
         }
     }

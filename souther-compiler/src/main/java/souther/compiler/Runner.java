@@ -113,13 +113,9 @@ public final class Runner {
         return new RunException(key, message, 1, null, args);
     }
 
-    /** Parses the {@code run} subcommand's arguments (everything after {@code run}) and runs it. */
-    static String runCli(String[] args) {
-        return runCli(args, new ArrayList<>());
-    }
-
-    /** As {@link #runCli(String[])}, collecting the compile's warnings into {@code warningsOut} for
-     *  the caller to render — running a module says what compiling it would have said. */
+    /** Parses the {@code run} subcommand's arguments (everything after {@code run}) and runs it,
+     *  collecting the compile's warnings into {@code warningsOut} for the caller to render —
+     *  running a module says what compiling it would have said. */
     static String runCli(String[] args, List<Located> warningsOut) {
         Path file = null;
         String behaviorName = null;

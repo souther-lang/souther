@@ -3,19 +3,9 @@ package souther.compiler.apt;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import javax.tools.Diagnostic;
-import javax.tools.DiagnosticCollector;
-import javax.tools.JavaCompiler;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardJavaFileManager;
-import javax.tools.ToolProvider;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -119,38 +109,14 @@ class SoutherProcessorDiagnosticTest {
                 "a count does not stand in for the reason: " + reported);
     }
 
-    /** Runs javac over one throwaway Java file with the processor pointed at {@code source}, and
-     *  returns what the processor reported. The compilation must fail. */
+    /** What the processor reported as an error. The compilation must fail: these are all errors. */
     private static String compile(Path dir, Path source, String lang) throws IOException {
-        Path java = write(dir, "Dummy.java", "public class Dummy {}\n");
-        Path classes = Files.createDirectories(dir.resolve("classes"));
-        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
-        DiagnosticCollector<JavaFileObject> collected = new DiagnosticCollector<>();
-        boolean ok;
-        try (StandardJavaFileManager files =
-                     javac.getStandardFileManager(collected, null, StandardCharsets.UTF_8)) {
-            List<String> options = new ArrayList<>(List.of(
-                    "-processor", SoutherProcessor.class.getName(),
-                    "-Asouther.source=" + source,
-                    "-Asouther.lang=" + lang,
-                    "-d", classes.toString(),
-                    "-classpath", System.getProperty("java.class.path")));
-            ok = javac.getTask(null, files, collected, options,
-                    null, files.getJavaFileObjects(java)).call();
-        }
-        StringBuilder reported = new StringBuilder();
-        for (Diagnostic<? extends JavaFileObject> d : collected.getDiagnostics()) {
-            if (d.getKind() == Diagnostic.Kind.ERROR) {
-                reported.append(d.getMessage(Locale.ENGLISH)).append('\n');
-            }
-        }
-        assertFalse(ok, "the compilation should have failed: " + reported);
-        return reported.toString();
+        ProcessorRun run = ProcessorRun.of(dir, source, lang);
+        assertFalse(run.ok(), "the compilation should have failed: " + run.errors());
+        return run.errors();
     }
 
     private static Path write(Path dir, String name, String content) throws IOException {
-        Path file = dir.resolve(name);
-        Files.writeString(file, content);
-        return file;
+        return ProcessorRun.write(dir, name, content);
     }
 }

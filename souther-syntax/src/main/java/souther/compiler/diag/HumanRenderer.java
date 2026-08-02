@@ -71,33 +71,26 @@ public final class HumanRenderer implements DiagnosticRenderer {
     }
 
     /**
-     * The header's title. A diagnostic that names what it is about keeps that name and says its
-     * severity beside it; one that names nothing is titled by its severity alone. A warning is
-     * marked either way, since the code and the message read the same for both and the bar is the
-     * only place the difference can be seen.
+     * The header's title: what the diagnostic is about — its own title, or the one its code carries
+     * — with its severity beside it, or the severity alone when it is about nothing in particular. A
+     * warning is marked either way, since the code and the message read the same for both and the
+     * bar is the only place the difference can be seen.
      */
     private String title(Diagnostic d, Locale locale) {
-        String specific = specificTitle(d, locale);
-        if (d.severity() != Severity.WARNING) {
-            return specific != null ? specific : Messages.get("diag.error.title", locale);
-        }
-        String warning = Messages.get("diag.warning.title", locale);
-        return specific != null ? specific + " (" + warning + ")" : warning;
-    }
-
-    /** What this diagnostic is about — its own title, or the one its code carries — or null when it
-     *  names neither and only its severity is left to title it with. */
-    private String specificTitle(Diagnostic d, Locale locale) {
+        String about = null;
         if (d.titleKey() != null && Messages.has(d.titleKey(), locale)) {
-            return Messages.get(d.titleKey(), locale);
-        }
-        if (d.code() != null) {
+            about = Messages.get(d.titleKey(), locale);
+        } else if (d.code() != null) {
             String key = d.code().toLowerCase(Locale.ROOT) + ".title";
             if (Messages.has(key, locale)) {
-                return Messages.get(key, locale);
+                about = Messages.get(key, locale);
             }
         }
-        return null;
+        if (d.severity() != Severity.WARNING) {
+            return about != null ? about : Messages.get("diag.error.title", locale);
+        }
+        String warning = Messages.get("diag.warning.title", locale);
+        return about != null ? about + " (" + warning + ")" : warning;
     }
 
     private String location(SourcePos pos, SourceContext src) {

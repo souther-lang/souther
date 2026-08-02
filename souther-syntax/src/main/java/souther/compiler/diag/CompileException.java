@@ -21,7 +21,7 @@ public class CompileException extends RuntimeException {
 
     /** A position is a line and a column, so a compile that was handed several sources also has to
      *  say which one — otherwise there is nothing to quote the line from. */
-    private static final int NO_SOURCE = -1;
+    private static final int NO_SOURCE = Located.NO_SOURCE;
 
     private final transient List<Diagnostic> diagnostics;
     /** One entry per diagnostic: which source it came from, or {@link #NO_SOURCE}. A compile that

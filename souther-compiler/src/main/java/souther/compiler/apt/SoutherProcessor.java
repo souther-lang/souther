@@ -133,15 +133,10 @@ public final class SoutherProcessor extends AbstractProcessor {
                 located, index -> contextOf(sources, index), new HumanRenderer(false), locale);
     }
 
-    /**
-     * The source a diagnostic tagged with {@code index} came from, or null when it names none and
-     * there is more than one to choose from (so no line is quoted). A compile of one file names no
-     * source — the caller knows the file it handed over — so the single file it was given is the
-     * answer there however the diagnostic is tagged.
-     */
+    /** The text a diagnostic tagged with {@code index} should quote, or null when it names no
+     *  source this compilation has (so no line is quoted). */
     private static SourceContext contextOf(List<Source> sources, int index) {
-        Source origin = sources.size() == 1 ? sources.get(0)
-                : index >= 0 && index < sources.size() ? sources.get(index) : null;
+        Source origin = Located.in(sources, index);
         return origin == null ? null
                 : new SourceContext(origin.path().getFileName().toString(), origin.text());
     }

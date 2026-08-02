@@ -132,7 +132,7 @@ class WarningReportingTest {
 
         String reported = capture(() -> Main.main(new String[]{
                 "compile", "--lang", "en", a.toString(), b.toString(),
-                "-d", Files.createTempDirectory("souther-warn-out").toString()}));
+                "-d", Files.createTempDirectory("souther-warn-out").toString()})).err();
 
         assertTrue(reported.contains("a.sou:10:5"),
                 "the warning belongs to the module that declares the construction: " + reported);
@@ -143,46 +143,23 @@ class WarningReportingTest {
     void runWarnsOnStderrAndKeepsItsResultOnStdout() throws Exception {
         Path file = write("probe.sou", UNPROVEN);
 
-        PrintStream outWas = System.out;
-        PrintStream errWas = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[]{"run", "--lang", "en", file.toString(), "--input", "5"});
-        } finally {
-            System.setOut(outWas);
-            System.setErr(errWas);
-        }
+        Captured ran = capture(() -> Main.main(
+                new String[]{"run", "--lang", "en", file.toString(), "--input", "5"}));
 
-        assertEquals("5", out.toString(StandardCharsets.UTF_8).strip(),
+        assertEquals("5", ran.out().strip(),
                 "a caller piping the result reads the behavior's output and nothing else");
-        assertTrue(err.toString(StandardCharsets.UTF_8).contains("probe.sou:8:5"),
-                err.toString(StandardCharsets.UTF_8));
+        assertTrue(ran.err().contains("probe.sou:8:5"), ran.err());
     }
 
     @Test
     void runKeepsTheStreamsApartInJsonToo() throws Exception {
         Path file = write("probe.sou", UNPROVEN);
 
-        PrintStream outWas = System.out;
-        PrintStream errWas = System.err;
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
-        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
-        try {
-            Main.main(new String[]{
-                    "run", "--format", "json", "--lang", "en", file.toString(), "--input", "5"});
-        } finally {
-            System.setOut(outWas);
-            System.setErr(errWas);
-        }
+        Captured ran = capture(() -> Main.main(new String[]{
+                "run", "--format", "json", "--lang", "en", file.toString(), "--input", "5"}));
 
-        assertEquals("5", out.toString(StandardCharsets.UTF_8).strip());
-        assertTrue(err.toString(StandardCharsets.UTF_8).contains("\"severity\":\"warning\""),
-                err.toString(StandardCharsets.UTF_8));
+        assertEquals("5", ran.out().strip());
+        assertTrue(ran.err().contains("\"severity\":\"warning\""), ran.err());
     }
 
     /** What {@code souther compile} writes to stderr for {@code file}. */
@@ -192,19 +169,28 @@ class WarningReportingTest {
         args.add(file.toString());
         args.add("-d");
         args.add(Files.createTempDirectory("souther-warn-out").toString());
-        return capture(() -> Main.main(args.toArray(new String[0])));
+        return capture(() -> Main.main(args.toArray(new String[0]))).err();
     }
 
-    private static String capture(Action action) throws Exception {
-        PrintStream original = System.err;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setErr(new PrintStream(captured, true, StandardCharsets.UTF_8));
+    /** What an action wrote to each stream. Both are captured because the point of several of these
+     *  tests is that the two carry different things. */
+    private record Captured(String out, String err) {}
+
+    private static Captured capture(Action action) throws Exception {
+        PrintStream outWas = System.out;
+        PrintStream errWas = System.err;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
         try {
             action.run();
         } finally {
-            System.setErr(original);
+            System.setOut(outWas);
+            System.setErr(errWas);
         }
-        return captured.toString(StandardCharsets.UTF_8);
+        return new Captured(out.toString(StandardCharsets.UTF_8),
+                err.toString(StandardCharsets.UTF_8));
     }
 
     private static Path write(String name, String content) throws Exception {
