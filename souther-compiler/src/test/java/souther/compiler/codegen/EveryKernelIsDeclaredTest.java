@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.Prelude;
+import souther.compiler.ast.Ast;
 
 import org.junit.jupiter.api.Test;
 
@@ -22,12 +23,8 @@ class EveryKernelIsDeclaredTest {
 
     @Test
     void everyEmittedKernelHasADeclarationNamingIt() {
-        Set<String> declared = new LinkedHashSet<>();
-        for (Prelude.IntrinsicSig sig : Prelude.intrinsics().values()) {
-            declared.add(sig.key());
-        }
         Set<String> emittedWithNoDeclaration = new LinkedHashSet<>(Intrinsics.keys());
-        emittedWithNoDeclaration.removeAll(declared);
+        emittedWithNoDeclaration.removeAll(declaredKeys());
 
         assertEquals(Set.of(), emittedWithNoDeclaration,
                 "a kernel is emitted that no declaration describes");
@@ -40,13 +37,24 @@ class EveryKernelIsDeclaredTest {
         Set<String> writtenOut = Set.of("int.divide", "int.remainder", "decimal.divide");
 
         Set<String> declaredWithNoEmitter = new LinkedHashSet<>();
-        for (Prelude.IntrinsicSig sig : Prelude.intrinsics().values()) {
-            if (!Intrinsics.keys().contains(sig.key()) && !writtenOut.contains(sig.key())) {
-                declaredWithNoEmitter.add(sig.key());
+        for (String key : declaredKeys()) {
+            if (!Intrinsics.keys().contains(key) && !writtenOut.contains(key)) {
+                declaredWithNoEmitter.add(key);
             }
         }
 
         assertEquals(Set.of(), declaredWithNoEmitter,
                 "a kernel is declared that nothing emits");
+    }
+
+    /** The kernel keys the library's declarations name: the entries whose body is a kernel. */
+    private static Set<String> declaredKeys() {
+        Set<String> declared = new LinkedHashSet<>();
+        for (Prelude.PreludeEntry entry : Prelude.entries().values()) {
+            if (entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
+                declared.add(kernel.key());
+            }
+        }
+        return declared;
     }
 }

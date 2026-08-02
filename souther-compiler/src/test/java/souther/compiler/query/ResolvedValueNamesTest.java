@@ -42,8 +42,8 @@ class ResolvedValueNamesTest {
     private static List<Ast.Expr> named(Ast.Module m) {
         List<Ast.Expr> out = new ArrayList<>();
         for (Ast.FnDef fn : m.fns()) {
-            if (fn.body() != null) {
-                collect(fn.body(), out);
+            if (fn.body() instanceof Ast.FnBody.Written w) {
+                collect(w.expr(), out);
             }
         }
         return out;

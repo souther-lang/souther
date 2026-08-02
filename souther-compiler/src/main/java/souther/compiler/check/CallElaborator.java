@@ -110,15 +110,16 @@ public final class CallElaborator {
         if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
             return null;
         }
-        Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(lib.qualified());
-        if (intrinsic == null || !intrinsic.params().isEmpty()) {
+        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
+        if (entry == null || !entry.declaration().params().isEmpty()) {
             return null;
         }
+        Type declared = entry.signature().result();
         Map<String, Type> bindings = new HashMap<>();
-        BottomInfer.pinResultTypeVars(intrinsic.result(), expected, bindings, ctx.symbols(),
+        BottomInfer.pinResultTypeVars(declared, expected, bindings, ctx.symbols(),
                 v.pos(), "the type of " + lib.qualified());
         return new Core.Call(lib.qualified(), List.of(),
-                TypeOps.toBottom(TypeOps.substitute(intrinsic.result(), bindings)), v.pos());
+                TypeOps.toBottom(TypeOps.substitute(declared, bindings)), v.pos());
     }
 
     static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
@@ -296,13 +297,11 @@ public final class CallElaborator {
             throw new Unanswerable(call.pos());
         }
         boolean library = call.denotes() instanceof ValueName.Stdlib;
-        // A shipped intrinsic behaves like a built-in: check the call against its declared signature
-        // (from the prelude) and yield its result type; the backend emits the primitive for its key.
-        Prelude.IntrinsicSig intrinsic = library ? Prelude.intrinsics().get(call.reaches()) : null;
+        Prelude.PreludeEntry entry = library ? Prelude.entry(call.reaches()) : null;
         // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
         // `()` would be a second spelling of it. The library was the last place that spelling was
         // still accepted.
-        if (intrinsic != null && intrinsic.params().isEmpty()) {
+        if (entry != null && entry.declaration().params().isEmpty()) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.apply.notfunction")
                             .title("check.apply.notfunction.title")
@@ -311,7 +310,12 @@ public final class CallElaborator {
                     "`" + call.written() + "` is a value, not a function, so it takes no `()` — write `"
                             + call.written() + "` on its own");
         }
-        if (intrinsic != null) {
+        // A shipped kernel behaves like a built-in: check the call against the declared signature
+        // and yield its result type; the backend emits the primitive for its key. A Souther-bodied
+        // library call — a recursive helper such as `List.foldFrom` — is not one of these and takes
+        // the paths below, as any helper does.
+        if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
+            Prelude.Signature intrinsic = entry.signature();
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.arity").title("check.arity.title")
@@ -352,15 +356,15 @@ public final class CallElaborator {
                 if (intrinsic.params().get(i) instanceof Type.FnOf declaredStep) {
                     ca.put(i, Elaborator.resolveStepBinding(call.written(), declaredStep, args.get(i),
                             bindings, env, ctx));
-                    requiresOrderedKey(intrinsic.key(), call, declaredStep, bindings, ctx);
+                    requiresOrderedKey(kernel.key(), call, declaredStep, bindings, ctx);
                 }
             }
             Type result = TypeOps.substitute(intrinsic.result(), bindings);
-            requiresOrdering(intrinsic.key(), call, result, ctx);
-            if (intrinsic.key().equals("list.sum") || intrinsic.key().equals("list.product")) {
+            requiresOrdering(kernel.key(), call, result, ctx);
+            if (kernel.key().equals("list.sum") || kernel.key().equals("list.product")) {
                 return numericFold(call, result, expected);
             }
-            if (intrinsic.key().equals("string.matches")) {
+            if (kernel.key().equals("string.matches")) {
                 validateRegexPattern(args.get(0));
             }
             return result;

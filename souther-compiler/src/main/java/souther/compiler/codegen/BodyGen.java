@@ -1130,9 +1130,9 @@ final class BodyGen {
                 }
                 default -> { }
             }
-            Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(call.fn());
-            if (intrinsic != null) {
-                Intrinsics.emit(this, intrinsic.key(), call);
+            Prelude.PreludeEntry entry = Prelude.entry(call.fn());
+            if (entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic kernel) {
+                Intrinsics.emit(this, kernel.key(), call);
                 return;
             }
             switch (call.fn()) {

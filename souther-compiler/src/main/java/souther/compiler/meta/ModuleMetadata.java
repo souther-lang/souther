@@ -189,9 +189,9 @@ public final class ModuleMetadata {
         // A behavior's body is not published — a reader has its signature and calls it — so a
         // behavior's own `let` is not carried whatever its shape.
         for (Ast.FnDef fn : HelperInliner.helpersOf(module).values()) {
-            if (exposed.contains(fn.name()) && fn.body() != null) {
+            if (exposed.contains(fn.name()) && fn.body() instanceof Ast.FnBody.Written w) {
                 reached.add(fn.name());
-                reach(fn.body(), own, reached);
+                reach(w.expr(), own, reached);
             }
         }
         List<String> texts = new ArrayList<>();
@@ -215,9 +215,9 @@ public final class ModuleMetadata {
             default -> null;
         };
         if (named != null && own.containsKey(named) && reached.add(named)) {
-            Ast.Expr body = own.get(named).body();
-            if (body != null) {   // an `intrinsic` helper is a name with nothing to walk into
-                reach(body, own, reached);
+            // an `intrinsic` helper is a name with nothing to walk into
+            if (own.get(named).body() instanceof Ast.FnBody.Written w) {
+                reach(w.expr(), own, reached);
             }
         }
         Ast.forEachChild(e, c -> reach(c, own, reached));

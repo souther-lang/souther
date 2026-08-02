@@ -1206,12 +1206,14 @@ public final class ExampleVerifier {
      */
     private Ast.Expr valueBody(String name) {
         for (Ast.FnDef fn : module.fns()) {
-            if (fn.name().equals(name) && fn.params().isEmpty() && fn.body() != null) {
-                return fn.body();
+            if (fn.name().equals(name) && fn.params().isEmpty()
+                    && fn.body() instanceof Ast.FnBody.Written w) {
+                return w.expr();
             }
         }
         Ast.FnDef imported = values.get(name);
-        return imported != null && imported.params().isEmpty() ? imported.body() : null;
+        return imported != null && imported.params().isEmpty()
+                && imported.body() instanceof Ast.FnBody.Written w ? w.expr() : null;
     }
 
     /**
@@ -1287,7 +1289,7 @@ public final class ExampleVerifier {
      * A helper that has one is applied; the ones that never do are the standard library's intrinsics
      * and a helper whose body produces a function, and both read as this. */
     private boolean noMethod(String name) {
-        if (Prelude.hasQualified(name)) {
+        if (Prelude.isLibraryFunction(name)) {
             return true;   // a standard-library function: an intrinsic, or one nothing emitted here
         }
         for (Ast.FnDef fn : module.fns()) {

@@ -229,7 +229,7 @@ class InvariantCombinatorRulesTest {
     @Test
     void everyRuleIsKeyedByANameTheAnalysisStillSees() {
         for (String fn : InvariantChecker.combinatorNames()) {
-            assertTrue(Prelude.hasQualified(fn), fn + " is not a standard-library operation");
+            assertTrue(Prelude.isLibraryFunction(fn), fn + " is not a standard-library operation");
             assertFalse(Prelude.sugared(fn),
                     fn + " is rewritten to another call before this tree is read, so its rule cannot"
                             + " fire — key the rule by what the rewrite leaves");

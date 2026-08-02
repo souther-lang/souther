@@ -72,7 +72,7 @@ public final class Exposing {
             }
             for (String name : imp.names()) {
                 String qualified = imp.module() + "." + name;
-                if (!Prelude.hasQualified(qualified)) {
+                if (!Prelude.isLibraryFunction(qualified)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.import.notstdfn").title("check.module.title")
                                     .at(imp.pos()).args(name, imp.module()).build(),

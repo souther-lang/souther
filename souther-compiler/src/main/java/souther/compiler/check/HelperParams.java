@@ -132,7 +132,7 @@ final class HelperParams {
             if (open.isEmpty()) {
                 return null;
             }
-            body = inliner.inline(h.body(), inliner.bodyOf(h.name()));
+            body = inliner.inline(h.written(), inliner.bodyOf(h.name()));
         } catch (CompileException _) {
             return null;   // a written type or a call that does not resolve; the check reports it
         }
@@ -150,7 +150,7 @@ final class HelperParams {
                             new Ast.RetType(List.of(Ast.TypeRef.of(t, p.pos())), p.pos()),
                             p.typeFromPattern()));
         }
-        return new Ast.FnDef(h.name(), params, h.declaredReturn(), h.intrinsicKey(), h.body(),
+        return new Ast.FnDef(h.name(), params, h.declaredReturn(), h.body(),
                 h.partial(), h.pos());
     }
 
@@ -406,8 +406,11 @@ final class HelperParams {
             if (recursiveHelperFns.get(fn) instanceof Type.FnOf sig) {
                 return sig.params();
             }
-            Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(fn);
-            return intrinsic == null ? null : intrinsic.params();
+            // Only a kernel's signature: a Souther-bodied library callee here is a recursive
+            // helper, and those are answered above with the types their call site instantiated.
+            Prelude.PreludeEntry entry = Prelude.entry(fn);
+            return entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic
+                    ? entry.signature().params() : null;
         }
 
         private boolean isParam(Ast.Expr e, String name) {

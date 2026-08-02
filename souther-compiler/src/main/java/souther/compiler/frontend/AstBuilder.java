@@ -423,7 +423,8 @@ public final class AstBuilder {
                                 + " namespace may declare one (ADR-0028)");
             }
             String key = stringValue(intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow().text());
-            return new Ast.FnDef(name, params, declaredReturn, key, null, partial, pos);
+            return new Ast.FnDef(name, params, declaredReturn, new Ast.FnBody.Intrinsic(key),
+                    partial, pos);
         }
         SyntaxNode bodyNode = onlyExpr(n);
         Ast.Expr body = expr(bodyNode);
@@ -455,7 +456,8 @@ public final class AstBuilder {
                 body = bindPattern(pat, new Ast.Var(params.get(i).name(), at), body, at);
             }
         }
-        return new Ast.FnDef(name, params, declaredReturn, null, body, partial, pos);
+        return new Ast.FnDef(name, params, declaredReturn, new Ast.FnBody.Written(body), partial,
+                pos);
     }
 
     private Ast.FnParam fnParam(SyntaxNode p, SyntaxNode pat) {
