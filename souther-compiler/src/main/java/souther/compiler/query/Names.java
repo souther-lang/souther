@@ -17,6 +17,7 @@ import souther.compiler.types.ValueName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -645,7 +646,8 @@ public final class Names {
             // type in its place. The answer is present, so an editor can still say what the names
             // around the mistake mean; what must not happen — emitting a module with a hole in it —
             // is stopped where the module is checked.
-            List<Report> reports = new ArrayList<>();
+            List<Report> reports = new ArrayList<>(
+                    valueNamespaceCollisions(db, available.value()));
             for (CompileException unresolved : resolution.unresolved()) {
                 reports.addAll(Report.of(unresolved));
             }
@@ -1114,6 +1116,69 @@ public final class Names {
                         .at(imp.pos()).args(imp.alias(), taken)
                         .hint("check.import.aliastaken.hint").build(),
                 "the alias `" + imp.alias() + "` is already how `" + taken + "` is named here");
+    }
+
+    /**
+     * Every way a spelling reaches this module's value namespace, and a report for each spelling that
+     * reaches it twice.
+     *
+     * <p>A data reaches it — a unit data is a value, a newtype is applied to what it wraps, a record
+     * is constructed by its name — and so do a {@code let}, a behavior, a definition another module
+     * publishes, and a standard-library qualifier. One name means one thing there, whichever way it
+     * arrived. A spelling with two meanings is answered by whichever reader looks first, which is how
+     * a name could be a unit data where it stood alone and an imported helper where it was applied.
+     *
+     * <p>Asked here because this is where the namespace is assembled (see {@link #reachableValues}).
+     * A rule stated per arrival would have to be restated for each new way in.
+     *
+     * <p>A behavior and a {@code let} of one name are not two: they are the declaration and the
+     * implementation of one thing (ADR-0072).
+     */
+    private static List<Report> valueNamespaceCollisions(Db db, Ast.Module m) {
+        List<Report> reports = new ArrayList<>();
+        Map<String, Ast.Def> declared = new LinkedHashMap<>();
+        for (Ast.Def def : m.defs()) {
+            // A standard-library qualifier is the only spelling that reaches the library, so a data
+            // of that name hides it — from every module, since the qualifier is not this module's to
+            // shadow. Refused where it is declared, as a reserved module name is (see Front).
+            if (Prelude.isQualifier(def.name())) {
+                reports.add(Report.raised(
+                        Diagnostic.of(null, "check.data.qualifier").title("check.duplicate.title")
+                                .at(def.pos()).args(def.name()).build(),
+                        "data `" + def.name() + "` uses a name reserved for the standard-library"
+                                + " qualifier `" + def.name() + "` (as in `" + def.name()
+                                + ".…`); pick another name"));
+            }
+            declared.put(def.name(), def);
+        }
+        Set<String> implementing = new HashSet<>();
+        for (Ast.BehaviorDef b : m.behaviors()) {
+            implementing.add(b.name());
+        }
+        for (Ast.FnDef fn : m.fns()) {
+            if (implementing.contains(fn.name()) || !declared.containsKey(fn.name())) {
+                continue;
+            }
+            reports.add(Report.raised(
+                    Diagnostic.of(null, "check.dup.valuename").title("check.duplicate.title")
+                            .at(fn.pos()).args(fn.name()).build(),
+                    "`let " + fn.name() + "` and data `" + fn.name()
+                            + "` are one name where a value is written; rename one"));
+        }
+        // A definition another module publishes is written here bare (ADR-0075), so it arrives in
+        // this namespace exactly as one of this module's own does — and collides the same way.
+        for (Ast.Import imp : m.imports()) {
+            Ast.Module from = db.ask(new Front.Available(imp.module())).value();
+            if (from == null) {
+                continue;
+            }
+            for (String published : Bodies.publishedNames(from, imp.names())) {
+                if (declared.containsKey(published)) {
+                    reports.add(importCollision(published, imp, null));
+                }
+            }
+        }
+        return reports;
     }
 
     /**

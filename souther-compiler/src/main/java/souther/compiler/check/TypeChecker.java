@@ -246,7 +246,6 @@ public final class TypeChecker {
                         "duplicate `let " + fn.name() + "`");
             }
         }
-        rejectValueNamespaceCollisions(module);
         Set<String> allBehaviors = new HashSet<>();
         Set<String> specNames = new HashSet<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
@@ -457,37 +456,6 @@ public final class TypeChecker {
             symbols.put(def.name(), def);
         }
         return new Declared(symbols, List.copyOf(rejected));
-    }
-
-    /**
-     * One name in the value namespace means one thing. A data reaches that namespace — a unit data is
-     * a value, a newtype is applied to what it wraps, a record is constructed by its name — so a
-     * {@code let} sharing the name would be a second answer to one spelling, and the type wins because
-     * a name resolves to a type first. Elm keeps the two apart by capitalization and F# lets the later
-     * binding shadow the earlier one; Souther writes Japanese identifiers and does not read case, so
-     * neither is available and the collision is refused where it is declared.
-     *
-     * <p>A behavior and a same-named {@code let} are not a collision: they are the declaration and the
-     * implementation of one thing (the parameter counts are reconciled elsewhere).
-     */
-    private static void rejectValueNamespaceCollisions(Ast.Module module) {
-        Set<String> declared = new HashSet<>();
-        for (Ast.Def def : module.defs()) {
-            declared.add(def.name());
-        }
-        Set<String> implementing = new HashSet<>();
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            implementing.add(b.name());
-        }
-        for (Ast.FnDef fn : module.fns()) {
-            if (!implementing.contains(fn.name()) && declared.contains(fn.name())) {
-                throw CompileException.of(
-                        Diagnostic.of(null, "check.dup.valuename").title("check.duplicate.title")
-                                .at(fn.pos()).args(fn.name()).build(),
-                        "`let " + fn.name() + "` and data `" + fn.name()
-                                + "` are one name where a value is written; rename one");
-            }
-        }
     }
 
 }

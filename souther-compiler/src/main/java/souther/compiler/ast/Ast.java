@@ -382,6 +382,8 @@ public interface Ast {
     /** A top-level data definition: product, sum, or unit. */
     sealed interface Def extends Ast permits Data, SumData, UnitData {
         String name();
+
+        SourcePos pos();
     }
 
     /**
