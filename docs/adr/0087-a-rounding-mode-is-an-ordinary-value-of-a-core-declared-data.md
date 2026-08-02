@@ -52,8 +52,16 @@ data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOO
   required — a field of another data, an example fixture. A rounding policy is a computation's
   input, not a value that crosses a serialization boundary. The refusal is the ordinary
   missing-codec diagnostic, and tests pin both surfaces so the type never quietly gains an
-  external representation. (An enumeration that wants one derives it from a written
-  `decoder`/`encoder` clause; this declaration writes none.)
+  external representation.
+
+  The absence follows from where the declaration lives, and it is worth being exact about why,
+  because the obvious reading is wrong: an ordinary enumeration receives a default codec *through
+  derivation even when it writes no `decoder`/`encoder` clause* — `Deriver.deriveSum` supplies one
+  — so writing no clause would not keep a codec away. What keeps it away is that a runtime-backed
+  declaration belongs to no compiled module and therefore never enters derivation at all. The
+  consequence is that "no codec" cannot be arranged by omitting a clause from a module's own data,
+  and that routing a runtime-backed declaration through derivation would both produce a codec and
+  emit calls to codec factories on handwritten classes that have none.
 - **Shadowing follows the unit-data rules.** Rounding-mode cases are ordinary unit data; a binding
   may take a case's name and the local takes precedence. Shadowed cases have no qualified escape
   syntax — the same is true of every unit data, and this change does not add one.
