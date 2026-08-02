@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Located;
 
 import org.junit.jupiter.api.Test;
 

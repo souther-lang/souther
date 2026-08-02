@@ -37,6 +37,33 @@ class AnalyzerTest {
         assertEquals(1, d.range().start().line(), "the error is on the second line (0-based line 1)");
     }
 
+    /** A warning is all the invariant checker has to say about a construction it cannot prove, so an
+     *  editor that shows none leaves the author with nothing to read. */
+    @Test
+    void anUnprovenConstructionIsReportedAsAWarningWhereItIsWritten() {
+        String src = """
+                module demo
+
+                data Eaches = Int
+                    invariant value >= 0
+
+                behavior wrap : (n: Int) -> Eaches
+                    constructs Eaches
+                let wrap (n) = {
+                    let m = n
+                    Eaches(m)
+                }
+                """;
+        List<LspDiagnostic> diags = analyzer.diagnostics(src);
+
+        assertEquals(1, diags.size(), diags.toString());
+        LspDiagnostic d = diags.get(0);
+        assertEquals(LspDiagnostic.WARNING, d.severity());
+        assertEquals("E2011", d.code());
+        assertEquals(9, d.range().start().line(), "the construction is on the tenth line");
+        assertEquals(4, d.range().start().character());
+    }
+
     @Test
     void aSemanticErrorIsReportedWhenSyntaxIsClean() {
         // a type variable in a user module is a semantic error the compiler raises

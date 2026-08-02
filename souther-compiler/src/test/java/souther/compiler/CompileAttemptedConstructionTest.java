@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
 
 import java.util.List;

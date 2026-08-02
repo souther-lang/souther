@@ -17,6 +17,7 @@ import souther.compiler.cst.LineIndex;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.cst.SyntaxElement;
@@ -65,7 +66,7 @@ public final class Analyzer {
     private souther.compiler.meta.ModulePath compiledAgainst;
 
     /** All diagnostics for a document: every syntax error, or — when there are none — the first
-     * semantic error a compile turns up. */
+     * semantic error a compile turns up, or the warnings a clean compile found. */
     public List<LspDiagnostic> diagnostics(String text) {
         LineIndex lines = new LineIndex(text);
         List<LspDiagnostic> out = new ArrayList<>();
@@ -92,7 +93,9 @@ public final class Analyzer {
             }
             // A self-contained module compiles fully here, so its inline `example`s are evaluated
             // on save and a failing one (E1805) surfaces as an editor diagnostic.
-            Compiler.compile(text, "Main");
+            for (Located w : Compiler.compileWithWarnings(text, "Main").locatedWarnings()) {
+                out.add(fromDiagnostic(lines, w.diagnostic()));
+            }
         } catch (CompileException e) {
             out.addAll(fromCompile(lines, e));
         } catch (RuntimeException | StackOverflowError e) {

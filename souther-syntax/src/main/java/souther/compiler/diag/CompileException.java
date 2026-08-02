@@ -21,7 +21,7 @@ public class CompileException extends RuntimeException {
 
     /** A position is a line and a column, so a compile that was handed several sources also has to
      *  say which one — otherwise there is nothing to quote the line from. */
-    private static final int NO_SOURCE = -1;
+    private static final int NO_SOURCE = Located.NO_SOURCE;
 
     private final transient List<Diagnostic> diagnostics;
     /** One entry per diagnostic: which source it came from, or {@link #NO_SOURCE}. A compile that
@@ -134,6 +134,17 @@ public class CompileException extends RuntimeException {
      *  none. A renderer walking the list quotes each diagnostic's own file. */
     public int sourceIndexOf(int i) {
         return sources == null || i >= sources.size() ? NO_SOURCE : sources.get(i);
+    }
+
+    /** Every diagnostic this error carries, each with the source it came from — what a renderer
+     *  walks, and the shape a warning arrives in too, so one loop renders both. */
+    public List<Located> locatedDiagnostics() {
+        List<Diagnostic> ds = diagnostics();
+        List<Located> located = new java.util.ArrayList<>(ds.size());
+        for (int i = 0; i < ds.size(); i++) {
+            located.add(new Located(ds.get(i), sourceIndexOf(i)));
+        }
+        return List.copyOf(located);
     }
 
     /**
