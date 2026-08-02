@@ -97,12 +97,13 @@ class CompilePostfixApplicationTest {
     }
 
     /**
-     * The applied expression is worked out once and before any argument. Both sides construct, so
-     * getting the order wrong is visible in what the behavior is permitted to build; getting the
-     * count wrong would build twice.
+     * An application of a function an expression worked out answers what applying that function
+     * answers. Both sides are arithmetic, so this says the result is right and nothing about the
+     * order the two sides ran in — which arithmetic cannot show. That the callee is worked out once
+     * is said below, where it can be looked at.
      */
     @Test
-    void theAppliedExpressionIsWorkedOutOnceAndFirst() throws Exception {
+    void anApplicationOfAComputedFunctionWorks() throws Exception {
         Map<?, ?> out = run("""
                 module demo
 
@@ -117,6 +118,34 @@ class CompilePostfixApplicationTest {
                 """, Map.of("n", 3L));
 
         assertEquals(20L, out.get("m"), "(3+1) * (3+2)");
+    }
+
+    /**
+     * The callee expression stands once in the lowered body. A pass that rebuilt the application
+     * per argument, or read the callee once for its type and again for its value, would leave two —
+     * and with a callee that constructs, the second is a construction the behavior never wrote.
+     */
+    @Test
+    void theCalleeExpressionStandsOnce() {
+        Map<String, String> byId = new java.util.LinkedHashMap<>();
+        byId.put("a.sou", """
+                module demo
+                data In = { n: Int }
+                data Out = { m: Int }
+                let pick (k: Int) : (Int) -> Int = (x) -> x * k
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { m = pick(i.n + 1)(i.n + 2) }
+                """);
+        Ast.FnDef def = souther.compiler.query.Compilation
+                .ofDocuments(byId, java.util.Set.of(), souther.compiler.meta.ModulePath.EMPTY)
+                .db().ask(new souther.compiler.query.Bodies.SettledFn("demo", "go")).value();
+        assertEquals(1, occurrences(def.body(), "pick"), "the callee was worked out more than once");
+    }
+
+    private static int occurrences(Ast.Expr e, String callee) {
+        int[] n = {e instanceof Ast.Apply a && callee.equals(a.reaches()) ? 1 : 0};
+        Ast.forEachChild(e, c -> n[0] += occurrences(c, callee));
+        return n[0];
     }
 
     /** A field is still taken off what an application answered. */

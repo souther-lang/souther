@@ -29,11 +29,6 @@ public final class CallElaborator {
     /** The members of a primitive-headed union — {@code Int | DivisionByZero} — the output of a
      * partial built-in. The head is a primitive case, and the error case is declared by the runtime
      * rather than by a module (see {@link TypeName#RUNTIME}). */
-    private static Set<TypeName> primitiveHeaded(Type head, String errorCase) {
-        return new java.util.LinkedHashSet<>(
-                List.of(TypeName.primitive(Type.show(head)), TypeName.runtime(errorCase)));
-    }
-
     /**
      * The kernels whose element must be an ordered value, and where in the result to find it.
      *
@@ -41,10 +36,13 @@ public final class CallElaborator {
      * say (ADR-0053). The declaration states the shape and this states the rest, keyed by the kernel
      * it constrains — which is what {@code sort} has always done, written out by hand.
      */
-    private static final Map<String, Boolean> ORDERED_ELEMENT = Map.of(
-            "list.sort", false,       // the result is the list itself
-            "list.max", true,         // the result is `Option<element>`
-            "list.min", true);
+    /** Where the element whose order is required sits in a kernel's result. */
+    private enum OrderedElement { OF_THE_LIST, OF_THE_OPTION }
+
+    private static final Map<String, OrderedElement> ORDERED_ELEMENT = Map.of(
+            "list.sort", OrderedElement.OF_THE_LIST,
+            "list.max", OrderedElement.OF_THE_OPTION,
+            "list.min", OrderedElement.OF_THE_OPTION);
 
     /**
      * Refuses an element with no natural order. An ordered primitive has one, and so does a newtype
@@ -53,10 +51,11 @@ public final class CallElaborator {
      * fine: it sorts to itself and its max is {@code None}.
      */
     private static void requiresOrdering(String key, Ast.Apply call, Type result, CheckContext ctx) {
-        Boolean inOption = ORDERED_ELEMENT.get(key);
-        if (inOption == null) {
+        OrderedElement where = ORDERED_ELEMENT.get(key);
+        if (where == null) {
             return;
         }
+        boolean inOption = where == OrderedElement.OF_THE_OPTION;
         Type element = switch (result) {
             case Type.OptionOf o when inOption -> o.element();
             case Type.ListOf l when !inOption -> l.element();
@@ -112,7 +111,7 @@ public final class CallElaborator {
      * <p>The Core is the one the application spelling produced, so nothing downstream of here tells
      * the two apart — which is what keeps a growing fold's seed the seed it was.
      */
-    static Core libraryValue(Ast.Var v, Scope env, CheckContext ctx, Type expected) {
+    static Core libraryValue(Ast.Var v, CheckContext ctx, Type expected) {
         if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
             return null;
         }

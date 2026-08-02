@@ -223,9 +223,13 @@ public final class Elaborator {
                         new Core.OptionNone(expected, v.pos());
                 // a library name written with no parameter list where it was declared: a value,
                 // typed from the context as `[]` is
-                case ValueName.Stdlib _
-                        when CallElaborator.libraryValue(v, env, ctx, expected) != null ->
-                        CallElaborator.libraryValue(v, env, ctx, expected);
+                case ValueName.Stdlib _ -> {
+                    Core value = CallElaborator.libraryValue(v, ctx, expected);
+                    if (value == null) {
+                        throw notAValue(v, env);   // a library function, not a library value
+                    }
+                    yield value;
+                }
                 default -> throw notAValue(v, env);
             };
             case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);

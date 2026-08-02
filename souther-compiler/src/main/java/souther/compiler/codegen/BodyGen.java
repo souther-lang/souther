@@ -1066,8 +1066,6 @@ final class BodyGen {
             code.invokevirtual(owner, method, desc);
         }
 
-        /** Narrows an {@code Int} (a {@code long}) to a JVM {@code int}, for a JDK method taking an
-         * {@code int} index. */
         /** Puts a function value on the stack as an {@code Fn}, at the parameter types the position
          * fixed. A kernel that applies a function needs one; see {@link Intrinsics.TakesAFunction}. */
         void emitFn(Core value, List<Type> paramTypes) {
@@ -1080,6 +1078,8 @@ final class BodyGen {
             code.getstatic(CD_RoundingMode, ((Core.Builtin) arg).name(), CD_RoundingMode);
         }
 
+        /** Narrows an {@code Int} (a {@code long}) to a JVM {@code int}, for a JDK method taking an
+         * {@code int} index. */
         void emitL2i() {
             code.l2i();
         }

@@ -16,9 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * choice an {@code if} makes between them, and a binding that already holds one all reach the same
  * binding.
  *
- * <p>What is still refused is escape. A function bound and applied never becomes a runtime value —
- * it expands at the application — so the binding costs nothing; one that is carried off does, and
- * that is a separate question ([#blocks]).
+ * <p>What is still refused is a function whose type nothing settled. Returning one, choosing one at
+ * run time and holding one in a collection whose element type is written all work; what does not is
+ * a binding no declared type and no position reached, because a function value has to be emitted at
+ * some parameter types and there are none to emit it at ([#blocks]).
  */
 class CompileFunctionBindingTest {
 
@@ -155,12 +156,12 @@ class CompileFunctionBindingTest {
      * A recursive helper is a static method, reached by the name it is declared under. Bound and
      * applied that is still what happens.
      *
-     * <p>Storing one is refused, but not for being recursive: a lambda the author wrote is refused
-     * there too, and for the same reason ([#blocks]). The pair below says which of the two rules is
-     * doing the refusing.
+     * <p>The pair below is here to say which rule refuses the second half. Neither recursion nor
+     * storing is it: a lambda the author wrote is refused in the same place, and both are refused
+     * because nothing settled the function's type ([#blocks]).
      */
     @Test
-    void aRecursiveHelperIsBoundAndAppliedButIsNotStored() throws Exception {
+    void aFunctionWhoseTypeNothingSettledCannotBeStored() throws Exception {
         String bound = """
                 module demo
 

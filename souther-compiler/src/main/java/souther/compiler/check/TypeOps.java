@@ -631,7 +631,6 @@ public final class TypeOps {
         }
     }
 
-    /** Replaces the type variables bound by {@link #unify} in a result type. */
     /**
      * {@code t} with every type variable still free read as the bottom.
      *

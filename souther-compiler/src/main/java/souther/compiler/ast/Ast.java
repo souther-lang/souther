@@ -1019,9 +1019,6 @@ public interface Ast {
             return function instanceof Var v ? v.denotes() : null;
         }
 
-        public Apply denoting(ValueName resolved) {
-            return new Apply(((Var) function).denoting(resolved), args, origin, pos);
-        }
 
         /** The same application, carried into a body by a value that body named. A recursive helper
          * is lowered to a method rather than expanded, so a value reaching one leaves an application
