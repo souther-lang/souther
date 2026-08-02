@@ -201,7 +201,7 @@ public sealed interface Type
                 f.params().forEach(p -> collectNames(p, out));
                 collectNames(f.result(), out);
             }
-            default -> { }
+            case Prim _, Var _, Nothing _, Never _, Erroneous _ -> { }
         }
     }
 
@@ -256,9 +256,11 @@ public sealed interface Type
     }
 
     /** Whether {@code t}, or any type nested inside it, satisfies {@code p}. Tests {@code t} itself
-     * first, then recurses through the collection types ({@code List}/{@code Set}/{@code Option}
-     * element, {@code Map} key and value, {@code Tuple} members). The single tree walk both
-     * "contains a tuple" and "still carries the empty-collection bottom" are expressed over. */
+     * first, then recurses through every position that holds a type: a collection's element,
+     * a {@code Map}'s key and value, a {@code Tuple}'s members, a function type's parameters and
+     * result. A {@code Union} ends the walk: its members are names, not nested types. The single
+     * tree walk both "contains a tuple" and "still carries the empty-collection bottom" are
+     * expressed over. */
     static boolean mentions(Type t, java.util.function.Predicate<Type> p) {
         if (p.test(t)) {
             return true;
@@ -269,7 +271,9 @@ public sealed interface Type
             case OptionOf o -> mentions(o.element(), p);
             case MapOf m -> mentions(m.key(), p) || mentions(m.value(), p);
             case TupleOf tu -> tu.elements().stream().anyMatch(e -> mentions(e, p));
-            default -> false;
+            case FnOf f -> f.params().stream().anyMatch(a -> mentions(a, p))
+                    || mentions(f.result(), p);
+            case Prim _, Ref _, Var _, Nothing _, Never _, Erroneous _, Union _ -> false;
         };
     }
 }
