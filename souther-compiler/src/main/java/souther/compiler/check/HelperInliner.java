@@ -728,7 +728,7 @@ public final class HelperInliner {
      * (the one recursive helper) directly rather than through a wrapper that would pass the function on
      * as a value. */
     private static Ast.Apply desugarFold(Ast.Apply call) {
-        if (!call.fn().equals("List.fold") || call.args().size() != 3) {
+        if (!"List.fold".equals(call.fn()) || call.args().size() != 3) {
             return call;
         }
         List<Ast.Expr> args = new ArrayList<>(call.args());
@@ -839,7 +839,7 @@ public final class HelperInliner {
      * Null when the name is not a helper (a builtin, an injected behavior, or unknown).
      */
     private List<Ast.FnParam> declaredParams(Ast.Apply call) {
-        if (call.fn().equals("List.fold") && call.args().size() == 3) {
+        if ("List.fold".equals(call.fn()) && call.args().size() == 3) {
             Ast.FnDef foldFrom = helpers.get("List.foldFrom");
             return foldFrom == null ? null : foldFrom.params().subList(0, 3);
         }
@@ -921,6 +921,9 @@ public final class HelperInliner {
      */
     private Ast.FnDef expands(ValueName denotes, String reachedBy) {
         return switch (denotes) {
+            // applying something that is not a name: what is applied is worked out by the expression,
+            // and no declaration stands behind it
+            case null -> null;
             case ValueName.Local local -> scopedLambdas.get(local.id());
             case ValueName.Helper _, ValueName.Stdlib _ -> helpers.get(reachedBy);
             // a construction, an injected behavior, `None`, or a name that denotes nothing: each is
@@ -1017,6 +1020,17 @@ public final class HelperInliner {
             throw new IllegalStateException("nothing said which body this expansion is written into");
         }
         return switch (e) {
+            // Applying something other than a name. The applied expression is bound first and the
+            // application reads the binding, which is the shape every reader downstream already has
+            // — and which says outright what the order is: the function is worked out once, before
+            // any argument, and the binding is what is applied.
+            case Ast.Apply raw when !raw.appliesAName() -> {
+                Ast.Binder f = binders.binder("$fn" + counter++, raw.function().pos());
+                yield inline(new Ast.LetIn(f, raw.function(), null, false, null,
+                        new Ast.Apply(f.name(), new ValueName.Local(f.name(), f.id()), raw.args(),
+                                raw.origin(), raw.pos()),
+                        raw.pos()));
+            }
             case Ast.Apply rawCall -> {
                 checkFunctionArgumentPlacement(rawCall);
                 Ast.Apply call = desugarNamedBlock(desugarFold(rawCall));
@@ -1033,7 +1047,7 @@ public final class HelperInliner {
                     // builtin, injected behavior, a function-typed parameter, or a recursive helper —
                     // a recursive helper is lowered to a method, so its call stays a Call (spec 13.1);
                     // only its args inline.
-                    yield new Ast.Apply(call.fn(), call.denotes(), forwardDependencies(helper, args),
+                    yield new Ast.Apply(call.function(), forwardDependencies(helper, args),
                             call.origin(), call.pos());
                 }
                 if (args.size() != helper.params().size()) {
@@ -1382,7 +1396,7 @@ public final class HelperInliner {
                 new Ast.Apply(v.name(), v.denotes(), callArgs, ConstructionOrigin.own(), v.pos()), v.pos());
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
-        return new Ast.Apply(call.fn(), call.denotes(), args, call.origin(), call.pos());
+        return new Ast.Apply(call.function(), args, call.origin(), call.pos());
     }
 
     /**
@@ -1777,7 +1791,7 @@ public final class HelperInliner {
         if (e instanceof Ast.Apply call && !(call.denotes() instanceof ValueName.Local)) {
             // `List.fold` desugars to `List.foldFrom` before inlining, so a body that folds reaches the
             // recursive `foldFrom` — recursion classification and prelude-injection must see that.
-            String fn = call.fn().equals("List.fold") ? "List.foldFrom" : call.fn();
+            String fn = "List.fold".equals(call.fn()) ? "List.foldFrom" : call.fn();
             if (helpers.containsKey(fn)) {
                 out.add(fn);
             }

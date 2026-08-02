@@ -703,7 +703,7 @@ public final class InvariantChecker {
      * imported declaration is the body it expands to — {@code if b then false else true} over a
      * binding holding the argument. Both are read. */
     private static Ast.Expr negated(Ast.Expr e) {
-        if (e instanceof Ast.Apply call && call.fn().equals("Bool.not") && call.args().size() == 1) {
+        if (e instanceof Ast.Apply call && "Bool.not".equals(call.fn()) && call.args().size() == 1) {
             return call.args().get(0);
         }
         if (e instanceof Ast.LetIn li) {
@@ -1203,7 +1203,7 @@ public final class InvariantChecker {
     private static Ast.Apply withArg(Ast.Apply call, int at, Ast.Expr arg) {
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(at, arg);
-        return new Ast.Apply(call.fn(), call.denotes(), args, call.origin(), call.pos());
+        return new Ast.Apply(call.function(), args, call.origin(), call.pos());
     }
 
     /** An emptiness check as the comparison it means, or {@code e} unchanged. */

@@ -205,7 +205,7 @@ final class InvariantConstraints {
         // same way the check asks — one reading of which expressions are compile-time strings and of
         // what one composes to, so a pattern the check accepted cannot arrive here unrecognised and
         // lose its constraint. It has been compiled once at check time, so it is known well-formed.
-        if (base == Type.STRING && call.fn().equals("String.matches") && call.args().size() == 2
+        if (base == Type.STRING && "String.matches".equals(call.fn()) && call.args().size() == 2
                 && isValue(call.args().get(1))) {
             return ConstEval.evalString(call.args().get(0)).map(Pattern::new);
         }
@@ -213,7 +213,7 @@ final class InvariantConstraints {
         // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
         // is not the identity says it of something else — the elements' products, their ids — and Raoh
         // has no constraint for that, so the clause keeps its own check.
-        if (base instanceof Type.ListOf && call.fn().equals("List.allUniqueBy")
+        if (base instanceof Type.ListOf && "List.allUniqueBy".equals(call.fn())
                 && call.args().size() == 2 && isValue(call.args().get(1))
                 && isIdentity(call.args().get(0))) {
             return Optional.of(new Unique());
@@ -222,7 +222,7 @@ final class InvariantConstraints {
     }
 
     private static Optional<Constraint> ofStringLength(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
-        if (!(left instanceof Ast.Apply call) || !call.fn().equals("String.length")
+        if (!(left instanceof Ast.Apply call) || !"String.length".equals(call.fn())
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return Optional.empty();
         }

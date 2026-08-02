@@ -1101,7 +1101,7 @@ final class BodyGen {
             }
             // `sortBy` orders by what its key answers, not by what the list holds, so its comparator
             // is read off the key's result type.
-            if (call.fn().equals("List.sortBy")
+            if ("List.sortBy".equals(call.fn())
                     && call.args().get(0).type() instanceof Type.FnOf key
                     && TypeOps.orderingEnumeration(key.result(), symbols) instanceof TypeName ordering) {
                 code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
@@ -1143,7 +1143,7 @@ final class BodyGen {
                 case "Date", "DateTime" -> {
                     // a written date: the checker has already parsed the literal, so the text is
                     // known good and this is a plain parse of a constant string.
-                    ClassDesc cd = call.fn().equals("Date") ? CD_LocalDate : CD_LocalDateTime;
+                    ClassDesc cd = "Date".equals(call.fn()) ? CD_LocalDate : CD_LocalDateTime;
                     code.loadConstant(((Core.Str) call.args().get(0)).value());
                     code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
                 }

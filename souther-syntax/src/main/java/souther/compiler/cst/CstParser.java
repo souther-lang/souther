@@ -947,7 +947,36 @@ public final class CstParser {
             finish();
             return;
         }
+        postfixExpr();
+    }
+
+    /**
+     * A primary and everything written after it: a field taken off it, or an argument list applied
+     * to it. Both are left-recursive, so each wraps what came before.
+     *
+     * <p>Application is here rather than at an identifier, so what is applied is any expression —
+     * {@code choose(flag)(x)}, {@code (if c then f else g)(x)}. Souther's grammar is not newline
+     * sensitive, so an argument list on the next line applies to the line above, as a leading `.`
+     * or operator already continues it.
+     */
+    private void postfixExpr() {
         primaryExpr();
+        while (true) {
+            if (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
+                int m = markForFieldAccess();
+                wrap(m, SyntaxKind.FIELD_ACCESS);
+                bump();   // .
+                bump();   // field
+                finish();
+            } else if (at(SyntaxKind.LPAREN) && !lineBreakBeforeNextToken()) {
+                int m = markForFieldAccess();
+                wrap(m, SyntaxKind.APPLY_EXPR);
+                argList();
+                finish();
+            } else {
+                return;
+            }
+        }
     }
 
     private static boolean isCmpOp(SyntaxKind k) {
@@ -1285,21 +1314,6 @@ public final class CstParser {
             bump();   // ident
             finish();
         }
-        fieldAccessChain();
-    }
-
-    /** {@code .a.b} following a primary. What precedes it is any ident-led expression, so a newtype is
-     * opened on the call that builds it (`amountOf(i).value`) rather than through a binding written to
-     * hold the result (issue #158). A qualified call is taken before this, so `Mod.name(args)` is that
-     * call and not a field `name` read off `Mod`. */
-    private void fieldAccessChain() {
-        while (at(SyntaxKind.DOT) && nth(1) == SyntaxKind.IDENT) {
-            int m = markForFieldAccess();
-            wrap(m, SyntaxKind.FIELD_ACCESS);
-            bump();   // .
-            bump();   // field
-            finish();
-        }
     }
 
     private void newDataExpr() {
@@ -1471,6 +1485,28 @@ public final class CstParser {
     /** The kind of the nth meaningful token ahead (0 = current), stopping at EOF. */
     private SyntaxKind nth(int n) {
         return tokens.get(mi(n)).kind();
+    }
+
+    /**
+     * Whether a line break stands between the cursor and the next meaningful token.
+     *
+     * <p>An argument list is read as applying to what precedes it only when nothing separates them.
+     * Everywhere else the grammar ignores line breaks, and a leading `.` or operator continues the
+     * line above — but an argument list cannot: a block whose statement ends in a list or a tuple is
+     * followed by a result expression that often opens with `(`, and reading that as an application
+     * takes the block's result away. The standard library is written that way, so this is not a
+     * style one could ask authors to avoid.
+     */
+    private boolean lineBreakBeforeNextToken() {
+        for (int i = pos; i < tokens.size(); i++) {
+            if (!tokens.get(i).kind().isTrivia()) {
+                return false;
+            }
+            if (tokens.get(i).text().indexOf('\n') >= 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** The token index of the nth meaningful token ahead of {@code pos}. */

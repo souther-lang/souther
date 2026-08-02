@@ -543,8 +543,13 @@ public final class Resolve {
         return switch (e) {
             case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
                     valueName(v.name(), v.pos(), bound)));
-            case Ast.Apply call -> new Ast.Apply(call.fn(),
+            // Applying a name is answered as a name: which of a binding, a helper, a library
+            // function or a type it is decides what the application means. Applying anything else
+            // is answered as the expression it is, and what may be applied is the check's to say.
+            case Ast.Apply call when call.appliesAName() -> new Ast.Apply(call.fn(),
                     answered(call.fn(), call.pos(), calledName(call, bound)),
+                    exprs(call.args(), bound), call.origin(), call.pos());
+            case Ast.Apply call -> new Ast.Apply(expr(call.function(), bound),
                     exprs(call.args(), bound), call.origin(), call.pos());
             // `Map.empty`, `String.isEmpty` — a namespace and a member of it, which the parser read
             // as a field taken off a name because no `(` followed. Folded here and nowhere earlier:

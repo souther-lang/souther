@@ -108,6 +108,12 @@ public final class Exposing {
                 for (Ast.Expr a : c.args()) {
                     args.add(rw(a));
                 }
+                // Only a bare name can be one an import brought in. What an application applies is
+                // otherwise an expression, and rewriting it as a name would throw that expression
+                // away.
+                if (!c.appliesAName()) {
+                    yield new Ast.Apply(rw(c.function()), args, c.origin(), c.pos());
+                }
                 String fn = c.fn();
                 if (fn.indexOf('.') < 0 && exposed.containsKey(fn)) {
                     fn = exposed.get(fn);

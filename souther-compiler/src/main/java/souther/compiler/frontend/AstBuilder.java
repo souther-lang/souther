@@ -616,6 +616,7 @@ public final class AstBuilder {
             case VAR_EXPR -> new Ast.Var(firstIdentText(n), pos(n));
             case FIELD_ACCESS -> fieldAccess(n);
             case CALL_EXPR -> call(n);
+            case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
             case UNARY_EXPR -> new Ast.Neg(expr(onlyExpr(n)), pos(n));
             case PIPE_EXPR -> pipe(n);
@@ -685,6 +686,20 @@ public final class AstBuilder {
         return new Ast.Apply(fn.toString(), args, posOf(first));
     }
 
+    /** An argument list written after any expression. What is applied is the expression before it,
+     * so this is where a call whose callee is not a name is read. */
+    private Ast.Expr apply(SyntaxNode n) {
+        List<SyntaxNode> children = exprChildren(n);
+        Ast.Expr function = expr(children.get(0));
+        List<Ast.Expr> args = new ArrayList<>();
+        n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
+            for (SyntaxNode arg : exprChildren(list)) {
+                args.add(expr(arg));
+            }
+        });
+        return new Ast.Apply(function, args, ConstructionOrigin.own(), function.pos());
+    }
+
     private Ast.Expr binary(SyntaxNode n) {
         List<SyntaxNode> operands = exprChildren(n);
         SyntaxToken op = operatorToken(n);
@@ -719,7 +734,7 @@ public final class AstBuilder {
         if (right instanceof Ast.Apply c) {
             List<Ast.Expr> args = new ArrayList<>(c.args());
             args.add(left);
-            return new Ast.Apply(c.fn(), args, c.pos());
+            return new Ast.Apply(c.function(), args, c.origin(), c.pos());
         }
         if (right instanceof Ast.Var v) {
             return new Ast.Apply(v.name(), List.of(left), v.pos());
@@ -1215,7 +1230,8 @@ public final class AstBuilder {
 
     private static boolean isExprKind(SyntaxKind k) {
         return switch (k) {
-            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, BINARY_EXPR, UNARY_EXPR, PIPE_EXPR,
+            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, APPLY_EXPR, BINARY_EXPR,
+                 UNARY_EXPR, PIPE_EXPR,
                  PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR, MATCH_EXPR, LAMBDA_EXPR,
                  FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR, UNREACHABLE_EXPR -> true;
             default -> false;

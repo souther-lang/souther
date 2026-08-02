@@ -83,7 +83,7 @@ public final class NewtypeDesugar {
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), ConstructionOrigin.own(), call.pos());
                 }
-                yield new Ast.Apply(call.fn(), call.denotes(), args, call.origin(), call.pos());
+                yield new Ast.Apply(call.function(), args, call.origin(), call.pos());
             }
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();

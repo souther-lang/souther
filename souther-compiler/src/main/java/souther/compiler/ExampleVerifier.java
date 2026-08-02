@@ -1247,7 +1247,7 @@ public final class ExampleVerifier {
      * value and a fixture. Anything else applied here is a newtype or nothing.
      */
     private Object collectionOrNewtype(Ast.Apply c, Type expected) {
-        if (c.fn().equals("Set.fromList") || c.fn().equals("Map.fromList")) {
+        if ("Set.fromList".equals(c.fn()) || "Map.fromList".equals(c.fn())) {
             if (c.args().size() != 1) {
                 throw new FixtureException("`" + c.fn() + "` takes one argument");
             }
@@ -1264,7 +1264,7 @@ public final class ExampleVerifier {
      * a helper however it is spelled. Asked wherever an application has to be told from a construction,
      * so the two readers of a call cannot come to different answers. */
     private Ast.FnDef appliedHelper(Ast.Apply c) {
-        if (c.fn().equals("Set.fromList") || c.fn().equals("Map.fromList")
+        if ("Set.fromList".equals(c.fn()) || "Map.fromList".equals(c.fn())
                 || neutral.isNewtype(c.fn())) {
             return null;
         }
@@ -1330,7 +1330,7 @@ public final class ExampleVerifier {
     }
 
     private Object newtypeInner(Ast.Apply c) {
-        if (c.fn().equals("Date") || c.fn().equals("DateTime")) {
+        if ("Date".equals(c.fn()) || "DateTime".equals(c.fn())) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read
             if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {

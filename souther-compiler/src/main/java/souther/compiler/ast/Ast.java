@@ -972,9 +972,21 @@ public interface Ast {
             this(new Var(fn, denotes, pos), args, origin, pos);
         }
 
-        /** The name this applies as it was written, or null where what it applies is not a name. */
+        /**
+         * The name this applies as it was written, or the empty spelling where what it applies is
+         * not a name.
+         *
+         * <p>A reader keyed by name is asking which declaration this reaches, and an application of
+         * something other than a name reaches none. No name is empty, so the empty spelling is that
+         * answer wherever such a reader looks — a table miss, a comparison that fails.
+         */
         public String fn() {
-            return function instanceof Var v ? v.name() : null;
+            return function instanceof Var v ? v.name() : "";
+        }
+
+        /** Whether what this applies is a name, which is what the readers keyed by one are asking. */
+        public boolean appliesAName() {
+            return function instanceof Var;
         }
 
         /** What the name this applies denotes, or null where what it applies is not a name. */
