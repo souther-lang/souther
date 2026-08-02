@@ -546,6 +546,15 @@ public final class Resolve {
             case Ast.Apply call -> new Ast.Apply(call.fn(),
                     answered(call.fn(), call.pos(), calledName(call, bound)),
                     exprs(call.args(), bound), call.origin(), call.pos());
+            // `Map.empty`, `String.isEmpty` — a namespace and a member of it, which the parser read
+            // as a field taken off a name because no `(` followed. Folded here and nowhere earlier:
+            // Souther reads no case, so `Map` may be a parameter, and a binding in force wins over
+            // everything else — which is a fact the parser and the AST builder do not have.
+            case Ast.FieldAccess fa -> {
+                Ast.Var member = memberOfNamespace(fa, bound);
+                yield member != null ? member
+                        : new Ast.FieldAccess(expr(fa.target(), bound), fa.field(), fa.pos());
+            }
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
                 for (Ast.FieldInit i : nd.inits()) {
@@ -663,6 +672,28 @@ public final class Resolve {
             return helper;
         }
         return values.behaviors().get(written);
+    }
+
+    /**
+     * {@code Q.m} read as a member of the namespace {@code Q}, or null where it is an ordinary field
+     * read.
+     *
+     * <p>Only where {@code Q} is unbound. A parameter or a {@code let} named {@code Map} makes
+     * {@code Map.empty} that binding's {@code empty} field, resolved the ordinary way, and no
+     * namespace member is produced. Whether the namespace has a member {@code m} is not asked here —
+     * see {@link #lookup}.
+     *
+     * <p>The reference is written {@code Q.m} and positioned at {@code Q}, so what a reader asks
+     * about covers both tokens exactly as an applied qualified name already does.
+     */
+    private Ast.Var memberOfNamespace(Ast.FieldAccess fa, Bindings bound) {
+        if (!(fa.target() instanceof Ast.Var base) || base.denotes() != null
+                || bound.binderOf(base.name()) != null || !Prelude.isQualifier(base.name())) {
+            return null;
+        }
+        String written = base.name() + "." + fa.field();
+        return new Ast.Var(written,
+                answered(written, base.pos(), new ValueName.Stdlib(written)), base.pos());
     }
 
     /** What a name used as a value denotes, and the report for one that denotes nothing. */
