@@ -245,6 +245,42 @@ class CompileQuantifiedRelationTest {
     }
 
     @Test
+    void aClosureParameterMayShadowTheContainersRootName() {
+        String m = """
+                module demo
+                data Qty = Int
+                    invariant value >= 1
+                data Line = { quantity: Int }
+                data Cart = { items: List<Line> }
+                    invariant List.all(i -> i.quantity >= 1, items)
+                behavior toQty : (cart: Cart) -> List<Qty>
+                    constructs Qty
+                let toQty (cart) = List.map(cart -> Qty(cart.quantity), cart.items)
+                """;
+        assertEquals(0, warnings(m),
+                "the container is read before the parameter takes the name, so what it is called"
+                        + " does not decide the answer");
+    }
+
+    @Test
+    void aParameterTakingOverWhatThePredicateReadsDropsTheRelation() {
+        // the clause's `floor` is the cart's; inside the closure the name is the element's, and the
+        // two are not the same value
+        String m = """
+                module demo
+                data Qty = Int
+                    invariant value >= 1
+                data Line = { quantity: Int, floor: Int }
+                data Cart = { items: List<Line>, floor: Int }
+                    invariant List.all(i -> i.quantity >= floor, items)
+                behavior toQty : (cart: Cart) -> List<Qty>
+                    constructs Qty
+                let toQty (cart) = List.map(cart -> Qty(cart.quantity - cart.floor + 1), cart.items)
+                """;
+        assertEquals(1, warnings(m), "the relation reads a name the parameter took over");
+    }
+
+    @Test
     void aRelationIsDroppedWhereItsContainerIsRebound() {
         String m = """
                 module demo

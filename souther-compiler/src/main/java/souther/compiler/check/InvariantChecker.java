@@ -206,12 +206,20 @@ public final class InvariantChecker {
      *
      * <p>{@code through} is how far it travels: a construction of one of those shapes holds only
      * elements of what it was built from, so what was stated of the source still holds of each of
-     * them. {@code reads} is every term the clause names from outside itself, {@code container}
-     * included. A binding that takes over one of those names leaves the clause saying something else,
-     * so the relation is dropped there.
+     * them. {@code reads} is every term the <em>predicate</em> names from outside itself; a binding
+     * that takes over one of those names leaves the predicate saying something else. The container is
+     * kept apart from them because it is read where the call is written rather than inside the
+     * closure, so a closure parameter spelling its root does not reach it.
      */
     private record Quantified(String container, Set<Shape> through, Ast.Block predicate,
-                              Bindings binds, List<String> reads) {}
+                              Bindings binds, List<String> reads) {
+
+        /** Whether a binding that drops what {@code drop} matches leaves the predicate intact. The
+         * container is not asked: it is read outside the closure this is instantiated in. */
+        boolean survives(java.util.function.Predicate<String> drop) {
+            return reads.stream().noneMatch(drop);
+        }
+    }
 
     /** What the guards have settled on the current path: numeric relations, predicates known to hold
      * or to fail, and relations known of every element of a container. Threaded functionally through
@@ -242,7 +250,9 @@ public final class InvariantChecker {
         Known forgetIf(java.util.function.Predicate<String> drop) {
             List<Quantified> kept = new ArrayList<>();
             for (Quantified q : quantified) {
-                if (q.reads().stream().noneMatch(drop)) {
+                // Here the container is asked too: a relation this walk carries past the binding is
+                // one it may look up anywhere after it, where the name means what the binding gave.
+                if (!drop.test(q.container()) && q.survives(drop)) {
                     kept.add(q);
                 }
             }
@@ -431,6 +441,11 @@ public final class InvariantChecker {
                     && combo.listArg() < call.args().size()) {
                 Ast.Expr container = call.args().get(combo.listArg());
                 Type elem = elementType(typeExpr(container, types));
+                // The container is read where the call is written, so what is known of its elements
+                // is looked up before the closure's parameter takes any name over. Reading it after
+                // would make an argument spelling that name — `List.map(cart -> ..., cart.items)` —
+                // answer differently from one spelling any other, which is nothing the program says.
+                List<Quantified> relations = elementRelations(container, k, types);
                 Map<String, Type> t2 = new HashMap<>(types);
                 String p = step.params().get(combo.elementParam()).name();
                 Known k2 = rebind(k, p);
@@ -438,8 +453,13 @@ public final class InvariantChecker {
                     t2.put(p, elem);
                     k2 = seedParam(p, elem, k2);   // the element carries its type's invariant
                 }
-                for (Quantified q : elementRelations(container, k2, types)) {
-                    k2 = instantiate(q, p, elem, k2);
+                for (Quantified q : relations) {
+                    // What the predicate reads besides the element is still read inside the closure,
+                    // so a parameter that takes one of those names over does leave it saying
+                    // something else.
+                    if (q.survives(key -> mentions(key, p))) {
+                        k2 = instantiate(q, p, elem, k2);
+                    }
                 }
                 walk(step.body(), k2, t2);
             } else {
@@ -528,8 +548,7 @@ public final class InvariantChecker {
             return;
         }
         List<String> named = new ArrayList<>();
-        named.add(container);
-        reads(e, binds, Set.of(), named);
+        reads(p, binds, Set.of(), named);   // the predicate's own parameter is its own, and left out
         out.add(new Quantified(container, carried.through(), p, binds, List.copyOf(named)));
     }
 
