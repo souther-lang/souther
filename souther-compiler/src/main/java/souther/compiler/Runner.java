@@ -19,10 +19,17 @@ import net.unit8.raoh.encode.ObjectEncoders;
 
 import souther.runtime.Sets;
 
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.StreamReadConstraints;
+import tools.jackson.core.StreamWriteConstraints;
+import tools.jackson.core.TokenStreamContext;
+import tools.jackson.core.exc.StreamConstraintsException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.io.IOException;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -169,7 +176,7 @@ public final class Runner {
         }
 
         Object result = invoke(loader, module.name(), spec.name(), args);
-        Object encoded = encode(loader, module.name(), spec.name(), sig.out(), result);
+        Object encoded = encodeOutput(loader, module.name(), spec.name(), sig.out(), result);
         return writeJson(encoded);
     }
 
@@ -418,6 +425,24 @@ public final class Runner {
     }
 
     /**
+     * The whole output, encoded.
+     *
+     * <p>Encoding descends the value by recursion, so a value that nests deeply enough runs the stack
+     * out before the writer ever counts a level. A behavior can build a value deeper than anything it
+     * was handed, so this is reached from input the boundary accepted. A {@code StackOverflowError}
+     * is not a {@code RunException}, so left alone it reaches the caller as a stack trace.
+     */
+    private static Object encodeOutput(MemoryClassLoader loader, String pkg, String behavior,
+                                       Type out, Object result) {
+        try {
+            return encode(loader, pkg, behavior, out, result);
+        } catch (StackOverflowError _) {
+            throw fail("run.encode.toodeep",
+                    "the output nests too deeply for this boundary to encode.");
+        }
+    }
+
+    /**
      * The output as its declared type writes it. Which encoder that is follows the type the behavior
      * declared, never the class the answer happens to have arrived in: a case of a sum carries no
      * discriminator on its own encoder — only the sum's writes one — so taking the encoder off the
@@ -553,21 +578,126 @@ public final class Runner {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
+    /** How deep the mapper reads and writes before it refuses, counted in levels of JSON. */
+    private static final int READ_DEPTH_LIMIT =
+            StreamReadConstraints.defaults().getMaxNestingDepth();
+    private static final int WRITE_DEPTH_LIMIT =
+            StreamWriteConstraints.defaults().getMaxNestingDepth();
+
+    /**
+     * The depth a context stands at when its side has just refused a value for nesting. The two
+     * sides count differently, measured: reading stands on the level it refused to enter, and
+     * writing on the last level it accepted.
+     */
+    private static final int READ_REFUSAL_DEPTH = READ_DEPTH_LIMIT + 1;
+    private static final int WRITE_REFUSAL_DEPTH = WRITE_DEPTH_LIMIT;
+
+    /**
+     * Parses {@code --input}.
+     *
+     * <p>The parser is made here rather than left to {@code readTree(String)} because the exception a
+     * depth refusal throws carries neither a location nor the parser that raised it. Holding the
+     * parser is what lets the refusal name the path it gave up at, the way every other thing the
+     * boundary rejects is named.
+     *
+     * <p>Input with nothing in it reads as the missing node rather than as no node at all, so an
+     * empty {@code --input} reaches the same refusal as input of the wrong shape.
+     */
     private static JsonNode parseJson(String input) {
+        JsonParser parser = JSON.createParser(input);
         try {
-            return JSON.readTree(input);
+            JsonNode tree = JSON.readTree(parser);
+            return tree == null ? JSON.missingNode() : tree;
         } catch (Exception e) {
+            TokenStreamContext where = parser.streamReadContext();
+            if (refusedForDepth(e, where, READ_REFUSAL_DEPTH)) {
+                throw tooDeep("run.input.toodeep", "--input nests deeper than this boundary accepts",
+                        where, READ_DEPTH_LIMIT);
+            }
             throw fail("run.input.badjson", "--input is not valid JSON: " + e.getMessage(),
                     e.getMessage());
+        } finally {
+            parser.close();
         }
     }
 
+    /** Renders the encoded output. The generator is held for the same reason the parser is. */
     private static String writeJson(Object tree) {
+        StringWriter out = new StringWriter();
+        JsonGenerator generator = JSON.createGenerator(out);
         try {
-            return JSON.writeValueAsString(tree);
+            JSON.writeValue(generator, tree);
+            return out.toString();
         } catch (Exception e) {
+            // read before the close in `finally`, which resets the generator's context to the root
+            TokenStreamContext where = generator.streamWriteContext();
+            if (refusedForDepth(e, where, WRITE_REFUSAL_DEPTH)) {
+                throw tooDeep("run.output.toodeep",
+                        "the output nests deeper than this boundary can render",
+                        where, WRITE_DEPTH_LIMIT);
+            }
             throw fail("run.output.json", "could not render the output as JSON: " + e.getMessage(),
                     e.getMessage());
+        } finally {
+            generator.close();
         }
+    }
+
+    /**
+     * Whether {@code failure} is the reader or writer refusing a value for its depth.
+     *
+     * <p>{@code StreamConstraintsException} is not the depth refusal alone: the reader raises the
+     * same type for a number too long, a name too long, a string too long, a document too long and a
+     * token count too high. Which limit it was is asked of the context's own depth rather than of
+     * the exception's text, which is prose Jackson is free to rewrite.
+     *
+     * <p>Standing at {@code refusalDepth} is the depth refusal and can be nothing else. A value
+     * refused for another reason stands shallower: the reader admits scalars at every level up to
+     * the limit, so the deepest a long number can be refused at is one level short of where a
+     * refusal for depth stands. Every other constraint keeps the wording it had.
+     */
+    private static boolean refusedForDepth(Exception failure, TokenStreamContext where,
+                                           int refusalDepth) {
+        return failure instanceof StreamConstraintsException
+                && where.getNestingDepth() >= refusalDepth;
+    }
+
+    /**
+     * A value that nests deeper than the boundary handles, reported where it stopped.
+     *
+     * <p>The limit is named rather than the value's own depth: reading and writing both stop at the
+     * level that crosses the limit, so how much deeper the value goes was never counted. What is
+     * counted is levels of JSON, which is not levels of the data — one level of a self-referential
+     * data spends a level for its object and another for the list that carries the next one.
+     */
+    private static RunException tooDeep(String key, String english, TokenStreamContext where,
+                                        int limit) {
+        String path = depthPath(where);
+        return fail(key, english + ": " + path + " and below (JSON nesting past " + limit
+                + " levels)", path, limit);
+    }
+
+    /** How much of the path to the deepest level is worth reading. */
+    private static final int DEPTH_PATH_SEGMENTS = 8;
+
+    /**
+     * The path the depth limit was reached at, cut short. Nesting that deep is nesting that repeats,
+     * so the whole pointer runs to hundreds of segments of the same few names; the head is the part
+     * that says which branch went deep.
+     */
+    private static String depthPath(TokenStreamContext where) {
+        String pointer = where.pathAsPointer().toString();
+        if (pointer.isEmpty()) {
+            return "(root)";
+        }
+        int cut = 0;
+        for (int i = 0; i < DEPTH_PATH_SEGMENTS; i++) {
+            int next = pointer.indexOf('/', cut + 1);
+            if (next < 0) {
+                return pointer;
+            }
+            cut = next;
+        }
+        return pointer.substring(0, cut) + "/…";
     }
 }
