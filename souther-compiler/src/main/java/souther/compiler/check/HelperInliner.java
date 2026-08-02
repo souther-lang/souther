@@ -1088,7 +1088,6 @@ public final class HelperInliner {
                 // what each substituted callee resolved to at the call site, so the expansion carries
                 // the argument's own answer rather than deciding one for it
                 Map<BindingId, ValueName> substDenotes = new HashMap<>();
-                Set<BindingId> fnParams = new HashSet<>();
                 List<BindingId> given = new ArrayList<>();   // the lambdas given to fn params
                 List<Ast.Binder> letBinders = new ArrayList<>();
                 List<Ast.Expr> letValues = new ArrayList<>();
@@ -1104,12 +1103,10 @@ public final class HelperInliner {
                         if (arg instanceof Ast.Var fnName) {
                             subst.put(p.binder().id(), fnName.name());
                             substDenotes.put(p.binder().id(), fnName.denotes());
-                            fnParams.add(p.binder().id());
                         } else if (arg instanceof Ast.Block lambda) {
                             Ast.Binder f = binders.binder("$" + k + "_" + p.name(), lambda.pos());
                             subst.put(p.binder().id(), f.name());
                             substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
-                            fnParams.add(p.binder().id());
                             given.add(f.id());
                             List<Ast.FnParam> lparams = new ArrayList<>();
                             for (Ast.Binder lp : lambda.params()) {
@@ -1161,7 +1158,7 @@ public final class HelperInliner {
                 SourcePos at = keepsItsPositions(call) ? null : call.pos();
                 Copy copy = new Copy(helper.written(),
                         new BindingOwner.Expansion(into, call.denotes(), k));
-                Ast.Expr body = inline(rename(helper.written(), subst, substDenotes, fnParams, at, copy));   // expand nested helpers too
+                Ast.Expr body = inline(rename(helper.written(), subst, substDenotes, at, copy));   // expand nested helpers too
                 given.forEach(scopedLambdas::remove);
                 body = keepDeclaredReturn(helper, body, call.pos(), k);
                 // wrap innermost-first so the value parameters bind in declared order
@@ -1492,14 +1489,17 @@ public final class HelperInliner {
     }
 
     /**
-     * Capture-avoiding renaming of the helper's free parameter references. A binder that shadows a
-     * parameter name (a {@code let}, {@code match} binding, or block parameter of the same name)
-     * drops that name from the substitution for its scope, so an inner rebinding is left untouched.
+     * Renaming of the helper's parameter references, matched by {@code BindingId}. An inner binder
+     * that happens to spell a parameter's name is a different binding with a different id, so a
+     * reference under it names that binding, is not in the substitution, and is left untouched —
+     * capture avoidance is the resolver's answer, not a rule of this walk.
      *
-     * <p>{@code fnParams} names the parameters bound to a function argument: those are also rewritten
-     * in call position, so an application {@code f(x)} of a function parameter becomes a call to the
-     * fn it was passed. A value parameter is never rewritten as a callee, so a parameter that happens
-     * to share a builtin's name still calls the builtin.
+     * <p>A callee is renamed as the subexpression it is, so applying a name asks the same question a
+     * read of it asks and can only get the same answer: an application {@code f(x)} of a parameter
+     * becomes a call to what the parameter was bound to — a function argument, or a value whose type
+     * the application is then checked against. There is no separate rule for the callee position to
+     * fall out of step with. A spelling that means something else — a builtin, a helper — was
+     * resolved to that before renaming and is not a {@code ValueName.Local}, so it is left alone.
      *
      * <p>{@code at}, when non-null, is stamped onto every rebuilt node in place of its own position.
      * A prelude helper is expanded with the call site as {@code at}, so a type error inside its body
@@ -1509,8 +1509,7 @@ public final class HelperInliner {
      * argument expressions, spliced in separately, keep their own positions either way.
      */
     private Ast.Expr rename(Ast.Expr e, Map<BindingId, String> subst,
-                            Map<BindingId, ValueName> substDenotes, Set<BindingId> fnParams,
-                            SourcePos at, Copy copy) {
+                            Map<BindingId, ValueName> substDenotes, SourcePos at, Copy copy) {
         return switch (e) {
             // a substituted name keeps what the argument resolved to, so a named function handed to a
             // combinator stays the helper it is rather than becoming a binding of that spelling
@@ -1518,31 +1517,20 @@ public final class HelperInliner {
                     && subst.containsKey(p.id()) ->
                     new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()));
             case Ast.Var v -> new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
-            case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, substDenotes, fnParams, at, copy), fa.field(), at(at, fa.pos()));
-            // applying something that is not a name: the callee is renamed as the expression it is,
-            // like every other subexpression. Rebuilding it from a name would leave nothing here.
-            case Ast.Apply call when !call.appliesAName() -> new Ast.Apply(
-                    rename(call.function(), subst, substDenotes, fnParams, at, copy),
-                    renameList(call.args(), subst, substDenotes, fnParams, at, copy),
+            case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, substDenotes, at, copy), fa.field(), at(at, fa.pos()));
+            // the callee is renamed as the expression it is, like every other subexpression. A name
+            // applied is an `Ast.Var` held here, so it goes through the arm above and is substituted
+            // exactly as a read of it would be — the position cannot ask a different question.
+            case Ast.Apply call -> new Ast.Apply(
+                    rename(call.function(), subst, substDenotes, at, copy),
+                    renameList(call.args(), subst, substDenotes, at, copy),
                     call.origin(), at(at, call.pos()));
-            case Ast.Apply call -> {
-                // a substituted callee is the function argument this parameter was bound to, under
-                // the name this expansion gave it; anything else keeps what the call already denoted
-                BindingId param = call.denotes() instanceof ValueName.Local p ? p.id() : null;
-                boolean renamed = param != null && fnParams.contains(param);
-                String callee = renamed ? subst.get(param) : call.written();
-                ValueName denotes = renamed
-                        ? substituted(substDenotes, param) : copy.of(call.denotes());
-                yield new Ast.Apply(callee, denotes, renameList(call.args(), subst, substDenotes, fnParams, at, copy),
-                        call.origin(),
-                        at(at, call.pos()));
-            }
-            case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), subst, substDenotes, fnParams, at, copy), rename(bin.right(), subst, substDenotes, fnParams, at, copy), at(at, bin.pos()));
-            case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), subst, substDenotes, fnParams, at, copy), at(at, neg.pos()));
+            case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), subst, substDenotes, at, copy), rename(bin.right(), subst, substDenotes, at, copy), at(at, bin.pos()));
+            case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), subst, substDenotes, at, copy), at(at, neg.pos()));
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
                 for (Ast.FieldInit i : nd.inits()) {
-                    inits.add(new Ast.FieldInit(i.name(), rename(i.value(), subst, substDenotes, fnParams, at, copy), at(at, i.pos())));
+                    inits.add(new Ast.FieldInit(i.name(), rename(i.value(), subst, substDenotes, at, copy), at(at, i.pos())));
                 }
                 List<Ast.ValueRef> spreads = new ArrayList<>();
                 for (Ast.ValueRef s : nd.spreads()) {
@@ -1560,36 +1548,36 @@ public final class HelperInliner {
                 for (Ast.Case c : m.cases()) {
                     cases.add(new Ast.Case(c.caseTypes(),
                             c.binding() == null ? null : copy.of(c.binding()),
-                            rename(c.body(), subst, substDenotes, fnParams, at, copy),
+                            rename(c.body(), subst, substDenotes, at, copy),
                             c.unwrapAsserts(), at(at, c.pos())));
                 }
-                yield new Ast.Match(rename(m.scrutinee(), subst, substDenotes, fnParams, at, copy), cases, at(at, m.pos()));
+                yield new Ast.Match(rename(m.scrutinee(), subst, substDenotes, at, copy), cases, at(at, m.pos()));
             }
-            case Ast.If iff -> new Ast.If(rename(iff.cond(), subst, substDenotes, fnParams, at, copy), rename(iff.then(), subst, substDenotes, fnParams, at, copy), rename(iff.els(), subst, substDenotes, fnParams, at, copy), at(at, iff.pos()));
-            // the binder shadows in the success branch alone, so it is dropped from the substitution
-            // there and left standing over the construction and the else value
+            case Ast.If iff -> new Ast.If(rename(iff.cond(), subst, substDenotes, at, copy), rename(iff.then(), subst, substDenotes, at, copy), rename(iff.els(), subst, substDenotes, at, copy), at(at, iff.pos()));
+            // the success binder has its own BindingId, so a reference to it is not a candidate for
+            // substitution, and neither the construction nor the else value can reach it
             case Ast.IfConstructed ic -> new Ast.IfConstructed(
-                    rename(ic.construct(), subst, substDenotes, fnParams, at, copy), copy.of(ic.binder()),
-                    rename(ic.then(), subst, substDenotes, fnParams, at, copy),
-                    Ast.mapArms(ic.els(), body -> rename(body, subst, substDenotes, fnParams, at, copy)),
+                    rename(ic.construct(), subst, substDenotes, at, copy), copy.of(ic.binder()),
+                    rename(ic.then(), subst, substDenotes, at, copy),
+                    Ast.mapArms(ic.els(), body -> rename(body, subst, substDenotes, at, copy)),
                     at(at, ic.pos()));
             case Ast.LetIn li -> {
-                Ast.Expr value = rename(li.value(), subst, substDenotes, fnParams, at, copy);
-                Ast.Expr body = rename(li.body(), subst, substDenotes, fnParams, at, copy);
+                Ast.Expr value = rename(li.value(), subst, substDenotes, at, copy);
+                Ast.Expr body = rename(li.body(), subst, substDenotes, at, copy);
                 yield new Ast.LetIn(copy.of(li.binder()), value, li.declaredType(), li.annotated(),
                         li.opens(), body, at(at, li.pos()));
             }
-            case Ast.ListLit lit -> new Ast.ListLit(renameList(lit.elements(), subst, substDenotes, fnParams, at, copy), at(at, lit.pos()));
-            case Ast.Tuple tup -> new Ast.Tuple(renameList(tup.elements(), subst, substDenotes, fnParams, at, copy), at(at, tup.pos()));
-            case Ast.TupleGet tg -> new Ast.TupleGet(rename(tg.tuple(), subst, substDenotes, fnParams, at, copy), tg.index(), tg.arity(), at(at, tg.pos()));
-            case Ast.ListComp comp -> new Ast.ListComp(rename(comp.element(), subst, substDenotes, fnParams, at, copy), renameList(comp.guards(), subst, substDenotes, fnParams, at, copy), at(at, comp.pos()));
+            case Ast.ListLit lit -> new Ast.ListLit(renameList(lit.elements(), subst, substDenotes, at, copy), at(at, lit.pos()));
+            case Ast.Tuple tup -> new Ast.Tuple(renameList(tup.elements(), subst, substDenotes, at, copy), at(at, tup.pos()));
+            case Ast.TupleGet tg -> new Ast.TupleGet(rename(tg.tuple(), subst, substDenotes, at, copy), tg.index(), tg.arity(), at(at, tg.pos()));
+            case Ast.ListComp comp -> new Ast.ListComp(rename(comp.element(), subst, substDenotes, at, copy), renameList(comp.guards(), subst, substDenotes, at, copy), at(at, comp.pos()));
             case Ast.Block block -> {
                 List<Ast.Binder> params = new ArrayList<>();
                 for (Ast.Binder p : block.params()) {
                     params.add(copy.of(p));
                 }
                 yield new Ast.Block(params,
-                        rename(block.body(), subst, substDenotes, fnParams, at, copy),
+                        rename(block.body(), subst, substDenotes, at, copy),
                         at(at, block.pos()));
             }
             case Ast.IntLit _ -> e;
@@ -1628,10 +1616,10 @@ public final class HelperInliner {
 
     private List<Ast.Expr> renameList(List<Ast.Expr> es, Map<BindingId, String> subst,
                                       Map<BindingId, ValueName> substDenotes,
-                                      Set<BindingId> fnParams, SourcePos at, Copy copy) {
+                                      SourcePos at, Copy copy) {
         List<Ast.Expr> out = new ArrayList<>();
         for (Ast.Expr e : es) {
-            out.add(rename(e, subst, substDenotes, fnParams, at, copy));
+            out.add(rename(e, subst, substDenotes, at, copy));
         }
         return out;
     }
