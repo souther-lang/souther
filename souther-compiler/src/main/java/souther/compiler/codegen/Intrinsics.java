@@ -46,8 +46,64 @@ final class Intrinsics {
         return e.emit(g, call);
     }
 
-    sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold {
+    sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold, TakesAFunction,
+            TakesARoundingMode {
         Type emit(BodyGen g, Core.Call call);
+    }
+
+    /**
+     * A kernel taking a rounding mode. The mode is a name the language gives, read by the operation
+     * that takes it rather than evaluated, so it is emitted as the JDK constant it names rather than
+     * as an expression ([#stdlib-decimal]).
+     *
+     * <p>{@code l2iArgs} narrows an argument from Souther's Int to a JVM {@code int}; {@code owner}
+     * and {@code virtual} say whether the kernel is a static or a method on the value.
+     */
+    record TakesARoundingMode(ClassDesc owner, String method, boolean virtual, int mode,
+                              Set<Integer> l2iArgs, ClassDesc[] params, Type result) implements Emit {
+        public Type emit(BodyGen g, Core.Call call) {
+            for (int i = 0; i < call.args().size(); i++) {
+                if (i == mode) {
+                    g.emitRoundingMode(call.args().get(i));
+                    continue;
+                }
+                g.genExpr(call.args().get(i));
+                if (l2iArgs.contains(i)) {
+                    g.emitL2i();
+                }
+            }
+            MethodTypeDesc desc = MethodTypeDesc.of(boundaryDesc(result), params);
+            if (virtual) {
+                g.emitInvokeVirtual(owner, method, desc);
+            } else {
+                g.emitInvokeStatic(owner, method, desc);
+            }
+            return result;
+        }
+    }
+
+    /**
+     * A kernel taking a function value. The function is not inlined into the call — the kernel is
+     * what applies it — so it is materialised as an {@code Fn}, at the parameter types the container
+     * it walks supplies.
+     *
+     * <p>{@code container} is which argument that container is; {@code paramTypes} reads the
+     * function's parameter types off it. The function goes first on the stack, as the declarations
+     * write it.
+     */
+    record TakesAFunction(ClassDesc owner, String method, int container,
+                          Function<Type, List<Type>> paramTypes,
+                          Function<List<Type>, Type> result) implements Emit {
+        public Type emit(BodyGen g, Core.Call call) {
+            Type held = call.args().get(container).type();
+            g.emitFn(call.args().get(0), paramTypes.apply(held));
+            g.genExpr(call.args().get(container));
+            List<Type> byArg = List.of(call.args().get(0).type(), held);
+            Type resultType = result.apply(byArg);
+            g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(resultType),
+                    CD_Fn, boundaryDesc(held)));
+            return resultType;
+        }
     }
 
     /**
@@ -73,7 +129,7 @@ final class Intrinsics {
                 byArg[src] = t;
                 params[j] = erased ? CD_Object : boundaryDesc(t);
             }
-            Type resultType = result.apply(List.of(byArg));
+            Type resultType = result == null ? call.type() : result.apply(List.of(byArg));
             g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(resultType), params));
             return resultType;
         }
@@ -146,12 +202,23 @@ final class Intrinsics {
         if (t instanceof Type.SetOf) {
             return CD_Set;
         }
-        return CD_Object;   // Ref, Var, Tuple, Option, Union, Nothing
+        // An optional is a runtime class of its own, not an erased reference: a kernel answering one
+        // declares it, so the descriptor has to name it or the call finds no such method.
+        if (t instanceof Type.OptionOf) {
+            return CD_Option;
+        }
+        return CD_Object;   // Ref, Var, Tuple, Union, Nothing
     }
 
     // --- the registry ---
 
     private static final Map<String, Emit> TABLE = buildTable();
+
+    /** Every kernel key this table emits. A key here with no declaration naming it is a kernel the
+     *  library ships and no signature describes, which is what {@code BUILTINS} used to be. */
+    static Set<String> keys() {
+        return TABLE.keySet();
+    }
 
     private static int[] order(int... a) {
         return a;
@@ -159,6 +226,13 @@ final class Intrinsics {
 
     private static Emit rt(ClassDesc owner, String method, int[] argOrder, Function<List<Type>, Type> result) {
         return new RuntimeStatic(owner, method, argOrder, Set.of(), result);
+    }
+
+    /** The same, for a kernel whose result the declaration already states outright — nothing about
+     *  the arguments narrows it, so the type the checker settled is the answer rather than one this
+     *  table works out again. */
+    private static Emit rtDeclared(ClassDesc owner, String method, int[] argOrder) {
+        return new RuntimeStatic(owner, method, argOrder, Set.of(), null);
     }
 
     private static Emit rtErased(ClassDesc owner, String method, int[] argOrder, Set<Integer> objectSlots,
@@ -181,6 +255,9 @@ final class Intrinsics {
         Map<String, Emit> t = new java.util.LinkedHashMap<>();
 
         // String — JDK-native instance methods (explicit descriptor); receiver is the last Souther arg.
+        t.put("string.toInt", rtDeclared(CD_Strings, "toInt", order(0)));
+        t.put("string.toDecimal", rtDeclared(CD_Strings, "toDecimal", order(0)));
+        t.put("string.length", rt(CD_Strings, "length", order(0), ts -> Type.INT));
         t.put("string.trim", jdk(CD_String, "trim", mtd(CD_String), order(0), Type.STRING));
         t.put("string.lowercase", jdk(CD_String, "toLowerCase", mtd(CD_String), order(0), Type.STRING));
         t.put("string.uppercase", jdk(CD_String, "toUpperCase", mtd(CD_String), order(0), Type.STRING));
@@ -208,6 +285,23 @@ final class Intrinsics {
         t.put("string.fromDecimal", rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
 
         // List
+        t.put("decimal.toInt", new TakesARoundingMode(CD_DecimalMath, "toInt", false, 1,
+                Set.of(), new ClassDesc[] {CD_BigDecimal, CD_RoundingMode}, Type.INT));
+        t.put("decimal.round", new TakesARoundingMode(CD_BigDecimal, "setScale", true, 2,
+                Set.of(1), new ClassDesc[] {ConstantDescs.CD_int, CD_RoundingMode}, Type.DECIMAL));
+        t.put("list.sortBy", new TakesAFunction(CD_Lists, "sortBy", 1,
+                held -> List.of(((Type.ListOf) held).element()),
+                ts -> ts.get(1)));
+        t.put("list.find", new TakesAFunction(CD_Lists, "find", 1,
+                held -> List.of(((Type.ListOf) held).element()),
+                ts -> Type.option(((Type.ListOf) ts.get(1)).element())));
+        t.put("option.map", new TakesAFunction(CD_Options, "map", 1,
+                held -> List.of(((Type.OptionOf) held).element()),
+                ts -> Type.option(((Type.FnOf) ts.get(0)).result())));
+        t.put("list.max", rt(CD_Lists, "max", order(0), ts -> Type.option(listOf(ts, 0).element())));
+        t.put("list.min", rt(CD_Lists, "min", order(0), ts -> Type.option(listOf(ts, 0).element())));
+        t.put("list.length", rt(CD_Lists, "length", order(0), ts -> Type.INT));
+        t.put("list.get", rt(CD_Lists, "get", order(1, 0), ts -> Type.option(listOf(ts, 1).element())));
         t.put("list.sort", rt(CD_Lists, "sort", order(0), ts -> ts.get(0)));
         t.put("list.reverse", rt(CD_Lists, "reverse", order(0), ts -> ts.get(0)));
         t.put("list.range", rt(CD_Lists, "range", order(0, 1), ts -> Type.list(Type.INT)));
@@ -215,6 +309,9 @@ final class Intrinsics {
         t.put("list.product", new NumericFold("productInt", "productDecimal"));
 
         // Map — keys/values are erased to Object; the map argument stays a raw Map.
+        t.put("map.get", rtErased(CD_Maps, "get", order(1, 0), Set.of(0),
+                ts -> Type.option(mapOf(ts, 1).value())));
+        t.put("map.empty", rt(CD_Maps, "empty", order(), ts -> Type.map(Type.NOTHING, Type.NOTHING)));
         t.put("map.containsKey", rtErased(CD_Maps, "containsKey", order(1, 0), Set.of(0), ts -> Type.BOOL));
         t.put("map.keys", rt(CD_Maps, "keys", order(0), ts -> Type.list(mapOf(ts, 0).key())));
         t.put("map.values", rt(CD_Maps, "values", order(0), ts -> Type.list(mapOf(ts, 0).value())));
@@ -232,6 +329,7 @@ final class Intrinsics {
         t.put("map.fromList", rt(CD_Maps, "fromList", order(0), Intrinsics::mapFromListResult));
 
         // Set — the element is erased to Object; a set argument stays a raw Set.
+        t.put("set.empty", rt(CD_Sets, "empty", order(), ts -> Type.set(Type.NOTHING)));
         t.put("set.singleton", rtErased(CD_Sets, "singleton", order(0), Set.of(0), ts -> Type.set(ts.get(0))));
         t.put("set.insert", rtErased(CD_Sets, "insert", order(0, 1), Set.of(0), Intrinsics::setInsertResult));
         t.put("set.remove", rtErased(CD_Sets, "remove", order(0, 1), Set.of(0), ts -> ts.get(1)));

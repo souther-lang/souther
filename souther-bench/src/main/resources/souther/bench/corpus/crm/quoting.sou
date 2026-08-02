@@ -476,7 +476,7 @@ let pendingRoleOf (quote: Quote): List<ApproverRole> =
         | Decided                  -> [ ]
 
 let roleTotalsOf (quotes: List<Quote>): Map<ApproverRole, Amount> =
-    List.fold((acc, quote) -> addQuoteToRole(acc, quote), Map.empty(), quotes)
+    List.fold((acc, quote) -> addQuoteToRole(acc, quote), Map.empty, quotes)
 
 let addQuoteToRole (acc: Map<ApproverRole, Amount>, quote: Quote): Map<ApproverRole, Amount> =
     List.fold((inner, role) ->

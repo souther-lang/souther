@@ -55,23 +55,6 @@ public final class Prelude {
             Map.entry("souther.decimal", "Decimal"),
             Map.entry("souther.option", "Option"));
 
-    /** The checker built-ins, by qualified name — the primitives that have no prelude source because
-     *  they are overloaded (length/get) or need bespoke codegen (get/find/sortBy). Two other groups
-     *  stay here too, each because a core declaration cannot yet write their signature: the ones
-     *  returning a primitive-headed union ({@code Int | DivisionByZero}, {@code Decimal | NotANumber})
-     *  and the ones taking a rounding mode, which is a bare built-in identifier and not a value a
-     *  parameter type can name ({@code Decimal.toInt}/{@code round}). The rest of Int/Decimal
-     *  (add/subtract/multiply/compare/modBy) is now declared in {@code souther.int}/{@code
-     *  souther.decimal}. {@code fold} is not among them: it is an ordinary recursive helper in
-     *  {@code souther.list} ({@code foldFrom}) that takes its step as a closure. They are reached
-     *  qualified like everything else (spec §stdlib). */
-    private static final Set<String> BUILTINS = Set.of(
-            "List.length", "List.get", "List.max", "List.min", "List.find", "List.sortBy",
-            "String.length", "String.toInt", "String.toDecimal",
-            "Map.get", "Map.empty", "Set.empty",
-            "Option.map",
-            "Int.remainder", "Int.divide", "Decimal.divide", "Decimal.toInt", "Decimal.round");
-
     /** Every qualifier a call may carry: the four prelude modules plus the arithmetic built-in
      *  namespaces {@code Int}/{@code Decimal} (spec §stdlib). */
     private static final Set<String> QUALIFIERS =
@@ -80,6 +63,12 @@ public final class Prelude {
     /** A shipped primitive: its declared signature and the backend key naming its bytecode. */
     public record IntrinsicSig(String name, List<Type> params, Type result, String key) {
     }
+
+    /** Every declaration the library ships, keyed by qualified name — the {@code let} as it was
+     *  written, whether its implementation is a Souther body or a shipped kernel. What is on the
+     *  other side of the name is not the name's business, so a reader asking what a library function
+     *  takes and answers asks this and stops. */
+    private static final Map<String, Ast.FnDef> DECLARATIONS = new LinkedHashMap<>();
 
     /** Helpers keyed by qualified name, e.g. {@code "List.map"}. */
     private static final Map<String, Ast.FnDef> HELPERS = new LinkedHashMap<>();
@@ -119,13 +108,19 @@ public final class Prelude {
         return SUGARED.contains(qualifiedName);
     }
 
-    /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function —
-     *  a prelude helper, a prelude intrinsic, a checker built-in, or a sugar for one. */
+    /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function — a
+     *  prelude helper, a prelude intrinsic, or a sugar for one. Every one of them is declared in a
+     *  core module: there is no longer a set of names whose signature lives only in the compiler
+     *  (ADR-0053). */
     public static boolean hasQualified(String qualifiedName) {
         return HELPERS.containsKey(qualifiedName)
                 || INTRINSICS.containsKey(qualifiedName)
-                || BUILTINS.contains(qualifiedName)
                 || SUGARED.contains(qualifiedName);
+    }
+
+    /** The declaration of a library function, or null where the library declares no such name. */
+    public static Ast.FnDef declarationOf(String qualifiedName) {
+        return DECLARATIONS.get(qualifiedName);
     }
 
     /** The helper functions of the prelude (inlined at call sites), keyed by qualified name. */
@@ -158,6 +153,15 @@ public final class Prelude {
             }
             for (Ast.FnDef fn : module.fns()) {
                 String qualified = alias + "." + fn.name();
+                // One qualified name, one declaration. The library has no overloading: a name that
+                // reads two ways would have to be chosen between, and nothing at a value position
+                // could do the choosing. Put into a map, a second one would replace the first in
+                // silence, so it is refused where it is loaded.
+                if (INTRINSICS.containsKey(qualified) || HELPERS.containsKey(qualified)) {
+                    throw new IllegalStateException(
+                            "the standard library declares `" + qualified + "` twice");
+                }
+                DECLARATIONS.put(qualified, fn);
                 if (fn.isIntrinsic()) {
                     List<Type> params = new ArrayList<>();
                     for (Ast.FnParam p : fn.params()) {

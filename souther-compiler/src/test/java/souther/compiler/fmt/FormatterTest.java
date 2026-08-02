@@ -103,6 +103,53 @@ class FormatterTest {
                 "formatted output does not re-parse for " + source + ":\n" + formatted);
     }
 
+    /**
+     * An argument list applies to the expression before it, and that expression may be anything.
+     * Reassembling the callee from the identifiers under the node would print `adder(1)(x)` as
+     * `adder(1, x)` and a parenthesised choice as nothing at all.
+     */
+    @Test
+    void anAppliedExpressionSurvivesFormatting() {
+        String src = """
+                module demo
+                let adder (n: Int): (Int) -> Int = (x) -> x + n
+                let pick (flag: Bool): (String) -> String =
+                    if flag then String.trim else String.uppercase
+                data In = { n: Int, s: String, flag: Bool }
+                data Out = { m: Int, t: String }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out {
+                    m = adder(1)(i.n),
+                    t = (if i.flag then String.trim else String.uppercase)(i.s)
+                }
+                """;
+        String formatted = Formatter.format(src);
+        assertEquals(code(src), code(formatted), "the applied expression was lost:\n" + formatted);
+        assertEquals(formatted, Formatter.format(formatted), "formatting is not idempotent here");
+    }
+
+    /**
+     * The formatter never puts an argument list at the start of a line: there it would be a
+     * parenthesised expression, and a block's tuple result would be read as applying the line above.
+     */
+    @Test
+    void anArgumentListStaysOnItsCalleesLine() {
+        String src = """
+                module demo
+                let widen (a: Int, bbbbbbbbbbbbbbbbbb: Int, cccccccccccccccccc: Int): (Int, Int) = {
+                    let total = Int.add(a, Int.add(bbbbbbbbbbbbbbbbbb, cccccccccccccccccc))
+                    (total, total)
+                }
+                """;
+        String formatted = Formatter.format(src);
+        for (String line : formatted.lines().toList()) {
+            assertTrue(!line.strip().startsWith("(") || !line.strip().endsWith(")")
+                            || line.strip().contains(","),
+                    "an argument list opened a line:\n" + formatted);
+        }
+        assertEquals(code(src), code(formatted), "tokens changed:\n" + formatted);
+    }
+
     /** An attempted construction's `as x` is code, not whitespace: dropping it would silently turn a
      * bound success branch into one with an unknown name, or a departure into a plain condition. */
     @Test
@@ -398,7 +445,7 @@ class FormatterTest {
                 + "data Out = { m: Map<String, Int> }\n"
                 + "behavior run : (i: In) -> Out constructs Out\n"
                 + "let run (i) = {\n"
-                + "let counted:Map<String,Int> = Map.empty()\n"
+                + "let counted:Map<String,Int> = Map.empty\n"
                 + "Out { m = counted }\n"
                 + "}\n";
         String formatted = Formatter.format(source);

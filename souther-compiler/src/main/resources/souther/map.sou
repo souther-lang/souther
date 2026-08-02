@@ -7,8 +7,11 @@ module souther.map
 // never mutate.
 //
 // Argument order follows F#/Elm ([#pipe]): the map comes last, so `m |> Map.insert(k, v)` reads
-// left to right. `Map.empty` is a compiler built-in — like `[]`, its key and value are fixed by
-// context, so it has no argument to learn them from.
+// left to right. `empty` takes no parameter list, so it is a value ([#fn-declaration]) — like `[]`,
+// its key and value are fixed by context, since it has no argument to learn them from.
+let empty : Map<'k, 'a> = intrinsic "map.empty"
+let get (key: 'k, m: Map<'k, 'a>) : Option<'a> = intrinsic "map.get"
+
 let containsKey (key: 'k, m: Map<'k, 'a>) : Bool = intrinsic "map.containsKey"
 let keys (m: Map<'k, 'a>) : List<'k> = intrinsic "map.keys"
 let values (m: Map<'k, 'a>) : List<'a> = intrinsic "map.values"
@@ -43,7 +46,7 @@ let fold (step: ('acc, 'k, 'a) -> 'acc, seed: 'acc, m: Map<'k, 'a>) : 'acc =
     }, seed, Map.toList(m))
 
 let map (f: ('k, 'a) -> 'b, m: Map<'k, 'a>) : Map<'k, 'b> =
-    Map.fold((acc, k, v) -> Map.insert(k, f(k, v), acc), Map.empty(), m)
+    Map.fold((acc, k, v) -> Map.insert(k, f(k, v), acc), Map.empty, m)
 
 let update (key: 'k, f: ('a) -> 'a, m: Map<'k, 'a>) : Map<'k, 'a> =
     match Map.get(key, m) with
@@ -55,7 +58,7 @@ let update (key: 'k, f: ('a) -> 'a, m: Map<'k, 'a>) : Map<'k, 'a> =
 // a caller has to write without it is `toList` out, `List.filter`, `fromList` back, which leaves the
 // map type behind for two steps and re-hashes every surviving entry.
 let filter (keep: ('k, 'a) -> Bool, m: Map<'k, 'a>) : Map<'k, 'a> =
-    Map.fold((acc, k, v) -> if keep(k, v) then Map.insert(k, v, acc) else acc, Map.empty(), m)
+    Map.fold((acc, k, v) -> if keep(k, v) then Map.insert(k, v, acc) else acc, Map.empty, m)
 
 // The key algebra, matching `Set`'s (Elm's `Dict.union` / `intersect` / `diff`, named `difference`
 // here so the two modules read alike). All three answer with entries taken from `a`: `union` adds

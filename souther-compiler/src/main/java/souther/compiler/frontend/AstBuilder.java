@@ -432,7 +432,12 @@ public final class AstBuilder {
         // already wrote parameters keeps a lambda body as its result. Only a lambda the source wrote
         // moves — a `.field` getter is a block too, but its parameter is synthesized, and lifting it
         // would name a definition's parameter something the author never wrote.
+        //
+        // A written function type moves nothing either. It says what the definition is, and what it
+        // says is a function — so the definition is a value of that type, and lifting its parameters
+        // out would leave the type describing something the definition no longer is.
         if (params.isEmpty() && bodyNode.kind() == SyntaxKind.LAMBDA_EXPR
+                && (declaredReturn == null || declaredReturn.asFn() == null)
                 && body instanceof Ast.Block lambda) {
             for (Ast.Binder p : lambda.params()) {
                 params.add(new Ast.FnParam(p, null, false));
@@ -616,6 +621,7 @@ public final class AstBuilder {
             case VAR_EXPR -> new Ast.Var(firstIdentText(n), pos(n));
             case FIELD_ACCESS -> fieldAccess(n);
             case CALL_EXPR -> call(n);
+            case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
             case UNARY_EXPR -> new Ast.Neg(expr(onlyExpr(n)), pos(n));
             case PIPE_EXPR -> pipe(n);
@@ -682,7 +688,21 @@ public final class AstBuilder {
                 args.add(expr(a));
             }
         });
-        return new Ast.Call(fn.toString(), args, posOf(first));
+        return new Ast.Apply(fn.toString(), args, posOf(first));
+    }
+
+    /** An argument list written after any expression. What is applied is the expression before it,
+     * so this is where a call whose callee is not a name is read. */
+    private Ast.Expr apply(SyntaxNode n) {
+        List<SyntaxNode> children = exprChildren(n);
+        Ast.Expr function = expr(children.get(0));
+        List<Ast.Expr> args = new ArrayList<>();
+        n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
+            for (SyntaxNode arg : exprChildren(list)) {
+                args.add(expr(arg));
+            }
+        });
+        return new Ast.Apply(function, args, ConstructionOrigin.own(), function.pos());
     }
 
     private Ast.Expr binary(SyntaxNode n) {
@@ -716,16 +736,16 @@ public final class AstBuilder {
         List<SyntaxNode> operands = exprChildren(n);
         Ast.Expr left = expr(operands.get(0));
         Ast.Expr right = expr(operands.get(1));
-        if (right instanceof Ast.Call c) {
+        if (right instanceof Ast.Apply c) {
             List<Ast.Expr> args = new ArrayList<>(c.args());
             args.add(left);
-            return new Ast.Call(c.fn(), args, c.pos());
+            return new Ast.Apply(c.function(), args, c.origin(), c.pos());
         }
         if (right instanceof Ast.Var v) {
-            return new Ast.Call(v.name(), List.of(left), v.pos());
+            return new Ast.Apply(v.name(), List.of(left), v.pos());
         }
         if (right instanceof Ast.FieldAccess fa && fa.target() instanceof Ast.Var base) {
-            return new Ast.Call(base.name() + "." + fa.field(), List.of(left), fa.pos());
+            return new Ast.Apply(base.name() + "." + fa.field(), List.of(left), fa.pos());
         }
         throw CompileException.of(
                 Diagnostic.of(null, "parse.vpipe.right").title("parse.title").at(right.pos()).build(),
@@ -969,7 +989,11 @@ public final class AstBuilder {
         String someBinding = null;
         if (unwrapNames.isEmpty() && i < es.size() && isToken(es.get(i), SyntaxKind.IDENT)) {
             String ident = tokenText(es.get(i));
-            if (!isSome) {
+            // A qualified name is not a case this advice fits: `Some` is the one case with a payload
+            // to bind and it has no qualified spelling, so what is wrong with `Q.C v` is `Q.C`, and
+            // saying so is resolution's to do. The parser has no answer for a name yet.
+            boolean qualified = caseTypes.get(caseTypes.size() - 1).written().indexOf('.') >= 0;
+            if (!isSome && !qualified) {
                 throw error(posOf((SyntaxToken) es.get(i)), "parse.case.positional",
                         "a case value is bound with `as`: write `| " + caseTypes.get(caseTypes.size() - 1).written()
                                 + " as " + ident + "`",
@@ -1215,7 +1239,8 @@ public final class AstBuilder {
 
     private static boolean isExprKind(SyntaxKind k) {
         return switch (k) {
-            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, BINARY_EXPR, UNARY_EXPR, PIPE_EXPR,
+            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, APPLY_EXPR, BINARY_EXPR,
+                 UNARY_EXPR, PIPE_EXPR,
                  PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR, MATCH_EXPR, LAMBDA_EXPR,
                  FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR, UNREACHABLE_EXPR -> true;
             default -> false;

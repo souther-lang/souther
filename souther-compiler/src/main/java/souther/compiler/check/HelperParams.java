@@ -202,7 +202,7 @@ final class HelperParams {
      * is not this parameter.
      */
     static boolean isApplied(Ast.Expr e, String name) {
-        if (e instanceof Ast.Call call && call.fn().equals(name)) {
+        if (e instanceof Ast.Apply call && call.reaches().equals(name)) {
             return true;
         }
         boolean[] found = {false};
@@ -311,7 +311,7 @@ final class HelperParams {
                         pin(Type.BOOL);
                     }
                 }
-                case Ast.Call call -> pinFromCall(call, name);
+                case Ast.Apply call -> pinFromCall(call, name);
                 case Ast.NewData nd -> pinFromInits(nd.typeName(), nd.inits(), name);
                 case Ast.Var v when v.name().equals(name) -> {
                     if (openUse == null) {
@@ -363,8 +363,8 @@ final class HelperParams {
         }
 
         /** The parameter passed where a callee declares the type of that argument. */
-        private void pinFromCall(Ast.Call call, String name) {
-            List<Type> params = calleeParams(call.fn());
+        private void pinFromCall(Ast.Apply call, String name) {
+            List<Type> params = calleeParams(call.reaches());
             if (params == null || params.size() != call.args().size()) {
                 return;
             }

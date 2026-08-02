@@ -72,7 +72,7 @@ class CompileGrowingMapFoldTest {
     }
 
     private static final String TALLY =
-            "List.fold((acc, x) -> Map.upsert(x, 1, c -> c + 1, acc), Map.empty(), %s)";
+            "List.fold((acc, x) -> Map.upsert(x, 1, c -> c + 1, acc), Map.empty, %s)";
 
     @Test
     void countingWithUpsertReadsWhatTheWalkHasWritten() throws Exception {
@@ -101,7 +101,7 @@ class CompileGrowingMapFoldTest {
     @Test
     void insertingWithoutReadingWrites() throws Exception {
         assertEquals(expected("a", 1L, "b", 1L),
-                counted("List.fold((acc, x) -> Map.insert(x, 1, acc), Map.empty(), b.xs)",
+                counted("List.fold((acc, x) -> Map.insert(x, 1, acc), Map.empty, b.xs)",
                         List.of("a", "b")));
     }
 
@@ -109,14 +109,14 @@ class CompileGrowingMapFoldTest {
     void aLaterEntryWithTheSameKeyWins() throws Exception {
         assertEquals(expected("k", 3L),
                 counted("List.fold((acc, x) -> Map.insert(\"k\", String.length(x), acc), "
-                        + "Map.empty(), b.xs)", List.of("a", "bb", "ccc")));
+                        + "Map.empty, b.xs)", List.of("a", "bb", "ccc")));
     }
 
     @Test
     void aFoldThatSkipsSomeElementsWrites() throws Exception {
         assertEquals(expected("bb", 2L),
                 counted("List.fold((acc, x) -> if String.length(x) > 1 "
-                        + "then Map.insert(x, String.length(x), acc) else acc, Map.empty(), b.xs)",
+                        + "then Map.insert(x, String.length(x), acc) else acc, Map.empty, b.xs)",
                         List.of("a", "bb")));
     }
 
@@ -138,7 +138,7 @@ class CompileGrowingMapFoldTest {
     void theSizeSoFarIsRead() throws Exception {
         // Reading the accumulator's size is a read like any other: the builder answers with what the
         // walk has written so far, which is what the fold's own accumulator held there.
-        String body = "List.fold((acc, x) -> Map.insert(x, Map.size(acc), acc), Map.empty(), %s)";
+        String body = "List.fold((acc, x) -> Map.insert(x, Map.size(acc), acc), Map.empty, %s)";
         assertEquals(1, callsTo(module(body.formatted("xs")), "builder"));
         assertEquals(expected("a", 0L, "b", 1L), counted(body.formatted("b.xs"), List.of("a", "b")));
     }
@@ -148,7 +148,7 @@ class CompileGrowingMapFoldTest {
         // `Map.remove` answers with a map of its own, so what the insert writes into is no longer the
         // accumulator and the walk keeps the persistent insert. The answer must not change either way.
         String body = "List.fold((acc, x) -> Map.insert(x, 1, Map.remove(\"z\", acc)), "
-                + "Map.empty(), %s)";
+                + "Map.empty, %s)";
         assertEquals(0, callsTo(module(body.formatted("xs")), "builder"));
         assertEquals(expected("a", 1L, "b", 1L), counted(body.formatted("b.xs"), List.of("a", "b")));
     }

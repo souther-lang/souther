@@ -9,6 +9,10 @@ module souther.string
 // `s |> String.trim |> String.contains("@")` reads top to bottom. `append` joins two strings in
 // their written order (Elm `String.append`); the `++` operator is the common form, `append a b == a
 // ++ b`. `concat` flattens a `List<String>` (Elm `String.concat`).
+let length (s: String) : Int = intrinsic "string.length"
+let toInt (s: String) : Int | NotANumber = intrinsic "string.toInt"
+let toDecimal (s: String) : Decimal | NotANumber = intrinsic "string.toDecimal"
+
 let trim (s: String) : String = intrinsic "string.trim"
 let lowercase (s: String) : String = intrinsic "string.lowercase"
 let uppercase (s: String) : String = intrinsic "string.uppercase"

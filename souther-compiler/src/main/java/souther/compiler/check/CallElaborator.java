@@ -8,9 +8,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
-import java.util.Set;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,15 +24,104 @@ public final class CallElaborator {
 
     private CallElaborator() {}
 
-    /** The members of a primitive-headed union — {@code Int | DivisionByZero} — the output of a
-     * partial built-in. The head is a primitive case, and the error case is declared by the runtime
-     * rather than by a module (see {@link TypeName#RUNTIME}). */
-    private static Set<TypeName> primitiveHeaded(Type head, String errorCase) {
-        return new java.util.LinkedHashSet<>(
-                List.of(TypeName.primitive(Type.show(head)), TypeName.runtime(errorCase)));
+    /** Where the element whose order is required sits in a kernel's result. */
+    private enum OrderedElement { OF_THE_LIST, OF_THE_OPTION }
+
+    /**
+     * The kernels whose element must be an ordered value, and where in the result to find it.
+     *
+     * <p>Souther has no type classes, so "the element is ordered" is not something a signature can
+     * say (ADR-0053). The declaration states the shape and this states the rest, keyed by the kernel
+     * it constrains — which is what {@code sort} has always done, written out by hand.
+     */
+    private static final Map<String, OrderedElement> ORDERED_ELEMENT = Map.of(
+            "list.sort", OrderedElement.OF_THE_LIST,
+            "list.max", OrderedElement.OF_THE_OPTION,
+            "list.min", OrderedElement.OF_THE_OPTION);
+
+    /**
+     * Refuses an element with no natural order. An ordered primitive has one, and so does a newtype
+     * over one — it carries its ordering as {@code Comparable}. A product data does not and would
+     * throw at run time, so it is refused here. The empty-list literal (element {@code Nothing}) is
+     * fine: it sorts to itself and its max is {@code None}.
+     */
+    private static void requiresOrdering(String key, Ast.Apply call, Type result, CheckContext ctx) {
+        OrderedElement where = ORDERED_ELEMENT.get(key);
+        if (where == null) {
+            return;
+        }
+        boolean inOption = where == OrderedElement.OF_THE_OPTION;
+        Type element = switch (result) {
+            case Type.OptionOf o when inOption -> o.element();
+            case Type.ListOf l when !inOption -> l.element();
+            default -> null;
+        };
+        if (element == null || element instanceof Type.Nothing
+                || TypeOps.supportsOrdering(element, ctx.symbols())) {
+            return;
+        }
+        String name = call.written().substring(call.written().indexOf('.') + 1);
+        throw needsOrdered(call.pos(), name, element,
+                name + " needs a list of ordered values (Int, String, Decimal, Date, DateTime, a"
+                        + " newtype over one of these, or an enumeration), but the element is "
+                        + element + " — use its ordered field instead (e.g. map to it first)");
     }
 
-    static Core elaborateCall(Ast.Call call, Scope env, CheckContext ctx,
+    /** Whether a declared parameter takes a rounding mode rather than a value. */
+    private static boolean isRoundingMode(Type t) {
+        return t instanceof Type.Ref r && r.name().equals(TypeOps.ROUNDING_MODE);
+    }
+
+    /**
+     * Refuses a sort key with no natural order. The constraint is on what the key answers, not on
+     * what the list holds, so it reads the binding the key's declared result took rather than the
+     * call's result.
+     */
+    private static void requiresOrderedKey(String key, Ast.Apply call, Type.FnOf declaredKey,
+                                           Map<String, Type> bindings, CheckContext ctx) {
+        if (!key.equals("list.sortBy")) {
+            return;
+        }
+        Type answered = TypeOps.substitute(declaredKey.result(), bindings);
+        if (BottomInfer.isBottom(answered) || answered instanceof Type.Var
+                || TypeOps.supportsOrdering(answered, ctx.symbols())) {
+            return;
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.ordered.key").title("check.type.mismatch.title")
+                        .at(call.pos()).args(call.written(), Type.show(answered))
+                        .hint("check.ordered.hint").build(),
+                call.written() + "'s key must be an ordered value (Int, String, Decimal, Date, DateTime,"
+                        + " a newtype over one of these, or an enumeration), but returns " + answered);
+    }
+
+    /**
+     * A library name written where a value goes, or null where the name is not a library value.
+     *
+     * <p>A declaration with no parameter list is a value ([#fn-declaration]), and the library's are
+     * the two empty collections. Their type comes from the context the way {@code []}'s does: the
+     * expected type pins what the declaration left open, and what it does not pin is the bottom that
+     * a later position fixes (ADR-0028).
+     *
+     * <p>The Core is the one the application spelling produced, so nothing downstream of here tells
+     * the two apart — which is what keeps a growing fold's seed the seed it was.
+     */
+    static Core libraryValue(Ast.Var v, CheckContext ctx, Type expected) {
+        if (!(v.denotes() instanceof ValueName.Stdlib lib)) {
+            return null;
+        }
+        Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(lib.qualified());
+        if (intrinsic == null || !intrinsic.params().isEmpty()) {
+            return null;
+        }
+        Map<String, Type> bindings = new HashMap<>();
+        BottomInfer.pinResultTypeVars(intrinsic.result(), expected, bindings, ctx.symbols(),
+                v.pos(), "the type of " + lib.qualified());
+        return new Core.Call(lib.qualified(), List.of(),
+                TypeOps.toBottom(TypeOps.substitute(intrinsic.result(), bindings)), v.pos());
+    }
+
+    static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
                                       Type expected) {
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         Type result = typeOfCall(ca, call, env, ctx, expected);
@@ -43,10 +130,10 @@ public final class CallElaborator {
         if (call.denotes() instanceof ValueName.Local local
                 && env.typeOf(local.id()) instanceof Type.FnOf) {
             return new Core.Apply(
-                    new Core.Read(call.fn(), local.id(), env.typeOf(local.id()), call.pos()),
+                    new Core.Read(call.written(), local.id(), env.typeOf(local.id()), call.pos()),
                     ca.cores(), result, call.pos());
         }
-        return new Core.Call(call.fn(), ca.cores(), result, call.pos());
+        return new Core.Call(call.reaches(), ca.cores(), result, call.pos());
     }
 
     /**
@@ -136,16 +223,16 @@ public final class CallElaborator {
      * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
      * with itself and not something an author can act on.
      */
-    static RuntimeException noCallee(Ast.Call call) {
+    static RuntimeException noCallee(Ast.Apply call) {
         return switch (call.denotes()) {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
             case ValueName.Behavior _ -> CompileException.of(
                     Diagnostic.of("E1401", "e1401.behavior")
-                            .title("e1401.title").at(call.pos(), call.fn().length())
-                            .args(call.fn()).hint("e1401.behavior.hint", call.fn())
+                            .title("e1401.title").at(call.pos(), call.written().length())
+                            .args(call.written()).hint("e1401.behavior.hint", call.written())
                             .build(),
-                    "`" + call.fn() + "` is a behavior, and it cannot be called from here: a helper"
+                    "`" + call.written() + "` is a behavior, and it cannot be called from here: a helper"
                             + " `let` does not reach one, and a `>->` composition is composed with"
                             + " rather than called (spec [#calling-a-behavior])");
             // A type applied to an argument is a construction, and every place a construction is
@@ -154,7 +241,7 @@ public final class CallElaborator {
             case ValueName.OfType named -> CompileException.of(
                     Diagnostic.of(null, "check.construct.position")
                             .title("check.construct.position.title")
-                            .at(call.pos(), call.fn().length()).args(named.name()).build(),
+                            .at(call.pos(), call.written().length()).args(named.name()).build(),
                     "`" + named.name() + "` is a type, so `" + named.name()
                             + "(...)` constructs one, and a construction cannot be written here");
             // A binding applied to arguments, whose type here is not a function. Either it is not one
@@ -165,20 +252,28 @@ public final class CallElaborator {
             case ValueName.Local _ -> CompileException.of(
                     Diagnostic.of(null, "check.apply.notfunction")
                             .title("check.apply.notfunction.title")
-                            .at(call.pos(), call.fn().length()).args(call.fn()).build(),
-                    "`" + call.fn() + "` is not a function here, so it cannot be applied to"
+                            .at(call.pos(), call.written().length()).args(call.written()).build(),
+                    "`" + call.written() + "` is not a function here, so it cannot be applied to"
                             + " arguments");
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
-            case ValueName.Builtin _ -> unelaborated("a builtin", call);
+            // A name the language itself gives, applied. `Some`/`None` are told apart earlier (E1303),
+            // so this is a rounding mode: a bare identifier the operation taking it reads, and not a
+            // function. Reachable from the moment one ladder answers a name wherever it is written.
+            case ValueName.Builtin b -> CompileException.of(
+                    Diagnostic.of(null, "check.builtin.notfunction")
+                            .title("check.apply.notfunction.title")
+                            .at(call.pos(), call.written().length()).args(b.name()).build(),
+                    "`" + b.name() + "` is a name the language gives, not a function, so it cannot"
+                            + " be applied to arguments");
             // thrown out at the top of typeOfCall, before any of the work above
             case ValueName.Unresolved _ -> unelaborated("an unresolved name", call);
             case null -> unelaborated("nothing", call);
         };
     }
 
-    private static IllegalStateException unelaborated(String what, Ast.Call call) {
-        return new IllegalStateException("`" + call.fn() + "` denotes " + what
+    private static IllegalStateException unelaborated(String what, Ast.Apply call) {
+        return new IllegalStateException("`" + call.written() + "` denotes " + what
                 + " and reached call elaboration unexpanded, at " + call.pos());
     }
 
@@ -190,11 +285,11 @@ public final class CallElaborator {
      * the library, then a function-typed binding, then an injected behavior — and a name that could
      * be read two ways was whichever came first.
      */
-    static Type typeOfCall(CallArgs ca, Ast.Call call, Scope env, CheckContext ctx, Type expected) {
+    static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
         List<Ast.Expr> args = call.args();
         if (call.denotes() == null) {
             throw new IllegalStateException(
-                    "`" + call.fn() + "` reached the check unresolved, at " + call.pos());
+                    "`" + call.written() + "` reached the check unresolved, at " + call.pos());
         }
         if (call.denotes() instanceof ValueName.Unresolved) {
             // reported where the name was written; this definition has no meaning to work out
@@ -203,36 +298,65 @@ public final class CallElaborator {
         boolean library = call.denotes() instanceof ValueName.Stdlib;
         // A shipped intrinsic behaves like a built-in: check the call against its declared signature
         // (from the prelude) and yield its result type; the backend emits the primitive for its key.
-        Prelude.IntrinsicSig intrinsic = library ? Prelude.intrinsics().get(call.fn()) : null;
+        Prelude.IntrinsicSig intrinsic = library ? Prelude.intrinsics().get(call.reaches()) : null;
+        // A declaration written with no parameter list is a value ([#fn-declaration]), and an empty
+        // `()` would be a second spelling of it. The library was the last place that spelling was
+        // still accepted.
+        if (intrinsic != null && intrinsic.params().isEmpty()) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.apply.notfunction")
+                            .title("check.apply.notfunction.title")
+                            .at(call.pos(), call.written().length()).args(call.written())
+                            .hint("check.stdlib.value.hint", call.written()).build(),
+                    "`" + call.written() + "` is a value, not a function, so it takes no `()` — write `"
+                            + call.written() + "` on its own");
+        }
         if (intrinsic != null) {
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.arity").title("check.arity.title")
-                                .at(call.pos(), call.fn().length())
-                                .args(call.fn(), intrinsic.params().size(), args.size()).build(),
-                        call.fn() + " takes " + intrinsic.params().size()
+                                .at(call.pos(), call.written().length())
+                                .args(call.written(), intrinsic.params().size(), args.size()).build(),
+                        call.written() + " takes " + intrinsic.params().size()
                                 + " argument(s) but is called with " + args.size());
             }
+            // The same three steps a helper's signature takes, for the same reasons: the context
+            // pins what it can before anything is read, the value arguments fix the rest, and a
+            // function argument is typed last — against parameter types the others have settled, so
+            // a block written there has them to be checked at.
+            //
+            // The pin is for the step's sake. With no function argument there is nothing waiting on
+            // it, and pinning anyway would answer an argument mismatch against the type the context
+            // wanted rather than against the one the declaration asks for.
+            boolean takesAFunction = intrinsic.params().stream().anyMatch(Type.FnOf.class::isInstance);
             Map<String, Type> bindings = new HashMap<>();
+            if (takesAFunction) {
+                BottomInfer.pinResultTypeVars(intrinsic.result(), expected, bindings, ctx.symbols(),
+                        call.pos(), "result of " + call.written());
+            }
             for (int i = 0; i < args.size(); i++) {
-                Type argType = ca.type(i);
-                TypeOps.unify(intrinsic.params().get(i), argType, bindings, ctx.symbols(), call.pos(),
-                        "argument " + (i + 1) + " of " + call.fn());
+                if (intrinsic.params().get(i) instanceof Type.FnOf) {
+                    continue;
+                }
+                // A rounding mode is not an expression: it is a name the operation taking it reads,
+                // so it is checked as one and carries no type of its own ([#stdlib-decimal]).
+                if (isRoundingMode(intrinsic.params().get(i))) {
+                    requireRoundingMode(call.written(), args.get(i));
+                    ca.untyped(i);
+                    continue;
+                }
+                TypeOps.unify(intrinsic.params().get(i), ca.type(i), bindings, ctx.symbols(),
+                        call.pos(), "argument " + (i + 1) + " of " + call.written());
+            }
+            for (int i = 0; i < args.size(); i++) {
+                if (intrinsic.params().get(i) instanceof Type.FnOf declaredStep) {
+                    ca.put(i, Elaborator.resolveStepBinding(call.written(), declaredStep, args.get(i),
+                            bindings, env, ctx));
+                    requiresOrderedKey(intrinsic.key(), call, declaredStep, bindings, ctx);
+                }
             }
             Type result = TypeOps.substitute(intrinsic.result(), bindings);
-            // `sort` carries no `comparable` constraint in its `List<'a>` signature (Souther has no
-            // type classes), so guard here: an ordered value sorts — an ordered primitive, or a
-            // newtype over one, which carries its ordering as Comparable. A product data does not,
-            // and would throw at runtime, so reject it now. The empty-list literal (element
-            // `Nothing`) is fine: it sorts to itself, so let it through.
-            if (intrinsic.key().equals("list.sort") && result instanceof Type.ListOf lo
-                    && !(lo.element() instanceof Type.Nothing)
-                    && !TypeOps.supportsOrdering(lo.element(), ctx.symbols())) {
-                throw needsOrdered(call.pos(), "sort", lo.element(),
-                        "sort needs a list of ordered values (Int, String, Decimal, Date, DateTime, or"
-                                + " a newtype over one of these), but the element is " + lo.element()
-                                + " — sort its ordered field instead (e.g. map to it first)");
-            }
+            requiresOrdering(intrinsic.key(), call, result, ctx);
             if (intrinsic.key().equals("list.sum") || intrinsic.key().equals("list.product")) {
                 return numericFold(call, result, expected);
             }
@@ -241,188 +365,11 @@ public final class CallElaborator {
             }
             return result;
         }
-        return switch (library ? call.fn() : "") {
-            case "String.length" -> {
-                arity(call, 1);
-                ca.require(0, Type.STRING, "argument of String.length");
-                yield Type.INT;
-            }
-            case "String.toInt" -> {
-                arity(call, 1);
-                ca.require(0, Type.STRING, "argument of String.toInt");
-                // a non-numeric string produces the NotANumber case; a primitive-headed union a core
-                // declaration cannot name, so this stays a built-in like Int.divide
-                yield Type.union(primitiveHeaded(Type.INT, "NotANumber"));
-            }
-            case "String.toDecimal" -> {
-                arity(call, 1);
-                ca.require(0, Type.STRING, "argument of String.toDecimal");
-                // the sibling of toInt, and here for the same reason: a primitive-headed union
-                yield Type.union(primitiveHeaded(Type.DECIMAL, "NotANumber"));
-            }
-            case "List.length" -> {
-                arity(call, 1);
-                Type t = ca.type(0);
-                if (!(t instanceof Type.ListOf)) {
-                    throw expects(call.pos(), "List.length", "kind.list", t,
-                            "argument of List.length must be a List but is " + t);
-                }
-                yield Type.INT;
-            }
-            case "List.max", "List.min" -> {
-                arity(call, 1);
-                Type t = ca.type(0);
-                if (!(t instanceof Type.ListOf lo)) {
-                    throw expects(call.pos(), call.fn(), "kind.list", t,
-                            "argument of " + call.fn() + " must be a List but is " + t);
-                }
-                // Like `sort`, max/min compare by natural order, so the element must be an ordered
-                // value (Souther has no type classes); a product data is not Comparable. The
-                // empty-list literal (element `Nothing`) is fine — its result is `None`.
-                if (!BottomInfer.isBottom(lo.element())
-                        && !TypeOps.supportsOrdering(lo.element(), ctx.symbols())) {
-                    throw needsOrdered(call.pos(), call.fn(), lo.element(),
-                            call.fn() + " needs a list of ordered values (Int, String, Decimal, Date,"
-                                    + " DateTime, a newtype over one of these, or an enumeration), but"
-                                    + " the element is "
-                                    + lo.element() + " — compare its ordered field instead");
-                }
-                yield Type.option(lo.element());
-            }
-            case "List.find" -> {
-                arity(call, 2);   // find(p, xs): predicate first, list last (F#/Elm order)
-                Type t = ca.type(1);
-                if (!(t instanceof Type.ListOf lo)) {
-                    throw expects(call.pos(), "List.find", "kind.list", t,
-                            "List.find expects a List, got " + t);
-                }
-                Type pr = ca.block(0, call.fn(), List.of(lo.element()));
-                if (pr != Type.BOOL) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.fn.predicatebool").title("check.fn.title")
-                                    .at(call.pos()).args("List.find", Type.show(pr)).build(),
-                            "List.find's predicate must return Bool, but returns " + pr);
-                }
-                yield Type.option(lo.element());
-            }
-            case "Option.map" -> {
-                arity(call, 2);   // map(f, opt): function first, option last (F#/Elm order)
-                Type t = ca.type(1);
-                if (!(t instanceof Type.OptionOf oo)) {
-                    throw expects(call.pos(), "Option.map", "kind.option", t,
-                            "Option.map expects an Option, got " + t);
-                }
-                // `f` sees the contained value; the option's element type gives its one parameter type.
-                // The result re-wraps `f`'s return, so the whole call is `Option<'b>`.
-                Type r = ca.block(0, call.fn(), List.of(oo.element()));
-                yield Type.option(r);
-            }
-            case "List.sortBy" -> {
-                arity(call, 2);   // sortBy(key, xs): key first, list last (F#/Elm order)
-                Type t = ca.type(1);
-                if (!(t instanceof Type.ListOf lo)) {
-                    throw expects(call.pos(), "List.sortBy", "kind.list", t,
-                            "List.sortBy expects a List, got " + t);
-                }
-                Type keyT = ca.block(0, call.fn(), List.of(lo.element()));
-                if (!BottomInfer.isBottom(keyT) && !TypeOps.supportsOrdering(keyT, ctx.symbols())) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.ordered.key").title("check.type.mismatch.title")
-                                    .at(call.pos()).args("List.sortBy", Type.show(keyT))
-                                    .hint("check.ordered.hint").build(),
-                            "List.sortBy's key must be an ordered value (Int, String, Decimal, Date,"
-                                    + " DateTime, a newtype over one of these, or an enumeration), but"
-                                    + " returns " + keyT);
-                }
-                yield Type.list(lo.element());
-            }
-            case "List.get" -> {
-                arity(call, 2);
-                Type first = ca.type(1);   // get(index, xs): list last
-                if (!(first instanceof Type.ListOf lo)) {
-                    throw expects(call.pos(), "List.get", "kind.list", first,
-                            "List.get expects a List, got " + first);
-                }
-                ca.require(0, Type.INT, "index of List.get");
-                yield Type.option(lo.element());
-            }
-            case "Map.get" -> {
-                arity(call, 2);
-                Type first = ca.type(1);   // get(key, m): map last
-                if (!(first instanceof Type.MapOf mo)) {
-                    throw expects(call.pos(), "Map.get", "kind.map", first,
-                            "Map.get expects a Map, got " + first);
-                }
-                // A bottom key type is a `Map.empty`-seeded accumulator whose key is not fixed yet;
-                // the block growing it — `Map.get(k, acc)` in a groupBy fold — supplies the real key,
-                // so accept it rather than demand the bottom. Otherwise the key must match.
-                if (!BottomInfer.isBottom(mo.key())) {
-                    ca.require(0, mo.key(), "key of Map.get");
-                } else {
-                    ca.type(0);   // nothing to check it against yet, but the key is still typed
-                }
-                yield Type.option(mo.value());
-            }
-            case "Map.empty" -> {
-                arity(call, 0);
-                // like `[]`, the empty map's key and value are bottoms fixed by context (ADR-0028).
-                // When the context supplies an expected map type, adopt it directly so the value type
-                // is concrete from the start — a Map.empty()-seeded fold no longer forces its
-                // accumulator (and any updater closure) to a bottom.
-                yield expected instanceof Type.MapOf me ? me : Type.map(Type.NOTHING, Type.NOTHING);
-            }
-            case "Set.empty" -> {
-                arity(call, 0);
-                // empty set's element type fixed by context (ADR-0028); adopt an expected set type
-                yield expected instanceof Type.SetOf se ? se : Type.set(Type.NOTHING);
-            }
+        return switch (library ? call.reaches() : "") {
             case "Date", "DateTime" -> {
                 arity(call, 1);
                 ca.type(0);   // the literal text, which temporalLiteral parses
                 yield temporalLiteral(call);
-            }
-            case "Int.remainder" -> {
-                arity(call, 2);
-                ca.require(0, Type.INT, "argument 1 of remainder");
-                ca.require(1, Type.INT, "argument 2 of remainder");
-                // partial: a zero divisor produces the DivisionByZero case (spec 18.2)
-                yield Type.union(primitiveHeaded(Type.INT, "DivisionByZero"));
-            }
-            case "Decimal.toInt" -> {
-                // The narrowing states its rounding, as `divide` does: dropping a fraction is a
-                // domain decision (spec 18.3). The widening `Decimal.fromInt` needs no such word and
-                // is an ordinary stdlib function.
-                arity(call, 2);
-                ca.require(0, Type.DECIMAL, "argument 1 of toInt");
-                requireRoundingMode(args.get(1));
-                ca.untyped(1);   // a built-in identifier, not an expression
-                yield Type.INT;
-            }
-            case "Decimal.round" -> {
-                // Rounding to a scale names its mode for the same reason `toInt` does, and stays in
-                // the compiler for the same reason: the mode is a bare built-in identifier, which a
-                // core declaration's parameter type cannot name (spec 18.3).
-                arity(call, 3);
-                ca.require(0, Type.DECIMAL, "argument 1 of round");
-                ca.require(1, Type.INT, "scale of round");
-                requireRoundingMode(args.get(2));
-                ca.untyped(2);   // a built-in identifier, not an expression
-                yield Type.DECIMAL;
-            }
-            case "Int.divide", "Decimal.divide" -> {
-                if (args.size() == 4) {
-                    // Decimal divide states its rounding: divide(a, b, scale, mode) (spec 18.3)
-                    ca.require(0, Type.DECIMAL, "argument 1 of divide");
-                    ca.require(1, Type.DECIMAL, "argument 2 of divide");
-                    ca.require(2, Type.INT, "scale of divide");
-                    requireRoundingMode(args.get(3));
-                    ca.untyped(3);   // a built-in identifier, not an expression
-                    yield Type.union(primitiveHeaded(Type.DECIMAL, "DivisionByZero"));
-                }
-                arity(call, 2);
-                ca.require(0, Type.INT, "argument 1 of divide");
-                ca.require(1, Type.INT, "argument 2 of divide");
-                yield Type.union(primitiveHeaded(Type.INT, "DivisionByZero"));
             }
             default -> {
                 // a function-typed value in scope (a helper's function parameter) applied to
@@ -430,13 +377,13 @@ public final class CallElaborator {
                 // reaches here — NewtypeDesugar has lowered it to a NewData literal.
                 // a function value in force, or a recursive helper's signature: which of the two
                 // is the denotation's to say, and only one of them is bound here
-                if (env.of(call.denotes(), call.fn()) instanceof Type.FnOf fn) {
+                if (env.of(call.denotes(), call.written()) instanceof Type.FnOf fn) {
                     if (args.size() != fn.params().size()) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.arity").title("check.arity.title")
-                                        .at(call.pos(), call.fn().length())
-                                        .args(call.fn(), fn.params().size(), args.size()).build(),
-                                "`" + call.fn() + "` takes " + fn.params().size()
+                                        .at(call.pos(), call.written().length())
+                                        .args(call.written(), fn.params().size(), args.size()).build(),
+                                "`" + call.written() + "` takes " + fn.params().size()
                                         + " argument(s) but is applied to " + args.size());
                     }
                     // Resolve the signature's type variables from the value (non-function) arguments
@@ -446,11 +393,11 @@ public final class CallElaborator {
                     // type, so a function argument's result refines the binding (as the old fold did).
                     Map<String, Type> bind = new HashMap<>();
                     // Pin the result-type variables from the surrounding context first (issue #70): a
-                    // fold whose seed is Map.empty()/[] has its accumulator `'acc` bound to the expected
+                    // fold whose seed is Map.empty/[] has its accumulator `'acc` bound to the expected
                     // result BEFORE the step (and any inlined Map.upsert closure) is checked, so the
                     // seed's bottom no longer drives the step's parameter types.
                     BottomInfer.pinResultTypeVars(fn.result(), expected, bind, ctx.symbols(), call.pos(),
-                            "result of " + call.fn());
+                            "result of " + call.written());
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
                             Type at = ca.type(i);
@@ -465,7 +412,7 @@ public final class CallElaborator {
                     try {
                         for (int i = 0; i < args.size(); i++) {
                             if (fn.params().get(i) instanceof Type.FnOf fp0) {
-                                ca.put(i, Elaborator.resolveStepBinding(call.fn(), fp0, args.get(i), bind, env, ctx));
+                                ca.put(i, Elaborator.resolveStepBinding(call.written(), fp0, args.get(i), bind, env, ctx));
                             }
                         }
                     } catch (CompileException stepError) {
@@ -487,46 +434,46 @@ public final class CallElaborator {
                         }
                         throw CompileException.of(b.build(),
                                 "cannot infer the element type of the empty collection seeding `"
-                                        + call.fn() + "`; annotate the declaration it feeds");
+                                        + call.written() + "`; annotate the declaration it feeds");
                     }
                     for (int i = 0; i < args.size(); i++) {
                         if (!(fn.params().get(i) instanceof Type.FnOf)) {
-                            ca.require(i, TypeOps.substitute(fn.params().get(i), bind), "argument " + (i + 1) + " of " + call.fn());
+                            ca.require(i, TypeOps.substitute(fn.params().get(i), bind), "argument " + (i + 1) + " of " + call.written());
                         }
                     }
                     yield TypeOps.substitute(fn.result(), bind);
                 }
                 // a library qualifier that matched no builtin or intrinsic above is a wrong stdlib
                 // call (spec §stdlib) — report it as such, not as a missing behavior.
-                if (library || call.fn().indexOf('.') >= 0) {
+                if (library || call.written().indexOf('.') >= 0) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
-                                    .at(call.pos(), call.fn().length()).args(call.fn()).build(),
-                            "`" + call.fn() + "` is not a standard-library function.");
+                                    .at(call.pos(), call.written().length()).args(call.written()).build(),
+                            "`" + call.written() + "` is not a standard-library function.");
                 }
                 // a required behavior called inline (spec 12.2, 13), or one that requires nothing and
                 // is called by name (spec [#calling-a-behavior]). Both are typed against the callee's
                 // declaration; where the behavior comes from at run time is the backend's to know.
-                ReqSig callee = ctx.reqs().get(call.fn());
+                ReqSig callee = ctx.reqs().get(call.reaches());
                 if (callee == null) {
-                    callee = ctx.callees().get(call.fn());
+                    callee = ctx.callees().get(call.reaches());
                 }
                 if (callee == null) {
-                    Elaborator.optionCaseWritten(call.fn(), call.pos());
-                    String qualified = Prelude.qualifiedFor(call.fn());
+                    Elaborator.optionCaseWritten(call.written(), call.pos());
+                    String qualified = Prelude.qualifiedFor(call.written());
                     if (qualified != null) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.stdlib.qualified.msg")
-                                        .title("check.unknown.title").at(call.pos(), call.fn().length())
-                                        .args(call.fn(), qualified).build(),
-                                "`" + call.fn() + "` is a standard-library function and must be called"
+                                        .title("check.unknown.title").at(call.pos(), call.written().length())
+                                        .args(call.written(), qualified).build(),
+                                "`" + call.written() + "` is a standard-library function and must be called"
                                         + " qualified, as `" + qualified + "` (spec §stdlib).");
                     }
                     throw noCallee(call);
                 }
                 arity(call, callee.params().size());
                 for (int i = 0; i < callee.params().size(); i++) {
-                    ca.require(i, callee.params().get(i), "argument " + (i + 1) + " of " + call.fn());
+                    ca.require(i, callee.params().get(i), "argument " + (i + 1) + " of " + call.written());
                 }
                 yield callee.success();
             }
@@ -547,15 +494,15 @@ public final class CallElaborator {
         return Optional.empty();
     }
 
-    /** The rounding-mode argument of {@code divide} is one of the built-in identifiers, written
-     * bare — not an ordinary expression (spec 18.3). */
-    static void requireRoundingMode(Ast.Expr e) {
+    /** A rounding mode is one of the built-in identifiers, written bare — not an ordinary
+     * expression ([#stdlib-decimal]). {@code of} is the operation taking it. */
+    static void requireRoundingMode(String of, Ast.Expr e) {
         if (!(e instanceof Ast.Var v) || !Elaborator.ROUNDING_MODES.contains(v.name())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.divide.rounding").title("check.type.mismatch.title")
-                            .at(e.pos()).build(),
-                    "the rounding mode of `divide` must be one of HALF_UP, HALF_EVEN, HALF_DOWN, UP,"
-                            + " DOWN, CEILING, FLOOR (spec 18.3)");
+                            .at(e.pos()).args(of).build(),
+                    "the rounding mode of `" + of + "` must be one of HALF_UP, HALF_EVEN, HALF_DOWN,"
+                            + " UP, DOWN, CEILING, FLOOR ([#stdlib-decimal])");
         }
     }
 
@@ -616,7 +563,7 @@ public final class CallElaborator {
      * that a sum does not go here — asking for an annotation would send the reader after something
      * the position already carries.
      */
-    private static Type numericFold(Ast.Call call, Type element, Type expected) {
+    private static Type numericFold(Ast.Apply call, Type element, Type expected) {
         if (element == Type.INT || element == Type.DECIMAL) {
             return element;
         }
@@ -628,31 +575,31 @@ public final class CallElaborator {
             if (position == null || BottomInfer.isBottom(position)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.numeric.empty").title("check.fold.seed.title")
-                                .at(call.pos(), call.fn().length()).args(call.fn())
+                                .at(call.pos(), call.written().length()).args(call.written())
                                 .hint("check.numeric.empty.hint").build(),
-                        call.fn() + " over the empty list answers with its seed, and whether that"
+                        call.written() + " over the empty list answers with its seed, and whether that"
                                 + " seed is an Int or a Decimal follows from an element the empty"
                                 + " list does not have — annotate the position it feeds"
-                                + " (`let total: Decimal = " + call.fn() + "([])`)");
+                                + " (`let total: Decimal = " + call.written() + "([])`)");
             }
             throw CompileException.of(
                     Diagnostic.of(null, "check.numeric.result").title("check.type.mismatch.title")
-                            .at(call.pos(), call.fn().length())
-                            .args(call.fn(), Type.show(position))
+                            .at(call.pos(), call.written().length())
+                            .args(call.written(), Type.show(position))
                             .hint("check.numeric.result.hint").build(),
-                    call.fn() + " answers with an Int or a Decimal, but this position needs "
+                    call.written() + " answers with an Int or a Decimal, but this position needs "
                             + Type.show(position) + " — a newtype over one of them is built from the"
-                            + " result (`Hours(" + call.fn() + "(xs))`) rather than being it, and any"
+                            + " result (`Hours(" + call.written() + "(xs))`) rather than being it, and any"
                             + " other type has no place for one");
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.numeric").title("check.type.mismatch.title")
-                        .at(call.pos(), call.fn().length())
-                        .args(call.fn(), Localizable.of("kind.numeric.list"), Type.show(element))
+                        .at(call.pos(), call.written().length())
+                        .args(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))
                         .hint("check.numeric.hint").build(),
-                shortName(call.fn()) + " needs a list of Int or Decimal, but the element is "
+                shortName(call.written()) + " needs a list of Int or Decimal, but the element is "
                         + Type.show(element) + " — map to its numeric field first and apply "
-                        + call.fn() + " to that");
+                        + call.written() + " to that");
     }
 
     /** The name without its qualifier: {@code List.sum} reads as {@code sum} in a sentence about the
@@ -676,16 +623,16 @@ public final class CallElaborator {
      * build rather than a run (and an {@code example} fixture, which may only hold literals, can
      * carry a date at all). A computed date comes from the boundary or from {@code Date.addDays},
      * not from this form. */
-    static Type temporalLiteral(Ast.Call call) {
-        boolean isDate = call.fn().equals("Date");
+    static Type temporalLiteral(Ast.Apply call) {
+        boolean isDate = "Date".equals(call.reaches());
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.temporal.literal").title("check.type.mismatch.title")
-                            .at(call.pos(), call.fn().length()).args(call.fn()).build(),
-                    "`" + call.fn() + "(...)` takes a written string, e.g. "
+                            .at(call.pos(), call.written().length()).args(call.written()).build(),
+                    "`" + call.written() + "(...)` takes a written string, e.g. "
                             + (isDate ? "Date(\"2026-07-01\")" : "DateTime(\"2026-07-01T09:00\")"));
         }
-        parseTemporal(call.fn(), lit.value(), call.pos());
+        parseTemporal(call.written(), lit.value(), call.pos());
         return isDate ? Type.DATE : Type.DATETIME;
     }
 
@@ -705,13 +652,13 @@ public final class CallElaborator {
         }
     }
 
-    static void arity(Ast.Call call, int n) {
+    static void arity(Ast.Apply call, int n) {
         if (call.args().size() != n) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.arity").title("check.arity.title")
-                            .at(call.pos(), call.fn().length())
-                            .args(call.fn(), n, call.args().size()).build(),
-                    call.fn() + " expects " + n + " argument(s), got " + call.args().size());
+                            .at(call.pos(), call.written().length())
+                            .args(call.written(), n, call.args().size()).build(),
+                    call.written() + " expects " + n + " argument(s), got " + call.args().size());
         }
     }
 }

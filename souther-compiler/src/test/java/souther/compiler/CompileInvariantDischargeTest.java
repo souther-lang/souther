@@ -110,6 +110,60 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aListSaysItsEmptinessTwoWaysAndBothDischarge() {
+        String m = """
+                module demo
+                data Empty
+                data Items = List<String>
+                    invariant Bool.not(List.isEmpty(value))
+                behavior build : (xs: List<String>) -> Items | Empty constructs Items, Empty
+                let build (xs) = {
+                    guard List.length(xs) >= 1
+                        else Empty
+                    Items(xs)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the length guard discharges the emptiness invariant");
+    }
+
+    @Test
+    void aMapSaysItsEmptinessTwoWaysAndBothDischarge() {
+        String m = """
+                module demo
+                data Empty
+                data Rates = Map<String, Int>
+                    invariant Bool.not(Map.isEmpty(value))
+                behavior build : (m: Map<String, Int>) -> Rates | Empty constructs Rates, Empty
+                let build (m) = {
+                    guard Map.size(m) >= 1
+                        else Empty
+                    Rates(m)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the size guard discharges the emptiness invariant");
+    }
+
+    @Test
+    void aStringSaysItsEmptinessTwoWaysAndBothDischarge() {
+        String m = """
+                module demo
+                data Empty
+                data Code = String
+                    invariant Bool.not(String.isEmpty(value))
+                behavior build : (s: String) -> Code | Empty constructs Code, Empty
+                let build (s) = {
+                    guard String.length(s) >= 1
+                        else Empty
+                    Code(s)
+                }
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "the length guard discharges the emptiness invariant");
+    }
+
+    @Test
     void theElementAMapHandsItsClosureCarriesItsOwnInvariant() {
         // The combinator rule for `List.map` binds the closure's parameter to the list's element type
         // and seeds that type's invariant, so `x >= 0` is known here and the re-wrap discharges. This

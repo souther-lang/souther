@@ -89,8 +89,8 @@ class CompileBranchCollectionWideningTest {
                 behavior collect : (total: Int) -> ReasonSet constructs ReasonSet, Costly, NoAuthority
                 let reasons (total: Int): Set<Reason> =
                     if total >= 100
-                        then Set.insert(Costly { threshold = 100 }, Set.empty())
-                        else Set.insert(NoAuthority, Set.empty())
+                        then Set.insert(Costly { threshold = 100 }, Set.empty)
+                        else Set.insert(NoAuthority, Set.empty)
                 let collect (total) = ReasonSet { reasons = reasons(total) }
                 """));
     }

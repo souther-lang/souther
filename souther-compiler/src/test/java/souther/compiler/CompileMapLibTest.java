@@ -4,7 +4,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import souther.compiler.diag.CompileException;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** The Map building standard library ([#stdlib-map]): empty / singleton / insert / remove /
  *  isEmpty / size, over the immutable string-keyed Map. */
@@ -32,7 +36,7 @@ class CompileMapLibTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = {
-                    let built = insert("b", 2, insert("a", 1, Map.empty()))
+                    let built = insert("b", 2, insert("a", 1, Map.empty))
                     Out {
                         built = built,
                         one = singleton("x", 9),
@@ -41,7 +45,7 @@ class CompileMapLibTest {
                         baseEmpty = isEmpty(i.base),
                         builtEmpty = isEmpty(built),
                         hasB = containsKey("b", built),
-                        emptyMap = Map.empty()
+                        emptyMap = Map.empty
                     }
                 }
                 """), getClass().getClassLoader());
@@ -58,7 +62,7 @@ class CompileMapLibTest {
         assertEquals(false, m.get("baseEmpty"));
         assertEquals(false, m.get("builtEmpty"));
         assertEquals(true, m.get("hasB"));
-        assertEquals(Map.of(), m.get("emptyMap"), "Map.empty() is an empty map");
+        assertEquals(Map.of(), m.get("emptyMap"), "Map.empty is an empty map");
     }
 
     /** The Map higher-order operations ([#stdlib-map]): fold sums the values, map keeps the keys and
@@ -148,7 +152,7 @@ class CompileMapLibTest {
     }
 
     /** fold / map / update over a statically-typed map that is empty at runtime: fold returns the
-     *  seed, map and update return an empty map — no step runs. (A bare {@code Map.empty()} has no
+     *  seed, map and update return an empty map — no step runs. (A bare {@code Map.empty} has no
      *  value type for a step to consume, so the meaningful empty case is a typed map, empty at run
      *  time.) */
     @Test
@@ -271,5 +275,42 @@ class CompileMapLibTest {
                 "upsert applies the step to a present key");
         assertEquals(Map.of("a", 10L, "b", 20L, "z", 1L), m.get("bumpedAbsent"),
                 "upsert inserts the default for an absent key");
+    }
+
+    /**
+     * The empty map is a value: its declaration is written with no parameter list, so it takes no
+     * argument list either. The spec has always said so; the implementation had it the other way,
+     * and named the qualifier as a local nobody declared.
+     */
+    @Test
+    void theEmptyMapIsWrittenWithoutAnArgumentList() throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+                data Out = { m: Map<String, Int> }
+                data Req = { n: Int }
+                behavior go : (r: Req) -> Out
+                    constructs Out
+                let go (r) = Out { m = Map.empty }
+                """), getClass().getClassLoader());
+
+        Object in = Codecs.decoded(loader, "demo.Req", Map.of("n", 1L));
+        Object go = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(go, in));
+
+        assertEquals(Map.of(), out.get("m"));
+    }
+
+    @Test
+    void applyingTheEmptyMapIsRefusedAsApplyingAValue() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Out = { m: Map<String, Int> }
+                data Req = { n: Int }
+                behavior go : (r: Req) -> Out
+                    constructs Out
+                let go (r) = Out { m = Map.empty() }
+                """));
+        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+        assertTrue(e.getMessage().contains("Map.empty"), e.getMessage());
     }
 }

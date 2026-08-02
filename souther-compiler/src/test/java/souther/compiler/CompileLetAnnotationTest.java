@@ -55,7 +55,7 @@ class CompileLetAnnotationTest {
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = {
                     let counted: Map<String, Int> =
-                        fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), i.keys)
+                        fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
                     Out { m = counted }
                 }
                 """;
@@ -147,7 +147,7 @@ class CompileLetAnnotationTest {
     }
 
     // The annotated type is the binding's type for everything downstream: the value reaches a helper
-    // that takes a `Map<String, Int>`, which the un-annotated `fold` over `Map.empty()` would not.
+    // that takes a `Map<String, Int>`, which the un-annotated `fold` over `Map.empty` would not.
     @Test
     void anAnnotatedBindingTypesTheValueItPassesOn() throws Exception {
         String src = """
@@ -159,7 +159,7 @@ class CompileLetAnnotationTest {
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = {
                     let counted: Map<String, Int> =
-                        fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty(), i.keys)
+                        fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
                     Out { n = entries(counted) }
                 }
                 """;

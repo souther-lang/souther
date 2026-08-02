@@ -1066,6 +1066,18 @@ final class BodyGen {
             code.invokevirtual(owner, method, desc);
         }
 
+        /** Puts a function value on the stack as an {@code Fn}, at the parameter types the position
+         * fixed. A kernel that applies a function needs one; see {@link Intrinsics.TakesAFunction}. */
+        void emitFn(Core value, List<Type> paramTypes) {
+            emitFunctionValue(value, paramTypes);
+        }
+
+        /** Puts the JDK rounding constant a mode names on the stack. The mode is read by name, not
+         * evaluated; see {@link Intrinsics.TakesARoundingMode}. */
+        void emitRoundingMode(Core arg) {
+            code.getstatic(CD_RoundingMode, ((Core.Builtin) arg).name(), CD_RoundingMode);
+        }
+
         /** Narrows an {@code Int} (a {@code long}) to a JVM {@code int}, for a JDK method taking an
          * {@code int} index. */
         void emitL2i() {
@@ -1073,17 +1085,50 @@ final class BodyGen {
         }
 
         private void call(Core.Call call, Type expected) {
-            // An enumeration's order lives on its sum, so the sort family takes it as a comparator
-            // rather than reading a Comparable off the value (issue #161).
-            if (call.fn().equals("List.sort")) {
+            // An enumeration's order lives on its sum, so the ordered family takes it as a comparator
+            // rather than reading a Comparable off the value (issue #161). Everything else about
+            // these is what their declaration says, so only this prefix is written out here.
+            if (ORDERED_BY_COMPARATOR.contains(call.fn())) {
                 TypeName ordering = elementOrdering(call.args().get(0));
                 if (ordering != null) {
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
                     genExpr(call.args().get(0));
-                    code.invokestatic(CD_Lists, "sort",
-                            MethodTypeDesc.of(CD_List, CD_Comparator, CD_List));
+                    String bare = bareOp(call.fn());
+                    code.invokestatic(CD_Lists, bare, MethodTypeDesc.of(
+                            bare.equals("sort") ? CD_List : CD_Option, CD_Comparator, CD_List));
                     return;
                 }
+            }
+            // `sortBy` orders by what its key answers, not by what the list holds, so its comparator
+            // is read off the key's result type.
+            if ("List.sortBy".equals(call.fn())
+                    && call.args().get(0).type() instanceof Type.FnOf key
+                    && TypeOps.orderingEnumeration(key.result(), symbols) instanceof TypeName ordering) {
+                code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+                emitFunctionValue(call.args().get(0),
+                        List.of(((Type.ListOf) call.args().get(1).type()).element()));
+                genExpr(call.args().get(1));
+                code.invokestatic(CD_Lists, "sortBy",
+                        MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
+                return;
+            }
+            // A partial division answers a case rather than a number when its divisor is zero, so
+            // it emits a branch. The table's row shape is one call with one result; these are
+            // written out here, and their declarations still say what they take and answer.
+            switch (call.fn()) {
+                case "Int.divide" -> {
+                    intDivide(call, true);
+                    return;
+                }
+                case "Int.remainder" -> {
+                    intDivide(call, false);
+                    return;
+                }
+                case "Decimal.divide" -> {
+                    decimalDivide(call);
+                    return;
+                }
+                default -> { }
             }
             Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(call.fn());
             if (intrinsic != null) {
@@ -1091,106 +1136,17 @@ final class BodyGen {
                 return;
             }
             switch (call.fn()) {
-                case "String.length" -> {
-                    genExpr(call.args().get(0));
-                    code.invokevirtual(CD_String, "length", MethodTypeDesc.of(ConstantDescs.CD_int));
-                    code.i2l();
-                }
-                case "String.toInt" -> {
-                    // Strings.toInt returns a boxed Long or NotANumber.INSTANCE — the Int | NotANumber
-                    // union, carried as Object (like intDivide's DivisionByZero result).
-                    genExpr(call.args().get(0));
-                    code.invokestatic(CD_Strings, "toInt", MethodTypeDesc.of(CD_Object, CD_String));
-                }
-                case "String.toDecimal" -> {
-                    // the sibling of toInt: a boxed BigDecimal or NotANumber.INSTANCE, carried as Object
-                    genExpr(call.args().get(0));
-                    code.invokestatic(CD_Strings, "toDecimal", MethodTypeDesc.of(CD_Object, CD_String));
-                }
-                case "List.length" -> {
-                    genExpr(call.args().get(0));
-                    code.invokeinterface(CD_List, "size", MTD_size);
-                    code.i2l();
-                }
-                case "List.get" -> {
-                    genExpr(call.args().get(1));      // get(index, xs): list then index (Lists.get)
-                    genExpr(call.args().get(0));      // long index
-                    code.invokestatic(CD_Lists, "get",
-                            MethodTypeDesc.of(CD_Option, CD_List, ConstantDescs.CD_long));
-                }
-                case "List.max", "List.min" -> {
-                    TypeName ordering = elementOrdering(call.args().get(0));
-                    if (ordering != null) {
-                        code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    }
-                    genExpr(call.args().get(0));
-                    code.invokestatic(CD_Lists, bareOp(call.fn()),   // "max" / "min"
-                            ordering == null
-                                    ? MethodTypeDesc.of(CD_Option, CD_List)
-                                    : MethodTypeDesc.of(CD_Option, CD_Comparator, CD_List));
-                }
-                case "List.find", "List.sortBy" -> {
-                    // find(p, xs) / sortBy(key, xs): the function is a value here (not inlined into a
-                    // fold), so materialise it as an Fn, then pass the list. The list's element type
-                    // gives the function's one parameter type.
-                    Type elem = ((Type.ListOf) call.args().get(1).type()).element();
-                    TypeName ordering = call.fn().equals("List.sortBy")
-                            && call.args().get(0).type() instanceof Type.FnOf key
-                            ? TypeOps.orderingEnumeration(key.result(), symbols) : null;
-                    if (ordering != null) {
-                        code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    }
-                    emitFunctionValue(call.args().get(0), List.of(elem));   // Fn on the stack
-                    genExpr(call.args().get(1));                            // then the List
-                    if (call.fn().equals("List.find")) {
-                        code.invokestatic(CD_Lists, "find", MethodTypeDesc.of(CD_Option, CD_Fn, CD_List));
-                    } else {
-                        code.invokestatic(CD_Lists, "sortBy", ordering == null
-                                ? MethodTypeDesc.of(CD_List, CD_Fn, CD_List)
-                                : MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
-                    }
-                }
                 case GrowingFold.BUILD -> buildList(call);
                 case GrowingFold.GROW -> growList(call);
                 case GrowingFold.MAP_BUILD -> buildMap(call);
                 case GrowingFold.PUT -> putIntoMap(call);
-                case "Option.map" -> {
-                    // map(f, opt): materialise f as an Fn (its one parameter is the option's element
-                    // type), then the option. `Option` is not surface-writable, so the rewrap into
-                    // Some(f v) / None happens in the runtime kernel (Option.map), not in emitted code.
-                    Type elem = ((Type.OptionOf) call.args().get(1).type()).element();
-                    emitFunctionValue(call.args().get(0), List.of(elem));   // Fn on the stack
-                    genExpr(call.args().get(1));                            // then the Option
-                    code.invokestatic(CD_Options, "map", MethodTypeDesc.of(CD_Option, CD_Fn, CD_Option));
-                }
-                case "Map.get" -> {
-                    genExpr(call.args().get(1));      // get(key, m): map then key (Maps.get)
-                    // The key goes into an Object parameter, so a primitive one boxes here. An Int
-                    // key is a long on the stack, and a String key is already a reference — which is
-                    // why leaving this out is bytecode that verifies for one and not the other.
-                    box(code, genExpr(call.args().get(0)));
-                    code.invokestatic(CD_Maps, "get",
-                            MethodTypeDesc.of(CD_Option, CD_Map, ConstantDescs.CD_Object));
-                }
-                case "Map.empty" -> code.invokestatic(CD_Maps, "empty", MethodTypeDesc.of(CD_Map));
-                case "Set.empty" -> code.invokestatic(CD_Sets, "empty", MethodTypeDesc.of(CD_Set));
                 case "Date", "DateTime" -> {
                     // a written date: the checker has already parsed the literal, so the text is
                     // known good and this is a plain parse of a constant string.
-                    ClassDesc cd = call.fn().equals("Date") ? CD_LocalDate : CD_LocalDateTime;
+                    ClassDesc cd = "Date".equals(call.fn()) ? CD_LocalDate : CD_LocalDateTime;
                     code.loadConstant(((Core.Str) call.args().get(0)).value());
                     code.invokestatic(cd, "parse", MethodTypeDesc.of(cd, CD_CharSequence));
                 }
-                case "Int.divide", "Decimal.divide" -> {
-                    if (call.args().size() == 4) {
-                        decimalDivide(call);
-                    } else {
-                        intDivide(call, true);
-                    }
-                }
-                case "Int.remainder" -> intDivide(call, false);
-                case "Decimal.toInt" -> decimalToInt(call);
-                case "Decimal.round" -> decimalRound(call);
                 default -> {
                     // an injected behavior a lambda captured arrives in a slot rather than in a
                     // field of the enclosing behavior, and is applied as the value it is. This asks
@@ -1489,29 +1445,6 @@ final class BodyGen {
             code.labelBinding(zero);
             code.getstatic(CD_DivisionByZero, "INSTANCE", CD_DivisionByZero);
             code.labelBinding(end);
-        }
-
-        /** {@code toInt(d, mode)}: the whole number `d` rounds to under `mode`, which is written at
-         * the call as `divide`'s is. The kernel aborts on a value too large for an Int. */
-        private void decimalToInt(Core.Call call) {
-            genExpr(call.args().get(0));
-            String mode = ((Core.Builtin) call.args().get(1)).name();
-            code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
-            code.invokestatic(CD_DecimalMath, "toInt",
-                    MethodTypeDesc.of(ConstantDescs.CD_long, CD_BigDecimal, CD_RoundingMode));
-        }
-
-        /** {@code round(d, scale, mode)}: `d` at the given number of decimal places, the mode written
-         * at the call as `toInt`'s and `divide`'s are. Unlike `toInt` the result stays a Decimal, so
-         * this is a plain {@code BigDecimal.setScale} and needs no kernel. */
-        private void decimalRound(Core.Call call) {
-            genExpr(call.args().get(0));
-            genExpr(call.args().get(1));   // scale (Int, a long)
-            code.l2i();
-            String mode = ((Core.Builtin) call.args().get(2)).name();
-            code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
-            code.invokevirtual(CD_BigDecimal, "setScale",
-                    MethodTypeDesc.of(CD_BigDecimal, ConstantDescs.CD_int, CD_RoundingMode));
         }
 
         /** Emits an inline call to an injected required behavior, leaving its success value on

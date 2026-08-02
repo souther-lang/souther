@@ -66,7 +66,7 @@ class CompileExampleMismatchTest {
                 let run (i) = Out {
                     first = Sku("apple"),
                     counts = List.fold((acc, s) -> Map.upsert(s.value, 1, c -> c + 1, acc),
-                        Map.empty(), i.skus),
+                        Map.empty, i.skus),
                     tags = Set.fromList([ "x" ])
                 }
                 example run
@@ -90,7 +90,7 @@ class CompileExampleMismatchTest {
                 data In = { ns: List<Int> }
                 data Out = { counts: Map<String, Int>, tags: Set<String> }
                 behavior run : (i: In) -> Out constructs Out
-                let run (i) = Out { counts = Map.empty(), tags = Set.empty() }
+                let run (i) = Out { counts = Map.empty, tags = Set.empty }
                 example run
                     | "wrong on purpose" : (In { ns = [] })
                         -> Out { counts = [ ("a", 1) ], tags = [ "x" ] }

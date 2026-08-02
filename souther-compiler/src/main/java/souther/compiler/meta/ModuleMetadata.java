@@ -210,7 +210,7 @@ public final class ModuleMetadata {
      */
     private static void reach(Ast.Expr e, Map<String, Ast.FnDef> own, Set<String> reached) {
         String named = switch (e) {
-            case Ast.Call call -> call.fn();
+            case Ast.Apply call -> call.written();
             case Ast.Var var -> var.name();
             default -> null;
         };

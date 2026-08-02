@@ -50,7 +50,7 @@ public final class ConstEval {
             case Ast.BoolLit b -> Optional.of(b.value());
             case Ast.Neg neg -> negate(eval(neg.operand()).orElse(null));
             case Ast.Binary bin -> binary(bin);
-            case Ast.Call call -> call(call);
+            case Ast.Apply call -> call(call);
             default -> Optional.empty();
         };
     }
@@ -139,15 +139,15 @@ public final class ConstEval {
         return Optional.empty();
     }
 
-    private static Optional<Object> call(Ast.Call call) {
+    private static Optional<Object> call(Ast.Apply call) {
         List<Ast.Expr> args = call.args();
-        switch (call.fn()) {
-            case "length", "String.length" -> {
+        switch (call.reaches()) {
+            case "String.length" -> {
                 if (args.size() == 1 && eval(args.get(0)).orElse(null) instanceof String s) {
                     return Optional.of((long) s.length());
                 }
             }
-            case "contains", "String.contains" -> {
+            case "String.contains" -> {
                 // contains(sub, s): the string being searched is the last argument (spec §pipe)
                 if (args.size() == 2
                         && eval(args.get(0)).orElse(null) instanceof String sub

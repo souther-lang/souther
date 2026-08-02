@@ -14,6 +14,13 @@ public final class Strings {
 
     private Strings() {}
 
+    /** The number of characters, as the Int the language carries. {@code String.length()} answers an
+     *  {@code int} and Souther's Int is a {@code long}, so the widening is here rather than at every
+     *  site that emits the call. */
+    public static long length(String s) {
+        return s.length();
+    }
+
     /** Splits on a literal separator, keeping empty pieces (Elm {@code String.split} semantics):
      *  {@code split("a,,b", ",") == ["a", "", "b"]}. An empty separator yields the whole string. */
     public static List<String> split(String s, String sep) {

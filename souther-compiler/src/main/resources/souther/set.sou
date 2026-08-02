@@ -2,12 +2,14 @@ module souther.set
 
 // Set operations (ADR-0028, [#stdlib-set]). A `Set<'a>` is unordered with no duplicates, compared
 // by value equality ([#collections], ADR-0009). It is immutable, so `insert` / `remove` / the
-// algebra return a fresh set. `Set.empty` is a compiler built-in — like `[]`, its element type is
-// fixed by context, so it has no argument to learn `'a` from.
+// algebra return a fresh set. `empty` takes no parameter list, so it is a value ([#fn-declaration])
+// — like `[]`, its element type is fixed by context, since it has no argument to learn `'a` from.
 //
 // Argument order follows F#/Elm ([#pipe]): the set operated on comes last, so `s |> Set.insert(x)`
 // reads left to right. `contains(x, s)` tests membership; `union` / `intersect` / `difference(a, b)`
 // are the set algebra (`difference` is `a` minus `b`).
+let empty : Set<'a> = intrinsic "set.empty"
+
 let singleton (value: 'a) : Set<'a> = intrinsic "set.singleton"
 let insert (value: 'a, s: Set<'a>) : Set<'a> = intrinsic "set.insert"
 let remove (value: 'a, s: Set<'a>) : Set<'a> = intrinsic "set.remove"
@@ -45,4 +47,4 @@ let partition (keep: ('a) -> Bool, s: Set<'a>) =
     Set.fold((acc, x) -> {
         let (yes, no) = acc
         if keep(x) then (Set.insert(x, yes), no) else (yes, Set.insert(x, no))
-    }, (Set.empty(), Set.empty()), s)
+    }, (Set.empty, Set.empty), s)

@@ -17,6 +17,13 @@ public final class Lists {
 
     private Lists() {}
 
+    /** The number of elements, as the Int the language carries. A JDK {@code size()} answers an
+     *  {@code int}, and Souther's Int is a {@code long}, so the widening is here rather than at
+     *  every site that emits the call. */
+    public static long length(List<?> list) {
+        return list.size();
+    }
+
     /** Safe indexing: {@code Some(element)} when {@code index} is in range, else {@code None}. */
     public static <T> Option<T> get(List<T> list, long index) {
         if (index < 0 || index >= list.size()) {

@@ -382,6 +382,8 @@ public interface Ast {
     /** A top-level data definition: product, sum, or unit. */
     sealed interface Def extends Ast permits Data, SumData, UnitData {
         String name();
+
+        SourcePos pos();
     }
 
     /**
@@ -659,7 +661,7 @@ public interface Ast {
     // --- expressions ---
 
     sealed interface Expr extends Ast
-            permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Call, Binary, Neg,
+            permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Block, Tuple,
                     TupleGet, Unreachable {}
 
@@ -940,6 +942,15 @@ public interface Ast {
             return new Var(binder.name(), new ValueName.Local(binder.name(), binder.id()), pos);
         }
 
+        /**
+         * The name of the declaration this reference reaches, or what was written where it reaches
+         * none. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is the spelling
+         * the source has, which an import may have let go without its qualifier.
+         */
+        public String reaches() {
+            return denotes instanceof ValueName.Stdlib lib ? lib.qualified() : name;
+        }
+
         public Var denoting(ValueName resolved) {
             return new Var(name, resolved, pos);
         }
@@ -948,27 +959,73 @@ public interface Ast {
     record FieldAccess(Expr target, String field, SourcePos pos) implements Expr {}
 
     /**
-     * A call. {@code denotes} is what {@code fn} names — a helper, a library function, an injected
-     * behavior, a function-typed parameter, or the type a newtype construction wraps — answered once
-     * during resolution.
+     * A function applied to arguments. {@code function} is the thing being applied, and it is an
+     * expression like any other: what is applied is what it answers, not how the application was
+     * written.
+     *
+     * <p>Applying a name is the common case and has its own constructors and readers below. A name
+     * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
+     * binding, or the type a newtype construction wraps — answered once during resolution.
      */
-    record Call(String fn, ValueName denotes, List<Expr> args, ConstructionOrigin origin,
-                SourcePos pos) implements Expr {
+    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos)
+            implements Expr {
 
-        /** A call as the parser read it, before resolution has said what {@code fn} denotes. */
-        public Call(String fn, List<Expr> args, SourcePos pos) {
-            this(fn, null, args, ConstructionOrigin.own(), pos);
+        /** Applying a name, as the parser read it, before resolution has said what the name denotes. */
+        public Apply(String fn, List<Expr> args, SourcePos pos) {
+            this(new Var(fn, pos), args, ConstructionOrigin.own(), pos);
         }
 
-        public Call denoting(ValueName resolved) {
-            return new Call(fn, resolved, args, origin, pos);
+        /** Applying a name a pass already knows the meaning of. */
+        public Apply(String fn, ValueName denotes, List<Expr> args, ConstructionOrigin origin,
+                     SourcePos pos) {
+            this(new Var(fn, denotes, pos), args, origin, pos);
         }
 
-        /** The same call, carried into a body by a value that body named. A recursive helper is
-         * lowered to a method rather than expanded, so a value reaching one leaves a call where its
-         * constructions would otherwise stand, and the call is what has to say where it came from. */
-        public Call carriedByValue() {
-            return new Call(fn, denotes, args, origin.carriedByValue(), pos);
+        /** Whether what this applies is a name. A reader that wants the name itself matches on
+         * {@link #function()}, which is where it is. */
+        public boolean appliesAName() {
+            return function instanceof Var;
+        }
+
+        /**
+         * The name this applies as the source writes it, or the empty spelling where what it
+         * applies is not a name. What a report quotes and underlines.
+         *
+         * <p><b>Never a lookup key.</b> An import lets a library name be written without its
+         * qualifier, so a table keyed by a declaration's name misses on the spelling — silently,
+         * because a miss is what a table keyed by names does with one it has not got. Every
+         * question of the form "which declaration is this" asks {@link #reaches()}, whose answer is
+         * this spelling for every name an import cannot have renamed.
+         */
+        public String written() {
+            return function instanceof Var v ? v.name() : "";
+        }
+
+        /**
+         * The name of the declaration this application reaches, or the empty spelling where it
+         * reaches none — what a table keyed by a declaration's name is looked up with.
+         *
+         * <p>A library name is filed under its qualifier whether or not an import let it be written
+         * bare, so that is what it answers; every other name is filed as it is written. The empty
+         * answer is not a convention: it is what applying something that is not a name leaves, and
+         * no declaration is named the empty spelling.
+         */
+        public String reaches() {
+            return denotes() instanceof ValueName.Stdlib lib ? lib.qualified() : written();
+        }
+
+        /** What the name this applies denotes, or null where what it applies is not a name. */
+        public ValueName denotes() {
+            return function instanceof Var v ? v.denotes() : null;
+        }
+
+
+        /** The same application, carried into a body by a value that body named. A recursive helper
+         * is lowered to a method rather than expanded, so a value reaching one leaves an application
+         * where its constructions would otherwise stand, and it is what has to say where it came
+         * from. */
+        public Apply carriedByValue() {
+            return new Apply(function, args, origin.carriedByValue(), pos);
         }
     }
 
@@ -994,7 +1051,7 @@ public interface Ast {
             case Neg n -> new Neg(f.apply(n.operand()), n.pos());
             case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.pos());
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
-            case Call c -> new Call(c.fn(), c.denotes(), mapExprs(c.args(), f), c.origin(), c.pos());
+            case Apply a -> new Apply(f.apply(a.function()), mapExprs(a.args(), f), a.origin(), a.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
             case IfConstructed ic -> new IfConstructed(f.apply(ic.construct()), ic.binder(),
                     f.apply(ic.then()), mapArms(ic.els(), f), ic.pos());
@@ -1042,7 +1099,10 @@ public interface Ast {
                 f.accept(b.left());
                 f.accept(b.right());
             }
-            case Call c -> c.args().forEach(f);
+            case Apply a -> {
+                f.accept(a.function());
+                a.args().forEach(f);
+            }
             case If iff -> {
                 f.accept(iff.cond());
                 f.accept(iff.then());

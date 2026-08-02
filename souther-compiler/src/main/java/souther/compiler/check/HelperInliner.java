@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
@@ -425,7 +426,7 @@ public final class HelperInliner {
             case Ast.NewData nd -> nd.carriedByValue();
             case Ast.Var v when v.denotes() instanceof ValueName.OfType named ->
                     v.denoting(named.carriedByValue());
-            case Ast.Call call -> call.carriedByValue();
+            case Ast.Apply call -> call.carriedByValue();
             default -> rebuilt;
         };
     }
@@ -538,8 +539,8 @@ public final class HelperInliner {
     private static Ast.Expr qualifyHelpers(Ast.Expr e, Predicate<ValueName.Helper> which) {
         Ast.Expr rebuilt = Ast.mapChildren(e, c -> qualifyHelpers(c, which));
         return switch (rebuilt) {
-            case Ast.Call call when foreign(call.denotes(), which) ->
-                    new Ast.Call(qualifiedName(call.denotes()), call.denotes(), call.args(),
+            case Ast.Apply call when foreign(call.denotes(), which) ->
+                    new Ast.Apply(qualifiedName(call.denotes()), call.denotes(), call.args(),
                             call.origin(),
                             call.pos());
             case Ast.Var v when foreign(v.denotes(), which) ->
@@ -590,7 +591,7 @@ public final class HelperInliner {
             return;
         }
         ValueName denotes = switch (e) {
-            case Ast.Call call -> call.denotes();
+            case Ast.Apply call -> call.denotes();
             case Ast.Var v -> v.denotes();
             default -> null;
         };
@@ -710,7 +711,7 @@ public final class HelperInliner {
     }
 
     /** The body {@code call} applies, or null where it applies something no body stands behind. */
-    public Ast.FnDef applied(Ast.Call call) {
+    public Ast.FnDef applied(Ast.Apply call) {
         return appliedHelper(call);
     }
 
@@ -726,13 +727,13 @@ public final class HelperInliner {
      * walk from the head. Rewriting it here, before inlining, means the step reaches {@code foldFrom}
      * (the one recursive helper) directly rather than through a wrapper that would pass the function on
      * as a value. */
-    private static Ast.Call desugarFold(Ast.Call call) {
-        if (!call.fn().equals("List.fold") || call.args().size() != 3) {
+    private static Ast.Apply desugarFold(Ast.Apply call) {
+        if (!"List.fold".equals(call.reaches()) || call.args().size() != 3) {
             return call;
         }
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.add(new Ast.IntLit(0, call.pos()));
-        return new Ast.Call("List.foldFrom", new ValueName.Stdlib("List.foldFrom"), args,
+        return new Ast.Apply("List.foldFrom", new ValueName.Stdlib("List.foldFrom"), args,
                 ConstructionOrigin.own(),
                 call.pos());
     }
@@ -837,12 +838,12 @@ public final class HelperInliner {
      * for the {@code List.fold} sugar — {@code foldFrom}'s without the index the sugar supplies.
      * Null when the name is not a helper (a builtin, an injected behavior, or unknown).
      */
-    private List<Ast.FnParam> declaredParams(Ast.Call call) {
-        if (call.fn().equals("List.fold") && call.args().size() == 3) {
+    private List<Ast.FnParam> declaredParams(Ast.Apply call) {
+        if ("List.fold".equals(call.reaches()) && call.args().size() == 3) {
             Ast.FnDef foldFrom = helpers.get("List.foldFrom");
             return foldFrom == null ? null : foldFrom.params().subList(0, 3);
         }
-        Ast.FnDef helper = helpers.get(call.fn());
+        Ast.FnDef helper = helpers.get(call.reaches());
         return helper == null ? null : helper.params();
     }
 
@@ -858,7 +859,7 @@ public final class HelperInliner {
      * the report names the caller's own call, not what the sugar expands to. A block with no
      * parameters is a braced block, not a lambda, and is left to the checker.
      */
-    private void checkFunctionArgumentPlacement(Ast.Call call) {
+    private void checkFunctionArgumentPlacement(Ast.Apply call) {
         List<Ast.FnParam> params = declaredParams(call);
         if (params == null || params.size() != call.args().size()) {
             return;   // not a helper, or an arity mismatch reported with the call itself
@@ -880,8 +881,8 @@ public final class HelperInliner {
             if (fnParam < 0) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.fn.argnotfn").title("check.fn.title")
-                                .at(lambda.pos()).args(call.fn(), i + 1, param).build(),
-                        "argument " + (i + 1) + " of `" + call.fn() + "` is `" + param
+                                .at(lambda.pos()).args(call.written(), i + 1, param).build(),
+                        "argument " + (i + 1) + " of `" + call.written() + "` is `" + param
                                 + "`, which does not take a function");
             }
             String shape = params.stream().map(Ast.FnParam::name)
@@ -889,12 +890,12 @@ public final class HelperInliner {
             throw CompileException.of(
                     Diagnostic.of(null, "check.fn.argorder").title("check.fn.title")
                             .at(lambda.pos())
-                            .args(call.fn(), i + 1, param, fnParam + 1, params.get(fnParam).name(), shape)
+                            .args(call.written(), i + 1, param, fnParam + 1, params.get(fnParam).name(), shape)
                             .hint("check.fn.argorder.hint").build(),
-                    "argument " + (i + 1) + " of `" + call.fn() + "` is `" + param
+                    "argument " + (i + 1) + " of `" + call.written() + "` is `" + param
                             + "`, which does not take a function: the function goes to argument "
                             + (fnParam + 1) + " (`" + params.get(fnParam).name() + "`). Write `"
-                            + call.fn() + "(" + shape + ")`.");
+                            + call.written() + "(" + shape + ")`.");
         }
     }
 
@@ -906,8 +907,8 @@ public final class HelperInliner {
      * other, so a parameter spelled like a helper is the parameter, and a lambda bound to a name a
      * module declares is the lambda — with nothing to tell the two apart by.
      */
-    private Ast.FnDef appliedHelper(Ast.Call call) {
-        return expands(call.denotes(), call.fn());
+    private Ast.FnDef appliedHelper(Ast.Apply call) {
+        return expands(call.denotes(), call.reaches());
     }
 
     /**
@@ -920,6 +921,9 @@ public final class HelperInliner {
      */
     private Ast.FnDef expands(ValueName denotes, String reachedBy) {
         return switch (denotes) {
+            // applying something that is not a name: what is applied is worked out by the expression,
+            // and no declaration stands behind it
+            case null -> null;
             case ValueName.Local local -> scopedLambdas.get(local.id());
             case ValueName.Helper _, ValueName.Stdlib _ -> helpers.get(reachedBy);
             // a construction, an injected behavior, `None`, or a name that denotes nothing: each is
@@ -968,7 +972,7 @@ public final class HelperInliner {
                 forwarded.add(Ast.Var.local(p, v.pos()));
             }
             out.set(i, new Ast.Block(params,
-                    new Ast.Call(v.name(), v.denotes(), forwarded, ConstructionOrigin.own(), v.pos()),
+                    new Ast.Apply(v.name(), v.denotes(), forwarded, ConstructionOrigin.own(), v.pos()),
                     v.pos()));
         }
         return out;
@@ -1016,9 +1020,20 @@ public final class HelperInliner {
             throw new IllegalStateException("nothing said which body this expansion is written into");
         }
         return switch (e) {
-            case Ast.Call rawCall -> {
+            // Applying something other than a name. The applied expression is bound first and the
+            // application reads the binding, which is the shape every reader downstream already has
+            // — and which says outright what the order is: the function is worked out once, before
+            // any argument, and the binding is what is applied.
+            case Ast.Apply raw when !raw.appliesAName() -> {
+                Ast.Binder f = binders.binder("$fn" + counter++, raw.function().pos());
+                yield inline(new Ast.LetIn(f, raw.function(), null, false, null,
+                        new Ast.Apply(f.name(), new ValueName.Local(f.name(), f.id()), raw.args(),
+                                raw.origin(), raw.pos()),
+                        raw.pos()));
+            }
+            case Ast.Apply rawCall -> {
                 checkFunctionArgumentPlacement(rawCall);
-                Ast.Call call = desugarNamedBlock(desugarFold(rawCall));
+                Ast.Apply call = desugarNamedBlock(desugarFold(rawCall));
                 List<Ast.Expr> args = new ArrayList<>();
                 for (Ast.Expr a : call.args()) {
                     args.add(inline(a));
@@ -1027,13 +1042,20 @@ public final class HelperInliner {
                 // a recursive helper is reached by the name it is declared under; a lambda a binding
                 // holds is not one, whatever it is called
                 boolean standing = !(call.denotes() instanceof ValueName.Local)
-                        && recursive.contains(call.fn());
+                        && recursive.contains(call.reaches());
                 if (helper == null || standing) {
                     // builtin, injected behavior, a function-typed parameter, or a recursive helper —
                     // a recursive helper is lowered to a method, so its call stays a Call (spec 13.1);
                     // only its args inline.
-                    yield new Ast.Call(call.fn(), call.denotes(), forwardDependencies(helper, args),
+                    yield new Ast.Apply(call.function(), forwardDependencies(helper, args),
                             call.origin(), call.pos());
+                }
+                // A declaration written with no parameter list is a value ([#fn-declaration]), so
+                // applying it applies whatever function that value is — not the declaration, which
+                // takes nothing. The value is substituted and the arguments are applied to it.
+                if (helper.params().isEmpty() && !args.isEmpty()
+                        && call.function() instanceof Ast.Var named) {
+                    yield inline(new Ast.Apply(valueOf(named), args, call.origin(), call.pos()));
                 }
                 if (args.size() != helper.params().size()) {
                     LambdaOrigin origin = lambdaOrigins.get(helper.name());
@@ -1052,7 +1074,7 @@ public final class HelperInliner {
                     }
                     throw CompileException.of(
                             Diagnostic.of(null, "check.helper.arity").title("check.arity.title")
-                                    .at(call.pos(), call.fn().length())
+                                    .at(call.pos(), call.written().length())
                                     .args(helper.name(), helper.params().size(), args.size()).build(),
                             "helper `let " + helper.name() + "` takes " + helper.params().size()
                                     + " argument(s) but is called with " + args.size());
@@ -1104,15 +1126,15 @@ public final class HelperInliner {
                                     .collect(java.util.stream.Collectors.joining(", "));
                             Diagnostic.Builder d = Diagnostic.of(null, "check.fn.argnotvalue")
                                     .title("check.fn.title").at(arg.pos())
-                                    .args(rawCall.fn(), i + 1, p.name(), shape);
+                                    .args(rawCall.written(), i + 1, p.name(), shape);
                             if (shape != null) {
                                 d.hint("check.fn.argnotvalue.hint");
                             }
                             throw CompileException.of(d.build(),
-                                    "argument " + (i + 1) + " of `" + rawCall.fn() + "` is `" + p.name()
+                                    "argument " + (i + 1) + " of `" + rawCall.written() + "` is `" + p.name()
                                             + "`, which takes a function: pass a named function or a lambda"
                                             + (shape == null ? ""
-                                                    : ". Write `" + rawCall.fn() + "(" + shape + ")`."));
+                                                    : ". Write `" + rawCall.written() + "(" + shape + ")`."));
                         }
                     } else {
                         // the binding the argument is bound to; the reads of the parameter inside the
@@ -1157,15 +1179,37 @@ public final class HelperInliner {
             case Ast.If iff -> new Ast.If(inline(iff.cond()), inline(iff.then()), inline(iff.els()), iff.pos());
             case Ast.IfConstructed ic -> new Ast.IfConstructed(inline(ic.construct()), ic.binder(),
                     inline(ic.then()), Ast.mapArms(ic.els(), this::inline), ic.pos());
-            case Ast.LetIn li when li.value() instanceof Ast.Block lambda -> {
-                // a lambda bound to a local: registered under that binding, so each application of it
-                // in the body expands inline (β-reduction) exactly as a named helper does. Its
+            case Ast.LetIn li -> {
+                // What the value turns out to be is what decides this, so it is worked out first: a
+                // lambda the author wrote and a named function read as a value are the same block by
+                // the time either gets here, and a `let` should not tell them apart.
+                Ast.Expr value = inline(li.value());
+                // A binding that holds a function, read into another binding: the second names the
+                // same function, so it is registered under it. Nothing is copied — what a name means
+                // is what it was given, and here it was given a binding.
+                Ast.FnDef aliased = value instanceof Ast.Var v ? expands(v.denotes(), v.reaches()) : null;
+                if (aliased != null) {
+                    BindingId alias = li.binder().id();
+                    scopedLambdas.put(alias, aliased);
+                    Ast.Expr aliasBody = inline(li.body());
+                    scopedLambdas.remove(alias);
+                    yield references(aliasBody, alias)
+                            ? new Ast.LetIn(li.binder(), value, li.declaredType(), li.annotated(),
+                                    li.opens(), aliasBody, li.pos())
+                            : aliasBody;
+                }
+                if (!(value instanceof Ast.Block lambda)) {
+                    yield new Ast.LetIn(li.binder(), value, li.declaredType(), li.annotated(),
+                            li.opens(), inline(li.body()), li.pos());
+                }
+                // a function bound to a local: registered under that binding, so each application of
+                // it in the body expands inline (β-reduction) exactly as a named helper does. Its
                 // parameters are untyped, so their types flow in from the arguments at expansion. No
-                // runtime closure is built as long as the lambda does not escape.
+                // runtime closure is built as long as it does not escape.
                 //
-                // The lambda cannot reach itself: a `let` does not bind its own name in its value
-                // (spec 16.1), so a name inside spelled like it is whatever it was outside, and
-                // expansion follows what a name denotes rather than how it is spelled.
+                // It cannot reach itself: a `let` does not bind its own name in its value (spec
+                // 16.1), so a name inside spelled like it is whatever it was outside, and expansion
+                // follows what a name denotes rather than how it is spelled.
                 List<Ast.FnParam> params = new ArrayList<>();
                 for (Ast.Binder p : lambda.params()) {
                     params.add(new Ast.FnParam(p, null));
@@ -1175,15 +1219,14 @@ public final class HelperInliner {
                         new Ast.FnDef(li.name(), params, null, null, lambda.body(), li.pos()));
                 Ast.Expr body = inline(li.body());
                 scopedLambdas.remove(bound);
-                // if the binding is still read, the lambda was used as a value, not just applied — it
-                // escapes, which needs a runtime closure. Keep the binding so the "a block is not a
-                // value" check reports it.
+                // if the binding is still read, the function was used as a value, not just applied —
+                // it escapes, which needs a runtime closure. Keep the binding so the check that
+                // reports an escaping block sees it.
                 yield references(body, bound)
-                        ? new Ast.LetIn(li.binder(), inline(lambda), li.declaredType(), li.annotated(), li.opens(), body, li.pos())
+                        ? new Ast.LetIn(li.binder(), lambda, li.declaredType(), li.annotated(),
+                                li.opens(), body, li.pos())
                         : body;
             }
-            case Ast.LetIn li -> new Ast.LetIn(li.binder(), inline(li.value()), li.declaredType(), li.annotated(), li.opens(),
-                    inline(li.body()), li.pos());
             case Ast.ListLit lit -> new Ast.ListLit(inlineList(lit.elements()), lit.pos());
             case Ast.Tuple tup -> new Ast.Tuple(inlineList(tup.elements()), tup.pos());
             case Ast.TupleGet tg -> new Ast.TupleGet(inline(tg.tuple()), tg.index(), tg.arity(), tg.pos());
@@ -1209,10 +1252,13 @@ public final class HelperInliner {
      * itself.
      */
     private Ast.Expr valueOf(Ast.Var v) {
+        if (v.denotes() instanceof ValueName.Stdlib lib) {
+            return libraryValueOf(v, lib);
+        }
         if (!(v.denotes() instanceof ValueName.Helper)) {
             return v;
         }
-        Ast.FnDef value = helpers.get(v.name());
+        Ast.FnDef value = helpers.get(v.reaches());
         if (value == null || value.body() == null) {
             return v;
         }
@@ -1230,12 +1276,66 @@ public final class HelperInliner {
                 args.add(Ast.Var.local(p, v.pos()));
             }
             return inline(new Ast.Block(params,
-                    new Ast.Call(v.name(), v.denotes(), args, ConstructionOrigin.own(), v.pos()), v.pos()));
+                    new Ast.Apply(v.name(), v.denotes(), args, ConstructionOrigin.own(), v.pos()), v.pos()));
         }
         if (recursive.contains(v.name())) {
             return v;
         }
         return carriedByValue(inline(value.body()));
+    }
+
+    /**
+     * A library name written where a value goes, as the function it names.
+     *
+     * <p>The library declares everything it ships, so this asks the declaration and nothing else —
+     * not whether the implementation is a Souther body or a kernel, which is what is on the other
+     * side of the name and not the name's business. What comes back is the block a reader would
+     * have written by hand, which is what the specification says the two spellings are.
+     *
+     * <p>An empty collection is not a function: it is a declaration with no parameter list, so it is
+     * already the value it is and is left alone.
+     */
+    private Ast.Expr libraryValueOf(Ast.Var v, ValueName.Stdlib lib) {
+        Ast.FnDef declared = Prelude.declarationOf(lib.qualified());
+        int arity = declared == null ? -1 : declared.params().size();
+        if (arity <= 0) {
+            return v;   // a value, or a name the library does not declare — reported where it is used
+        }
+        // A rounding mode is written at the call and read by name, so a block standing in for one of
+        // these would have to pass a binding where a name has to be. Said here rather than left to
+        // the arity mismatch the expansion would otherwise cause.
+        if (takesARoundingMode(declared)) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.stdlib.roundingmode.byname")
+                            .title("check.apply.notfunction.title")
+                            .at(v.pos(), v.name().length()).args(lib.qualified()).build(),
+                    "`" + lib.qualified() + "` takes a rounding mode, which is written at the call"
+                            + " and not passed as a value, so it cannot be handed over by name —"
+                            + " wrap it in a block that writes the mode");
+        }
+        int k = counter++;
+        List<Ast.Binder> params = new ArrayList<>();
+        List<Ast.Expr> args = new ArrayList<>();
+        for (int i = 0; i < arity; i++) {
+            Ast.Binder p = binders.binder("$v" + k + "_" + i, v.pos());
+            params.add(p);
+            args.add(Ast.Var.local(p, v.pos()));
+        }
+        return inline(new Ast.Block(params,
+                new Ast.Apply(v.name(), v.denotes(), args, ConstructionOrigin.own(), v.pos()),
+                v.pos()));
+    }
+
+    /** Whether a declaration takes a rounding mode — a name the operation reads, not a value. */
+    private static boolean takesARoundingMode(Ast.FnDef declared) {
+        for (Ast.FnParam p : declared.params()) {
+            if (p.type() != null && p.type().cases().size() == 1
+                    && p.type().cases().get(0) instanceof Ast.TypeRef ref
+                    && ref.name().equals(TypeOps.ROUNDING_MODE.name())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -1294,13 +1394,13 @@ public final class HelperInliner {
      * helper call. Only {@code fold} needs this — map/filter/all/any are helpers whose function
      * parameter the inliner binds directly (see {@link #inline}).
      */
-    private Ast.Call desugarNamedBlock(Ast.Call call) {
-        Integer idx = BLOCK_ARG.get(call.fn());
+    private Ast.Apply desugarNamedBlock(Ast.Apply call) {
+        Integer idx = BLOCK_ARG.get(call.reaches());
         if (idx == null || idx >= call.args().size()
                 || !(call.args().get(idx) instanceof Ast.Var v)) {
             return call;
         }
-        Ast.FnDef helper = expands(v.denotes(), v.name());
+        Ast.FnDef helper = expands(v.denotes(), v.reaches());
         if (helper == null) {
             return call;   // a bare name that stands for no body is left for the type checker to report
         }
@@ -1313,10 +1413,10 @@ public final class HelperInliner {
             callArgs.add(Ast.Var.local(p, v.pos()));
         }
         Ast.Block block = new Ast.Block(params,
-                new Ast.Call(v.name(), v.denotes(), callArgs, ConstructionOrigin.own(), v.pos()), v.pos());
+                new Ast.Apply(v.name(), v.denotes(), callArgs, ConstructionOrigin.own(), v.pos()), v.pos());
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
-        return new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
+        return new Ast.Apply(call.function(), args, call.origin(), call.pos());
     }
 
     /**
@@ -1410,17 +1510,23 @@ public final class HelperInliner {
             case Ast.Var v when v.denotes() instanceof ValueName.Local p
                     && subst.containsKey(p.id()) ->
                     new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()));
-            case Ast.Var v -> v.denoting(copy.of(v.denotes()));
+            case Ast.Var v -> new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
             case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, substDenotes, fnParams, at, copy), fa.field(), at(at, fa.pos()));
-            case Ast.Call call -> {
+            // applying something that is not a name: the callee is renamed as the expression it is,
+            // like every other subexpression. Rebuilding it from a name would leave nothing here.
+            case Ast.Apply call when !call.appliesAName() -> new Ast.Apply(
+                    rename(call.function(), subst, substDenotes, fnParams, at, copy),
+                    renameList(call.args(), subst, substDenotes, fnParams, at, copy),
+                    call.origin(), at(at, call.pos()));
+            case Ast.Apply call -> {
                 // a substituted callee is the function argument this parameter was bound to, under
                 // the name this expansion gave it; anything else keeps what the call already denoted
                 BindingId param = call.denotes() instanceof ValueName.Local p ? p.id() : null;
                 boolean renamed = param != null && fnParams.contains(param);
-                String callee = renamed ? subst.get(param) : call.fn();
+                String callee = renamed ? subst.get(param) : call.written();
                 ValueName denotes = renamed
                         ? substituted(substDenotes, param) : copy.of(call.denotes());
-                yield new Ast.Call(callee, denotes, renameList(call.args(), subst, substDenotes, fnParams, at, copy),
+                yield new Ast.Apply(callee, denotes, renameList(call.args(), subst, substDenotes, fnParams, at, copy),
                         call.origin(),
                         at(at, call.pos()));
             }
@@ -1496,7 +1602,7 @@ public final class HelperInliner {
      * the ones to report. Everything else is a prelude helper, whose body lies in the shipped source of
      * {@code souther.*} and is stamped with the call site instead.
      */
-    private boolean keepsItsPositions(Ast.Call call) {
+    private boolean keepsItsPositions(Ast.Apply call) {
         return switch (call.denotes()) {
             // a lambda, wherever it came from: the caller wrote it, or a prelude body wrote it and
             // was stamped with the call site when that body was renamed
@@ -1582,7 +1688,12 @@ public final class HelperInliner {
             }
             // A value stands for a value. A block written as one — a `.field` getter, whose parameter
             // the compiler synthesizes — is refused where it is written rather than where it is used.
-            if (e.getValue().body() instanceof Ast.Block block) {
+            //
+            // Unless the definition says it is a function. Then the block is what that says it is,
+            // and its parameters are the ones the written type names.
+            boolean declaredAFunction = e.getValue().declaredReturn() != null
+                    && e.getValue().declaredReturn().asFn() != null;
+            if (!declaredAFunction && e.getValue().body() instanceof Ast.Block block) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
                                 .at(block.pos()).build(),
@@ -1692,7 +1803,7 @@ public final class HelperInliner {
     private static boolean references(Ast.Expr e, BindingId binding) {
         ValueName denotes = switch (e) {
             case Ast.Var v -> v.denotes();
-            case Ast.Call c -> c.denotes();
+            case Ast.Apply c -> c.denotes();
             default -> null;
         };
         if (denotes instanceof ValueName.Local local && local.id().equals(binding)) {
@@ -1708,10 +1819,10 @@ public final class HelperInliner {
         // whatever else bears that name. The call carries what it resolved to, so it is asked rather
         // than matched against the helper table — a parameter named like a helper was reaching the
         // graph as a call to that helper, which made `let f (g: (Int) -> Int) = g(1)` recursive.
-        if (e instanceof Ast.Call call && !(call.denotes() instanceof ValueName.Local)) {
+        if (e instanceof Ast.Apply call && !(call.denotes() instanceof ValueName.Local)) {
             // `List.fold` desugars to `List.foldFrom` before inlining, so a body that folds reaches the
             // recursive `foldFrom` — recursion classification and prelude-injection must see that.
-            String fn = call.fn().equals("List.fold") ? "List.foldFrom" : call.fn();
+            String fn = "List.fold".equals(call.reaches()) ? "List.foldFrom" : call.reaches();
             if (helpers.containsKey(fn)) {
                 out.add(fn);
             }

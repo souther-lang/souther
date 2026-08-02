@@ -43,14 +43,14 @@ class CompileValueEqualityMatrixTest {
                 constructs Out, Row, Amount
             let go (r) = {
                 // an optional is read, never built (E1303), so the two come out of a Map
-                let oa = Map.get("k", Map.insert("k", r.a, Map.empty()))
-                let ob = Map.get("k", Map.insert("k", r.b, Map.empty()))
+                let oa = Map.get("k", Map.insert("k", r.a, Map.empty))
+                let ob = Map.get("k", Map.insert("k", r.b, Map.empty))
                 let sa = Set.fromList([r.a])
                 let sb = Set.fromList([r.b])
-                let mva = Map.insert("k", r.a, Map.empty())
-                let mvb = Map.insert("k", r.b, Map.empty())
-                let mka = Map.insert(r.a, 1, Map.empty())
-                let mkb = Map.insert(r.b, 1, Map.empty())
+                let mva = Map.insert("k", r.a, Map.empty)
+                let mvb = Map.insert("k", r.b, Map.empty)
+                let mka = Map.insert(r.a, 1, Map.empty)
+                let mkb = Map.insert(r.b, 1, Map.empty)
                 Out { decimalEq   = r.a == r.b
                     , decimalSet  = Set.size(Set.fromList([r.a, r.b]))
                     , newtypeEq   = Amount(r.a) == Amount(r.b)

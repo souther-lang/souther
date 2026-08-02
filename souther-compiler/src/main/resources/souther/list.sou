@@ -19,6 +19,13 @@ module souther.list
 // value (a closure), applied per element; the self-call is in tail position, so the backend turns the
 // recursion into a loop (no per-element stack frame). `List.get` gives the base case: `None` past the
 // end of the list yields the seed. Every combinator below is derived from it.
+let length (xs: List<'a>) : Int = intrinsic "list.length"
+let find (p: ('a) -> Bool, xs: List<'a>) : Option<'a> = intrinsic "list.find"
+let sortBy (key: ('a) -> 'k, xs: List<'a>) : List<'a> = intrinsic "list.sortBy"
+let max (xs: List<'a>) : Option<'a> = intrinsic "list.max"
+let min (xs: List<'a>) : Option<'a> = intrinsic "list.min"
+let get (index: Int, xs: List<'a>) : Option<'a> = intrinsic "list.get"
+
 let foldFrom (step: ('acc, 'a) -> 'acc, seed: 'acc, xs: List<'a>, i: Int) : 'acc =
     match List.get(i, xs) with
         | Some x -> List.foldFrom(step, step(seed, x), xs, i + 1)
@@ -122,7 +129,7 @@ let distinct (xs: List<'a>) = {
     let (_, out) = List.fold((acc, x) -> {
         let (seen, ys) = acc
         if Set.contains(x, seen) then acc else (Set.insert(x, seen), ys ++ [x])
-    }, (Set.empty(), []), xs)
+    }, (Set.empty, []), xs)
     out
 }
 
@@ -153,7 +160,7 @@ let groupBy (key: ('a) -> 'k, xs: List<'a>) =
                 | None -> [x]
                 | Some bucket -> bucket ++ [x],
             acc),
-        Map.empty(), xs)
+        Map.empty, xs)
 
 // `filterMap` maps and drops in one pass (Elm's `List.filterMap`, F#'s `List.choose`): `f` answers
 // with an optional, and only what is there joins the result. This is how an optional field becomes a
@@ -190,7 +197,7 @@ let foldr (step: ('acc, 'a) -> 'acc, seed: 'acc, xs: List<'a>) : 'acc =
 // same key collapse and the later one wins, as `Map.fromList` does — say the key is an id with
 // `List.allUniqueBy` and the collapse cannot happen.
 let indexBy (key: ('a) -> 'k, xs: List<'a>) =
-    List.fold((acc, x) -> Map.insert(key(x), x, acc), Map.empty(), xs)
+    List.fold((acc, x) -> Map.insert(key(x), x, acc), Map.empty, xs)
 
 // `sort` orders by the elements' natural order (Elm `List.sort`). Like Elm it is a native
 // primitive, not a fold: an in-language sort needs comparison plus a place to remember the

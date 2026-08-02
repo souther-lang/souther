@@ -62,7 +62,7 @@ public final class NewtypeDesugar {
 
     private static Ast.Expr go(Ast.Expr e, Symbols symbols) {
         return switch (e) {
-            case Ast.Call call -> {
+            case Ast.Apply call -> {
                 List<Ast.Expr> args = mapExprs(call.args(), symbols);
                 // Whether this name is a type or something else was answered when the module's names
                 // were resolved. Asking the type namespace again here would read a binding of the
@@ -73,17 +73,17 @@ public final class NewtypeDesugar {
                     if (args.size() != 1) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.newtype.arity").title("check.arity.title")
-                                        .at(call.pos(), call.fn().length()).args(call.fn(), args.size())
+                                        .at(call.pos(), call.written().length()).args(call.written(), args.size())
                                         .build(),
-                                "`" + call.fn() + "` wraps one value, but is applied to " + args.size()
+                                "`" + call.written() + "` wraps one value, but is applied to " + args.size()
                                         + " argument(s)");
                     }
                     yield new Ast.NewData(
-                            new Ast.Name(call.fn(), built, call.pos()),
+                            new Ast.Name(call.written(), built, call.pos()),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), ConstructionOrigin.own(), call.pos());
                 }
-                yield new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
+                yield new Ast.Apply(call.function(), args, call.origin(), call.pos());
             }
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();

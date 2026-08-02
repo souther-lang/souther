@@ -111,7 +111,8 @@ public enum SyntaxKind {
     PIPE_EXPR,          // a |> b
     BINARY_EXPR,        // a <op> b (all precedence levels)
     UNARY_EXPR,         // -a
-    CALL_EXPR,          // f(args)
+    CALL_EXPR,          // f(args) — an identifier applied, which the AST builder folds into APPLY_EXPR
+    APPLY_EXPR,         // <expr>(args) — what is applied is any expression
     ARG_LIST,
     FIELD_ACCESS,       // a.b
     VAR_EXPR,           // a bare identifier

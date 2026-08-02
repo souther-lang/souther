@@ -9,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Decimal division states its rounding as a domain decision: {@code divide(a, b, scale, mode)}
@@ -61,6 +62,36 @@ class CompileDecimalDivideTest {
         assertEquals(false, m.get("ok"));
     }
 
+    /**
+     * The two names are two declarations. Sharing one rule made them interchangeable aliases picked
+     * apart by argument count, so each was reachable under the other's name — and the spec sentence
+     * saying `Decimal.divide(a, b)` cannot be written was not true.
+     */
+    @Test
+    void eachDivideTakesOnlyItsOwnArguments() {
+        CompileException four = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Pair = { a: Int, b: Int }
+                data Out = { n: Int }
+                behavior divv : (p: Pair) -> Out constructs Out
+                let divv (p) = match Int.divide(p.a, p.b, 2, HALF_UP) with
+                    | Decimal as q -> Out { n = 0 }
+                    | DivisionByZero -> Out { n = 0 }
+                """));
+        assertTrue(four.getMessage().contains("Int.divide takes 2"), four.getMessage());
+
+        CompileException two = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Pair = { a: Decimal, b: Decimal }
+                data Out = { n: Int }
+                behavior divv : (p: Pair) -> Out constructs Out
+                let divv (p) = match Decimal.divide(p.a, p.b) with
+                    | Int as q -> Out { n = q }
+                    | DivisionByZero -> Out { n = 0 }
+                """));
+        assertTrue(two.getMessage().contains("Decimal.divide takes 4"), two.getMessage());
+    }
+
     @Test
     void twoArgDivideOnDecimalIsRejected() {
         String src = """
@@ -72,5 +103,19 @@ class CompileDecimalDivideTest {
                 let divv (p) = Out { value = divide(p.a, p.b) }
                 """;
         assertThrows(CompileException.class, () -> Compiler.compile(src));
+    }
+
+    /** A mode is a name the language gives, read by the operation that takes it. Applied, it is told
+     * what it is rather than shown a compiler bug. */
+    @Test
+    void aRoundingModeAppliedToArgumentsIsToldItIsNotAFunction() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data In = { n: Int }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = HALF_UP(i.n) }
+                """));
+        assertEquals("check.builtin.notfunction", e.diagnostic().messageKey());
     }
 }

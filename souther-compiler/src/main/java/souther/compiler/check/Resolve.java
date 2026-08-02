@@ -110,9 +110,15 @@ public final class Resolve {
      * read off the module. A module resolved on its own reaches only what it declares.
      */
     public record Values(String module, Map<String, ValueName.Helper> helpers,
-                         Map<String, ValueName.Behavior> behaviors) {
+                         Map<String, ValueName.Behavior> behaviors,
+                         Map<String, String> exposed) {
 
-        /** What a module reaches when nothing else is in sight. */
+        /**
+         * What a module reaches when nothing else is in sight — the core modules, which the library
+         * resolves as it loads. A core module imports nothing (it declares the library), so the
+         * table of names an import would bring in is empty; a module that does import is resolved
+         * with what the query answered, which reads its imports from the source that wrote them.
+         */
         public static Values of(Ast.Module m) {
             Map<String, ValueName.Helper> helpers = new LinkedHashMap<>();
             for (String helper : HelperInliner.helpersOf(m).keySet()) {
@@ -122,7 +128,7 @@ public final class Resolve {
             for (Ast.BehaviorDef b : m.behaviors()) {
                 behaviors.put(b.name(), new ValueName.Behavior(m.name(), b.name()));
             }
-            return new Values(m.name(), helpers, behaviors);
+            return new Values(m.name(), helpers, behaviors, Map.of());
         }
     }
 
@@ -543,9 +549,23 @@ public final class Resolve {
         return switch (e) {
             case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
                     valueName(v.name(), v.pos(), bound)));
-            case Ast.Call call -> new Ast.Call(call.fn(),
-                    answered(call.fn(), call.pos(), calledName(call, bound)),
+            // Applying a name is answered as a name: which of a binding, a helper, a library
+            // function or a type it is decides what the application means. Applying anything else
+            // is answered as the expression it is, and what may be applied is the check's to say.
+            case Ast.Apply call when call.appliesAName() -> new Ast.Apply(call.written(),
+                    answered(call.written(), call.pos(), calledName(call, bound)),
                     exprs(call.args(), bound), call.origin(), call.pos());
+            case Ast.Apply call -> new Ast.Apply(expr(call.function(), bound),
+                    exprs(call.args(), bound), call.origin(), call.pos());
+            // `Map.empty`, `String.isEmpty` — a namespace and a member of it, which the parser read
+            // as a field taken off a name because no `(` followed. Folded here and nowhere earlier:
+            // Souther reads no case, so `Map` may be a parameter, and a binding in force wins over
+            // everything else — which is a fact the parser and the AST builder do not have.
+            case Ast.FieldAccess fa -> {
+                Ast.Var member = memberOfNamespace(fa, bound);
+                yield member != null ? member
+                        : new Ast.FieldAccess(expr(fa.target(), bound), fa.field(), fa.pos());
+            }
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
                 for (Ast.FieldInit i : nd.inits()) {
@@ -619,53 +639,45 @@ public final class Resolve {
     // --- names in a body ---
 
     /**
-     * What a name used as a value denotes. A binding in force wins over everything else — a body may
-     * bind a name a module declares, and the binding is what the name means there.
+     * What a name written in the value namespace denotes, or null where nothing here does.
+     *
+     * <p>One ladder, in one order, so a name means the same thing under an application as beside one.
+     * It was two — a bare name tried the declared types before this module's helpers, an applied one
+     * tried the library first and the types last — and which rung answered therefore depended on
+     * whether a `(` followed. The rungs a spelling could reach twice are refused where the value
+     * namespace is assembled, so the order between them decides nothing.
+     *
+     * <p>{@code applied} is the one thing the position still says. A type written as a value is the
+     * construction of a unit data and records where it came from; applied, it is a newtype taking
+     * what it wraps, and the application is what says that.
      */
-    private ValueName valueName(String written, SourcePos pos, Bindings bound) {
+    private ValueName lookup(String written, boolean applied, Bindings bound) {
+        // a binding in force wins over everything else: a body may bind a name a module declares,
+        // and the binding is what the name means there
         ValueName.Local binding = bound.binderOf(written);
         if (binding != null) {
             return binding;
         }
+        // names the language itself gives: Option's two cases, and the rounding modes an operation
+        // taking one reads rather than evaluates
         if (Elaborator.ROUNDING_MODES.contains(written) || written.equals("None")
                 || written.equals("Some")) {
             return new ValueName.Builtin(written);
         }
-        TypeName type = symbols.resolve(written);
-        if (type != null && !type.isUnresolved()) {
-            return new ValueName.OfType(written, type, ConstructionOrigin.own());
-        }
-        // a helper or a behavior named without being applied — handed to a combinator by name,
-        // which the inliner expands into a block that applies it
-        ValueName.Helper helper = values.helpers().get(written);
-        if (helper != null) {
-            return helper;
-        }
-        ValueName.Behavior behavior = values.behaviors().get(written);
-        if (behavior != null) {
-            return behavior;
-        }
-        return nothing(written, pos, unknownIdentifier(written, pos, bound));
-    }
-
-    /** What the name a call applies denotes. */
-    private ValueName calledName(Ast.Call call, Bindings bound) {
-        String written = call.fn();
-        ValueName.Local binding = bound.binderOf(written);
-        if (binding != null) {
-            return binding;   // a function-typed parameter, applied
-        }
-        if (written.equals("Some") || written.equals("None")) {
-            return new ValueName.Builtin(written);   // Option's cases, which are not calls (E1303)
-        }
         // A library qualifier makes this a library reference — `Date(...)`, whose namespace is the
-        // whole name, included. Whether the library has a function of that name is the check's to
-        // say: asking here would tie the answer to how much of the library has been loaded, and the
+        // whole name, included. Whether the library has a member of that name is the check's to say:
+        // asking here would tie the answer to how much of the library has been loaded, and the
         // library resolves its own sources while it loads.
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
             return new ValueName.Stdlib(written);
         }
+        TypeName type = symbols.resolve(written);
+        if (type != null && !type.isUnresolved()) {
+            return new ValueName.OfType(written, type, applied ? null : ConstructionOrigin.own());
+        }
+        // a helper or a behavior, applied or handed over by name — which the inliner expands into a
+        // block that applies it
         ValueName.Helper helper = values.helpers().get(written);
         if (helper != null) {
             return helper;
@@ -674,11 +686,47 @@ public final class Resolve {
         if (behavior != null) {
             return behavior;
         }
-        TypeName type = symbols.resolve(written);
-        if (type != null && !type.isUnresolved()) {
-            return new ValueName.OfType(written, type, null);   // a newtype applied to what it wraps
+        // A name an import let this module write without its qualifier. Asked last: an import brings
+        // a name in, and everything the module already has — a binding in force, its own
+        // declarations — is what that name means here instead.
+        String qualified = values.exposed().get(written);
+        return qualified == null ? null : new ValueName.Stdlib(qualified);
+    }
+
+    /**
+     * {@code Q.m} read as a member of the namespace {@code Q}, or null where it is an ordinary field
+     * read.
+     *
+     * <p>Only where {@code Q} is unbound. A parameter or a {@code let} named {@code Map} makes
+     * {@code Map.empty} that binding's {@code empty} field, resolved the ordinary way, and no
+     * namespace member is produced. Whether the namespace has a member {@code m} is not asked here —
+     * see {@link #lookup}.
+     *
+     * <p>The reference is written {@code Q.m} and positioned at {@code Q}, so what a reader asks
+     * about covers both tokens exactly as an applied qualified name already does.
+     */
+    private Ast.Var memberOfNamespace(Ast.FieldAccess fa, Bindings bound) {
+        if (!(fa.target() instanceof Ast.Var base) || base.denotes() != null
+                || bound.binderOf(base.name()) != null || !Prelude.isQualifier(base.name())) {
+            return null;
         }
-        return nothing(written, call.pos(), notCallable(written, call.pos(), bound));
+        String written = base.name() + "." + fa.field();
+        return new Ast.Var(written,
+                answered(written, base.pos(), new ValueName.Stdlib(written)), base.pos());
+    }
+
+    /** What a name used as a value denotes, and the report for one that denotes nothing. */
+    private ValueName valueName(String written, SourcePos pos, Bindings bound) {
+        ValueName denotes = lookup(written, false, bound);
+        return denotes != null ? denotes
+                : nothing(written, pos, unknownIdentifier(written, pos, bound));
+    }
+
+    /** The same, for the name an application applies: what is not there is reported differently. */
+    private ValueName calledName(Ast.Apply call, Bindings bound) {
+        ValueName denotes = lookup(call.written(), true, bound);
+        return denotes != null ? denotes
+                : nothing(call.written(), call.pos(), notCallable(call.written(), call.pos(), bound));
     }
 
     /**

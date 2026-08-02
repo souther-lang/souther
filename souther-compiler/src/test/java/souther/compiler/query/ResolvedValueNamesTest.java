@@ -50,7 +50,7 @@ class ResolvedValueNamesTest {
     }
 
     private static void collect(Ast.Expr e, List<Ast.Expr> out) {
-        if (e instanceof Ast.Var || e instanceof Ast.Call) {
+        if (e instanceof Ast.Var || e instanceof Ast.Apply) {
             out.add(e);
         }
         Ast.mapChildren(e, child -> {
@@ -60,13 +60,13 @@ class ResolvedValueNamesTest {
     }
 
     private static ValueName denotes(Ast.Expr e) {
-        return e instanceof Ast.Var v ? v.denotes() : ((Ast.Call) e).denotes();
+        return e instanceof Ast.Var v ? v.denotes() : ((Ast.Apply) e).denotes();
     }
 
     /** The one named {@code written}, which each of these writes once. */
     private static ValueName denotationOf(String source, String written) {
         for (Ast.Expr e : named(resolve(source))) {
-            String spelled = e instanceof Ast.Var v ? v.name() : ((Ast.Call) e).fn();
+            String spelled = e instanceof Ast.Var v ? v.name() : ((Ast.Apply) e).written();
             if (spelled.equals(written)) {
                 return denotes(e);
             }

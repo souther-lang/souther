@@ -120,4 +120,58 @@ class CompileValueNamespaceCollisionTest {
                 let origin = Stamp { at = "1970-01-01" }
                 """));
     }
+
+    private static final String PUBLISHES_TAG = """
+            module lib
+            exposing ( Tag )
+
+            let Tag (n: Int) = n + 1
+            """;
+
+    /**
+     * A definition another module publishes is written here bare, so it lands in this namespace
+     * exactly where a data of that name already is. Reached through an import it used to walk past
+     * the check: bare `Tag` was the unit data and `Tag(i.n)` the imported helper, in one body.
+     */
+    @Test
+    void anImportedHelperMayNotBeNamedLikeALocalData() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(java.util.List.of(PUBLISHES_TAG, """
+                        module app
+                        exposing ( Out, In, go )
+
+                        import lib ( Tag )
+
+                        data Tag
+                        data In = { n: Int }
+                        data Out = { bumped: Int }
+
+                        behavior go : (i: In) -> Out | Tag
+                            constructs Out, Tag
+                        let go (i) = {
+                            guard i.n > 0
+                                else Tag
+                            Out { bumped = Tag(i.n) }
+                        }
+                        """)));
+
+        assertTrue(e.getMessage().contains("Tag"), e.getMessage());
+    }
+
+    /** The qualifier is the only spelling that reaches the library, so a data of that name hides it. */
+    @Test
+    void aDataMayNotBeNamedLikeAStandardLibraryQualifier() {
+        CompileException e = refused("""
+                module demo
+
+                data List = String
+                data In = { s: String }
+                data Out = { n: Int }
+
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { n = String.length(i.s) }
+                """);
+
+        assertTrue(e.getMessage().contains("List"), e.getMessage());
+    }
 }

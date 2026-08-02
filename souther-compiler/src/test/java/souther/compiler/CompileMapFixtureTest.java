@@ -25,7 +25,7 @@ class CompileMapFixtureTest {
                 behavior count : (i: In) -> Out constructs Out
 
                 let count (i) = Out {
-                    counts = List.fold((acc, n) -> Map.upsert(n, 1, c -> c + 1, acc), Map.empty(), i.names)
+                    counts = List.fold((acc, n) -> Map.upsert(n, 1, c -> c + 1, acc), Map.empty, i.names)
                 }
 
                 example count
