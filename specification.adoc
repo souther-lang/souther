@@ -807,7 +807,7 @@ This is a guard comprehension (<<stdlib-list>>): it yields one `+ClientBorne+` i
 
 A bare identifier in an expression resolves as: a variable if a bound local exists; otherwise a built-in value (such as `+None+`; <<algebraic-types>>); otherwise the construction of a unit data of the same name; otherwise undefined. Souther does not distinguish identifiers syntactically by case (so that Japanese business vocabulary can be used as identifiers), so this resolution is done in the symbol table.
 
-Because a local shadowing a built-in value is always an error, using a *built-in value name* (`+None+`, rounding mode `+HALF_UP+`, etc.; <<stdlib-decimal>>) as a binding name — `+let+`, a `+match+` binding, or a lambda argument — is a compile error. This prevents a shadowed built-in from silently becoming unreachable. A unit data name is domain vocabulary and may be used as a binding, in which case the local takes precedence and constructing a unit data of that name is not writable in the same scope.
+Because a local shadowing a built-in value is always an error, using a *built-in value name* (`+None+`; <<algebraic-types>>) as a binding name — `+let+`, a `+match+` binding, or a lambda argument — is a compile error. This prevents a shadowed built-in from silently becoming unreachable. A unit data name is domain vocabulary and may be used as a binding, in which case the local takes precedence and constructing a unit data of that name is not writable in the same scope. The rounding-mode cases (<<stdlib-decimal>>) are ordinary unit data and follow this rule; a shadowed case has no qualified escape syntax.
 
 [#field-visibility]
 === Field visibility
@@ -2546,7 +2546,7 @@ An outside-world dependency is declared as a behavior with no implementation, an
 
 The standard library is bundled with the compiler and referenced by short qualifiers — `+List+` (list), `+Map+` (map), `+Set+` (set), `+String+` (string), `+Bool+` (boolean), `+Int+` / `+Decimal+` (numbers), `+Date+` / `+DateTime+` (temporal), `+Option+` (optional). Every function is called through this qualifier: `+List.map(f, xs)+`, `+String.trim(s)+`, `+List.length(xs)+`. There is no automatic import — names are not delivered implicitly. What may be written bare is operators (`+==+` `+<+` `+{plus}{plus}+`, etc.), `+if+` / `+match+`, literals, and the current module's helpers. Argument order follows the convention of <<pipe>> (primary subject last).
 
-A standard-library function is therefore never a bare name and never crosses what a module writes bare. What a module writes bare in a value position is one of: a binding in force, one of its own `+let+`s, a data of its own written as a value, a behavior it can reach, a name an import let it write without its qualifier, or a name the language gives (`+None+`, the rounding modes). One spelling means one of these — a `+let+` may not be named like a data (<<fn-rules>>), a name the language gives may not be taken, and a binding in force wins over a declaration.
+A standard-library function is therefore never a bare name and never crosses what a module writes bare. What a module writes bare in a value position is one of: a binding in force, one of its own `+let+`s, a data of its own written as a value, a behavior it can reach, a name an import let it write without its qualifier, a name the language gives (`+None+`), or a case of a data core declares (`+HALF_UP+`; <<stdlib-decimal>>). One spelling means one of these — a `+let+` may not be named like a data (<<fn-rules>>), a name the language gives may not be taken, and a binding in force wins over a declaration.
 
 A qualifier is the only spelling that reaches its library, so a *type* MUST NOT be named like one: `+data List = String+` is a compile error, as `+module souther.foo+` is. In expression position the qualifier still yields to a binding — a parameter or a `+let+` named `+Map+` makes `+Map.empty+` that binding's `+empty+` field — because a binding in force wins over everything.
 
@@ -2578,8 +2578,7 @@ An intrinsic MUST declare its return type (it cannot be inferred from `+intrinsi
 *Every* standard-library function is declared in a core module this way, whether its body is Souther (self-hosted, like `+List.map+` over `+foldFrom+`) or `+intrinsic "key"+` (a JVM kernel). The declaration is the single source of truth for the signature — there is no compiler table of signatures, and a function the compiler can call but a declaration does not describe does not exist. What stays in the compiler is what the *type language cannot say*, as a side condition on a declared signature rather than in place of one:
 
 * the operators (`{plus}` `+-+` `+*+` `+/+` `+==+` `+<+` `+<=+` `+>+` `+>=+`) are syntax, and the arithmetic ones carry the closed-newtype rules (<<newtype>>) a plain function does not;
-* "the element is an ordered value" — Souther has no `+comparable+` type class, so `+List.sort+` / `+max+` / `+min+` / `+sortBy+` declare `+List<'a>+` and the constraint on `+'a+` is checked in the compiler;
-* "this argument is a rounding mode" — `+Decimal.divide+` / `+Decimal.toInt+` / `+Decimal.round+` declare a `+RoundingMode+` parameter, a type only core may name, and the argument is read as the identifier it is written as rather than evaluated (<<stdlib-decimal>>). A name is therefore not a value here, so these three cannot be handed over by name the way any other function can (<<blocks>>).
+* "the element is an ordered value" — Souther has no `+comparable+` type class, so `+List.sort+` / `+max+` / `+min+` / `+sortBy+` declare `+List<'a>+` and the constraint on `+'a+` is checked in the compiler.
 
 Because a signature is a declaration and nothing else, a standard-library function is a function value like any other: `+List.map(String.trim, xs)+` and `+let f = String.length+` are ordinary (<<blocks>>). A value the library offers is declared the same way, with no parameter list — `+let empty : Map<'k, 'a> = intrinsic "map.empty"+` — and is written `+Map.empty+`.
 
@@ -2666,14 +2665,16 @@ add  subtract  multiply  divide  compare  fromInt  toInt  round
 abs  min  max  clamp
 ----
 
-Division makes the rounding scale and mode explicit as arguments. `+Decimal.divide(a, b, 2, HALF_UP)+` rounds HALF_UP at 2 decimal places. The mode is written as one of the identifiers below and read as that identifier: `+RoundingMode+` is a parameter type only core may name, and a binding of a mode's name is refused (<<unit-data>>).
+Division makes the rounding scale and mode explicit as arguments. `+Decimal.divide(a, b, 2, HALF_UP)+` rounds HALF_UP at 2 decimal places. The mode is an ordinary value of the data core declares:
 
 [,text]
 ----
-HALF_UP  HALF_EVEN  HALF_DOWN  UP  DOWN  CEILING  FLOOR
+data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOOR
 ----
 
-These correspond to `+java.math.RoundingMode+`. `+Decimal.divide(a, b)+` without scale and mode cannot be written — to surface rounding as a domain decision, the same position as "scale is incidental" in <<primitives>>. Division by zero returns `+Decimal | DivisionByZero+`, opened by `+| Decimal as d+` (<<primitive-arm>>).
+A mode argument is evaluated like any other, so a policy can be stated once and passed by name, chosen by an `+if+` or a `+match+`, or computed by a helper, and the three operations taking one are ordinary functions that can be handed over by name (<<blocks>>). The cases are unit data and follow the unit-data rules (<<unit-data>>): written bare, shadowable by a binding. The type provides no codec, so it cannot appear where one is required — a field of it, an example fixture over it — and this is intentional: a rounding policy is a computation's input, not a value that crosses a serialization boundary.
+
+The cases correspond to `+java.math.RoundingMode+`. `+Decimal.divide(a, b)+` without scale and mode cannot be written — to surface rounding as a domain decision, the same position as "scale is incidental" in <<primitives>>. Division by zero returns `+Decimal | DivisionByZero+`, opened by `+| Decimal as d+` (<<primitive-arm>>).
 
 `+Int+` and `+Decimal+` meet only where the conversion is written. `+Decimal.fromInt(n)+` widens an `+Int+`; it is exact, so nothing has to be stated. `+Decimal.toInt(d, mode)+` narrows back, and because that drops a fraction it names the rounding at the call, as `+divide+` does. There is no implicit widening: an arithmetic operator takes two operands of one type (<<primitives>>), so a rate applied to an amount in yen reads `+Decimal.fromInt(netAmount) * taxRate+` — the conversion sits where the value stops being an amount. A `+Decimal+` too large for an `+Int+` aborts, as an `+Int+` overflow does (<<primitives>>).
 

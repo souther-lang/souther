@@ -234,7 +234,10 @@ public final class DataChecker {
             // unit data spelled like the one another module's published body builds was recording
             // its own type as the one built. Carried or not is asked of the name for the same reason
             // it is asked of a construction node — it is the same question about the same thing.
+            // `constructs` governs what this compilation declares; a unit the language gives
+            // (`HALF_UP`) is vocabulary, not business data — as `None` is.
             case Ast.Var v when v.denotes() instanceof ValueName.OfType named
+                    && symbols.declaredByCompilation(named.type())
                     && symbols.get(named.type()) instanceof Ast.UnitData -> {
                 Map<TypeName, String> side = named.origin().carried(named.type())
                         ? out.carried() : out.originated();

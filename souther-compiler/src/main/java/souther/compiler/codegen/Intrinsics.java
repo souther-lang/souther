@@ -1,7 +1,9 @@
 package souther.compiler.codegen;
 
+import souther.compiler.Prelude;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.core.Core;
 
 import java.lang.constant.ClassDesc;
@@ -43,42 +45,35 @@ final class Intrinsics {
         if (e == null) {
             throw new CompileException(call.pos(), "unknown intrinsic `" + key + "`");
         }
-        return e.emit(g, call);
+        return e.emit(g, key, call);
     }
 
     sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold, TakesAFunction,
-            TakesARoundingMode {
-        Type emit(BodyGen g, Core.Call call);
+            DeclaredStatic {
+        Type emit(BodyGen g, String key, Core.Call call);
     }
 
     /**
-     * A kernel taking a rounding mode. The mode is a name the language gives, read by the operation
-     * that takes it rather than evaluated, so it is emitted as the JDK constant it names rather than
-     * as an expression ([#stdlib-decimal]).
-     *
-     * <p>{@code l2iArgs} narrows an argument from Souther's Int to a JVM {@code int}; {@code owner}
-     * and {@code virtual} say whether the kernel is a static or a method on the value.
+     * An {@code invokestatic} whose descriptor comes from the kernel's core declaration: each
+     * parameter is the boundary form of the declared parameter type, the return the boundary form
+     * of the declared result. A descriptor belongs to the callee — deriving one from the observed
+     * argument types only ever agreed with it while every parameter type was invariant, and a
+     * sum-typed parameter ({@code RoundingMode}) ends that: the argument's type may be the case it
+     * happens to be, while the declaration names the sum.
      */
-    record TakesARoundingMode(ClassDesc owner, String method, boolean virtual, int mode,
-                              Set<Integer> l2iArgs, ClassDesc[] params, Type result) implements Emit {
-        public Type emit(BodyGen g, Core.Call call) {
-            for (int i = 0; i < call.args().size(); i++) {
-                if (i == mode) {
-                    g.emitRoundingMode(call.args().get(i));
-                    continue;
-                }
-                g.genExpr(call.args().get(i));
-                if (l2iArgs.contains(i)) {
-                    g.emitL2i();
-                }
+    record DeclaredStatic(ClassDesc owner, String method) implements Emit {
+        public Type emit(BodyGen g, String key, Core.Call call) {
+            Prelude.Signature declared = Prelude.kernelSignature(key);
+            ClassDesc[] params = new ClassDesc[declared.params().size()];
+            for (int i = 0; i < params.length; i++) {
+                params[i] = boundaryDesc(declared.params().get(i));
             }
-            MethodTypeDesc desc = MethodTypeDesc.of(boundaryDesc(result), params);
-            if (virtual) {
-                g.emitInvokeVirtual(owner, method, desc);
-            } else {
-                g.emitInvokeStatic(owner, method, desc);
+            for (Core arg : call.args()) {
+                g.genExpr(arg);
             }
-            return result;
+            g.emitInvokeStatic(owner, method,
+                    MethodTypeDesc.of(boundaryDesc(declared.result()), params));
+            return declared.result();
         }
     }
 
@@ -94,7 +89,7 @@ final class Intrinsics {
     record TakesAFunction(ClassDesc owner, String method, int container,
                           Function<Type, List<Type>> paramTypes,
                           Function<List<Type>, Type> result) implements Emit {
-        public Type emit(BodyGen g, Core.Call call) {
+        public Type emit(BodyGen g, String key, Core.Call call) {
             Type held = call.args().get(container).type();
             g.emitFn(call.args().get(0), paramTypes.apply(held));
             g.genExpr(call.args().get(container));
@@ -115,7 +110,7 @@ final class Intrinsics {
      */
     record RuntimeStatic(ClassDesc owner, String method, int[] argOrder,
                          Set<Integer> objectSlots, Function<List<Type>, Type> result) implements Emit {
-        public Type emit(BodyGen g, Core.Call call) {
+        public Type emit(BodyGen g, String key, Core.Call call) {
             int n = argOrder.length;
             Type[] byArg = new Type[n];
             ClassDesc[] params = new ClassDesc[n];
@@ -142,7 +137,7 @@ final class Intrinsics {
      */
     record JdkVirtual(ClassDesc owner, String method, MethodTypeDesc desc, int[] argOrder,
                       Set<Integer> l2iArgs, Type result) implements Emit {
-        public Type emit(BodyGen g, Core.Call call) {
+        public Type emit(BodyGen g, String key, Core.Call call) {
             for (int src : argOrder) {
                 g.genExpr(call.args().get(src));
                 if (l2iArgs.contains(src)) {
@@ -162,7 +157,7 @@ final class Intrinsics {
      * position the call was written in.
      */
     record NumericFold(String intMethod, String decimalMethod) implements Emit {
-        public Type emit(BodyGen g, Core.Call call) {
+        public Type emit(BodyGen g, String key, Core.Call call) {
             Type result = call.type();
             if (result != Type.INT && result != Type.DECIMAL) {
                 // the checker admits these two and nothing else; anything here is this compiler
@@ -207,6 +202,11 @@ final class Intrinsics {
         if (t instanceof Type.OptionOf) {
             return CD_Option;
         }
+        // So is a name of the runtime namespace ({@code RoundingMode}): it is the real package of
+        // the classes souther-runtime ships (see TypeName.RUNTIME), so a kernel taking one names it.
+        if (t instanceof Type.Ref r && TypeName.RUNTIME.equals(r.name().module())) {
+            return ClassDesc.of(r.name().qualified());
+        }
         return CD_Object;   // Ref, Var, Tuple, Union, Nothing
     }
 
@@ -218,6 +218,11 @@ final class Intrinsics {
      *  library ships and no signature describes, which is what {@code BUILTINS} used to be. */
     static Set<String> keys() {
         return TABLE.keySet();
+    }
+
+    /** How each key is emitted — read by the test that holds the descriptor invariant. */
+    static Map<String, Emit> emitters() {
+        return Map.copyOf(TABLE);
     }
 
     private static int[] order(int... a) {
@@ -284,11 +289,10 @@ final class Intrinsics {
         t.put("string.padRight", rt(CD_Strings, "padRight", order(2, 0, 1), ts -> Type.STRING));
         t.put("string.fromDecimal", rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
 
+        t.put("decimal.toInt", new DeclaredStatic(CD_DecimalMath, "toInt"));
+        t.put("decimal.round", new DeclaredStatic(CD_DecimalMath, "round"));
+
         // List
-        t.put("decimal.toInt", new TakesARoundingMode(CD_DecimalMath, "toInt", false, 1,
-                Set.of(), new ClassDesc[] {CD_BigDecimal, CD_RoundingMode}, Type.INT));
-        t.put("decimal.round", new TakesARoundingMode(CD_BigDecimal, "setScale", true, 2,
-                Set.of(1), new ClassDesc[] {ConstantDescs.CD_int, CD_RoundingMode}, Type.DECIMAL));
         t.put("list.sortBy", new TakesAFunction(CD_Lists, "sortBy", 1,
                 held -> List.of(((Type.ListOf) held).element()),
                 ts -> ts.get(1)));

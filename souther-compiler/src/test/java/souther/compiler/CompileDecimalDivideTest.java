@@ -105,8 +105,8 @@ class CompileDecimalDivideTest {
         assertThrows(CompileException.class, () -> Compiler.compile(src));
     }
 
-    /** A mode is a name the language gives, read by the operation that takes it. Applied, it is told
-     * what it is rather than shown a compiler bug. */
+    /** A mode is a unit data, so applying one to arguments is the ordinary answer for a type
+     * written where a call goes: naming it constructs it, and a construction is not a function. */
     @Test
     void aRoundingModeAppliedToArgumentsIsToldItIsNotAFunction() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
@@ -116,6 +116,6 @@ class CompileDecimalDivideTest {
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = Out { n = HALF_UP(i.n) }
                 """));
-        assertEquals("check.builtin.notfunction", e.diagnostic().messageKey());
+        assertEquals("check.construct.position", e.diagnostic().messageKey());
     }
 }

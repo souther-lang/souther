@@ -136,10 +136,15 @@ final class Descriptors {
     /** {@code DecimalMath.divide(BigDecimal, BigDecimal) -> BigDecimal}: the Decimal `/` operator. */
     static final MethodTypeDesc MTD_bdDivideOp =
             MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, CD_BigDecimal);
-    static final ClassDesc CD_RoundingMode = ClassDesc.of("java.math.RoundingMode");
+    /** The Souther value ([#stdlib-decimal]); the runtime maps it to {@code java.math.RoundingMode}. */
+    static final ClassDesc CD_RoundingMode = ClassDesc.of("souther.runtime.RoundingMode");
+    static final ClassDesc CD_JavaRoundingMode = ClassDesc.of("java.math.RoundingMode");
+    /** {@code DecimalMath.toJava(RoundingMode)}: the Java constant a mode value denotes. */
+    static final MethodTypeDesc MTD_toJavaRoundingMode =
+            MethodTypeDesc.of(CD_JavaRoundingMode, CD_RoundingMode);
     /** {@code BigDecimal.divide(BigDecimal, int, RoundingMode)} (spec 18.3). */
     static final MethodTypeDesc MTD_bdDivide =
-            MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, ConstantDescs.CD_int, CD_RoundingMode);
+            MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal, ConstantDescs.CD_int, CD_JavaRoundingMode);
     static final ClassDesc CD_LocalDate = ClassDesc.of("java.time.LocalDate");
     static final ClassDesc CD_LocalDateTime = ClassDesc.of("java.time.LocalDateTime");
     static final ClassDesc CD_Lists = ClassDesc.of("souther.runtime.Lists");

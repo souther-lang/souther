@@ -111,12 +111,12 @@ class CompileLibraryFunctionByNameTest {
     }
 
     /**
-     * A rounding mode is written at the call and read by name, so a block standing in for one of
-     * these would have to pass a binding where a name has to be. Told for that reason rather than
-     * as the argument-count mismatch the expansion would otherwise cause.
+     * An operation taking a rounding mode is an ordinary function, so handing it over expands like
+     * any other name — and a two-parameter function where {@code List.map} wants one is the
+     * ordinary arity mismatch, not a rule about the mode.
      */
     @Test
-    void anOperationTakingARoundingModeCannotBeHandedOverByName() {
+    void anOperationTakingARoundingModeExpandsLikeAnyOtherName() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
 
@@ -128,8 +128,7 @@ class CompileLibraryFunctionByNameTest {
                 let go (i) = Out { ns = List.map(Decimal.toInt, i.ds) }
                 """));
 
-        assertEquals("check.stdlib.roundingmode.byname", e.diagnostic().messageKey());
-        assertTrue(e.getMessage().contains("Decimal.toInt"), e.getMessage());
+        assertEquals("check.fn.blockparam.arity", e.diagnostic().messageKey());
     }
 
     /** An empty collection is a declaration with no parameter list, so it is already the value it

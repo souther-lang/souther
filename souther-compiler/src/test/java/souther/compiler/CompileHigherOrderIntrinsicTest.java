@@ -186,11 +186,11 @@ class CompileHigherOrderIntrinsicTest {
     }
 
     /**
-     * A rounding mode is a name the language gives, read by the operation that takes it. A core
-     * declaration says so in its parameter type, and the report names the operation asking.
+     * A rounding mode is an ordinary value of the {@code RoundingMode} data, so an argument of
+     * another type is an ordinary type mismatch naming the operation and the type it asks for.
      */
     @Test
-    void aRoundingModeParameterTakesTheNameAndNotAnExpression() {
+    void aRoundingModeParameterIsTypedLikeAnyOther() {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
                 module demo
 
@@ -202,6 +202,6 @@ class CompileHigherOrderIntrinsicTest {
                 let run (i) = Out { n = Decimal.toInt(i.d, i.d) }
                 """));
         assertTrue(e.getMessage().contains("Decimal.toInt"), e.getMessage());
-        assertTrue(e.getMessage().contains("HALF_UP"), e.getMessage());
+        assertTrue(e.getMessage().contains("RoundingMode"), e.getMessage());
     }
 }

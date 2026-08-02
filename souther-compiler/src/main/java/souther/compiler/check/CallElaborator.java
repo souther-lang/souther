@@ -67,11 +67,6 @@ public final class CallElaborator {
                         + element + " — use its ordered field instead (e.g. map to it first)");
     }
 
-    /** Whether a declared parameter takes a rounding mode rather than a value. */
-    private static boolean isRoundingMode(Type t) {
-        return t instanceof Type.Ref r && r.name().equals(TypeOps.ROUNDING_MODE);
-    }
-
     /**
      * Refuses a sort key with no natural order. The constraint is on what the key answers, not on
      * what the list holds, so it reads the binding the key's declared result took rather than the
@@ -198,15 +193,6 @@ public final class CallElaborator {
             cores[i] = c;
         }
 
-        /** Records argument {@code i} as carrying no type: it is not an expression at all, but a
-         * built-in identifier the call reads by name — the rounding mode of {@code divide}
-         * (spec 18.3), which {@code requireRoundingMode} has already checked is one. The emitter
-         * reads its name and never asks for its type. */
-        void untyped(int i) {
-            Ast.Var name = (Ast.Var) args.get(i);
-            cores[i] = new Core.Builtin(name.name(), name.pos());
-        }
-
         /** The elaborated arguments. Every argument must have been reached: a rule that yields a type
          * without touching one of its arguments would leave the emitter a node with no type. */
         List<Core> cores() {
@@ -270,9 +256,8 @@ public final class CallElaborator {
                             + " arguments");
             case ValueName.Helper _ -> unelaborated("a helper", call);
             case ValueName.Stdlib _ -> unelaborated("a standard-library function", call);
-            // A name the language itself gives, applied. `Some`/`None` are told apart earlier (E1303),
-            // so this is a rounding mode: a bare identifier the operation taking it reads, and not a
-            // function. Reachable from the moment one ladder answers a name wherever it is written.
+            // A name the language itself gives (`None`), applied. `Some`/`None` applications are
+            // told apart earlier (E1303), so reaching here is a value position no rewrite covers.
             case ValueName.Builtin b -> CompileException.of(
                     Diagnostic.of(null, "check.builtin.notfunction")
                             .title("check.apply.notfunction.title")
@@ -319,11 +304,7 @@ public final class CallElaborator {
      *       bound from the context before the step is checked (issue #70). With no function
      *       argument nothing waits, and pinning anyway would answer an argument mismatch against
      *       the type the context wanted rather than the one the declaration asks for;</li>
-     *   <li>type the value arguments and unify each with its declared parameter. A parameter typed
-     *       {@code RoundingMode} is not an expression but a name the operation reads, so it is
-     *       checked as one and recorded untyped ([#stdlib-decimal]); no function type in scope can
-     *       carry that parameter, since the type is writable only by the library's own
-     *       signatures;</li>
+     *   <li>type the value arguments and unify each with its declared parameter;</li>
      *   <li>type the function arguments last, against parameter types the earlier arguments
      *       settled. A failure that is genuinely an empty-collection seed nothing typed — one that
      *       reported the unresolved bottom — is re-pointed at the seed rather than at the
@@ -354,11 +335,6 @@ public final class CallElaborator {
             if (param instanceof Type.FnOf) {
                 continue;
             }
-            if (isRoundingMode(param)) {
-                requireRoundingMode(call.written(), args.get(i));
-                ca.untyped(i);
-                continue;
-            }
             TypeOps.unify(param, ca.type(i), bind, ctx.symbols(),
                     call.pos(), "argument " + (i + 1) + " of " + call.written());
         }
@@ -386,7 +362,7 @@ public final class CallElaborator {
         }
         for (int i = 0; i < args.size(); i++) {
             Type param = signature.params().get(i);
-            if (!(param instanceof Type.FnOf) && !isRoundingMode(param)) {
+            if (!(param instanceof Type.FnOf)) {
                 ca.requireTyped(i, TypeOps.substitute(param, bind),
                         "argument " + (i + 1) + " of " + call.written());
             }
@@ -524,18 +500,6 @@ public final class CallElaborator {
             return ConstEval.eval(nd.inits().get(0).value());
         }
         return Optional.empty();
-    }
-
-    /** A rounding mode is one of the built-in identifiers, written bare — not an ordinary
-     * expression ([#stdlib-decimal]). {@code of} is the operation taking it. */
-    static void requireRoundingMode(String of, Ast.Expr e) {
-        if (!(e instanceof Ast.Var v) || !Elaborator.ROUNDING_MODES.contains(v.name())) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.divide.rounding").title("check.type.mismatch.title")
-                            .at(e.pos()).args(of).build(),
-                    "the rounding mode of `" + of + "` must be one of HALF_UP, HALF_EVEN, HALF_DOWN,"
-                            + " UP, DOWN, CEILING, FLOOR ([#stdlib-decimal])");
-        }
     }
 
     /** The pattern of {@code String.matches} must evaluate to a string at compile time, so it is

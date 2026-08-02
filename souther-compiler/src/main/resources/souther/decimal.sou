@@ -7,6 +7,12 @@
 // implementation-location policy.
 module souther.decimal
 
+// An ordinary data: a mode is evaluated at the call like any other argument. The implementation is
+// runtime-provided (souther.runtime.RoundingMode) rather than generated — see Prelude's
+// runtime-backed registration. It has no codec: a rounding policy is a computation's input, not a
+// value that crosses a serialization boundary.
+data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOOR
+
 let divide (a: Decimal, b: Decimal, scale: Int, mode: RoundingMode) : Decimal | DivisionByZero
     = intrinsic "decimal.divide"
 let toInt (d: Decimal, mode: RoundingMode) : Int = intrinsic "decimal.toInt"
@@ -20,9 +26,8 @@ let multiply (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.multiply"
 let compare (a: Decimal, b: Decimal) : Int = intrinsic "decimal.compare"
 
 // `fromInt` widens an Int to a Decimal. It is exact — every Int is a Decimal — so nothing has to be
-// stated and it is an ordinary function. The narrowing back, `Decimal.toInt(d, mode)`, is not: it
-// drops a fraction, and by which rule is a domain decision, so the mode is written at the call and
-// the function stays compiler-integrated (like `divide`, whose mode is a bare built-in identifier).
+// stated and it is an ordinary function. The narrowing back, `Decimal.toInt(d, mode)`, drops a
+// fraction, and by which rule is a domain decision, so it takes the mode as an argument.
 //
 // There is no implicit widening. An arithmetic operator takes two operands of one type, so a rate
 // applied to an amount is written `Decimal.fromInt(税抜) * 税率` — the conversion is visible where the
