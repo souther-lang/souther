@@ -5,7 +5,11 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 
+import souther.compiler.diag.CompileException;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A binding is what a name is, so what a program means does not depend on how its bindings are
@@ -75,6 +79,61 @@ class CompileHelperShadowingTest {
                 "`acc` is the binding written here, through both expansions");
         assertEquals(List.of(12L, 13L), run(source.replace("BOUND", "x"), input),
                 "and so is `x`, which both steps bind an element under");
+    }
+
+    /**
+     * A helper applies a function it was given, under a parameter spelled like the helper it is
+     * handed. What is applied is the parameter, whatever the two are called.
+     */
+    @Test
+    void applyingAFunctionParameterIsTheParameterWhateverItIsSpelled() throws Exception {
+        String source = """
+                module demo
+                data In = { xs: List<Int>, n: Int }
+                data Out = { ys: List<Int> }
+
+                let twice (f: (Int) -> Int, v: Int): Int = f(f(v))
+                let once (NAME: (Int) -> Int, v: Int): Int = NAME(v)
+
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { ys = [once(e -> e + 1, i.n), twice(e -> e + 1, i.n)] }
+                """;
+        assertEquals(List.of(11L, 12L),
+                run(source.replace("NAME", "apply"), Map.of("xs", List.of(), "n", 10L)));
+        assertEquals(List.of(11L, 12L),
+                run(source.replace("NAME", "twice"), Map.of("xs", List.of(), "n", 10L)),
+                "`twice` is the parameter here, not the helper of that name");
+    }
+
+    /**
+     * A unit data written where a value goes is that construction, and the permission the behavior
+     * declares covers it — whatever something around it happens to bind under that spelling.
+     */
+    @Test
+    void aUnitDataNamedAsAValueIsThatConstructionWhateverIsBoundAround() {
+        String source = """
+                module demo
+                data In = { xs: List<Int>, n: Int }
+                data Missing
+                data Out = { ys: List<Int> }
+
+                let pick (v: Int): Out | Missing =
+                    if v > 0 then Out { ys = [v] } else Missing
+
+                behavior go : (i: In) -> Out | Missing constructs Out, DECLARED
+                let go (i) = {
+                    let NAME = i.n + 1
+                    pick(NAME)
+                }
+                """;
+        for (String spelled : List.of("held", "Missing")) {
+            String src = source.replace("NAME", spelled);
+            assertDoesNotThrow(() -> Compiler.compile(src.replace("DECLARED", "Missing")),
+                    "`Missing` is the construction it is, with a binding spelled " + spelled);
+            assertThrows(CompileException.class,
+                    () -> Compiler.compile(src.replace("constructs Out, DECLARED", "constructs Out")),
+                    "and the permission for it is still required, with a binding spelled " + spelled);
+        }
     }
 
     /** Two expansions of one helper into one body each bring their own bindings, so the second does
