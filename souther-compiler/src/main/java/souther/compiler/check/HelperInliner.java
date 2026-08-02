@@ -1045,15 +1045,14 @@ public final class HelperInliner {
             // any argument, and the binding is what is applied.
             case Ast.Apply raw when !raw.appliesAName() -> {
                 Ast.Binder f = binders.binder("$fn" + counter++, raw.function().pos());
-                // The application reads the binding, and quotes what the author wrote. A field read
-                // applied — `deps.transform(x)` — has a spelling, and a report that quoted the
-                // binding instead would name `$fn0`, which is nowhere in the source. The spelling
-                // is what a report says; the binding is what the application means.
-                String written = spelling(raw.function());
+                // What the application reaches is the binding, and what a report about it quotes is
+                // what the author wrote — a field read applied (`deps.count(x)`) has a spelling, and
+                // quoting the binding would name `$fn0`, which is nowhere in the source. The two are
+                // separate slots: the binding is in the callee position, the spelling beside it.
                 yield inline(new Ast.LetIn(f, raw.function(), null, false, null,
-                        new Ast.Apply(written != null ? written : f.name(),
-                                new ValueName.Local(f.name(), f.id()), raw.args(),
-                                raw.origin(), raw.pos()),
+                        new Ast.Apply(new Ast.Var(f.name(), new ValueName.Local(f.name(), f.id()),
+                                raw.pos()),
+                                raw.args(), raw.origin(), spelling(raw.function()), raw.pos()),
                         raw.pos()));
             }
             case Ast.Apply rawCall -> {
@@ -1072,8 +1071,7 @@ public final class HelperInliner {
                     // builtin, injected behavior, a function-typed parameter, or a recursive helper —
                     // a recursive helper is lowered to a method, so its call stays a Call (spec 13.1);
                     // only its args inline.
-                    yield new Ast.Apply(call.function(), forwardDependencies(helper, args),
-                            call.origin(), call.pos());
+                    yield call.withArgs(forwardDependencies(helper, args));
                 }
                 // A declaration written with no parameter list is a value ([#fn-declaration]), so
                 // applying it applies whatever function that value is — not the declaration, which
@@ -1430,7 +1428,7 @@ public final class HelperInliner {
         Ast.Block block = etaExpand(v, helper.params().size(), i -> "$b" + k + "_" + i);
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
-        return new Ast.Apply(call.function(), args, call.origin(), call.pos());
+        return call.withArgs(args);
     }
 
     /**
@@ -1529,7 +1527,7 @@ public final class HelperInliner {
             case Ast.Apply call -> new Ast.Apply(
                     rename(call.function(), subst, substDenotes, at, copy),
                     renameList(call.args(), subst, substDenotes, at, copy),
-                    call.origin(), at(at, call.pos()));
+                    call.origin(), call.appliedAs(), at(at, call.pos()));
             case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), subst, substDenotes, at, copy), rename(bin.right(), subst, substDenotes, at, copy), at(at, bin.pos()));
             case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), subst, substDenotes, at, copy), at(at, neg.pos()));
             case Ast.NewData nd -> {

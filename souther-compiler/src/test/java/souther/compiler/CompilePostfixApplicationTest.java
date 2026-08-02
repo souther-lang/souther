@@ -2,6 +2,9 @@ package souther.compiler;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -315,5 +318,23 @@ class CompilePostfixApplicationTest {
         assertFalse(nameless.appliesAName());
         assertEquals("", nameless.written(), "there is no spelling to quote");
         assertEquals("", nameless.reaches(), "and no declaration to look up");
+    }
+
+    /**
+     * What a lowering put in the callee position and what a report quotes are separate slots. An
+     * application of something other than a name binds it first, so what this reaches is that
+     * binding — and every table in the compiler is keyed by declarations, so a spelling reaching one
+     * would be a miss that looked like a hit for whatever happened to be filed under it.
+     */
+    @Test
+    void whatAnApplicationReachesIsNeverTheSpellingAReportQuotes() {
+        SourcePos at = new SourcePos(1, 1);
+        BindingId id = new BindingId(new BindingOwner.OfValue("demo", "go"), 0);
+        Ast.Apply lowered = new Ast.Apply(
+                new Ast.Var("$fn0", new ValueName.Local("$fn0", id), at),
+                java.util.List.of(), souther.compiler.types.ConstructionOrigin.own(), "d.count", at);
+
+        assertEquals("d.count", lowered.written(), "a report quotes what the author wrote");
+        assertEquals("$fn0", lowered.reaches(), "a table is looked up with the binding");
     }
 }

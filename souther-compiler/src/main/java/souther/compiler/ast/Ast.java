@@ -986,8 +986,14 @@ public interface Ast {
      * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
      * binding, or the type a newtype construction wraps — answered once during resolution.
      */
-    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos)
-            implements Expr {
+    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, String appliedAs,
+                 SourcePos pos) implements Expr {
+
+        /** Applying whatever {@code function} is, with nothing standing in for what the source
+         * wrote — every application but one a lowering rewrote. */
+        public Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos) {
+            this(function, args, origin, null, pos);
+        }
 
         /** Applying a name, as the parser read it, before resolution has said what the name denotes. */
         public Apply(String fn, List<Expr> args, SourcePos pos) {
@@ -1013,11 +1019,15 @@ public interface Ast {
          * <p><b>Never a lookup key.</b> An import lets a library name be written without its
          * qualifier, so a table keyed by a declaration's name misses on the spelling — silently,
          * because a miss is what a table keyed by names does with one it has not got. Every
-         * question of the form "which declaration is this" asks {@link #reaches()}, whose answer is
-         * this spelling for every name an import cannot have renamed.
+         * question of the form "which declaration is this" asks {@link #reaches()}.
+         *
+         * <p>{@link #appliedAs} answers where a lowering replaced what was written with a binding
+         * it introduced: applying something other than a name binds it first, and the binding is
+         * named nothing an author could have typed. The two are separate for that reason — this
+         * one is read by reports and nothing else.
          */
         public String written() {
-            return function instanceof Var v ? v.name() : "";
+            return appliedAs != null ? appliedAs : nameApplied();
         }
 
         /**
@@ -1028,9 +1038,19 @@ public interface Ast {
          * bare, so that is what it answers; every other name is filed as it is written. The empty
          * answer is not a convention: it is what applying something that is not a name leaves, and
          * no declaration is named the empty spelling.
+         *
+         * <p>Never {@link #written()}: a spelling a report quotes is not what this application
+         * reaches, and a lowering that put one there would otherwise have every table in the
+         * compiler looked up with it.
          */
         public String reaches() {
-            return denotes() instanceof ValueName.Stdlib lib ? lib.qualified() : written();
+            return denotes() instanceof ValueName.Stdlib lib ? lib.qualified() : nameApplied();
+        }
+
+        /** The name in the callee position, or the empty spelling where what is applied is not a
+         *  name. What both spellings above are built from, and what neither may skip past. */
+        private String nameApplied() {
+            return function instanceof Var v ? v.name() : "";
         }
 
         /** What the name this applies denotes, or null where what it applies is not a name. */
@@ -1044,7 +1064,14 @@ public interface Ast {
          * where its constructions would otherwise stand, and it is what has to say where it came
          * from. */
         public Apply carriedByValue() {
-            return new Apply(function, args, origin.carriedByValue(), pos);
+            return new Apply(function, args, origin.carriedByValue(), appliedAs, pos);
+        }
+
+        /** The same application over rewritten arguments — a pass that touches only the arguments
+         *  says so here rather than listing the slots it is not changing, which is how
+         *  {@link #appliedAs} would be dropped by a rewrite that has no opinion about it. */
+        public Apply withArgs(List<Expr> args) {
+            return new Apply(function, args, origin, appliedAs, pos);
         }
     }
 
@@ -1095,7 +1122,7 @@ public interface Ast {
                 Expr function = atExpr.apply(a.function());
                 List<Expr> args = each(a.args(), atExpr);
                 yield function == a.function() && args == a.args() ? a
-                        : new Apply(function, args, a.origin(), a.pos());
+                        : new Apply(function, args, a.origin(), a.appliedAs(), a.pos());
             }
             case If iff -> {
                 Expr cond = atExpr.apply(iff.cond());

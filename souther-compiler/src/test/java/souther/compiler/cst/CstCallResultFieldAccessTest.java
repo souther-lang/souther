@@ -1,6 +1,8 @@
 package souther.compiler.cst;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -82,5 +84,30 @@ class CstCallResultFieldAccessTest {
         assertEquals("personOf(i).address.city", outer.text().strip());
         assertEquals(SyntaxKind.FIELD_ACCESS, outer.childNodes().get(0).kind());
         assertEquals("personOf(i).address", outer.childNodes().get(0).text().strip());
+    }
+
+    /**
+     * An argument list begins on the line its callee ends on. The specification says so of every
+     * application; before this it held only where the callee was not a bare or qualified name, so
+     * the same two lines meant one thing written one way and another written the other. The block
+     * these are written in has a result of its own, so what a next-line `(` opens is a parenthesised
+     * expression that stands as a statement's value rather than an argument list.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "amountOf",                 // a bare name
+            "up.amountOf",              // a qualified name
+            "amountOf // a comment",    // a comment between the two
+            "amountOf(i)",              // the result of an application
+    })
+    void aLineBreakEndsThePostfixChainWhateverTheCalleeIs(String callee) {
+        SyntaxNode root = parsed("{\n    let a = " + callee + "\n    (i)\n}");
+
+        assertEquals(0, allOf(root, SyntaxKind.APPLY_EXPR).stream()
+                        .filter(n -> n.text().strip().endsWith("(i)")
+                                && n.text().contains("\n")).count(),
+                () -> "the next line's `(i)` was applied to `" + callee + "`");
+        assertEquals(1, allOf(root, SyntaxKind.PAREN_EXPR).size(),
+                () -> "`(i)` is a parenthesised expression after `" + callee + "`");
     }
 }
