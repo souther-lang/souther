@@ -1,6 +1,8 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Resolve;
+import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ValueName;
@@ -332,5 +334,52 @@ class ResolvedValueNamesTest {
         ValueName.Local local = assertInstanceOf(ValueName.Local.class, denoted);
         assertEquals(new BindingOwner.OfValue("m.a", "g"), local.id().owner(),
                 "`m` is bound by `g`, so `g` is what it belongs to");
+    }
+
+    /** What a name in {@code source} denotes, and where the editor says it was declared. */
+    private static SourcePos declaredAt(String source, String written) {
+        Map<String, String> byId = new LinkedHashMap<>();
+        byId.put("a.sou", source);
+        Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
+        for (Resolve.ValueUse use : c.db().ask(new Names.Resolution("m.a")).value().values()) {
+            if (use.written().equals(written) && use.denotes() instanceof ValueName.Local local) {
+                return c.db().ask(new Names.ValueDeclaredAt(local)).value();
+            }
+        }
+        throw new AssertionError("nothing named `" + written + "` is a binding here");
+    }
+
+    /**
+     * An invariant reads its declaration's fields as the bindings they are, so an editor asked where
+     * one is declared answers with the field.
+     */
+    @Test
+    void aFieldAnInvariantReadsIsDeclaredWhereTheFieldIsWritten() {
+        assertEquals(new SourcePos(4, 7), declaredAt("""
+                module m.a exposing ( Amount )
+
+                data Amount = {
+                      value: Int
+                }
+                    invariant value >= 0
+                """, "value"), "the field on line 4");
+    }
+
+    /** A field an include brings in keeps the binding of the declaration that wrote it, so it is
+     * declared there and not where it was spread in. */
+    @Test
+    void aFieldAnIncludeBringsInIsDeclaredWhereItWasWritten() {
+        assertEquals(new SourcePos(4, 7), declaredAt("""
+                module m.a exposing ( Priced )
+
+                data Money = {
+                      cost: Int
+                }
+
+                data Priced = {
+                      ...Money
+                }
+                    invariant cost >= 0
+                """, "cost"), "the field on line 4, in the declaration that wrote it");
     }
 }

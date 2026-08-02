@@ -336,9 +336,12 @@ public final class Resolve {
             case Ast.UnitData u -> u;
             // an invariant reads the fields of the data it belongs to, which are what bind its
             // names — `value > 0` is about this declaration's `value`, whatever else is in scope
-            case Ast.Data d -> new Ast.Data(d.name(), d.newtype(), names(d.includes()), fields(d.fields()),
-                    Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
-                    d.decoder().map(this::decoder), d.encoder().map(this::encoder), d.pos());
+            case Ast.Data d -> {
+                declareFields(d);
+                yield new Ast.Data(d.name(), d.newtype(), names(d.includes()), fields(d.fields()),
+                        Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
+                        d.decoder().map(this::decoder), d.encoder().map(this::encoder), d.pos());
+            }
             case Ast.SumData s -> new Ast.SumData(s.name(), sumCases(s), s.decoder().map(this::discriminate),
                     s.encoder().map(this::sumEncoder), s.pos());
         };
@@ -370,6 +373,24 @@ public final class Resolve {
      * the ones a spread brings in, which are as much this declaration's fields as the written ones
      * (and are what a spread-in invariant was written against).
      */
+    /**
+     * Where each field this declaration writes is written, against the binding it introduces inside
+     * an invariant.
+     *
+     * <p>Recorded whether or not this declaration has an invariant of its own: a declaration that
+     * includes it reads these fields in <em>its</em> invariant, and the binding a field is stays the
+     * declaring declaration's, so this is where an editor is answered from either way.
+     */
+    private void declareFields(Ast.Data d) {
+        Map<String, BindingId> bindings = TypeOps.fieldBindings(d, symbols);
+        for (Ast.Field field : d.fields()) {
+            BindingId binding = bindings.get(field.name());
+            if (binding != null) {
+                binders.put(binding, field.pos());
+            }
+        }
+    }
+
     private Bindings boundFields(Ast.Data d) {
         Bindings bound = Bindings.NONE;
         // which binding each field is is answered in one place, so the pass that emits this
