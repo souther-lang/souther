@@ -20,8 +20,11 @@ import java.util.Set;
  * <p>What the imports bring in is answered as a table ({@link #read}) and nothing in the
  * module is rewritten. A name written bare stays written bare, and what it means where it is written
  * is settled once, by resolution, with the bindings in force — an import is the last thing consulted
- * and a binding or the module's own declaration wins over it. The {@code import List ( ... )} lines
- * are then dropped ({@link #withoutLibraryImports}), having been checked.
+ * and a binding in force wins over it. A declaration of that name does not shadow it: the two are a
+ * conflict, refused on the import line, and the declaration standing as the name's meaning after
+ * that is what recovery does with a module that will not be emitted. The
+ * {@code import List ( ... )} lines are then dropped ({@link #withoutLibraryImports}), having been
+ * checked.
  *
  * <p>It mirrors Elm's {@code import List exposing (map)}: the qualified access always works, and the
  * import merely lets a name be written without its qualifier. A name exposed from two libraries at

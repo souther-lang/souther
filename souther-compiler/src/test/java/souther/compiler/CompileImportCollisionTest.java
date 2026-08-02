@@ -154,6 +154,33 @@ class CompileImportCollisionTest {
                 """)));
     }
 
+    /**
+     * A value an attached file declares is one of the module's values, so an import of that
+     * spelling collides with it as one written in the model file does. The library imports are read
+     * where the table they fill is built, and the attached files used to join after that — so the
+     * one kind of declaration that could still shadow a library import was the one written in a
+     * file the check never saw.
+     */
+    @Test
+    void aValueAnAttachedFileDeclaresCollidesWithALibraryImport() {
+        assertEquals("check.import.conflict", refused(List.of("""
+                module f25
+                import List ( map )
+                data In  = { n: Int }
+                data Out = { m: Int }
+                behavior run : (i: In) -> Out
+                    constructs Out
+                let run (i) = Out { m = i.n }
+                """, """
+                examples for f25
+
+                let map = In { n = 1 }
+
+                example run
+                    | "a fixture named like the import" : (map) -> Out { m = 1 }
+                """)));
+    }
+
     /** A binding is not a declaration. It is written inside a body, and an import says what a name
      * means where no binding answers it. */
     @Test

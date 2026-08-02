@@ -177,10 +177,15 @@ public final class Front {
                     return Answer.absent(reserved);
                 }
             }
-            Exposing.Validated imports = Exposing.read(raw);
-            Ast.Module m = Exposing.withoutLibraryImports(raw, imports.kept());
-            Ast.Module whole = withAttachedRows(db, m, layout.exampleFilesOf()
+            // The attached files join before the imports are read, because their values are the
+            // module's values: a name one of them declares reaches the value namespace exactly as a
+            // name in the model file does, so an import of that spelling collides with it the same
+            // way. They bring no imports of their own — an attached file writes none — so what is
+            // read here is still the model file's lines.
+            Ast.Module joined = withAttachedRows(db, raw, layout.exampleFilesOf()
                     .getOrDefault(name, List.of()));
+            Exposing.Validated imports = Exposing.read(joined);
+            Ast.Module whole = Exposing.withoutLibraryImports(joined, imports.kept());
             if (imports.conflicts().isEmpty()) {
                 return Answer.of(whole);
             }
