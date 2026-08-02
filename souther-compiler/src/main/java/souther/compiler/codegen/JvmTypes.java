@@ -38,15 +38,23 @@ final class JvmTypes {
         }
     }
 
-    /** The boxed JVM class for a primitive type, or {@code null} for a non-primitive. */
+    /** The boxed JVM class for a boxable primitive, or {@code null} where the type has none —
+     * a non-primitive, or {@code Raw}, which no stage produces. */
     static ClassDesc boxedPrim(Type t) {
-        if (t == Type.INT) return CD_Long;
-        if (t == Type.BOOL) return CD_Boolean;
-        if (t == Type.DECIMAL) return CD_BigDecimal;
-        if (t == Type.STRING) return CD_String;
-        if (t == Type.DATE) return CD_LocalDate;
-        if (t == Type.DATETIME) return CD_LocalDateTime;
-        return null;
+        return switch (t) {
+            case Type.Prim p -> switch (p) {
+                case INT -> CD_Long;
+                case BOOL -> CD_Boolean;
+                case DECIMAL -> CD_BigDecimal;
+                case STRING -> CD_String;
+                case DATE -> CD_LocalDate;
+                case DATETIME -> CD_LocalDateTime;
+                case RAW -> null;
+            };
+            case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
+                 Type.Union _, Type.FnOf _, Type.Var _, Type.Nothing _, Type.Never _,
+                 Type.TupleOf _, Type.Erroneous _ -> null;
+        };
     }
 
     /** True when {@code t} is carried as a reference on the JVM (everything but Int and Bool). */
@@ -185,26 +193,33 @@ final class JvmTypes {
     /** The JVM class carrying a value of {@code type}: primitives unboxed, containers as their raw
      * interface, a data reference through {@link CodegenContext#caseClass}. */
     static ClassDesc jvmType(Type type, CodegenContext ctx) {
-        if (type == Type.INT) return ConstantDescs.CD_long;
-        if (type == Type.STRING) return CD_String;
-        if (type == Type.BOOL) return ConstantDescs.CD_boolean;
-        if (type == Type.DECIMAL) return CD_BigDecimal;
-        if (type == Type.DATE) return CD_LocalDate;
-        if (type == Type.DATETIME) return CD_LocalDateTime;
-        if (type instanceof Type.OptionOf) return CD_Option;
-        if (type instanceof Type.ListOf) return CD_List;
-        if (type instanceof Type.MapOf) return CD_Map;
-        if (type instanceof Type.SetOf) return CD_Set;
-        if (type instanceof Type.Union) return CD_Object;
-        if (type instanceof Type.Var) return CD_Object;   // a type variable is erased to Object
-        if (type instanceof Type.Nothing) return CD_Object;   // an empty collection's element bottom
-        if (type instanceof Type.FnOf) return CD_Fn;
-        // a pair is typed as the pair, so its elements are read as fields rather than through the
-        // Tuple interface: every fold-carried tuple is one, and that read is per element
-        if (type instanceof Type.TupleOf tu) {
-            return tu.elements().size() == 2 ? CD_TuplePair : CD_Tuple;
-        }
-        return ctx.caseClass(((Type.Ref) type).name());
+        return switch (type) {
+            case Type.Prim p -> switch (p) {
+                case INT -> ConstantDescs.CD_long;
+                case STRING -> CD_String;
+                case BOOL -> ConstantDescs.CD_boolean;
+                case DECIMAL -> CD_BigDecimal;
+                case DATE -> CD_LocalDate;
+                case DATETIME -> CD_LocalDateTime;
+                // reserved: no stage produces one, so none reaches codegen
+                case RAW -> throw new IllegalStateException("no JVM carrier for Raw");
+            };
+            case Type.OptionOf _ -> CD_Option;
+            case Type.ListOf _ -> CD_List;
+            case Type.MapOf _ -> CD_Map;
+            case Type.SetOf _ -> CD_Set;
+            case Type.Union _ -> CD_Object;
+            case Type.Var _ -> CD_Object;   // a type variable is erased to Object
+            case Type.Nothing _ -> CD_Object;   // an empty collection's element bottom
+            case Type.FnOf _ -> CD_Fn;
+            // a pair is typed as the pair, so its elements are read as fields rather than through
+            // the Tuple interface: every fold-carried tuple is one, and that read is per element
+            case Type.TupleOf tu -> tu.elements().size() == 2 ? CD_TuplePair : CD_Tuple;
+            case Type.Ref r -> ctx.caseClass(r.name());
+            // the checker refuses both before emitting a module, so meeting one is a compiler fault
+            case Type.Never _ -> throw new IllegalStateException("no JVM carrier for Never");
+            case Type.Erroneous _ -> throw new IllegalStateException("no JVM carrier for ?");
+        };
     }
 
     static ClassDesc[] fieldDescs(Map<String, Type> fields, CodegenContext ctx) {

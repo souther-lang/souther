@@ -1050,8 +1050,15 @@ public final class TypeOps {
     /** The ordered primitives: the ones the JVM carries as {@link Comparable}, so {@code <}/{@code >}
      * and {@code sort} work on them (spec §primitives, §stdlib-list). */
     static boolean isOrdered(Type t) {
-        return t == Type.INT || t == Type.STRING || t == Type.DECIMAL
-                || t == Type.DATE || t == Type.DATETIME;
+        return switch (t) {
+            case Type.Prim p -> switch (p) {
+                case INT, STRING, DECIMAL, DATE, DATETIME -> true;
+                case BOOL, RAW -> false;
+            };
+            case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
+                 Type.Union _, Type.FnOf _, Type.Var _, Type.Nothing _, Type.Never _,
+                 Type.TupleOf _, Type.Erroneous _ -> false;
+        };
     }
 
     /**
