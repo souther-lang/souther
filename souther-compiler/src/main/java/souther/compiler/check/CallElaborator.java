@@ -288,11 +288,6 @@ public final class CallElaborator {
             return result;
         }
         return switch (library ? call.fn() : "") {
-            case "String.length" -> {
-                arity(call, 1);
-                ca.require(0, Type.STRING, "argument of String.length");
-                yield Type.INT;
-            }
             case "String.toInt" -> {
                 arity(call, 1);
                 ca.require(0, Type.STRING, "argument of String.toInt");
@@ -305,15 +300,6 @@ public final class CallElaborator {
                 ca.require(0, Type.STRING, "argument of String.toDecimal");
                 // the sibling of toInt, and here for the same reason: a primitive-headed union
                 yield Type.union(primitiveHeaded(Type.DECIMAL, "NotANumber"));
-            }
-            case "List.length" -> {
-                arity(call, 1);
-                Type t = ca.type(0);
-                if (!(t instanceof Type.ListOf)) {
-                    throw expects(call.pos(), "List.length", "kind.list", t,
-                            "argument of List.length must be a List but is " + t);
-                }
-                yield Type.INT;
             }
             case "List.max", "List.min" -> {
                 arity(call, 1);
@@ -381,33 +367,6 @@ public final class CallElaborator {
                                     + " returns " + keyT);
                 }
                 yield Type.list(lo.element());
-            }
-            case "List.get" -> {
-                arity(call, 2);
-                Type first = ca.type(1);   // get(index, xs): list last
-                if (!(first instanceof Type.ListOf lo)) {
-                    throw expects(call.pos(), "List.get", "kind.list", first,
-                            "List.get expects a List, got " + first);
-                }
-                ca.require(0, Type.INT, "index of List.get");
-                yield Type.option(lo.element());
-            }
-            case "Map.get" -> {
-                arity(call, 2);
-                Type first = ca.type(1);   // get(key, m): map last
-                if (!(first instanceof Type.MapOf mo)) {
-                    throw expects(call.pos(), "Map.get", "kind.map", first,
-                            "Map.get expects a Map, got " + first);
-                }
-                // A bottom key type is a `Map.empty`-seeded accumulator whose key is not fixed yet;
-                // the block growing it — `Map.get(k, acc)` in a groupBy fold — supplies the real key,
-                // so accept it rather than demand the bottom. Otherwise the key must match.
-                if (!BottomInfer.isBottom(mo.key())) {
-                    ca.require(0, mo.key(), "key of Map.get");
-                } else {
-                    ca.type(0);   // nothing to check it against yet, but the key is still typed
-                }
-                yield Type.option(mo.value());
             }
             case "Date", "DateTime" -> {
                 arity(call, 1);

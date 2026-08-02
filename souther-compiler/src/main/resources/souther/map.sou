@@ -10,6 +10,7 @@ module souther.map
 // left to right. `empty` takes no parameter list, so it is a value ([#fn-declaration]) — like `[]`,
 // its key and value are fixed by context, since it has no argument to learn them from.
 let empty : Map<'k, 'a> = intrinsic "map.empty"
+let get (key: 'k, m: Map<'k, 'a>) : Option<'a> = intrinsic "map.get"
 
 let containsKey (key: 'k, m: Map<'k, 'a>) : Bool = intrinsic "map.containsKey"
 let keys (m: Map<'k, 'a>) : List<'k> = intrinsic "map.keys"

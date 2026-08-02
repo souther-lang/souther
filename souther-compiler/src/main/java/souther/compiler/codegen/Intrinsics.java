@@ -146,7 +146,12 @@ final class Intrinsics {
         if (t instanceof Type.SetOf) {
             return CD_Set;
         }
-        return CD_Object;   // Ref, Var, Tuple, Option, Union, Nothing
+        // An optional is a runtime class of its own, not an erased reference: a kernel answering one
+        // declares it, so the descriptor has to name it or the call finds no such method.
+        if (t instanceof Type.OptionOf) {
+            return CD_Option;
+        }
+        return CD_Object;   // Ref, Var, Tuple, Union, Nothing
     }
 
     // --- the registry ---
@@ -181,6 +186,7 @@ final class Intrinsics {
         Map<String, Emit> t = new java.util.LinkedHashMap<>();
 
         // String — JDK-native instance methods (explicit descriptor); receiver is the last Souther arg.
+        t.put("string.length", rt(CD_Strings, "length", order(0), ts -> Type.INT));
         t.put("string.trim", jdk(CD_String, "trim", mtd(CD_String), order(0), Type.STRING));
         t.put("string.lowercase", jdk(CD_String, "toLowerCase", mtd(CD_String), order(0), Type.STRING));
         t.put("string.uppercase", jdk(CD_String, "toUpperCase", mtd(CD_String), order(0), Type.STRING));
@@ -208,6 +214,8 @@ final class Intrinsics {
         t.put("string.fromDecimal", rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
 
         // List
+        t.put("list.length", rt(CD_Lists, "length", order(0), ts -> Type.INT));
+        t.put("list.get", rt(CD_Lists, "get", order(1, 0), ts -> Type.option(listOf(ts, 1).element())));
         t.put("list.sort", rt(CD_Lists, "sort", order(0), ts -> ts.get(0)));
         t.put("list.reverse", rt(CD_Lists, "reverse", order(0), ts -> ts.get(0)));
         t.put("list.range", rt(CD_Lists, "range", order(0, 1), ts -> Type.list(Type.INT)));
@@ -215,6 +223,8 @@ final class Intrinsics {
         t.put("list.product", new NumericFold("productInt", "productDecimal"));
 
         // Map — keys/values are erased to Object; the map argument stays a raw Map.
+        t.put("map.get", rtErased(CD_Maps, "get", order(1, 0), Set.of(0),
+                ts -> Type.option(mapOf(ts, 1).value())));
         t.put("map.empty", rt(CD_Maps, "empty", order(), ts -> Type.map(Type.NOTHING, Type.NOTHING)));
         t.put("map.containsKey", rtErased(CD_Maps, "containsKey", order(1, 0), Set.of(0), ts -> Type.BOOL));
         t.put("map.keys", rt(CD_Maps, "keys", order(0), ts -> Type.list(mapOf(ts, 0).key())));

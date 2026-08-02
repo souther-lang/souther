@@ -1091,11 +1091,6 @@ final class BodyGen {
                 return;
             }
             switch (call.fn()) {
-                case "String.length" -> {
-                    genExpr(call.args().get(0));
-                    code.invokevirtual(CD_String, "length", MethodTypeDesc.of(ConstantDescs.CD_int));
-                    code.i2l();
-                }
                 case "String.toInt" -> {
                     // Strings.toInt returns a boxed Long or NotANumber.INSTANCE — the Int | NotANumber
                     // union, carried as Object (like intDivide's DivisionByZero result).
@@ -1106,17 +1101,6 @@ final class BodyGen {
                     // the sibling of toInt: a boxed BigDecimal or NotANumber.INSTANCE, carried as Object
                     genExpr(call.args().get(0));
                     code.invokestatic(CD_Strings, "toDecimal", MethodTypeDesc.of(CD_Object, CD_String));
-                }
-                case "List.length" -> {
-                    genExpr(call.args().get(0));
-                    code.invokeinterface(CD_List, "size", MTD_size);
-                    code.i2l();
-                }
-                case "List.get" -> {
-                    genExpr(call.args().get(1));      // get(index, xs): list then index (Lists.get)
-                    genExpr(call.args().get(0));      // long index
-                    code.invokestatic(CD_Lists, "get",
-                            MethodTypeDesc.of(CD_Option, CD_List, ConstantDescs.CD_long));
                 }
                 case "List.max", "List.min" -> {
                     TypeName ordering = elementOrdering(call.args().get(0));
@@ -1162,15 +1146,6 @@ final class BodyGen {
                     emitFunctionValue(call.args().get(0), List.of(elem));   // Fn on the stack
                     genExpr(call.args().get(1));                            // then the Option
                     code.invokestatic(CD_Options, "map", MethodTypeDesc.of(CD_Option, CD_Fn, CD_Option));
-                }
-                case "Map.get" -> {
-                    genExpr(call.args().get(1));      // get(key, m): map then key (Maps.get)
-                    // The key goes into an Object parameter, so a primitive one boxes here. An Int
-                    // key is a long on the stack, and a String key is already a reference — which is
-                    // why leaving this out is bytecode that verifies for one and not the other.
-                    box(code, genExpr(call.args().get(0)));
-                    code.invokestatic(CD_Maps, "get",
-                            MethodTypeDesc.of(CD_Option, CD_Map, ConstantDescs.CD_Object));
                 }
                 case "Date", "DateTime" -> {
                     // a written date: the checker has already parsed the literal, so the text is
