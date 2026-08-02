@@ -1,7 +1,9 @@
 package souther.compiler.apt;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.Compiler;
@@ -85,9 +87,15 @@ public final class SoutherProcessor extends AbstractProcessor {
             // one that names itself is a module set of one, and may import a module off the path.
             boolean selfContained =
                     texts.size() == 1 && Compiler.moduleNameFromHeader(texts.get(0)) == null;
-            Map<String, byte[]> classes = selfContained
-                    ? Compiler.compile(texts.get(0))
-                    : Compiler.compileModules(texts, path);
+            Compiler.Compiled compiled = selfContained
+                    ? Compiler.compileWithWarnings(texts.get(0))
+                    : Compiler.compileModulesWithWarnings(texts, path);
+            // A warning is the whole of what the checker has to say about an unproven construction,
+            // so a build that never reports one lets them accumulate while staying green.
+            for (String reported : render(compiled.warnings(), sources)) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, reported);
+            }
+            Map<String, byte[]> classes = compiled.classes();
             Filer filer = processingEnv.getFiler();
             for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
                 JavaFileObject file = filer.createClassFile(entry.getKey());
@@ -115,28 +123,27 @@ public final class SoutherProcessor extends AbstractProcessor {
         if (e.diagnostic() == null) {
             return List.of("souther: " + e.getMessage());   // not yet structured
         }
-        Locale locale = Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
-        HumanRenderer renderer = new HumanRenderer(false);
-        List<String> reported = new ArrayList<>();
-        List<souther.compiler.diag.Diagnostic> ds = e.diagnostics();
-        for (int i = 0; i < ds.size(); i++) {
-            // Each diagnostic quotes its own file; a compile reporting several modules at once has
-            // one per module.
-            Source origin = originOf(e, sources, i);
-            SourceContext src = origin == null ? null
-                    : new SourceContext(origin.path().getFileName().toString(), origin.text());
-            reported.add(renderer.render(ds.get(i), src, locale));
-        }
-        return reported;
+        return render(e.locatedDiagnostics(), sources);
     }
 
-    /** The source the error came from, or null when it names none (so no line is quoted). */
-    private static Source originOf(CompileException e, List<Source> sources, int i) {
-        if (sources.size() == 1) {
-            return sources.get(0);
-        }
-        int index = e.sourceIndexOf(i);
-        return index >= 0 && index < sources.size() ? sources.get(index) : null;
+    /** The same rendering for a warning, which arrives already carrying the source it belongs to. */
+    private List<String> render(List<Located> located, List<Source> sources) {
+        Locale locale = Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
+        return DiagnosticRenderer.renderAll(
+                located, index -> contextOf(sources, index), new HumanRenderer(false), locale);
+    }
+
+    /**
+     * The source a diagnostic tagged with {@code index} came from, or null when it names none and
+     * there is more than one to choose from (so no line is quoted). A compile of one file names no
+     * source — the caller knows the file it handed over — so the single file it was given is the
+     * answer there however the diagnostic is tagged.
+     */
+    private static SourceContext contextOf(List<Source> sources, int index) {
+        Source origin = sources.size() == 1 ? sources.get(0)
+                : index >= 0 && index < sources.size() ? sources.get(index) : null;
+        return origin == null ? null
+                : new SourceContext(origin.path().getFileName().toString(), origin.text());
     }
 
     /**
