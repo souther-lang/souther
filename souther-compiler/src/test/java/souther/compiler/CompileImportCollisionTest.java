@@ -97,4 +97,81 @@ class CompileImportCollisionTest {
                 data Line = { a: Amount }
                 """));
     }
+
+    /**
+     * Which kind of declaration the import lands beside does not enter into it. A data, a
+     * {@code let} and a behavior all reach the value namespace under the name they are written
+     * with, so any of them beside an import of that name is one spelling with two answers. The
+     * check was written for a data and stopped there: a behavior of the same spelling compiled and
+     * emitted a call to the imported one, which is a class that has no such method (issue #287).
+     */
+    @Test
+    void anImportBesideADeclarationOfAnyKindIsRefused() {
+        String up = """
+                module up exposing ( twice, Thing )
+                data Thing = { a: Int }
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n * 2
+                """;
+        String upValue = """
+                module up exposing ( twice )
+                let twice (n: Int) = n * 2
+                """;
+
+        assertEquals("check.import.conflict", refused(List.of(up, """
+                module probe.c
+                import up ( twice )
+                behavior twice : (a: Int, b: Int) -> Int
+                let twice (a, b) = a * b
+                data Line = { a: Int }
+                """)));
+        assertEquals("check.import.conflict", refused(List.of(upValue, """
+                module probe.c
+                import up ( twice )
+                let twice (a: Int, b: Int) = a * b
+                data Line = { a: Int }
+                """)));
+        assertEquals("check.import.conflict", refused(List.of(up, """
+                module probe.c
+                import up ( Thing )
+                let Thing (n: Int) = n
+                data Line = { a: Int }
+                """)));
+    }
+
+    /** The standard library is imported by the same rule. A module's own declaration used to shadow
+     * the import instead, so one spelling meant the library's function on one line and the module's
+     * own definition on the next. */
+    @Test
+    void aLibraryImportBesideADeclarationIsRefused() {
+        assertEquals("check.import.conflict", refused(List.of("""
+                module probe.c
+                import List ( map )
+                let map (n: Int) = n + 1
+                data Line = { a: Int }
+                """)));
+    }
+
+    /** A binding is not a declaration. It is written inside a body, and an import says what a name
+     * means where no binding answers it. */
+    @Test
+    void aBindingSpelledLikeAnImportIsStillTheBinding() {
+        Compiler.compileModules(List.of("""
+                module probe.c
+                import List ( map )
+                data In = { xs: List<Int> }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = {
+                    let map = 7
+                    Out { n = map }
+                }
+                """));
+    }
+
+    private static String refused(List<String> modules) {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(modules));
+        return e.diagnostic().messageKey();
+    }
 }

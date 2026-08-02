@@ -1167,20 +1167,65 @@ public final class Names {
                     "`let " + fn.name() + "` and data `" + fn.name()
                             + "` are one name where a value is written; rename one"));
         }
-        // A definition another module publishes is written here bare (ADR-0075), so it arrives in
-        // this namespace exactly as one of this module's own does — and collides the same way.
+        // What this module declares under a name, whichever kind of declaration it is: a data, a
+        // `let`, a behavior. A behavior and its `let` are one of them, so the set is what is asked
+        // rather than a count.
+        Set<String> ownNames = new LinkedHashSet<>(declared.keySet());
+        ownNames.addAll(implementing);
+        for (Ast.FnDef fn : m.fns()) {
+            ownNames.add(fn.name());
+        }
+        // A name an import brings in is written here bare (ADR-0075), so it arrives in this
+        // namespace exactly as one of this module's own does — and collides the same way. Which kind
+        // of thing each side is does not enter into it: the reader writes one spelling, and one
+        // spelling here means one thing.
         for (Ast.Import imp : m.imports()) {
-            Ast.Module from = db.ask(new Front.Available(imp.module())).value();
-            if (from == null) {
-                continue;
-            }
-            for (String published : Bodies.publishedNames(from, imp.names())) {
-                if (declared.containsKey(published)) {
-                    reports.add(importCollision(published, imp, null));
+            for (String imported : importedIntoValues(db, imp)) {
+                if (ownNames.contains(imported)) {
+                    reports.add(importCollision(imported, imp, null));
                 }
             }
         }
         return reports;
+    }
+
+    /**
+     * The names {@code imp} brings into the value namespace.
+     *
+     * <p>From another module: the definitions it publishes and the behaviors it declares, both of
+     * which a reader writes bare. Its types are here too — a unit data is a value, a newtype is
+     * applied to what it wraps, a record is constructed by its name — and the type namespace refuses
+     * a type against a type, so what this adds is a type against a {@code let} or a behavior.
+     *
+     * <p>From the standard library: the functions the line names. The library declares everything it
+     * ships, so the line is asked and nothing else.
+     */
+    private static Set<String> importedIntoValues(Db db, Ast.Import imp) {
+        if (Prelude.isQualifier(imp.module())) {
+            Set<String> names = new LinkedHashSet<>();
+            for (String name : imp.names()) {
+                if (Prelude.isLibraryFunction(imp.module() + "." + name)) {
+                    names.add(name);
+                }
+            }
+            return names;
+        }
+        Ast.Module from = db.ask(new Front.Available(imp.module())).value();
+        if (from == null) {
+            return Set.of();
+        }
+        Set<String> names = new LinkedHashSet<>(Bodies.publishedNames(from, imp.names()));
+        Set<String> behaviors = behaviorNames(from);
+        Set<String> types = new LinkedHashSet<>();
+        for (Ast.Def def : from.defs()) {
+            types.add(def.name());
+        }
+        for (String name : imp.names()) {
+            if (behaviors.contains(name) || types.contains(name)) {
+                names.add(name);
+            }
+        }
+        return names;
     }
 
     /**

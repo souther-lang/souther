@@ -220,10 +220,10 @@ class CompileBehaviorByNameTest {
     }
 
     /**
-     * The same behavior in both positions, whichever one the name reaches. A module declaring a
-     * behavior and importing one of the same spelling is the case where the two could come apart:
-     * the arity a name is expanded to and the behavior a call lands on are read from two tables,
-     * and a binding must not be the position where they disagree.
+     * The same behavior in both positions, wherever the name reaches one. The arity a name is
+     * expanded to and the behavior a call lands on are read from two tables, and a binding must not
+     * be the position where they come apart — so the two spellings are compared by what the emitted
+     * body references rather than by whether each compiles.
      */
     @Test
     void aBoundNameAndAWrittenNameReachTheSameBehavior() {
@@ -233,7 +233,7 @@ class CompileBehaviorByNameTest {
                 behavior twice : (n: Int) -> Int
                 let twice (n) = n * 2
                 """;
-        String demo = """
+        String imports = """
                 module demo
 
                 import up ( twice )
@@ -241,19 +241,35 @@ class CompileBehaviorByNameTest {
                 data In = { n: Int }
                 data Out = { n: Int }
 
-                behavior twice : (a: Int, b: Int) -> Int
-                let twice (a, b) = a * b
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = %s
+                """;
+        String declares = """
+                module demo
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n * 2
 
                 behavior go : (i: In) -> Out constructs Out
                 let go (i) = %s
                 """;
+        String written = "Out { n = twice(i.n) }";
+        String bound = """
+                {
+                    let f = twice
+                    Out { n = f(i.n) }
+                }""";
 
-        assertEquals(reached(up, demo.formatted("Out { n = twice(i.n, 3) }")),
-                reached(up, demo.formatted("""
-                        {
-                            let f = twice
-                            Out { n = f(i.n, 3) }
-                        }""")));
+        assertEquals(List.of("up/Twice"), reached(up, imports.formatted(written)));
+        assertEquals(reached(up, imports.formatted(written)),
+                reached(up, imports.formatted(bound)));
+
+        assertEquals(List.of("demo/Twice"), reached(up, declares.formatted(written)));
+        assertEquals(reached(up, declares.formatted(written)),
+                reached(up, declares.formatted(bound)));
     }
 
     /** Which behavior classes the emitted body of {@code demo.go} references. */

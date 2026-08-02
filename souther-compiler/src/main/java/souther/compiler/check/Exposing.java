@@ -42,12 +42,13 @@ public final class Exposing {
     /**
      * The library names an import brings in, with the three things an import can get wrong reported:
      * a name the library does not have, one name brought in from two modules at once, and one that
-     * collides with a data this module declares.
+     * collides with something this module declares.
      *
-     * <p>A module's own {@code let} of that name is not a collision — it is the module's own name,
-     * and one declaration wins over an import, the same way a binding in force wins over both. A
-     * data is: a data is written where a value goes, so the two would be one spelling with two
-     * answers, which is refused wherever a name reaches the value namespace twice.
+     * <p>Which kind of declaration it collides with does not enter into it. A data, a {@code let}
+     * and a behavior all reach the value namespace under the name they are written with, so any of
+     * them beside an import of that name is one spelling with two answers. A binding in force is a
+     * different thing and still wins over both: it is written inside a body, and what an import
+     * says is what a name means where no binding answers it.
      */
     private static Validated validate(Ast.Module module) {
         Set<String> ownNames = new HashSet<>();
@@ -79,15 +80,12 @@ public final class Exposing {
                             "`" + name + "` is not a function in the standard library module `"
                                     + imp.module() + "` (spec §stdlib).");
                 }
-                if (declaredData.contains(name)) {
+                if (declaredData.contains(name) || ownNames.contains(name)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.import.conflict").title("check.module.title")
                                     .at(imp.pos()).args(name).hint("check.import.conflict.hint")
                                     .build(),
                             "imported `" + name + "` conflicts with a local definition");
-                }
-                if (ownNames.contains(name)) {
-                    continue;   // the module defines its own `name`; that shadows the import
                 }
                 String prior = exposed.putIfAbsent(name, qualified);
                 if (prior != null && !prior.equals(qualified)) {
