@@ -973,20 +973,33 @@ public interface Ast {
         }
 
         /**
-         * The name this applies as it was written, or the empty spelling where what it applies is
-         * not a name.
+         * The name this applies, for a reader that is asking which declaration it reaches.
          *
-         * <p>A reader keyed by name is asking which declaration this reaches, and an application of
-         * something other than a name reaches none. No name is empty, so the empty spelling is that
-         * answer wherever such a reader looks — a table miss, a comparison that fails.
+         * <p>Absent where what is applied is not a name: that application reaches no declaration, so
+         * there is nothing for such a reader to look up. Every reader that wants the name and would
+         * do something else without it asks this rather than {@link #fn()}.
          */
-        public String fn() {
-            return function instanceof Var v ? v.name() : "";
+        public Optional<Var> namedCallee() {
+            return function instanceof Var v ? Optional.of(v) : Optional.empty();
         }
 
         /** Whether what this applies is a name, which is what the readers keyed by one are asking. */
         public boolean appliesAName() {
             return function instanceof Var;
+        }
+
+        /**
+         * The name this applies as it was written, or the empty spelling where what it applies is
+         * not a name.
+         *
+         * <p>For a reader that looks the name up in a table keyed by one, and only for that: an
+         * application of something other than a name reaches no declaration, and no name is empty,
+         * so the empty spelling is the miss such a reader wants. A reader that would do anything
+         * else with the absence — read its length, take a prefix, report it — is not asking this
+         * question and asks {@link #namedCallee()}.
+         */
+        public String fn() {
+            return function instanceof Var v ? v.name() : "";
         }
 
         /** What the name this applies denotes, or null where what it applies is not a name. */

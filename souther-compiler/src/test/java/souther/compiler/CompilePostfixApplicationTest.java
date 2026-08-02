@@ -1,11 +1,16 @@
 package souther.compiler;
 
+import souther.compiler.ast.Ast;
+import souther.compiler.diag.SourcePos;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * An argument list applies to the expression before it, not only to a name. What is applied is
@@ -171,5 +176,94 @@ class CompilePostfixApplicationTest {
                 """, Map.of("n", 4L));
 
         assertEquals(8L, out.get("m"));
+    }
+
+    /**
+     * A line comment ends the line, so what follows it is a new expression — the same answer a bare
+     * newline gives. Souther has no comment that stays inside a line, so there is no third case.
+     */
+    @Test
+    void aLineCommentEndsTheReachOfAnArgumentList() throws Exception {
+        Map<?, ?> out = run("""
+                module demo
+
+                data In = { n: Int }
+                data Out = { m: Int }
+
+                behavior go : (i: In) -> Out constructs Out
+
+                let go (i) = {
+                    let ys = [i.n]   // the list this walks
+                    (Out { m = List.length(ys) })
+                }
+                """, Map.of("n", 3L));
+
+        assertEquals(1L, out.get("m"));
+    }
+
+    /**
+     * The shape the standard library is written in, which is what decided the rule: a statement
+     * ending in a list, and a result opening with a parenthesis.
+     */
+    @Test
+    void aStatementEndingInAListIsNotAppliedToTheResultBelowIt() throws Exception {
+        Map<?, ?> out = run("""
+                module demo
+
+                data In = { n: Int }
+                data Out = { m: Int }
+
+                behavior go : (i: In) -> Out constructs Out
+
+                let go (i) = {
+                    let ys = [i.n] ++ [i.n]
+                    (Out { m = List.length(ys) })
+                }
+                """, Map.of("n", 2L));
+
+        assertEquals(2L, out.get("m"));
+    }
+
+    /** A field access still continues the line above, as it always has. */
+    @Test
+    void aFieldAccessStillReachesAcrossALineBreak() throws Exception {
+        Map<?, ?> out = run("""
+                module demo
+
+                data Amount = Int
+                data In = { n: Int }
+                data Out = { m: Int }
+
+                let amountOf (n: Int) = Amount(n)
+
+                behavior go : (i: In) -> Out constructs Out, Amount
+
+                let go (i) = Out { m = amountOf(i.n)
+                    .value }
+                """, Map.of("n", 9L));
+
+        assertEquals(9L, out.get("m"));
+    }
+
+    /**
+     * What an application applies is asked for as what it is. A reader keyed by name gets the miss
+     * it wants; a reader that would do something else with the absence is handed nothing to mistake
+     * for a name.
+     */
+    @Test
+    void anApplicationSaysWhetherItAppliesAName() {
+        SourcePos at = new SourcePos(1, 1);
+        Ast.Apply named = new Ast.Apply("List.map", java.util.List.of(), at);
+        Ast.Apply nameless = new Ast.Apply(new Ast.Block(java.util.List.of(),
+                new Ast.IntLit(1, at), at), java.util.List.of(),
+                souther.compiler.types.ConstructionOrigin.own(), at);
+
+        assertTrue(named.appliesAName());
+        assertEquals("List.map", named.fn());
+        assertEquals("List.map", named.namedCallee().orElseThrow().name());
+
+        assertFalse(nameless.appliesAName());
+        assertEquals("", nameless.fn(), "a table keyed by name misses");
+        assertTrue(nameless.namedCallee().isEmpty(), "and nothing is handed back to read");
     }
 }
