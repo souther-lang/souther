@@ -129,6 +129,28 @@ class FormatterTest {
     }
 
     /**
+     * A qualified callee is a field read the argument list is written after, so the formatter prints
+     * the callee as the expression it is. Nothing reassembles a name from the identifier tokens
+     * under the node — there is no node left that holds them (issue #274).
+     */
+    @Test
+    void aQualifiedCalleeSurvivesFormatting() {
+        String src = """
+                module demo
+                data In = { s: String, ns: List<Int> }
+                data Out = { t: String, m: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out {
+                    t = String.trim(i.s),
+                    m = List.length(List.map((n) -> n + 1, i.ns))
+                }
+                """;
+        String formatted = Formatter.format(src);
+        assertEquals(code(src), code(formatted), "the qualified callee was lost:\n" + formatted);
+        assertEquals(formatted, Formatter.format(formatted), "formatting is not idempotent here");
+    }
+
+    /**
      * The formatter never puts an argument list at the start of a line: there it would be a
      * parenthesised expression, and a block's tuple result would be read as applying the line above.
      */

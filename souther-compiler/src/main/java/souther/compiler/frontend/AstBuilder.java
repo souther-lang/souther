@@ -622,7 +622,6 @@ public final class AstBuilder {
             case LITERAL_EXPR -> literal(n);
             case VAR_EXPR -> new Ast.Var(firstIdentText(n), pos(n));
             case FIELD_ACCESS -> fieldAccess(n);
-            case CALL_EXPR -> call(n);
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
             case UNARY_EXPR -> new Ast.Neg(expr(onlyExpr(n)), pos(n));
@@ -670,41 +669,23 @@ public final class AstBuilder {
         return new Ast.FieldAccess(target, field.text(), posOf(field));
     }
 
-    private Ast.Expr call(SyntaxNode n) {
-        StringBuilder fn = new StringBuilder();
-        SyntaxToken first = null;
-        for (SyntaxElement e : meaningful(n)) {
-            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
-                if (fn.length() > 0) {
-                    fn.append('.');
-                }
-                fn.append(t.text());
-                if (first == null) {
-                    first = t;
-                }
-            }
-        }
-        List<Ast.Expr> args = new ArrayList<>();
-        n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
-            for (SyntaxNode a : exprChildren(list)) {
-                args.add(expr(a));
-            }
-        });
-        return new Ast.Apply(fn.toString(), args, posOf(first));
-    }
-
-    /** An argument list written after any expression. What is applied is the expression before it,
-     * so this is where a call whose callee is not a name is read. */
+    /**
+     * An argument list written after any expression — every application, whatever is applied.
+     *
+     * <p>Positioned where the callee starts, not where the callee node says it is: a field read
+     * positions itself at the field, so an application of {@code Map.empty} taken from
+     * {@code function.pos()} would report at {@code empty} and underline {@code Map.empty}'s
+     * length from there, running past the end of what was written.
+     */
     private Ast.Expr apply(SyntaxNode n) {
-        List<SyntaxNode> children = exprChildren(n);
-        Ast.Expr function = expr(children.get(0));
+        SyntaxNode callee = exprChildren(n).get(0);
         List<Ast.Expr> args = new ArrayList<>();
         n.child(SyntaxKind.ARG_LIST).ifPresent(list -> {
             for (SyntaxNode arg : exprChildren(list)) {
                 args.add(expr(arg));
             }
         });
-        return new Ast.Apply(function, args, ConstructionOrigin.own(), function.pos());
+        return new Ast.Apply(expr(callee), args, ConstructionOrigin.own(), pos(callee));
     }
 
     private Ast.Expr binary(SyntaxNode n) {
@@ -746,8 +727,12 @@ public final class AstBuilder {
         if (right instanceof Ast.Var v) {
             return new Ast.Apply(v.name(), List.of(left), v.pos());
         }
-        if (right instanceof Ast.FieldAccess fa && fa.target() instanceof Ast.Var base) {
-            return new Ast.Apply(base.name() + "." + fa.field(), List.of(left), fa.pos());
+        // `e |> Mod.name`: the read is handed over as the callee it is, rather than reassembled
+        // into a name here. Whether it is a namespace member or a field taken off a binding is
+        // resolution's to say, and it says it once, for this and for `Mod.name(e)` alike.
+        if (right instanceof Ast.FieldAccess fa) {
+            return new Ast.Apply(fa, List.of(left), ConstructionOrigin.own(),
+                    pos(operands.get(1)));
         }
         throw CompileException.of(
                 Diagnostic.of(null, "parse.vpipe.right").title("parse.title").at(right.pos()).build(),
@@ -1241,7 +1226,7 @@ public final class AstBuilder {
 
     private static boolean isExprKind(SyntaxKind k) {
         return switch (k) {
-            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, APPLY_EXPR, BINARY_EXPR,
+            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, APPLY_EXPR, BINARY_EXPR,
                  UNARY_EXPR, PIPE_EXPR,
                  PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR, MATCH_EXPR, LAMBDA_EXPR,
                  FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR, UNREACHABLE_EXPR -> true;

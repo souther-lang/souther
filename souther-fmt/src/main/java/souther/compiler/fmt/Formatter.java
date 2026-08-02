@@ -538,7 +538,6 @@ public final class Formatter {
             case VAR_EXPR -> text(firstIdent(n));
             case FIELD_ACCESS -> concat(expr(firstExprChild(n)), text("."), text(lastIdent(n)));
             case FIELD_GETTER -> concat(text("."), text(lastIdent(n)));
-            case CALL_EXPR -> call(n);
             case APPLY_EXPR -> apply(n);
             case BINARY_EXPR -> binary(n);
             case UNARY_EXPR -> concat(text("-"), expr(onlyExpr(n)));
@@ -557,19 +556,10 @@ public final class Formatter {
         };
     }
 
-    private Doc call(SyntaxNode n) {
-        StringBuilder fn = new StringBuilder();
-        for (SyntaxToken t : idents(n)) {
-            if (fn.length() > 0) {
-                fn.append('.');
-            }
-            fn.append(t.text());
-        }
-        return concat(text(fn.toString()), arguments(n));
-    }
-
     /**
-     * An argument list applied to the expression before it.
+     * An argument list applied to the expression before it — every application, whatever is
+     * applied. The callee is printed as the expression it is, so a qualified name reaches here as
+     * the field read it was parsed as and no name is reassembled from the tokens under the node.
      *
      * <p>Printed on the line its callee ends on: an argument list that began the next line would be
      * a parenthesised expression rather than an application.
@@ -1011,7 +1001,7 @@ public final class Formatter {
 
     private static boolean isExprKind(SyntaxKind k) {
         return switch (k) {
-            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, CALL_EXPR, APPLY_EXPR, BINARY_EXPR,
+            case LITERAL_EXPR, VAR_EXPR, FIELD_ACCESS, APPLY_EXPR, BINARY_EXPR,
                  UNARY_EXPR, PIPE_EXPR, PAREN_EXPR, TUPLE_EXPR, LIST_EXPR, LIST_COMP, IF_EXPR,
                  MATCH_EXPR, LAMBDA_EXPR, FIELD_GETTER, NEW_DATA_EXPR, BLOCK_EXPR,
                  UNREACHABLE_EXPR -> true;

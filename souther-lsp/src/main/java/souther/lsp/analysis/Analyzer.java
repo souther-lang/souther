@@ -1098,24 +1098,33 @@ public final class Analyzer {
     /** Pre-order walk, appending {@code {line, startChar, length, tokenType}} for each classifiable
      * token in source order. */
     private void collectTokens(SyntaxNode node, LineIndex lines, List<int[]> out) {
-        collectTokens(node, lines, out, node.kind());
+        collectTokens(node, lines, out, node.kind(), false);
     }
 
     /**
      * {@code enclosing} is the nearest ancestor that is not a pattern. A pattern says what a value is
      * made of, not what its names are for: the same {@code (a, b)} binds parameters in a lambda's
      * head and locals in a {@code let}, so classification has to see past it.
+     *
+     * <p>{@code callee} says this node is what an application applies. It cannot be worked out from
+     * the parent alone: a qualified callee is a field read, and only its last name is the function —
+     * {@code Map.map(f, xs)} names a namespace and then a function in it. So it is carried down, to
+     * the field a read takes and not to what the read is taken off.
      */
     private void collectTokens(SyntaxNode node, LineIndex lines, List<int[]> out,
-                               SyntaxKind enclosing) {
+                               SyntaxKind enclosing, boolean callee) {
         SyntaxKind outer = isPatternNode(node.kind()) ? enclosing : node.kind();
         boolean seenIdent = false;
+        boolean seenChildNode = false;
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxNode child) {
-                collectTokens(child, lines, out, outer);
+                boolean applied = node.kind() == SyntaxKind.APPLY_EXPR ? !seenChildNode
+                        : callee && node.kind() == SyntaxKind.PAREN_EXPR;
+                seenChildNode = true;
+                collectTokens(child, lines, out, outer, applied);
             } else {
                 SyntaxToken token = (SyntaxToken) e;
-                int type = classify(token, node.kind(), outer, seenIdent);
+                int type = classify(token, node.kind(), outer, seenIdent, callee);
                 if (token.kind() == SyntaxKind.IDENT) {
                     seenIdent = true;
                 }
@@ -1140,7 +1149,7 @@ public final class Analyzer {
     }
 
     private int classify(SyntaxToken token, SyntaxKind parent, SyntaxKind enclosing,
-                         boolean afterFirstIdent) {
+                         boolean afterFirstIdent, boolean callee) {
         SyntaxKind k = token.kind();
         if (k == SyntaxKind.LINE_COMMENT) {
             return T_COMMENT;
@@ -1161,12 +1170,18 @@ public final class Analyzer {
             return T_OPERATOR;
         }
         if (k == SyntaxKind.IDENT) {
-            return classifyIdent(parent, enclosing, afterFirstIdent);
+            return classifyIdent(parent, enclosing, afterFirstIdent, callee);
         }
         return -1;   // braces, parens, commas, colons, dots
     }
 
-    private int classifyIdent(SyntaxKind parent, SyntaxKind enclosing, boolean afterFirstIdent) {
+    private int classifyIdent(SyntaxKind parent, SyntaxKind enclosing, boolean afterFirstIdent,
+                              boolean callee) {
+        // what an application applies: the bare name, or the last name of a qualified one. The
+        // qualifier in front of it is not the function and is classified as what it is written as.
+        if (callee && (parent == SyntaxKind.VAR_EXPR || parent == SyntaxKind.FIELD_ACCESS)) {
+            return T_FUNCTION;
+        }
         // a name a pattern binds is a parameter where the pattern is one, and a local otherwise
         if (parent == SyntaxKind.PATTERN_NAME) {
             return enclosing == SyntaxKind.LAMBDA_EXPR || enclosing == SyntaxKind.FN_PARAM
@@ -1183,7 +1198,7 @@ public final class Analyzer {
         return switch (parent) {
             case TYPE_REF, TYPE_ARGS, SUM_BODY, NEWTYPE_BODY, CONSTRUCTS_CLAUSE, DEPENDS_CLAUSE,
                  DATA_DEF, NEW_DATA_EXPR, PATTERN_CTOR -> T_TYPE;
-            case BEHAVIOR_DEF, FN_DEF, STAGE, CALL_EXPR -> T_FUNCTION;
+            case BEHAVIOR_DEF, FN_DEF, STAGE -> T_FUNCTION;
             case PARAM, FN_PARAM, LAMBDA_EXPR -> T_PARAMETER;
             case FIELD, FIELD_INIT, FIELD_ACCESS, FIELD_GETTER -> T_PROPERTY;
             case MODULE_HEADER, QUALIFIED_NAME, IMPORT_DECL -> T_NAMESPACE;

@@ -451,9 +451,12 @@ public final class CallElaborator {
                     }
                     yield applySignature(call, fn, ca, expected, env, ctx).result();
                 }
-                // a library qualifier that matched no builtin or intrinsic above is a wrong stdlib
-                // call (spec §stdlib) — report it as such, not as a missing behavior.
-                if (library || call.written().indexOf('.') >= 0) {
+                // A library qualifier that matched no builtin or intrinsic above is a wrong stdlib
+                // call (spec §stdlib) — report it as such, not as a missing behavior. Asked of what
+                // this reaches rather than of what a report would quote: a field read applied
+                // (`deps.count(x)`) reaches a binding and is quoted with a dot in it, and what is
+                // wrong with it is that it is not a function, which is what the report below says.
+                if (library || call.reaches().indexOf('.') >= 0) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
                                     .at(call.pos(), call.written().length()).args(call.written()).build(),

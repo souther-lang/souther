@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Locale;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -45,35 +46,42 @@ class SyntaxDiagnosticTest {
 
     @Test
     void aBlockOfOnlyStatementsIsASyntaxError() {
-        Diagnostic d = diagnosticOf("""
-                module demo
-                let run (i) = {
-                    let a = i
-                }
-                """);
-        assertEquals("parse.title", d.titleKey());
-        assertEquals("parse.block.noresult", d.messageKey());
-    }
-
-    // Issue #75: `i` and the following line's `(a)` read as one call, so the block is left with no
-    // result. It used to reach the AST builder and die with a NullPointerException; the message says
-    // what happened, in both locales.
-    @Test
-    void aResultAbsorbedByTheLineAboveIsReportedRatherThanCrashing() {
         String source = """
                 module demo
                 let run (i) = {
                     let a = i
-                    (a)
                 }
                 """;
         Diagnostic d = diagnosticOf(source);
+        assertEquals("parse.title", d.titleKey());
         assertEquals("parse.block.noresult", d.messageKey());
         SourceContext src = new SourceContext("m.sou", source);
         String en = new HumanRenderer(false).render(d, src, Locale.ENGLISH);
         String ja = new HumanRenderer(false).render(d, src, Locale.JAPANESE);
         assertTrue(en.contains("A block ends in one expression, which is its value"), en);
         assertTrue(ja.contains("ブロックは最後に値となる式を1つ置きます"), ja);
+    }
+
+    /**
+     * A result written under a statement that ends in a name is that result. An argument list must
+     * begin on the line its callee ends on, and that rule is now the only one: {@code i} and the
+     * following line's {@code (a)} were read as one call while an applied name was a shape of its
+     * own, which left the block with no result (issue #75) — and made a name applied across a line
+     * break mean something a name applied to the result of an expression never did (issue #274).
+     */
+    @Test
+    void aResultUnderAStatementIsNotAppliedToTheNameAboveIt() {
+        String source = """
+                module demo
+                data Out = { n: Int }
+                let run (i: Int) = {
+                    let a = i
+                    (a)
+                }
+                behavior go : (n: Int) -> Out constructs Out
+                let go (n) = Out { n = run(n) }
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(source));
     }
 
     @Test

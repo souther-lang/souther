@@ -1203,7 +1203,7 @@ public final class InvariantChecker {
     private static Ast.Apply withArg(Ast.Apply call, int at, Ast.Expr arg) {
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(at, arg);
-        return new Ast.Apply(call.function(), args, call.origin(), call.pos());
+        return call.withArgs(args);
     }
 
     /** An emptiness check as the comparison it means, or {@code e} unchanged. */

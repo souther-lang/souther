@@ -1289,24 +1289,18 @@ public final class CstParser {
         expect(SyntaxKind.RPAREN);
     }
 
-    /** An identifier-led primary: a call, a qualified call, a construction, or a bare variable —
-     * each of which a field-access chain may follow. */
+    /**
+     * An identifier-led primary: a construction or a bare variable, each of which a field-access
+     * chain or an argument list may follow.
+     *
+     * <p>A name that is applied is not read here. {@code name(args)} is the variable and the
+     * argument list {@link #postfixExpr} writes after it, and {@code Mod.name(args)} is that
+     * argument list after a field read — so what is applied is a subexpression whichever way it is
+     * written, and whether {@code Mod.name} is a namespace member or an ordinary field read is
+     * left to resolution, which knows the bindings in force.
+     */
     private void identExpr() {
-        if (nth(1) == SyntaxKind.DOT && nth(2) == SyntaxKind.IDENT && nth(3) == SyntaxKind.LPAREN) {
-            // qualified call `Mod.name(args)`
-            start(SyntaxKind.CALL_EXPR);
-            bump();   // Mod
-            bump();   // .
-            bump();   // name
-            argList();
-            finish();
-        } else if (nth(1) == SyntaxKind.LPAREN) {
-            // plain call `name(args)`
-            start(SyntaxKind.CALL_EXPR);
-            bump();   // name
-            argList();
-            finish();
-        } else if (!noConstruct && nth(1) == SyntaxKind.LBRACE) {
+        if (!noConstruct && nth(1) == SyntaxKind.LBRACE) {
             // construction `Type { ... }` (unless suppressed, as in a match scrutinee)
             newDataExpr();
         } else {
