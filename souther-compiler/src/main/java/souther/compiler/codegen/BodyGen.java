@@ -901,10 +901,7 @@ final class BodyGen {
                 return true;
             }
             boolean[] found = {false};
-            Core.mapChildren(e, child -> {
-                found[0] |= walksInside(child);
-                return child;
-            });
+            Core.forEachChild(e, child -> found[0] |= walksInside(child));
             return found[0];
         }
 

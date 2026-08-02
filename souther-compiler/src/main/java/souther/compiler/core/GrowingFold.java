@@ -80,7 +80,7 @@ public final class GrowingFold {
     /** {@code body} with every growing fold in it rewritten, innermost first — so a {@code map} over
      *  a {@code filter} builds both, and the two builds are then joined into one. */
     public static Core rewrite(Core body) {
-        Core mapped = Core.mapChildren(body, GrowingFold::rewrite);
+        Core mapped = Core.mapChildren(body, GrowingFold::rewrite, s -> s);
         if (mapped instanceof Core.Call call) {
             Core built = built(call);
             if (built != null) {
@@ -306,10 +306,7 @@ public final class GrowingFold {
             return 0;
         }
         int[] n = {e instanceof Core.Call c && c.fn().equals(GROW) ? 1 : 0};
-        Core.mapChildren(e, child -> {
-            n[0] += adds(child);
-            return child;
-        });
+        Core.forEachChild(e, child -> n[0] += adds(child));
         return n[0];
     }
 
@@ -332,7 +329,7 @@ public final class GrowingFold {
             return new Core.LetIn(outer.params().get(0), c.args().get(0), element,
                     body.type(), c.pos());
         }
-        return Core.mapChildren(e, child -> piped(child, outer, refused));
+        return Core.mapChildren(e, child -> piped(child, outer, refused), s -> s);
     }
 
     /** The step with its appends turned into adds, or null when the step does something else with the
@@ -452,11 +449,10 @@ public final class GrowingFold {
      */
     private static int uses(Core e, BindingId binding) {
         int[] n = {0};
+        // a spread reads the binding it names, and the walk hands that read over like any other
         count(e, node -> switch (node) {
             case Core.Read v -> v.binding().equals(binding);
             case Core.Apply a -> a.fn().binding().equals(binding);
-            case Core.NewData nd ->
-                    nd.spreads().stream().anyMatch(s -> s.binding().equals(binding));
             default -> false;
         }, n);
         return n[0];
@@ -467,9 +463,6 @@ public final class GrowingFold {
         if (holds.test(e)) {
             n[0]++;
         }
-        Core.mapChildren(e, child -> {
-            count(child, holds, n);
-            return child;
-        });
+        Core.forEachChild(e, child -> count(child, holds, n));
     }
 }
