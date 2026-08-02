@@ -163,19 +163,12 @@ public final class InvariantChecker {
             "Set.contains", new Carried(1, Set.of(Shape.PERMUTES)),
             "Map.containsKey", new Carried(1, Set.of(Shape.PERMUTES)));
 
-    /** A stdlib call that states a predicate ({@code predicate}) of every element of a container
-     * ({@code container}). Stating one is stating the predicate of each element, so the elements a
-     * combinator's closure is handed carry it — which is the other direction of {@link #CARRIED},
-     * where a predicate travels from a container to one built from it. {@code List.all} is the only
-     * such call the library has. */
-    private record Quantifier(int predicate, int container) {}
-
-    private static final Map<String, Quantifier> QUANTIFIERS =
-            Map.of("List.all", new Quantifier(0, 1));
-
-    /** The constructions every element of whose result is an element of what it was built from, so a
-     * relation stated of the source is a relation of each element here. */
-    private static final Set<Shape> KEEPS_ELEMENTS = Set.of(Shape.PERMUTES, Shape.SUBSET);
+    /** The calls that state their predicate of <em>every</em> element, so what they say of a
+     * container is what holds of each element a closure is handed. Which argument is the predicate
+     * and which the container is what {@link #COMBINATORS} already answers of any combinator, and how
+     * far the statement travels is what {@link #CARRIED} already answers of any predicate — so a
+     * quantifier is the name and nothing else. {@code List.all} is the only one the library has. */
+    private static final Set<String> QUANTIFIERS = Set.of("List.all");
 
     /** Emptiness, by the size call it means. This is not a rule about what an operation does to a
      * property (spec §invariant-discharge-preservation) but about what a predicate <em>says</em>:
@@ -211,12 +204,14 @@ public final class InvariantChecker {
      * relation as the clause it was written as, together with the rule that names its free leaves, so
      * it can be read again at the element a combinator's closure is handed.
      *
-     * <p>{@code reads} is every term the clause names from outside itself, {@code container}
+     * <p>{@code through} is how far it travels: a construction of one of those shapes holds only
+     * elements of what it was built from, so what was stated of the source still holds of each of
+     * them. {@code reads} is every term the clause names from outside itself, {@code container}
      * included. A binding that takes over one of those names leaves the clause saying something else,
      * so the relation is dropped there.
      */
-    private record Quantified(String container, Ast.Block predicate, Bindings binds,
-                              List<String> reads) {}
+    private record Quantified(String container, Set<Shape> through, Ast.Block predicate,
+                              Bindings binds, List<String> reads) {}
 
     /** What the guards have settled on the current path: numeric relations, predicates known to hold
      * or to fail, and relations known of every element of a container. Threaded functionally through
@@ -454,34 +449,30 @@ public final class InvariantChecker {
     }
 
     /** The relations known of every element of {@code container}: those stated of it as written, and
-     * those stated of each container it was built from by an operation that only drops or reorders
-     * elements — every element here is an element there. */
+     * those stated of a container it was built from that travel every construction in between. */
     private List<Quantified> elementRelations(Ast.Expr container, Known k, Map<String, Type> types) {
         List<Quantified> found = new ArrayList<>();
+        Set<Shape> crossed = java.util.EnumSet.noneOf(Shape.class);
         Ast.Expr source = container;
-        while (source != null) {
+        while (true) {
             String key = bodyKey(source, types);
             if (key != null) {
                 for (Quantified q : k.quantified()) {
-                    if (key.equals(q.container())) {
+                    if (key.equals(q.container()) && q.through().containsAll(crossed)) {
                         found.add(q);
                     }
                 }
             }
-            source = builtFromKeepingElements(source);
+            if (!(source instanceof Ast.Apply call)) {
+                return found;
+            }
+            Built built = BUILT_FROM.get(call.reaches());
+            if (built == null || built.from() >= call.args().size()) {
+                return found;
+            }
+            crossed.add(built.shape());
+            source = call.args().get(built.from());
         }
-        return found;
-    }
-
-    /** What {@code e} was built from where every element of {@code e} is one of that container's, or
-     * {@code null} where it was not built that way. */
-    private static Ast.Expr builtFromKeepingElements(Ast.Expr e) {
-        if (!(e instanceof Ast.Apply call)) {
-            return null;
-        }
-        Built built = BUILT_FROM.get(call.reaches());
-        return built != null && KEEPS_ELEMENTS.contains(built.shape())
-                && built.from() < call.args().size() ? call.args().get(built.from()) : null;
     }
 
     /** What {@code q} says of the element bound to {@code element}, taken into {@code k}. The clause
@@ -521,24 +512,25 @@ public final class InvariantChecker {
             quantifiedBy(under, binds, !positive, out);
             return;
         }
-        if (!positive || !(e instanceof Ast.Apply call)) {
+        if (!positive || !(e instanceof Ast.Apply call) || !QUANTIFIERS.contains(call.reaches())) {
             return;
         }
-        Quantifier over = QUANTIFIERS.get(call.reaches());
-        if (over == null || over.predicate() >= call.args().size()
-                || over.container() >= call.args().size()
-                || !(call.args().get(over.predicate()) instanceof Ast.Block p)
+        Combinator over = COMBINATORS.get(call.reaches());
+        Carried carried = CARRIED.get(call.reaches());
+        if (over == null || carried == null || over.closureArg() >= call.args().size()
+                || over.listArg() >= call.args().size()
+                || !(call.args().get(over.closureArg()) instanceof Ast.Block p)
                 || p.params().size() != 1) {
             return;
         }
-        String container = siteOf(binds).apply(call.args().get(over.container()));
+        String container = siteOf(binds).apply(call.args().get(over.listArg()));
         if (container == null) {
             return;
         }
         List<String> named = new ArrayList<>();
         named.add(container);
         reads(e, binds, Set.of(), named);
-        out.add(new Quantified(container, p, binds, List.copyOf(named)));
+        out.add(new Quantified(container, carried.through(), p, binds, List.copyOf(named)));
     }
 
     /** Every term {@code e} names from outside itself, as the clause's own rule names it. A name the
