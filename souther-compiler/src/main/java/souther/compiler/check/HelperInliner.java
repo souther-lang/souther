@@ -21,7 +21,9 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalInt;
 import java.util.Set;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
 
 /**
@@ -54,6 +56,17 @@ public final class HelperInliner {
      * applying the declaration by a spelling and why a lambda naming itself had to be refused.
      */
     private final Map<BindingId, Ast.FnDef> scopedLambdas = new HashMap<>();
+    /**
+     * The behaviors a body expanded here may name, with how many inputs each takes — the module's
+     * own callable ones and the ones it borrows (spec {@code [#calling-a-behavior]}).
+     *
+     * <p>Apart from {@link #helpers} because a behavior is never expanded: what stands behind its
+     * name may be a Java implementation, so a body that reached past it to the {@code let} would be
+     * a second answer to the same name. All this holds is what reifying the name needs, which is its
+     * arity; the query layer works out which behaviors are here, since which of them may be named is
+     * a fact about the module rather than about any one body.
+     */
+    private Map<String, Integer> callableBehaviors = Map.of();
     private final Set<String> recursive = new HashSet<>();   // own helpers on a call cycle (spec 13.1)
     private final Map<String, LambdaOrigin> lambdaOrigins = new HashMap<>();   // $k_p -> where it was written
     private int counter = 0;
@@ -154,6 +167,19 @@ public final class HelperInliner {
         inliner.classifyRecursion();
         inliner.rejectValueCycles();
         return inliner;
+    }
+
+    /**
+     * The same, told which behaviors a body expanded here may name and how many inputs each takes.
+     *
+     * <p>Told rather than worked out: which behaviors those are follows from the declarations of
+     * this module and of the ones it imports, which is not what this pass reads. A body expanded
+     * without being told names none of them, and a name it cannot reify is left as it was written
+     * for the check to report.
+     */
+    public HelperInliner namingBehaviors(Map<String, Integer> arities) {
+        this.callableBehaviors = Map.copyOf(arities);
+        return this;
     }
 
     /** prelude helpers are keyed by their qualified name (`List.map`); a module's own helpers by their
@@ -953,17 +979,7 @@ public final class HelperInliner {
                     || !dependencies.contains(local.id())) {
                 continue;
             }
-            List<Ast.Binder> params = new ArrayList<>();
-            List<Ast.Expr> forwarded = new ArrayList<>();
-            for (int j = 0; j < want.params().size(); j++) {
-                // a source identifier never starts with `$`, so these cannot capture a caller local
-                Ast.Binder p = binders.binder("$" + counter++ + "_" + v.name(), v.pos());
-                params.add(p);
-                forwarded.add(Ast.Var.local(p, v.pos()));
-            }
-            out.set(i, new Ast.Block(params,
-                    new Ast.Apply(v.name(), v.denotes(), forwarded, ConstructionOrigin.own(), v.pos()),
-                    v.pos()));
+            out.set(i, etaExpand(v, want.params().size(), _ -> "$" + counter++ + "_" + v.name()));
         }
         return out;
     }
@@ -1231,77 +1247,98 @@ public final class HelperInliner {
     }
 
     /**
-     * A name that denotes a value — a {@code let} written with no parameter list — expanded to the
-     * expression it was defined as. A value is not module state: its body is elaborated where it was
-     * declared and substituted at each reference, so nothing is held between them and there is no
-     * order in which the module's values come into being.
+     * {@code function} as the function value it names: a block taking as many parameters as the
+     * function takes and applying it to them. The same value the author would get by spelling the
+     * lambda, so nothing downstream has to know which of the two was written.
      *
-     * <p>A recursive value is left alone here; the recursion check reports it under its own name.
-     * Anything else — a helper handed to a combinator by name, a binding, a unit data — is the name
-     * itself.
+     * <p>{@code binderName} names the block's parameters, given the index of each. A source
+     * identifier never starts with {@code $}, so a name from any of the callers cannot capture a
+     * local of the body it is written into.
+     */
+    private Ast.Block etaExpand(Ast.Var function, int arity, IntFunction<String> binderName) {
+        List<Ast.Binder> params = new ArrayList<>();
+        List<Ast.Expr> args = new ArrayList<>();
+        for (int i = 0; i < arity; i++) {
+            Ast.Binder p = binders.binder(binderName.apply(i), function.pos());
+            params.add(p);
+            args.add(Ast.Var.local(p, function.pos()));
+        }
+        return new Ast.Block(params,
+                new Ast.Apply(function.name(), function.denotes(), args, ConstructionOrigin.own(),
+                        function.pos()),
+                function.pos());
+    }
+
+    /**
+     * How many inputs the declaration {@code v} reaches takes, where that declaration is one a name
+     * written in value position stands for — and empty where the name reaches no such declaration.
+     *
+     * <p>This asks the declaration and nothing else: not whether the implementation is a Souther
+     * body, a kernel or a Java one, which is what is on the other side of the name and not the
+     * name's business. A helper, a library function and a behavior differ in what stands behind
+     * them and not in what reification needs, which is how many arguments the block it becomes
+     * takes.
+     *
+     * <p>Empty covers a declaration taking nothing and every name that stands for no declaration at
+     * all: a binding, a construction, a library name the library does not declare, and a behavior
+     * this body may not name. Each of those is left as it was written and reported where it is
+     * used. A declaration taking nothing has no function value to become rather than one this
+     * declines to make: a {@code let} with no parameter list is a value and is written without
+     * {@code ()}, and there is no block taking no parameter to expand it to.
+     */
+    private OptionalInt declarationArity(Ast.Var v) {
+        int arity = switch (v.denotes()) {
+            case ValueName.Stdlib lib -> {
+                Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
+                Ast.FnDef declared = entry == null ? null : entry.declaration();
+                yield declared == null ? 0 : declared.params().size();
+            }
+            case ValueName.Helper _ -> {
+                Ast.FnDef declared = helpers.get(v.reaches());
+                yield declared == null || declared.body() == null ? 0 : declared.params().size();
+            }
+            // A behavior's name handed over is the behavior: the block applies the behavior, so the
+            // emitted code goes through the behavior's class and not through the `let` that
+            // implements it. Only the ones a body may name are here — a behavior with a requirement
+            // is a binding by the time it can be written.
+            case ValueName.Behavior b -> callableBehaviors.getOrDefault(b.name(), 0);
+            // A binding holds whatever it was given; a construction, a checker built-in and a name
+            // that denotes nothing stand for no declaration at all.
+            case ValueName.Local _, ValueName.OfType _, ValueName.Builtin _,
+                    ValueName.Unresolved _ -> 0;
+            case null -> 0;
+        };
+        return arity == 0 ? OptionalInt.empty() : OptionalInt.of(arity);
+    }
+
+    /**
+     * A name written where a value goes, as the value it stands for.
+     *
+     * <p>A name that reaches a declaration taking arguments is the function it names, written out.
+     * A recursive helper is written out too — the call inside stays the call it has to be.
+     *
+     * <p>A name that denotes a value — a {@code let} written with no parameter list — is expanded to
+     * the expression it was defined as. A value is not module state: its body is elaborated where it
+     * was declared and substituted at each reference, so nothing is held between them and there is
+     * no order in which the module's values come into being. A recursive value is left alone here;
+     * the recursion check reports it under its own name.
+     *
+     * <p>Anything else — a binding, a unit data — is the name itself.
      */
     private Ast.Expr valueOf(Ast.Var v) {
-        if (v.denotes() instanceof ValueName.Stdlib lib) {
-            return libraryValueOf(v, lib);
+        OptionalInt arity = declarationArity(v);
+        if (arity.isPresent()) {
+            int k = counter++;
+            return inline(etaExpand(v, arity.getAsInt(), i -> "$v" + k + "_" + i));
         }
         if (!(v.denotes() instanceof ValueName.Helper)) {
             return v;
         }
         Ast.FnDef value = helpers.get(v.reaches());
-        if (value == null || value.body() == null) {
-            return v;
-        }
-        if (!value.params().isEmpty()) {
-            // A helper named where a value goes is the function it names, written out: a lambda that
-            // takes what the helper takes and applies it. The same value the author would get by
-            // spelling the lambda, so nothing downstream has to know which of the two was written.
-            // A recursive helper eta-expands too — the call inside stays the call it has to be.
-            int k = counter++;
-            List<Ast.Binder> params = new ArrayList<>();
-            List<Ast.Expr> args = new ArrayList<>();
-            for (int i = 0; i < value.params().size(); i++) {
-                Ast.Binder p = binders.binder("$v" + k + "_" + i, v.pos());
-                params.add(p);
-                args.add(Ast.Var.local(p, v.pos()));
-            }
-            return inline(new Ast.Block(params,
-                    new Ast.Apply(v.name(), v.denotes(), args, ConstructionOrigin.own(), v.pos()), v.pos()));
-        }
-        if (recursive.contains(v.name())) {
+        if (value == null || value.body() == null || recursive.contains(v.name())) {
             return v;
         }
         return carriedByValue(inline(value.written()));
-    }
-
-    /**
-     * A library name written where a value goes, as the function it names.
-     *
-     * <p>The library declares everything it ships, so this asks the declaration and nothing else —
-     * not whether the implementation is a Souther body or a kernel, which is what is on the other
-     * side of the name and not the name's business. What comes back is the block a reader would
-     * have written by hand, which is what the specification says the two spellings are.
-     *
-     * <p>An empty collection is not a function: it is a declaration with no parameter list, so it is
-     * already the value it is and is left alone.
-     */
-    private Ast.Expr libraryValueOf(Ast.Var v, ValueName.Stdlib lib) {
-        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
-        Ast.FnDef declared = entry == null ? null : entry.declaration();
-        int arity = declared == null ? -1 : declared.params().size();
-        if (arity <= 0) {
-            return v;   // a value, or a name the library does not declare — reported where it is used
-        }
-        int k = counter++;
-        List<Ast.Binder> params = new ArrayList<>();
-        List<Ast.Expr> args = new ArrayList<>();
-        for (int i = 0; i < arity; i++) {
-            Ast.Binder p = binders.binder("$v" + k + "_" + i, v.pos());
-            params.add(p);
-            args.add(Ast.Var.local(p, v.pos()));
-        }
-        return inline(new Ast.Block(params,
-                new Ast.Apply(v.name(), v.denotes(), args, ConstructionOrigin.own(), v.pos()),
-                v.pos()));
     }
 
     /**
@@ -1371,15 +1408,7 @@ public final class HelperInliner {
             return call;   // a bare name that stands for no body is left for the type checker to report
         }
         int k = counter++;
-        List<Ast.Binder> params = new ArrayList<>();
-        List<Ast.Expr> callArgs = new ArrayList<>();
-        for (int i = 0; i < helper.params().size(); i++) {
-            Ast.Binder p = binders.binder("$b" + k + "_" + i, v.pos());
-            params.add(p);
-            callArgs.add(Ast.Var.local(p, v.pos()));
-        }
-        Ast.Block block = new Ast.Block(params,
-                new Ast.Apply(v.name(), v.denotes(), callArgs, ConstructionOrigin.own(), v.pos()), v.pos());
+        Ast.Block block = etaExpand(v, helper.params().size(), i -> "$b" + k + "_" + i);
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
         return new Ast.Apply(call.function(), args, call.origin(), call.pos());

@@ -434,6 +434,33 @@ public final class Bodies {
         }
     }
 
+    /**
+     * How many inputs each behavior a body of this module may name takes.
+     *
+     * <p>A name written where a value goes becomes the function it names, and all that becoming one
+     * needs is how many arguments it takes (spec {@code [#blocks]}). {@link CalleeSigs} already says
+     * which behaviors may be named here and what they take; this is that answer with the types
+     * dropped, because the expansion is written before anything is typed.
+     *
+     * <p>Its own question rather than a read of {@link CalleeSigs} at the expansion, so a change to a
+     * behavior's input <em>types</em> does not expand every body of the module again.
+     */
+    public record NamedBehaviorArity(String name) implements Key<Map<String, Integer>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Integer>> compute(Db db) {
+            Answer<Map<String, ReqSig>> sigs = db.ask(new CalleeSigs(name));
+            if (!sigs.present()) {
+                return Answer.absent();
+            }
+            return Answer.of(Ordered.map(InjectionSigs.arities(sigs.value())));
+        }
+    }
+
     /** A module with every helper parameter the author left unwritten carrying the type its body
      * gives it — the surface tree the check reads its declarations from. */
     public record Settled(String name) implements Key<Ast.Module> {
@@ -723,12 +750,15 @@ public final class Bodies {
             Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
             Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
-            if (!def.present() || !helpers.present() || !recursive.present()) {
+            Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
+            if (!def.present() || !helpers.present() || !recursive.present()
+                    || !behaviors.present()) {
                 return Answer.absent();
             }
             try {
                 return Answer.of(Lower.body(def.value(),
-                        HelperInliner.forHelpers(module, helpers.value()),
+                        HelperInliner.forHelpers(module, helpers.value())
+                                .namingBehaviors(behaviors.value()),
                         recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -752,12 +782,15 @@ public final class Bodies {
             Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
             Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
-            if (!def.present() || !helpers.present() || !recursive.present()) {
+            Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
+            if (!def.present() || !helpers.present() || !recursive.present()
+                    || !behaviors.present()) {
                 return Answer.absent();
             }
             try {
                 return Answer.of(Lower.body(def.value(),
-                        HelperInliner.forHelpers(module, helpers.value(), InliningPolicy.DISCHARGE),
+                        HelperInliner.forHelpers(module, helpers.value(), InliningPolicy.DISCHARGE)
+                                .namingBehaviors(behaviors.value()),
                         recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);

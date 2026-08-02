@@ -194,7 +194,12 @@ public final class TypeChecker {
         // published helper is expanded at its call sites here exactly as one of this module's own is,
         // and it is not one of this module's own — which is what keeps a recursive one of them in
         // `injectedRecursiveHelpers`, to be emitted here rather than declared here.
-        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere);
+        // A helper is checked standing on its own as well as expanded into what calls it, and both
+        // readings answer the same about a behavior's name: it becomes the function value it names,
+        // which a helper may then not apply (E1401). Told nothing, the standalone reading would
+        // refuse the name for being a name rather than for being a behavior a helper cannot reach.
+        HelperInliner inliner = HelperInliner.forModule(module, publishedToHere)
+                .namingBehaviors(InjectionSigs.arities(calleeSigs));
         // An invariant runs on every construction and must terminate (spec §invariant-expressions).
         // A total recursive helper does terminate, so it is admissible — including the stdlib fold
         // (`List.foldFrom`) that backs the list quantifiers `List.all`/`any`/`member`/`distinct`,

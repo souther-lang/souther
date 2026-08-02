@@ -141,20 +141,28 @@ class CompileImportedNameTest {
         assertTrue(!e.getMessage().contains("String.trim"), e.getMessage());
     }
 
-    /** A name that was answered is not an unknown one, whatever it turns out to denote. */
+    /**
+     * A name that was answered is not an unknown one, whatever it turns out to denote. A composition
+     * is answered and is still not a value — its requirements are inferred from its stages, so a
+     * body holding one would take on a set that changes when an upstream stage does.
+     */
     @Test
     void aNameThatDenotesSomethingUnusableSaysWhatItDenotes() {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compile("""
-                module demo
+                module demo exposing ( In, Mid, Out, one, two, chain : Out, go )
                 data In = { n: Int }
-                data Out = { m: Int }
-                behavior twice : (n: Int) -> Int
-                let twice (n) = n * 2
-                behavior go : (i: In) -> Out constructs Out
+                data Mid = { n: Int }
+                data Out = { n: Int }
+                behavior one : (i: In) -> Mid constructs Mid
+                let one (i) = Mid { n = i.n }
+                behavior two : (m: Mid) -> Out constructs Out
+                let two (m) = Out { n = m.n }
+                behavior chain = one >-> two
+                behavior go : (i: In) -> Out
                 let go (i) = {
-                    let f = twice
-                    Out { m = f(i.n) }
+                    let f = chain
+                    f(i)
                 }
                 """));
         assertTrue(e.getMessage().contains("is a behavior"), e.getMessage());
