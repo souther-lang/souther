@@ -434,6 +434,41 @@ class RunnerTest {
     }
 
     /**
+     * Depth is one of the limits the reader holds, not the only one: a number too long and a name
+     * too long are refused by the same exception type at a depth of nothing. Each keeps the wording
+     * it had rather than being told it nests too deeply.
+     */
+    @Test
+    void aLimitOtherThanDepthIsNotReportedAsDepth() throws Exception {
+        Path file = write("tree.sou", """
+                data Node = { n: Int, kids: List<Node> }
+                data Out = { n: Int }
+                behavior top : (t: Node) -> Out constructs Out
+                let top (t) = Out { n = t.n }
+                """);
+        // A number longer than StreamReadConstraints.getMaxNumberLength(), written at the 500th
+        // level — the deepest a value the reader accepts the nesting of can stand, and one level
+        // short of where a refusal for depth stands. Reading the exception's text instead of the
+        // context's depth, or reading the depth as `at the limit` rather than `past it`, calls this
+        // one too deeply nested.
+        String longNumber = "[".repeat(500) + "1".repeat(1001) + "]".repeat(500);
+        Runner.RunException tooLongANumber = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "top", longNumber));
+        assertTrue(tooLongANumber.getMessage().contains("is not valid JSON"),
+                tooLongANumber.getMessage());
+        assertFalse(tooLongANumber.getMessage().contains("nests deeper"),
+                tooLongANumber.getMessage());
+
+        // longer than StreamReadConstraints.getMaxNameLength()
+        String longName = "{\"" + "n".repeat(50001) + "\":1}";
+        Runner.RunException tooLongAName = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "top", longName));
+        assertTrue(tooLongAName.getMessage().contains("is not valid JSON"),
+                tooLongAName.getMessage());
+        assertFalse(tooLongAName.getMessage().contains("nests deeper"), tooLongAName.getMessage());
+    }
+
+    /**
      * Output deeper than the boundary writes is reported the same way. A behavior can build a value
      * deeper than anything it was handed, so this is reachable from input the boundary accepted.
      */

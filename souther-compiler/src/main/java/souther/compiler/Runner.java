@@ -585,6 +585,14 @@ public final class Runner {
             StreamWriteConstraints.defaults().getMaxNestingDepth();
 
     /**
+     * The depth a context stands at when its side has just refused a value for nesting. The two
+     * sides count differently, measured: reading stands on the level it refused to enter, and
+     * writing on the last level it accepted.
+     */
+    private static final int READ_REFUSAL_DEPTH = READ_DEPTH_LIMIT + 1;
+    private static final int WRITE_REFUSAL_DEPTH = WRITE_DEPTH_LIMIT;
+
+    /**
      * Parses {@code --input}.
      *
      * <p>The parser is made here rather than left to {@code readTree(String)} because the exception a
@@ -599,14 +607,17 @@ public final class Runner {
         JsonParser parser = JSON.createParser(input);
         try {
             JsonNode tree = JSON.readTree(parser);
-            parser.close();
             return tree == null ? JSON.missingNode() : tree;
-        } catch (StreamConstraintsException _) {
-            throw tooDeep("run.input.toodeep", "--input nests deeper than this boundary accepts",
-                    parser.streamReadContext(), READ_DEPTH_LIMIT);
         } catch (Exception e) {
+            TokenStreamContext where = parser.streamReadContext();
+            if (refusedForDepth(e, where, READ_REFUSAL_DEPTH)) {
+                throw tooDeep("run.input.toodeep", "--input nests deeper than this boundary accepts",
+                        where, READ_DEPTH_LIMIT);
+            }
             throw fail("run.input.badjson", "--input is not valid JSON: " + e.getMessage(),
                     e.getMessage());
+        } finally {
+            parser.close();
         }
     }
 
@@ -616,16 +627,39 @@ public final class Runner {
         JsonGenerator generator = JSON.createGenerator(out);
         try {
             JSON.writeValue(generator, tree);
-            generator.close();
             return out.toString();
-        } catch (StreamConstraintsException _) {
-            throw tooDeep("run.output.toodeep",
-                    "the output nests deeper than this boundary can render",
-                    generator.streamWriteContext(), WRITE_DEPTH_LIMIT);
         } catch (Exception e) {
+            // read before the close in `finally`, which resets the generator's context to the root
+            TokenStreamContext where = generator.streamWriteContext();
+            if (refusedForDepth(e, where, WRITE_REFUSAL_DEPTH)) {
+                throw tooDeep("run.output.toodeep",
+                        "the output nests deeper than this boundary can render",
+                        where, WRITE_DEPTH_LIMIT);
+            }
             throw fail("run.output.json", "could not render the output as JSON: " + e.getMessage(),
                     e.getMessage());
+        } finally {
+            generator.close();
         }
+    }
+
+    /**
+     * Whether {@code failure} is the reader or writer refusing a value for its depth.
+     *
+     * <p>{@code StreamConstraintsException} is not the depth refusal alone: the reader raises the
+     * same type for a number too long, a name too long, a string too long, a document too long and a
+     * token count too high. Which limit it was is asked of the context's own depth rather than of
+     * the exception's text, which is prose Jackson is free to rewrite.
+     *
+     * <p>Standing at {@code refusalDepth} is the depth refusal and can be nothing else. A value
+     * refused for another reason stands shallower: the reader admits scalars at every level up to
+     * the limit, so the deepest a long number can be refused at is one level short of where a
+     * refusal for depth stands. Every other constraint keeps the wording it had.
+     */
+    private static boolean refusedForDepth(Exception failure, TokenStreamContext where,
+                                           int refusalDepth) {
+        return failure instanceof StreamConstraintsException
+                && where.getNestingDepth() >= refusalDepth;
     }
 
     /**
