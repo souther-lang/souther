@@ -123,6 +123,29 @@ class CompileAppliedLambdaParamTest {
         assertEquals(false, field(loader, check, Map.of("n", 5L, "xs", List.of(1L, -2L)), "outer"));
     }
 
+    // Substituting a callee wherever the binding is substituted does not make every parameter
+    // applicable: the element here is an `Int`, and applying it is refused. The report reads the
+    // binding's type rather than finding no binding at all, which the key does not distinguish —
+    // what it pins is that the refusal is still there.
+    @Test
+    void applyingAParameterBoundToAValueIsStillRefused() {
+        souther.compiler.diag.CompileException e =
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        souther.compiler.diag.CompileException.class,
+                        () -> Compiler.compile("""
+                                module demo
+
+                                data Order = { n: Int }
+                                data Result = { ns: List<Int> }
+
+                                behavior check : (o: Order) -> Result
+                                    constructs Result
+
+                                let check (o) = Result { ns = List.map((x) -> x(o.n), [1, 2]) }
+                                """));
+        assertEquals("check.apply.notfunction", e.diagnostic().messageKey());
+    }
+
     private Object field(BytesClassLoader loader, Object check, Map<String, ?> order, String name)
             throws Exception {
         Object decoded = Codecs.decoded(loader, "demo.Order", order);

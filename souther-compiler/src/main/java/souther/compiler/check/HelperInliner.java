@@ -1494,12 +1494,12 @@ public final class HelperInliner {
      * reference under it names that binding, is not in the substitution, and is left untouched —
      * capture avoidance is the resolver's answer, not a rule of this walk.
      *
-     * <p>{@code Ast.Var} and {@code Ast.Apply} make the same substitution decision for the same
-     * {@code BindingId}: a call whose callee denotes a substituted binding is rewritten exactly as a
-     * read of it is, so an application {@code f(x)} of a parameter becomes a call to what the
-     * parameter was bound to — a function argument, or a value whose type the application is checked
-     * against. A spelling that means something else — a builtin, a helper — was resolved to that
-     * before renaming and is not a {@code ValueName.Local}, so it is left alone.
+     * <p>A callee is renamed as the subexpression it is, so applying a name asks the same question a
+     * read of it asks and can only get the same answer: an application {@code f(x)} of a parameter
+     * becomes a call to what the parameter was bound to — a function argument, or a value whose type
+     * the application is then checked against. There is no separate rule for the callee position to
+     * fall out of step with. A spelling that means something else — a builtin, a helper — was
+     * resolved to that before renaming and is not a {@code ValueName.Local}, so it is left alone.
      *
      * <p>{@code at}, when non-null, is stamped onto every rebuilt node in place of its own position.
      * A prelude helper is expanded with the call site as {@code at}, so a type error inside its body
@@ -1518,24 +1518,13 @@ public final class HelperInliner {
                     new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()));
             case Ast.Var v -> new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
             case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, substDenotes, at, copy), fa.field(), at(at, fa.pos()));
-            // applying something that is not a name: the callee is renamed as the expression it is,
-            // like every other subexpression. Rebuilding it from a name would leave nothing here.
-            case Ast.Apply call when !call.appliesAName() -> new Ast.Apply(
+            // the callee is renamed as the expression it is, like every other subexpression. A name
+            // applied is an `Ast.Var` held here, so it goes through the arm above and is substituted
+            // exactly as a read of it would be — the position cannot ask a different question.
+            case Ast.Apply call -> new Ast.Apply(
                     rename(call.function(), subst, substDenotes, at, copy),
                     renameList(call.args(), subst, substDenotes, at, copy),
                     call.origin(), at(at, call.pos()));
-            case Ast.Apply call -> {
-                // a substituted callee is what this binding was bound to, under the name this
-                // expansion gave it; anything else keeps what the call already denoted
-                BindingId param = call.denotes() instanceof ValueName.Local p ? p.id() : null;
-                boolean renamed = param != null && subst.containsKey(param);
-                String callee = renamed ? subst.get(param) : call.written();
-                ValueName denotes = renamed
-                        ? substituted(substDenotes, param) : copy.of(call.denotes());
-                yield new Ast.Apply(callee, denotes, renameList(call.args(), subst, substDenotes, at, copy),
-                        call.origin(),
-                        at(at, call.pos()));
-            }
             case Ast.Binary bin -> new Ast.Binary(bin.op(), rename(bin.left(), subst, substDenotes, at, copy), rename(bin.right(), subst, substDenotes, at, copy), at(at, bin.pos()));
             case Ast.Neg neg -> new Ast.Neg(rename(neg.operand(), subst, substDenotes, at, copy), at(at, neg.pos()));
             case Ast.NewData nd -> {
@@ -1565,8 +1554,8 @@ public final class HelperInliner {
                 yield new Ast.Match(rename(m.scrutinee(), subst, substDenotes, at, copy), cases, at(at, m.pos()));
             }
             case Ast.If iff -> new Ast.If(rename(iff.cond(), subst, substDenotes, at, copy), rename(iff.then(), subst, substDenotes, at, copy), rename(iff.els(), subst, substDenotes, at, copy), at(at, iff.pos()));
-            // the binder shadows in the success branch alone, so it is dropped from the substitution
-            // there and left standing over the construction and the else value
+            // the success binder has its own BindingId, so a reference to it is not a candidate for
+            // substitution, and neither the construction nor the else value can reach it
             case Ast.IfConstructed ic -> new Ast.IfConstructed(
                     rename(ic.construct(), subst, substDenotes, at, copy), copy.of(ic.binder()),
                     rename(ic.then(), subst, substDenotes, at, copy),
