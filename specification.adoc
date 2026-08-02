@@ -1036,6 +1036,18 @@ let build (rows) = {
 
 A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a `+let+` returned, of a string joined from parts — is not a term, and a clause needing it is left to the run-time check.
 
+A binding given a location *is* that location, so `+let c = cart+` makes `+c.quantity+` the term `+cart.quantity+`. A helper is expanded by binding each argument and reading the parameter through that binding (<<invariant-discharge-representation>>), which is why a construction moved into a helper still reads the terms the caller's guards and input types settled. A binding given anything else is a term of its own; where what it was given is arithmetic over terms the procedure names the two are related, and otherwise nothing about it follows.
+
+[,text]
+----
+data Qty = Int invariant value >= 1
+data Cart = { quantity: Int } invariant quantity >= 1
+
+let one (c: Cart): Qty = Qty(c.quantity)         // `c` is `cart`, so this is discharged
+behavior toQty : (cart: Cart) -> Qty constructs Qty
+let toQty (cart) = one(cart)
+----
+
 [#invariant-discharge-representation]
 ==== What the check reads
 
