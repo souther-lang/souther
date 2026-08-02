@@ -93,7 +93,7 @@ public final class Prelude {
                 helpers.put(e.getKey(), e.getValue().declaration());
             }
         }
-        HELPERS = Map.copyOf(helpers);
+        HELPERS = Collections.unmodifiableMap(helpers);
     }
 
     private Prelude() {
@@ -141,7 +141,8 @@ public final class Prelude {
         return Collections.unmodifiableMap(ENTRIES);
     }
 
-    /** The Souther-bodied declarations (inlined at call sites), keyed by qualified name. */
+    /** The Souther-bodied declarations (inlined at call sites), keyed by qualified name, in
+     *  declaration order. */
     public static Map<String, Ast.FnDef> helpers() {
         return HELPERS;
     }
