@@ -13,6 +13,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -149,6 +150,26 @@ class WarningReportingTest {
         assertEquals("5", ran.out().strip(),
                 "a caller piping the result reads the behavior's output and nothing else");
         assertTrue(ran.err().contains("probe.sou:8:5"), ran.err());
+    }
+
+    /**
+     * The run that aborts is the one the warning predicted, so it is the last one that should
+     * swallow it. The compile finishes before the run begins, so the warnings are already the whole
+     * set by the time the abort is raised, and {@code Main} renders them from its catch.
+     *
+     * <p>Driven through {@link Runner} rather than {@link Main#main}, because the failing path ends
+     * in {@code System.exit} and would take the test JVM with it.
+     */
+    @Test
+    void theWarningsSurviveARunThatAborts() throws Exception {
+        Path file = write("probe.sou", UNPROVEN);
+        List<Located> warnings = new ArrayList<>();
+
+        assertThrows(Runner.RunException.class, () -> Runner.runCli(
+                new String[]{file.toString(), "--input", "-1"}, warnings));
+
+        assertEquals(1, warnings.size(), warnings.toString());
+        assertEquals("E2011", warnings.get(0).diagnostic().code());
     }
 
     @Test

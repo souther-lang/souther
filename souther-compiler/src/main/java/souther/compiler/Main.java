@@ -216,6 +216,10 @@ public final class Main {
             report(warnings, sources, render);
             System.out.println(output);
         } catch (Runner.RunException e) {
+            // The compile finished before the run began, so these warnings are the whole set — and a
+            // run that aborted on an invariant is where a warning that the construction was unproven
+            // is worth most. A usage error is raised before any of it and carries none.
+            report(warnings, sources, render);
             System.err.println(e.localized(Messages.resolveLocale(render.lang)));
             System.exit(e.exitCode);
         } catch (CompileException e) {
