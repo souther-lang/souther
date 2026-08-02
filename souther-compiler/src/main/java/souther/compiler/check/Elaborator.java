@@ -249,9 +249,9 @@ public final class Elaborator {
                 // by here every spread names a binding in force: a value spread was bound ahead of
                 // the construction when it was inlined, so Core reads the binding it copies from
                 List<Core.Read> spreads = new ArrayList<>();
-                for (Ast.ValueRef s : nd.spreads()) {
+                for (Ast.Var s : nd.spreads()) {
                     if (!(s.denotes() instanceof ValueName.Local local)) {
-                        throw new IllegalStateException("`" + s.written()
+                        throw new IllegalStateException("`" + s.name()
                                 + "` is spread but names no binding, at " + s.pos());
                     }
                     spreads.add(new Core.Read(s.bare(), local.id(), env.typeOf(local.id()), s.pos()));

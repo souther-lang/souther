@@ -1383,13 +1383,13 @@ public final class ExampleVerifier {
         Map<String, Object> map = new LinkedHashMap<>();
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought.
-        for (Ast.ValueRef ref : nd.spreads()) {
+        for (Ast.Var ref : nd.spreads()) {
             // A spread names a value in force, so what it copies is what that name denotes: a binding
             // holds what it was bound to, and a definition stands for its body. A definition is
             // reached by the name this row spells it with — a definition of this module by its own
             // name, one another module published by that module's name and its own. `bare()` is the
             // name it was *declared* under, which is not that key for an imported value (issue #212).
-            String spread = ref.written();
+            String spread = ref.name();
             Ast.Expr value = ref.denotes() instanceof ValueName.Local local
                     ? bindings.get(local.id()) : valueBody(spread);
             if (value == null) {

@@ -147,59 +147,6 @@ public interface Ast {
     }
 
     /**
-     * A name in the value namespace, in both forms it has: {@code written} as the source spelled it —
-     * bare {@code price}, qualified {@code billing.price}, or through an import alias — and
-     * {@code denotes} as it resolves. What {@link Name} is for a type.
-     *
-     * <p>A check reads {@link #denotes()}. A name that denotes nothing was reported where it was
-     * written and carries {@link ValueName.Unresolved}, so a reader downstream never has a spelling
-     * to match and never repeats the report.
-     */
-    record ValueRef(String written, ValueName denotes, SourcePos pos) implements Ast {
-
-        /** A name as the parser read it, before resolution has said what it denotes. */
-        public static ValueRef written(String written, SourcePos pos) {
-            return new ValueRef(written, null, pos);
-        }
-
-        /** A name a pass introduced, reading the binding it bound it to — the counterpart of
-         * {@link Var#local}. */
-        public static ValueRef local(Binder binder, SourcePos pos) {
-            return new ValueRef(binder.name(), new ValueName.Local(binder.name(), binder.id()), pos);
-        }
-
-        /** The same name, resolved to what it denotes. */
-        public ValueRef denoting(ValueName resolved) {
-            return new ValueRef(written, resolved, pos);
-        }
-
-        /**
-         * The bare name this reaches its declaration by, whatever the source spelled.
-         *
-         * <p>Every name here has been through resolution by the time anything reads it, including
-         * one that denotes nothing — that is an answer too. A name with no answer at all means a
-         * tree reached a reader without being resolved, which would put this back to matching
-         * spellings, so it says so rather than falling back to the spelling.
-         */
-        public String bare() {
-            if (denotes == null) {
-                throw new IllegalStateException("`" + written + "` was never resolved");
-            }
-            return denotes.name();
-        }
-
-        /** Whether this name denotes nothing — reported where it was written. */
-        public boolean unresolved() {
-            return denotes instanceof ValueName.Unresolved;
-        }
-
-        @Override
-        public String toString() {
-            return written;
-        }
-    }
-
-    /**
      * A whole source file: its public surface, imports, and definitions.
      *
      * <p>{@code exposedOutputs} maps an exposed composition behavior's name to the output signature
@@ -284,7 +231,7 @@ public interface Ast {
                         List<Param> params,
                         RetType ret,
                         List<Name> constructs,
-                        List<ValueRef> dependsOn,
+                        List<Var> dependsOn,
                         SourcePos pos) implements BehaviorDef {}
 
     /** A behavior parameter. Its type may be an anonymous union of cases (spec 12.2). */
@@ -295,7 +242,7 @@ public interface Ast {
      * is the optional trailing output declaration (14.5): null when absent (output is inferred), else
      * the declared cases, which must match the inferred output exactly (E1604).
      */
-    record PipeBehavior(String name, List<ValueRef> stages, RetType declaredOut, SourcePos pos)
+    record PipeBehavior(String name, List<Var> stages, RetType declaredOut, SourcePos pos)
             implements BehaviorDef {}
 
     /**
@@ -916,7 +863,7 @@ public interface Ast {
      * node carries it — the component has no default, which is what stops a pass from quietly
      * dropping it and turning a carried construction back into the reader's own.
      */
-    record NewData(Name typeName, List<FieldInit> inits, List<ValueRef> spreads,
+    record NewData(Name typeName, List<FieldInit> inits, List<Var> spreads,
                    ConstructionOrigin origin, SourcePos pos) implements Expr {
 
         /** The same construction, carried into a reader by {@code module}'s published body. */
@@ -942,15 +889,56 @@ public interface Ast {
     record BoolLit(boolean value, SourcePos pos) implements Expr {}
 
     /**
-     * A name used as a value. {@code denotes} is what it names, answered once during resolution; a
-     * reader asks it rather than deciding for itself whether the spelling is a local, a unit data or
-     * something the language provides.
+     * A name used as a value — the one representation the surface AST has for one. {@code name} is
+     * how the source spelled it (bare {@code price}, qualified {@code billing.price}, or through an
+     * import alias) and {@code denotes} is what it names, answered once during resolution; a reader
+     * asks that rather than deciding for itself whether the spelling is a local, a unit data or
+     * something the language provides. What {@link Name} is for a type.
+     *
+     * <p>It stands in two kinds of slot, which differ in what may replace it:
+     *
+     * <ul>
+     *   <li>an expression slot, where any expression may stand — an argument, a field's value, the
+     *       thing an {@code if} tests;</li>
+     *   <li>a name slot, where only another name may — a construction's spread {@code T { ..base }},
+     *       which copies the fields of what the name stands for and so has nothing to evaluate.</li>
+     * </ul>
+     *
+     * <p>Both are children: {@link #forEachChild} reaches them, so a pass that asks about names sees
+     * a spread without knowing spreads exist. {@link #mapChildren} takes the two slots as separate
+     * operators, so a rewrite cannot put an expression where only a name may stand. A pass that does
+     * substitute an expression for a name — the inliner — binds it ahead of the construction and
+     * spreads the binding.
+     *
+     * <p>A name that denotes nothing was reported where it was written and carries
+     * {@link ValueName.Unresolved}, so a reader downstream never has a spelling to match and never
+     * repeats the report.
      */
     record Var(String name, ValueName denotes, SourcePos pos) implements Expr {
 
         /** A name as the parser read it, before resolution has said what it denotes. */
         public Var(String name, SourcePos pos) {
             this(name, null, pos);
+        }
+
+        /**
+         * The bare name this reaches its declaration by, whatever the source spelled.
+         *
+         * <p>Every name here has been through resolution by the time anything reads it, including
+         * one that denotes nothing — that is an answer too. A name with no answer at all means a
+         * tree reached a reader without being resolved, which would put this back to matching
+         * spellings, so it says so rather than falling back to the spelling.
+         */
+        public String bare() {
+            if (denotes == null) {
+                throw new IllegalStateException("`" + name + "` was never resolved");
+            }
+            return denotes.name();
+        }
+
+        /** Whether this name denotes nothing — reported where it was written. */
+        public boolean unresolved() {
+            return denotes instanceof ValueName.Unresolved;
         }
 
         /**
@@ -975,6 +963,11 @@ public interface Ast {
 
         public Var denoting(ValueName resolved) {
             return new Var(name, resolved, pos);
+        }
+
+        @Override
+        public String toString() {
+            return name;
         }
     }
 

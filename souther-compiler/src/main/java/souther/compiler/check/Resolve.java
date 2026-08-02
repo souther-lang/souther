@@ -577,10 +577,10 @@ public final class Resolve {
                 }
                 // a spread names a value, so it is resolved the way a bare name is: a binding in
                 // force wins over a declaration here too
-                List<Ast.ValueRef> spreads = new ArrayList<>();
-                for (Ast.ValueRef s : nd.spreads()) {
+                List<Ast.Var> spreads = new ArrayList<>();
+                for (Ast.Var s : nd.spreads()) {
                     spreads.add(s.denotes() != null ? s : s.denoting(
-                            answered(s.written(), s.pos(), valueName(s.written(), s.pos(), bound))));
+                            answered(s.name(), s.pos(), valueName(s.name(), s.pos(), bound))));
                 }
                 yield new Ast.NewData(type(nd.typeName()), inits, spreads, nd.origin(), nd.pos());
             }

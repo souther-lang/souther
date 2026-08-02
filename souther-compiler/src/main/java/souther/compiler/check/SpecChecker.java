@@ -52,7 +52,7 @@ public final class SpecChecker {
             List<String> out = new ArrayList<>();
             switch (b) {
                 case Ast.SpecBehavior spec -> {
-                    for (Ast.ValueRef req : spec.dependsOn()) {
+                    for (Ast.Var req : spec.dependsOn()) {
                         if (names.contains(req.bare()) && !out.contains(req.bare())) {
                             out.add(req.bare());
                         }
@@ -67,7 +67,7 @@ public final class SpecChecker {
                     }
                 }
                 case Ast.PipeBehavior pipe -> {
-                    for (Ast.ValueRef stage : pipe.stages()) {
+                    for (Ast.Var stage : pipe.stages()) {
                         if (names.contains(stage.bare()) && !out.contains(stage.bare())) {
                             out.add(stage.bare());
                         }
@@ -127,7 +127,7 @@ public final class SpecChecker {
             if (!(b instanceof Ast.SpecBehavior spec)) {
                 continue;
             }
-            for (Ast.ValueRef required : spec.dependsOn()) {
+            for (Ast.Var required : spec.dependsOn()) {
                 if (required.unresolved() || reqSigs.containsKey(required.bare())) {
                     continue;
                 }
@@ -144,7 +144,7 @@ public final class SpecChecker {
                         : "e1607.unknown";
                 throw CompileException.of(
                         Diagnostic.of("E1607", key).title("e1607.title")
-                                .at(required.pos(), required.written().length())
+                                .at(required.pos(), required.name().length())
                                 .args(spec.name(), req)
                                 .hint(key + ".hint", spec.name(), req)
                                 .build(),
@@ -241,7 +241,7 @@ public final class SpecChecker {
                             + "`, so its return type comes from the behavior — do not declare one"
                             + " (spec 13.1)");
         }
-        for (Ast.ValueRef required : spec.dependsOn()) {
+        for (Ast.Var required : spec.dependsOn()) {
             // A `depends on` naming nothing was reported where it is written. What this fn's trailing
             // parameters should be called comes from those names, so there is nothing to hold them
             // against — saying they are named wrongly would name the spelling that denotes nothing.
@@ -365,7 +365,7 @@ public final class SpecChecker {
         // extra -> E1603.
         List<String> actual = requiredCalls(body, reqSigs.keySet());
         List<String> declared = new ArrayList<>();
-        for (Ast.ValueRef required : spec.dependsOn()) {
+        for (Ast.Var required : spec.dependsOn()) {
             declared.add(required.bare());
         }
         for (String call : actual) {
@@ -776,14 +776,14 @@ public final class SpecChecker {
                 arity.put(spec.name(), spec.params().size());
             }
         }
-        Map<String, List<Ast.ValueRef>> pipeStages = PipelineSigs.pipelineStages(module);
+        Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (!(b instanceof Ast.PipeBehavior pipe)) {
                 continue;
             }
             // check the flattened stages: a named intermediate splices in its own first stage, which
             // then sits after `>->` and so must be single-input too (spec 14.1, 14.2)
-            List<Ast.ValueRef> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
+            List<Ast.Var> stages = PipelineSigs.flattenStages(pipe.stages(), pipeStages,
                     pipe.pos());
             for (int i = 1; i < stages.size(); i++) {
                 String stage = stages.get(i).bare();

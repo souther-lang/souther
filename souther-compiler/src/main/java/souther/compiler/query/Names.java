@@ -115,16 +115,16 @@ public final class Names {
             for (Ast.BehaviorDef b : m.behaviors()) {
                 switch (b) {
                     case Ast.PipeBehavior pipe -> {
-                        List<Ast.ValueRef> stages = new ArrayList<>();
-                        for (Ast.ValueRef stage : pipe.stages()) {
+                        List<Ast.Var> stages = new ArrayList<>();
+                        for (Ast.Var stage : pipe.stages()) {
                             stages.add(binding.stage(stage));
                         }
                         behaviors.add(new Ast.PipeBehavior(pipe.name(), stages, pipe.declaredOut(),
                                 pipe.pos()));
                     }
                     case Ast.SpecBehavior spec -> {
-                        List<Ast.ValueRef> dependsOn = new ArrayList<>();
-                        for (Ast.ValueRef req : spec.dependsOn()) {
+                        List<Ast.Var> dependsOn = new ArrayList<>();
+                        for (Ast.Var req : spec.dependsOn()) {
                             dependsOn.add(binding.required(req, spec.name()));
                         }
                         behaviors.add(new Ast.SpecBehavior(spec.name(), spec.params(), spec.ret(),
@@ -232,8 +232,8 @@ public final class Names {
          * boundary edge rather than a behavior (spec 14.1) — said here, where the question is what
          * the name denotes, so nothing further down has a spelling to test for it.
          */
-        Ast.ValueRef stage(Ast.ValueRef ref) {
-            String written = ref.written();
+        Ast.Var stage(Ast.Var ref) {
+            String written = ref.name();
             int dot = written.lastIndexOf('.');
             // Only a qualified one: `decoder` on its own is an ordinary name, and a module may
             // declare a behavior by it.
@@ -254,19 +254,19 @@ public final class Names {
          * all is settled here, in the same message, because it is the same question — what does this
          * name denote — asked of a clause rather than of a stage.
          */
-        Ast.ValueRef required(Ast.ValueRef ref, String by) {
+        Ast.Var required(Ast.Var ref, String by) {
             return behavior(ref, (name, candidates) -> Report.raised(
                     Diagnostic.of("E1607", "e1607.unknown").title("e1607.title")
-                            .at(name.pos(), name.written().length()).args(by, name.written())
-                            .suggestion(Suggest.candidate(name.written(), candidates))
+                            .at(name.pos(), name.name().length()).args(by, name.name())
+                            .suggestion(Suggest.candidate(name.name(), candidates))
                             .hint("e1607.unknown.hint").build(),
-                    "`behavior " + by + "` declares `depends on " + name.written() + "`, which is not a"
-                            + " behavior in scope" + Suggest.hint(name.written(), candidates)));
+                    "`behavior " + by + "` declares `depends on " + name.name() + "`, which is not a"
+                            + " behavior in scope" + Suggest.hint(name.name(), candidates)));
         }
 
         /** A name that must denote a behavior, with what to say when none does. */
-        private Ast.ValueRef behavior(Ast.ValueRef ref, Unknown unknown) {
-            String written = ref.written();
+        private Ast.Var behavior(Ast.Var ref, Unknown unknown) {
+            String written = ref.name();
             int dot = written.lastIndexOf('.');
             if (dot < 0) {
                 return bare(ref, written, unknown);
@@ -305,7 +305,7 @@ public final class Names {
         }
 
         /** A bare name: this module's own behavior, or one an import brought in. */
-        private Ast.ValueRef bare(Ast.ValueRef ref, String written, Unknown unknown) {
+        private Ast.Var bare(Ast.Var ref, String written, Unknown unknown) {
             BehaviorsInScope.Of scope = db.ask(new BehaviorsInScope(m.name())).value();
             if (scope == null) {
                 return ref.denoting(new ValueName.Unresolved(written));
@@ -324,11 +324,11 @@ public final class Names {
 
         /** What to say about a name no behavior answers to, given the names that were reachable. */
         private interface Unknown {
-            Report report(Ast.ValueRef ref, Set<String> candidates);
+            Report report(Ast.Var ref, Set<String> candidates);
         }
 
-        private Report unknownBehavior(Ast.ValueRef ref, Set<String> candidates) {
-            String written = ref.written();
+        private Report unknownBehavior(Ast.Var ref, Set<String> candidates) {
+            String written = ref.name();
             return Report.raised(
                     Diagnostic.of(null, "check.unknown.behavior.msg").title("check.unknown.title")
                             .at(ref.pos(), written.length()).args(written)
@@ -338,9 +338,9 @@ public final class Names {
         }
 
         /** Records why a name denotes nothing, and gives it the name that says so. */
-        private Ast.ValueRef nothing(Ast.ValueRef ref, Report report) {
+        private Ast.Var nothing(Ast.Var ref, Report report) {
             reports.add(report);
-            return ref.denoting(new ValueName.Unresolved(ref.written()));
+            return ref.denoting(new ValueName.Unresolved(ref.name()));
         }
     }
 
@@ -733,11 +733,11 @@ public final class Names {
                 return Answer.of(Boolean.FALSE);   // there is no module here to have a hole in
             }
             for (Ast.BehaviorDef b : m.behaviors()) {
-                List<Ast.ValueRef> named = switch (b) {
+                List<Ast.Var> named = switch (b) {
                     case Ast.PipeBehavior pipe -> pipe.stages();
                     case Ast.SpecBehavior spec -> spec.dependsOn();
                 };
-                for (Ast.ValueRef ref : named) {
+                for (Ast.Var ref : named) {
                     if (ref.unresolved()) {
                         return Answer.of(Boolean.TRUE);
                     }

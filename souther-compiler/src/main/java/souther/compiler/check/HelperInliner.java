@@ -552,13 +552,13 @@ public final class HelperInliner {
             // a spread names a value the way any other position does, and `mapChildren` does not
             // reach it — it holds a name rather than an expression
             case Ast.NewData nd -> {
-                List<Ast.ValueRef> spreads = new ArrayList<>();
+                List<Ast.Var> spreads = new ArrayList<>();
                 boolean changed = false;
-                for (Ast.ValueRef spread : nd.spreads()) {
+                for (Ast.Var spread : nd.spreads()) {
                     boolean qualify = foreign(spread.denotes(), which);
                     changed |= qualify;
                     spreads.add(qualify
-                            ? new Ast.ValueRef(qualifiedName(spread.denotes()), spread.denotes(),
+                            ? new Ast.Var(qualifiedName(spread.denotes()), spread.denotes(),
                                     spread.pos())
                             : spread);
                 }
@@ -603,7 +603,7 @@ public final class HelperInliner {
             out.add(helper);
         }
         if (e instanceof Ast.NewData nd) {
-            for (Ast.ValueRef spread : nd.spreads()) {
+            for (Ast.Var spread : nd.spreads()) {
                 if (spread.denotes() instanceof ValueName.Helper helper) {
                     out.add(helper);
                 }
@@ -1329,8 +1329,8 @@ public final class HelperInliner {
     private Ast.Expr newData(Ast.NewData nd) {
         List<Ast.Binder> bound = new ArrayList<>();
         List<Ast.Expr> values = new ArrayList<>();
-        List<Ast.ValueRef> spreads = new ArrayList<>();
-        for (Ast.ValueRef spread : nd.spreads()) {
+        List<Ast.Var> spreads = new ArrayList<>();
+        for (Ast.Var spread : nd.spreads()) {
             Ast.FnDef value = valueSpread(spread);
             if (value == null) {
                 spreads.add(spread);
@@ -1339,7 +1339,7 @@ public final class HelperInliner {
             Ast.Binder name = binders.binder("$s" + counter++ + "_" + spread.bare(), spread.pos());
             bound.add(name);
             values.add(carriedByValue(inline(value.written())));
-            spreads.add(Ast.ValueRef.local(name, spread.pos()));
+            spreads.add(Ast.Var.local(name, spread.pos()));
         }
         Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
                 nd.origin(), nd.pos());
@@ -1508,13 +1508,13 @@ public final class HelperInliner {
                 for (Ast.FieldInit i : nd.inits()) {
                     inits.add(new Ast.FieldInit(i.name(), rename(i.value(), subst, substDenotes, at, copy), at(at, i.pos())));
                 }
-                List<Ast.ValueRef> spreads = new ArrayList<>();
-                for (Ast.ValueRef s : nd.spreads()) {
+                List<Ast.Var> spreads = new ArrayList<>();
+                for (Ast.Var s : nd.spreads()) {
                     // `..param` copies the renamed binding, and stays the binding it now names
                     BindingId spread = s.denotes() instanceof ValueName.Local p ? p.id() : null;
                     spreads.add(spread == null || !subst.containsKey(spread)
                             ? s.denoting(copy.of(s.denotes()))
-                            : new Ast.ValueRef(subst.get(spread), substituted(substDenotes, spread),
+                            : new Ast.Var(subst.get(spread), substituted(substDenotes, spread),
                                     at(at, s.pos())));
                 }
                 yield new Ast.NewData(nd.typeName(), inits, spreads, nd.origin(), at(at, nd.pos()));
@@ -1692,12 +1692,12 @@ public final class HelperInliner {
      * against the module's definitions: a binding in force wins over a declaration, and a spread is
      * no exception.
      */
-    private Ast.FnDef valueSpread(Ast.ValueRef spread) {
+    private Ast.FnDef valueSpread(Ast.Var spread) {
         if (!(spread.denotes() instanceof ValueName.Helper)) {
             return null;
         }
         // by the name it is reached by here, which for another module's value is the qualified one
-        String reached = spread.written();
+        String reached = spread.name();
         Ast.FnDef value = own.get(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
                 || recursive.contains(reached) ? null : value;
@@ -1716,9 +1716,9 @@ public final class HelperInliner {
             }
         }
         if (e instanceof Ast.NewData nd) {
-            for (Ast.ValueRef spread : nd.spreads()) {
+            for (Ast.Var spread : nd.spreads()) {
                 if (valueSpread(spread) != null) {
-                    out.add(spread.written());   // `...base` reads the value a bare name does
+                    out.add(spread.name());   // `...base` reads the value a bare name does
                 }
             }
         }

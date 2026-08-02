@@ -266,7 +266,7 @@ public final class TypeChecker {
                 }
                 DataChecker.rejectDuplicateNames(outputCases, "the behavior output", spec.pos());
                 List<String> required = new ArrayList<>();
-                for (Ast.ValueRef req : spec.dependsOn()) {
+                for (Ast.Var req : spec.dependsOn()) {
                     required.add(req.bare());
                 }
                 DataChecker.rejectDuplicateNames(required, "`depends on`", spec.pos());

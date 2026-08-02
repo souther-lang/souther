@@ -1,5 +1,7 @@
 package souther.compiler;
 
+import souther.compiler.meta.ModulePath;
+
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -104,6 +106,34 @@ class CompileValueSpreadTest {
                 Codecs.apply(behavior, in));
 
         assertEquals("local", out.get("name"));
+    }
+
+    /**
+     * A published value is substituted where it is named, so the reader needs its body — and the
+     * bodies that body needs. A spread names one of those the way a bare name does, so the value it
+     * spreads travels with it.
+     */
+    @Test
+    void aPublishedValueCarriesTheValueItSpreads() {
+        ModulePath library = Compiler.compile("""
+                module shared.people exposing ( Person, listed )
+
+                data Person = { name: String, age: Int }
+
+                let base = Person { name = "A", age = 20 }
+                let listed = Person { ...base, age = 21 }
+                """)::get;
+
+        assertDoesNotThrow(() -> Compiler.compileModules(java.util.List.of("""
+                module app.roster exposing ( Entry )
+
+                import shared.people ( Person, listed )
+
+                data Entry = { of: Person }
+
+                behavior enrol : (p: Person) -> Entry constructs Entry
+                let enrol (p) = Entry { of = listed }
+                """), library));
     }
 
     /** A spread names a value the way any other position does, so what that value built came in

@@ -365,7 +365,7 @@ public final class AstBuilder {
             });
             Ast.RetType ret = retType(s.child(SyntaxKind.RET_TYPE).orElseThrow());
             List<Ast.Name> constructs = new ArrayList<>();
-            List<Ast.ValueRef> dependsOn = new ArrayList<>();
+            List<Ast.Var> dependsOn = new ArrayList<>();
             for (SyntaxNode clause : s.childNodes()) {
                 // either clause may name through a module, so the idents of one name are joined and
                 // a comma starts the next
@@ -375,14 +375,14 @@ public final class AstBuilder {
                     // one ident past the keyword is the `on` of `depends on`, which lexes as an
                     // ordinary identifier and is no part of the list
                     for (Ast.Name dep : dottedNames(clause, 1)) {
-                        dependsOn.add(Ast.ValueRef.written(dep.written(), dep.pos()));
+                        dependsOn.add(new Ast.Var(dep.written(), dep.pos()));
                     }
                 }
             }
             return new Ast.SpecBehavior(name, params, ret, constructs, dependsOn, pos);
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
-        List<Ast.ValueRef> stages = new ArrayList<>();
+        List<Ast.Var> stages = new ArrayList<>();
         for (SyntaxNode st : childNodes(pipe, SyntaxKind.STAGE)) {
             StringBuilder sb = new StringBuilder();
             for (SyntaxToken t : identTokens(st)) {
@@ -391,7 +391,7 @@ public final class AstBuilder {
                 }
                 sb.append(t.text());
             }
-            stages.add(Ast.ValueRef.written(sb.toString(), pos(st)));
+            stages.add(new Ast.Var(sb.toString(), pos(st)));
         }
         Ast.RetType declaredOut = pipe.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         return new Ast.PipeBehavior(name, stages, declaredOut, pos);
@@ -868,7 +868,7 @@ public final class AstBuilder {
         SyntaxToken head = identTokens(n).get(0);
         Ast.Name typeName = Ast.Name.written(head.text(), posOf(head));
         List<Ast.FieldInit> inits = new ArrayList<>();
-        List<Ast.ValueRef> spreads = new ArrayList<>();
+        List<Ast.Var> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction
         // itself still spreads a plain local: `let $s0 = c.address in Address { ...$s0, ... }`
         List<String> pathNames = new ArrayList<>();
@@ -877,7 +877,7 @@ public final class AstBuilder {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
                 List<SyntaxToken> path = identTokens(c);
                 if (path.size() == 1) {
-                    spreads.add(Ast.ValueRef.written(path.get(0).text(), posOf(path.get(0))));
+                    spreads.add(new Ast.Var(path.get(0).text(), posOf(path.get(0))));
                 } else {
                     String bound = "$s" + (spreadCounter++);
                     Ast.Expr value = new Ast.Var(path.get(0).text(), posOf(path.get(0)));
@@ -888,7 +888,7 @@ public final class AstBuilder {
                     pathValues.add(value);
                     // the path is bound just outside the construction, so this name is answered
                     // against that binding like any other the source wrote
-                    spreads.add(Ast.ValueRef.written(bound, posOf(path.get(0))));
+                    spreads.add(new Ast.Var(bound, posOf(path.get(0))));
                 }
             } else if (c.kind() == SyntaxKind.FIELD_INIT) {
                 String field = firstIdentText(c);

@@ -603,12 +603,12 @@ public final class Front {
             written.add(ref.name());
         }
         for (Ast.BehaviorDef b : m.behaviors()) {
-            List<Ast.ValueRef> named = switch (b) {
+            List<Ast.Var> named = switch (b) {
                 case Ast.PipeBehavior pipe -> pipe.stages();
                 case Ast.SpecBehavior spec -> spec.dependsOn();
             };
-            for (Ast.ValueRef ref : named) {
-                written.add(ref.written());
+            for (Ast.Var ref : named) {
+                written.add(ref.name());
             }
         }
         for (String name : written) {
