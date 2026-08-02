@@ -615,9 +615,6 @@ final class BodyGen {
                 // helper names that module's unit, which this module need not declare at all — and,
                 // if it declares one spelled the same, is not the same unit.
                 case Core.UnitValue u -> loadSharedInstance(code, cd(u.data()));
-                case Core.Builtin b -> throw new IllegalStateException(
-                        "`" + b.name() + "` is read by the operation that takes it, not emitted, at "
-                                + b.pos());
                 case Core.Neg n -> {
                     if (genExpr(n.operand()) == Type.DECIMAL) {
                         code.invokevirtual(CD_BigDecimal, "negate", MethodTypeDesc.of(CD_BigDecimal));
@@ -1072,12 +1069,6 @@ final class BodyGen {
             emitFunctionValue(value, paramTypes);
         }
 
-        /** Puts the JDK rounding constant a mode names on the stack. The mode is read by name, not
-         * evaluated; see {@link Intrinsics.TakesARoundingMode}. */
-        void emitRoundingMode(Core arg) {
-            code.getstatic(CD_RoundingMode, ((Core.Builtin) arg).name(), CD_RoundingMode);
-        }
-
         /** Narrows an {@code Int} (a {@code long}) to a JVM {@code int}, for a JDK method taking an
          * {@code int} index. */
         void emitL2i() {
@@ -1421,7 +1412,7 @@ final class BodyGen {
         }
 
         /** {@code divide(a, b, scale, mode)} on Decimal: a zero divisor takes the DivisionByZero
-         * case, otherwise {@code a.divide(b, scale, RoundingMode.mode)} (spec 18.3). */
+         * case, otherwise {@code a.divide(b, scale, toJava(mode))} (spec 18.3). */
         private void decimalDivide(Core.Call call) {
             genExpr(call.args().get(0));
             int aSlot = slot(Type.DECIMAL);
@@ -1438,8 +1429,8 @@ final class BodyGen {
             code.aload(bSlot);
             genExpr(call.args().get(2));              // scale (Int, a long)
             code.l2i();
-            String mode = ((Core.Builtin) call.args().get(3)).name();
-            code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
+            genExpr(call.args().get(3));              // mode, an ordinary value
+            code.invokestatic(CD_DecimalMath, "toJava", MTD_toJavaRoundingMode);
             code.invokevirtual(CD_BigDecimal, "divide", MTD_bdDivide);
             code.goto_(end);
             code.labelBinding(zero);
@@ -1931,9 +1922,8 @@ final class BodyGen {
                 case Core.Str _ -> { }
                 case Core.Bool _ -> { }
                 case Core.Unreachable _ -> { }
-                // neither reads anything the enclosing body binds
+                // reads nothing the enclosing body binds
                 case Core.UnitValue _ -> { }
-                case Core.Builtin _ -> { }
             }
         }
 

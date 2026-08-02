@@ -1,9 +1,12 @@
 package souther.compiler;
 
+import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
 import souther.compiler.check.Symbols;
+import souther.compiler.check.TypeChecker;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.frontend.CstFrontend;
 
@@ -13,7 +16,9 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,10 +56,9 @@ public final class Prelude {
             Map.entry("souther.decimal", "Decimal"),
             Map.entry("souther.option", "Option"));
 
-    /** Every qualifier a call may carry: the four prelude modules plus the arithmetic built-in
-     *  namespaces {@code Int}/{@code Decimal} (spec §stdlib). */
-    private static final Set<String> QUALIFIERS =
-            Set.of("List", "String", "Map", "Set", "Bool", "Int", "Decimal", "Date", "DateTime", "Option");
+    /** Every qualifier a call may carry — the language's constant ({@link Reserved}), read from
+     *  there so nothing has to initialize this class to know it. */
+    private static final Set<String> QUALIFIERS = Reserved.QUALIFIERS;
 
     /** A declaration's resolved signature: its parameter types, and the success type of its declared
      *  return — or null where the declaration writes no return type and leaves its result to its
@@ -76,6 +80,25 @@ public final class Prelude {
 
     /** Every declaration the library ships, keyed by qualified name ({@code "List.map"}). */
     private static final Map<String, PreludeEntry> ENTRIES = new LinkedHashMap<>();
+
+    /**
+     * The data declarations whose JVM implementation souther-runtime provides by hand rather than
+     * the backend generating. The classification is made once, here: it anchors the declared names
+     * to the runtime namespace ({@code souther.runtime.RoundingMode} is the class shipped there),
+     * answers {@link Symbols}' lookups for them, and — because the declarations belong to no
+     * compiled module — keeps them out of derivation and code generation, which is why such a data
+     * has no codec. A prelude data not registered here is refused at load: nothing would emit its
+     * classes.
+     */
+    private static final Set<String> RUNTIME_BACKED_DATA = Set.of("RoundingMode");
+
+    /** The resolved runtime-backed declarations — the sums and their cases — keyed by bare name. */
+    private static final Map<String, Ast.Def> RUNTIME_DEFS = new LinkedHashMap<>();
+
+    /** Each kernel's declared signature, keyed by its intrinsic key ({@code "decimal.toInt"}) —
+     *  the projection of {@link #ENTRIES} the backend reads to derive a kernel's JVM descriptor
+     *  from the declaration rather than repeating it. */
+    private static final Map<String, Signature> KERNELS = new LinkedHashMap<>();
 
     /** Bare stdlib name → a qualified suggestion, so a bare call gets a "did you mean" hint. The
      *  checker built-ins (which are not in the prelude sources) are listed here explicitly. */
@@ -154,16 +177,26 @@ public final class Prelude {
     }
 
     private static void load() {
-        Symbols noSymbols = Symbols.none();   // prelude signatures use only primitives / 'a
         for (String resource : RESOURCES) {
-            // The prelude is resolved like any other module (issue #177). Its signatures name only
-            // primitives, type variables and Option's cases, so `Symbols.none()` answers them all;
-            // a prelude body naming a data type would be reported here, where it is unanswerable.
-            Ast.Module module = Resolve.module(CstFrontend.parse(read(resource)), noSymbols);
+            // The prelude is resolved like any other module (issue #177): its own declarations are
+            // collected first, then everything is resolved against them, so a signature may name a
+            // data the module declares. What it declares must be runtime-backed (see
+            // RUNTIME_BACKED_DATA), and the names anchor to the runtime namespace where the
+            // implementation classes live.
+            Ast.Module parsed = CstFrontend.parse(read(resource));
+            Symbols symbols = symbolsOf(parsed, resource);
+            Ast.Module module = Resolve.module(parsed, symbols);
             String alias = MODULE_TO_ALIAS.get(module.name());
             if (alias == null) {
                 throw new IllegalStateException("prelude resource " + resource
                         + " declares unknown module " + module.name());
+            }
+            for (Ast.Def def : module.defs()) {
+                if (RUNTIME_DEFS.containsKey(def.name())) {
+                    throw new IllegalStateException(
+                            "the standard library declares `" + def.name() + "` twice");
+                }
+                RUNTIME_DEFS.put(def.name(), def);
             }
             for (Ast.FnDef fn : module.fns()) {
                 String qualified = alias + "." + fn.name();
@@ -175,7 +208,11 @@ public final class Prelude {
                     throw new IllegalStateException(
                             "the standard library declares `" + qualified + "` twice");
                 }
-                ENTRIES.put(qualified, new PreludeEntry(fn, signatureOf(fn, qualified, noSymbols)));
+                Signature signature = signatureOf(fn, qualified, symbols);
+                ENTRIES.put(qualified, new PreludeEntry(fn, signature));
+                if (fn.body() instanceof Ast.FnBody.Intrinsic intrinsic) {
+                    KERNELS.put(intrinsic.key(), signature);
+                }
                 BARE_TO_QUALIFIED.putIfAbsent(fn.name(), qualified);
             }
         }
@@ -218,6 +255,61 @@ public final class Prelude {
         BARE_TO_QUALIFIED.put("subtract", "Int.subtract` or `Decimal.subtract");
         BARE_TO_QUALIFIED.put("multiply", "Int.multiply` or `Decimal.multiply");
         BARE_TO_QUALIFIED.put("divide", "Int.divide` or `Decimal.divide");
+    }
+
+    /**
+     * What names mean while a prelude source is resolved: its own declarations, anchored to the
+     * runtime namespace. Anchoring happens here and nowhere else — every reader below (the scope
+     * fallback, the definition lookup) reads what this wrote. A prelude data outside
+     * {@link #RUNTIME_BACKED_DATA} is refused: its cases would have no implementation classes.
+     * A case of a registered sum is registered with it.
+     */
+    private static Symbols symbolsOf(Ast.Module m, String resource) {
+        Map<String, Ast.Def> declared = TypeChecker.ownDefs(m);
+        if (declared.isEmpty()) {
+            return Symbols.none();   // signatures over primitives and type variables only
+        }
+        Set<String> covered = new LinkedHashSet<>();
+        for (Ast.Def def : declared.values()) {
+            if (def instanceof Ast.SumData sum && RUNTIME_BACKED_DATA.contains(sum.name())) {
+                covered.add(sum.name());
+                for (Ast.Name c : sum.cases()) {
+                    covered.add(c.written());
+                }
+            }
+        }
+        Map<String, TypeName> scope = new HashMap<>();
+        for (String name : declared.keySet()) {
+            if (!covered.contains(name)) {
+                throw new IllegalStateException("prelude resource " + resource + " declares `"
+                        + name + "`, which is not registered as runtime-backed data");
+            }
+            scope.put(name, TypeName.runtime(name));
+        }
+        return Symbols.of(TypeName.RUNTIME,
+                Registry.of(Map.of(TypeName.RUNTIME, m)), scope, Map.of());
+    }
+
+    /** The runtime-backed declaration {@code name} denotes, or null when there is none. */
+    public static Ast.Def runtimeBackedDef(TypeName name) {
+        return TypeName.RUNTIME.equals(name.module()) ? RUNTIME_DEFS.get(name.name()) : null;
+    }
+
+    /** The runtime-namespace name a bare {@code written} denotes, or null when it denotes none.
+     *  The lowest rung of a module's scope: its own declarations and its imports come first. */
+    public static TypeName runtimeBackedType(String written) {
+        return RUNTIME_DEFS.containsKey(written) ? TypeName.runtime(written) : null;
+    }
+
+    /** Every runtime-backed declaration, keyed by bare name — what the runtime namespace declares. */
+    public static Map<String, Ast.Def> runtimeBackedDefs() {
+        return Collections.unmodifiableMap(RUNTIME_DEFS);
+    }
+
+    /** The declared signature of the kernel behind {@code intrinsic "key"}, or null where no core
+     *  declaration writes that key. */
+    public static Signature kernelSignature(String key) {
+        return KERNELS.get(key);
     }
 
     /** The resolved signature of {@code fn}. A zero-parameter declaration is a value whose type

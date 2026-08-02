@@ -1,6 +1,6 @@
 package souther.compiler.frontend;
 
-import souther.compiler.Prelude;
+import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.SourcePos;
 
@@ -33,17 +33,20 @@ public final class ImplicitUnits {
     }
 
     /** Names that mean something without a declaration: the primitives and library namespaces, the
-     * runtime's arithmetic failure cases, and Option's two cases (which a module may not declare). */
+     * runtime's arithmetic failure cases, and Option's two cases (which a module may not declare).
+     * The namespaces come from {@link Reserved} — the language's constant — rather than from
+     * {@code Prelude}, whose loading parses sources back through {@link #expand} and so must not
+     * be what this class initializes against. */
     private static final Set<String> BUILT_IN = builtIn();
 
     private static Set<String> builtIn() {
-        Set<String> names = new HashSet<>(Prelude.qualifiers());
+        Set<String> names = new HashSet<>(Reserved.QUALIFIERS);
         names.add("Raw");
         names.add("DivisionByZero");
         names.add("NotANumber");
         names.add("Some");
         names.add("None");
-        return names;
+        return Set.copyOf(names);
     }
 
     /** {@code module} with a unit data added for each name it introduces and does not declare. */

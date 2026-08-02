@@ -1,6 +1,7 @@
 # ADR-0086: A function name is a value, and application is an operation on one
 
-Status: Accepted.
+Status: Accepted. The rounding-mode entry under "what is still refused" is superseded by
+ADR-0087, which makes `RoundingMode` an ordinary value type.
 
 ## Context
 
@@ -60,7 +61,7 @@ Five passes were rebuilding an application from its name and discarding whatever
 What is still refused, and why:
 
 - A behavior's name bound to a `let` — `let f = twice`. Handing the same name to a combinator works and goes through the behavior's class, so this is the decision above with one position missing, not a rule. What blocks it is that η-expansion happens in the inliner, which holds the helper table and not the behavior signatures, so the arity to expand to is not in hand there (issue #271).
-- The three functions taking a rounding mode, handed over by name. Their argument is an identifier read as itself rather than an expression, so an η-expansion would turn it into a binding and the side condition would reject it. When `RoundingMode` becomes an ordinary value type this restriction goes with it (issue #270).
+- The three functions taking a rounding mode, handed over by name. Their argument is an identifier read as itself rather than an expression, so an η-expansion would turn it into a binding and the side condition would reject it. When `RoundingMode` becomes an ordinary value type this restriction goes with it (issue #270). *It did: ADR-0087 declares `RoundingMode` as ordinary data, and this restriction is gone.*
 - A function whose type nothing settles, stored in a collection. The measurement that named this is worth recording: a plain lambda and a library name are refused *identically* when stored, so the rule is about a function whose type is unknown at the point it is stored, not about recursion or about escaping. Applying one through a combinator is a separate gap that predates this change (issue #272). That gap is closed — the list above records what was still refused when this decision was taken; issue #272 was a stale binding in the inliner, not a rule.
 
 `Core.FunctionRef` was considered and left out (issue #277). Folding a function reference into a compact IR node rather than expanding it to a `Core.Block` every time is a representation choice, not a semantic one; it belongs with the explicit closure-conversion form `Core.Block`'s javadoc is waiting for. What is permanent is that a function reference in value position becomes a function value.

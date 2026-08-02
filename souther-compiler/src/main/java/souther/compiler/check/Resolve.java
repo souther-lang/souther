@@ -662,10 +662,8 @@ public final class Resolve {
         if (binding != null) {
             return binding;
         }
-        // names the language itself gives: Option's two cases, and the rounding modes an operation
-        // taking one reads rather than evaluates
-        if (Elaborator.ROUNDING_MODES.contains(written) || written.equals("None")
-                || written.equals("Some")) {
+        // names the language itself gives: Option's two cases
+        if (written.equals("None") || written.equals("Some")) {
             return new ValueName.Builtin(written);
         }
         // A library qualifier makes this a library reference — `Date(...)`, whose namespace is the

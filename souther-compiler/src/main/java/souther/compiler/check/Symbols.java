@@ -1,5 +1,6 @@
 package souther.compiler.check;
 
+import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.types.TypeName;
 
@@ -86,13 +87,24 @@ public final class Symbols {
         return new TypeName(module, name);
     }
 
-    /** The definition of {@code name}, or null when no module declares it. */
+    /** The definition of {@code name}, or null when no module declares it. The runtime namespace
+     * declares the prelude's runtime-backed data ({@code RoundingMode}), which no module of the
+     * compilation holds, so it is answered from the prelude's registration. */
     public Ast.Def get(TypeName name) {
-        return registry.declaration(name);
+        Ast.Def def = registry.declaration(name);
+        return def != null ? def : Prelude.runtimeBackedDef(name);
     }
 
     public boolean contains(TypeName name) {
         return get(name) != null;
+    }
+
+    /** Whether {@code name} is declared by a module of this compilation — as opposed to a
+     * declaration the language gives (the prelude's runtime-backed data), which resolves and types
+     * like any other but belongs to no module here. The construction discipline asks this: what a
+     * compilation declares is governed by {@code constructs}; the language's vocabulary is not. */
+    public boolean declaredByCompilation(TypeName name) {
+        return registry.declaration(name) != null;
     }
 
     /** The definition the written name {@code written} denotes here, or null when nothing does. The
@@ -132,7 +144,10 @@ public final class Symbols {
     public TypeName resolve(String written) {
         int dot = written.lastIndexOf('.');
         if (dot < 0) {
-            return scope.get(written);
+            TypeName name = scope.get(written);
+            // The prelude's runtime-backed data is nameable everywhere, on the lowest rung: a
+            // module's own declaration or import of the same name is what the name means there.
+            return name != null ? name : Prelude.runtimeBackedType(written);
         }
         String target = moduleOfQualifier(written.substring(0, dot));
         if (target == null) {
@@ -187,8 +202,12 @@ public final class Symbols {
         return new LinkedHashSet<>(scope.values());
     }
 
-    /** Every definition of one module, keyed by the name written there. */
+    /** Every definition of one module, keyed by the name written there. The runtime namespace
+     * answers with the prelude's runtime-backed data. */
     public Map<String, Ast.Def> declaredIn(String moduleName) {
+        if (TypeName.RUNTIME.equals(moduleName)) {
+            return Prelude.runtimeBackedDefs();
+        }
         return registry.declaredIn(moduleName);
     }
 

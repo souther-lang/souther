@@ -878,20 +878,11 @@ public final class Elaborator {
         };
     }
 
-    /** The built-in rounding modes (spec 18.3), each a bare identifier resolving to a
-     * {@code java.math.RoundingMode} — like {@code None}, a built-in value, not a data (spec 8.4). */
-    public static final Set<String> ROUNDING_MODES = Set.of(
-            "HALF_UP", "HALF_EVEN", "HALF_DOWN", "UP", "DOWN", "CEILING", "FLOOR");
-
-    /** Built-in values written as bare identifiers ({@code None}, the rounding modes): a binding may
-     * not take one of these names, because it would shadow the built-in and make it unreachable. */
-    static final Set<String> BUILTIN_VALUES = builtinValues();
-
-    static Set<String> builtinValues() {
-        Set<String> s = new HashSet<>(ROUNDING_MODES);
-        s.add("None");
-        return Set.copyOf(s);
-    }
+    /** Built-in values written as bare identifiers ({@code None}): a binding may not take one of
+     * these names, because it would shadow the built-in and make it unreachable. A unit data name
+     * — a rounding mode included — is ordinary and may be bound, the local taking precedence
+     * ([#unit-data]). */
+    static final Set<String> BUILTIN_VALUES = Set.of("None");
 
     static void rejectBuiltinShadow(String name, SourcePos pos) {
         if (BUILTIN_VALUES.contains(name)) {

@@ -22,13 +22,12 @@ import java.util.Optional;
  * <p>Every node carries {@link #type()}: the type the checker decided for it (issue #81). The
  * checker is the only producer of Core — it builds the tree as it types a body
  * ({@code Elaborator.elaborate}) — so the backend reads those decisions instead of inferring the
- * same types a second time. The one node with no type is {@link Builtin}, a name the language gives
- * a meaning that the emitter reads rather than evaluates (spec 18.3).
+ * same types a second time.
  *
- * <p>A name in a body is one of three nodes, not one: a read of something the body binds, a unit
- * data written as its own value, and a name the language defines. They were one, and the emitter
- * told them apart by looking the spelling up in its slots and falling back when it found nothing —
- * which is an answer about a name, decided by its text.
+ * <p>A name in a body is one of two nodes, not one: a read of something the body binds, and a unit
+ * data written as its own value. They were one, and the emitter told them apart by looking the
+ * spelling up in its slots and falling back when it found nothing — which is an answer about a
+ * name, decided by its text.
  *
  * <p>A surface-only node (a list comprehension) never appears — the Lower stage has already
  * rewritten it.
@@ -37,8 +36,7 @@ public sealed interface Core {
 
     SourcePos pos();
 
-    /** The type the checker decided for this expression (null only on a built-in identifier
-     * the emitter reads by name — see the class comment). */
+    /** The type the checker decided for this expression. */
     Type type();
 
     record Int(long value, Type type, SourcePos pos) implements Core {}
@@ -57,16 +55,6 @@ public sealed interface Core {
     /** A unit data written where a value goes: the type has one value, and naming it is that value
      * (spec §unit-data). Which unit is on the node, so nothing resolves a spelling again. */
     record UnitValue(TypeName data, Type type, SourcePos pos) implements Core {}
-
-    /** A name the language gives a meaning, which the emitter reads rather than evaluates: the
-     * rounding mode of {@code divide} (spec 18.3). It is not a value, so it has no type. */
-    record Builtin(String name, SourcePos pos) implements Core {
-
-        @Override
-        public Type type() {
-            return null;
-        }
-    }
 
     record Neg(Core operand, Type type, SourcePos pos) implements Core {}
 
@@ -193,7 +181,6 @@ public sealed interface Core {
             case Bool x -> x;
             case Read x -> x;
             case UnitValue x -> x;
-            case Builtin x -> x;
             case OptionNone x -> x;
             case Unreachable x -> x;
             case Neg n -> new Neg(f.apply(n.operand()), n.type(), n.pos());

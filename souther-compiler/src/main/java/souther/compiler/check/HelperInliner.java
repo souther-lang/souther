@@ -1305,18 +1305,6 @@ public final class HelperInliner {
         if (arity <= 0) {
             return v;   // a value, or a name the library does not declare — reported where it is used
         }
-        // A rounding mode is written at the call and read by name, so a block standing in for one of
-        // these would have to pass a binding where a name has to be. Said here rather than left to
-        // the arity mismatch the expansion would otherwise cause.
-        if (takesARoundingMode(declared)) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.stdlib.roundingmode.byname")
-                            .title("check.apply.notfunction.title")
-                            .at(v.pos(), v.name().length()).args(lib.qualified()).build(),
-                    "`" + lib.qualified() + "` takes a rounding mode, which is written at the call"
-                            + " and not passed as a value, so it cannot be handed over by name —"
-                            + " wrap it in a block that writes the mode");
-        }
         int k = counter++;
         List<Ast.Binder> params = new ArrayList<>();
         List<Ast.Expr> args = new ArrayList<>();
@@ -1328,18 +1316,6 @@ public final class HelperInliner {
         return inline(new Ast.Block(params,
                 new Ast.Apply(v.name(), v.denotes(), args, ConstructionOrigin.own(), v.pos()),
                 v.pos()));
-    }
-
-    /** Whether a declaration takes a rounding mode — a name the operation reads, not a value. */
-    private static boolean takesARoundingMode(Ast.FnDef declared) {
-        for (Ast.FnParam p : declared.params()) {
-            if (p.type() != null && p.type().cases().size() == 1
-                    && p.type().cases().get(0) instanceof Ast.TypeRef ref
-                    && ref.name().equals(TypeOps.ROUNDING_MODE.name())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**
