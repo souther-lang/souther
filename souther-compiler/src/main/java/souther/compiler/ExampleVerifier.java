@@ -1139,14 +1139,14 @@ public final class ExampleVerifier {
                     throw new FixtureException("`" + v.name()
                             + "` is bound to no value a fixture can name");
                 }
-                yield expandedValue(v.name(), held, expected);
+                yield expandedValue(local, held, expected);
             }
-            case ValueName.Helper _ -> {
+            case ValueName.Helper helper -> {
                 Ast.Expr value = valueBody(v.name());
                 if (value == null) {
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
                 }
-                yield expandedValue(v.name(), value, expected);
+                yield expandedValue(helper, value, expected);
             }
             case null, default ->
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
@@ -1214,17 +1214,24 @@ public final class ExampleVerifier {
         return imported != null && imported.params().isEmpty() ? imported.body() : null;
     }
 
-    /** The names being expanded, innermost last — a value that reaches itself has no fixture to be. */
-    private final Deque<String> expanding = new ArrayDeque<>();
+    /**
+     * What is being expanded, innermost last — a value that reaches itself has no fixture to be.
+     *
+     * <p>Held as what each one is rather than as what it is called: two bindings of one spelling are
+     * two values, and reading the second while the first is open is not a value reaching itself. The
+     * spelling is what the report shows, and decides nothing.
+     */
+    private final Deque<ValueName> expanding = new ArrayDeque<>();
 
-    private Object expandedValue(String name, Ast.Expr body, Type expected) {
-        if (expanding.contains(name)) {
-            List<String> cycle = new ArrayList<>(expanding);
-            cycle.add(name);
-            throw new FixtureException("`" + name + "` is defined in terms of itself ("
+    private Object expandedValue(ValueName named, Ast.Expr body, Type expected) {
+        if (expanding.contains(named)) {
+            List<String> cycle = new ArrayList<>();
+            expanding.forEach(open -> cycle.add(open.name()));
+            cycle.add(named.name());
+            throw new FixtureException("`" + named.name() + "` is defined in terms of itself ("
                     + String.join(" -> ", cycle) + ")");
         }
-        expanding.addLast(name);
+        expanding.addLast(named);
         try {
             return raw(body, expected);
         } finally {
@@ -1387,7 +1394,8 @@ public final class ExampleVerifier {
                 throw new FixtureException("`" + spread
                         + "` is not a value a fixture can spread");
             }
-            Object copied = expandedValue(spread, value, Type.ref(nd.typeName().denotes()));
+            Object copied = expandedValue(ref.denotes(), value,
+                    Type.ref(nd.typeName().denotes()));
             if (!(copied instanceof Map<?, ?> fields)) {
                 throw new FixtureException("`" + spread + "` is not a record, so it has no fields to"
                         + " spread");
