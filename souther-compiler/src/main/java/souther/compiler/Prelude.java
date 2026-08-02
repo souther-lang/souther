@@ -66,7 +66,7 @@ public final class Prelude {
      *  {@code souther.list} ({@code foldFrom}) that takes its step as a closure. They are reached
      *  qualified like everything else (spec §stdlib). */
     private static final Set<String> BUILTINS = Set.of(
-            "List.max", "List.min", "List.find", "List.sortBy",
+            "List.find", "List.sortBy",
             "String.toInt", "String.toDecimal",
             "Option.map",
             "Int.remainder", "Int.divide", "Decimal.divide", "Decimal.toInt", "Decimal.round");

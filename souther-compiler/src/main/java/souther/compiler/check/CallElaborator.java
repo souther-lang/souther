@@ -35,6 +35,45 @@ public final class CallElaborator {
     }
 
     /**
+     * The kernels whose element must be an ordered value, and where in the result to find it.
+     *
+     * <p>Souther has no type classes, so "the element is ordered" is not something a signature can
+     * say (ADR-0053). The declaration states the shape and this states the rest, keyed by the kernel
+     * it constrains — which is what {@code sort} has always done, written out by hand.
+     */
+    private static final Map<String, Boolean> ORDERED_ELEMENT = Map.of(
+            "list.sort", false,       // the result is the list itself
+            "list.max", true,         // the result is `Option<element>`
+            "list.min", true);
+
+    /**
+     * Refuses an element with no natural order. An ordered primitive has one, and so does a newtype
+     * over one — it carries its ordering as {@code Comparable}. A product data does not and would
+     * throw at run time, so it is refused here. The empty-list literal (element {@code Nothing}) is
+     * fine: it sorts to itself and its max is {@code None}.
+     */
+    private static void requiresOrdering(String key, Ast.Apply call, Type result, CheckContext ctx) {
+        Boolean inOption = ORDERED_ELEMENT.get(key);
+        if (inOption == null) {
+            return;
+        }
+        Type element = switch (result) {
+            case Type.OptionOf o when inOption -> o.element();
+            case Type.ListOf l when !inOption -> l.element();
+            default -> null;
+        };
+        if (element == null || element instanceof Type.Nothing
+                || TypeOps.supportsOrdering(element, ctx.symbols())) {
+            return;
+        }
+        String name = call.fn().substring(call.fn().indexOf('.') + 1);
+        throw needsOrdered(call.pos(), name, element,
+                name + " needs a list of ordered values (Int, String, Decimal, Date, DateTime, a"
+                        + " newtype over one of these, or an enumeration), but the element is "
+                        + element + " — use its ordered field instead (e.g. map to it first)");
+    }
+
+    /**
      * A library name written where a value goes, or null where the name is not a library value.
      *
      * <p>A declaration with no parameter list is a value ([#fn-declaration]), and the library's are
@@ -266,19 +305,7 @@ public final class CallElaborator {
                         "argument " + (i + 1) + " of " + call.fn());
             }
             Type result = TypeOps.substitute(intrinsic.result(), bindings);
-            // `sort` carries no `comparable` constraint in its `List<'a>` signature (Souther has no
-            // type classes), so guard here: an ordered value sorts — an ordered primitive, or a
-            // newtype over one, which carries its ordering as Comparable. A product data does not,
-            // and would throw at runtime, so reject it now. The empty-list literal (element
-            // `Nothing`) is fine: it sorts to itself, so let it through.
-            if (intrinsic.key().equals("list.sort") && result instanceof Type.ListOf lo
-                    && !(lo.element() instanceof Type.Nothing)
-                    && !TypeOps.supportsOrdering(lo.element(), ctx.symbols())) {
-                throw needsOrdered(call.pos(), "sort", lo.element(),
-                        "sort needs a list of ordered values (Int, String, Decimal, Date, DateTime, or"
-                                + " a newtype over one of these), but the element is " + lo.element()
-                                + " — sort its ordered field instead (e.g. map to it first)");
-            }
+            requiresOrdering(intrinsic.key(), call, result, ctx);
             if (intrinsic.key().equals("list.sum") || intrinsic.key().equals("list.product")) {
                 return numericFold(call, result, expected);
             }
@@ -300,26 +327,6 @@ public final class CallElaborator {
                 ca.require(0, Type.STRING, "argument of String.toDecimal");
                 // the sibling of toInt, and here for the same reason: a primitive-headed union
                 yield Type.union(primitiveHeaded(Type.DECIMAL, "NotANumber"));
-            }
-            case "List.max", "List.min" -> {
-                arity(call, 1);
-                Type t = ca.type(0);
-                if (!(t instanceof Type.ListOf lo)) {
-                    throw expects(call.pos(), call.fn(), "kind.list", t,
-                            "argument of " + call.fn() + " must be a List but is " + t);
-                }
-                // Like `sort`, max/min compare by natural order, so the element must be an ordered
-                // value (Souther has no type classes); a product data is not Comparable. The
-                // empty-list literal (element `Nothing`) is fine — its result is `None`.
-                if (!BottomInfer.isBottom(lo.element())
-                        && !TypeOps.supportsOrdering(lo.element(), ctx.symbols())) {
-                    throw needsOrdered(call.pos(), call.fn(), lo.element(),
-                            call.fn() + " needs a list of ordered values (Int, String, Decimal, Date,"
-                                    + " DateTime, a newtype over one of these, or an enumeration), but"
-                                    + " the element is "
-                                    + lo.element() + " — compare its ordered field instead");
-                }
-                yield Type.option(lo.element());
             }
             case "List.find" -> {
                 arity(call, 2);   // find(p, xs): predicate first, list last (F#/Elm order)

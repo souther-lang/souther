@@ -214,6 +214,8 @@ final class Intrinsics {
         t.put("string.fromDecimal", rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
 
         // List
+        t.put("list.max", rt(CD_Lists, "max", order(0), ts -> Type.option(listOf(ts, 0).element())));
+        t.put("list.min", rt(CD_Lists, "min", order(0), ts -> Type.option(listOf(ts, 0).element())));
         t.put("list.length", rt(CD_Lists, "length", order(0), ts -> Type.INT));
         t.put("list.get", rt(CD_Lists, "get", order(1, 0), ts -> Type.option(listOf(ts, 1).element())));
         t.put("list.sort", rt(CD_Lists, "sort", order(0), ts -> ts.get(0)));

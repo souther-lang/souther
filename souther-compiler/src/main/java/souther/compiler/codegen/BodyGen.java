@@ -1073,15 +1073,17 @@ final class BodyGen {
         }
 
         private void call(Core.Call call, Type expected) {
-            // An enumeration's order lives on its sum, so the sort family takes it as a comparator
-            // rather than reading a Comparable off the value (issue #161).
-            if (call.fn().equals("List.sort")) {
+            // An enumeration's order lives on its sum, so the ordered family takes it as a comparator
+            // rather than reading a Comparable off the value (issue #161). Everything else about
+            // these is what their declaration says, so only this prefix is written out here.
+            if (ORDERED_BY_COMPARATOR.contains(call.fn())) {
                 TypeName ordering = elementOrdering(call.args().get(0));
                 if (ordering != null) {
                     code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
                     genExpr(call.args().get(0));
-                    code.invokestatic(CD_Lists, "sort",
-                            MethodTypeDesc.of(CD_List, CD_Comparator, CD_List));
+                    String bare = bareOp(call.fn());
+                    code.invokestatic(CD_Lists, bare, MethodTypeDesc.of(
+                            bare.equals("sort") ? CD_List : CD_Option, CD_Comparator, CD_List));
                     return;
                 }
             }
@@ -1101,17 +1103,6 @@ final class BodyGen {
                     // the sibling of toInt: a boxed BigDecimal or NotANumber.INSTANCE, carried as Object
                     genExpr(call.args().get(0));
                     code.invokestatic(CD_Strings, "toDecimal", MethodTypeDesc.of(CD_Object, CD_String));
-                }
-                case "List.max", "List.min" -> {
-                    TypeName ordering = elementOrdering(call.args().get(0));
-                    if (ordering != null) {
-                        code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    }
-                    genExpr(call.args().get(0));
-                    code.invokestatic(CD_Lists, bareOp(call.fn()),   // "max" / "min"
-                            ordering == null
-                                    ? MethodTypeDesc.of(CD_Option, CD_List)
-                                    : MethodTypeDesc.of(CD_Option, CD_Comparator, CD_List));
                 }
                 case "List.find", "List.sortBy" -> {
                     // find(p, xs) / sortBy(key, xs): the function is a value here (not inlined into a
