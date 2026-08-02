@@ -620,11 +620,13 @@ public final class DataChecker {
                     "decoder for `" + ctx.data().name() + "` must construct `" + ctx.data().name()
                             + "`, but constructs `" + c.typeName().written() + "`");
         }
-        checkConstruction(c.typeName().written(), c.inits(), c.spreads(), c.pos(), fields, env, ctx);
+        // a decoder's construction gives every field a value of its own; nothing builds one with a
+        // spread, so there is no binding to copy from here
+        checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(), fields, env, ctx);
     }
 
     static List<Core.FieldInit> checkConstruction(String typeName, List<Ast.FieldInit> inits,
-                                          List<String> spreads,
+                                          List<Core.Read> spreads,
                                           SourcePos pos, Map<String, Type> fields, Scope env,
                                           CheckContext ctx) {
         Map<String, Ast.FieldInit> byName = new HashMap<>();
@@ -667,8 +669,9 @@ public final class DataChecker {
         // of — all of them, because naming one of several would pick by position and send the author
         // to open a sum whose cases never had the field
         Set<String> fromSums = new LinkedHashSet<>();
-        for (String sp : spreads) {
-            Type bound = env.byName().get(sp);
+        for (Core.Read spread : spreads) {
+            String sp = spread.name();
+            Type bound = env.typeOf(spread.binding());
             if (bound instanceof Type.Ref ref
                     && ctx.symbols().get(ref.name()) instanceof Ast.SumData sum) {
                 fromSums.add(Type.show(bound));
