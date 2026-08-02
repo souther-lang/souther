@@ -118,7 +118,7 @@ final class HelperParams {
     private static Ast.FnDef settle(Ast.FnDef h, HelperInliner inliner, Symbols symbols,
                                     Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
         List<Integer> open = new ArrayList<>();
-        Map<String, Type> env = new HashMap<>();
+        Scope env = Scope.NONE;
         Ast.Expr body;
         try {
             for (int i = 0; i < h.params().size(); i++) {
@@ -126,7 +126,7 @@ final class HelperParams {
                 if (p.type() == null) {
                     open.add(i);
                 } else {
-                    env.put(p.name(), TypeOps.resolveParamType(p.type(), symbols));
+                    env = env.with(p.binder(), TypeOps.resolveParamType(p.type(), symbols));
                 }
             }
             if (open.isEmpty()) {
@@ -160,7 +160,7 @@ final class HelperParams {
      * so the rounds run to a fixpoint. {@code env} is completed as they are found, and
      * {@code openUses} collects, for each parameter still open, a use of it that named no type.
      */
-    static Map<Integer, Type> determine(Ast.FnDef h, List<Integer> open, Map<String, Type> env,
+    static Map<Integer, Type> determine(Ast.FnDef h, List<Integer> open, Scope env,
                                         Ast.Expr body, Symbols symbols, Map<String, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
                                         Map<Integer, Ast.Var> openUses) {
@@ -178,15 +178,16 @@ final class HelperParams {
         while (progress) {
             progress = false;
             for (int idx : value) {
-                String name = h.params().get(idx).name();
-                if (env.containsKey(name)) {
+                Ast.Binder param = h.params().get(idx).binder();
+                String name = param.name();
+                if (env.holds(param.id())) {
                     continue;
                 }
                 Type t = typing.typeOf(name, body, env);
                 if (t == null) {
                     openUses.put(idx, typing.openUse());
                 } else {
-                    env.put(name, t);
+                    env = env.with(param, t);
                     found.put(idx, t);
                     progress = true;
                 }
@@ -269,16 +270,14 @@ final class HelperParams {
         }
 
         /** The type {@code body} gives {@code name}, or null when it gives none. */
-        Type typeOf(String name, Ast.Expr body, Map<String, Type> env) {
+        Type typeOf(String name, Ast.Expr body, Scope env) {
             this.pinned = null;
             this.openUse = null;
             // A recursive helper's call is left standing rather than expanded, so the neighbouring
             // expression a parameter takes its type from can be one — `x + count(t)` reads `count(t)`
             // to type `x`. Its signature goes in here, once, and every inner scope is derived from
             // this one (spec 13.1). What is bound wins over it, as it does everywhere else.
-            Map<String, Type> scope = new HashMap<>(recursiveHelperFns);
-            scope.putAll(env);
-            visit(body, scope, name);
+            visit(body, env.reaching(recursiveHelperFns), name);
             return pinned;
         }
 
@@ -287,7 +286,7 @@ final class HelperParams {
             return openUse;
         }
 
-        private void visit(Ast.Expr e, Map<String, Type> env, String name) {
+        private void visit(Ast.Expr e, Scope env, String name) {
             if (pinned != null) {
                 return;
             }
@@ -334,7 +333,7 @@ final class HelperParams {
          * {@code x} through {@code y}, which is the shape a call to another body-typed helper inlines
          * to. A binding of the parameter's own name shadows it, so its body is not walked for it.
          */
-        private void visitLet(Ast.LetIn li, Map<String, Type> env, String name) {
+        private void visitLet(Ast.LetIn li, Scope env, String name) {
             Type demanded = li.declaredType() == null ? null
                     : TypeOps.resolveParamType(li.declaredType(), symbols);
             if (isParam(li.value(), name)) {
@@ -354,16 +353,11 @@ final class HelperParams {
                 return;
             }
             Type bound = demanded != null ? demanded : carried(li, env);
-            Map<String, Type> inner = env;
-            if (bound != null) {
-                inner = new HashMap<>(env);
-                inner.put(li.name(), bound);
-            }
-            visit(li.body(), inner, name);
+            visit(li.body(), bound == null ? env : env.with(li.binder(), bound), name);
         }
 
         /** The type a binding carries into its body, or null where this scope cannot type its value. */
-        private Type carried(Ast.LetIn li, Map<String, Type> env) {
+        private Type carried(Ast.LetIn li, Scope env) {
             Type value = typed(li.value(), env);
             return value == null ? null : Elaborator.carriedType(li, value, symbols);
         }
@@ -434,7 +428,7 @@ final class HelperParams {
         }
 
         /** The type of a neighbouring expression, or null where this scope cannot type it. */
-        private Type typed(Ast.Expr e, Map<String, Type> env) {
+        private Type typed(Ast.Expr e, Scope env) {
             try {
                 return Elaborator.typeOf(e, env, ctx);
             } catch (CompileException _) {

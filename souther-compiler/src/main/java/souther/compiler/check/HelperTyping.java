@@ -42,7 +42,7 @@ public final class HelperTyping {
                                      TypeChecker.Elaborated elaborated) {
         for (Ast.FnDef h : inliner.helpers().values()) {
             boolean recursive = recursiveHelperFns.containsKey(h.name());
-            Map<String, Type> env = new HashMap<>();
+            Scope env = Scope.NONE;
             List<Integer> inferred = new ArrayList<>();
             for (int i = 0; i < h.params().size(); i++) {
                 Ast.FnParam p = h.params().get(i);
@@ -61,7 +61,7 @@ public final class HelperTyping {
                     inferred.add(i);
                     continue;
                 }
-                env.put(p.name(), TypeOps.resolveParamType(p.type(), symbols));
+                env = env.with(p.binder(), TypeOps.resolveParamType(p.type(), symbols));
             }
             Elaborator.rejectBuiltinShadowing(h.body());
             // A helper the lowered module carries is one the backend emits — a recursive one, and one
@@ -94,8 +94,7 @@ public final class HelperTyping {
             // it is given. A parameter of the same name wins: a binding in force wins over the
             // declaration it shadows (spec §fn-rules), so `let use (depth: Int)` reads its `depth` as
             // the Int it declares and not as the helper it is spelled like.
-            Map<String, Type> tenv = new HashMap<>(recursiveHelperFns);
-            tenv.putAll(env);
+            Scope tenv = env.reaching(recursiveHelperFns);
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
@@ -143,7 +142,7 @@ public final class HelperTyping {
      * settles back onto the parameter — so what reaches here open is what it could not settle. Reading
      * it again is what turns "not settled" into a report that names the use that named no type.
      */
-    private static void typeFromBody(Ast.FnDef h, List<Integer> open, Map<String, Type> env,
+    private static void typeFromBody(Ast.FnDef h, List<Integer> open, Scope env,
             Ast.Expr body, Symbols symbols, Map<String, ReqSig> reqSigs,
             Map<String, Type> recursiveHelperFns) {
         // A parameter used as a function is one, and neither applying it nor handing it to a
@@ -166,7 +165,7 @@ public final class HelperTyping {
         HelperParams.determine(h, open, env, body, symbols, reqSigs, recursiveHelperFns, openUses);
         for (int idx : open) {
             Ast.FnParam p = h.params().get(idx);
-            if (env.containsKey(p.name())) {
+            if (env.holds(p.binder().id())) {
                 continue;
             }
             Diagnostic.Builder d = Diagnostic.of(null, "check.helper.infer").title("check.helper.title")
@@ -319,7 +318,7 @@ public final class HelperTyping {
      * argument's type cannot be determined in the available scope (a value bound further out), it is
      * skipped and the ordinary inlined check still applies.
      */
-    static void checkFunctionArgs(Ast.Expr e, Map<String, Type> env, Symbols symbols,
+    static void checkFunctionArgs(Ast.Expr e, Scope env, Symbols symbols,
                                           Map<String, ReqSig> reqs, HelperInliner inliner) {
         if (e instanceof Ast.Call call) {
             checkHelperCallFnArgs(call, env, symbols, reqs, inliner);
@@ -327,7 +326,7 @@ public final class HelperTyping {
         TypeChecker.forEachChild(e, sub -> checkFunctionArgs(sub, env, symbols, reqs, inliner));
     }
 
-    private static void checkHelperCallFnArgs(Ast.Call call, Map<String, Type> env, Symbols symbols,
+    private static void checkHelperCallFnArgs(Ast.Call call, Scope env, Symbols symbols,
                                               Map<String, ReqSig> reqs, HelperInliner inliner) {
         // what the call applies, which a binding of a helper's spelling is not: applying a
         // function-typed parameter is not a call to the helper it happens to be named after
@@ -412,7 +411,7 @@ public final class HelperTyping {
     }
 
     private static void checkFunctionArg(Ast.FnDef h, String paramName, Type.FnOf want, Ast.Expr arg,
-                                         Map<String, Type> env, Symbols symbols,
+                                         Scope env, Symbols symbols,
                                          Map<String, ReqSig> reqs, HelperInliner inliner,
                                          Map<String, Type> bind) {
         if (arg instanceof Ast.Block lambda) {
@@ -425,12 +424,12 @@ public final class HelperTyping {
                                 + want.params().size() + " argument(s) but is written with "
                                 + lambda.params().size());
             }
-            Map<String, Type> lenv = new HashMap<>(env);
+            Scope lenv = env;
             for (int j = 0; j < lambda.params().size(); j++) {
                 if (isOpen(want.params().get(j))) {
                     return;   // the parameter type is still open; nothing concrete to check
                 }
-                lenv.put(lambda.params().get(j).name(), want.params().get(j));
+                lenv = lenv.with(lambda.params().get(j), want.params().get(j));
             }
             Type got;
             try {
@@ -454,7 +453,8 @@ public final class HelperTyping {
             if (!TypeOps.assignable(got, want.result(), symbols)) {
                 throw blockReturnMismatch(h, paramName, want.result(), got, lambda.pos());
             }
-        } else if (arg instanceof Ast.Var v && env.get(v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
+        } else if (arg instanceof Ast.Var v
+                && env.of(v.denotes(), v.name()) instanceof Type vt && !(vt instanceof Type.FnOf)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.fn.notfunction").title("check.fn.title")
                             .at(arg.pos()).args(paramName, h.name(), v.name()).build(),

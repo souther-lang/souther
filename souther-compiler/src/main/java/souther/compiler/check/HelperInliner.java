@@ -1114,7 +1114,7 @@ public final class HelperInliner {
                         // the binding the argument is bound to; the reads of the parameter inside the
                         // body are answered with it, so a read says which binding it is rather than
                         // where it happens to be written
-                        Ast.Binder f = binders.binder("$" + k + "_" + p.name(), call.pos());
+                        Ast.Binder f = binders.binder(p.name(), call.pos());
                         subst.put(p.name(), f.name());
                         substDenotes.put(p.name(), new ValueName.Local(f.name(), f.id()));
                         letBinders.add(f);
@@ -1476,8 +1476,7 @@ public final class HelperInliner {
                 Map<String, ValueName> innerDenotes = substDenotes;
                 List<Ast.Binder> freshParams = new ArrayList<>();
                 for (Ast.Binder p : block.params()) {
-                    Ast.Binder fresh = binders.binder("$b" + (counter++) + "_" + p.name(),
-                            at(at, p.pos()));
+                    Ast.Binder fresh = binders.binder(p.name(), at(at, p.pos()));
                     freshParams.add(fresh);
                     inner = with(inner, p.name(), fresh.name());
                     innerDenotes = new HashMap<>(innerDenotes);

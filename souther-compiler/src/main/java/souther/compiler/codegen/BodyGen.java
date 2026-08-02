@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -204,7 +205,7 @@ final class BodyGen {
          * emitter in the shape it emits from. {@code expected} is the type the position wants, as the
          * checker pushes a field's declared type into its initialiser. */
         Core elaborate(Ast.Expr e, Type expected) {
-            return Elaborator.elaborate(Lower.desugarExpr(e), typesEnvWithHelpers(),
+            return Elaborator.elaborate(Lower.desugarExpr(e), scope(),
                     new CheckContext(symbols, data, reqSigs()), expected);
         }
 
@@ -1782,32 +1783,35 @@ final class BodyGen {
             code.labelBinding(end);
         }
 
-        /** A name-to-type view of this scope, for the checker's inference helpers. */
-        private Map<String, Type> typesEnv() {
-            Map<String, Type> t = new HashMap<>();
-            locals.values().forEach(v -> t.put(v.name(), v.type()));
-            captured.forEach((name, v) -> t.put(name, v.type()));
-            return t;
+        /** What the body may name here: the bindings this emitter holds, and the injected behaviors
+         * a lambda captured, which a call reaches by the name they are declared under. */
+        private Scope bound() {
+            Map<BindingId, Scope.Binding> held = new LinkedHashMap<>();
+            locals.forEach((binding, v) -> held.put(binding, new Scope.Binding(v.name(), v.type())));
+            Map<String, Type> declared = new HashMap<>();
+            captured.forEach((name, v) -> declared.put(name, v.type()));
+            return Scope.of(held).reaching(declared);
         }
 
-        /** {@link #typesEnv} plus the recursive helpers' signatures, so re-typing an expression that
+        /** {@link #bound} plus the recursive helpers' signatures, so re-typing an expression that
          * calls one (a nested {@code foldFrom} in a fold's seed) resolves it as a function. Only a
          * recursive helper's signature can be read here, and a recursive helper declares its return
          * type (spec 13.1); an example-applied helper is emitted beside them without declaring one, and
          * no standing call names it — it is expanded wherever a body calls it. */
-        private Map<String, Type> typesEnvWithHelpers() {
-            Map<String, Type> t = typesEnv();
+        private Scope scope() {
+            Scope held = bound();
+            Map<String, Type> declared = new HashMap<>(held.declared());
             ctx.emittedHelpers.forEach((name, h) -> {
-                if (t.containsKey(name) || h.declaredReturn() == null) {
-                    return;   // a local of the same name shadows the helper, as it does in the checker
+                if (declared.containsKey(name) || h.declaredReturn() == null) {
+                    return;
                 }
                 List<Type> params = new ArrayList<>();
                 for (Ast.FnParam p : h.params()) {
                     params.add(TypeOps.resolveParamType(p.type(), symbols));
                 }
-                t.put(name, Type.fn(params, successType(h.declaredReturn())));
+                declared.put(name, Type.fn(params, successType(h.declaredReturn())));
             });
-            return t;
+            return held.reaching(declared);
         }
 
         /** Emits a function value from its elaborated node: the parameter and result types are the

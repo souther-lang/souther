@@ -6,6 +6,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -550,8 +551,7 @@ public final class DataChecker {
             // A total recursive helper — the stdlib fold behind the list quantifiers, or a user helper
             // proven total — is callable from an invariant, so its signature must be in scope here. A
             // field of the same name as a helper wins: a bare name in an invariant is a field reference.
-            Map<String, Type> invEnv = new HashMap<>(recursiveHelperFns);
-            invEnv.putAll(fields);
+            Scope invEnv = fieldScope(ctx).reaching(recursiveHelperFns);
             Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx);
             if (t != Type.BOOL) {
                 throw CompileException.of(
@@ -566,29 +566,37 @@ public final class DataChecker {
         ctx.data().encoder().ifPresent(enc -> checkEncoder(enc, ctx));
     }
 
+    /** The bindings a declaration's own invariant reads: its fields, each as the binding it is. */
+    private static Scope fieldScope(CheckContext ctx) {
+        Map<String, Type> types = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
+        Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
+        TypeOps.fieldBindings(ctx.data(), ctx.symbols()).forEach((name, binding) ->
+                bindings.put(binding, new Scope.Binding(name, types.get(name))));
+        return Scope.of(bindings);
+    }
+
     private static void checkDecoder(Ast.DecoderDef dec, CheckContext ctx, Map<String, Type> fields) {
         switch (dec) {
             case Ast.PrimDecoder prim -> {
                 Type inputType = TypeOps.primType(prim.from());
-                Map<String, Type> env = new HashMap<>();
-                env.put(prim.inputName(), inputType);
+                Scope env = Scope.NONE.with(prim.input(), inputType);
                 for (Ast.DecStmt stmt : prim.stmts()) {
                     switch (stmt) {
-                        case Ast.Let let -> env.put(let.name(), Elaborator.typeOf(let.value(), env, ctx));
+                        case Ast.Let let ->
+                                env = env.with(let.binder(), Elaborator.typeOf(let.value(), env, ctx));
                     }
                 }
                 checkConstruct(prim.result(), ctx, fields, env);
             }
             case Ast.ObjectDecoder obj -> {
-                Map<String, Type> env = new HashMap<>();
+                Scope env = Scope.NONE;
                 for (Ast.Bind bind : obj.binds()) {
-                    env.put(bind.name(), decRefType(bind.ref(), ctx.symbols()));
+                    env = env.with(bind.binder(), decRefType(bind.ref(), ctx.symbols()));
                 }
                 checkConstruct(obj.result(), ctx, fields, env);
             }
             case Ast.NewtypeDecoder nt -> {
-                Map<String, Type> env = new HashMap<>();
-                env.put(nt.inputName(), decRefType(nt.inner(), ctx.symbols()));
+                Scope env = Scope.NONE.with(nt.input(), decRefType(nt.inner(), ctx.symbols()));
                 checkConstruct(nt.result(), ctx, fields, env);
             }
         }
@@ -619,7 +627,7 @@ public final class DataChecker {
     }
 
     private static void checkConstruct(Ast.Construct c, CheckContext ctx, Map<String, Type> fields,
-                                       Map<String, Type> env) {
+                                       Scope env) {
         if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data().name()))) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.codec.mustconstruct").title("check.codec.title")
@@ -632,7 +640,7 @@ public final class DataChecker {
 
     static List<Core.FieldInit> checkConstruction(String typeName, List<Ast.FieldInit> inits,
                                           List<String> spreads,
-                                          SourcePos pos, Map<String, Type> fields, Map<String, Type> env,
+                                          SourcePos pos, Map<String, Type> fields, Scope env,
                                           CheckContext ctx) {
         Map<String, Ast.FieldInit> byName = new HashMap<>();
         List<Core.FieldInit> elaborated = new ArrayList<>();
@@ -675,7 +683,7 @@ public final class DataChecker {
         // to open a sum whose cases never had the field
         Set<String> fromSums = new LinkedHashSet<>();
         for (String sp : spreads) {
-            Type bound = env.get(sp);
+            Type bound = env.byName().get(sp);
             if (bound instanceof Type.Ref ref
                     && ctx.symbols().get(ref.name()) instanceof Ast.SumData sum) {
                 fromSums.add(Type.show(bound));
@@ -743,11 +751,11 @@ public final class DataChecker {
     }
 
     private static void checkEncoder(Ast.EncoderDef enc, CheckContext ctx) {
-        Map<String, Type> env = Map.of(enc.selfName(), Type.ref(ctx.symbols().own(ctx.data().name())));
+        Scope env = Scope.NONE.with(enc.self(), Type.ref(ctx.symbols().own(ctx.data().name())));
         checkRawExpr(enc.result(), env, ctx);
     }
 
-    private static void checkRawExpr(Ast.RawExpr raw, Map<String, Type> env, CheckContext ctx) {
+    private static void checkRawExpr(Ast.RawExpr raw, Scope env, CheckContext ctx) {
         switch (raw) {
             case Ast.TextRaw t -> Elaborator.requireType(t.arg(), Type.STRING, env, ctx,
                     "argument of Text");
@@ -774,9 +782,7 @@ public final class DataChecker {
                                     .at(o.pos()).args(Type.show(at)).build(),
                             "optional encoder expects an Option, got " + at);
                 }
-                Map<String, Type> inner = new HashMap<>(env);
-                inner.put(o.elemVar(), oo.element());
-                checkRawExpr(o.inner(), inner, ctx);
+                checkRawExpr(o.inner(), env.with(o.elem(), oo.element()), ctx);
             }
             case Ast.ObjectRaw o -> {
                 for (Ast.RawEntry entry : o.entries()) {
