@@ -1020,6 +1020,19 @@ public final class HelperInliner {
         }
     }
 
+    /** How the source wrote an expression that is a name or a chain of field reads off one, or null
+     *  where it wrote something with no spelling of its own — a call's result, a lambda. */
+    private static String spelling(Ast.Expr e) {
+        return switch (e) {
+            case Ast.Var v -> v.name();
+            case Ast.FieldAccess fa -> {
+                String target = spelling(fa.target());
+                yield target == null ? null : target + "." + fa.field();
+            }
+            default -> null;
+        };
+    }
+
     /** Rewrites every helper call in {@code e} to its inlined body, into the body already named. */
     public Ast.Expr inline(Ast.Expr e) {
         if (binders == null) {
@@ -1032,8 +1045,14 @@ public final class HelperInliner {
             // any argument, and the binding is what is applied.
             case Ast.Apply raw when !raw.appliesAName() -> {
                 Ast.Binder f = binders.binder("$fn" + counter++, raw.function().pos());
+                // The application reads the binding, and quotes what the author wrote. A field read
+                // applied — `deps.transform(x)` — has a spelling, and a report that quoted the
+                // binding instead would name `$fn0`, which is nowhere in the source. The spelling
+                // is what a report says; the binding is what the application means.
+                String written = spelling(raw.function());
                 yield inline(new Ast.LetIn(f, raw.function(), null, false, null,
-                        new Ast.Apply(f.name(), new ValueName.Local(f.name(), f.id()), raw.args(),
+                        new Ast.Apply(written != null ? written : f.name(),
+                                new ValueName.Local(f.name(), f.id()), raw.args(),
                                 raw.origin(), raw.pos()),
                         raw.pos()));
             }
