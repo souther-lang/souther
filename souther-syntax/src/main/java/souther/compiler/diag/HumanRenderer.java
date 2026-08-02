@@ -15,6 +15,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
     private static final String RESET = "[0m";
     private static final String CYAN = "[36m";
     private static final String RED = "[31m";
+    private static final String YELLOW = "[33m";
     private static final String DIM = "[2m";
 
     private final boolean useColor;
@@ -28,7 +29,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
         StringBuilder out = new StringBuilder();
         header(out, d, src, locale);
         out.append('\n');
-        snippet(out, d.region(), src, RED);
+        snippet(out, d.region(), src, d.severity() == Severity.WARNING ? YELLOW : RED);
         for (LabeledRegion sec : d.secondary()) {
             out.append('\n');
             snippet(out, sec.region(), src, CYAN);
@@ -69,7 +70,24 @@ public final class HumanRenderer implements DiagnosticRenderer {
         out.append(color(CYAN, bar.toString())).append('\n');
     }
 
+    /**
+     * The header's title. A diagnostic that names what it is about keeps that name and says its
+     * severity beside it; one that names nothing is titled by its severity alone. A warning is
+     * marked either way, since the code and the message read the same for both and the bar is the
+     * only place the difference can be seen.
+     */
     private String title(Diagnostic d, Locale locale) {
+        String specific = specificTitle(d, locale);
+        if (d.severity() != Severity.WARNING) {
+            return specific != null ? specific : Messages.get("diag.error.title", locale);
+        }
+        String warning = Messages.get("diag.warning.title", locale);
+        return specific != null ? specific + " (" + warning + ")" : warning;
+    }
+
+    /** What this diagnostic is about — its own title, or the one its code carries — or null when it
+     *  names neither and only its severity is left to title it with. */
+    private String specificTitle(Diagnostic d, Locale locale) {
         if (d.titleKey() != null && Messages.has(d.titleKey(), locale)) {
             return Messages.get(d.titleKey(), locale);
         }
@@ -79,7 +97,7 @@ public final class HumanRenderer implements DiagnosticRenderer {
                 return Messages.get(key, locale);
             }
         }
-        return Messages.get("diag.error.title", locale);
+        return null;
     }
 
     private String location(SourcePos pos, SourceContext src) {

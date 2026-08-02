@@ -136,6 +136,17 @@ public class CompileException extends RuntimeException {
         return sources == null || i >= sources.size() ? NO_SOURCE : sources.get(i);
     }
 
+    /** Every diagnostic this error carries, each with the source it came from — what a renderer
+     *  walks, and the shape a warning arrives in too, so one loop renders both. */
+    public List<Located> locatedDiagnostics() {
+        List<Diagnostic> ds = diagnostics();
+        List<Located> located = new java.util.ArrayList<>(ds.size());
+        for (int i = 0; i < ds.size(); i++) {
+            located.add(new Located(ds.get(i), sourceIndexOf(i)));
+        }
+        return List.copyOf(located);
+    }
+
     /**
      * The same error, tagged with the source being compiled when it was thrown. The first tag wins:
      * an inner phase that already named its source keeps it, so a surrounding loop may tag freely.
