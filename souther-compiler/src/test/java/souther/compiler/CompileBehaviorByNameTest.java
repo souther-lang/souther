@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -179,6 +180,87 @@ class CompileBehaviorByNameTest {
                 """, Map.of("xs", List.of(1L, 2L)));
 
         assertEquals(List.of(2L, 3L), out.get("ys"));
+    }
+
+    /**
+     * A helper reaches no behavior, and that is one answer for the name however it is written. The
+     * helper is checked standing on its own as well as expanded into what calls it, so both
+     * readings have to say the same thing — a name in an argument said E1401 and the same name
+     * bound to a {@code let} first said it could not be held as a value, which sends the reader
+     * after a rule about bindings that does not exist.
+     */
+    @Test
+    void aHelperReachesNoBehaviorInEitherPosition() {
+        String helper = """
+                module demo
+
+                data In = { xs: List<Int> }
+                data Out = { ys: List<Int> }
+
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n * 2
+
+                let mapped (xs: List<Int>) = %s
+
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { ys = mapped(i.xs) }
+                """;
+
+        CompileException handed = assertThrows(CompileException.class,
+                () -> Compiler.compile(helper.formatted("List.map(twice, xs)")));
+        CompileException bound = assertThrows(CompileException.class,
+                () -> Compiler.compile(helper.formatted("""
+                        {
+                            let f = twice
+                            List.map(f, xs)
+                        }""")));
+
+        assertEquals("E1401", handed.diagnostic().code());
+        assertEquals(handed.diagnostic().code(), bound.diagnostic().code());
+    }
+
+    /**
+     * The same behavior in both positions, whichever one the name reaches. A module declaring a
+     * behavior and importing one of the same spelling is the case where the two could come apart:
+     * the arity a name is expanded to and the behavior a call lands on are read from two tables,
+     * and a binding must not be the position where they disagree.
+     */
+    @Test
+    void aBoundNameAndAWrittenNameReachTheSameBehavior() {
+        String up = """
+                module up exposing ( twice )
+
+                behavior twice : (n: Int) -> Int
+                let twice (n) = n * 2
+                """;
+        String demo = """
+                module demo
+
+                import up ( twice )
+
+                data In = { n: Int }
+                data Out = { n: Int }
+
+                behavior twice : (a: Int, b: Int) -> Int
+                let twice (a, b) = a * b
+
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = %s
+                """;
+
+        assertEquals(reached(up, demo.formatted("Out { n = twice(i.n, 3) }")),
+                reached(up, demo.formatted("""
+                        {
+                            let f = twice
+                            Out { n = f(i.n, 3) }
+                        }""")));
+    }
+
+    /** Which behavior classes the emitted body of {@code demo.go} references. */
+    private static List<String> reached(String up, String demo) {
+        String impl = new String(Compiler.compileModules(List.of(up, demo)).get("demo.Go$Impl"),
+                java.nio.charset.StandardCharsets.ISO_8859_1);
+        return Stream.of("demo/Twice", "up/Twice").filter(impl::contains).toList();
     }
 
     /**

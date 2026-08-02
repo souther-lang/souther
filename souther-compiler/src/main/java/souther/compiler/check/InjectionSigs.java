@@ -6,6 +6,7 @@ import souther.compiler.types.Type;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -108,5 +109,19 @@ public final class InjectionSigs {
             }
         }
         return sigs;
+    }
+
+    /**
+     * The same behaviors, with only how many inputs each takes — what turning one of their names
+     * into a function value needs (spec {@code [#blocks]}).
+     *
+     * <p>The expansion that does it is written before anything is typed, so it cannot read a
+     * signature. One projection rather than one per caller, so a body expanded for the backend and a
+     * helper expanded for its own check answer the same about the same name.
+     */
+    public static Map<String, Integer> arities(Map<String, ReqSig> sigs) {
+        Map<String, Integer> arities = new LinkedHashMap<>();
+        sigs.forEach((name, sig) -> arities.put(name, sig.params().size()));
+        return arities;
     }
 }

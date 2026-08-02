@@ -457,11 +457,7 @@ public final class Bodies {
             if (!sigs.present()) {
                 return Answer.absent();
             }
-            Map<String, Integer> arities = new LinkedHashMap<>();
-            for (Map.Entry<String, ReqSig> e : sigs.value().entrySet()) {
-                arities.put(e.getKey(), e.getValue().params().size());
-            }
-            return Answer.of(Ordered.map(arities));
+            return Answer.of(Ordered.map(InjectionSigs.arities(sigs.value())));
         }
     }
 
@@ -786,12 +782,15 @@ public final class Bodies {
             Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
             Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
-            if (!def.present() || !helpers.present() || !recursive.present()) {
+            Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
+            if (!def.present() || !helpers.present() || !recursive.present()
+                    || !behaviors.present()) {
                 return Answer.absent();
             }
             try {
                 return Answer.of(Lower.body(def.value(),
-                        HelperInliner.forHelpers(module, helpers.value(), InliningPolicy.DISCHARGE),
+                        HelperInliner.forHelpers(module, helpers.value(), InliningPolicy.DISCHARGE)
+                                .namingBehaviors(behaviors.value()),
                         recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);

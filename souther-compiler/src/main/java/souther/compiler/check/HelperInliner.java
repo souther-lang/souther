@@ -1282,9 +1282,9 @@ public final class HelperInliner {
      * <p>Empty covers a declaration taking nothing and every name that stands for no declaration at
      * all: a binding, a construction, a library name the library does not declare, and a behavior
      * this body may not name. Each of those is left as it was written and reported where it is
-     * used. A declaration taking nothing is two things under one answer — a library value, which is
-     * already the value it is, and a behavior taking no input, which has no function value because
-     * a block taking no parameter is not a shape this language writes.
+     * used. A declaration taking nothing has no function value to become rather than one this
+     * declines to make: a {@code let} with no parameter list is a value and is written without
+     * {@code ()}, and there is no block taking no parameter to expand it to.
      */
     private OptionalInt declarationArity(Ast.Var v) {
         int arity = switch (v.denotes()) {
