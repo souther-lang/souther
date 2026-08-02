@@ -376,4 +376,102 @@ class RunnerTest {
         // The generated class lands in the file-stem package; driving it confirms the name resolves.
         assertEquals("\"ok\"", Runner.run(file, "id", "\"ok\""));
     }
+
+    /** {@code --input} with nothing in it is input of the wrong shape, which is a refusal the reader
+     * can act on rather than a null the runner then walks into. */
+    @Test
+    void anEmptyInputIsReportedRatherThanThrown() throws Exception {
+        Path file = write("pair.sou", """
+                data Pair = { left: Int, right: Int }
+                behavior mkPair : (a: Int, b: Int) -> Pair constructs Pair
+                let mkPair (a, b) = Pair { left = a, right = b }
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "mkPair", "   "));
+        assertEquals(1, e.exitCode);
+        assertTrue(e.getMessage().contains("must be a JSON array"), e.getMessage());
+    }
+
+    // --- depth at the boundary ------------------------------------------------------------------
+
+    /** {@code levels} levels of {@code {"n": 1, "kids": [ ... ]}}, the shape self-referential data
+     * arrives in. Each level spends two levels of JSON: the object and the list. */
+    private static String nestedTree(int levels) {
+        return "{\"n\":1,\"kids\":[".repeat(levels) + "]}".repeat(levels);
+    }
+
+    /** A JSON array of {@code count} numbers — flat input, whatever the behavior builds from it. */
+    private static String counting(int count) {
+        StringBuilder json = new StringBuilder("[");
+        for (int i = 0; i < count; i++) {
+            json.append(i == 0 ? "" : ",").append(i);
+        }
+        return json.append("]").toString();
+    }
+
+    /**
+     * Input deeper than the boundary reads is a decode failure like any other: it names the path it
+     * gave up at, and counts the nesting in JSON rather than in the parser's words.
+     */
+    @Test
+    void anInputDeeperThanTheBoundaryReadsNamesThePathItGaveUpAt() throws Exception {
+        Path file = write("tree.sou", """
+                data Node = { n: Int, kids: List<Node> }
+                data Out = { n: Int }
+                behavior top : (t: Node) -> Out constructs Out
+                let top (t) = Out { n = t.n }
+                """);
+        assertEquals("{\"n\":1}", Runner.run(file, "top", nestedTree(250)));
+
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "top", nestedTree(251)));
+        assertEquals(1, e.exitCode);
+        assertTrue(e.getMessage().contains("/kids/0/kids"), e.getMessage());
+        assertTrue(e.getMessage().contains("past 500 levels"), e.getMessage());
+        assertFalse(e.getMessage().contains("StreamReadConstraints"), e.getMessage());
+        assertTrue(e.localized(java.util.Locale.JAPANESE).contains("深さ"),
+                e.localized(java.util.Locale.JAPANESE));
+    }
+
+    /**
+     * Output deeper than the boundary writes is reported the same way. A behavior can build a value
+     * deeper than anything it was handed, so this is reachable from input the boundary accepted.
+     */
+    @Test
+    void anOutputDeeperThanTheBoundaryWritesNamesThePathItGaveUpAt() throws Exception {
+        Path file = write("nest.sou", """
+                data Node = { kids: List<Node> }
+                behavior nest : (xs: List<Int>) -> Node constructs Node
+                let nest (xs) = List.fold((acc, x) -> Node { kids = [acc] }, Node { kids = [] }, xs)
+                """);
+        assertEquals("{\"kids\":[{\"kids\":[]}]}", Runner.run(file, "nest", "[1]"));
+
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "nest", counting(600)));
+        assertEquals(1, e.exitCode);
+        assertTrue(e.getMessage().contains("/kids/0/kids"), e.getMessage());
+        assertFalse(e.getMessage().contains("StreamWriteConstraints"), e.getMessage());
+        assertFalse(e.getMessage().contains("java.util"), e.getMessage());
+        assertTrue(e.localized(java.util.Locale.JAPANESE).contains("深さ"),
+                e.localized(java.util.Locale.JAPANESE));
+    }
+
+    /**
+     * Deeper still, the encoder runs out of stack before the writer ever counts a level. That is not
+     * a {@code RuntimeException}, so left alone it reaches the caller as a stack trace.
+     */
+    @Test
+    void anOutputTooDeepToEncodeIsReportedRatherThanThrown() throws Exception {
+        Path file = write("nest.sou", """
+                data Node = { kids: List<Node> }
+                behavior nest : (xs: List<Int>) -> Node constructs Node
+                let nest (xs) = List.fold((acc, x) -> Node { kids = [acc] }, Node { kids = [] }, xs)
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "nest", counting(20000)));
+        assertEquals(1, e.exitCode);
+        assertTrue(e.getMessage().contains("encode"), e.getMessage());
+        assertTrue(e.localized(java.util.Locale.JAPANESE).contains("エンコード"),
+                e.localized(java.util.Locale.JAPANESE));
+    }
 }
