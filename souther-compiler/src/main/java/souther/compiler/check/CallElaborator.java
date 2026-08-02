@@ -8,9 +8,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Localizable;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
-import java.util.Set;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,9 +24,9 @@ public final class CallElaborator {
 
     private CallElaborator() {}
 
-    /** The members of a primitive-headed union — {@code Int | DivisionByZero} — the output of a
-     * partial built-in. The head is a primitive case, and the error case is declared by the runtime
-     * rather than by a module (see {@link TypeName#RUNTIME}). */
+    /** Where the element whose order is required sits in a kernel's result. */
+    private enum OrderedElement { OF_THE_LIST, OF_THE_OPTION }
+
     /**
      * The kernels whose element must be an ordered value, and where in the result to find it.
      *
@@ -36,9 +34,6 @@ public final class CallElaborator {
      * say (ADR-0053). The declaration states the shape and this states the rest, keyed by the kernel
      * it constrains — which is what {@code sort} has always done, written out by hand.
      */
-    /** Where the element whose order is required sits in a kernel's result. */
-    private enum OrderedElement { OF_THE_LIST, OF_THE_OPTION }
-
     private static final Map<String, OrderedElement> ORDERED_ELEMENT = Map.of(
             "list.sort", OrderedElement.OF_THE_LIST,
             "list.max", OrderedElement.OF_THE_OPTION,
