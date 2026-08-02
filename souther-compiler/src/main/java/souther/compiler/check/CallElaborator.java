@@ -174,6 +174,18 @@ public final class CallElaborator {
             Elaborator.requireType(args.get(i), c.type(), expected, ctx.symbols(), what);
         }
 
+        /** Argument {@code i}, elaborated once by {@link #type}, required to fit {@code required}
+         *  now that the signature's variables are settled. Reads the stored core — the
+         *  expression's own type did not change, only what is asked of it — so nothing is
+         *  elaborated twice. */
+        void requireTyped(int i, Type required, String what) {
+            if (cores[i] == null) {
+                throw new IllegalStateException(
+                        "argument " + (i + 1) + " required before it was typed");
+            }
+            Elaborator.requireType(args.get(i), cores[i].type(), required, ctx.symbols(), what);
+        }
+
         /** Argument {@code i} as a block (or a function value standing in for one), returning the
          * result type the block yields at {@code paramTypes}. */
         Type block(int i, String fnName, List<Type> paramTypes) {
@@ -286,6 +298,102 @@ public final class CallElaborator {
      * the library, then a function-typed binding, then an injected behavior — and a name that could
      * be read two ways was whichever came first.
      */
+    /** What one application of a declared signature settled: the declared result with the
+     *  signature's variables substituted, and that substitution itself — for the checks a kernel
+     *  runs on the outcome. Settled at construction: the map is copied, not shared with the
+     *  unifier. */
+    private record Applied(Type result, Map<String, Type> substitution) {
+        private Applied {
+            substitution = Map.copyOf(substitution);
+        }
+    }
+
+    /**
+     * Types an application against a declared signature — the same four steps whichever holds the
+     * signature, a kernel declaration or a function type in scope (a function-typed parameter, a
+     * recursive helper's signature):
+     *
+     * <ol>
+     *   <li>pin the result's type variables from the expected type, only where a function argument
+     *       waits on them — a fold whose seed is {@code []}/{@code Map.empty} has its accumulator
+     *       bound from the context before the step is checked (issue #70). With no function
+     *       argument nothing waits, and pinning anyway would answer an argument mismatch against
+     *       the type the context wanted rather than the one the declaration asks for;</li>
+     *   <li>type the value arguments and unify each with its declared parameter. A parameter typed
+     *       {@code RoundingMode} is not an expression but a name the operation reads, so it is
+     *       checked as one and recorded untyped ([#stdlib-decimal]); no function type in scope can
+     *       carry that parameter, since the type is writable only by the library's own
+     *       signatures;</li>
+     *   <li>type the function arguments last, against parameter types the earlier arguments
+     *       settled. A failure that is genuinely an empty-collection seed nothing typed — one that
+     *       reported the unresolved bottom — is re-pointed at the seed rather than at the
+     *       arithmetic the bottom reached; an unrelated error in the step is rethrown untouched
+     *       (issue #70);</li>
+     *   <li>require each value argument against its settled parameter type, and substitute into
+     *       the declared result.</li>
+     * </ol>
+     *
+     * <p>Arity is the caller's to check first, in its own words; this throws where the two
+     * disagree rather than walking off the shorter list.
+     */
+    private static Applied applySignature(Ast.Apply call, Type.FnOf signature, CallArgs ca,
+                                          Type expected, Scope env, CheckContext ctx) {
+        List<Ast.Expr> args = call.args();
+        if (args.size() != signature.params().size()) {
+            throw new IllegalStateException("`" + call.written() + "` reached signature application"
+                    + " with " + args.size() + " argument(s) against " + signature.params().size());
+        }
+        boolean takesAFunction = signature.params().stream().anyMatch(Type.FnOf.class::isInstance);
+        Map<String, Type> bind = new HashMap<>();
+        if (takesAFunction) {
+            BottomInfer.pinResultTypeVars(signature.result(), expected, bind, ctx.symbols(),
+                    call.pos(), "result of " + call.written());
+        }
+        for (int i = 0; i < args.size(); i++) {
+            Type param = signature.params().get(i);
+            if (param instanceof Type.FnOf) {
+                continue;
+            }
+            if (isRoundingMode(param)) {
+                requireRoundingMode(call.written(), args.get(i));
+                ca.untyped(i);
+                continue;
+            }
+            TypeOps.unify(param, ca.type(i), bind, ctx.symbols(),
+                    call.pos(), "argument " + (i + 1) + " of " + call.written());
+        }
+        try {
+            for (int i = 0; i < args.size(); i++) {
+                if (signature.params().get(i) instanceof Type.FnOf declaredStep) {
+                    ca.put(i, Elaborator.resolveStepBinding(call.written(), declaredStep,
+                            args.get(i), bind, env, ctx));
+                }
+            }
+        } catch (CompileException stepError) {
+            int seed = BottomInfer.untypedEmptySeed(args, signature, bind, call.pos());
+            if (seed < 0 || !BottomInfer.reportsUnresolvedBottom(stepError)) {
+                throw stepError;
+            }
+            Diagnostic.Builder b = Diagnostic.of(null, "check.fold.seed.untyped")
+                    .title("check.fold.seed.title")
+                    .at(args.get(seed).pos(), Elaborator.width(args.get(seed)));
+            if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
+                b.secondary(stepError.diagnostic().region(), "check.fold.seed.here");
+            }
+            throw CompileException.of(b.build(),
+                    "cannot infer the element type of the empty collection seeding `"
+                            + call.written() + "`; annotate the declaration it feeds");
+        }
+        for (int i = 0; i < args.size(); i++) {
+            Type param = signature.params().get(i);
+            if (!(param instanceof Type.FnOf) && !isRoundingMode(param)) {
+                ca.requireTyped(i, TypeOps.substitute(param, bind),
+                        "argument " + (i + 1) + " of " + call.written());
+            }
+        }
+        return new Applied(TypeOps.substitute(signature.result(), bind), bind);
+    }
+
     static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
         List<Ast.Expr> args = call.args();
         if (call.denotes() == null) {
@@ -324,50 +432,25 @@ public final class CallElaborator {
                         call.written() + " takes " + intrinsic.params().size()
                                 + " argument(s) but is called with " + args.size());
             }
-            // The same three steps a helper's signature takes, for the same reasons: the context
-            // pins what it can before anything is read, the value arguments fix the rest, and a
-            // function argument is typed last — against parameter types the others have settled, so
-            // a block written there has them to be checked at.
-            //
-            // The pin is for the step's sake. With no function argument there is nothing waiting on
-            // it, and pinning anyway would answer an argument mismatch against the type the context
-            // wanted rather than against the one the declaration asks for.
-            boolean takesAFunction = intrinsic.params().stream().anyMatch(Type.FnOf.class::isInstance);
-            Map<String, Type> bindings = new HashMap<>();
-            if (takesAFunction) {
-                BottomInfer.pinResultTypeVars(intrinsic.result(), expected, bindings, ctx.symbols(),
-                        call.pos(), "result of " + call.written());
-            }
-            for (int i = 0; i < args.size(); i++) {
-                if (intrinsic.params().get(i) instanceof Type.FnOf) {
-                    continue;
-                }
-                // A rounding mode is not an expression: it is a name the operation taking it reads,
-                // so it is checked as one and carries no type of its own ([#stdlib-decimal]).
-                if (isRoundingMode(intrinsic.params().get(i))) {
-                    requireRoundingMode(call.written(), args.get(i));
-                    ca.untyped(i);
-                    continue;
-                }
-                TypeOps.unify(intrinsic.params().get(i), ca.type(i), bindings, ctx.symbols(),
-                        call.pos(), "argument " + (i + 1) + " of " + call.written());
-            }
-            for (int i = 0; i < args.size(); i++) {
-                if (intrinsic.params().get(i) instanceof Type.FnOf declaredStep) {
-                    ca.put(i, Elaborator.resolveStepBinding(call.written(), declaredStep, args.get(i),
-                            bindings, env, ctx));
-                    requiresOrderedKey(kernel.key(), call, declaredStep, bindings, ctx);
+            Applied applied = applySignature(call,
+                    new Type.FnOf(intrinsic.params(), intrinsic.result()), ca, expected, env, ctx);
+            // What remains is the kernel's own: constraints its key names on the outcome the
+            // signature could not state, and the emitter's special cases. They read the settled
+            // substitution and result — they are checks on what the application became, not part
+            // of how an application is typed.
+            for (Type param : intrinsic.params()) {
+                if (param instanceof Type.FnOf declaredStep) {
+                    requiresOrderedKey(kernel.key(), call, declaredStep, applied.substitution(), ctx);
                 }
             }
-            Type result = TypeOps.substitute(intrinsic.result(), bindings);
-            requiresOrdering(kernel.key(), call, result, ctx);
+            requiresOrdering(kernel.key(), call, applied.result(), ctx);
             if (kernel.key().equals("list.sum") || kernel.key().equals("list.product")) {
-                return numericFold(call, result, expected);
+                return numericFold(call, applied.result(), expected);
             }
             if (kernel.key().equals("string.matches")) {
                 validateRegexPattern(args.get(0));
             }
-            return result;
+            return applied.result();
         }
         return switch (library ? call.reaches() : "") {
             case "Date", "DateTime" -> {
@@ -390,62 +473,7 @@ public final class CallElaborator {
                                 "`" + call.written() + "` takes " + fn.params().size()
                                         + " argument(s) but is applied to " + args.size());
                     }
-                    // Resolve the signature's type variables from the value (non-function) arguments
-                    // first — a generic recursive helper like `foldFrom(step, seed, xs, i)` fixes `'acc`
-                    // from the seed and `'a` from the list. An empty-collection seed ([], Map.empty)
-                    // binds the accumulator to a bottom; the step's result then grows it to the concrete
-                    // type, so a function argument's result refines the binding (as the old fold did).
-                    Map<String, Type> bind = new HashMap<>();
-                    // Pin the result-type variables from the surrounding context first (issue #70): a
-                    // fold whose seed is Map.empty/[] has its accumulator `'acc` bound to the expected
-                    // result BEFORE the step (and any inlined Map.upsert closure) is checked, so the
-                    // seed's bottom no longer drives the step's parameter types.
-                    BottomInfer.pinResultTypeVars(fn.result(), expected, bind, ctx.symbols(), call.pos(),
-                            "result of " + call.written());
-                    for (int i = 0; i < args.size(); i++) {
-                        if (!(fn.params().get(i) instanceof Type.FnOf)) {
-                            Type at = ca.type(i);
-                            TypeOps.unify(fn.params().get(i), at, bind, ctx.symbols(), call.pos(), "argument " + (i + 1));
-                        }
-                    }
-                    // Type the step (function) arguments. A fold over an empty-collection seed whose
-                    // step needs the accumulator's element/value type can only get it from context;
-                    // with no expected type the accumulator stays a bottom and the step fails deep in
-                    // its (possibly inlined) body. Point at the seed — the empty collection whose type
-                    // could not be inferred — rather than the arithmetic/match the bottom reached (#70).
-                    try {
-                        for (int i = 0; i < args.size(); i++) {
-                            if (fn.params().get(i) instanceof Type.FnOf fp0) {
-                                ca.put(i, Elaborator.resolveStepBinding(call.written(), fp0, args.get(i), bind, env, ctx));
-                            }
-                        }
-                    } catch (CompileException stepError) {
-                        // Only re-point at the seed when the failure is genuinely the unresolved bottom:
-                        // an empty-collection seed whose accumulator type nothing fixed, and an error
-                        // that actually reported that bottom (`_`). An unrelated error in the step (an
-                        // unknown identifier, a real type clash) is rethrown untouched so it is not
-                        // masked. This fires whether or not a context type was pushed — an expected type
-                        // that did not fit still leaves the accumulator a bottom (issue #70).
-                        int seed = BottomInfer.untypedEmptySeed(args, fn, bind, call.pos());
-                        if (seed < 0 || !BottomInfer.reportsUnresolvedBottom(stepError)) {
-                            throw stepError;
-                        }
-                        Diagnostic.Builder b = Diagnostic.of(null, "check.fold.seed.untyped")
-                                .title("check.fold.seed.title")
-                                .at(args.get(seed).pos(), Elaborator.width(args.get(seed)));
-                        if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
-                            b.secondary(stepError.diagnostic().region(), "check.fold.seed.here");
-                        }
-                        throw CompileException.of(b.build(),
-                                "cannot infer the element type of the empty collection seeding `"
-                                        + call.written() + "`; annotate the declaration it feeds");
-                    }
-                    for (int i = 0; i < args.size(); i++) {
-                        if (!(fn.params().get(i) instanceof Type.FnOf)) {
-                            ca.require(i, TypeOps.substitute(fn.params().get(i), bind), "argument " + (i + 1) + " of " + call.written());
-                        }
-                    }
-                    yield TypeOps.substitute(fn.result(), bind);
+                    yield applySignature(call, fn, ca, expected, env, ctx).result();
                 }
                 // a library qualifier that matched no builtin or intrinsic above is a wrong stdlib
                 // call (spec §stdlib) — report it as such, not as a missing behavior.
