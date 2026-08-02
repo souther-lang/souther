@@ -142,6 +142,14 @@ public final class Prelude {
             }
             for (Ast.FnDef fn : module.fns()) {
                 String qualified = alias + "." + fn.name();
+                // One qualified name, one declaration. The library has no overloading: a name that
+                // reads two ways would have to be chosen between, and nothing at a value position
+                // could do the choosing. Put into a map, a second one would replace the first in
+                // silence, so it is refused where it is loaded.
+                if (INTRINSICS.containsKey(qualified) || HELPERS.containsKey(qualified)) {
+                    throw new IllegalStateException(
+                            "the standard library declares `" + qualified + "` twice");
+                }
                 if (fn.isIntrinsic()) {
                     List<Type> params = new ArrayList<>();
                     for (Ast.FnParam p : fn.params()) {

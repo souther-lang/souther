@@ -5,6 +5,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.diag.CompileException;
@@ -1209,6 +1210,9 @@ public final class HelperInliner {
      * itself.
      */
     private Ast.Expr valueOf(Ast.Var v) {
+        if (v.denotes() instanceof ValueName.Stdlib lib) {
+            return libraryValueOf(v, lib);
+        }
         if (!(v.denotes() instanceof ValueName.Helper)) {
             return v;
         }
@@ -1236,6 +1240,68 @@ public final class HelperInliner {
             return v;
         }
         return carriedByValue(inline(value.body()));
+    }
+
+    /**
+     * A library name written where a value goes, as the function it names.
+     *
+     * <p>The library declares everything it ships, so this asks the declaration and nothing else —
+     * not whether the implementation is a Souther body or a kernel, which is what is on the other
+     * side of the name and not the name's business. What comes back is the block a reader would
+     * have written by hand, which is what the specification says the two spellings are.
+     *
+     * <p>An empty collection is not a function: it is a declaration with no parameter list, so it is
+     * already the value it is and is left alone.
+     */
+    private Ast.Expr libraryValueOf(Ast.Var v, ValueName.Stdlib lib) {
+        Ast.FnDef declared = helpers.get(lib.qualified());
+        int arity = declared != null ? declared.params().size() : intrinsicArity(lib.qualified());
+        if (arity <= 0) {
+            return v;   // a value, or a name the library does not declare — reported where it is used
+        }
+        // A rounding mode is written at the call and read by name, so a block standing in for one of
+        // these would have to pass a binding where a name has to be. Said here rather than left to
+        // the arity mismatch the expansion would otherwise cause.
+        if (takesARoundingMode(lib.qualified())) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.stdlib.roundingmode.byname")
+                            .title("check.apply.notfunction.title")
+                            .at(v.pos(), v.name().length()).args(lib.qualified()).build(),
+                    "`" + lib.qualified() + "` takes a rounding mode, which is written at the call"
+                            + " and not passed as a value, so it cannot be handed over by name —"
+                            + " wrap it in a block that writes the mode");
+        }
+        int k = counter++;
+        List<Ast.Binder> params = new ArrayList<>();
+        List<Ast.Expr> args = new ArrayList<>();
+        for (int i = 0; i < arity; i++) {
+            Ast.Binder p = binders.binder("$v" + k + "_" + i, v.pos());
+            params.add(p);
+            args.add(Ast.Var.local(p, v.pos()));
+        }
+        return inline(new Ast.Block(params,
+                new Ast.Apply(v.name(), v.denotes(), args, ConstructionOrigin.own(), v.pos()),
+                v.pos()));
+    }
+
+    /** The parameters a shipped kernel declares, or -1 where the library declares no such kernel. */
+    private static int intrinsicArity(String qualified) {
+        Prelude.IntrinsicSig sig = Prelude.intrinsics().get(qualified);
+        return sig == null ? -1 : sig.params().size();
+    }
+
+    /** Whether a declaration takes a rounding mode — a name the operation reads, not a value. */
+    private static boolean takesARoundingMode(String qualified) {
+        Prelude.IntrinsicSig sig = Prelude.intrinsics().get(qualified);
+        if (sig == null) {
+            return false;
+        }
+        for (Type p : sig.params()) {
+            if (p instanceof Type.Ref r && r.name().equals(TypeOps.ROUNDING_MODE)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
