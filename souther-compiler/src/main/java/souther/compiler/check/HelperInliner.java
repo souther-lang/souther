@@ -1297,15 +1297,15 @@ public final class HelperInliner {
      * already the value it is and is left alone.
      */
     private Ast.Expr libraryValueOf(Ast.Var v, ValueName.Stdlib lib) {
-        Ast.FnDef declared = helpers.get(lib.qualified());
-        int arity = declared != null ? declared.params().size() : intrinsicArity(lib.qualified());
+        Ast.FnDef declared = Prelude.declarationOf(lib.qualified());
+        int arity = declared == null ? -1 : declared.params().size();
         if (arity <= 0) {
             return v;   // a value, or a name the library does not declare — reported where it is used
         }
         // A rounding mode is written at the call and read by name, so a block standing in for one of
         // these would have to pass a binding where a name has to be. Said here rather than left to
         // the arity mismatch the expansion would otherwise cause.
-        if (takesARoundingMode(lib.qualified())) {
+        if (takesARoundingMode(declared)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.stdlib.roundingmode.byname")
                             .title("check.apply.notfunction.title")
@@ -1327,20 +1327,12 @@ public final class HelperInliner {
                 v.pos()));
     }
 
-    /** The parameters a shipped kernel declares, or -1 where the library declares no such kernel. */
-    private static int intrinsicArity(String qualified) {
-        Prelude.IntrinsicSig sig = Prelude.intrinsics().get(qualified);
-        return sig == null ? -1 : sig.params().size();
-    }
-
     /** Whether a declaration takes a rounding mode — a name the operation reads, not a value. */
-    private static boolean takesARoundingMode(String qualified) {
-        Prelude.IntrinsicSig sig = Prelude.intrinsics().get(qualified);
-        if (sig == null) {
-            return false;
-        }
-        for (Type p : sig.params()) {
-            if (p instanceof Type.Ref r && r.name().equals(TypeOps.ROUNDING_MODE)) {
+    private static boolean takesARoundingMode(Ast.FnDef declared) {
+        for (Ast.FnParam p : declared.params()) {
+            if (p.type() != null && p.type().cases().size() == 1
+                    && p.type().cases().get(0) instanceof Ast.TypeRef ref
+                    && ref.name().equals(TypeOps.ROUNDING_MODE.name())) {
                 return true;
             }
         }

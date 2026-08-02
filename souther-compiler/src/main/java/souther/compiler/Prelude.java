@@ -64,6 +64,12 @@ public final class Prelude {
     public record IntrinsicSig(String name, List<Type> params, Type result, String key) {
     }
 
+    /** Every declaration the library ships, keyed by qualified name — the {@code let} as it was
+     *  written, whether its implementation is a Souther body or a shipped kernel. What is on the
+     *  other side of the name is not the name's business, so a reader asking what a library function
+     *  takes and answers asks this and stops. */
+    private static final Map<String, Ast.FnDef> DECLARATIONS = new LinkedHashMap<>();
+
     /** Helpers keyed by qualified name, e.g. {@code "List.map"}. */
     private static final Map<String, Ast.FnDef> HELPERS = new LinkedHashMap<>();
     /** Intrinsics keyed by qualified name, e.g. {@code "String.trim"}. */
@@ -112,6 +118,11 @@ public final class Prelude {
                 || SUGARED.contains(qualifiedName);
     }
 
+    /** The declaration of a library function, or null where the library declares no such name. */
+    public static Ast.FnDef declarationOf(String qualifiedName) {
+        return DECLARATIONS.get(qualifiedName);
+    }
+
     /** The helper functions of the prelude (inlined at call sites), keyed by qualified name. */
     public static Map<String, Ast.FnDef> helpers() {
         return HELPERS;
@@ -150,6 +161,7 @@ public final class Prelude {
                     throw new IllegalStateException(
                             "the standard library declares `" + qualified + "` twice");
                 }
+                DECLARATIONS.put(qualified, fn);
                 if (fn.isIntrinsic()) {
                     List<Type> params = new ArrayList<>();
                     for (Ast.FnParam p : fn.params()) {
