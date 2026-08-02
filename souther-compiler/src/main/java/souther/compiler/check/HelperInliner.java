@@ -1172,15 +1172,37 @@ public final class HelperInliner {
             case Ast.If iff -> new Ast.If(inline(iff.cond()), inline(iff.then()), inline(iff.els()), iff.pos());
             case Ast.IfConstructed ic -> new Ast.IfConstructed(inline(ic.construct()), ic.binder(),
                     inline(ic.then()), Ast.mapArms(ic.els(), this::inline), ic.pos());
-            case Ast.LetIn li when li.value() instanceof Ast.Block lambda -> {
-                // a lambda bound to a local: registered under that binding, so each application of it
-                // in the body expands inline (β-reduction) exactly as a named helper does. Its
+            case Ast.LetIn li -> {
+                // What the value turns out to be is what decides this, so it is worked out first: a
+                // lambda the author wrote and a named function read as a value are the same block by
+                // the time either gets here, and a `let` should not tell them apart.
+                Ast.Expr value = inline(li.value());
+                // A binding that holds a function, read into another binding: the second names the
+                // same function, so it is registered under it. Nothing is copied — what a name means
+                // is what it was given, and here it was given a binding.
+                Ast.FnDef aliased = value instanceof Ast.Var v ? expands(v.denotes(), v.name()) : null;
+                if (aliased != null) {
+                    BindingId alias = li.binder().id();
+                    scopedLambdas.put(alias, aliased);
+                    Ast.Expr aliasBody = inline(li.body());
+                    scopedLambdas.remove(alias);
+                    yield references(aliasBody, alias)
+                            ? new Ast.LetIn(li.binder(), value, li.declaredType(), li.annotated(),
+                                    li.opens(), aliasBody, li.pos())
+                            : aliasBody;
+                }
+                if (!(value instanceof Ast.Block lambda)) {
+                    yield new Ast.LetIn(li.binder(), value, li.declaredType(), li.annotated(),
+                            li.opens(), inline(li.body()), li.pos());
+                }
+                // a function bound to a local: registered under that binding, so each application of
+                // it in the body expands inline (β-reduction) exactly as a named helper does. Its
                 // parameters are untyped, so their types flow in from the arguments at expansion. No
-                // runtime closure is built as long as the lambda does not escape.
+                // runtime closure is built as long as it does not escape.
                 //
-                // The lambda cannot reach itself: a `let` does not bind its own name in its value
-                // (spec 16.1), so a name inside spelled like it is whatever it was outside, and
-                // expansion follows what a name denotes rather than how it is spelled.
+                // It cannot reach itself: a `let` does not bind its own name in its value (spec
+                // 16.1), so a name inside spelled like it is whatever it was outside, and expansion
+                // follows what a name denotes rather than how it is spelled.
                 List<Ast.FnParam> params = new ArrayList<>();
                 for (Ast.Binder p : lambda.params()) {
                     params.add(new Ast.FnParam(p, null));
@@ -1190,15 +1212,14 @@ public final class HelperInliner {
                         new Ast.FnDef(li.name(), params, null, null, lambda.body(), li.pos()));
                 Ast.Expr body = inline(li.body());
                 scopedLambdas.remove(bound);
-                // if the binding is still read, the lambda was used as a value, not just applied — it
-                // escapes, which needs a runtime closure. Keep the binding so the "a block is not a
-                // value" check reports it.
+                // if the binding is still read, the function was used as a value, not just applied —
+                // it escapes, which needs a runtime closure. Keep the binding so the check that
+                // reports an escaping block sees it.
                 yield references(body, bound)
-                        ? new Ast.LetIn(li.binder(), inline(lambda), li.declaredType(), li.annotated(), li.opens(), body, li.pos())
+                        ? new Ast.LetIn(li.binder(), lambda, li.declaredType(), li.annotated(),
+                                li.opens(), body, li.pos())
                         : body;
             }
-            case Ast.LetIn li -> new Ast.LetIn(li.binder(), inline(li.value()), li.declaredType(), li.annotated(), li.opens(),
-                    inline(li.body()), li.pos());
             case Ast.ListLit lit -> new Ast.ListLit(inlineList(lit.elements()), lit.pos());
             case Ast.Tuple tup -> new Ast.Tuple(inlineList(tup.elements()), tup.pos());
             case Ast.TupleGet tg -> new Ast.TupleGet(inline(tg.tuple()), tg.index(), tg.arity(), tg.pos());
