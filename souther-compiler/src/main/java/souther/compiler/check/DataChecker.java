@@ -184,7 +184,7 @@ public final class DataChecker {
             case Ast.FieldAccess fa -> collectConstructs(fa.target(), out, symbols, recConstructs);
             case Ast.Tuple tup -> tup.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
             case Ast.TupleGet tg -> collectConstructs(tg.tuple(), out, symbols, recConstructs);
-            case Ast.Call call -> {
+            case Ast.Apply call -> {
                 // a recursive helper is not inlined, so its own (transitive) constructions are
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be —
                 // each as the kind it already is, so one another module published stays that

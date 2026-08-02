@@ -50,7 +50,7 @@ public final class ConstEval {
             case Ast.BoolLit b -> Optional.of(b.value());
             case Ast.Neg neg -> negate(eval(neg.operand()).orElse(null));
             case Ast.Binary bin -> binary(bin);
-            case Ast.Call call -> call(call);
+            case Ast.Apply call -> call(call);
             default -> Optional.empty();
         };
     }
@@ -139,7 +139,7 @@ public final class ConstEval {
         return Optional.empty();
     }
 
-    private static Optional<Object> call(Ast.Call call) {
+    private static Optional<Object> call(Ast.Apply call) {
         List<Ast.Expr> args = call.args();
         switch (call.fn()) {
             case "length", "String.length" -> {

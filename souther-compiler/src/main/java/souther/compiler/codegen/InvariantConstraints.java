@@ -111,7 +111,7 @@ final class InvariantConstraints {
      * empty when this cannot prove one.
      */
     static Optional<Constraint> of(Ast.Expr clause, Type base) {
-        if (clause instanceof Ast.Call call) {
+        if (clause instanceof Ast.Apply call) {
             return ofCall(call, base);
         }
         if (!(clause instanceof Ast.Binary bin)) {
@@ -188,7 +188,7 @@ final class InvariantConstraints {
 
     /** The literal bound {@code size(value)} is compared against, or null when this is not that shape. */
     private static Integer sizeBound(String size, Ast.Expr left, Ast.Expr right) {
-        if (!(left instanceof Ast.Call call) || !call.fn().equals(size)
+        if (!(left instanceof Ast.Apply call) || !call.fn().equals(size)
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return null;
         }
@@ -199,7 +199,7 @@ final class InvariantConstraints {
         return bound.intValue();
     }
 
-    private static Optional<Constraint> ofCall(Ast.Call call, Type base) {
+    private static Optional<Constraint> ofCall(Ast.Apply call, Type base) {
         // `String.matches(p, value)` is whole-string anchored (Strings.matches), and so is Raoh's
         // pattern (Matcher.matches), so the two accept the same strings. The regex is asked for the
         // same way the check asks — one reading of which expressions are compile-time strings and of
@@ -222,7 +222,7 @@ final class InvariantConstraints {
     }
 
     private static Optional<Constraint> ofStringLength(Ast.BinOp op, Ast.Expr left, Ast.Expr right) {
-        if (!(left instanceof Ast.Call call) || !call.fn().equals("String.length")
+        if (!(left instanceof Ast.Apply call) || !call.fn().equals("String.length")
                 || call.args().size() != 1 || !isValue(call.args().get(0))) {
             return Optional.empty();
         }
@@ -288,7 +288,7 @@ final class InvariantConstraints {
         if (isValue(e)) {
             return true;
         }
-        return e instanceof Ast.Call call && call.args().size() == 1 && isValue(call.args().get(0));
+        return e instanceof Ast.Apply call && call.args().size() == 1 && isValue(call.args().get(0));
     }
 
     private static boolean isValue(Ast.Expr e) {

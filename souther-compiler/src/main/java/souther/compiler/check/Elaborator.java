@@ -224,7 +224,7 @@ public final class Elaborator {
                 default -> throw notAValue(v, env);
             };
             case Ast.FieldAccess fa -> elaborateFieldAccess(fa, env, ctx);
-            case Ast.Call call -> CallElaborator.elaborateCall(call, env, ctx, expected);
+            case Ast.Apply call -> CallElaborator.elaborateCall(call, env, ctx, expected);
             case Ast.Binary bin -> BinaryElaborator.elaborateBinary(bin, env, ctx);
             case Ast.NewData nd -> {
                 Ast.Name built = nd.typeName();
@@ -724,7 +724,7 @@ public final class Elaborator {
     static void collectApplications(Ast.Binder binder, Ast.Expr e, Scope env,
                                             CheckContext ctx, List<List<Type>> out,
                                             Set<BindingId> inner) {
-        if (e instanceof Ast.Call call && call.denotes() instanceof ValueName.Local applied
+        if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Local applied
                 && applied.id().equals(binder.id())
                 && call.args().stream().noneMatch(a -> reaches(a, inner))) {
             List<Type> argTypes = new ArrayList<>();
@@ -781,7 +781,7 @@ public final class Elaborator {
         }
         ValueName denotes = switch (e) {
             case Ast.Var v -> v.denotes();
-            case Ast.Call c -> c.denotes();
+            case Ast.Apply c -> c.denotes();
             default -> null;
         };
         if (denotes instanceof ValueName.Local local && inner.contains(local.id())) {
@@ -1107,7 +1107,7 @@ public final class Elaborator {
             case Ast.BoolLit b -> b.value() ? 4 : 5;
             case Ast.DecimalLit d -> d.value().toPlainString().length() + 1;
             case Ast.FieldAccess fa -> fa.field().length();
-            case Ast.Call c -> c.fn().length();
+            case Ast.Apply c -> c.fn().length();
             default -> 1;
         };
     }

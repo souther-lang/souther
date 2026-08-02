@@ -659,7 +659,7 @@ public interface Ast {
     // --- expressions ---
 
     sealed interface Expr extends Ast
-            permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Call, Binary, Neg,
+            permits IntLit, DecimalLit, StringLit, BoolLit, Var, FieldAccess, Apply, Binary, Neg,
                     NewData, Match, If, IfConstructed, ListLit, ListComp, LetIn, Block, Tuple,
                     TupleGet, Unreachable {}
 
@@ -948,27 +948,48 @@ public interface Ast {
     record FieldAccess(Expr target, String field, SourcePos pos) implements Expr {}
 
     /**
-     * A call. {@code denotes} is what {@code fn} names — a helper, a library function, an injected
-     * behavior, a function-typed parameter, or the type a newtype construction wraps — answered once
-     * during resolution.
+     * A function applied to arguments. {@code function} is the thing being applied, and it is an
+     * expression like any other: what is applied is what it answers, not how the application was
+     * written.
+     *
+     * <p>Applying a name is the common case and has its own constructors and readers below. A name
+     * carries what it denotes — a helper, a library function, an injected behavior, a function-typed
+     * binding, or the type a newtype construction wraps — answered once during resolution.
      */
-    record Call(String fn, ValueName denotes, List<Expr> args, ConstructionOrigin origin,
-                SourcePos pos) implements Expr {
+    record Apply(Expr function, List<Expr> args, ConstructionOrigin origin, SourcePos pos)
+            implements Expr {
 
-        /** A call as the parser read it, before resolution has said what {@code fn} denotes. */
-        public Call(String fn, List<Expr> args, SourcePos pos) {
-            this(fn, null, args, ConstructionOrigin.own(), pos);
+        /** Applying a name, as the parser read it, before resolution has said what the name denotes. */
+        public Apply(String fn, List<Expr> args, SourcePos pos) {
+            this(new Var(fn, pos), args, ConstructionOrigin.own(), pos);
         }
 
-        public Call denoting(ValueName resolved) {
-            return new Call(fn, resolved, args, origin, pos);
+        /** Applying a name a pass already knows the meaning of. */
+        public Apply(String fn, ValueName denotes, List<Expr> args, ConstructionOrigin origin,
+                     SourcePos pos) {
+            this(new Var(fn, denotes, pos), args, origin, pos);
         }
 
-        /** The same call, carried into a body by a value that body named. A recursive helper is
-         * lowered to a method rather than expanded, so a value reaching one leaves a call where its
-         * constructions would otherwise stand, and the call is what has to say where it came from. */
-        public Call carriedByValue() {
-            return new Call(fn, denotes, args, origin.carriedByValue(), pos);
+        /** The name this applies as it was written, or null where what it applies is not a name. */
+        public String fn() {
+            return function instanceof Var v ? v.name() : null;
+        }
+
+        /** What the name this applies denotes, or null where what it applies is not a name. */
+        public ValueName denotes() {
+            return function instanceof Var v ? v.denotes() : null;
+        }
+
+        public Apply denoting(ValueName resolved) {
+            return new Apply(((Var) function).denoting(resolved), args, origin, pos);
+        }
+
+        /** The same application, carried into a body by a value that body named. A recursive helper
+         * is lowered to a method rather than expanded, so a value reaching one leaves an application
+         * where its constructions would otherwise stand, and it is what has to say where it came
+         * from. */
+        public Apply carriedByValue() {
+            return new Apply(function, args, origin.carriedByValue(), pos);
         }
     }
 
@@ -994,7 +1015,7 @@ public interface Ast {
             case Neg n -> new Neg(f.apply(n.operand()), n.pos());
             case FieldAccess fa -> new FieldAccess(f.apply(fa.target()), fa.field(), fa.pos());
             case Binary b -> new Binary(b.op(), f.apply(b.left()), f.apply(b.right()), b.pos());
-            case Call c -> new Call(c.fn(), c.denotes(), mapExprs(c.args(), f), c.origin(), c.pos());
+            case Apply a -> new Apply(f.apply(a.function()), mapExprs(a.args(), f), a.origin(), a.pos());
             case If iff -> new If(f.apply(iff.cond()), f.apply(iff.then()), f.apply(iff.els()), iff.pos());
             case IfConstructed ic -> new IfConstructed(f.apply(ic.construct()), ic.binder(),
                     f.apply(ic.then()), mapArms(ic.els(), f), ic.pos());
@@ -1042,7 +1063,10 @@ public interface Ast {
                 f.accept(b.left());
                 f.accept(b.right());
             }
-            case Call c -> c.args().forEach(f);
+            case Apply a -> {
+                f.accept(a.function());
+                a.args().forEach(f);
+            }
             case If iff -> {
                 f.accept(iff.cond());
                 f.accept(iff.then());

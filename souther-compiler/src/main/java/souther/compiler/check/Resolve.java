@@ -543,7 +543,7 @@ public final class Resolve {
         return switch (e) {
             case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
                     valueName(v.name(), v.pos(), bound)));
-            case Ast.Call call -> new Ast.Call(call.fn(),
+            case Ast.Apply call -> new Ast.Apply(call.fn(),
                     answered(call.fn(), call.pos(), calledName(call, bound)),
                     exprs(call.args(), bound), call.origin(), call.pos());
             case Ast.NewData nd -> {
@@ -649,7 +649,7 @@ public final class Resolve {
     }
 
     /** What the name a call applies denotes. */
-    private ValueName calledName(Ast.Call call, Bindings bound) {
+    private ValueName calledName(Ast.Apply call, Bindings bound) {
         String written = call.fn();
         ValueName.Local binding = bound.binderOf(written);
         if (binding != null) {

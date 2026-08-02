@@ -34,7 +34,7 @@ public final class CallElaborator {
                 List.of(TypeName.primitive(Type.show(head)), TypeName.runtime(errorCase)));
     }
 
-    static Core elaborateCall(Ast.Call call, Scope env, CheckContext ctx,
+    static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
                                       Type expected) {
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         Type result = typeOfCall(ca, call, env, ctx, expected);
@@ -136,7 +136,7 @@ public final class CallElaborator {
      * expanded, substituted or rewritten before the check ran, which is this compiler disagreeing
      * with itself and not something an author can act on.
      */
-    static RuntimeException noCallee(Ast.Call call) {
+    static RuntimeException noCallee(Ast.Apply call) {
         return switch (call.denotes()) {
             // a behavior named from a helper `let` or a `>->` composition, neither of which reaches
             // one (spec [#calling-a-behavior])
@@ -177,7 +177,7 @@ public final class CallElaborator {
         };
     }
 
-    private static IllegalStateException unelaborated(String what, Ast.Call call) {
+    private static IllegalStateException unelaborated(String what, Ast.Apply call) {
         return new IllegalStateException("`" + call.fn() + "` denotes " + what
                 + " and reached call elaboration unexpanded, at " + call.pos());
     }
@@ -190,7 +190,7 @@ public final class CallElaborator {
      * the library, then a function-typed binding, then an injected behavior — and a name that could
      * be read two ways was whichever came first.
      */
-    static Type typeOfCall(CallArgs ca, Ast.Call call, Scope env, CheckContext ctx, Type expected) {
+    static Type typeOfCall(CallArgs ca, Ast.Apply call, Scope env, CheckContext ctx, Type expected) {
         List<Ast.Expr> args = call.args();
         if (call.denotes() == null) {
             throw new IllegalStateException(
@@ -616,7 +616,7 @@ public final class CallElaborator {
      * that a sum does not go here — asking for an annotation would send the reader after something
      * the position already carries.
      */
-    private static Type numericFold(Ast.Call call, Type element, Type expected) {
+    private static Type numericFold(Ast.Apply call, Type element, Type expected) {
         if (element == Type.INT || element == Type.DECIMAL) {
             return element;
         }
@@ -676,7 +676,7 @@ public final class CallElaborator {
      * build rather than a run (and an {@code example} fixture, which may only hold literals, can
      * carry a date at all). A computed date comes from the boundary or from {@code Date.addDays},
      * not from this form. */
-    static Type temporalLiteral(Ast.Call call) {
+    static Type temporalLiteral(Ast.Apply call) {
         boolean isDate = call.fn().equals("Date");
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
             throw CompileException.of(
@@ -705,7 +705,7 @@ public final class CallElaborator {
         }
     }
 
-    static void arity(Ast.Call call, int n) {
+    static void arity(Ast.Apply call, int n) {
         if (call.args().size() != n) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.arity").title("check.arity.title")

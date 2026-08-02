@@ -220,7 +220,7 @@ public final class HelperTyping {
      * §invariant-expressions). A total helper — including the stdlib fold behind the list
      * quantifiers — is admissible and not in {@code partial}. */
     static void rejectPartialHelperInInvariant(Ast.Expr e, String data, Set<String> partial) {
-        if (e instanceof Ast.Call call && partial.contains(call.fn())) {
+        if (e instanceof Ast.Apply call && partial.contains(call.fn())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.invariant.partial").title("check.invariant.invalid.title")
                             .at(call.pos(), call.fn().length()).args(data, call.fn()).build(),
@@ -294,7 +294,7 @@ public final class HelperTyping {
 
     /** Rejects a call to an injected behavior inside a recursive helper: it is pure (spec 13.1). */
     private static void rejectInjectedCalls(Ast.Expr e, String helper, Set<String> injected) {
-        if (e instanceof Ast.Call call && injected.contains(call.fn())) {
+        if (e instanceof Ast.Apply call && injected.contains(call.fn())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.rechelper.pure").title("check.helper.title")
                             .at(call.pos(), call.fn().length()).args(helper, call.fn()).build(),
@@ -320,13 +320,13 @@ public final class HelperTyping {
      */
     static void checkFunctionArgs(Ast.Expr e, Scope env, Symbols symbols,
                                           Map<String, ReqSig> reqs, HelperInliner inliner) {
-        if (e instanceof Ast.Call call) {
+        if (e instanceof Ast.Apply call) {
             checkHelperCallFnArgs(call, env, symbols, reqs, inliner);
         }
         TypeChecker.forEachChild(e, sub -> checkFunctionArgs(sub, env, symbols, reqs, inliner));
     }
 
-    private static void checkHelperCallFnArgs(Ast.Call call, Scope env, Symbols symbols,
+    private static void checkHelperCallFnArgs(Ast.Apply call, Scope env, Symbols symbols,
                                               Map<String, ReqSig> reqs, HelperInliner inliner) {
         // what the call applies, which a binding of a helper's spelling is not: applying a
         // function-typed parameter is not a call to the helper it happens to be named after
@@ -507,7 +507,7 @@ public final class HelperTyping {
 
     /** Collects the names in {@code names} that {@code e} calls (a recursive-helper call graph edge). */
     private static void collectCalls(Ast.Expr e, Set<String> out, Set<String> names) {
-        if (e instanceof Ast.Call call && names.contains(call.fn())) {
+        if (e instanceof Ast.Apply call && names.contains(call.fn())) {
             out.add(call.fn());
         }
         TypeChecker.forEachChild(e, c -> collectCalls(c, out, names));

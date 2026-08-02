@@ -103,7 +103,7 @@ public final class Exposing {
 
     private Ast.Expr rw(Ast.Expr e) {
         return switch (e) {
-            case Ast.Call c -> {
+            case Ast.Apply c -> {
                 List<Ast.Expr> args = new ArrayList<>();
                 for (Ast.Expr a : c.args()) {
                     args.add(rw(a));
@@ -112,7 +112,7 @@ public final class Exposing {
                 if (fn.indexOf('.') < 0 && exposed.containsKey(fn)) {
                     fn = exposed.get(fn);
                 }
-                yield new Ast.Call(fn, args, c.pos());
+                yield new Ast.Apply(fn, args, c.pos());
             }
             case Ast.Binary b -> new Ast.Binary(b.op(), rw(b.left()), rw(b.right()), b.pos());
             case Ast.If iff -> new Ast.If(rw(iff.cond()), rw(iff.then()), rw(iff.els()), iff.pos());

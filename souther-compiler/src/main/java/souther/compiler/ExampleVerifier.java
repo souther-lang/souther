@@ -791,7 +791,7 @@ public final class ExampleVerifier {
      */
     private Object helperAnswer(Ast.Expr e, Set<String> followed) {
         return switch (e) {
-            case Ast.Call c when appliedHelper(c) instanceof Ast.FnDef helper -> answered(c, helper);
+            case Ast.Apply c when appliedHelper(c) instanceof Ast.FnDef helper -> answered(c, helper);
             case Ast.LetIn let -> helperAnswer(let.body(), followed);
             // a binding holds what it was bound to; a value stands for the body it was defined as.
             // A name that denotes a type is a case, and no helper answered it.
@@ -830,7 +830,7 @@ public final class ExampleVerifier {
         if (expected instanceof Ast.NewData nd) {
             return nd.typeName().written();
         }
-        if (expected instanceof Ast.Call c && neutral.isNewtype(c.fn())) {
+        if (expected instanceof Ast.Apply c && neutral.isNewtype(c.fn())) {
             return c.fn();
         }
         return null;   // a literal expected (a primitive output)
@@ -873,7 +873,7 @@ public final class ExampleVerifier {
     private TypeName constructedCase(Ast.Expr e, Set<String> followed) {
         return switch (e) {
             case Ast.NewData nd -> nd.typeName().denotes();
-            case Ast.Call c when neutral.isNewtype(c.fn()) -> symbols.resolveCase(c.fn());
+            case Ast.Apply c when neutral.isNewtype(c.fn()) -> symbols.resolveCase(c.fn());
             case Ast.LetIn let -> constructedCase(let.body(), followed);
             case Ast.Var v -> namedCase(v, followed);
             case null, default -> null;
@@ -1093,7 +1093,7 @@ public final class ExampleVerifier {
             case Ast.BoolLit b -> b.value();
             case Ast.Neg n -> negate(raw(n.operand()));
             case Ast.Binary bin -> fold(bin);
-            case Ast.Call c -> collectionOrNewtype(c, expected);
+            case Ast.Apply c -> collectionOrNewtype(c, expected);
             case Ast.Var v -> named(v, expected);
             case Ast.NewData nd -> record(nd);
             case Ast.LetIn let -> bound(let, expected);
@@ -1246,7 +1246,7 @@ public final class ExampleVerifier {
      * {@code List} whatever the position declares, so this is what lets one record serve as both a
      * value and a fixture. Anything else applied here is a newtype or nothing.
      */
-    private Object collectionOrNewtype(Ast.Call c, Type expected) {
+    private Object collectionOrNewtype(Ast.Apply c, Type expected) {
         if (c.fn().equals("Set.fromList") || c.fn().equals("Map.fromList")) {
             if (c.args().size() != 1) {
                 throw new FixtureException("`" + c.fn() + "` takes one argument");
@@ -1263,7 +1263,7 @@ public final class ExampleVerifier {
      * fixture's own notation for a collection and a newtype application is a construction, so neither is
      * a helper however it is spelled. Asked wherever an application has to be told from a construction,
      * so the two readers of a call cannot come to different answers. */
-    private Ast.FnDef appliedHelper(Ast.Call c) {
+    private Ast.FnDef appliedHelper(Ast.Apply c) {
         if (c.fn().equals("Set.fromList") || c.fn().equals("Map.fromList")
                 || neutral.isNewtype(c.fn())) {
             return null;
@@ -1304,14 +1304,14 @@ public final class ExampleVerifier {
      * a field of a record and an element of a list alike. An application that encloses nothing is
      * {@link #helperAnswer}: there the value itself is what the row asserts.
      */
-    private Object applied(Ast.Call c, Ast.FnDef helper, Type expected) {
+    private Object applied(Ast.Apply c, Ast.FnDef helper, Type expected) {
         return neutral.of(answered(c, helper), expected, c.fn());
     }
 
     /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
      * built against its parameter types, so an argument breaking one of those types' invariants is
      * reported as the fixture it is. */
-    private Object answered(Ast.Call c, Ast.FnDef helper) {
+    private Object answered(Ast.Apply c, Ast.FnDef helper) {
         if (c.args().size() != helper.params().size()) {
             throw new FixtureException("`" + c.fn() + "` takes " + helper.params().size()
                     + " argument(s) but is called with " + c.args().size());
@@ -1329,7 +1329,7 @@ public final class ExampleVerifier {
         return helpers.invoke(c.fn(), args);
     }
 
-    private Object newtypeInner(Ast.Call c) {
+    private Object newtypeInner(Ast.Apply c) {
         if (c.fn().equals("Date") || c.fn().equals("DateTime")) {
             // a written date: the decoders take the parsed temporal, not its text (a Date field's
             // neutral form is a LocalDate), so the fixture hands over the same value the checker read

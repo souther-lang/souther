@@ -34,7 +34,7 @@ class CallElaboratorNoCalleeTest {
 
     private static RuntimeException answerFor(ValueName denotes) {
         return CallElaborator.noCallee(
-                new Ast.Call("f", denotes, List.of(new Ast.IntLit(1, AT)),
+                new Ast.Apply("f", denotes, List.of(new Ast.IntLit(1, AT)),
                         ConstructionOrigin.own(), AT));
     }
 

@@ -53,7 +53,7 @@ public final class BottomInfer {
      * whose element/value type is fixed by context rather than written. */
     static boolean isEmptyCollectionLiteral(Ast.Expr e) {
         return (e instanceof Ast.ListLit l && l.elements().isEmpty())
-                || (e instanceof Ast.Call c && c.args().isEmpty()
+                || (e instanceof Ast.Apply c && c.args().isEmpty()
                         && (c.fn().equals("Map.empty") || c.fn().equals("Set.empty")));
     }
 

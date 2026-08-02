@@ -245,7 +245,7 @@ public final class InvariantChecker {
     /** What in {@code clause} the check cannot read, said so an author can act on it. */
     private String whyUnreadable(Ast.Expr clause, Bindings binds) {
         Ast.Expr blocked = unreadable(clause);
-        if (blocked instanceof Ast.Call call) {
+        if (blocked instanceof Ast.Apply call) {
             return "it calls `" + call.fn() + "`, which the check reads as a value and not as a term";
         }
         if (blocked != null) {
@@ -377,14 +377,14 @@ public final class InvariantChecker {
                     walk(c.body(), k2, t2);
                 }
             }
-            case Ast.Call call -> walkCall(call, k, types);
+            case Ast.Apply call -> walkCall(call, k, types);
             default -> Ast.forEachChild(e, child -> walk(child, k, types));
         }
     }
 
     /** Walks a call, binding a combinator closure's element parameter to the list's element type (and
      * seeding its invariant) so a construction inside the closure is analyzed rather than left opaque. */
-    private void walkCall(Ast.Call call, Known k, Map<String, Type> types) {
+    private void walkCall(Ast.Apply call, Known k, Map<String, Type> types) {
         Combinator combo = COMBINATORS.get(call.fn());
         for (int i = 0; i < call.args().size(); i++) {
             Ast.Expr arg = call.args().get(i);
@@ -703,7 +703,7 @@ public final class InvariantChecker {
      * imported declaration is the body it expands to — {@code if b then false else true} over a
      * binding holding the argument. Both are read. */
     private static Ast.Expr negated(Ast.Expr e) {
-        if (e instanceof Ast.Call call && call.fn().equals("Bool.not") && call.args().size() == 1) {
+        if (e instanceof Ast.Apply call && call.fn().equals("Bool.not") && call.args().size() == 1) {
             return call.args().get(0);
         }
         if (e instanceof Ast.LetIn li) {
@@ -863,7 +863,7 @@ public final class InvariantChecker {
 
     /** The atom a size call in a clause names, or {@code null}. */
     private String clauseSizeAtom(Ast.Expr e, Bindings binds) {
-        if (!(e instanceof Ast.Call call) || !SIZE_CALLS.contains(call.fn()) || call.args().size() != 1) {
+        if (!(e instanceof Ast.Apply call) || !SIZE_CALLS.contains(call.fn()) || call.args().size() != 1) {
             return null;
         }
         Named named = resolve(call.args().get(0), binds, true);
@@ -933,7 +933,7 @@ public final class InvariantChecker {
         if (path != null) {
             return path;
         }
-        if (e instanceof Ast.Call call) {
+        if (e instanceof Ast.Apply call) {
             Built built = BUILT_FROM.get(call.fn());
             if (built != null && built.from() < call.args().size()
                     && siteKey(call.args().get(built.from()), types) != null) {
@@ -946,7 +946,7 @@ public final class InvariantChecker {
     /** The atom key of {@code SIZE_CALL(container)} when {@code key} can name the container, else
      * {@code null}. */
     private static String sizeAtom(Ast.Expr e, Function<Ast.Expr, String> key) {
-        if (!(e instanceof Ast.Call call) || !SIZE_CALLS.contains(call.fn()) || call.args().size() != 1) {
+        if (!(e instanceof Ast.Apply call) || !SIZE_CALLS.contains(call.fn()) || call.args().size() != 1) {
             return null;
         }
         String arg = key.apply(sizeSource(call.args().get(0)));
@@ -958,7 +958,7 @@ public final class InvariantChecker {
      * {@code List.length(xs)}. How the elements are made has no bearing on how many there are, which
      * is why the closure does not enter the key. */
     private static Ast.Expr sizeSource(Ast.Expr e) {
-        if (e instanceof Ast.Call call) {
+        if (e instanceof Ast.Apply call) {
             Built built = BUILT_FROM.get(call.fn());
             if (built != null && built.shape().keepsSize() && built.from() < call.args().size()) {
                 return sizeSource(call.args().get(built.from()));
@@ -970,7 +970,7 @@ public final class InvariantChecker {
     /** What is known of the size of every container a clause names: never negative, and no greater
      * than the size of what it was built from wherever the building can only drop elements. */
     private void sizeFacts(Ast.Expr e, Bindings binds, List<Constraint> out) {
-        if (!(e instanceof Ast.Call call)) {
+        if (!(e instanceof Ast.Apply call)) {
             Ast.forEachChild(e, child -> sizeFacts(child, binds, out));
             return;
         }
@@ -996,7 +996,7 @@ public final class InvariantChecker {
      * drop elements. */
     private void bounds(String sizeCall, Ast.Expr container, Function<Ast.Expr, String> key,
                         List<Constraint> out) {
-        if (!(container instanceof Ast.Call call)) {
+        if (!(container instanceof Ast.Apply call)) {
             return;
         }
         Built built = BUILT_FROM.get(call.fn());
@@ -1026,7 +1026,7 @@ public final class InvariantChecker {
         }
         List<String> keys = new ArrayList<>();
         keys.add(written);
-        if (!(inv instanceof Ast.Call call)) {
+        if (!(inv instanceof Ast.Apply call)) {
             return keys;
         }
         Carried carried = CARRIED.get(call.fn());
@@ -1039,13 +1039,13 @@ public final class InvariantChecker {
         // rule and the two meet in the key.
         Named named = resolve(call.args().get(carried.container()), binds, false);
         Ast.Expr container = named.term();
-        Ast.Call stated = call;
-        while (container instanceof Ast.Call inner) {
+        Ast.Apply stated = call;
+        while (container instanceof Ast.Apply inner) {
             Built built = BUILT_FROM.get(inner.fn());
             if (built == null || built.from() >= inner.args().size()) {
                 break;
             }
-            Ast.Call next = carries(stated, carried, inner, built);
+            Ast.Apply next = carries(stated, carried, inner, built);
             if (next == null) {
                 break;
             }
@@ -1072,7 +1072,7 @@ public final class InvariantChecker {
      * carries nothing on its own, but a predicate stated over a projection carries when the closure
      * copied that field across, over the field it came from.
      */
-    private Ast.Call carries(Ast.Call stated, Carried carried, Ast.Call inner, Built built) {
+    private Ast.Apply carries(Ast.Apply stated, Carried carried, Ast.Apply inner, Built built) {
         if (carried.through().contains(built.shape())) {
             return stated;
         }
@@ -1200,17 +1200,17 @@ public final class InvariantChecker {
         return e -> e == at ? named : invPath(e, binds);
     }
 
-    private static Ast.Call withArg(Ast.Call call, int at, Ast.Expr arg) {
+    private static Ast.Apply withArg(Ast.Apply call, int at, Ast.Expr arg) {
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(at, arg);
-        return new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
+        return new Ast.Apply(call.fn(), call.denotes(), args, call.origin(), call.pos());
     }
 
     /** An emptiness check as the comparison it means, or {@code e} unchanged. */
     private static Ast.Expr asSizeComparison(Ast.Expr e) {
-        if (e instanceof Ast.Call call && call.args().size() == 1
+        if (e instanceof Ast.Apply call && call.args().size() == 1
                 && EMPTINESS.containsKey(call.fn())) {
-            Ast.Call size = new Ast.Call(EMPTINESS.get(call.fn()), call.denotes(), call.args(),
+            Ast.Apply size = new Ast.Apply(EMPTINESS.get(call.fn()), call.denotes(), call.args(),
                     call.origin(),
                     call.pos());
             return new Ast.Binary(Ast.BinOp.EQ, size, new Ast.IntLit(0, call.pos()), call.pos());
@@ -1284,7 +1284,7 @@ public final class InvariantChecker {
                 yield sb.append('}').toString();
             }
             // Only the library's own functions: they are pure, so one written call is one value.
-            case Ast.Call c when Prelude.hasQualified(c.fn()) ->
+            case Ast.Apply c when Prelude.hasQualified(c.fn()) ->
                     elementsKey(c.fn() + "(", c.args(), site, bound, depth, ")");
             default -> null;
         };

@@ -682,7 +682,7 @@ public final class AstBuilder {
                 args.add(expr(a));
             }
         });
-        return new Ast.Call(fn.toString(), args, posOf(first));
+        return new Ast.Apply(fn.toString(), args, posOf(first));
     }
 
     private Ast.Expr binary(SyntaxNode n) {
@@ -716,16 +716,16 @@ public final class AstBuilder {
         List<SyntaxNode> operands = exprChildren(n);
         Ast.Expr left = expr(operands.get(0));
         Ast.Expr right = expr(operands.get(1));
-        if (right instanceof Ast.Call c) {
+        if (right instanceof Ast.Apply c) {
             List<Ast.Expr> args = new ArrayList<>(c.args());
             args.add(left);
-            return new Ast.Call(c.fn(), args, c.pos());
+            return new Ast.Apply(c.fn(), args, c.pos());
         }
         if (right instanceof Ast.Var v) {
-            return new Ast.Call(v.name(), List.of(left), v.pos());
+            return new Ast.Apply(v.name(), List.of(left), v.pos());
         }
         if (right instanceof Ast.FieldAccess fa && fa.target() instanceof Ast.Var base) {
-            return new Ast.Call(base.name() + "." + fa.field(), List.of(left), fa.pos());
+            return new Ast.Apply(base.name() + "." + fa.field(), List.of(left), fa.pos());
         }
         throw CompileException.of(
                 Diagnostic.of(null, "parse.vpipe.right").title("parse.title").at(right.pos()).build(),

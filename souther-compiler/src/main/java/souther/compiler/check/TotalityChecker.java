@@ -84,7 +84,7 @@ final class TotalityChecker {
      * structural-recursion message, reported at a representative self-call; a larger group reports the
      * mutual failure at its lexicographically-first member (a stable anchor). */
     private static CompileException notTerminating(Set<String> group, Map<String, Ast.FnDef> own,
-                                                   Map<String, Ast.Call> firstCall) {
+                                                   Map<String, Ast.Apply> firstCall) {
         if (group.size() == 1) {
             String name = group.iterator().next();
             Ast.FnDef h = own.get(name);
@@ -92,7 +92,7 @@ final class TotalityChecker {
                     + "(...)` passes no argument that is a strictly smaller part of a parameter."
                     + " Recurse on a part obtained by `match` (a field or a case), count with"
                     + " `fold`, or mark the helper `partial`";
-            Ast.Call at = firstCall.get(name);
+            Ast.Apply at = firstCall.get(name);
             return at == null
                     ? error(h, name, "check.totality.notstructural", message)
                     : error(at, name, "check.totality.notstructural", message);
@@ -153,12 +153,12 @@ final class TotalityChecker {
 
     /** The size-change graphs of a group, plus a representative self/mutual call per member (its
      * source position for a rejection message — recorded here so the reject path need not re-walk). */
-    private record Built(List<Scg> scgs, Map<String, Ast.Call> firstCall) {}
+    private record Built(List<Scg> scgs, Map<String, Ast.Apply> firstCall) {}
 
     /** Builds the per-call-edge size-change graphs for every member of {@code group}. */
     private static Built buildScgs(Set<String> group, Map<String, Ast.FnDef> own) {
         List<Scg> scgs = new ArrayList<>();
-        Map<String, Ast.Call> firstCall = new HashMap<>();
+        Map<String, Ast.Apply> firstCall = new HashMap<>();
         for (String f : group) {
             Ast.FnDef def = own.get(f);
             List<Ast.FnParam> params = def.params();
@@ -280,7 +280,7 @@ final class TotalityChecker {
 
     /** A recorded recursive call to a group member, with the callee and the smaller-than / equal-to
      * relations ({@code lt} / {@code eq}) in scope where it appears. */
-    private record RecCall(String callee, Ast.Call call,
+    private record RecCall(String callee, Ast.Apply call,
                            Map<BindingId, Set<BindingId>> lt,
                            Map<BindingId, Set<BindingId>> eq) {}
 
@@ -367,7 +367,7 @@ final class TotalityChecker {
                         equal.isEmpty() ? eq : with(eq, li.binder().id(), equal);
                 walk(li.body(), group, paramNames, ltInner, eqInner, calls);
             }
-            case Ast.Call call -> {
+            case Ast.Apply call -> {
                 if (group.contains(call.fn())) {
                     calls.add(new RecCall(call.fn(), call, lt, eq));
                 }
@@ -478,7 +478,7 @@ final class TotalityChecker {
     }
 
     private static void collectOwnCalls(Ast.Expr e, Set<String> own, Set<String> out) {
-        if (e instanceof Ast.Call call && own.contains(call.fn())) {
+        if (e instanceof Ast.Apply call && own.contains(call.fn())) {
             out.add(call.fn());
         }
         forEachChild(e, c -> collectOwnCalls(c, own, out));
@@ -523,7 +523,7 @@ final class TotalityChecker {
                 message);
     }
 
-    private static CompileException error(Ast.Call call, String name, String key, String message) {
+    private static CompileException error(Ast.Apply call, String name, String key, String message) {
         return CompileException.of(
                 Diagnostic.of("E2001", key).title("check.totality.title")
                         .at(call.pos(), call.fn().length()).args(name).build(),

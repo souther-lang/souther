@@ -62,7 +62,7 @@ public final class NewtypeDesugar {
 
     private static Ast.Expr go(Ast.Expr e, Symbols symbols) {
         return switch (e) {
-            case Ast.Call call -> {
+            case Ast.Apply call -> {
                 List<Ast.Expr> args = mapExprs(call.args(), symbols);
                 // Whether this name is a type or something else was answered when the module's names
                 // were resolved. Asking the type namespace again here would read a binding of the
@@ -83,7 +83,7 @@ public final class NewtypeDesugar {
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), ConstructionOrigin.own(), call.pos());
                 }
-                yield new Ast.Call(call.fn(), call.denotes(), args, call.origin(), call.pos());
+                yield new Ast.Apply(call.fn(), call.denotes(), args, call.origin(), call.pos());
             }
             case Ast.NewData nd -> {
                 List<Ast.FieldInit> inits = new ArrayList<>();
