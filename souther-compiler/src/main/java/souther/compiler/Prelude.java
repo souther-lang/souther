@@ -222,8 +222,9 @@ public final class Prelude {
 
     /** The resolved signature of {@code fn}. A zero-parameter declaration is a value whose type
      *  only the signature can answer — {@code libraryValue} reads it with no call whose arguments
-     *  could pin it — so a value that writes no return type is refused here rather than filed as an
-     *  entry whose type nothing states. */
+     *  could pin it — and a kernel's calls are checked against the declared result with no body to
+     *  infer one from. Either would be an entry answering a type question with nothing, so a
+     *  declaration of either kind that writes no return type is refused here. */
     static Signature signatureOf(Ast.FnDef fn, String qualified, Symbols symbols) {
         List<Type> params = new ArrayList<>();
         for (Ast.FnParam p : fn.params()) {
@@ -231,9 +232,11 @@ public final class Prelude {
         }
         Type result = fn.declaredReturn() == null
                 ? null : TypeOps.successType(fn.declaredReturn(), symbols);
-        if (fn.params().isEmpty() && result == null) {
-            throw new IllegalStateException(
-                    "a zero-parameter prelude value must declare its return type: `" + qualified + "`");
+        if (result == null
+                && (fn.params().isEmpty() || fn.body() instanceof Ast.FnBody.Intrinsic)) {
+            throw new IllegalStateException("a prelude "
+                    + (fn.params().isEmpty() ? "value" : "kernel")
+                    + " must declare its return type: `" + qualified + "`");
         }
         return new Signature(params, result);
     }
