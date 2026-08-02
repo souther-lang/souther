@@ -1,9 +1,11 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -167,6 +169,55 @@ class CompileImportCollisionTest {
                     Out { n = map }
                 }
                 """));
+    }
+
+    /**
+     * A name the line asks for and the source module does not expose is nothing the import brought
+     * in. Saying it collides as well would tell the author to rename a local definition that is not
+     * what is wrong; the line has one thing wrong with it and gets one report.
+     */
+    @Test
+    void aNameTheSourceDoesNotExposeIsNotAlsoACollision() {
+        Map<String, List<Diagnostic>> diagnostics = Compiler.diagnoseModules(Map.of(
+                "up.sou", """
+                        module up exposing ( other )
+                        data Thing = { a: Int }
+                        let other (n: Int) = n
+                        """,
+                "c.sou", """
+                        module probe.c
+                        import up ( Thing )
+                        let Thing (n: Int) = n
+                        data Line = { a: Int }
+                        """));
+
+        assertEquals(List.of("check.import.notexposed"),
+                diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());
+    }
+
+    /**
+     * The collision is reported, not raised. Raised, it escaped the question that read the module
+     * and took every other file's diagnostics with it — an editor showed one "the compiler could
+     * not finish reading this file" for the whole workspace while the author was part-way through
+     * writing the `let` that collided.
+     */
+    @Test
+    void theCollisionIsReportedWithoutStoppingTheOtherFiles() {
+        Map<String, List<Diagnostic>> diagnostics = Compiler.diagnoseModules(Map.of(
+                "c.sou", """
+                        module probe.c
+                        import List ( map )
+                        let map (n: Int) = n + 1
+                        """,
+                "d.sou", """
+                        module probe.d
+                        data Broken = { a: NoSuchType }
+                        """));
+
+        assertEquals(List.of("check.import.conflict"),
+                diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());
+        assertEquals(List.of("check.unknown.type.msg"),
+                diagnostics.get("d.sou").stream().map(Diagnostic::messageKey).toList());
     }
 
     private static String refused(List<String> modules) {

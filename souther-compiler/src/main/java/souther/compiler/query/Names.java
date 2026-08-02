@@ -1190,38 +1190,33 @@ public final class Names {
     }
 
     /**
-     * The names {@code imp} brings into the value namespace.
+     * The names {@code imp} brings into the value namespace: the definitions the module publishes,
+     * the behaviors it declares and the types it declares, all of which a reader writes bare. A type
+     * is one of them because a unit data is a value, a newtype is applied to what it wraps and a
+     * record is constructed by its name — the type namespace refuses a type against a type, so what
+     * a type adds here is a type against a {@code let} or a behavior.
      *
-     * <p>From another module: the definitions it publishes and the behaviors it declares, both of
-     * which a reader writes bare. Its types are here too — a unit data is a value, a newtype is
-     * applied to what it wraps, a record is constructed by its name — and the type namespace refuses
-     * a type against a type, so what this adds is a type against a {@code let} or a behavior.
+     * <p>Only what {@code from} exposes, and only what the line asks for. A name the line names and
+     * the module does not expose is nothing this import brought in, and reporting a collision for it
+     * would tell the author to rename a definition that is not what is wrong — the line is answered
+     * by {@code check.import.notexposed}, which is the whole of it.
      *
-     * <p>From the standard library: the functions the line names. The library declares everything it
-     * ships, so the line is asked and nothing else.
+     * <p>A library import is not here. Those lines are read where the table they fill is built
+     * ({@link Exposing}) and are gone from the module by the time this is asked.
      */
     private static Set<String> importedIntoValues(Db db, Ast.Import imp) {
-        if (Prelude.isQualifier(imp.module())) {
-            Set<String> names = new LinkedHashSet<>();
-            for (String name : imp.names()) {
-                if (Prelude.isLibraryFunction(imp.module() + "." + name)) {
-                    names.add(name);
-                }
-            }
-            return names;
-        }
         Ast.Module from = db.ask(new Front.Available(imp.module())).value();
         if (from == null) {
             return Set.of();
         }
         Set<String> names = new LinkedHashSet<>(Bodies.publishedNames(from, imp.names()));
-        Set<String> behaviors = behaviorNames(from);
-        Set<String> types = new LinkedHashSet<>();
+        Set<String> declared = new LinkedHashSet<>(behaviorNames(from));
         for (Ast.Def def : from.defs()) {
-            types.add(def.name());
+            declared.add(def.name());
         }
+        Set<String> exposed = new HashSet<>(from.exposing());
         for (String name : imp.names()) {
-            if (behaviors.contains(name) || types.contains(name)) {
+            if (declared.contains(name) && exposed.contains(name)) {
                 names.add(name);
             }
         }

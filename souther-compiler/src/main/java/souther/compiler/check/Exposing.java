@@ -31,8 +31,18 @@ public final class Exposing {
 
     private Exposing() {}
 
-    /** What the imports bring in, and the imports that are not the library's. */
-    public record Validated(Map<String, String> exposed, List<Ast.Import> kept) {}
+    /**
+     * What the imports bring in, the imports that are not the library's, and the import lines that
+     * name something this module already declares.
+     *
+     * <p>A collision is answered rather than thrown because it is one module's mistake and not a
+     * reason to stop reading. Thrown, it escaped the question that asked for this module and took
+     * every other file's diagnostics with it — an editor showed "the compiler could not finish
+     * reading this file" for the whole workspace while the author was part-way through writing a
+     * {@code let}.
+     */
+    public record Validated(Map<String, String> exposed, List<Ast.Import> kept,
+                            List<Diagnostic> conflicts) {}
 
     /** Both answers at once, for a reader that wants them both and should ask once. */
     public static Validated read(Ast.Module module) {
@@ -66,6 +76,7 @@ public final class Exposing {
 
         Map<String, String> exposed = new HashMap<>();
         List<Ast.Import> kept = new ArrayList<>();
+        List<Diagnostic> conflicts = new ArrayList<>();
         for (Ast.Import imp : module.imports()) {
             if (!Prelude.isQualifier(imp.module())) {
                 kept.add(imp);   // an ordinary user-module import — resolved elsewhere
@@ -81,11 +92,10 @@ public final class Exposing {
                                     + imp.module() + "` (spec §stdlib).");
                 }
                 if (declaredData.contains(name) || ownNames.contains(name)) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.import.conflict").title("check.module.title")
-                                    .at(imp.pos()).args(name).hint("check.import.conflict.hint")
-                                    .build(),
-                            "imported `" + name + "` conflicts with a local definition");
+                    conflicts.add(Diagnostic.of(null, "check.import.conflict")
+                            .title("check.module.title").at(imp.pos()).args(name)
+                            .hint("check.import.conflict.hint").build());
+                    continue;   // the name is refused; what it means until then is the declaration
                 }
                 String prior = exposed.putIfAbsent(name, qualified);
                 if (prior != null && !prior.equals(qualified)) {
@@ -97,7 +107,7 @@ public final class Exposing {
                 }
             }
         }
-        return new Validated(exposed, kept);
+        return new Validated(exposed, kept, conflicts);
     }
 
     /**

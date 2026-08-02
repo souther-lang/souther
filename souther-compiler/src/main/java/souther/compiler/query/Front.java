@@ -179,8 +179,19 @@ public final class Front {
             }
             Exposing.Validated imports = Exposing.read(raw);
             Ast.Module m = Exposing.withoutLibraryImports(raw, imports.kept());
-            return Answer.of(withAttachedRows(db, m, layout.exampleFilesOf()
-                    .getOrDefault(name, List.of())));
+            Ast.Module whole = withAttachedRows(db, m, layout.exampleFilesOf()
+                    .getOrDefault(name, List.of()));
+            if (imports.conflicts().isEmpty()) {
+                return Answer.of(whole);
+            }
+            // A library import naming something this module declares. Reported here because this is
+            // where the import lines are read, and reported rather than raised so the rest of the
+            // module — and every other file beside it — is still read and still answers.
+            List<Report> reports = new ArrayList<>();
+            for (Diagnostic conflict : imports.conflicts()) {
+                reports.add(Report.of(conflict));
+            }
+            return Answer.of(whole, reports);
         }
 
         /**
