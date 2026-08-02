@@ -773,8 +773,10 @@ public final class Names {
             }
         }
         BehaviorsInScope.Of behaviors = db.ask(new BehaviorsInScope(m.name())).value();
+        Map<String, String> exposed = db.ask(new Front.LibraryNames(m.name())).value();
         return new Resolve.Values(m.name(), helpers,
-                behaviors == null ? Map.of() : behaviors.byName());
+                behaviors == null ? Map.of() : behaviors.byName(),
+                exposed == null ? Map.of() : exposed);
     }
 
     /** The resolved module — {@link Resolution} without the record of how it got there. */

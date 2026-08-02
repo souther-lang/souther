@@ -177,7 +177,7 @@ public final class Front {
                     return Answer.absent(reserved);
                 }
             }
-            Ast.Module m = Exposing.rewrite(raw);
+            Ast.Module m = Exposing.withoutLibraryImports(raw);
             return Answer.of(withAttachedRows(db, m, layout.exampleFilesOf()
                     .getOrDefault(name, List.of())));
         }
@@ -277,7 +277,7 @@ public final class Front {
                     reports.add(reserved);
                     continue;
                 }
-                Ast.Module m = Exposing.rewrite(published.module());
+                Ast.Module m = Exposing.withoutLibraryImports(published.module());
                 found.put(name, m);
                 injected.put(name, published.injectedBehaviors());
                 for (String reach : reaches(m)) {
@@ -350,6 +350,40 @@ public final class Front {
      * reading the whole module here would mean a new behavior in one module rebuilding every module
      * that imports a type from it.
      */
+    /**
+     * The library names a module's imports let it write bare, keyed by the bare spelling.
+     *
+     * <p>Read from the module as its source declared it, because {@link Exposed} drops the import
+     * lines once it has checked them: what they brought in outlives the lines themselves.
+     */
+    public record LibraryNames(String name) implements Key<Map<String, String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, String>> compute(Db db) {
+            Layout.Of layout = db.ask(new Layout()).value();
+            if (layout == null) {
+                return Answer.absent();
+            }
+            String id = layout.idOfModule().get(name);
+            if (id == null) {
+                return Answer.of(Map.of());   // read from the path, where the lines are already gone
+            }
+            Answer<CstFrontend.Parsed> parsed = db.ask(new Parsed(id));
+            if (!parsed.present()) {
+                return Answer.absent();
+            }
+            try {
+                return Answer.of(Ordered.map(Exposing.exposedNames(parsed.value().module())));
+            } catch (CompileException e) {
+                return Answer.absent(e);   // reported where the import is checked
+            }
+        }
+    }
+
     public record Exposes(String name) implements Key<Set<String>> {
         @Override
         public String module() {

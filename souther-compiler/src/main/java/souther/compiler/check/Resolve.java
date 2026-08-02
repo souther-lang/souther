@@ -110,7 +110,8 @@ public final class Resolve {
      * read off the module. A module resolved on its own reaches only what it declares.
      */
     public record Values(String module, Map<String, ValueName.Helper> helpers,
-                         Map<String, ValueName.Behavior> behaviors) {
+                         Map<String, ValueName.Behavior> behaviors,
+                         Map<String, String> exposed) {
 
         /** What a module reaches when nothing else is in sight. */
         public static Values of(Ast.Module m) {
@@ -122,7 +123,7 @@ public final class Resolve {
             for (Ast.BehaviorDef b : m.behaviors()) {
                 behaviors.put(b.name(), new ValueName.Behavior(m.name(), b.name()));
             }
-            return new Values(m.name(), helpers, behaviors);
+            return new Values(m.name(), helpers, behaviors, Exposing.exposedNames(m));
         }
     }
 
@@ -541,14 +542,19 @@ public final class Resolve {
      */
     private Ast.Expr expr(Ast.Expr e, Bindings bound) {
         return switch (e) {
-            case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
-                    valueName(v.name(), v.pos(), bound)));
+            case Ast.Var v -> {
+                ValueName denotes = answered(v.name(), v.pos(),
+                        valueName(v.name(), v.pos(), bound));
+                yield new Ast.Var(spelling(v.name(), denotes), denotes, v.pos());
+            }
             // Applying a name is answered as a name: which of a binding, a helper, a library
             // function or a type it is decides what the application means. Applying anything else
             // is answered as the expression it is, and what may be applied is the check's to say.
-            case Ast.Apply call when call.appliesAName() -> new Ast.Apply(call.fn(),
-                    answered(call.fn(), call.pos(), calledName(call, bound)),
-                    exprs(call.args(), bound), call.origin(), call.pos());
+            case Ast.Apply call when call.appliesAName() -> {
+                ValueName denotes = answered(call.fn(), call.pos(), calledName(call, bound));
+                yield new Ast.Apply(spelling(call.fn(), denotes), denotes,
+                        exprs(call.args(), bound), call.origin(), call.pos());
+            }
             case Ast.Apply call -> new Ast.Apply(expr(call.function(), bound),
                     exprs(call.args(), bound), call.origin(), call.pos());
             // `Map.empty`, `String.isEmpty` — a namespace and a member of it, which the parser read
@@ -676,7 +682,15 @@ public final class Resolve {
         if (helper != null) {
             return helper;
         }
-        return values.behaviors().get(written);
+        ValueName.Behavior behavior = values.behaviors().get(written);
+        if (behavior != null) {
+            return behavior;
+        }
+        // A name an import let this module write without its qualifier. Asked last: an import brings
+        // a name in, and everything the module already has — a binding in force, its own
+        // declarations — is what that name means here instead.
+        String qualified = values.exposed().get(written);
+        return qualified == null ? null : new ValueName.Stdlib(qualified);
     }
 
     /**
@@ -699,6 +713,19 @@ public final class Resolve {
         String written = base.name() + "." + fa.field();
         return new Ast.Var(written,
                 answered(written, base.pos(), new ValueName.Stdlib(written)), base.pos());
+    }
+
+    /**
+     * How a resolved name is written in the resolved tree: the library name it was answered with,
+     * where an import let it be written without its qualifier, and what was written otherwise.
+     *
+     * <p>An import lets {@code trim} be written for {@code String.trim}. Everything downstream reads
+     * a resolved tree and asks the library about a name by its qualified form, so that is the form
+     * the resolved tree carries. What was written stays with the position recorded by
+     * {@link #answered}, which is what an editor answers from.
+     */
+    private static String spelling(String written, ValueName denotes) {
+        return denotes instanceof ValueName.Stdlib lib ? lib.qualified() : written;
     }
 
     /** What a name used as a value denotes, and the report for one that denotes nothing. */

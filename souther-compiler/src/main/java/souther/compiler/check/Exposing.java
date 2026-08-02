@@ -25,15 +25,32 @@ import java.util.Set;
  */
 public final class Exposing {
 
-    private final Map<String, String> exposed;   // bare name → qualified, e.g. "map" → "List.map"
+    private Exposing() {}
 
-    private Exposing(Map<String, String> exposed) {
-        this.exposed = exposed;
+    /**
+     * The library names {@code module} may write bare, keyed by the bare spelling.
+     *
+     * <p>An import says which names a module may write without their qualifier. It does not say what
+     * any of them means where it is written: a binding in force wins over an import, and only the
+     * pass that knows the bindings can say that. So this answers what the imports bring in, and
+     * resolution decides what each name means with that in hand.
+     */
+    public static Map<String, String> exposedNames(Ast.Module module) {
+        return validate(module).exposed;
     }
 
-    /** Rewrites {@code module}'s exposed bare library calls to qualified form and strips its
-     *  {@code import List ( ... )} lines. User-module imports are left untouched. */
-    public static Ast.Module rewrite(Ast.Module module) {
+    /** What the imports bring in, and the imports that are not the library's. */
+    private record Validated(Map<String, String> exposed, List<Ast.Import> kept) {}
+
+    /**
+     * The library names an import brings in, with the two things an import can get wrong reported:
+     * a name the library does not have, and one name brought in from two modules at once.
+     *
+     * <p>A name the module declares itself is not brought in. That is the module's own name, and one
+     * declaration wins over an import — the same way a binding in force wins over both, which is
+     * decided where the bindings are known.
+     */
+    private static Validated validate(Ast.Module module) {
         Set<String> ownNames = new HashSet<>();
         for (Ast.FnDef fn : module.fns()) {
             ownNames.add(fn.name());
@@ -43,10 +60,10 @@ public final class Exposing {
         }
 
         Map<String, String> exposed = new HashMap<>();
-        List<Ast.Import> keptImports = new ArrayList<>();
+        List<Ast.Import> kept = new ArrayList<>();
         for (Ast.Import imp : module.imports()) {
             if (!Prelude.isQualifier(imp.module())) {
-                keptImports.add(imp);   // an ordinary user-module import — resolved elsewhere
+                kept.add(imp);   // an ordinary user-module import — resolved elsewhere
                 continue;
             }
             for (String name : imp.names()) {
@@ -71,99 +88,24 @@ public final class Exposing {
                 }
             }
         }
+        return new Validated(exposed, kept);
+    }
 
-        // Nothing to qualify and no stdlib import to strip — the common case for a module that
-        // reaches the library only through explicit qualifiers, or none at all. Skip the AST rebuild.
-        if (exposed.isEmpty() && keptImports.size() == module.imports().size()) {
+    /**
+     * {@code module} with its {@code import List ( ... )} lines dropped, having checked them.
+     *
+     * <p>What they brought in is answered by {@link #exposedNames} and settled where the bindings
+     * are known. Nothing in the module is rewritten here: a name written bare is still written bare,
+     * and what it means is one question asked in one place.
+     */
+    public static Ast.Module withoutLibraryImports(Ast.Module module) {
+        List<Ast.Import> kept = validate(module).kept;
+        if (kept.size() == module.imports().size()) {
             return module;
         }
-
-        Exposing pass = new Exposing(exposed);
-        List<Ast.Def> defs = new ArrayList<>();
-        for (Ast.Def def : module.defs()) {
-            defs.add(pass.rewriteDef(def));
-        }
-        List<Ast.FnDef> fns = new ArrayList<>();
-        for (Ast.FnDef fn : module.fns()) {
-            fns.add(new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
-                    pass.rw(fn.body()), fn.partial(), fn.pos()));
-        }
         return new Ast.Module(module.name(), module.exposing(), module.exposedOutputs(),
-                keptImports, defs, module.behaviors(), fns,
+                kept, module.defs(), module.behaviors(), module.fns(),
                 module.examples(), module.fakes(), module.exampleFileTarget(), module.pos());
     }
 
-    private Ast.Def rewriteDef(Ast.Def def) {
-        if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-            return new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
-                    Ast.mapClauses(d.invariants(), this::rw), d.decoder(), d.encoder(), d.pos());
-        }
-        return def;
-    }
-
-    private Ast.Expr rw(Ast.Expr e) {
-        return switch (e) {
-            case Ast.Apply c -> {
-                List<Ast.Expr> args = new ArrayList<>();
-                for (Ast.Expr a : c.args()) {
-                    args.add(rw(a));
-                }
-                // Only a bare name can be one an import brought in. What an application applies is
-                // otherwise an expression, and rewriting it as a name would throw that expression
-                // away.
-                if (!c.appliesAName()) {
-                    yield new Ast.Apply(rw(c.function()), args, c.origin(), c.pos());
-                }
-                String fn = c.fn();
-                if (fn.indexOf('.') < 0 && exposed.containsKey(fn)) {
-                    fn = exposed.get(fn);
-                }
-                yield new Ast.Apply(fn, args, c.pos());
-            }
-            case Ast.Binary b -> new Ast.Binary(b.op(), rw(b.left()), rw(b.right()), b.pos());
-            case Ast.If iff -> new Ast.If(rw(iff.cond()), rw(iff.then()), rw(iff.els()), iff.pos());
-            case Ast.Match m -> {
-                List<Ast.Case> cases = new ArrayList<>();
-                for (Ast.Case cs : m.cases()) {
-                    cases.add(new Ast.Case(cs.caseTypes(), cs.binding(), rw(cs.body()), cs.unwrapAsserts(), cs.pos()));
-                }
-                yield new Ast.Match(rw(m.scrutinee()), cases, m.pos());
-            }
-            case Ast.FieldAccess fa -> new Ast.FieldAccess(rw(fa.target()), fa.field(), fa.pos());
-            case Ast.NewData nd -> {
-                List<Ast.FieldInit> inits = new ArrayList<>();
-                for (Ast.FieldInit fi : nd.inits()) {
-                    inits.add(new Ast.FieldInit(fi.name(), rw(fi.value()), fi.pos()));
-                }
-                yield new Ast.NewData(nd.typeName(), inits, nd.spreads(), nd.origin(), nd.pos());
-            }
-            case Ast.LetIn li -> new Ast.LetIn(li.binder(), rw(li.value()), li.declaredType(), li.annotated(), li.opens(),
-                    rw(li.body()), li.pos());
-            case Ast.Block bl -> new Ast.Block(bl.params(), rw(bl.body()), bl.pos());
-            case Ast.ListLit ll -> {
-                List<Ast.Expr> elems = new ArrayList<>();
-                for (Ast.Expr x : ll.elements()) {
-                    elems.add(rw(x));
-                }
-                yield new Ast.ListLit(elems, ll.pos());
-            }
-            case Ast.ListComp lc -> {
-                List<Ast.Expr> guards = new ArrayList<>();
-                for (Ast.Expr g : lc.guards()) {
-                    guards.add(rw(g));
-                }
-                yield new Ast.ListComp(rw(lc.element()), guards, lc.pos());
-            }
-            case Ast.Neg n -> new Ast.Neg(rw(n.operand()), n.pos());
-            case Ast.Tuple tup -> {
-                List<Ast.Expr> els = new ArrayList<>();
-                for (Ast.Expr x : tup.elements()) {
-                    els.add(rw(x));
-                }
-                yield new Ast.Tuple(els, tup.pos());
-            }
-            case Ast.TupleGet tg -> new Ast.TupleGet(rw(tg.tuple()), tg.index(), tg.arity(), tg.pos());
-            default -> e;   // Var and the literals carry no nested calls
-        };
-    }
 }

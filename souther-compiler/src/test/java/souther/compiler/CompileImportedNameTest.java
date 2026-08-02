@@ -1,0 +1,135 @@
+package souther.compiler;
+
+import org.junit.jupiter.api.Test;
+
+import souther.compiler.diag.CompileException;
+
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * An import lets a library name be written without its qualifier (spec §stdlib). What it brings in
+ * is one table, and what each name means where it is written is answered once, with the bindings in
+ * force. So a name an import brought in reads the same wherever an expression may be written, and a
+ * binding of the same name wins over it everywhere.
+ */
+class CompileImportedNameTest {
+
+    @Test
+    void anImportedNameIsAValue() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                import String ( isEmpty )
+                data In = { xs: List<String> }
+                data Out = { ok: Bool }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { ok = List.all(isEmpty, i.xs) }
+                """));
+    }
+
+    @Test
+    void anImportedNameReadsInsideAnAttemptedConstruction() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                import String ( trim )
+                data Empty
+                data Name = String
+                    invariant String.length(value) > 0
+                data In = { s: String }
+                data Out = { t: String }
+                behavior go : (i: In) -> Out | Empty constructs Out, Name, Empty
+                let go (i) = {
+                    guard Name(i.s) as n
+                        else Empty
+                    Out { t = trim(n.value) }
+                }
+                """));
+    }
+
+    @Test
+    void anImportedNameReadsInAnExampleRow() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                import String ( trim )
+                data In = { s: String }
+                data Out = { t: String }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { t = trim(i.s) }
+                example go
+                    | "trims" : (In { s = " a " }) -> Out { t = "a" }
+                """));
+    }
+
+    @Test
+    void aParameterOfTheSameNameWinsOverAnImport() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                import List ( map )
+                data In = { n: Int }
+                data Out = { m: Int }
+                let use (map: (Int) -> Int, x: Int) = map(x)
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { m = use((k) -> k + 1, i.n) }
+                """));
+    }
+
+    @Test
+    void aLocalLetOfTheSameNameWinsOverAnImport() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                import String ( trim )
+                data In = { s: String }
+                data Out = { t: String }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = {
+                    let trim: (String) -> String = (s) -> s ++ "!"
+                    Out { t = trim(i.s) }
+                }
+                """));
+    }
+
+    @Test
+    void aNameTheLibraryDoesNotHaveIsRejected() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile("""
+                module demo
+                import String ( shout )
+                data In = { s: String }
+                data Out = { t: String }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { t = i.s }
+                """));
+        assertTrue(e.getMessage().contains("shout"), e.getMessage());
+    }
+
+    @Test
+    void aNameExposedFromTwoLibrariesIsRejected() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile("""
+                module demo
+                import List ( map )
+                import Option ( map )
+                data In = { xs: List<Int> }
+                data Out = { ys: List<Int> }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = Out { ys = i.xs }
+                """));
+        assertTrue(e.getMessage().contains("map"), e.getMessage());
+    }
+
+    @Test
+    void aFieldOfABindingNamedLikeAQualifierIsAField() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+                data Holder = { empty: Bool }
+                data In = { m: Holder }
+                data Out = { ok: Bool }
+                behavior go : (i: In) -> Out constructs Out
+                let go (i) = {
+                    let Map = i.m
+                    Out { ok = Map.empty }
+                }
+                """));
+    }
+}
