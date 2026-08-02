@@ -1050,6 +1050,14 @@ public final class HelperInliner {
                     yield new Ast.Apply(call.function(), forwardDependencies(helper, args),
                             call.origin(), call.pos());
                 }
+                // A declaration written with no parameter list is a value ([#fn-declaration]), so
+                // applying it applies whatever function that value is — not the declaration, which
+                // takes nothing. The value is substituted and the arguments are applied to it.
+                if (helper.params().isEmpty() && !args.isEmpty()
+                        && call.namedCallee().isPresent()) {
+                    yield inline(new Ast.Apply(valueOf(call.namedCallee().orElseThrow()), args,
+                            call.origin(), call.pos()));
+                }
                 if (args.size() != helper.params().size()) {
                     LambdaOrigin origin = lambdaOrigins.get(helper.name());
                     if (origin != null) {
@@ -1683,7 +1691,12 @@ public final class HelperInliner {
             }
             // A value stands for a value. A block written as one — a `.field` getter, whose parameter
             // the compiler synthesizes — is refused where it is written rather than where it is used.
-            if (e.getValue().body() instanceof Ast.Block block) {
+            //
+            // Unless the definition says it is a function. Then the block is what that says it is,
+            // and its parameters are the ones the written type names.
+            boolean declaredAFunction = e.getValue().declaredReturn() != null
+                    && e.getValue().declaredReturn().asFn() != null;
+            if (!declaredAFunction && e.getValue().body() instanceof Ast.Block block) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.block.notvalue").title("check.block.title")
                                 .at(block.pos()).build(),

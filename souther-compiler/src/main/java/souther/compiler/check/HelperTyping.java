@@ -102,6 +102,7 @@ public final class HelperTyping {
             if (Elaborator.producesFunction(body)) {
                 continue;
             }
+
             if (recursiveHelperFns.containsKey(h.name())) {
                 // a recursive helper is pure: it is a static method with no injected fields, so it
                 // cannot reach an injected behavior — put the effect in the behavior that calls it.

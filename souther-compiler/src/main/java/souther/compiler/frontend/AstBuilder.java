@@ -432,7 +432,12 @@ public final class AstBuilder {
         // already wrote parameters keeps a lambda body as its result. Only a lambda the source wrote
         // moves — a `.field` getter is a block too, but its parameter is synthesized, and lifting it
         // would name a definition's parameter something the author never wrote.
+        //
+        // A written function type moves nothing either. It says what the definition is, and what it
+        // says is a function — so the definition is a value of that type, and lifting its parameters
+        // out would leave the type describing something the definition no longer is.
         if (params.isEmpty() && bodyNode.kind() == SyntaxKind.LAMBDA_EXPR
+                && (declaredReturn == null || declaredReturn.asFn() == null)
                 && body instanceof Ast.Block lambda) {
             for (Ast.Binder p : lambda.params()) {
                 params.add(new Ast.FnParam(p, null, false));

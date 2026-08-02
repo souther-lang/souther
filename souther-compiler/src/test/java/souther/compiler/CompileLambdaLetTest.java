@@ -71,7 +71,9 @@ class CompileLambdaLetTest {
                 }
                 """;
         CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(module));
-        assertTrue(ex.getMessage().contains("not a value"),
-                "expected a block-is-not-a-value rejection, got: " + ex.getMessage());
+        // It is refused for what is actually missing: nothing here says what the function takes.
+        // Applied in this scope its parameter types would be read off the application; carried out
+        // of it, only a written type can say.
+        assertEquals("check.fn.noinfer", ex.diagnostic().messageKey(), ex.getMessage());
     }
 }

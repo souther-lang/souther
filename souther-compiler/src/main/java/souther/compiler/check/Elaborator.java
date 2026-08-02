@@ -675,11 +675,11 @@ public final class Elaborator {
         TypeChecker.forEachChild(e, sub -> checkAnnotatedLambdaBindings(sub, symbols));
     }
 
-    /** A function value that could not be inlined away and so becomes a first-class {@code Fn}: a
-     * function chosen at runtime by an {@code if} (spec §blocks). A bare lambda is not here — it is
-     * either inlined at its application or, if it escapes, reported as "a block is not a value". */
+    /** A value that is a function, whatever it was written as. One applied where it is bound is
+     * expanded there and never reaches this; what does is one that escaped, and it becomes a
+     * first-class {@code Fn} at the parameter types the context or its applications give. */
     public static boolean isFunctionSelection(Ast.Expr e) {
-        return !(e instanceof Ast.Block) && producesFunction(e);
+        return producesFunction(e);
     }
 
 

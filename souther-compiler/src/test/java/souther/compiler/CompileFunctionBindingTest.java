@@ -245,9 +245,9 @@ class CompileFunctionBindingTest {
     }
 
     /**
-     * Storing a function is refused by one rule, whatever the function was written as. A recursive
-     * helper is not a special case of it: the lambda beside it is refused identically, so nothing
-     * about recursion is what decides this.
+     * Storing a function whose type nothing states is refused for that — not for being stored, and
+     * not for being recursive. A lambda and a library name are refused identically, so neither what
+     * it was written as nor recursion is what decides it.
      */
     @Test
     void storingAFunctionIsRefusedWhateverItWasWrittenAs() {
@@ -280,7 +280,7 @@ class CompileFunctionBindingTest {
 
         for (String src : List.of(lambda, libraryName)) {
             CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-            assertEquals("check.block.notvalue", e.diagnostic().messageKey(), e.getMessage());
+            assertEquals("check.fn.noinfer", e.diagnostic().messageKey(), e.getMessage());
         }
     }
 }
