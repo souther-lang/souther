@@ -742,6 +742,25 @@ class CompileInvariantDischargeTest {
     }
 
     @Test
+    void aClauseOverAFieldChainIsARelationAndNotOnlyAFact() {
+        // `bounds.floor >= 1` bounds a term the domain names, so a sum built on it is derived from
+        // it rather than having to be restated
+        String m = """
+                module demo
+                data Qty = Int
+                    invariant value >= 1
+                data Bounds = { floor: Int }
+                data Cart = { bounds: Bounds }
+                    invariant bounds.floor >= 1
+                behavior toQty : (cart: Cart) -> Qty
+                    constructs Qty
+                let toQty (cart) = Qty(cart.bounds.floor + 1)
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "floor >= 1 gives floor + 1 >= 1");
+    }
+
+    @Test
     void aFreeNameInsideTheClosureIsPartOfTheTerm() {
         // the clause's `floor` is the field being given, so the guard has to bound by the same value
         String m = """

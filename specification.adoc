@@ -1118,6 +1118,29 @@ The field the closure copied need not be the one the clause names: when the clos
 
 This is bounded to a field *copied*. A field the closure computes from others — `+code = String.concat([r.sku, r.name])+` — is not this: two rows that differ can land on one value, and nothing about the result follows.
 
+[#invariant-discharge-quantified]
+==== A relation over every element, read at the element
+
+`+List.all(p, xs)+` states `+p+` of each element of `+xs+`. Where a standard-library combinator hands its closure an element of `+xs+`, the check reads the relation again there, with the quantifier's own parameter standing for the element the closure was handed.
+
+[,text]
+----
+data Qty = Int invariant value >= 1
+data Line = { quantity: Int }
+data Cart = { items: List<Line> } invariant List.all(i -> i.quantity >= 1, items)
+
+behavior toQty : (cart: Cart) -> List<Qty> constructs Qty
+let toQty (cart) = List.map(i -> Qty(i.quantity), cart.items)   // discharged
+----
+
+Both sources of a relation read alike: an input type's invariant clause, and a `+guard+` or `+if+` on the path stating the relation of the same container.
+
+The container the closure walks need not be the one the relation was stated of. Where every element of it is an element of the one that was — a *permutes* or a *subset* construction (<<invariant-discharge-preservation>>) — the relation is read there too, so `+List.map(f, List.filter(q, xs))+` carries what was stated of `+xs+`. A *maps* or *collapses* construction makes elements the relation says nothing about.
+
+A relation the clause in turn states of a container is read at that container's elements as well, so a clause over a container of containers reaches the innermost element.
+
+`+List.any+` is not this: one element having a property says nothing about the rest. Neither is a `+List.all+` the path has *denied*, which says some element fails the predicate without naming which.
+
 [#invariant-discharge-facts]
 ==== A clause that states no relation is settled, not derived
 

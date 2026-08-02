@@ -163,6 +163,20 @@ public final class InvariantChecker {
             "Set.contains", new Carried(1, Set.of(Shape.PERMUTES)),
             "Map.containsKey", new Carried(1, Set.of(Shape.PERMUTES)));
 
+    /** A stdlib call that states a predicate ({@code predicate}) of every element of a container
+     * ({@code container}). Stating one is stating the predicate of each element, so the elements a
+     * combinator's closure is handed carry it — which is the other direction of {@link #CARRIED},
+     * where a predicate travels from a container to one built from it. {@code List.all} is the only
+     * such call the library has. */
+    private record Quantifier(int predicate, int container) {}
+
+    private static final Map<String, Quantifier> QUANTIFIERS =
+            Map.of("List.all", new Quantifier(0, 1));
+
+    /** The constructions every element of whose result is an element of what it was built from, so a
+     * relation stated of the source is a relation of each element here. */
+    private static final Set<Shape> KEEPS_ELEMENTS = Set.of(Shape.PERMUTES, Shape.SUBSET);
+
     /** Emptiness, by the size call it means. This is not a rule about what an operation does to a
      * property (spec §invariant-discharge-preservation) but about what a predicate <em>says</em>:
      * {@code List.isEmpty(xs)} and {@code List.length(xs) == 0} are one statement, so a guard writing
@@ -191,24 +205,53 @@ public final class InvariantChecker {
         return TypeOps.effectiveInvariants(named, data, symbols, dischargeInvariants::get);
     }
 
-    /** What the guards have settled on the current path: numeric relations, and predicates known to
-     * hold or to fail. Threaded functionally through the walk, as the domain alone once was. */
-    private record Known(NumericDomain numbers, PredicateFacts facts) {
+    /**
+     * A relation known of every element of a container. A fact settles the container as a whole and
+     * is keyed by the call that states it, which relates it to nothing inside; this keeps the
+     * relation as the clause it was written as, together with the rule that names its free leaves, so
+     * it can be read again at the element a combinator's closure is handed.
+     *
+     * <p>{@code reads} is every term the clause names from outside itself, {@code container}
+     * included. A binding that takes over one of those names leaves the clause saying something else,
+     * so the relation is dropped there.
+     */
+    private record Quantified(String container, Ast.Block predicate, Bindings binds,
+                              List<String> reads) {}
+
+    /** What the guards have settled on the current path: numeric relations, predicates known to hold
+     * or to fail, and relations known of every element of a container. Threaded functionally through
+     * the walk, as the domain alone once was. */
+    private record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quantified) {
 
         static Known top() {
-            return new Known(NumericDomain.top(), PredicateFacts.none());
+            return new Known(NumericDomain.top(), PredicateFacts.none(), List.of());
         }
 
         Known with(NumericDomain n) {
-            return new Known(n, facts);
+            return new Known(n, facts, quantified);
         }
 
         Known with(PredicateFacts f) {
-            return new Known(numbers, f);
+            return new Known(numbers, f, quantified);
+        }
+
+        Known and(List<Quantified> more) {
+            if (more.isEmpty()) {
+                return this;
+            }
+            List<Quantified> all = new ArrayList<>(quantified);
+            all.addAll(more);
+            return new Known(numbers, facts, List.copyOf(all));
         }
 
         Known forgetIf(java.util.function.Predicate<String> drop) {
-            return new Known(numbers.forgetIf(drop), facts.forgetIf(drop));
+            List<Quantified> kept = new ArrayList<>();
+            for (Quantified q : quantified) {
+                if (q.reads().stream().noneMatch(drop)) {
+                    kept.add(q);
+                }
+            }
+            return new Known(numbers.forgetIf(drop), facts.forgetIf(drop), List.copyOf(kept));
         }
     }
 
@@ -391,7 +434,8 @@ public final class InvariantChecker {
             if (combo != null && i == combo.closureArg() && arg instanceof Ast.Block step
                     && combo.elementParam() < step.params().size()
                     && combo.listArg() < call.args().size()) {
-                Type elem = elementType(typeExpr(call.args().get(combo.listArg()), types));
+                Ast.Expr container = call.args().get(combo.listArg());
+                Type elem = elementType(typeExpr(container, types));
                 Map<String, Type> t2 = new HashMap<>(types);
                 String p = step.params().get(combo.elementParam()).name();
                 Known k2 = rebind(k, p);
@@ -399,11 +443,126 @@ public final class InvariantChecker {
                     t2.put(p, elem);
                     k2 = seedParam(p, elem, k2);   // the element carries its type's invariant
                 }
+                for (Quantified q : elementRelations(container, k2, types)) {
+                    k2 = instantiate(q, p, elem, k2);
+                }
                 walk(step.body(), k2, t2);
             } else {
                 walk(arg, k, types);
             }
         }
+    }
+
+    /** The relations known of every element of {@code container}: those stated of it as written, and
+     * those stated of each container it was built from by an operation that only drops or reorders
+     * elements — every element here is an element there. */
+    private List<Quantified> elementRelations(Ast.Expr container, Known k, Map<String, Type> types) {
+        List<Quantified> found = new ArrayList<>();
+        Ast.Expr source = container;
+        while (source != null) {
+            String key = bodyKey(source, types);
+            if (key != null) {
+                for (Quantified q : k.quantified()) {
+                    if (key.equals(q.container())) {
+                        found.add(q);
+                    }
+                }
+            }
+            source = builtFromKeepingElements(source);
+        }
+        return found;
+    }
+
+    /** What {@code e} was built from where every element of {@code e} is one of that container's, or
+     * {@code null} where it was not built that way. */
+    private static Ast.Expr builtFromKeepingElements(Ast.Expr e) {
+        if (!(e instanceof Ast.Apply call)) {
+            return null;
+        }
+        Built built = BUILT_FROM.get(call.reaches());
+        return built != null && KEEPS_ELEMENTS.contains(built.shape())
+                && built.from() < call.args().size() ? call.args().get(built.from()) : null;
+    }
+
+    /** What {@code q} says of the element bound to {@code element}, taken into {@code k}. The clause
+     * is read again with the quantifier's own parameter standing for that element — the same reading
+     * {@link #seedAt} does of a type's invariant, over the clause a quantifier holds. A relation the
+     * clause in turn states of a container is recorded, so a container of containers reaches its
+     * innermost element. */
+    private Known instantiate(Quantified q, String element, Type elementType, Known k) {
+        Ast.Binder param = q.predicate().params().get(0);
+        Map<String, Type> fields = new HashMap<>(q.binds().fields());
+        if (elementType != null) {
+            fields.put(param.name(), elementType);
+        }
+        Bindings at = new Bindings(
+                name -> param.name().equals(name)
+                        ? LinearForm.atom(element) : q.binds().form().apply(name),
+                name -> param.name().equals(name) ? element : q.binds().path().apply(name),
+                q.binds().given(), q.binds().bodyKey(), fields);
+        List<Quantified> nested = new ArrayList<>();
+        quantifiedBy(q.predicate().body(), at, true, nested);
+        return assume(obligations(q.predicate().body(), at), k).and(nested);
+    }
+
+    /** What {@code e}, asserted with polarity {@code positive}, says of every element of a container.
+     * Mirrors {@link #obligations}: a conjunction states each of its sides, and a negation flips the
+     * polarity. Only a stated quantifier is recorded — denying one says some element fails the
+     * predicate, and which one is not something this check can name. */
+    private void quantifiedBy(Ast.Expr raw, Bindings binds, boolean positive, List<Quantified> out) {
+        Ast.Expr e = asSizeComparison(raw);
+        if (e instanceof Ast.Binary b && b.op() == Ast.BinOp.AND && positive) {
+            quantifiedBy(b.left(), binds, true, out);
+            quantifiedBy(b.right(), binds, true, out);
+            return;
+        }
+        Ast.Expr under = negated(e);
+        if (under != null) {
+            quantifiedBy(under, binds, !positive, out);
+            return;
+        }
+        if (!positive || !(e instanceof Ast.Apply call)) {
+            return;
+        }
+        Quantifier over = QUANTIFIERS.get(call.reaches());
+        if (over == null || over.predicate() >= call.args().size()
+                || over.container() >= call.args().size()
+                || !(call.args().get(over.predicate()) instanceof Ast.Block p)
+                || p.params().size() != 1) {
+            return;
+        }
+        String container = siteOf(binds).apply(call.args().get(over.container()));
+        if (container == null) {
+            return;
+        }
+        List<String> named = new ArrayList<>();
+        named.add(container);
+        reads(e, binds, Set.of(), named);
+        out.add(new Quantified(container, p, binds, List.copyOf(named)));
+    }
+
+    /** Every term {@code e} names from outside itself, as the clause's own rule names it. A name the
+     * clause binds is its own and is left out; anything else the rule cannot name is kept as written,
+     * which can only drop the relation sooner. */
+    private void reads(Ast.Expr e, Bindings binds, Set<String> bound, List<String> out) {
+        String root = rootName(e);
+        if (root != null) {
+            if (!bound.contains(root)) {
+                String path = invPath(e, binds);
+                out.add(path == null ? root : path);
+            }
+            return;
+        }
+        Set<String> inner = bound;
+        if (e instanceof Ast.Block b && !b.params().isEmpty()) {
+            inner = new java.util.HashSet<>(bound);
+            inner.addAll(b.paramNames());
+        } else if (e instanceof Ast.LetIn li) {
+            inner = new java.util.HashSet<>(bound);
+            inner.add(li.name());
+        }
+        Set<String> scope = inner;
+        Ast.forEachChild(e, child -> reads(child, binds, scope, out));
     }
 
     // --- construction detection & discharge check ----------------------------------------------
@@ -467,6 +626,12 @@ public final class InvariantChecker {
         /** Nothing to substitute: what the body's own expressions are read with. */
         static Bindings ofBody(Function<Ast.Expr, String> bodyKey) {
             return new Bindings(_ -> null, _ -> null, _ -> null, bodyKey, Map.of());
+        }
+
+        /** A clause written in the body's own scope, where every name already stands for itself —
+         * what a guard states, read by the rule a type's clause is read by. */
+        static Bindings ofScope(Map<String, Type> types) {
+            return ofPaths(LinearForm::atom, name -> name, types);
         }
     }
 
@@ -664,6 +829,9 @@ public final class InvariantChecker {
                 out = out.with(out.numbers().assume(la.minus(ra), eff));
             }
         }
+        List<Quantified> quantified = new ArrayList<>();
+        quantifiedBy(cond, Bindings.ofScope(types), positive, quantified);
+        out = out.and(quantified);
         // Both routes, always: which one carries a clause is decided where the clause is read, and a
         // guard does not know which that will be.
         Polar polar = polar(cond, positive);
@@ -726,6 +894,30 @@ public final class InvariantChecker {
         return seedAt(name, t, k, 0);
     }
 
+    /** {@code k} with everything {@code owed} states taken as holding. What a clause owes at a
+     * construction is what it guarantees where it is already established, so the two read the same
+     * clauses through the same rule and differ only in direction. */
+    private Known assume(List<Clause> owed, Known k) {
+        if (owed == null) {
+            return k;
+        }
+        Known out = k;
+        for (Clause c : owed) {
+            for (Constraint known : c.known()) {
+                out = out.with(out.numbers().assume(known.form(), known.rel()));
+            }
+            if (c.numeric() != null) {
+                out = out.with(out.numbers().assume(c.numeric().form(), c.numeric().rel()));
+            }
+            if (c.fact() != null) {
+                // What is guaranteed is guaranteed of the term as written; a container built from it
+                // is another term, and reads the rules where it is constructed rather than here.
+                out = out.with(out.facts().assume(c.fact().keys().get(0), c.fact().positive()));
+            }
+        }
+        return out;
+    }
+
     private Known seedAt(String path, Type t, Known k, int depth) {
         if (depth > 2 || !(t instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)) {
             return k;
@@ -744,26 +936,12 @@ public final class InvariantChecker {
                 },
                 resolvePath, fields);
         Known out = k;
+        List<Quantified> quantified = new ArrayList<>();
         for (Ast.InvariantClause inv : invariantsOf(ref.name(), data)) {
-            List<Clause> o = obligations(inv.expr(), binds);
-            if (o == null) {
-                continue;
-            }
-            for (Clause c : o) {
-                for (Constraint known : c.known()) {
-                    out = out.with(out.numbers().assume(known.form(), known.rel()));
-                }
-                if (c.numeric() != null) {
-                    out = out.with(out.numbers().assume(c.numeric().form(), c.numeric().rel()));
-                }
-                if (c.fact() != null) {
-                    // What an input's type guarantees is guaranteed of the term as written; a
-                    // container built from it is another term, and reads the rules where it is
-                    // constructed rather than here.
-                    out = out.with(out.facts().assume(c.fact().keys().get(0), c.fact().positive()));
-                }
-            }
+            quantifiedBy(inv.expr(), binds, true, quantified);
+            out = assume(obligations(inv.expr(), binds), out);
         }
+        out = out.and(quantified);
         if (data.newtype()) {
             // A newtype's `.value` is the same location as the newtype, so what its base guarantees is
             // guaranteed of this very atom: `data Outer = Inner` carries Inner's invariant.
@@ -833,15 +1011,24 @@ public final class InvariantChecker {
         });
     }
 
-    /** The leaf rule for an invariant expression: a bare name resolves to its field/{@code value}, and
-     * a size call over one to that container's size atom. */
+    /** The leaf rule for an invariant expression: a bare name resolves to its field/{@code value}, a
+     * chain read off one to that location, and a size call over one to that container's size atom.
+     * A bare name goes through the form because what a construction gives a field may be an
+     * arithmetic result rather than a location; a chain read off it is a location either way. */
     private Function<Ast.Expr, LinearForm> resolveLeaf(Bindings binds) {
         return n -> {
             String size = clauseSizeAtom(n, binds);
             if (size != null) {
                 return LinearForm.atom(size);
             }
-            return n instanceof Ast.Var v ? binds.form().apply(v.name()) : null;
+            if (n instanceof Ast.Var v) {
+                return binds.form().apply(v.name());
+            }
+            if (n instanceof Ast.FieldAccess) {
+                String path = invPath(n, binds);
+                return path == null ? null : LinearForm.atom(path);
+            }
+            return null;
         };
     }
 
