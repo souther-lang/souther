@@ -34,10 +34,18 @@ public final class CallElaborator {
                 List.of(TypeName.primitive(Type.show(head)), TypeName.runtime(errorCase)));
     }
 
-    static Core elaborateCall(Ast.Call call, Map<String, Type> env, CheckContext ctx,
+    static Core elaborateCall(Ast.Call call, Scope env, CheckContext ctx,
                                       Type expected) {
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         Type result = typeOfCall(ca, call, env, ctx, expected);
+        // applying something this body binds is a different operation from calling something
+        // declared elsewhere, and it is the only one that carries a binding into the emitted tree
+        if (call.denotes() instanceof ValueName.Local local
+                && env.typeOf(local.id()) instanceof Type.FnOf) {
+            return new Core.Apply(
+                    new Core.Read(call.fn(), local.id(), env.typeOf(local.id()), call.pos()),
+                    ca.cores(), result, call.pos());
+        }
         return new Core.Call(call.fn(), ca.cores(), result, call.pos());
     }
 
@@ -50,10 +58,10 @@ public final class CallElaborator {
     static final class CallArgs {
         private final List<Ast.Expr> args;
         private final Core[] cores;
-        private final Map<String, Type> env;
+        private final Scope env;
         private final CheckContext ctx;
 
-        CallArgs(List<Ast.Expr> args, Map<String, Type> env, CheckContext ctx) {
+        CallArgs(List<Ast.Expr> args, Scope env, CheckContext ctx) {
             this.args = args;
             this.cores = new Core[args.size()];
             this.env = env;
@@ -96,7 +104,7 @@ public final class CallElaborator {
          * reads its name and never asks for its type. */
         void untyped(int i) {
             Ast.Var name = (Ast.Var) args.get(i);
-            cores[i] = new Core.Var(name.name(), null, name.pos());
+            cores[i] = new Core.Builtin(name.name(), name.pos());
         }
 
         /** The elaborated arguments. Every argument must have been reached: a rule that yields a type
@@ -182,7 +190,7 @@ public final class CallElaborator {
      * the library, then a function-typed binding, then an injected behavior — and a name that could
      * be read two ways was whichever came first.
      */
-    static Type typeOfCall(CallArgs ca, Ast.Call call, Map<String, Type> env, CheckContext ctx, Type expected) {
+    static Type typeOfCall(CallArgs ca, Ast.Call call, Scope env, CheckContext ctx, Type expected) {
         List<Ast.Expr> args = call.args();
         if (call.denotes() == null) {
             throw new IllegalStateException(
@@ -420,7 +428,9 @@ public final class CallElaborator {
                 // a function-typed value in scope (a helper's function parameter) applied to
                 // arguments — f(x) (spec §fn-declaration). A newtype construction 金額(500) never
                 // reaches here — NewtypeDesugar has lowered it to a NewData literal.
-                if (env.get(call.fn()) instanceof Type.FnOf fn) {
+                // a function value in force, or a recursive helper's signature: which of the two
+                // is the denotation's to say, and only one of them is bound here
+                if (env.of(call.denotes(), call.fn()) instanceof Type.FnOf fn) {
                     if (args.size() != fn.params().size()) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.arity").title("check.arity.title")

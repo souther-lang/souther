@@ -268,7 +268,7 @@ public final class InvariantChecker {
         Set<String> inner = bound;
         if (e instanceof Ast.Block b && !b.params().isEmpty()) {
             inner = new java.util.HashSet<>(bound);
-            inner.addAll(b.params());
+            inner.addAll(b.paramNames());
         } else if (e instanceof Ast.LetIn li) {
             inner = new java.util.HashSet<>(bound);
             inner.add(li.name());
@@ -335,11 +335,11 @@ public final class InvariantChecker {
                 checkIfConstruction(ic.construct(), k, types, true);
                 Ast.forEachChild(ic.construct(), child -> walk(child, k, types));
                 Map<String, Type> t2 = new HashMap<>(types);
-                Known k2 = rebind(k, ic.binder());
+                Known k2 = rebind(k, ic.binderName());
                 Type built = typeExpr(ic.construct(), types);
                 if (built != null) {
-                    t2.put(ic.binder(), built);
-                    k2 = seedParam(ic.binder(), built, k2);   // on this branch the invariant holds
+                    t2.put(ic.binderName(), built);
+                    k2 = seedParam(ic.binderName(), built, k2);   // on this branch the invariant holds
                 }
                 walk(ic.then(), k2, t2);
                 // Each departure stands where the invariant did not hold, and nothing was built
@@ -366,11 +366,11 @@ public final class InvariantChecker {
                     Map<String, Type> t2 = new HashMap<>(types);
                     Known k2 = k;
                     if (c.binding() != null) {
-                        k2 = rebind(k, c.binding());
+                        k2 = rebind(k, c.bindingName());
                         if (c.caseTypes().size() == 1) {
                             Type bound = MatchElaborator.caseBindType(c.caseTypes().get(0).denotes());
                             if (bound != null) {
-                                t2.put(c.binding(), bound);
+                                t2.put(c.bindingName(), bound);
                             }
                         }
                     }
@@ -393,7 +393,7 @@ public final class InvariantChecker {
                     && combo.listArg() < call.args().size()) {
                 Type elem = elementType(typeExpr(call.args().get(combo.listArg()), types));
                 Map<String, Type> t2 = new HashMap<>(types);
-                String p = step.params().get(combo.elementParam());
+                String p = step.params().get(combo.elementParam()).name();
                 Known k2 = rebind(k, p);
                 if (elem != null) {
                     t2.put(p, elem);
@@ -1104,12 +1104,12 @@ public final class InvariantChecker {
                 || !(closure instanceof Ast.Block step) || step.params().size() != 1) {
             return null;
         }
-        String element = step.params().get(0);
-        List<String> read = new Reads(proj.params().get(0)).chain(proj.body());
+        Ast.Binder element = step.params().get(0);
+        List<String> read = new Reads(proj.params().get(0).name()).chain(proj.body());
         if (read == null) {
             return null;
         }
-        Reads reads = new Reads(element);
+        Reads reads = new Reads(element.name());
         Ast.Expr made = reads.produced(step.body());
         List<String> traced;
         if (read.isEmpty()) {
@@ -1258,7 +1258,7 @@ public final class InvariantChecker {
             case Ast.If iff -> elementsKey("if(", List.of(iff.cond(), iff.then(), iff.els()),
                     site, bound, depth, ")");
             case Ast.Block b -> {
-                Map<String, String> inner = binding(bound, b.params(), depth);
+                Map<String, String> inner = binding(bound, b.paramNames(), depth);
                 yield wrap("\\" + b.params().size(), termKey(b.body(), site, inner, depth + 1));
             }
             case Ast.LetIn li -> {

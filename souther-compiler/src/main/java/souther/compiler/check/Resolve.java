@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
@@ -46,10 +48,58 @@ public final class Resolve {
     private final List<ValueUse> values0 = new ArrayList<>();
     /** Every name it could not answer, as the error it would once have thrown. */
     private final List<CompileException> unresolved = new ArrayList<>();
+    /** Where each binding this pass gave an identity to is written. */
+    private final Map<BindingId, SourcePos> binders = new LinkedHashMap<>();
+    /** How many bindings each definition has been given, so the next one gets the next number. */
+    private final Map<BindingOwner, Integer> counts = new HashMap<>();
+    /** The definition whose text is being read. Every binding met belongs to it. */
+    private BindingOwner owner;
 
     private Resolve(Symbols symbols, Values values) {
         this.symbols = symbols;
         this.values = values;
+    }
+
+    /** The value definition of this spelling in this module. */
+    private BindingOwner ownerOfValue(String name) {
+        return new BindingOwner.OfValue(values.module(), name);
+    }
+
+    /** A binder answered, and the bindings that hold under it. */
+    private record Answered(Ast.Binder binder, Bindings bound) {}
+
+    /**
+     * {@code binder} given a binding of its own, and {@code bound} extended with it.
+     *
+     * <p>The binding is what the names under it are answered with, so two bindings of one spelling
+     * are two answers however they were written. Where it was written is kept aside, for a reader
+     * that is asking about the source rather than about the program.
+     */
+    private Answered bind(Bindings bound, Ast.Binder binder) {
+        int ordinal = counts.merge(owner, 1, Integer::sum) - 1;
+        BindingId id = new BindingId(owner, ordinal);
+        binders.put(id, binder.pos());
+        return new Answered(new Ast.Binder.Bound(binder.name(), id, binder.pos()),
+                bound.and(binder.name(), new ValueName.Local(binder.name(), id)));
+    }
+
+    /** The bindings under {@code binder}, where the binder itself is not carried on. */
+    private Bindings binding(Bindings bound, Ast.Binder binder) {
+        return bind(bound, binder).bound();
+    }
+
+    /** Several binders answered, and the bindings that hold under all of them. */
+    private record AnsweredAll(List<Ast.Binder> binders, Bindings bound) {}
+
+    /** The same as {@link #bind}, for the names one binder writes at once — a block's parameters. */
+    private AnsweredAll bindAll(Bindings bound, List<Ast.Binder> written) {
+        List<Ast.Binder> out = new ArrayList<>();
+        for (Ast.Binder b : written) {
+            Answered a = bind(bound, b);
+            bound = a.bound();
+            out.add(a.binder());
+        }
+        return new AnsweredAll(out, bound);
     }
 
     /**
@@ -105,9 +155,13 @@ public final class Resolve {
      * which becomes {@link souther.compiler.types.Type#ERRONEOUS}, and the rest of the module is
      * resolved as if the mistake were not there — so an author is told about every unknown name at
      * once instead of one per compile, and an editor can still say what the names around it mean.
+     *
+     * <p>{@code binders} says where each binding was written. A binding is not its position — a pass
+     * that expands a helper stamps the call site over the positions in the copy — so the two are kept
+     * apart, and a reader asking about the source rather than about the program reads this.
      */
     public record Resolved(Ast.Module module, List<Denotation> denotations, List<ValueUse> values,
-                           List<CompileException> unresolved) {}
+                           List<CompileException> unresolved, Map<BindingId, SourcePos> binders) {}
 
     /** {@code m} with every name it writes resolved against its own definitions — a module compiled
      * with nothing else in sight. */
@@ -155,6 +209,7 @@ public final class Resolve {
         }
         List<Ast.Example> examples = new ArrayList<>();
         for (Ast.Example e : m.examples()) {
+            r.owner = r.ownerOfValue(e.target());
             List<Ast.ExampleRow> rows = new ArrayList<>();
             for (Ast.ExampleRow row : e.rows()) {
                 List<Ast.With> withs = new ArrayList<>();
@@ -168,6 +223,7 @@ public final class Resolve {
         }
         List<Ast.Fake> fakes = new ArrayList<>();
         for (Ast.Fake f : m.fakes()) {
+            r.owner = r.ownerOfValue(f.target());
             List<Ast.FakeRow> rows = new ArrayList<>();
             for (Ast.FakeRow row : f.rows()) {
                 rows.add(new Ast.FakeRow(row.inputs() == null ? null : r.exprs(row.inputs()),
@@ -182,15 +238,18 @@ public final class Resolve {
         return new Resolved(
                 new Ast.Module(m.name(), m.exposing(), exposedOutputs, m.imports(), defs,
                         behaviors, fns, examples, fakes, m.exampleFileTarget(), m.pos()),
-                List.copyOf(r.denotations), List.copyOf(r.values0), List.copyOf(r.unresolved));
+                List.copyOf(r.denotations), List.copyOf(r.values0), List.copyOf(r.unresolved),
+                Map.copyOf(r.binders));
     }
 
     private Ast.FnDef fn(Ast.FnDef f) {
+        owner = ownerOfValue(f.name());
         List<Ast.FnParam> params = new ArrayList<>();
         Bindings bound = Bindings.NONE;
         for (Ast.FnParam p : f.params()) {
-            params.add(new Ast.FnParam(p.name(), paramType(p.type()), p.typeFromPattern(), p.pos()));
-            bound = bound.and(p.name(), p.pos());
+            Answered a = bind(bound, p.binder());
+            params.add(new Ast.FnParam(a.binder(), paramType(p.type()), p.typeFromPattern()));
+            bound = a.bound();
         }
         return new Ast.FnDef(f.name(), params, retType(f.declaredReturn()), f.intrinsicKey(),
                 f.body() == null ? null : expr(f.body(), bound), f.partial(), f.pos());
@@ -272,13 +331,17 @@ public final class Resolve {
     // --- definitions ---
 
     private Ast.Def def(Ast.Def def) {
+        owner = new BindingOwner.OfData(symbols.own(def.name()));
         return switch (def) {
             case Ast.UnitData u -> u;
             // an invariant reads the fields of the data it belongs to, which are what bind its
             // names — `value > 0` is about this declaration's `value`, whatever else is in scope
-            case Ast.Data d -> new Ast.Data(d.name(), d.newtype(), names(d.includes()), fields(d.fields()),
-                    Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
-                    d.decoder().map(this::decoder), d.encoder().map(this::encoder), d.pos());
+            case Ast.Data d -> {
+                declareFields(d);
+                yield new Ast.Data(d.name(), d.newtype(), names(d.includes()), fields(d.fields()),
+                        Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
+                        d.decoder().map(this::decoder), d.encoder().map(this::encoder), d.pos());
+            }
             case Ast.SumData s -> new Ast.SumData(s.name(), sumCases(s), s.decoder().map(this::discriminate),
                     s.encoder().map(this::sumEncoder), s.pos());
         };
@@ -310,23 +373,30 @@ public final class Resolve {
      * the ones a spread brings in, which are as much this declaration's fields as the written ones
      * (and are what a spread-in invariant was written against).
      */
-    private Bindings boundFields(Ast.Data d) {
-        return boundFields(d, Bindings.NONE, new LinkedHashSet<>());
+    /**
+     * Where each field this declaration writes is written, against the binding it introduces inside
+     * an invariant.
+     *
+     * <p>Recorded whether or not this declaration has an invariant of its own: a declaration that
+     * includes it reads these fields in <em>its</em> invariant, and the binding a field is stays the
+     * declaring declaration's, so this is where an editor is answered from either way.
+     */
+    private void declareFields(Ast.Data d) {
+        Map<String, BindingId> bindings = TypeOps.fieldBindings(d, symbols);
+        for (Ast.Field field : d.fields()) {
+            BindingId binding = bindings.get(field.name());
+            if (binding != null) {
+                binders.put(binding, field.pos());
+            }
+        }
     }
 
-    private Bindings boundFields(Ast.Data d, Bindings bound, Set<TypeName> spread) {
-        for (Ast.Field f : d.fields()) {
-            bound = bound.and(f.name(), f.pos());
-        }
-        for (Ast.Name include : d.includes()) {
-            TypeName source = include.denotes() != null
-                    ? include.denotes() : symbols.resolve(include.written());
-            // a spread of a spread reaches the fields underneath; a spread that names nothing, or
-            // names its way back round, is reported where the declaration is checked
-            if (source != null && spread.add(source)
-                    && symbols.get(source) instanceof Ast.Data src) {
-                bound = boundFields(src, bound, spread);
-            }
+    private Bindings boundFields(Ast.Data d) {
+        Bindings bound = Bindings.NONE;
+        // which binding each field is is answered in one place, so the pass that emits this
+        // invariant reaches the same ones without working them out again
+        for (Map.Entry<String, BindingId> f : TypeOps.fieldBindings(d, symbols).entrySet()) {
+            bound = bound.and(f.getKey(), new ValueName.Local(f.getKey(), f.getValue()));
         }
         return bound;
     }
@@ -354,30 +424,37 @@ public final class Resolve {
     private Ast.DecoderDef decoder(Ast.DecoderDef d) {
         return switch (d) {
             case Ast.PrimDecoder p -> {
-                Bindings bound = Bindings.NONE.and(p.inputName(), p.pos());
+                Answered input = bind(Bindings.NONE, p.input());
+                Bindings bound = input.bound();
                 List<Ast.DecStmt> stmts = new ArrayList<>();
                 for (Ast.DecStmt s : p.stmts()) {
                     if (s instanceof Ast.Let let) {
-                        stmts.add(new Ast.Let(let.name(), expr(let.value(), bound), let.pos()));
-                        bound = bound.and(let.name(), let.pos());
+                        Ast.Expr value = expr(let.value(), bound);
+                        Answered a = bind(bound, let.binder());
+                        stmts.add(new Ast.Let(a.binder(), value, let.pos()));
+                        bound = a.bound();
                     } else {
                         stmts.add(s);
                     }
                 }
-                yield new Ast.PrimDecoder(p.from(), p.inputName(), stmts,
+                yield new Ast.PrimDecoder(p.from(), input.binder(), stmts,
                         construct(p.result(), bound), p.pos());
             }
             case Ast.ObjectDecoder o -> {
                 List<Ast.Bind> binds = new ArrayList<>();
                 Bindings bound = Bindings.NONE;
                 for (Ast.Bind b : o.binds()) {
-                    binds.add(new Ast.Bind(b.name(), b.key(), decRef(b.ref()), b.pos()));
-                    bound = bound.and(b.name(), b.pos());
+                    Answered a = bind(bound, b.binder());
+                    binds.add(new Ast.Bind(a.binder(), b.key(), decRef(b.ref()), b.pos()));
+                    bound = a.bound();
                 }
                 yield new Ast.ObjectDecoder(binds, construct(o.result(), bound), o.pos());
             }
-            case Ast.NewtypeDecoder n -> new Ast.NewtypeDecoder(decRef(n.inner()), n.inputName(),
-                    construct(n.result(), Bindings.NONE.and(n.inputName(), n.pos())), n.pos());
+            case Ast.NewtypeDecoder n -> {
+                Answered input = bind(Bindings.NONE, n.input());
+                yield new Ast.NewtypeDecoder(decRef(n.inner()), input.binder(),
+                        construct(n.result(), input.bound()), n.pos());
+            }
         };
     }
 
@@ -404,8 +481,8 @@ public final class Resolve {
 
     /** An encoder reads the value it is encoding under the name it gives it. */
     private Ast.EncoderDef encoder(Ast.EncoderDef e) {
-        return new Ast.EncoderDef(e.selfName(),
-                rawExpr(e.result(), Bindings.NONE.and(e.selfName(), e.pos())), e.pos());
+        Answered self = bind(Bindings.NONE, e.self());
+        return new Ast.EncoderDef(self.binder(), rawExpr(e.result(), self.bound()), e.pos());
     }
 
     private Ast.RawExpr rawExpr(Ast.RawExpr r, Bindings bound) {
@@ -422,8 +499,11 @@ public final class Resolve {
             case Ast.MapEnc m -> new Ast.MapEnc(expr(m.source(), bound), encElem(m.elem()),
                     encElem(m.key()), m.pos());
             // the inner expression reads the element the option holds, under the name given here
-            case Ast.OptionRaw o -> new Ast.OptionRaw(expr(o.access(), bound),
-                    rawExpr(o.inner(), bound.and(o.elemVar(), o.pos())), o.elemVar(), o.pos());
+            case Ast.OptionRaw o -> {
+                Answered elem = bind(bound, o.elem());
+                yield new Ast.OptionRaw(expr(o.access(), bound),
+                        rawExpr(o.inner(), elem.bound()), elem.binder(), o.pos());
+            }
             case Ast.ObjectRaw o -> {
                 List<Ast.RawEntry> entries = new ArrayList<>();
                 for (Ast.RawEntry entry : o.entries()) {
@@ -482,23 +562,32 @@ public final class Resolve {
             }
             // a binding's pattern may write Option's `Some`, which the binding check then rejects
             // for what it is — a name that opens nothing — rather than as a name nothing declares
-            case Ast.LetIn li -> new Ast.LetIn(li.name(), expr(li.value(), bound),
-                    paramType(li.declaredType()), li.annotated(),
-                    li.opens() == null ? null : caseName(li.opens()),
-                    expr(li.body(), bound.and(li.name(), li.pos())), li.pos());
-            case Ast.Block b -> new Ast.Block(b.params(),
-                    expr(b.body(), bound.andAll(b.params(), b.pos())), b.pos());
+            case Ast.LetIn li -> {
+                Ast.Expr value = expr(li.value(), bound);
+                Answered a = bind(bound, li.binder());
+                yield new Ast.LetIn(a.binder(), value,
+                        paramType(li.declaredType()), li.annotated(),
+                        li.opens() == null ? null : caseName(li.opens()),
+                        expr(li.body(), a.bound()), li.pos());
+            }
+            case Ast.Block b -> {
+                AnsweredAll ps = bindAll(bound, b.params());
+                yield new Ast.Block(ps.binders(), expr(b.body(), ps.bound()), b.pos());
+            }
             // an attempt's binder names the value only where there is one to name — the success
             // branch. The construction and the else value are outside it.
-            case Ast.IfConstructed ic -> new Ast.IfConstructed(expr(ic.construct(), bound),
-                    ic.binder(), expr(ic.then(), bound.and(ic.binder(), ic.pos())),
-                    arms(ic.els(), bound), ic.pos());
+            case Ast.IfConstructed ic -> {
+                Answered a = bind(bound, ic.binder());
+                yield new Ast.IfConstructed(expr(ic.construct(), bound), a.binder(),
+                        expr(ic.then(), a.bound()), arms(ic.els(), bound), ic.pos());
+            }
             case Ast.Match m -> {
                 List<Ast.Case> cases = new ArrayList<>();
                 for (Ast.Case c : m.cases()) {
-                    Bindings inArm = c.binding() == null ? bound : bound.and(c.binding(), c.pos());
-                    cases.add(new Ast.Case(caseNames(c.caseTypes()), c.binding(),
-                            expr(c.body(), inArm),
+                    Answered a = c.binding() == null ? null : bind(bound, c.binding());
+                    Bindings inArm = a == null ? bound : a.bound();
+                    cases.add(new Ast.Case(caseNames(c.caseTypes()),
+                            a == null ? null : a.binder(), expr(c.body(), inArm),
                             c.unwrapAsserts() == null ? null : names(c.unwrapAsserts()), c.pos()));
                 }
                 yield new Ast.Match(expr(m.scrutinee(), bound), cases, m.pos());
@@ -534,9 +623,9 @@ public final class Resolve {
      * bind a name a module declares, and the binding is what the name means there.
      */
     private ValueName valueName(String written, SourcePos pos, Bindings bound) {
-        SourcePos binder = bound.binderOf(written);
-        if (binder != null) {
-            return new ValueName.Local(written, binder);
+        ValueName.Local binding = bound.binderOf(written);
+        if (binding != null) {
+            return binding;
         }
         if (Elaborator.ROUNDING_MODES.contains(written) || written.equals("None")
                 || written.equals("Some")) {
@@ -562,9 +651,9 @@ public final class Resolve {
     /** What the name a call applies denotes. */
     private ValueName calledName(Ast.Call call, Bindings bound) {
         String written = call.fn();
-        SourcePos binder = bound.binderOf(written);
-        if (binder != null) {
-            return new ValueName.Local(written, binder);   // a function-typed parameter, applied
+        ValueName.Local binding = bound.binderOf(written);
+        if (binding != null) {
+            return binding;   // a function-typed parameter, applied
         }
         if (written.equals("Some") || written.equals("None")) {
             return new ValueName.Builtin(written);   // Option's cases, which are not calls (E1303)
@@ -662,28 +751,20 @@ public final class Resolve {
     }
 
     /**
-     * The names bound at a point in a body, each with where it was bound. Persistent: extending it
+     * The names bound at a point in a body, each with the binding it is. Persistent: extending it
      * leaves the outer scope as it was, which is what an inner binding shadowing an outer one is.
      */
-    record Bindings(Map<String, SourcePos> byName) {
+    record Bindings(Map<String, ValueName.Local> byName) {
 
         static final Bindings NONE = new Bindings(Map.of());
 
-        Bindings and(String name, SourcePos binder) {
-            Map<String, SourcePos> next = new HashMap<>(byName);
-            next.put(name, binder);
+        Bindings and(String name, ValueName.Local binding) {
+            Map<String, ValueName.Local> next = new HashMap<>(byName);
+            next.put(name, binding);
             return new Bindings(Map.copyOf(next));
         }
 
-        Bindings andAll(List<String> names, SourcePos binder) {
-            Map<String, SourcePos> next = new HashMap<>(byName);
-            for (String name : names) {
-                next.put(name, binder);
-            }
-            return new Bindings(Map.copyOf(next));
-        }
-
-        SourcePos binderOf(String name) {
+        ValueName.Local binderOf(String name) {
             return byName.get(name);
         }
     }

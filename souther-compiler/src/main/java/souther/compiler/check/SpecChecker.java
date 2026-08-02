@@ -286,21 +286,21 @@ public final class SpecChecker {
             }
         }
 
-        Map<String, Type> env = new HashMap<>();
+        Scope env = Scope.NONE;
         for (Ast.FnParam p : fn.params()) {
             Elaborator.rejectBuiltinShadow(p.name(), p.pos());
         }
         Elaborator.rejectBuiltinShadowing(fn.body());
         for (int i = 0; i < nBusiness; i++) {
-            env.put(fn.params().get(i).name(), TypeOps.successType(spec.params().get(i).type(), symbols));
+            env = env.with(fn.params().get(i).binder(),
+                    TypeOps.successType(spec.params().get(i).type(), symbols));
         }
         Type output = TypeOps.successType(spec.ret(), symbols);
         // recursive helpers this behavior calls resolve through their signatures (spec 13.1); merged
         // only for typing, so the construction and dependency walks below still see the business params alone.
         // A parameter of the same name wins: a binding in force wins over the declaration it shadows
         // (spec §fn-rules), so an input written `depth` is the input and not the helper spelled that way.
-        Map<String, Type> tenv = new HashMap<>(recursiveHelperFns);
-        tenv.putAll(env);
+        Scope tenv = env.reaching(recursiveHelperFns);
         // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
         // declared types first, so a mismatch names the parameter, not the derivation it expands to.
         // A nested fold reaches `List.foldFrom` inside a block, so its signature must be in scope here.
@@ -326,7 +326,7 @@ public final class SpecChecker {
         // One expression (spec 16.4): this single walk sees every construction, including under a
         // desugared `guard`.
         DataChecker.Constructs constructed = DataChecker.Constructs.empty();
-        DataChecker.collectConstructs(body, constructed, symbols, new HashSet<>(env.keySet()), recHelperConstructs);
+        DataChecker.collectConstructs(body, constructed, symbols, recHelperConstructs);
         // `constructs` on an fn-backed behavior is optional: its construction permission is internal
         // (invisible to callers, unlike `depends on`), so with the body visible the set can be inferred
         // (ADR-0002). Omit it and inference stands. Declare it and it must match the body exactly —
@@ -391,7 +391,9 @@ public final class SpecChecker {
         // A guard-discharged one is silent; an unproven one is a warning (a possible abort); one the
         // guards prove must fail on a reachable path is an error (the path-sensitive generalization of
         // the constant `金額(-5)` check).
-        InvariantChecker.Findings inv = InvariantChecker.analyze(discharge, env, symbols);
+        // the invariant analysis reads its own atoms off the spellings a body writes, so it is
+        // handed the name view rather than the bindings
+        InvariantChecker.Findings inv = InvariantChecker.analyze(discharge, env.byName(), symbols);
         warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);

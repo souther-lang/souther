@@ -4,6 +4,8 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.CallElaborator;
@@ -748,11 +750,8 @@ public final class ExampleVerifier {
      * under, so a row spelling that type qualified asserts the same case.
      */
     private String caseOnly(Ast.Expr expected) {
-        if (!(expected instanceof Ast.Var v)) {
-            return null;
-        }
-        TypeName type = symbols.resolveCase(v.name());
-        return type == null ? null : type.name();
+        return expected instanceof Ast.Var v && v.denotes() instanceof ValueName.OfType named
+                ? named.type().name() : null;
     }
 
     /** The expected value built the same way as an input, so structural equality compares like with
@@ -794,7 +793,13 @@ public final class ExampleVerifier {
         return switch (e) {
             case Ast.Call c when appliedHelper(c) instanceof Ast.FnDef helper -> answered(c, helper);
             case Ast.LetIn let -> helperAnswer(let.body(), followed);
-            case Ast.Var v when symbols.resolveCase(v.name()) == null -> {
+            // a binding holds what it was bound to; a value stands for the body it was defined as.
+            // A name that denotes a type is a case, and no helper answered it.
+            case Ast.Var v when v.denotes() instanceof ValueName.Local local -> {
+                Ast.Expr held = bindings.get(local.id());
+                yield held == null ? null : helperAnswer(held, followed);
+            }
+            case Ast.Var v when v.denotes() instanceof ValueName.Helper -> {
                 Ast.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
                 yield body == null ? null : helperAnswer(body, followed);
             }
@@ -870,20 +875,26 @@ public final class ExampleVerifier {
             case Ast.NewData nd -> nd.typeName().denotes();
             case Ast.Call c when neutral.isNewtype(c.fn()) -> symbols.resolveCase(c.fn());
             case Ast.LetIn let -> constructedCase(let.body(), followed);
-            case Ast.Var v -> namedCase(v.name(), followed);
+            case Ast.Var v -> namedCase(v, followed);
             case null, default -> null;
         };
     }
 
     /** The case a bare name stands for: the type it denotes where it denotes one — a unit case, or a
-     * case written bare — and otherwise the case the value it names constructs. */
-    private TypeName namedCase(String name, Set<String> followed) {
-        TypeName type = symbols.resolveCase(name);
-        if (type != null) {
-            return type;
-        }
-        Ast.Expr body = followed.add(name) ? valueBody(name) : null;
-        return body == null ? null : constructedCase(body, followed);
+     * case written bare — and otherwise the case the value or binding it names constructs. */
+    private TypeName namedCase(Ast.Var v, Set<String> followed) {
+        return switch (v.denotes()) {
+            case ValueName.OfType named -> named.type();
+            case ValueName.Local local -> {
+                Ast.Expr held = bindings.get(local.id());
+                yield held == null ? null : constructedCase(held, followed);
+            }
+            case ValueName.Helper _ -> {
+                Ast.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
+                yield body == null ? null : constructedCase(body, followed);
+            }
+            case null, default -> null;
+        };
     }
 
     /** The expectation, rendered as the value it stands for: a bare case stays the case name, anything
@@ -1083,7 +1094,7 @@ public final class ExampleVerifier {
             case Ast.Neg n -> negate(raw(n.operand()));
             case Ast.Binary bin -> fold(bin);
             case Ast.Call c -> collectionOrNewtype(c, expected);
-            case Ast.Var v -> unitInput(v.name(), expected);
+            case Ast.Var v -> named(v, expected);
             case Ast.NewData nd -> record(nd);
             case Ast.LetIn let -> bound(let, expected);
             case Ast.ListLit l -> {
@@ -1108,16 +1119,45 @@ public final class ExampleVerifier {
         };
     }
 
-    /** A bare name in a fixture is only meaningful as a unit case (no fields) or the built-in {@code
-     * None}; a unit's decoder ignores the input, so an empty map stands in, and {@code None} maps to
-     * a null, which the optional decoder reads as the absent optional (spec 8, absent/null -> None),
-     * the same as omitting a `T?` field — mirroring how a `let` body writes an empty optional. */
-    private Object unitInput(String name, Type expected) {
-        if (name.equals("None")) {
-            return null;
-        }
-        if (symbols.declaration(name) instanceof Ast.UnitData) {
-            TypeName caseName = symbols.resolve(name);
+    /**
+     * A bare name in a fixture, read as what it denotes.
+     *
+     * <p>Which of the four it is was settled where the name was written, so it is not worked out
+     * again here: a binding in force is the value it holds, whatever else bears its spelling.
+     */
+    private Object named(Ast.Var v, Type expected) {
+        return switch (v.denotes()) {
+            // `None` maps to a null, which the optional decoder reads as the absent optional
+            // (spec 8, absent/null -> None), the same as omitting a `T?` field
+            case ValueName.Builtin b when b.name().equals("None") -> null;
+            case ValueName.OfType named
+                    when symbols.get(named.type()) instanceof Ast.UnitData ->
+                    unitInput(named.type(), expected);
+            case ValueName.Local local -> {
+                Ast.Expr held = bindings.get(local.id());
+                if (held == null) {
+                    throw new FixtureException("`" + v.name()
+                            + "` is bound to no value a fixture can name");
+                }
+                yield expandedValue(local, held, expected);
+            }
+            case ValueName.Helper helper -> {
+                Ast.Expr value = valueBody(v.name());
+                if (value == null) {
+                    throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
+                }
+                yield expandedValue(helper, value, expected);
+            }
+            case null, default ->
+                    throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
+        };
+    }
+
+    /** A unit case as a fixture writes it: a unit's decoder ignores the input, so an empty map
+     * stands in. */
+    private Object unitInput(TypeName caseName, Type expected) {
+        {
+            String name = caseName.name();
             // A fixture is built in the neutral form the boundary reads, so a case of an enumeration
             // is written the way that sum travels: its name, bare (issue #161). The same unit data may
             // be a case of an enumeration and of a sum that has a field-bearing case, and those travel
@@ -1130,11 +1170,6 @@ public final class ExampleVerifier {
             neutral.tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
             return unit;
         }
-        Ast.Expr value = valueBody(name);
-        if (value != null) {
-            return expandedValue(name, value, expected);
-        }
-        throw new FixtureException("`" + name + "` is not a value a fixture can name");
     }
 
     /**
@@ -1145,20 +1180,18 @@ public final class ExampleVerifier {
      * local already has. That binding is what the spread then names, so a fixture reads one the way it
      * reads a value: the position says what type to read it as.
      */
-    private final Map<String, Ast.Expr> bindings = new LinkedHashMap<>();
+    private final Map<BindingId, Ast.Expr> bindings = new LinkedHashMap<>();
 
     /** A {@code let} inside a fixture: its name stands for what it was bound to while the body is
      * built, and a binding of the same spelling that was already in force is put back afterwards. */
     private Object bound(Ast.LetIn let, Type expected) {
-        Ast.Expr shadowed = bindings.put(let.name(), let.value());
+        BindingId binding = let.binder().id();
+        bindings.put(binding, let.value());
         try {
             return raw(let.body(), expected);
         } finally {
-            if (shadowed == null) {
-                bindings.remove(let.name());
-            } else {
-                bindings.put(let.name(), shadowed);
-            }
+            // a binding of its own, so there is nothing of an outer one to put back
+            bindings.remove(binding);
         }
     }
 
@@ -1172,10 +1205,6 @@ public final class ExampleVerifier {
      * values holds.
      */
     private Ast.Expr valueBody(String name) {
-        Ast.Expr binding = bindings.get(name);
-        if (binding != null) {
-            return binding;   // a binding in force is what the name means here
-        }
         for (Ast.FnDef fn : module.fns()) {
             if (fn.name().equals(name) && fn.params().isEmpty() && fn.body() != null) {
                 return fn.body();
@@ -1185,17 +1214,24 @@ public final class ExampleVerifier {
         return imported != null && imported.params().isEmpty() ? imported.body() : null;
     }
 
-    /** The names being expanded, innermost last — a value that reaches itself has no fixture to be. */
-    private final Deque<String> expanding = new ArrayDeque<>();
+    /**
+     * What is being expanded, innermost last — a value that reaches itself has no fixture to be.
+     *
+     * <p>Held as what each one is rather than as what it is called: two bindings of one spelling are
+     * two values, and reading the second while the first is open is not a value reaching itself. The
+     * spelling is what the report shows, and decides nothing.
+     */
+    private final Deque<ValueName> expanding = new ArrayDeque<>();
 
-    private Object expandedValue(String name, Ast.Expr body, Type expected) {
-        if (expanding.contains(name)) {
-            List<String> cycle = new ArrayList<>(expanding);
-            cycle.add(name);
-            throw new FixtureException("`" + name + "` is defined in terms of itself ("
+    private Object expandedValue(ValueName named, Ast.Expr body, Type expected) {
+        if (expanding.contains(named)) {
+            List<String> cycle = new ArrayList<>();
+            expanding.forEach(open -> cycle.add(open.name()));
+            cycle.add(named.name());
+            throw new FixtureException("`" + named.name() + "` is defined in terms of itself ("
                     + String.join(" -> ", cycle) + ")");
         }
-        expanding.addLast(name);
+        expanding.addLast(named);
         try {
             return raw(body, expected);
         } finally {
@@ -1346,17 +1382,20 @@ public final class ExampleVerifier {
         // `...base` copies the fields of a value, and the fields written after it replace what it
         // brought.
         for (Ast.ValueRef ref : nd.spreads()) {
-            // The name as this row spells it, which is what the values a fixture may name are keyed by:
-            // a definition of this module by its own name, one another module published by that module's
-            // name and its own. `bare()` is the name it was *declared* under, which is not that key for
-            // an imported value — so a row could name one but not spread it (issue #212).
+            // A spread names a value in force, so what it copies is what that name denotes: a binding
+            // holds what it was bound to, and a definition stands for its body. A definition is
+            // reached by the name this row spells it with — a definition of this module by its own
+            // name, one another module published by that module's name and its own. `bare()` is the
+            // name it was *declared* under, which is not that key for an imported value (issue #212).
             String spread = ref.written();
-            Ast.Expr value = valueBody(spread);
+            Ast.Expr value = ref.denotes() instanceof ValueName.Local local
+                    ? bindings.get(local.id()) : valueBody(spread);
             if (value == null) {
                 throw new FixtureException("`" + spread
                         + "` is not a value a fixture can spread");
             }
-            Object copied = expandedValue(spread, value, Type.ref(nd.typeName().denotes()));
+            Object copied = expandedValue(ref.denotes(), value,
+                    Type.ref(nd.typeName().denotes()));
             if (!(copied instanceof Map<?, ?> fields)) {
                 throw new FixtureException("`" + spread + "` is not a record, so it has no fields to"
                         + " spread");

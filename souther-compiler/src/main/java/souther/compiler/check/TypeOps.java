@@ -4,6 +4,8 @@ import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -709,6 +711,58 @@ public final class TypeOps {
                 }
             } else {
                 out.add(name);
+            }
+        }
+    }
+
+    /**
+     * The binding each of {@code data}'s fields introduces inside its own invariant.
+     *
+     * <p>An invariant reads its declaration's fields, and reads them as the bindings they are. Which
+     * binding each is is answered here and nowhere else, so the pass that resolves an invariant and
+     * the pass that emits it reach the same one. A field name is unique within a declaration, which
+     * is what lets the answer be keyed by it; the order the map iterates in says nothing, and no
+     * reader may take one from it.
+     *
+     * <p>What is fixed is the numbering: a field is numbered among the fields of the declaration
+     * that declares it, in the order that declaration writes them. An include brings a field in
+     * without renumbering it, so the two passes agree however either of them reaches it.
+     */
+    public static Map<String, BindingId> fieldBindings(Ast.Data data, Symbols symbols) {
+        Map<String, BindingId> bindings = new LinkedHashMap<>();
+        walkFields(data, symbols.own(data.name()), symbols, new LinkedHashSet<>(), bindings);
+        return bindings;
+    }
+
+    /**
+     * Every field {@code data} has, each with the binding the declaration that declares it gives it.
+     *
+     * <p>A field brought in by an include keeps the binding of the declaration it was written in,
+     * because the invariant that reads it was written there too and is carried in with it. So a
+     * declaration binds its own fields and the fields underneath, and an invariant reads the same
+     * binding wherever it is checked or emitted.
+     *
+     * <p>A walk of its own, not the one {@link #fieldTypes} makes, because it answers where that one
+     * cannot: this runs while the declaration is being resolved, where an include may not yet say
+     * what it denotes, and a field has a name whether or not its type has been worked out. It
+     * therefore reaches the fields in an order of its own, which is why nothing reads one off the
+     * result. An include that names nothing is skipped, and a name an include repeats keeps the
+     * declaration's own — both are refused where the declaration is checked, and refusing them twice
+     * says nothing more.
+     */
+    private static void walkFields(Ast.Data data, TypeName declared, Symbols symbols,
+                                   Set<TypeName> seen, Map<String, BindingId> out) {
+        BindingOwner owner = new BindingOwner.OfFields(declared);
+        int ordinal = 0;
+        for (Ast.Field field : data.fields()) {
+            out.putIfAbsent(field.name(), new BindingId(owner, ordinal++));
+        }
+        for (Ast.Name include : data.includes()) {
+            TypeName source = include.denotes() != null
+                    ? include.denotes() : symbols.resolve(include.written());
+            if (source != null && seen.add(source)
+                    && symbols.get(source) instanceof Ast.Data included) {
+                walkFields(included, source, symbols, seen, out);
             }
         }
     }

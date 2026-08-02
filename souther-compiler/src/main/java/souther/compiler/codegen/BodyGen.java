@@ -1,5 +1,6 @@
 package souther.compiler.codegen;
 
+import souther.compiler.check.Scope;
 import souther.compiler.check.Symbols;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -10,6 +11,7 @@ import souther.compiler.check.Elaborator;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.Lower;
 import souther.compiler.check.ReqSig;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
@@ -26,6 +28,7 @@ import java.lang.constant.MethodTypeDesc;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +96,17 @@ final class BodyGen {
         private final CodeBuilder code;
         private final Ast.Data data;
         private final ClassDesc cdName;
-        private final Map<String, Var> env = new HashMap<>();
+        /**
+         * Where each binding this body holds lives.
+         *
+         * <p>Keyed by the binding rather than by its spelling, so an inner binding of the same
+         * spelling takes a slot of its own and leaves the outer one where it was. Nothing has to be
+         * put back when a scope ends, which is what a name-keyed table needed and did not always do.
+         */
+        private final Map<BindingId, Var> locals = new HashMap<>();
+        /** Where each injected behavior a lambda captured lives. Declared rather than bound, so it is
+         * reached by the name it is declared under. */
+        private final Map<String, Var> captured = new HashMap<>();
         private int nextSlot;
         private Set<String> reqNames = Set.of();
         private Map<String, Type> reqSuccess = Map.of();
@@ -151,19 +164,22 @@ final class BodyGen {
             return sigs;
         }
 
-        void bind(String name, int slot, Type type) {
-            env.put(name, new Var(slot, type));
-            nextSlot = Math.max(nextSlot, slot + width(type));
+        void bind(Ast.Binder binder, int slot, Type type) {
+            bind(binder.id(), binder.name(), slot, type);
         }
 
-        /** Restores a name to the binding it had before a block shadowed it (or removes it if it had
-         * none), so a block's parameters do not leak past the block (see {@link #fold}). */
-        private void restore(String name, Var previous) {
-            if (previous == null) {
-                env.remove(name);
-            } else {
-                env.put(name, previous);
-            }
+        void bind(BindingId binding, String name, int slot, Type type) {
+            put(locals, binding, new Var(slot, type, name));
+        }
+
+        /** Where an injected behavior a lambda captured was put. */
+        void bindCaptured(String injected, int slot, Type type) {
+            put(captured, injected, new Var(slot, type, injected));
+        }
+
+        private <K> void put(Map<K, Var> where, K key, Var var) {
+            where.put(key, var);
+            nextSlot = Math.max(nextSlot, var.slot() + width(var.type()));
         }
 
         int slot(Type type) {
@@ -189,7 +205,7 @@ final class BodyGen {
          * emitter in the shape it emits from. {@code expected} is the type the position wants, as the
          * checker pushes a field's declared type into its initialiser. */
         Core elaborate(Ast.Expr e, Type expected) {
-            return Elaborator.elaborate(Lower.desugarExpr(e), typesEnvWithHelpers(),
+            return Elaborator.elaborate(Lower.desugarExpr(e), scope(),
                     new CheckContext(symbols, data, reqSigs()), expected);
         }
 
@@ -231,24 +247,24 @@ final class BodyGen {
         /** Generates a synthetic {@code Fn} class for an escaping lambda: captured free variables become
          * {@code final} fields set by the constructor, and the body compiles into {@code apply}, which
          * unboxes its arguments from the {@code Object[]} and boxes its result (spec §blocks). */
-        private byte[] generateLambdaClass(ClassDesc cd, List<String> params, Core body,
+        private byte[] generateLambdaClass(ClassDesc cd, List<Ast.Binder> params, Core body,
                                            List<Type> paramTypes,
-                                           Type resultType, List<String> valueNames, List<Type> valueTypes,
+                                           Type resultType, List<Core.Read> captures,
                                            List<String> injectedNames, Map<String, Type> reqSuccess,
                                            Map<String, List<Type>> reqParams) {
             return build(cd, cb -> {
                 cb.withFlags(ClassFile.ACC_FINAL | ClassFile.ACC_SUPER);
                 cb.withInterfaceSymbols(CD_Fn);
-                for (int i = 0; i < valueNames.size(); i++) {
-                    cb.withField(captureField(i), jvmType(valueTypes.get(i)),
+                for (int i = 0; i < captures.size(); i++) {
+                    cb.withField(captureField(i), jvmType(captures.get(i).type()),
                             ClassFile.ACC_PRIVATE | ClassFile.ACC_FINAL);
                 }
                 for (String inj : injectedNames) {   // named after the behavior so requiredCall reads it
                     cb.withField(inj, ctx.requiredFieldType(inj), ClassFile.ACC_PRIVATE | ClassFile.ACC_FINAL);
                 }
                 List<ClassDesc> ctor = new ArrayList<>();
-                for (Type t : valueTypes) {
-                    ctor.add(jvmType(t));
+                for (Core.Read c : captures) {
+                    ctor.add(jvmType(c.type()));
                 }
                 for (String inj : injectedNames) {
                     ctor.add(ctx.requiredFieldType(inj));
@@ -258,11 +274,12 @@ final class BodyGen {
                     code.aload(0);
                     code.invokespecial(CD_Object, "<init>", MTD_void);
                     int slot = 1;
-                    for (int i = 0; i < valueNames.size(); i++) {
+                    for (int i = 0; i < captures.size(); i++) {
+                        Type ct = captures.get(i).type();
                         code.aload(0);
-                        load(code, slot, valueTypes.get(i));
-                        code.putfield(cd, captureField(i), jvmType(valueTypes.get(i)));
-                        slot += width(valueTypes.get(i));
+                        load(code, slot, ct);
+                        code.putfield(cd, captureField(i), jvmType(ct));
+                        slot += width(ct);
                     }
                     for (String inj : injectedNames) {
                         code.aload(0);
@@ -272,7 +289,7 @@ final class BodyGen {
                     }
                     code.return_();
                 });
-                if (valueNames.isEmpty() && injectedNames.isEmpty()) {
+                if (captures.isEmpty() && injectedNames.isEmpty()) {
                     // Captures are this class's only fields, so capturing nothing makes it stateless
                     // and one instance per lambda site is enough. Two sites never share one, and
                     // Souther has no function equality, so this is unobservable. Package-private:
@@ -301,13 +318,13 @@ final class BodyGen {
                         unbox(code, pt, s);
                         g.bind(params.get(i), s, pt);
                     }
-                    for (int i = 0; i < valueNames.size(); i++) {
-                        Type ct = valueTypes.get(i);
-                        int s = g.slot(ct);
+                    for (int i = 0; i < captures.size(); i++) {
+                        Core.Read c = captures.get(i);
+                        int s = g.slot(c.type());
                         code.aload(0);
-                        code.getfield(cd, captureField(i), jvmType(ct));
-                        store(code, s, ct);
-                        g.bind(valueNames.get(i), s, ct);
+                        code.getfield(cd, captureField(i), jvmType(c.type()));
+                        store(code, s, c.type());
+                        g.bind(c.binding(), c.name(), s, c.type());
                     }
                     Type rt = g.genExpr(body);
                     box(code, rt);
@@ -348,7 +365,7 @@ final class BodyGen {
                         requiredCall(call);
                         int vSlot = slot(letType);
                         store(code, vSlot, letType);
-                        bind(li.name(), vSlot, letType);
+                        bind(li.binder(), vSlot, letType);
                     } else {
                         Type vt = li.value().type();
                         if (vt instanceof Type.FnOf fn) {
@@ -360,7 +377,7 @@ final class BodyGen {
                         }
                         int slot = slot(vt);
                         store(code, slot, vt);
-                        bind(li.name(), slot, vt);
+                        bind(li.binder(), slot, vt);
                     }
                     emitTail(li.body(), cdB, requiredNames, requiredSuccess, expected);
                 }
@@ -377,10 +394,8 @@ final class BodyGen {
                 // the value emitter would leave the recursive call a real call and grow the stack.
                 case Core.IfConstructed ic -> {
                     Attempt a = emitAttempt(ic);
-                    Var shadowed = env.get(ic.binder());
                     bind(ic.binder(), a.slot(), ic.construct().type());
                     emitTail(ic.then(), cdB, requiredNames, requiredSuccess, expected);
-                    restore(ic.binder(), shadowed);
                     code.labelBinding(a.elseLabel());
                     // Each departure is in tail position too, so it returns on its own and needs no
                     // jump past the ones emitted after it.
@@ -435,7 +450,7 @@ final class BodyGen {
         private void emitSelfTailCall(Core.Call call) {
             List<Var> params = new ArrayList<>(tcoParams.size());
             for (Ast.FnParam p : tcoParams) {
-                params.add(env.get(p.name()));
+                params.add(locals.get(p.binder().id()));
             }
             for (int i = 0; i < call.args().size(); i++) {
                 Type at = genExpr(call.args().get(i));
@@ -452,7 +467,8 @@ final class BodyGen {
 
         /** Pushes each field's value in declaration order: an explicit initializer, else the field
          * carried over from a spread source (ADR-0021). */
-        void emitFieldValues(Map<String, Type> fields, List<Core.FieldInit> inits, List<String> spreads) {
+        void emitFieldValues(Map<String, Type> fields, List<Core.FieldInit> inits,
+                             List<Core.Read> spreads) {
             Map<String, Core.FieldInit> byName = new HashMap<>();
             for (Core.FieldInit init : inits) {
                 byName.put(init.name(), init);
@@ -465,7 +481,7 @@ final class BodyGen {
                     genExpr(init.value(), fields.get(field));
                     continue;
                 }
-                for (String sp : spreads) {
+                for (Core.Read sp : spreads) {
                     if (spreadableFields(((Type.Ref) varType(sp)).name()).containsKey(field)) {
                         spreadField(sp, field);
                         break;
@@ -587,23 +603,21 @@ final class BodyGen {
                 case Core.Bool x -> {
                     if (x.value()) code.iconst_1(); else code.iconst_0();
                 }
-                case Core.Var v -> {
-                    Var var = env.get(v.name());
-                    if (var != null) {
-                        load(code, var.slot(), var.type());
-                    } else if (v.type() instanceof Type.Ref ref
-                            && symbols.get(ref.name()) instanceof Ast.UnitData) {
-                        // A unit data name in an expression constructs it (spec §unit-data), and a
-                        // unit type has exactly one value. Which unit is read off the type the name
-                        // was given rather than resolved again from its spelling: a body expanded in
-                        // from another module's published helper names that module's unit, which this
-                        // module need not declare at all — and, if it declares one spelled the same,
-                        // is not the same unit.
-                        loadSharedInstance(code, cd(ref.name()));
-                    } else {
+                case Core.Read v -> {
+                    Var var = locals.get(v.binding());
+                    if (var == null) {
                         throw new CompileException(v.pos(), "unbound identifier `" + v.name() + "`");
                     }
+                    load(code, var.slot(), var.type());
                 }
+                // a unit type has exactly one value, and naming it is that value (spec §unit-data).
+                // Which unit is on the node: a body expanded in from another module's published
+                // helper names that module's unit, which this module need not declare at all — and,
+                // if it declares one spelled the same, is not the same unit.
+                case Core.UnitValue u -> loadSharedInstance(code, cd(u.data()));
+                case Core.Builtin b -> throw new IllegalStateException(
+                        "`" + b.name() + "` is read by the operation that takes it, not emitted, at "
+                                + b.pos());
                 case Core.Neg n -> {
                     if (genExpr(n.operand()) == Type.DECIMAL) {
                         code.invokevirtual(CD_BigDecimal, "negate", MethodTypeDesc.of(CD_BigDecimal));
@@ -630,10 +644,8 @@ final class BodyGen {
                 case Core.IfConstructed ic -> {
                     Attempt a = emitAttempt(ic);
                     Label end = code.newLabel();
-                    Var shadowed = env.get(ic.binder());
                     bind(ic.binder(), a.slot(), ic.construct().type());
                     genExpr(ic.then(), shapeOf(ic, expected));
-                    restore(ic.binder(), shadowed);
                     code.goto_(end);
 
                     code.labelBinding(a.elseLabel());
@@ -658,6 +670,7 @@ final class BodyGen {
                 case Core.NewData nd -> newData(nd);
                 case Core.Match m -> match(m, expected);
                 case Core.Call c -> call(c, expected);
+                case Core.Apply a -> applyFn(a, (Type.FnOf) a.fn().type());
                 case Core.LetIn li -> {
                     // a `let` outside tail position: bind, then value the body
                     Type vt = li.value().type();
@@ -670,7 +683,7 @@ final class BodyGen {
                     }
                     int s = slot(vt);
                     store(code, s, vt);
-                    bind(li.name(), s, vt);
+                    bind(li.binder(), s, vt);
                     genExpr(li.body(), expected);
                 }
                 // a block has no value of its own; it is inlined by the call it is passed to
@@ -741,11 +754,10 @@ final class BodyGen {
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm: save any outer binding it shadows and restore it
                 // after the arm, or a later arm reusing the name would resolve to this arm's slot.
-                Var prevBinding = c.binding() != null ? env.get(c.binding()) : null;
+
                 emitCaseGuard(c, sSlot, st, element, nextCase);
                 genExpr(c.body(), want);
                 if (c.binding() != null) {
-                    restore(c.binding(), prevBinding);
                 }
                 code.goto_(end);
                 code.labelBinding(nextCase);
@@ -768,11 +780,10 @@ final class BodyGen {
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm (see {@link #match}): restore any outer binding it
                 // shadows before the next arm's dispatch.
-                Var prevBinding = c.binding() != null ? env.get(c.binding()) : null;
+
                 emitCaseGuard(c, sSlot, st, element, nextCase);
                 emitTail(c.body(), cdB, requiredNames, requiredSuccess, expected);
                 if (c.binding() != null) {
-                    restore(c.binding(), prevBinding);
                 }
                 code.labelBinding(nextCase);
             }
@@ -1028,12 +1039,12 @@ final class BodyGen {
             return Type.ref(ntName);
         }
 
-        Type varType(String name) {
-            return env.get(name).type();
+        Type varType(Core.Read read) {
+            return locals.get(read.binding()).type();
         }
 
-        void spreadField(String spreadVar, String field) {
-            Var v = env.get(spreadVar);
+        void spreadField(Core.Read spreadVar, String field) {
+            Var v = locals.get(spreadVar.binding());
             TypeName srcName = ((Type.Ref) v.type()).name();
             load(code, v.slot(), v.type());
             emitFieldRead(code, srcName, field, spreadableFields(srcName).get(field));
@@ -1181,9 +1192,13 @@ final class BodyGen {
                 case "Decimal.toInt" -> decimalToInt(call);
                 case "Decimal.round" -> decimalRound(call);
                 default -> {
-                    Var fv = env.get(call.fn());
-                    if (fv != null && fv.type() instanceof Type.FnOf fnType) {
-                        applyFn(call, fnType);
+                    // an injected behavior a lambda captured arrives in a slot rather than in a
+                    // field of the enclosing behavior, and is applied as the value it is. This asks
+                    // where the value is, not what the name means: what it means was settled when
+                    // the call was elaborated, and an injected behavior is not a binding.
+                    Var behavior = captured.get(call.fn());
+                    if (behavior != null && behavior.type() instanceof Type.FnOf fnType) {
+                        applyCaptured(call, fnType);
                     } else if (ctx.emittedHelpers.containsKey(call.fn())) {
                         // The one loop the language has is emitted where it stands, not called.
                         if (!call.fn().equals(FOLD) || !folded(call)) {
@@ -1341,7 +1356,7 @@ final class BodyGen {
             // would otherwise stay bound after the walk — and a step that destructures its accumulator
             // binds ordinary names (`let (i, ys) = acc`), which are the caller's names as often as not.
             // The whole scope is put back, the slots it took staying taken.
-            Map<String, Var> enclosing = new HashMap<>(env);
+            Map<BindingId, Var> enclosing = new HashMap<>(locals);
             bind(step.params().get(0), acc, accType);
             int element = slot(elementType);
             bind(step.params().get(1), element, elementType);
@@ -1361,8 +1376,8 @@ final class BodyGen {
             code.goto_(next);
             code.labelBinding(done);
 
-            env.clear();
-            env.putAll(enclosing);
+            locals.clear();
+            locals.putAll(enclosing);
             load(code, acc, accType);
             answer.run();
             return true;
@@ -1467,7 +1482,7 @@ final class BodyGen {
             code.aload(bSlot);
             genExpr(call.args().get(2));              // scale (Int, a long)
             code.l2i();
-            String mode = ((Core.Var) call.args().get(3)).name();
+            String mode = ((Core.Builtin) call.args().get(3)).name();
             code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
             code.invokevirtual(CD_BigDecimal, "divide", MTD_bdDivide);
             code.goto_(end);
@@ -1480,7 +1495,7 @@ final class BodyGen {
          * the call as `divide`'s is. The kernel aborts on a value too large for an Int. */
         private void decimalToInt(Core.Call call) {
             genExpr(call.args().get(0));
-            String mode = ((Core.Var) call.args().get(1)).name();
+            String mode = ((Core.Builtin) call.args().get(1)).name();
             code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
             code.invokestatic(CD_DecimalMath, "toInt",
                     MethodTypeDesc.of(ConstantDescs.CD_long, CD_BigDecimal, CD_RoundingMode));
@@ -1493,7 +1508,7 @@ final class BodyGen {
             genExpr(call.args().get(0));
             genExpr(call.args().get(1));   // scale (Int, a long)
             code.l2i();
-            String mode = ((Core.Var) call.args().get(2)).name();
+            String mode = ((Core.Builtin) call.args().get(2)).name();
             code.getstatic(CD_RoundingMode, mode, CD_RoundingMode);
             code.invokevirtual(CD_BigDecimal, "setScale",
                     MethodTypeDesc.of(CD_BigDecimal, ConstantDescs.CD_int, CD_RoundingMode));
@@ -1768,31 +1783,35 @@ final class BodyGen {
             code.labelBinding(end);
         }
 
-        /** A name-to-type view of this scope, for the checker's inference helpers. */
-        private Map<String, Type> typesEnv() {
-            Map<String, Type> t = new HashMap<>();
-            env.forEach((k, v) -> t.put(k, v.type()));
-            return t;
+        /** What the body may name here: the bindings this emitter holds, and the injected behaviors
+         * a lambda captured, which a call reaches by the name they are declared under. */
+        private Scope bound() {
+            Map<BindingId, Scope.Binding> held = new LinkedHashMap<>();
+            locals.forEach((binding, v) -> held.put(binding, new Scope.Binding(v.name(), v.type())));
+            Map<String, Type> declared = new HashMap<>();
+            captured.forEach((name, v) -> declared.put(name, v.type()));
+            return Scope.of(held).reaching(declared);
         }
 
-        /** {@link #typesEnv} plus the recursive helpers' signatures, so re-typing an expression that
+        /** {@link #bound} plus the recursive helpers' signatures, so re-typing an expression that
          * calls one (a nested {@code foldFrom} in a fold's seed) resolves it as a function. Only a
          * recursive helper's signature can be read here, and a recursive helper declares its return
          * type (spec 13.1); an example-applied helper is emitted beside them without declaring one, and
          * no standing call names it — it is expanded wherever a body calls it. */
-        private Map<String, Type> typesEnvWithHelpers() {
-            Map<String, Type> t = typesEnv();
+        private Scope scope() {
+            Scope held = bound();
+            Map<String, Type> declared = new HashMap<>(held.declared());
             ctx.emittedHelpers.forEach((name, h) -> {
-                if (t.containsKey(name) || h.declaredReturn() == null) {
-                    return;   // a local of the same name shadows the helper, as it does in the checker
+                if (declared.containsKey(name) || h.declaredReturn() == null) {
+                    return;
                 }
                 List<Type> params = new ArrayList<>();
                 for (Ast.FnParam p : h.params()) {
                     params.add(TypeOps.resolveParamType(p.type(), symbols));
                 }
-                t.put(name, Type.fn(params, successType(h.declaredReturn())));
+                declared.put(name, Type.fn(params, successType(h.declaredReturn())));
             });
-            return t;
+            return held.reaching(declared);
         }
 
         /** Emits a function value from its elaborated node: the parameter and result types are the
@@ -1816,7 +1835,7 @@ final class BodyGen {
                     Type vt = genExpr(li.value());
                     int s = slot(vt);
                     store(code, s, vt);
-                    bind(li.name(), s, vt);
+                    bind(li.binder(), s, vt);
                     emitFunctionValue(li.body(), paramTypes);
                 }
                 default -> genExpr(value);
@@ -1831,27 +1850,17 @@ final class BodyGen {
                     ((Type.FnOf) block.type()).result(), freeVars(block));
         }
 
-        private void emitLambda(List<String> params, Core body, List<Type> paramTypes,
-                                Type resultType, List<String> free) {
-            List<String> valueNames = new ArrayList<>();
-            List<Type> valueTypes = new ArrayList<>();
-            List<String> injectedNames = new ArrayList<>();
-            for (String c : free) {
-                if (env.containsKey(c)) {
-                    valueNames.add(c);
-                    valueTypes.add(env.get(c).type());
-                } else {
-                    injectedNames.add(c);   // an injected behavior the closure calls (spec 13.2)
-                }
-            }
+        private void emitLambda(List<Ast.Binder> params, Core body, List<Type> paramTypes,
+                                Type resultType, Reaches free) {
+            List<Core.Read> captures = free.bindings();
+            List<String> injectedNames = free.injected();
             String className = pkg + ".$Fn" + ctx.nextLambdaId();
             ClassDesc cd = ClassDesc.of(className);
             ctx.addSynth(className, generateLambdaClass(cd, params, body, paramTypes, resultType,
-                    valueNames, valueTypes, injectedNames, reqSuccess, reqParams));
+                    captures, injectedNames, reqSuccess, reqParams));
 
-            // `free` is partitioned into the two lists above, so this is the same condition
-            // generateLambdaClass interned on — it must stay the same one.
-            if (free.isEmpty()) {
+            // the same condition generateLambdaClass interned on — it must stay the same one
+            if (captures.isEmpty() && injectedNames.isEmpty()) {
                 loadSharedInstance(code, cd);
                 return;
             }
@@ -1859,9 +1868,9 @@ final class BodyGen {
             code.new_(cd);
             code.dup();
             List<ClassDesc> ctorDescs = new ArrayList<>();
-            for (int i = 0; i < valueNames.size(); i++) {
-                load(code, env.get(valueNames.get(i)).slot(), valueTypes.get(i));
-                ctorDescs.add(jvmType(valueTypes.get(i)));
+            for (Core.Read c : captures) {
+                load(code, locals.get(c.binding()).slot(), c.type());
+                ctorDescs.add(jvmType(c.type()));
             }
             for (String inj : injectedNames) {
                 code.aload(0);                              // the enclosing behavior instance
@@ -1874,15 +1883,23 @@ final class BodyGen {
 
         /** Applies a first-class function value: {@code f.apply(new Object[]{args...})}, then casts
          * the {@code Object} result back to the function's result type. */
-        private void applyFn(Core.Call call, Type.FnOf fnType) {
-            Var fv = env.get(call.fn());
+        private void applyFn(Core.Apply call, Type.FnOf fnType) {
+            applyValue(locals.get(call.fn().binding()), call.args(), fnType);
+        }
+
+        /** The same, for an injected behavior a lambda captured into a slot of its own class. */
+        private void applyCaptured(Core.Call call, Type.FnOf fnType) {
+            applyValue(captured.get(call.fn()), call.args(), fnType);
+        }
+
+        private void applyValue(Var fv, List<Core> args, Type.FnOf fnType) {
             load(code, fv.slot(), fv.type());   // the Fn receiver
-            pushInt(code, call.args().size());
+            pushInt(code, args.size());
             code.anewarray(CD_Object);
-            for (int i = 0; i < call.args().size(); i++) {
+            for (int i = 0; i < args.size(); i++) {
                 code.dup();
                 pushInt(code, i);
-                Type at = genExpr(call.args().get(i));
+                Type at = genExpr(args.get(i));
                 box(code, at);
                 code.aastore();
             }
@@ -1890,20 +1907,50 @@ final class BodyGen {
             stackCast(fnType.result());   // Object result -> the function's result type
         }
 
-        /** The free variables of a lambda: names its body reads that are bound in the enclosing
-         * scope (so must be captured), in first-seen order. */
-        private List<String> freeVars(Core.Block block) {
-            LinkedHashSet<String> free = new LinkedHashSet<>();
-            collectFree(block.body(), new HashSet<>(block.params()), free);
-            return new ArrayList<>(free);
+        /**
+         * What a lambda's body reaches outside itself, and so what its class must be handed.
+         *
+         * <p>Two different things, kept apart rather than told apart afterwards: the bindings of the
+         * enclosing body it reads, and the injected behaviors it calls. One is bound here and the
+         * other is declared elsewhere, which is why one is held by binding and the other by name.
+         */
+        private static final class Reaches {
+
+            private final LinkedHashMap<BindingId, Core.Read> reads = new LinkedHashMap<>();
+            private final LinkedHashSet<String> behaviors = new LinkedHashSet<>();
+
+            List<Core.Read> bindings() {
+                return new ArrayList<>(reads.values());
+            }
+
+            List<String> injected() {
+                return new ArrayList<>(behaviors);
+            }
         }
 
-        private void collectFree(Core e, Set<String> bound, LinkedHashSet<String> free) {
+        /** What {@code block}'s body reaches outside itself, in first-seen order. */
+        private Reaches freeVars(Core.Block block) {
+            Reaches free = new Reaches();
+            Set<BindingId> bound = new HashSet<>();
+            block.params().forEach(p -> bound.add(p.id()));
+            collectFree(block.body(), bound, free);
+            return free;
+        }
+
+        private void collectFree(Core e, Set<BindingId> bound, Reaches free) {
             switch (e) {
-                case Core.Var v -> maybeFree(v.name(), bound, free);
+                case Core.Read v -> reaches(v, bound, free);
                 case Core.Call c -> {
-                    maybeFree(c.fn(), bound, free);   // an applied function value is captured too
+                    // an injected behavior the body calls is handed over too: the lambda is a class
+                    // of its own, and what it reaches has to reach it
+                    if (reqNames.contains(c.fn())) {
+                        free.behaviors.add(c.fn());
+                    }
                     c.args().forEach(a -> collectFree(a, bound, free));
+                }
+                case Core.Apply a -> {
+                    reaches(a.fn(), bound, free);
+                    a.args().forEach(x -> collectFree(x, bound, free));
                 }
                 case Core.FieldAccess fa -> collectFree(fa.target(), bound, free);
                 case Core.Binary bin -> {
@@ -1913,7 +1960,7 @@ final class BodyGen {
                 case Core.Neg neg -> collectFree(neg.operand(), bound, free);
                 case Core.NewData nd -> {
                     nd.inits().forEach(i -> collectFree(i.value(), bound, free));
-                    nd.spreads().forEach(sp -> maybeFree(sp, bound, free));
+                    nd.spreads().forEach(sp -> reaches(sp, bound, free));
                 }
                 case Core.If iff -> {
                     collectFree(iff.cond(), bound, free);
@@ -1922,51 +1969,55 @@ final class BodyGen {
                 }
                 case Core.IfConstructed ic -> {
                     collectFree(ic.construct(), bound, free);
-                    Set<String> inner = new HashSet<>(bound);
-                    inner.add(ic.binder());
-                    collectFree(ic.then(), inner, free);
+                    collectFree(ic.then(), with(bound, ic.binder().id()), free);
                     ic.els().forEach(arm -> collectFree(arm.body(), bound, free));
                 }
                 case Core.LetIn li -> {
                     collectFree(li.value(), bound, free);
-                    Set<String> inner = new HashSet<>(bound);
-                    inner.add(li.name());
-                    collectFree(li.body(), inner, free);
+                    collectFree(li.body(), with(bound, li.binder().id()), free);
                 }
                 case Core.Match m -> {
                     collectFree(m.scrutinee(), bound, free);
                     for (Core.Case c : m.cases()) {
-                        Set<String> inner = bound;
-                        if (c.binding() != null) {
-                            inner = new HashSet<>(bound);
-                            inner.add(c.binding());
-                        }
-                        collectFree(c.body(), inner, free);
+                        collectFree(c.body(), c.binding() == null
+                                ? bound : with(bound, c.binding().id()), free);
                     }
                 }
                 case Core.Block b -> {
-                    Set<String> inner = new HashSet<>(bound);
-                    inner.addAll(b.params());
+                    Set<BindingId> inner = new HashSet<>(bound);
+                    b.params().forEach(p -> inner.add(p.id()));
                     collectFree(b.body(), inner, free);
                 }
                 case Core.ListLit lit -> lit.elements().forEach(x -> collectFree(x, bound, free));
-                case Core.Tuple tup -> tup.elements().forEach(x -> collectFree(x, bound, free));
+                case Core.OptionSome so -> collectFree(so.value(), bound, free);
+                case Core.Tuple t -> t.elements().forEach(x -> collectFree(x, bound, free));
                 case Core.TupleGet tg -> collectFree(tg.tuple(), bound, free);
-                case Core.OptionSome s -> collectFree(s.value(), bound, free);
                 case Core.OptionNone _ -> { }
                 case Core.Int _ -> { }
                 case Core.Decimal _ -> { }
                 case Core.Str _ -> { }
                 case Core.Bool _ -> { }
                 case Core.Unreachable _ -> { }
+                // neither reads anything the enclosing body binds
+                case Core.UnitValue _ -> { }
+                case Core.Builtin _ -> { }
             }
         }
 
-        private void maybeFree(String name, Set<String> bound, LinkedHashSet<String> free) {
-            if (!bound.contains(name) && (env.containsKey(name) || reqNames.contains(name))) {
-                free.add(name);
+        private static Set<BindingId> with(Set<BindingId> bound, BindingId binding) {
+            Set<BindingId> inner = new HashSet<>(bound);
+            inner.add(binding);
+            return inner;
+        }
+
+        /** A read of something bound outside the lambda is captured; one of its own is not. */
+        private void reaches(Core.Read read, Set<BindingId> bound, Reaches free) {
+            if (!bound.contains(read.binding()) && locals.containsKey(read.binding())) {
+                free.reads.putIfAbsent(read.binding(), read);
             }
         }
 
-    private record Var(int slot, Type type) {}
+    /** Where a value lives and what it is. {@code name} is what it is called — a diagnostic quotes
+     * it, and the checker's inference helpers are handed a view keyed by it; nothing is found by it. */
+    private record Var(int slot, Type type, String name) {}
 }

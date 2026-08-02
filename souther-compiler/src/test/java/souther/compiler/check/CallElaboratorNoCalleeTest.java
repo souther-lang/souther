@@ -5,6 +5,8 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ConstructionOrigin;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -68,7 +70,8 @@ class CallElaboratorNoCalleeTest {
      */
     @Test
     void aBindingIsToldItIsNotAFunction() {
-        RuntimeException e = answerFor(new ValueName.Local("f", AT));
+        RuntimeException e = answerFor(new ValueName.Local("f",
+                new BindingId(new BindingOwner.OfValue("m.a", "g"), 0)));
         assertEquals("check.apply.notfunction",
                 assertInstanceOf(CompileException.class, e).diagnostic().messageKey());
     }

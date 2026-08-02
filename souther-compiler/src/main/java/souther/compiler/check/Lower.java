@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.BindingId;
 import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
@@ -70,22 +71,22 @@ public final class Lower {
                                  Set<String> dependencies) {
         Ast.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
-                : inliner.inline(fn.body(), dependencyBinders(fn, dependencies));
+                : inliner.inline(fn.body(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
         return new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), fn.intrinsicKey(),
                 desugar(expanded), fn.partial(), fn.pos());
     }
 
-    /** Where each {@code depends on} name is bound: the trailing parameter that carries it. A name in
-     * the body is that parameter only when it was answered by this binder — a binding in force wins
-     * over the declaration it shadows (spec §fn-rules), so the spelling alone does not say. */
-    private static Set<SourcePos> dependencyBinders(Ast.FnDef fn, Set<String> dependencies) {
-        Set<SourcePos> binders = new HashSet<>();
+    /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A
+     * name in the body is one of them only when it was answered with that binding — a binding in force
+     * wins over the declaration it shadows (spec §fn-rules), so the spelling alone does not say. */
+    private static Set<BindingId> dependencies(Ast.FnDef fn, Set<String> dependencies) {
+        Set<BindingId> bindings = new HashSet<>();
         for (Ast.FnParam p : fn.params()) {
             if (dependencies.contains(p.name())) {
-                binders.add(p.pos());
+                bindings.add(p.binder().id());
             }
         }
-        return binders;
+        return bindings;
     }
 
     /** {@code module} with {@code fns} as its fns and every data invariant desugared — the tree the

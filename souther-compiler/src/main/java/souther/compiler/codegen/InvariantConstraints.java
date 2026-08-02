@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.types.ValueName;
 import souther.compiler.check.ConstEval;
 import souther.compiler.types.Type;
 
@@ -295,10 +296,14 @@ final class InvariantConstraints {
     }
 
     /** Whether a projection hands back what it was given — {@code x -> x}, however the parameter is
-     * spelled. A block with one parameter is how a lambda arrives here (spec §blocks). */
+     * spelled. A block with one parameter is how a lambda arrives here (spec §blocks). The body reads
+     * the parameter when it reads that binding; a name spelled like it, bound elsewhere, is another
+     * value. */
     private static boolean isIdentity(Ast.Expr e) {
         return e instanceof Ast.Block b && b.params().size() == 1
-                && b.body() instanceof Ast.Var v && v.name().equals(b.params().get(0));
+                && b.body() instanceof Ast.Var v
+                && v.denotes() instanceof ValueName.Local local
+                && local.id().equals(b.params().get(0).id());
     }
 
     private static Ast.BinOp mirrored(Ast.BinOp op) {

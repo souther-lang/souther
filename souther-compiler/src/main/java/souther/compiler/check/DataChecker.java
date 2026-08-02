@@ -6,6 +6,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -145,10 +146,9 @@ public final class DataChecker {
      * Without it, a parameter named after a unit data was read as constructing that unit.
      */
     static void collectConstructs(Ast.Expr e, Map<TypeName, String> out, Symbols symbols,
-                                  Set<String> bound,
                                   Map<String, Constructs> recConstructs) {
         Constructs all = Constructs.empty();
-        collectConstructs(e, all, symbols, bound, recConstructs);
+        collectConstructs(e, all, symbols, recConstructs);
         out.putAll(all.originated());
     }
 
@@ -158,14 +158,11 @@ public final class DataChecker {
     }
 
     static void collectConstructs(Ast.Expr e, Constructs out, Symbols symbols,
-                                          Set<String> bound,
                                           Map<String, Constructs> recConstructs) {
         switch (e) {
             case Ast.LetIn li -> {
-                collectConstructs(li.value(), out, symbols, bound, recConstructs);
-                Set<String> inner = new HashSet<>(bound);
-                inner.add(li.name());
-                collectConstructs(li.body(), out, symbols, inner, recConstructs);
+                collectConstructs(li.value(), out, symbols, recConstructs);
+                collectConstructs(li.body(), out, symbols, recConstructs);
             }
             case Ast.NewData nd -> {
                 // A construction this body was handed is not this body's. It is handed one two ways.
@@ -181,12 +178,12 @@ public final class DataChecker {
                         ? out.carried() : out.originated();
                 side.putIfAbsent(nd.typeName().denotes(), nd.typeName().written());
                 for (Ast.FieldInit init : nd.inits()) {
-                    collectConstructs(init.value(), out, symbols, bound, recConstructs);
+                    collectConstructs(init.value(), out, symbols, recConstructs);
                 }
             }
-            case Ast.FieldAccess fa -> collectConstructs(fa.target(), out, symbols, bound, recConstructs);
-            case Ast.Tuple tup -> tup.elements().forEach(el -> collectConstructs(el, out, symbols, bound, recConstructs));
-            case Ast.TupleGet tg -> collectConstructs(tg.tuple(), out, symbols, bound, recConstructs);
+            case Ast.FieldAccess fa -> collectConstructs(fa.target(), out, symbols, recConstructs);
+            case Ast.Tuple tup -> tup.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
+            case Ast.TupleGet tg -> collectConstructs(tg.tuple(), out, symbols, recConstructs);
             case Ast.Call call -> {
                 // a recursive helper is not inlined, so its own (transitive) constructions are
                 // attributed to the behavior that calls it, exactly as an inlined helper's would be —
@@ -199,56 +196,45 @@ public final class DataChecker {
                 if (viaHelper != null) {
                     out.absorb(call.origin().viaValueReference() ? viaHelper.allCarried() : viaHelper);
                 }
-                call.args().forEach(a -> collectConstructs(a, out, symbols, bound, recConstructs));
+                call.args().forEach(a -> collectConstructs(a, out, symbols, recConstructs));
             }
             case Ast.Binary bin -> {
-                collectConstructs(bin.left(), out, symbols, bound, recConstructs);
-                collectConstructs(bin.right(), out, symbols, bound, recConstructs);
+                collectConstructs(bin.left(), out, symbols, recConstructs);
+                collectConstructs(bin.right(), out, symbols, recConstructs);
             }
-            case Ast.Neg neg -> collectConstructs(neg.operand(), out, symbols, bound, recConstructs);
+            case Ast.Neg neg -> collectConstructs(neg.operand(), out, symbols, recConstructs);
             case Ast.Match m -> {
-                collectConstructs(m.scrutinee(), out, symbols, bound, recConstructs);
+                collectConstructs(m.scrutinee(), out, symbols, recConstructs);
                 for (Ast.Case c : m.cases()) {
-                    Set<String> inner = new HashSet<>(bound);
-                    if (c.binding() != null) {
-                        inner.add(c.binding());
-                    }
-                    collectConstructs(c.body(), out, symbols, inner, recConstructs);
+                    collectConstructs(c.body(), out, symbols, recConstructs);
                 }
             }
             case Ast.If iff -> {
-                collectConstructs(iff.cond(), out, symbols, bound, recConstructs);
-                collectConstructs(iff.then(), out, symbols, bound, recConstructs);
-                collectConstructs(iff.els(), out, symbols, bound, recConstructs);
+                collectConstructs(iff.cond(), out, symbols, recConstructs);
+                collectConstructs(iff.then(), out, symbols, recConstructs);
+                collectConstructs(iff.els(), out, symbols, recConstructs);
             }
             // an attempt builds the value on its success branch, so it needs the same permission a
             // plain construction does — what it does not do is abort when it fails
             case Ast.IfConstructed ic -> {
-                collectConstructs(ic.construct(), out, symbols, bound, recConstructs);
-                Set<String> inner = new HashSet<>(bound);
-                inner.add(ic.binder());
-                collectConstructs(ic.then(), out, symbols, inner, recConstructs);
+                collectConstructs(ic.construct(), out, symbols, recConstructs);
+                collectConstructs(ic.then(), out, symbols, recConstructs);
                 ic.els().forEach(arm ->
-                        collectConstructs(arm.body(), out, symbols, bound, recConstructs));
+                        collectConstructs(arm.body(), out, symbols, recConstructs));
             }
-            case Ast.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, bound, recConstructs));
+            case Ast.ListLit lit -> lit.elements().forEach(el -> collectConstructs(el, out, symbols, recConstructs));
             case Ast.ListComp comp -> {
-                collectConstructs(comp.element(), out, symbols, bound, recConstructs);
-                comp.guards().forEach(g -> collectConstructs(g, out, symbols, bound, recConstructs));
+                collectConstructs(comp.element(), out, symbols, recConstructs);
+                comp.guards().forEach(g -> collectConstructs(g, out, symbols, recConstructs));
             }
-            case Ast.Block block -> {
-                // a block builds under the enclosing behavior's permission (spec 12.5)
-                Set<String> inner = new HashSet<>(bound);
-                inner.addAll(block.params());
-                collectConstructs(block.body(), out, symbols, inner, recConstructs);
-            }
+            // a block builds under the enclosing behavior's permission (spec 12.5)
+            case Ast.Block block -> collectConstructs(block.body(), out, symbols, recConstructs);
             // a bare name that denotes a unit data is that unit's construction (spec 8.4). Read off
             // what the name denotes rather than resolved again from its spelling: a reader with a
             // unit data spelled like the one another module's published body builds was recording
             // its own type as the one built. Carried or not is asked of the name for the same reason
             // it is asked of a construction node — it is the same question about the same thing.
-            case Ast.Var v when !bound.contains(v.name())
-                    && v.denotes() instanceof ValueName.OfType named
+            case Ast.Var v when v.denotes() instanceof ValueName.OfType named
                     && symbols.get(named.type()) instanceof Ast.UnitData -> {
                 Map<TypeName, String> side = named.origin().carried(named.type())
                         ? out.carried() : out.originated();
@@ -550,8 +536,7 @@ public final class DataChecker {
             // A total recursive helper — the stdlib fold behind the list quantifiers, or a user helper
             // proven total — is callable from an invariant, so its signature must be in scope here. A
             // field of the same name as a helper wins: a bare name in an invariant is a field reference.
-            Map<String, Type> invEnv = new HashMap<>(recursiveHelperFns);
-            invEnv.putAll(fields);
+            Scope invEnv = fieldScope(ctx).reaching(recursiveHelperFns);
             Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx);
             if (t != Type.BOOL) {
                 throw CompileException.of(
@@ -566,29 +551,37 @@ public final class DataChecker {
         ctx.data().encoder().ifPresent(enc -> checkEncoder(enc, ctx));
     }
 
+    /** The bindings a declaration's own invariant reads: its fields, each as the binding it is. */
+    private static Scope fieldScope(CheckContext ctx) {
+        Map<String, Type> types = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
+        Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
+        TypeOps.fieldBindings(ctx.data(), ctx.symbols()).forEach((name, binding) ->
+                bindings.put(binding, new Scope.Binding(name, types.get(name))));
+        return Scope.of(bindings);
+    }
+
     private static void checkDecoder(Ast.DecoderDef dec, CheckContext ctx, Map<String, Type> fields) {
         switch (dec) {
             case Ast.PrimDecoder prim -> {
                 Type inputType = TypeOps.primType(prim.from());
-                Map<String, Type> env = new HashMap<>();
-                env.put(prim.inputName(), inputType);
+                Scope env = Scope.NONE.with(prim.input(), inputType);
                 for (Ast.DecStmt stmt : prim.stmts()) {
                     switch (stmt) {
-                        case Ast.Let let -> env.put(let.name(), Elaborator.typeOf(let.value(), env, ctx));
+                        case Ast.Let let ->
+                                env = env.with(let.binder(), Elaborator.typeOf(let.value(), env, ctx));
                     }
                 }
                 checkConstruct(prim.result(), ctx, fields, env);
             }
             case Ast.ObjectDecoder obj -> {
-                Map<String, Type> env = new HashMap<>();
+                Scope env = Scope.NONE;
                 for (Ast.Bind bind : obj.binds()) {
-                    env.put(bind.name(), decRefType(bind.ref(), ctx.symbols()));
+                    env = env.with(bind.binder(), decRefType(bind.ref(), ctx.symbols()));
                 }
                 checkConstruct(obj.result(), ctx, fields, env);
             }
             case Ast.NewtypeDecoder nt -> {
-                Map<String, Type> env = new HashMap<>();
-                env.put(nt.inputName(), decRefType(nt.inner(), ctx.symbols()));
+                Scope env = Scope.NONE.with(nt.input(), decRefType(nt.inner(), ctx.symbols()));
                 checkConstruct(nt.result(), ctx, fields, env);
             }
         }
@@ -619,7 +612,7 @@ public final class DataChecker {
     }
 
     private static void checkConstruct(Ast.Construct c, CheckContext ctx, Map<String, Type> fields,
-                                       Map<String, Type> env) {
+                                       Scope env) {
         if (!c.typeName().denotes().equals(ctx.symbols().own(ctx.data().name()))) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.codec.mustconstruct").title("check.codec.title")
@@ -627,12 +620,14 @@ public final class DataChecker {
                     "decoder for `" + ctx.data().name() + "` must construct `" + ctx.data().name()
                             + "`, but constructs `" + c.typeName().written() + "`");
         }
-        checkConstruction(c.typeName().written(), c.inits(), c.spreads(), c.pos(), fields, env, ctx);
+        // a decoder's construction gives every field a value of its own; nothing builds one with a
+        // spread, so there is no binding to copy from here
+        checkConstruction(c.typeName().written(), c.inits(), List.of(), c.pos(), fields, env, ctx);
     }
 
     static List<Core.FieldInit> checkConstruction(String typeName, List<Ast.FieldInit> inits,
-                                          List<String> spreads,
-                                          SourcePos pos, Map<String, Type> fields, Map<String, Type> env,
+                                          List<Core.Read> spreads,
+                                          SourcePos pos, Map<String, Type> fields, Scope env,
                                           CheckContext ctx) {
         Map<String, Ast.FieldInit> byName = new HashMap<>();
         List<Core.FieldInit> elaborated = new ArrayList<>();
@@ -674,8 +669,9 @@ public final class DataChecker {
         // of — all of them, because naming one of several would pick by position and send the author
         // to open a sum whose cases never had the field
         Set<String> fromSums = new LinkedHashSet<>();
-        for (String sp : spreads) {
-            Type bound = env.get(sp);
+        for (Core.Read spread : spreads) {
+            String sp = spread.name();
+            Type bound = env.typeOf(spread.binding());
             if (bound instanceof Type.Ref ref
                     && ctx.symbols().get(ref.name()) instanceof Ast.SumData sum) {
                 fromSums.add(Type.show(bound));
@@ -743,11 +739,11 @@ public final class DataChecker {
     }
 
     private static void checkEncoder(Ast.EncoderDef enc, CheckContext ctx) {
-        Map<String, Type> env = Map.of(enc.selfName(), Type.ref(ctx.symbols().own(ctx.data().name())));
+        Scope env = Scope.NONE.with(enc.self(), Type.ref(ctx.symbols().own(ctx.data().name())));
         checkRawExpr(enc.result(), env, ctx);
     }
 
-    private static void checkRawExpr(Ast.RawExpr raw, Map<String, Type> env, CheckContext ctx) {
+    private static void checkRawExpr(Ast.RawExpr raw, Scope env, CheckContext ctx) {
         switch (raw) {
             case Ast.TextRaw t -> Elaborator.requireType(t.arg(), Type.STRING, env, ctx,
                     "argument of Text");
@@ -774,9 +770,7 @@ public final class DataChecker {
                                     .at(o.pos()).args(Type.show(at)).build(),
                             "optional encoder expects an Option, got " + at);
                 }
-                Map<String, Type> inner = new HashMap<>(env);
-                inner.put(o.elemVar(), oo.element());
-                checkRawExpr(o.inner(), inner, ctx);
+                checkRawExpr(o.inner(), env.with(o.elem(), oo.element()), ctx);
             }
             case Ast.ObjectRaw o -> {
                 for (Ast.RawEntry entry : o.entries()) {

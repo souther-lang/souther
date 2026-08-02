@@ -5,6 +5,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeChecker;
@@ -62,10 +63,19 @@ public final class Deriver {
             // a type like this is never emitted.
             return d;
         }
+        // the decoder and the encoder each read the value under a name of their own, so each owns
+        // the bindings it writes rather than sharing the declaration's
+        BindingOwner declared = new BindingOwner.OfData(symbols.own(d.name()));
         Optional<Ast.DecoderDef> decoder = d.decoder().isPresent()
-                ? d.decoder() : Optional.of(deriveDecoder(d, fields, isCase, symbols));
+                ? d.decoder()
+                : Optional.of(deriveDecoder(d, fields, isCase, symbols,
+                        new Ast.Binders(new BindingOwner.Synthesized(declared,
+                                BindingOwner.Pass.DERIVER, 0))));
         Optional<Ast.EncoderDef> encoder = d.encoder().isPresent()
-                ? d.encoder() : Optional.of(deriveEncoder(d, fields, isCase));
+                ? d.encoder()
+                : Optional.of(deriveEncoder(d, fields, isCase,
+                        new Ast.Binders(new BindingOwner.Synthesized(declared,
+                                BindingOwner.Pass.DERIVER, 1))));
         return new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(), d.invariants(),
                 decoder, encoder, d.pos());
     }
@@ -73,7 +83,7 @@ public final class Deriver {
     // --- decoder derivation ---
 
     private static Ast.DecoderDef deriveDecoder(Ast.Data d, Map<String, Type> fields, boolean isCase,
-                                               Symbols symbols) {
+                                               Symbols symbols, Ast.Binders binders) {
         SourcePos pos = d.pos();
         Ast.Name self = Ast.Name.resolved(symbols.own(d.name()), pos);
         // only an explicit newtype `data X = Y` is bare; a braced record is always an object, even
@@ -81,27 +91,30 @@ public final class Deriver {
         Map.Entry<String, Type> single = bareField(d, fields, isCase);
         if (single != null) {
             Ast.RawKind kind = rawKind(single.getValue());
+            Ast.Binder input = binders.binder("__in", pos);
             Ast.Construct result = new Ast.Construct(self,
-                    List.of(new Ast.FieldInit(single.getKey(), Ast.Var.local("__in", pos), pos)),
+                    List.of(new Ast.FieldInit(single.getKey(), Ast.Var.local(input, pos), pos)),
                     List.of(), pos);
-            return new Ast.PrimDecoder(kind, "__in", List.of(), result, pos);
+            return new Ast.PrimDecoder(kind, input, List.of(), result, pos);
         }
         // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec 8.7)
         if (d.newtype() && !isCase) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
+            Ast.Binder input = binders.binder("__in", pos);
             Ast.Construct result = new Ast.Construct(self,
-                    List.of(new Ast.FieldInit(only.getKey(), Ast.Var.local("__in", pos), pos)),
+                    List.of(new Ast.FieldInit(only.getKey(), Ast.Var.local(input, pos), pos)),
                     List.of(), pos);
             return new Ast.NewtypeDecoder(
                     decRef(only.getValue(), d, only.getKey(), fieldPos(d, only.getKey())),
-                    "__in", result, pos);
+                    input, result, pos);
         }
         List<Ast.Bind> binds = new ArrayList<>();
         List<Ast.FieldInit> inits = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
-            binds.add(new Ast.Bind(f.getKey(), f.getKey(),
+            Ast.Binder took = binders.binder(f.getKey(), pos);
+            binds.add(new Ast.Bind(took, f.getKey(),
                     decRef(f.getValue(), d, f.getKey(), fieldPos(d, f.getKey())), pos));
-            inits.add(new Ast.FieldInit(f.getKey(), Ast.Var.local(f.getKey(), pos), pos));
+            inits.add(new Ast.FieldInit(f.getKey(), Ast.Var.local(took, pos), pos));
         }
         return new Ast.ObjectDecoder(binds, new Ast.Construct(self, inits, List.of(), pos), pos);
     }
@@ -169,28 +182,30 @@ public final class Deriver {
 
     // --- encoder derivation ---
 
-    private static Ast.EncoderDef deriveEncoder(Ast.Data d, Map<String, Type> fields, boolean isCase) {
+    private static Ast.EncoderDef deriveEncoder(Ast.Data d, Map<String, Type> fields, boolean isCase,
+                                                Ast.Binders binders) {
         SourcePos pos = d.pos();
+        Ast.Binder self = binders.binder("self", pos);
         Map.Entry<String, Type> single = bareField(d, fields, isCase);
         if (single != null) {
-            Ast.Expr access = new Ast.FieldAccess(Ast.Var.local("self", pos), single.getKey(), pos);
-            return new Ast.EncoderDef("self", primRaw(single.getValue(), access, pos), pos);
+            Ast.Expr access = new Ast.FieldAccess(Ast.Var.local(self, pos), single.getKey(), pos);
+            return new Ast.EncoderDef(self, primRaw(single.getValue(), access, pos), pos);
         }
         // a newtype over a non-primitive Y encodes self.value as Y writes itself — Y's
         // representation, not `{value: ...}` (spec 8.7). Y is a named data, a sum, or a collection,
         // so this is the same choice a field of type Y makes.
         if (d.newtype() && !isCase) {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
-            Ast.Expr access = new Ast.FieldAccess(Ast.Var.local("self", pos), only.getKey(), pos);
-            return new Ast.EncoderDef("self",
-                    rawForAccess(only.getValue(), access, d, only.getKey(), pos), pos);
+            Ast.Expr access = new Ast.FieldAccess(Ast.Var.local(self, pos), only.getKey(), pos);
+            return new Ast.EncoderDef(self,
+                    rawForAccess(only.getValue(), access, d, only.getKey(), pos, binders), pos);
         }
         List<Ast.RawEntry> entries = new ArrayList<>();
         for (Map.Entry<String, Type> f : fields.entrySet()) {
             entries.add(new Ast.RawEntry(f.getKey(),
-                    rawFor(f.getValue(), f.getKey(), d, fieldPos(d, f.getKey())), pos));
+                    rawFor(f.getValue(), f.getKey(), d, fieldPos(d, f.getKey()), self, binders), pos));
         }
-        return new Ast.EncoderDef("self", new Ast.ObjectRaw(entries, pos), pos);
+        return new Ast.EncoderDef(self, new Ast.ObjectRaw(entries, pos), pos);
     }
 
     private static Ast.RawExpr primRaw(Type t, Ast.Expr access, SourcePos pos) {
@@ -214,13 +229,14 @@ public final class Deriver {
                 || t == Type.DECIMAL || t == Type.DATE || t == Type.DATETIME;
     }
 
-    private static Ast.RawExpr rawFor(Type t, String field, Ast.Data d, SourcePos pos) {
-        return rawForAccess(t, new Ast.FieldAccess(Ast.Var.local("self", pos), field, pos),
-                d, field, pos);
+    private static Ast.RawExpr rawFor(Type t, String field, Ast.Data d, SourcePos pos,
+                                      Ast.Binder self, Ast.Binders binders) {
+        return rawForAccess(t, new Ast.FieldAccess(Ast.Var.local(self, pos), field, pos),
+                d, field, pos, binders);
     }
 
     private static Ast.RawExpr rawForAccess(Type t, Ast.Expr access, Ast.Data d, String field,
-                                            SourcePos pos) {
+                                            SourcePos pos, Ast.Binders binders) {
         if (isPrim(t)) {
             return primRaw(t, access, pos);
         }
@@ -234,9 +250,10 @@ public final class Deriver {
             return new Ast.SetEnc(access, encElem(so.element(), d, field, pos), pos);
         }
         if (t instanceof Type.OptionOf oo) {
-            String elemVar = "$opt";
-            Ast.RawExpr inner = rawForAccess(oo.element(), Ast.Var.local(elemVar, pos), d, field, pos);
-            return new Ast.OptionRaw(access, inner, elemVar, pos);
+            Ast.Binder elem = binders.binder("$opt", pos);
+            Ast.RawExpr inner = rawForAccess(oo.element(), Ast.Var.local(elem, pos), d, field, pos,
+                    binders);
+            return new Ast.OptionRaw(access, inner, elem, pos);
         }
         if (t instanceof Type.MapOf mo) {
             return new Ast.MapEnc(access, encElem(mo.value(), d, field, pos), mapKeyEnc(mo, d, field, pos), pos);

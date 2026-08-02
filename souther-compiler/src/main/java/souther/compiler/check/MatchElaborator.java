@@ -23,7 +23,7 @@ public final class MatchElaborator {
 
     private MatchElaborator() {}
 
-    static Core elaborateMatch(Ast.Match m, Map<String, Type> env, CheckContext ctx,
+    static Core elaborateMatch(Ast.Match m, Scope env, CheckContext ctx,
                                        Type expected) {
         Core scrutinee = Elaborator.elaborate(m.scrutinee(), env, ctx);
         Type st = scrutinee.type();
@@ -83,7 +83,7 @@ public final class MatchElaborator {
      * exactly once (E1201; a second cover is an overlap error). */
     static Core elaborateCasesMatch(Ast.Match m, Core scrutineeCore, Set<TypeName> cases,
                                         String what, Type scrutinee,
-                                        Map<String, Type> env, CheckContext ctx, Type expected) {
+                                        Scope env, CheckContext ctx, Type expected) {
         Set<TypeName> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
@@ -139,7 +139,7 @@ public final class MatchElaborator {
     /** Match over {@code Option<element>}: cases are {@code Some} (binds the element) and
      * {@code None}; both must be present (spec 16.3). */
     static Core elaborateOptionMatch(Ast.Match m, Core scrutineeCore, Type element,
-                                          Map<String, Type> env, CheckContext ctx, Type expected) {
+                                          Scope env, CheckContext ctx, Type expected) {
         Set<TypeName> covered = new HashSet<>();
         List<Core.Case> arms = new ArrayList<>();
         Type branchType = null;
@@ -290,14 +290,10 @@ public final class MatchElaborator {
         }
     }
 
-    /** Extends {@code env} with {@code name -> type} when both are present; otherwise returns it as is. */
-    static Map<String, Type> bound(Map<String, Type> env, String name, Type type) {
-        if (name == null || type == null) {
-            return env;
-        }
-        Map<String, Type> benv = new HashMap<>(env);
-        benv.put(name, type);
-        return benv;
+    /** Extends {@code env} with {@code binding} when both it and its type are present; otherwise
+     * returns it as is. */
+    static Scope bound(Scope env, Ast.Binder binding, Type type) {
+        return binding == null || type == null ? env : env.with(binding, type);
     }
 
     static Type mergeBranch(Ast.Match m, Type branchType, Type bt, Ast.Case c, Type expected) {
