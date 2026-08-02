@@ -1068,6 +1068,12 @@ final class BodyGen {
 
         /** Narrows an {@code Int} (a {@code long}) to a JVM {@code int}, for a JDK method taking an
          * {@code int} index. */
+        /** Puts a function value on the stack as an {@code Fn}, at the parameter types the position
+         * fixed. A kernel that applies a function needs one; see {@link Intrinsics.TakesAFunction}. */
+        void emitFn(Core value, List<Type> paramTypes) {
+            emitFunctionValue(value, paramTypes);
+        }
+
         void emitL2i() {
             code.l2i();
         }
@@ -1087,6 +1093,19 @@ final class BodyGen {
                     return;
                 }
             }
+            // `sortBy` orders by what its key answers, not by what the list holds, so its comparator
+            // is read off the key's result type.
+            if (call.fn().equals("List.sortBy")
+                    && call.args().get(0).type() instanceof Type.FnOf key
+                    && TypeOps.orderingEnumeration(key.result(), symbols) instanceof TypeName ordering) {
+                code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
+                emitFunctionValue(call.args().get(0),
+                        List.of(((Type.ListOf) call.args().get(1).type()).element()));
+                genExpr(call.args().get(1));
+                code.invokestatic(CD_Lists, "sortBy",
+                        MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
+                return;
+            }
             Prelude.IntrinsicSig intrinsic = Prelude.intrinsics().get(call.fn());
             if (intrinsic != null) {
                 Intrinsics.emit(this, intrinsic.key(), call);
@@ -1104,40 +1123,10 @@ final class BodyGen {
                     genExpr(call.args().get(0));
                     code.invokestatic(CD_Strings, "toDecimal", MethodTypeDesc.of(CD_Object, CD_String));
                 }
-                case "List.find", "List.sortBy" -> {
-                    // find(p, xs) / sortBy(key, xs): the function is a value here (not inlined into a
-                    // fold), so materialise it as an Fn, then pass the list. The list's element type
-                    // gives the function's one parameter type.
-                    Type elem = ((Type.ListOf) call.args().get(1).type()).element();
-                    TypeName ordering = call.fn().equals("List.sortBy")
-                            && call.args().get(0).type() instanceof Type.FnOf key
-                            ? TypeOps.orderingEnumeration(key.result(), symbols) : null;
-                    if (ordering != null) {
-                        code.invokestatic(cd(ordering), ORDERING_METHOD, MTD_ordering, true);
-                    }
-                    emitFunctionValue(call.args().get(0), List.of(elem));   // Fn on the stack
-                    genExpr(call.args().get(1));                            // then the List
-                    if (call.fn().equals("List.find")) {
-                        code.invokestatic(CD_Lists, "find", MethodTypeDesc.of(CD_Option, CD_Fn, CD_List));
-                    } else {
-                        code.invokestatic(CD_Lists, "sortBy", ordering == null
-                                ? MethodTypeDesc.of(CD_List, CD_Fn, CD_List)
-                                : MethodTypeDesc.of(CD_List, CD_Comparator, CD_Fn, CD_List));
-                    }
-                }
                 case GrowingFold.BUILD -> buildList(call);
                 case GrowingFold.GROW -> growList(call);
                 case GrowingFold.MAP_BUILD -> buildMap(call);
                 case GrowingFold.PUT -> putIntoMap(call);
-                case "Option.map" -> {
-                    // map(f, opt): materialise f as an Fn (its one parameter is the option's element
-                    // type), then the option. `Option` is not surface-writable, so the rewrap into
-                    // Some(f v) / None happens in the runtime kernel (Option.map), not in emitted code.
-                    Type elem = ((Type.OptionOf) call.args().get(1).type()).element();
-                    emitFunctionValue(call.args().get(0), List.of(elem));   // Fn on the stack
-                    genExpr(call.args().get(1));                            // then the Option
-                    code.invokestatic(CD_Options, "map", MethodTypeDesc.of(CD_Option, CD_Fn, CD_Option));
-                }
                 case "Date", "DateTime" -> {
                     // a written date: the checker has already parsed the literal, so the text is
                     // known good and this is a plain parse of a constant string.

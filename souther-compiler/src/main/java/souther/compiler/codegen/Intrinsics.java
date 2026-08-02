@@ -46,8 +46,32 @@ final class Intrinsics {
         return e.emit(g, call);
     }
 
-    sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold {
+    sealed interface Emit permits RuntimeStatic, JdkVirtual, NumericFold, TakesAFunction {
         Type emit(BodyGen g, Core.Call call);
+    }
+
+    /**
+     * A kernel taking a function value. The function is not inlined into the call — the kernel is
+     * what applies it — so it is materialised as an {@code Fn}, at the parameter types the container
+     * it walks supplies.
+     *
+     * <p>{@code container} is which argument that container is; {@code paramTypes} reads the
+     * function's parameter types off it. The function goes first on the stack, as the declarations
+     * write it.
+     */
+    record TakesAFunction(ClassDesc owner, String method, int container,
+                          Function<Type, List<Type>> paramTypes,
+                          Function<List<Type>, Type> result) implements Emit {
+        public Type emit(BodyGen g, Core.Call call) {
+            Type held = call.args().get(container).type();
+            g.emitFn(call.args().get(0), paramTypes.apply(held));
+            g.genExpr(call.args().get(container));
+            List<Type> byArg = List.of(call.args().get(0).type(), held);
+            Type resultType = result.apply(byArg);
+            g.emitInvokeStatic(owner, method, MethodTypeDesc.of(boundaryDesc(resultType),
+                    CD_Fn, boundaryDesc(held)));
+            return resultType;
+        }
     }
 
     /**
@@ -214,6 +238,15 @@ final class Intrinsics {
         t.put("string.fromDecimal", rt(CD_Strings, "fromDecimal", order(0), ts -> Type.STRING));
 
         // List
+        t.put("list.sortBy", new TakesAFunction(CD_Lists, "sortBy", 1,
+                held -> List.of(((Type.ListOf) held).element()),
+                ts -> ts.get(1)));
+        t.put("list.find", new TakesAFunction(CD_Lists, "find", 1,
+                held -> List.of(((Type.ListOf) held).element()),
+                ts -> Type.option(((Type.ListOf) ts.get(1)).element())));
+        t.put("option.map", new TakesAFunction(CD_Options, "map", 1,
+                held -> List.of(((Type.OptionOf) held).element()),
+                ts -> Type.option(((Type.FnOf) ts.get(0)).result())));
         t.put("list.max", rt(CD_Lists, "max", order(0), ts -> Type.option(listOf(ts, 0).element())));
         t.put("list.min", rt(CD_Lists, "min", order(0), ts -> Type.option(listOf(ts, 0).element())));
         t.put("list.length", rt(CD_Lists, "length", order(0), ts -> Type.INT));

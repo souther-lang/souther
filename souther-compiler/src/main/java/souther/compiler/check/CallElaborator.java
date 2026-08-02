@@ -74,6 +74,29 @@ public final class CallElaborator {
     }
 
     /**
+     * Refuses a sort key with no natural order. The constraint is on what the key answers, not on
+     * what the list holds, so it reads the binding the key's declared result took rather than the
+     * call's result.
+     */
+    private static void requiresOrderedKey(String key, Ast.Apply call, Type.FnOf declaredKey,
+                                           Map<String, Type> bindings, CheckContext ctx) {
+        if (!key.equals("list.sortBy")) {
+            return;
+        }
+        Type answered = TypeOps.substitute(declaredKey.result(), bindings);
+        if (BottomInfer.isBottom(answered) || answered instanceof Type.Var
+                || TypeOps.supportsOrdering(answered, ctx.symbols())) {
+            return;
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.ordered.key").title("check.type.mismatch.title")
+                        .at(call.pos()).args(call.fn(), Type.show(answered))
+                        .hint("check.ordered.hint").build(),
+                call.fn() + "'s key must be an ordered value (Int, String, Decimal, Date, DateTime,"
+                        + " a newtype over one of these, or an enumeration), but returns " + answered);
+    }
+
+    /**
      * A library name written where a value goes, or null where the name is not a library value.
      *
      * <p>A declaration with no parameter list is a value ([#fn-declaration]), and the library's are
@@ -298,11 +321,32 @@ public final class CallElaborator {
                         call.fn() + " takes " + intrinsic.params().size()
                                 + " argument(s) but is called with " + args.size());
             }
+            // The same three steps a helper's signature takes, for the same reasons: the context
+            // pins what it can before anything is read, the value arguments fix the rest, and a
+            // function argument is typed last — against parameter types the others have settled, so
+            // a block written there has them to be checked at.
+            //
+            // The pin is for the step's sake. With no function argument there is nothing waiting on
+            // it, and pinning anyway would answer an argument mismatch against the type the context
+            // wanted rather than against the one the declaration asks for.
+            boolean takesAFunction = intrinsic.params().stream().anyMatch(Type.FnOf.class::isInstance);
             Map<String, Type> bindings = new HashMap<>();
+            if (takesAFunction) {
+                BottomInfer.pinResultTypeVars(intrinsic.result(), expected, bindings, ctx.symbols(),
+                        call.pos(), "result of " + call.fn());
+            }
             for (int i = 0; i < args.size(); i++) {
-                Type argType = ca.type(i);
-                TypeOps.unify(intrinsic.params().get(i), argType, bindings, ctx.symbols(), call.pos(),
-                        "argument " + (i + 1) + " of " + call.fn());
+                if (!(intrinsic.params().get(i) instanceof Type.FnOf)) {
+                    TypeOps.unify(intrinsic.params().get(i), ca.type(i), bindings, ctx.symbols(),
+                            call.pos(), "argument " + (i + 1) + " of " + call.fn());
+                }
+            }
+            for (int i = 0; i < args.size(); i++) {
+                if (intrinsic.params().get(i) instanceof Type.FnOf declaredStep) {
+                    ca.put(i, Elaborator.resolveStepBinding(call.fn(), declaredStep, args.get(i),
+                            bindings, env, ctx));
+                    requiresOrderedKey(intrinsic.key(), call, declaredStep, bindings, ctx);
+                }
             }
             Type result = TypeOps.substitute(intrinsic.result(), bindings);
             requiresOrdering(intrinsic.key(), call, result, ctx);
@@ -327,53 +371,6 @@ public final class CallElaborator {
                 ca.require(0, Type.STRING, "argument of String.toDecimal");
                 // the sibling of toInt, and here for the same reason: a primitive-headed union
                 yield Type.union(primitiveHeaded(Type.DECIMAL, "NotANumber"));
-            }
-            case "List.find" -> {
-                arity(call, 2);   // find(p, xs): predicate first, list last (F#/Elm order)
-                Type t = ca.type(1);
-                if (!(t instanceof Type.ListOf lo)) {
-                    throw expects(call.pos(), "List.find", "kind.list", t,
-                            "List.find expects a List, got " + t);
-                }
-                Type pr = ca.block(0, call.fn(), List.of(lo.element()));
-                if (pr != Type.BOOL) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.fn.predicatebool").title("check.fn.title")
-                                    .at(call.pos()).args("List.find", Type.show(pr)).build(),
-                            "List.find's predicate must return Bool, but returns " + pr);
-                }
-                yield Type.option(lo.element());
-            }
-            case "Option.map" -> {
-                arity(call, 2);   // map(f, opt): function first, option last (F#/Elm order)
-                Type t = ca.type(1);
-                if (!(t instanceof Type.OptionOf oo)) {
-                    throw expects(call.pos(), "Option.map", "kind.option", t,
-                            "Option.map expects an Option, got " + t);
-                }
-                // `f` sees the contained value; the option's element type gives its one parameter type.
-                // The result re-wraps `f`'s return, so the whole call is `Option<'b>`.
-                Type r = ca.block(0, call.fn(), List.of(oo.element()));
-                yield Type.option(r);
-            }
-            case "List.sortBy" -> {
-                arity(call, 2);   // sortBy(key, xs): key first, list last (F#/Elm order)
-                Type t = ca.type(1);
-                if (!(t instanceof Type.ListOf lo)) {
-                    throw expects(call.pos(), "List.sortBy", "kind.list", t,
-                            "List.sortBy expects a List, got " + t);
-                }
-                Type keyT = ca.block(0, call.fn(), List.of(lo.element()));
-                if (!BottomInfer.isBottom(keyT) && !TypeOps.supportsOrdering(keyT, ctx.symbols())) {
-                    throw CompileException.of(
-                            Diagnostic.of(null, "check.ordered.key").title("check.type.mismatch.title")
-                                    .at(call.pos()).args("List.sortBy", Type.show(keyT))
-                                    .hint("check.ordered.hint").build(),
-                            "List.sortBy's key must be an ordered value (Int, String, Decimal, Date,"
-                                    + " DateTime, a newtype over one of these, or an enumeration), but"
-                                    + " returns " + keyT);
-                }
-                yield Type.list(lo.element());
             }
             case "Date", "DateTime" -> {
                 arity(call, 1);

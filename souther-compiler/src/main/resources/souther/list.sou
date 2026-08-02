@@ -20,6 +20,8 @@ module souther.list
 // recursion into a loop (no per-element stack frame). `List.get` gives the base case: `None` past the
 // end of the list yields the seed. Every combinator below is derived from it.
 let length (xs: List<'a>) : Int = intrinsic "list.length"
+let find (p: ('a) -> Bool, xs: List<'a>) : Option<'a> = intrinsic "list.find"
+let sortBy (key: ('a) -> 'k, xs: List<'a>) : List<'a> = intrinsic "list.sortBy"
 let max (xs: List<'a>) : Option<'a> = intrinsic "list.max"
 let min (xs: List<'a>) : Option<'a> = intrinsic "list.min"
 let get (index: Int, xs: List<'a>) : Option<'a> = intrinsic "list.get"
