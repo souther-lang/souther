@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
@@ -307,12 +308,13 @@ public final class Compilation {
         return found.module() == null ? -1 : sourceIndexOf(found.module());
     }
 
-    /** The warnings among {@code found}, in order. */
-    public List<Diagnostic> warnings(List<Db.Found> found) {
-        List<Diagnostic> warnings = new ArrayList<>();
+    /** The warnings among {@code found}, in order, each tagged with the source it belongs to — the
+     *  same tag {@link #firstError} puts on an error, so a warning can be quoted where it is. */
+    public List<Located> warnings(List<Db.Found> found) {
+        List<Located> warnings = new ArrayList<>();
         for (Db.Found f : found) {
             if (!f.report().isError()) {
-                warnings.add(f.report().diagnostic());
+                warnings.add(new Located(f.report().diagnostic(), indexOf(f)));
             }
         }
         return warnings;

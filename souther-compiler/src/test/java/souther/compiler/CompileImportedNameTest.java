@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
 
 /**
@@ -221,7 +222,7 @@ class CompileImportedNameTest {
                     Out { v = NonEmpty(i.s) }
                 }
                 """);
-        assertEquals(0, c.warnings().stream()
+        assertEquals(0, c.warnings().stream().map(Located::diagnostic)
                         .filter(d -> d.severity() == Severity.WARNING).count(),
                 c.warnings().toString());
     }

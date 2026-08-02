@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.Compiler;
 import souther.compiler.Prelude;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
 
 import org.junit.jupiter.api.Test;
@@ -247,7 +248,7 @@ class InvariantCombinatorRulesTest {
     void theElementCarriesItsInvariantIntoEachClosure() {
         for (Fires f : FIRES) {
             Compiler.Compiled c = Compiler.compileWithWarnings(PREAMBLE + f.body());
-            long warnings = c.warnings().stream()
+            long warnings = c.warnings().stream().map(Located::diagnostic)
                     .filter(d -> d.severity() == Severity.WARNING).count();
             assertEquals(0, warnings,
                     f.fn() + ": the construction in the closure should discharge from the element's"

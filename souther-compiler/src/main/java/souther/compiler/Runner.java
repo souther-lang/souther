@@ -6,6 +6,7 @@ import souther.compiler.check.Sig;
 import souther.compiler.types.Type;
 import souther.compiler.query.Compilation;
 import souther.compiler.codegen.Backend;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issues;
@@ -32,6 +33,7 @@ import java.io.IOException;
 import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -113,6 +115,12 @@ public final class Runner {
 
     /** Parses the {@code run} subcommand's arguments (everything after {@code run}) and runs it. */
     static String runCli(String[] args) {
+        return runCli(args, new ArrayList<>());
+    }
+
+    /** As {@link #runCli(String[])}, collecting the compile's warnings into {@code warningsOut} for
+     *  the caller to render — running a module says what compiling it would have said. */
+    static String runCli(String[] args, List<Located> warningsOut) {
         Path file = null;
         String behaviorName = null;
         String inputJson = null;
@@ -134,7 +142,7 @@ public final class Runner {
         if (file == null) {
             throw usage("run.usage.nofile", "no source file given");
         }
-        return run(file, behaviorName, inputJson);
+        return run(file, behaviorName, inputJson, warningsOut);
     }
 
     private static String value(String[] args, int i, String option) {
@@ -153,13 +161,19 @@ public final class Runner {
      * encoded output as JSON text. {@code behaviorName} may be null when the module holds exactly
      * one runnable behavior; {@code inputJson} may be null for a zero-argument behavior. */
     public static String run(Path file, String behaviorName, String inputJson) {
+        return run(file, behaviorName, inputJson, new ArrayList<>());
+    }
+
+    /** As {@link #run(Path, String, String)}, collecting the compile's warnings into
+     *  {@code warningsOut}. */
+    static String run(Path file, String behaviorName, String inputJson, List<Located> warningsOut) {
         String source = read(file);
         String moduleName = moduleName(file);
 
         // One compilation answers all of it. Re-reading the source here to find the behavior and
         // its signature would resolve every name a second time, against a tree this compile has
         // already produced.
-        Compilation compilation = Compiler.compiled(source, moduleName);
+        Compilation compilation = Compiler.compiled(source, moduleName, warningsOut);
         Map<String, byte[]> classes = compilation.classes();
         Ast.Module module = compilation.module(compilation.modules().get(0));
         Map<String, Sig> sigs = compilation.signatures(module.name());

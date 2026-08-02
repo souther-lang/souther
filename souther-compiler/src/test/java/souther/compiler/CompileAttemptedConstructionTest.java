@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
 
 import java.util.List;
@@ -185,7 +186,7 @@ class CompileAttemptedConstructionTest {
                 }
                 """;
         Compiler.Compiled c = Compiler.compileWithWarnings(src);
-        assertEquals(0, c.warnings().stream()
+        assertEquals(0, c.warnings().stream().map(Located::diagnostic)
                         .filter(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code())).count(),
                 "the attempt cannot abort, so there is no possible violation to warn about");
     }

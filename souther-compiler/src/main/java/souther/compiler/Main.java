@@ -3,10 +3,10 @@ package souther.compiler;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
 import souther.compiler.diag.CompileException;
-import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
 import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.JsonRenderer;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.fmt.Formatter;
@@ -103,8 +103,13 @@ public final class Main {
             System.exit(2);
             return;
         }
+        List<Located> warnings = new ArrayList<>();
         try {
-            for (Path file : compileToDir(sources, outDir, classPath)) {
+            List<Path> written = compileToDir(sources, outDir, classPath, warnings);
+            // Before the written files: the warnings are about the source, and a long list of paths
+            // between them and the command would bury them.
+            report(warnings, sources, render);
+            for (Path file : written) {
                 System.out.println("wrote " + file);
             }
         } catch (CompileException e) {
@@ -201,13 +206,20 @@ public final class Main {
     private static void runSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
         String[] args = render.extract(rawArgs);
+        Path source = firstSource(args);
+        List<Path> sources = source == null ? List.of() : List.of(source);
+        List<Located> warnings = new ArrayList<>();
         try {
-            System.out.println(Runner.runCli(args));
+            String output = Runner.runCli(args, warnings);
+            // The warnings go to stderr and the behavior's output to stdout, so a caller piping the
+            // result reads JSON and nothing else.
+            report(warnings, sources, render);
+            System.out.println(output);
         } catch (Runner.RunException e) {
             System.err.println(e.localized(Messages.resolveLocale(render.lang)));
             System.exit(e.exitCode);
         } catch (CompileException e) {
-            reportCompileError(e, firstSource(args) == null ? List.of() : List.of(firstSource(args)), render);
+            reportCompileError(e, sources, render);
             System.exit(1);
         }
     }
@@ -224,10 +236,18 @@ public final class Main {
 
     /** The file the {@code i}-th diagnostic should quote. */
     static Path sourceOf(List<Path> sources, CompileException e, int i) {
+        return sourceAt(sources, e.sourceIndexOf(i));
+    }
+
+    /**
+     * The file a diagnostic tagged with {@code index} should quote. A compile of one file names no
+     * source — the compilation drops the index, since the caller knows the file it handed over — so
+     * the single file it was given is the answer there however the diagnostic is tagged.
+     */
+    static Path sourceAt(List<Path> sources, int index) {
         if (sources.size() == 1) {
             return sources.get(0);
         }
-        int index = e.sourceIndexOf(i);
         return index >= 0 && index < sources.size() ? sources.get(index) : null;
     }
 
@@ -252,14 +272,18 @@ public final class Main {
             System.err.println(e.getMessage());
             return;
         }
+        report(e.locatedDiagnostics(), sources, render);
+    }
+
+    /** Prints each diagnostic to stderr as the chosen renderer renders it, quoting the file it
+     * belongs to. Errors and warnings take the same path; only where they come from differs. */
+    private static void report(List<Located> located, List<Path> sources, RenderOptions render) {
         Locale locale = Messages.resolveLocale(render.lang);
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
-        List<Diagnostic> ds = e.diagnostics();
-        for (int i = 0; i < ds.size(); i++) {
-            // Each diagnostic quotes its own file: a compile that reports several modules at once has
-            // one per module, and they do not share a source.
-            System.err.println(renderer.render(ds.get(i), read(sourceOf(sources, e, i)), locale));
+        for (String line : DiagnosticRenderer.renderAll(
+                located, index -> read(sourceAt(sources, index)), renderer, locale)) {
+            System.err.println(line);
         }
     }
 
@@ -333,6 +357,13 @@ public final class Main {
      */
     public static List<Path> compileToDir(List<Path> sources, Path outDir, List<Path> classPath)
             throws IOException {
+        return compileToDir(sources, outDir, classPath, new ArrayList<>());
+    }
+
+    /** As {@link #compileToDir(List, Path, List)}, collecting the compile's warnings into
+     *  {@code warningsOut} for the caller to render — the CLI does, with the flags it was given. */
+    static List<Path> compileToDir(List<Path> sources, Path outDir, List<Path> classPath,
+                                   List<Located> warningsOut) throws IOException {
         List<String> texts = new ArrayList<>();
         for (Path source : sources) {
             texts.add(Files.readString(source));
@@ -344,9 +375,7 @@ public final class Main {
         Compiler.Compiled compiled = texts.size() == 1 && classPath.isEmpty()
                 ? Compiler.compileWithWarnings(texts.get(0), Runner.moduleName(sources.get(0)))
                 : Compiler.compileModulesWithWarnings(texts, path);
-        for (Diagnostic w : compiled.warnings()) {
-            System.err.println("warning: " + DiagnosticRenderer.body(w, Locale.ENGLISH));
-        }
+        warningsOut.addAll(compiled.warnings());
         Map<String, byte[]> classes = compiled.classes();
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, byte[]> entry : classes.entrySet()) {

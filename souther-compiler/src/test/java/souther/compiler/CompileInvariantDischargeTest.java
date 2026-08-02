@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
 
 import org.junit.jupiter.api.Test;
@@ -20,11 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CompileInvariantDischargeTest {
 
     private static long warnings(Compiler.Compiled c) {
-        return c.warnings().stream().filter(d -> d.severity() == Severity.WARNING).count();
+        return c.warnings().stream().map(Located::diagnostic)
+                .filter(d -> d.severity() == Severity.WARNING).count();
     }
 
     private static boolean hasWarning(Compiler.Compiled c, String code) {
-        return c.warnings().stream()
+        return c.warnings().stream().map(Located::diagnostic)
                 .anyMatch(d -> d.severity() == Severity.WARNING && code.equals(d.code()));
     }
 

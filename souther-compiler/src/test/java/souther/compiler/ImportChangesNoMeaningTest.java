@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Located;
 
 import org.junit.jupiter.api.Test;
 
@@ -185,7 +186,7 @@ class ImportChangesNoMeaningTest {
     }
 
     private static List<String> codes(Compiler.Compiled c) {
-        return c.warnings().stream().map(Diagnostic::code).sorted().toList();
+        return c.warnings().stream().map(Located::diagnostic).map(Diagnostic::code).sorted().toList();
     }
 
     /**

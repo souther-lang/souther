@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
@@ -34,7 +35,7 @@ public final class Compiler {
     }
 
     /** A compiled module with any non-fatal diagnostics (invariant-discharge warnings, etc.). */
-    public record Compiled(Map<String, byte[]> classes, List<Diagnostic> warnings) {}
+    public record Compiled(Map<String, byte[]> classes, List<Located> warnings) {}
 
     /** Compiles and returns the classes together with any invariant-discharge warnings. */
     public static Compiled compileWithWarnings(String source) {
@@ -44,7 +45,7 @@ public final class Compiler {
     /** As {@link #compileWithWarnings(String)}, but a header-less source is named
      * {@code defaultModuleName} (so the CLI's filename-stem naming can surface warnings too). */
     public static Compiled compileWithWarnings(String source, String defaultModuleName) {
-        List<Diagnostic> warnings = new ArrayList<>();
+        List<Located> warnings = new ArrayList<>();
         Map<String, byte[]> classes = compile(source, defaultModuleName, warnings);
         return new Compiled(classes, warnings);
     }
@@ -55,7 +56,7 @@ public final class Compiler {
     }
 
     private static Map<String, byte[]> compile(String source, String defaultModuleName,
-                                               List<Diagnostic> warningsOut) {
+                                               List<Located> warningsOut) {
         try {
             return compiling(source, defaultModuleName, warningsOut);
         } catch (StackOverflowError _) {
@@ -89,7 +90,7 @@ public final class Compiler {
      * the one.
      */
     private static Map<String, byte[]> compiling(String source, String defaultModuleName,
-                                                 List<Diagnostic> warningsOut) {
+                                                 List<Located> warningsOut) {
         return classesOf(compiled(source, defaultModuleName, warningsOut));
     }
 
@@ -102,8 +103,10 @@ public final class Compiler {
         return compiled(source, defaultModuleName, new ArrayList<>());
     }
 
-    private static Compilation compiled(String source, String defaultModuleName,
-                                        List<Diagnostic> warningsOut) {
+    /** As {@link #compiled(String, String)}, collecting the compile's warnings into
+     *  {@code warningsOut}. */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName);
         Db db = compilation.db();
 
@@ -170,12 +173,12 @@ public final class Compiler {
     /** As {@link #compileModulesWithWarnings(List)}, resolving against {@code path} as
      * {@link #compileModules(List, ModulePath)} does. */
     public static Compiled compileModulesWithWarnings(List<String> sources, ModulePath path) {
-        List<Diagnostic> warnings = new ArrayList<>();
+        List<Located> warnings = new ArrayList<>();
         return new Compiled(compileModules(sources, path, warnings), warnings);
     }
 
     private static Map<String, byte[]> compileModules(List<String> sources, ModulePath path,
-                                                      List<Diagnostic> warningsOut) {
+                                                      List<Located> warningsOut) {
         try {
             return linking(sources, path, warningsOut);
         } catch (StackOverflowError _) {
@@ -192,7 +195,7 @@ public final class Compiler {
      * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
      */
     private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
-                                               List<Diagnostic> warningsOut) {
+                                               List<Located> warningsOut) {
         Compilation compilation = Compilation.ofSources(sources, path);
         Db db = compilation.db();
 
