@@ -595,13 +595,6 @@ public final class HelperInliner {
         if (denotes instanceof ValueName.Helper helper) {
             out.add(helper);
         }
-        if (e instanceof Ast.NewData nd) {
-            for (Ast.Var spread : nd.spreads()) {
-                if (spread.denotes() instanceof ValueName.Helper helper) {
-                    out.add(helper);
-                }
-            }
-        }
         Ast.forEachChild(e, c -> collectHelpersOf(c, out));
     }
 
@@ -1477,15 +1470,24 @@ public final class HelperInliner {
      * null} and keep the positions their bodies have ({@link #keepsItsPositions}). The caller's
      * argument expressions, spliced in separately, keep their own positions either way.
      */
+    /**
+     * One name renamed — what {@link #rename} does wherever a name stands, whether that is an
+     * expression of its own or the name a spread holds.
+     *
+     * <p>A substituted name keeps what the argument resolved to, so a named function handed to a
+     * combinator stays the helper it is rather than becoming a binding of that spelling.
+     */
+    private Ast.Var renameVar(Ast.Var v, Map<BindingId, String> subst,
+                              Map<BindingId, ValueName> substDenotes, SourcePos at, Copy copy) {
+        return v.denotes() instanceof ValueName.Local p && subst.containsKey(p.id())
+                ? new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()))
+                : new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
+    }
+
     private Ast.Expr rename(Ast.Expr e, Map<BindingId, String> subst,
                             Map<BindingId, ValueName> substDenotes, SourcePos at, Copy copy) {
         return switch (e) {
-            // a substituted name keeps what the argument resolved to, so a named function handed to a
-            // combinator stays the helper it is rather than becoming a binding of that spelling
-            case Ast.Var v when v.denotes() instanceof ValueName.Local p
-                    && subst.containsKey(p.id()) ->
-                    new Ast.Var(subst.get(p.id()), substituted(substDenotes, p.id()), at(at, v.pos()));
-            case Ast.Var v -> new Ast.Var(v.name(), copy.of(v.denotes()), at(at, v.pos()));
+            case Ast.Var v -> renameVar(v, subst, substDenotes, at, copy);
             case Ast.FieldAccess fa -> new Ast.FieldAccess(rename(fa.target(), subst, substDenotes, at, copy), fa.field(), at(at, fa.pos()));
             // the callee is renamed as the expression it is, like every other subexpression. A name
             // applied is an `Ast.Var` held here, so it goes through the arm above and is substituted
@@ -1501,14 +1503,10 @@ public final class HelperInliner {
                 for (Ast.FieldInit i : nd.inits()) {
                     inits.add(new Ast.FieldInit(i.name(), rename(i.value(), subst, substDenotes, at, copy), at(at, i.pos())));
                 }
+                // `..param` copies the renamed binding: a name slot asks what a name asks
                 List<Ast.Var> spreads = new ArrayList<>();
                 for (Ast.Var s : nd.spreads()) {
-                    // `..param` copies the renamed binding, and stays the binding it now names
-                    BindingId spread = s.denotes() instanceof ValueName.Local p ? p.id() : null;
-                    spreads.add(spread == null || !subst.containsKey(spread)
-                            ? s.denoting(copy.of(s.denotes()))
-                            : new Ast.Var(subst.get(spread), substituted(substDenotes, spread),
-                                    at(at, s.pos())));
+                    spreads.add(renameVar(s, subst, substDenotes, at, copy));
                 }
                 yield new Ast.NewData(nd.typeName(), inits, spreads, nd.origin(), at(at, nd.pos()));
             }
@@ -1706,13 +1704,6 @@ public final class HelperInliner {
             Ast.FnDef d = own.get(v.name());
             if (d != null && d.params().isEmpty()) {
                 out.add(v.name());
-            }
-        }
-        if (e instanceof Ast.NewData nd) {
-            for (Ast.Var spread : nd.spreads()) {
-                if (valueSpread(spread) != null) {
-                    out.add(spread.name());   // `...base` reads the value a bare name does
-                }
             }
         }
         forEachChild(e, c -> collectValueRefs(c, out));
