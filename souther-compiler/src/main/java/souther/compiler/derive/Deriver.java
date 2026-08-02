@@ -93,8 +93,7 @@ public final class Deriver {
             Ast.RawKind kind = rawKind(single.getValue());
             Ast.Binder input = binders.binder("__in", pos);
             Ast.Construct result = new Ast.Construct(self,
-                    List.of(new Ast.FieldInit(single.getKey(), Ast.Var.local(input, pos), pos)),
-                    List.of(), pos);
+                    List.of(new Ast.FieldInit(single.getKey(), Ast.Var.local(input, pos), pos)), pos);
             return new Ast.PrimDecoder(kind, input, List.of(), result, pos);
         }
         // a newtype over a non-primitive Y delegates the whole input to Y's decoder (spec 8.7)
@@ -102,8 +101,7 @@ public final class Deriver {
             Map.Entry<String, Type> only = fields.entrySet().iterator().next();
             Ast.Binder input = binders.binder("__in", pos);
             Ast.Construct result = new Ast.Construct(self,
-                    List.of(new Ast.FieldInit(only.getKey(), Ast.Var.local(input, pos), pos)),
-                    List.of(), pos);
+                    List.of(new Ast.FieldInit(only.getKey(), Ast.Var.local(input, pos), pos)), pos);
             return new Ast.NewtypeDecoder(
                     decRef(only.getValue(), d, only.getKey(), fieldPos(d, only.getKey())),
                     input, result, pos);
@@ -116,7 +114,7 @@ public final class Deriver {
                     decRef(f.getValue(), d, f.getKey(), fieldPos(d, f.getKey())), pos));
             inits.add(new Ast.FieldInit(f.getKey(), Ast.Var.local(took, pos), pos));
         }
-        return new Ast.ObjectDecoder(binds, new Ast.Construct(self, inits, List.of(), pos), pos);
+        return new Ast.ObjectDecoder(binds, new Ast.Construct(self, inits, pos), pos);
     }
 
     private static Ast.RawKind rawKind(Type t) {

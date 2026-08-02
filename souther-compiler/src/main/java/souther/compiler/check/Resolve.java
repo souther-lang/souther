@@ -484,7 +484,7 @@ public final class Resolve {
         for (Ast.FieldInit i : c.inits()) {
             inits.add(new Ast.FieldInit(i.name(), expr(i.value(), bound), i.pos()));
         }
-        return new Ast.Construct(type(c.typeName()), inits, c.spreads(), c.pos());
+        return new Ast.Construct(type(c.typeName()), inits, c.pos());
     }
 
     // --- encoders ---

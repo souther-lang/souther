@@ -546,9 +546,13 @@ public interface Ast {
         }
     }
 
-    /** A typed record literal {@code TypeName { ..src, field: expr, ... }} — a construction. */
-    record Construct(Name typeName, List<FieldInit> inits, List<String> spreads, SourcePos pos)
-            implements Ast {}
+    /**
+     * The construction a decoder ends in: {@code TypeName { field: expr, ... }}, one value per field.
+     *
+     * <p>Not an expression, and not what a body writes — a decoder is derived or written in the codec
+     * grammar, and nothing there spreads. A construction a body writes is {@link NewData}.
+     */
+    record Construct(Name typeName, List<FieldInit> inits, SourcePos pos) implements Ast {}
 
     /** One {@code field: expr} (or shorthand {@code field}) inside a record literal. */
     record FieldInit(String name, Expr value, SourcePos pos) implements Ast {}
