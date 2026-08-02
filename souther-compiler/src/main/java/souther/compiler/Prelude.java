@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,9 +58,10 @@ public final class Prelude {
 
     /** A declaration's resolved signature: its parameter types, and the success type of its declared
      *  return — or null where the declaration writes no return type and leaves its result to its
-     *  body, which a Souther-bodied helper may and a kernel never does. Resolved once at load; what
-     *  the failure cases of the return are is the checker's question about the call, not the
-     *  signature's. */
+     *  body, which a Souther-bodied helper with parameters may and a kernel never does. A
+     *  zero-parameter declaration is a value and always has a result here (see
+     *  {@link #signatureOf}). Resolved once at load; what the failure cases of the return are is the
+     *  checker's question about the call, not the signature's. */
     public record Signature(List<Type> params, Type result) {
         public Signature {
             params = List.copyOf(params);
@@ -136,7 +138,7 @@ public final class Prelude {
 
     /** Every entry, keyed by qualified name, in declaration order. */
     public static Map<String, PreludeEntry> entries() {
-        return java.util.Collections.unmodifiableMap(ENTRIES);
+        return Collections.unmodifiableMap(ENTRIES);
     }
 
     /** The Souther-bodied declarations (inlined at call sites), keyed by qualified name. */
@@ -172,13 +174,7 @@ public final class Prelude {
                     throw new IllegalStateException(
                             "the standard library declares `" + qualified + "` twice");
                 }
-                List<Type> params = new ArrayList<>();
-                for (Ast.FnParam p : fn.params()) {
-                    params.add(TypeOps.resolveParamType(p.type(), noSymbols));
-                }
-                Type result = fn.declaredReturn() == null
-                        ? null : TypeOps.successType(fn.declaredReturn(), noSymbols);
-                ENTRIES.put(qualified, new PreludeEntry(fn, new Signature(params, result)));
+                ENTRIES.put(qualified, new PreludeEntry(fn, signatureOf(fn, qualified, noSymbols)));
                 BARE_TO_QUALIFIED.putIfAbsent(fn.name(), qualified);
             }
         }
@@ -221,6 +217,24 @@ public final class Prelude {
         BARE_TO_QUALIFIED.put("subtract", "Int.subtract` or `Decimal.subtract");
         BARE_TO_QUALIFIED.put("multiply", "Int.multiply` or `Decimal.multiply");
         BARE_TO_QUALIFIED.put("divide", "Int.divide` or `Decimal.divide");
+    }
+
+    /** The resolved signature of {@code fn}. A zero-parameter declaration is a value whose type
+     *  only the signature can answer — {@code libraryValue} reads it with no call whose arguments
+     *  could pin it — so a value that writes no return type is refused here rather than filed as an
+     *  entry whose type nothing states. */
+    static Signature signatureOf(Ast.FnDef fn, String qualified, Symbols symbols) {
+        List<Type> params = new ArrayList<>();
+        for (Ast.FnParam p : fn.params()) {
+            params.add(TypeOps.resolveParamType(p.type(), symbols));
+        }
+        Type result = fn.declaredReturn() == null
+                ? null : TypeOps.successType(fn.declaredReturn(), symbols);
+        if (fn.params().isEmpty() && result == null) {
+            throw new IllegalStateException(
+                    "a zero-parameter prelude value must declare its return type: `" + qualified + "`");
+        }
+        return new Signature(params, result);
     }
 
     private static String read(String resource) {
