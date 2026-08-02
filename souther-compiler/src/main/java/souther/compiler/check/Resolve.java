@@ -559,14 +559,14 @@ public final class Resolve {
             case Ast.Apply call when call.appliesAName() -> new Ast.Apply(call.written(),
                     answered(call.written(), call.pos(), calledName(call, bound)),
                     exprs(call.args(), bound), call.origin(), call.pos());
-            case Ast.Apply call -> new Ast.Apply(expr(call.function(), bound),
+            case Ast.Apply call -> new Ast.Apply(callee(call.function(), bound),
                     exprs(call.args(), bound), call.origin(), call.pos());
-            // `Map.empty`, `String.isEmpty` — a namespace and a member of it, which the parser read
-            // as a field taken off a name because no `(` followed. Folded here and nowhere earlier:
-            // Souther reads no case, so `Map` may be a parameter, and a binding in force wins over
+            // `Map.empty`, `String.isEmpty`, `up.Amount` — a namespace and a member of it, which
+            // the parser read as a field taken off a name because it reads no case at all. Folded
+            // here and nowhere earlier: `Map` may be a parameter, and a binding in force wins over
             // everything else — which is a fact the parser and the AST builder do not have.
             case Ast.FieldAccess fa -> {
-                Ast.Var member = memberOfNamespace(fa, bound);
+                Ast.Var member = qualifiedName(fa, false, bound);
                 yield member != null ? member
                         : new Ast.FieldAccess(expr(fa.target(), bound), fa.field(), fa.pos());
             }
@@ -701,25 +701,102 @@ public final class Resolve {
     }
 
     /**
-     * {@code Q.m} read as a member of the namespace {@code Q}, or null where it is an ordinary field
-     * read.
+     * The callee of an application that does not apply a bare name.
      *
-     * <p>Only where {@code Q} is unbound. A parameter or a {@code let} named {@code Map} makes
-     * {@code Map.empty} that binding's {@code empty} field, resolved the ordinary way, and no
-     * namespace member is produced. Whether the namespace has a member {@code m} is not asked here —
-     * see {@link #lookup}.
-     *
-     * <p>The reference is written {@code Q.m} and positioned at {@code Q}, so what a reader asks
-     * about covers both tokens exactly as an applied qualified name already does.
+     * <p>A field read in this position may be a qualified name — {@code Map.empty(k)},
+     * {@code up.Amount(n)} — and it is answered here rather than as a value, because applied is
+     * what the position says: a type written as a value is a unit data's construction, and applied
+     * it is a newtype taking what it wraps. Anything else is the expression it is, and what may be
+     * applied is the check's to say.
      */
-    private Ast.Var memberOfNamespace(Ast.FieldAccess fa, Bindings bound) {
-        if (!(fa.target() instanceof Ast.Var base) || base.denotes() != null
-                || bound.binderOf(base.name()) != null || !Prelude.isQualifier(base.name())) {
+    private Ast.Expr callee(Ast.Expr function, Bindings bound) {
+        if (function instanceof Ast.FieldAccess fa) {
+            Ast.Var name = qualifiedName(fa, true, bound);
+            if (name != null) {
+                return name;
+            }
+        }
+        return expr(function, bound);
+    }
+
+    /**
+     * A chain of names read as one qualified name — {@code Map.empty}, {@code up.Amount},
+     * {@code probe.a.Amount}, where the module's own name is dotted — or null where it is an
+     * ordinary field read.
+     *
+     * <p>Only where the chain's root is unbound. A parameter or a {@code let} named {@code Map}
+     * makes {@code Map.empty} that binding's {@code empty} field, resolved the ordinary way, and no
+     * qualified name is produced.
+     *
+     * <p>The whole chain is asked first, and a chain that answers nothing is left for the caller to
+     * take apart — so {@code probe.a.defaultAmount.value} folds {@code probe.a.defaultAmount} and
+     * reads {@code .value} off it. What is reported, and where, is
+     * {@link #unknownMember}'s to say: a member of a namespace that has no such member is named in
+     * full, and a chain rooted at a name nothing declares is reported at that name.
+     *
+     * <p>Positioned at the root, so what a reader asks about covers every token of the name.
+     */
+    private Ast.Var qualifiedName(Ast.FieldAccess fa, boolean applied, Bindings bound) {
+        Ast.Var root = rootName(fa);
+        if (root == null || root.denotes() != null || bound.binderOf(root.name()) != null) {
             return null;
         }
-        String written = base.name() + "." + fa.field();
-        return new Ast.Var(written,
-                answered(written, base.pos(), new ValueName.Stdlib(written)), base.pos());
+        String written = dottedName(fa);
+        ValueName denotes = lookup(written, applied, bound);
+        if (denotes != null) {
+            return new Ast.Var(written, answered(written, root.pos(), denotes), root.pos());
+        }
+        return unknownMember(fa, written, applied, root.pos(), bound);
+    }
+
+    /**
+     * The report for a chain whose spelling denotes nothing, or null where there is nothing to say
+     * here and the chain is taken apart instead.
+     *
+     * <p>Something is said only where the part in front is a namespace: {@code probe.a.NoSuch}
+     * names a module that exists and a member it has not got, and reporting the root {@code probe}
+     * as an unknown identifier would send the author after a module name that is right. Where the
+     * front is not a namespace — {@code unknown.member} — nothing is said, and the root is reported
+     * as the unknown identifier it is once the chain is read as the field access it turned out to
+     * be.
+     */
+    private Ast.Var unknownMember(Ast.FieldAccess fa, String written, boolean applied,
+                                  SourcePos pos, Bindings bound) {
+        String qualifier = dottedName(fa.target());
+        if (qualifier == null || !isNamespace(qualifier)) {
+            return null;
+        }
+        CompileException why = applied ? notCallable(written, pos, bound)
+                : unknownIdentifier(written, pos, bound);
+        return new Ast.Var(written, answered(written, pos, nothing(written, pos, why)), pos);
+    }
+
+    /** Whether {@code qualifier} names a namespace a member may be reached through: a
+     *  standard-library one, or a module of this compilation (or an alias for one). */
+    private boolean isNamespace(String qualifier) {
+        return Prelude.isQualifier(qualifier) || symbols.moduleOfQualifier(qualifier) != null;
+    }
+
+    /** The name a chain of field reads is rooted at, or null where it is rooted at anything else —
+     *  a call's result, a parenthesised expression — which no qualified name can be. */
+    private static Ast.Var rootName(Ast.Expr e) {
+        return switch (e) {
+            case Ast.Var v -> v;
+            case Ast.FieldAccess fa -> rootName(fa.target());
+            default -> null;
+        };
+    }
+
+    /** The dotted spelling of a chain of names, or null where it is not one. */
+    private static String dottedName(Ast.Expr e) {
+        return switch (e) {
+            case Ast.Var v -> v.name();
+            case Ast.FieldAccess fa -> {
+                String target = dottedName(fa.target());
+                yield target == null ? null : target + "." + fa.field();
+            }
+            default -> null;
+        };
     }
 
     /** What a name used as a value denotes, and the report for one that denotes nothing. */
