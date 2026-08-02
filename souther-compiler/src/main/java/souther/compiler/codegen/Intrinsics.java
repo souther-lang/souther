@@ -220,6 +220,11 @@ final class Intrinsics {
         return TABLE.keySet();
     }
 
+    /** How each key is emitted — read by the test that holds the descriptor invariant. */
+    static Map<String, Emit> emitters() {
+        return Map.copyOf(TABLE);
+    }
+
     private static int[] order(int... a) {
         return a;
     }

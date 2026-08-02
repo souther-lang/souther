@@ -84,6 +84,24 @@ the observed argument types only ever agreed with the declaration while every pa
 invariant; a sum-typed parameter ends that — an argument's type may be the case it happens to be
 while the declaration names the sum — so the descriptor comes from the callee.
 
+The other 61 kernels that build a descriptor from the call were audited against that invariant and
+none breaks it, but the reason is worth recording because it is not a rule anyone stated: every
+other declared parameter is a primitive or a container, whose boundary form the type settles on
+its own, or a type variable in a slot the emitter erases to `Object` — which is what the
+declaration would have given. So the agreement is a property of the declarations that exist, not
+of the mechanism, and registering a second runtime-backed data and writing it into a kernel's
+parameters reproduces #270 exactly. `KernelDescriptorsComeFromDeclarationsTest` turns that into a
+checked invariant: a kernel reading its descriptor off the call may not declare a parameter whose
+boundary form depends on which value arrives. It was verified to fail by putting `decimal.toInt`
+back on the observed-type emitter.
+
+Generalising the declaration-read descriptor to the rest is a separate design problem, not left
+undone by oversight: an emitter reading the declaration must still answer the call's Souther type,
+and for a polymorphic kernel those are two different sources (the declaration says `List<'a>`, the
+caller needs the element it actually holds). Ten kernels also permute their arguments and nine
+erase a slot and box it, neither of which the declaration states. Until those are separated, a
+mechanical migration would move type variables into places that expect settled types.
+
 `constructs` does not govern a rounding-mode case, stated as the general rule rather than a
 namespace check: the discipline governs what the compilation declares
 (`Symbols.declaredByCompilation`), and a declaration the language gives is vocabulary — as
