@@ -52,6 +52,24 @@ class TwoReadingsOfOneValueTest {
                 CandidateMerge.of(pair(v("a"), v("a")), pair(Type.INT, Type.INT)));
     }
 
+    /** A variable's earlier reading is itself a reading, so the two are taken together rather than
+     * compared: what one position said it holds answers the position that left it open. */
+    @Test
+    void whatAVariableStoodForAlreadyIsReadWithWhatItStandsForNow() {
+        assertEquals(Type.map(Type.STRING, Type.STRING),
+                CandidateMerge.of(Type.map(v("a"), v("a")), Type.map(Type.STRING, v("b"))));
+        assertEquals(pair(Type.INT, Type.INT),
+                CandidateMerge.of(pair(v("a"), v("a")), pair(Type.INT, v("b"))));
+    }
+
+    /** Nothing built from a value holds that value, so a reading saying so is not one to take. */
+    @Test
+    void aVariableDoesNotStandForSomethingHoldingItself() {
+        assertNull(CandidateMerge.of(v("a"), Type.list(v("a"))));
+        assertNull(CandidateMerge.of(Type.list(v("a")), v("a")));
+        assertNull(CandidateMerge.of(v("a"), pair(Type.INT, v("a"))));
+    }
+
     /** Neither reading is the one being checked, so which is given first decides nothing. */
     @Test
     void theAnswerIsTheSameWhicheverReadingIsGivenFirst() {
@@ -62,7 +80,10 @@ class TwoReadingsOfOneValueTest {
                 new Type[] {Type.list(v("a")), Type.list(Type.INT)},
                 new Type[] {Type.map(v("a"), v("a")), Type.map(Type.STRING, Type.INT)},
                 new Type[] {Type.list(Type.INT), Type.set(Type.INT)},
-                new Type[] {Type.option(v("a")), Type.option(v("a"))});
+                new Type[] {Type.option(v("a")), Type.option(v("a"))},
+                new Type[] {Type.map(v("a"), v("a")), Type.map(Type.STRING, v("b"))},
+                new Type[] {pair(v("a"), v("b")), pair(v("c"), v("c"))},
+                new Type[] {v("a"), Type.list(v("a"))});
         for (Type[] two : pairs) {
             assertEquals(CandidateMerge.of(two[0], two[1]), CandidateMerge.of(two[1], two[0]),
                     Type.show(two[0]) + " with " + Type.show(two[1]));

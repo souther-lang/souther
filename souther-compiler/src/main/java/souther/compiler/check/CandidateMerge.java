@@ -49,10 +49,10 @@ final class CandidateMerge {
             return null;
         }
         if (left instanceof Type.Var lv) {
-            return meets(lv, right, stands, forThat) ? right : null;
+            return met(lv, right, stands, forThat);
         }
         if (right instanceof Type.Var rv) {
-            return meets(rv, left, forThat, stands) ? left : null;
+            return met(rv, left, forThat, stands);
         }
         return switch (left) {
             case Type.ListOf l when right instanceof Type.ListOf r ->
@@ -85,24 +85,66 @@ final class CandidateMerge {
     }
 
     /**
-     * Whether {@code v} standing where {@code other} stands agrees with everywhere else it stands.
-     * Recorded in both directions, so a variable on the other side is held to the same rule.
+     * What {@code v} standing where {@code other} stands comes to, given everywhere else it stands,
+     * or null where the two cannot be one thing. Recorded in both directions, so a variable on the
+     * other side is held to the same rule.
+     *
+     * <p>Where it stood somewhere already, the two readings of it are themselves two readings of one
+     * value and are merged: {@code Map<'a, 'a>} against {@code Map<String, 'b>} says the key is a
+     * String and then that the value is `'b`, and `'b` is what the second reading leaves open, so
+     * the answer is a Map of String to String rather than a disagreement.
+     *
+     * <p>A variable cannot stand for something holding itself. Nothing built from a value contains
+     * that value, so a reading that says so is not one this can take.
      */
-    private static boolean meets(Type.Var v, Type other,
-                                 Map<String, Type> its, Map<String, Type> theirs) {
-        Type already = its.get(v.name());
-        if (already != null && !already.equals(other)) {
-            return false;
+    private static Type met(Type.Var v, Type other,
+                            Map<String, Type> its, Map<String, Type> theirs) {
+        if (!v.equals(other) && Type.mentions(other, x -> x.equals(v))) {
+            return null;   // `'a` and `List<'a>` are not two readings of one value
         }
-        if (other instanceof Type.Var ov) {
-            Type met = theirs.get(ov.name());
-            if (met != null && !met.equals(v)) {
-                return false;
+        Type.Var ov = other instanceof Type.Var o ? o : null;
+        Type mine = stoodFor(its, v);
+        Type yours = ov == null ? stoodFor(theirs, other) : stoodFor(theirs, ov);
+        Type both;
+        if (mine instanceof Type.Var one && yours instanceof Type.Var another) {
+            // Both readings leave this position open, and either name denotes the value equally
+            // well. One is taken, by name, so the answer is a function of the two readings and not
+            // of which was given first.
+            both = one.name().compareTo(another.name()) <= 0 ? one : another;
+        } else if (mine instanceof Type.Var) {
+            both = yours;
+        } else if (yours instanceof Type.Var) {
+            both = mine;
+        } else {
+            // Neither leaves it open, so what each has been read as is itself two readings of one
+            // value. Both are headed by a constructor, so this descends rather than coming back here.
+            both = merge(mine, yours, its, theirs);
+            if (both == null) {
+                return null;
             }
-            theirs.put(ov.name(), v);
         }
-        its.put(v.name(), other);
-        return true;
+        its.put(v.name(), both);
+        if (ov != null) {
+            theirs.put(ov.name(), both);
+        }
+        return both;
+    }
+
+    /**
+     * What {@code t} has been read as, following what stands for what until something is not a
+     * variable or nothing more is said. A variable nothing has said anything about answers itself.
+     */
+    private static Type stoodFor(Map<String, Type> read, Type t) {
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        Type at = t;
+        while (at instanceof Type.Var v && seen.add(v.name())) {
+            Type next = read.get(v.name());
+            if (next == null || next.equals(at)) {
+                return at;
+            }
+            at = next;
+        }
+        return at;
     }
 
     private static Type wrap(java.util.function.UnaryOperator<Type> hold, Type left, Type right,

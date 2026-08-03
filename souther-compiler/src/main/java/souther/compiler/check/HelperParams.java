@@ -283,8 +283,9 @@ final class HelperParams {
         private final CheckContext ctx;
         private final Map<String, ReqSig> reqSigs;
         private final Map<String, Type> recursiveHelperFns;
-        /** What this walk has minted for the parameter it is reading, so a second position that
-         * asks the same signature is answered with the same variables. */
+        /** What this walk has minted for the parameter it is reading. A second position that asks
+         * the same signature is a second reading, and mints its own; the two are taken together
+         * where they answer one value. */
         private final Freshening freshening = new Freshening();
         private Type pinned;
         /** Whether the position now being read is a field read off its child. */
@@ -511,12 +512,12 @@ final class HelperParams {
             if (readings.stream().noneMatch(r -> mentions(r.expr(), target))) {
                 return;
             }
-            // What the enclosing position states reaches every arm, whether or not it says what the
-            // value holds: an arm is where the parameter stands, and the question asked of it is the
-            // same one asked anywhere else. Reading `List.length(if b then xs else [])` otherwise
-            // answers differently from `List.length(xs)`, which is the walk's shape deciding what the
-            // rule reaches.
-            Type answers = determinesOuterType(expected) ? expected : answered(readings, target);
+            // A type stated outright is the answer wherever it comes from, and only where nothing
+            // states one does a reading that says what the value is and leaves what it holds open
+            // become it. The enclosing position and the arms beside this one are both asked, in that
+            // order, so `List.length(if b then xs else [1, 2, 3])` takes the `List<Int>` the other arm
+            // states and `List.length(if b then xs else [])` takes the List the position asks for.
+            Type answers = firstAnswer(expected, readings, target);
             for (Reading r : readings) {
                 if (mentions(r.expr(), target)) {
                     visit(r.expr(), r.scope(), target, answers);
@@ -527,12 +528,32 @@ final class HelperParams {
             }
         }
 
-        /** The type one of {@code readings} answers, or null where none of them answers one. */
-        private Type answered(List<Reading> readings, BindingId target) {
+        /**
+         * What positions answering one type answer, taking a stated answer over one that leaves what
+         * the value holds open. Both the enclosing position and the arms beside the parameter are
+         * asked; an arm holding the parameter is not, because this scope cannot type it.
+         */
+        private Type firstAnswer(Type expected, List<Reading> readings, BindingId target) {
+            if (settles(expected)) {
+                return expected;
+            }
+            Type stated = answered(readings, target, this::settles);
+            if (stated != null) {
+                return stated;
+            }
+            // An arm is asked before the position, because an arm that answers a variable already
+            // attached to another parameter says these positions hold one thing, where the position
+            // has only just minted one for this parameter and says nothing about the arms.
+            Type carried = answered(readings, target, this::determinesOuterType);
+            return carried != null ? carried : determinesOuterType(expected) ? expected : null;
+        }
+
+        /** The type one of {@code readings} answers that {@code takes} accepts, or null. */
+        private Type answered(List<Reading> readings, BindingId target, Predicate<Type> takes) {
             for (Reading r : readings) {
                 if (!mentions(r.expr(), target)) {
                     Type t = typed(r.expr(), r.scope());
-                    if (settles(t)) {
+                    if (takes.test(t)) {
                         return t;
                     }
                 }
@@ -871,7 +892,7 @@ final class HelperParams {
          * Whether {@code v} is a variable this walk has already attached to another of the helper's
          * parameters. Standing alone it then says something after all — that this parameter holds
          * whatever that one holds — which is a relation the body made and not a value nothing states.
-         * {@code List.member(y, xs)} says exactly that about {@code y}.
+         * An arm beside an arm holding another parameter is where it arrives.
          *
          * <p>A variable the core wrote is attached to nothing, and one minted for the parameter being
          * settled is what is being worked out, so neither says anything: {@code let id (v) = v} is

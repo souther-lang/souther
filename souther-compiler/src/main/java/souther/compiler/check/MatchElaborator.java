@@ -314,7 +314,7 @@ public final class MatchElaborator {
                 Diagnostic.of(null, "check.match.branchtypes").title("check.match.title")
                         .at(c.pos()).args(Type.show(branchType), Type.show(bt))
                         .diff(Type.show(bt, branchType), Type.show(branchType, bt)).build(),
-                "match branches disagree: " + branchType + " vs " + bt);
+                "match branches disagree: " + Type.show(branchType) + " vs " + Type.show(bt));
     }
 
     /** A non-exhaustive-match error (E1201) listing every missing case. The legacy message names the
