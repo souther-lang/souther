@@ -192,7 +192,7 @@ final class HelperParams {
                 if (env.holds(param.id())) {
                     continue;
                 }
-                Type t = typing.typeOf(param, body, env, answers);
+                Type t = typing.typeOf(param, body, env, answers, othersOf(h, idx, env));
                 if (t == null) {
                     openUses.put(idx, typing.openUse());
                 } else {
@@ -203,6 +203,25 @@ final class HelperParams {
             }
         }
         return found;
+    }
+
+    /**
+     * What every parameter of {@code h} other than {@code idx} is known to be — written beside it or
+     * settled in an earlier round. A variable standing in one of these is one the body has tied to a
+     * value this walk is not working out, which is what makes it evidence rather than the question.
+     */
+    private static List<Type> othersOf(Ast.FnDef h, int idx, Scope env) {
+        List<Type> others = new ArrayList<>();
+        for (int i = 0; i < h.params().size(); i++) {
+            if (i == idx) {
+                continue;
+            }
+            Type t = env.typeOf(h.params().get(i).binder().id());
+            if (t != null) {
+                others.add(t);
+            }
+        }
+        return others;
     }
 
     /**
@@ -290,8 +309,10 @@ final class HelperParams {
         private Type pinned;
         /** Whether the position now being read is a field read off its child. */
         private boolean readingAField;
-        /** The parameter being settled: a variable minted for it is what is being worked out. */
+        /** The parameter being settled: a variable standing for it is what is being worked out. */
         private BindingId target;
+        /** What every other parameter of this helper is known to be, for {@link #saysWhatAnotherHolds}. */
+        private List<Type> otherParameters = List.of();
         /** Every reading of the parameter that leaves what it holds open, and what they settle. */
         private Readings readings = new Readings();
         private OpenUse openUse;
@@ -314,6 +335,11 @@ final class HelperParams {
          * was — the body asked for two different things and neither is what it is.
          */
         Type typeOf(Ast.Binder target, Ast.Expr body, Scope env, Type answers) {
+            return typeOf(target, body, env, answers, List.of());
+        }
+
+        Type typeOf(Ast.Binder target, Ast.Expr body, Scope env, Type answers, List<Type> others) {
+            this.otherParameters = others;
             this.target = target.id();
             this.pinned = null;
             this.readings = new Readings();
@@ -867,7 +893,7 @@ final class HelperParams {
                 return false;
             }
             boolean outer = switch (t) {
-                case Type.Var v -> attachedElsewhere(v);
+                case Type.Var v -> saysWhatAnotherHolds(v);
                 case Type.FnOf _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> false;
                 case Type.Prim _, Type.Ref _, Type.Union _, Type.ListOf _, Type.SetOf _,
                         Type.MapOf _, Type.OptionOf _, Type.TupleOf _ -> true;
@@ -876,17 +902,26 @@ final class HelperParams {
         }
 
         /**
-         * Whether {@code v} is a variable this walk has already attached to another of the helper's
-         * parameters. Standing alone it then says something after all — that this parameter holds
-         * whatever that one holds — which is a relation the body made and not a value nothing states.
-         * An arm beside an arm holding another parameter is where it arrives.
+         * Whether {@code v} standing alone says what this parameter holds: it stands in what another
+         * parameter of this helper is known to be. That parameter's type was settled without reading
+         * this one — a parameter is settled on its own, and an argument holding the parameter being
+         * settled is not read — so it is evidence rather than the question asked back.
          *
-         * <p>A variable the core wrote is attached to nothing, and one minted for the parameter being
-         * settled is what is being worked out, so neither says anything: {@code let id (v) = v} is
-         * open however the walk reached it.
+         * <p>Where the variable stands is not enough on its own. A binding the body made from this
+         * parameter carries it too, and taking that for evidence would let a parameter be settled by
+         * what was built out of it: {@code let f (v) = let xs = [v] in List.member(v, xs)} says
+         * nothing about {@code v} that {@code v} did not say first. Only the other parameters count.
+         *
+         * <p>A variable the core wrote, and one standing only where this parameter is being worked
+         * out, say nothing: {@code let id (v) = v} is open however the walk reached it.
          */
-        private boolean attachedElsewhere(Type.Var v) {
-            return v.mintedFor() != null && !v.mintedFor().equals(target);
+        private boolean saysWhatAnotherHolds(Type.Var v) {
+            for (Type other : otherParameters) {
+                if (Type.mentions(other, x -> x.equals(v))) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /** The type of a neighbouring expression, or null where this scope cannot type it. */

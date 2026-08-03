@@ -146,6 +146,22 @@ class CompileHelperCarriesItsVariablesTest {
                 "writing what the list holds says it");
     }
 
+    /**
+     * A bare variable says what this parameter holds only where another <em>parameter</em> is known
+     * to hold it. A binding the body made out of the parameter carries the same variable, and taking
+     * that for evidence would settle a parameter by what was built from it.
+     */
+    @Test
+    void whatWasBuiltFromTheParameterIsNotEvidenceAboutIt() {
+        assertFalse(compiles("""
+                let f (v) = {
+                    let xs = [ v ]
+                    List.member(v, xs)
+                }
+                let use (b: Bool) = f(1) && b"""),
+                "`xs` is made from `v`, so it says nothing about `v` that `v` did not say first");
+    }
+
     // --- what a position states reaches the arms, and what an arm states wins ---
 
     @Test
