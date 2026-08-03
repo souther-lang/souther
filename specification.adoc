@@ -2295,6 +2295,27 @@ How many rows are waiting is what `+souther examples+` reports; it is not a comp
 
 The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
 
+[#example-adequacy]
+=== What the rows establish
+
+An `+example+` fixes the value rule for one input. Whether a model's rows together say enough about it is a different question, and `+souther examples+` answers it from what evaluating them observed. Nothing here changes what compiles; it reports.
+
+*Evidence is graded, not counted.* How far a row got decides what it proves, and three claims are kept apart rather than collapsed into one:
+
+* *specified* — a row expects this case. Somebody wrote down that the model owes it.
+* *observed* — the behavior was seen to answer with this case. A row that expected something else still saw what it saw: a row expecting `+Approved+` that got `+Rejected+` is no evidence for `+Approved+`, and is evidence that `+Rejected+` can happen.
+* *verified* — a row expected this case and the behavior produced it.
+
+A pending row (<<example-pending>>) reaches *specified* and no further, which is the honest account of a behavior that has been described and not yet written. A row that failed reaches *observed* — a measure that dropped it would report the case it produced as one nothing produces.
+
+An input position carries the same three, with *executed* in place of *observed*: the behavior was applied to a value of that case, which claims nothing about what came back. Covering every case an input can be is the mechanised half of asking whether the behavior is total (<<match>>).
+
+*What counts as a case to cover.* A position that is a sum — a union, or a named `+data S = A | B+` — has cases to cover, folded to their leaves. A position typed as one data has one, and covering it is not a question any row can fail, so it is not counted. This is narrower than what a row's expected arm is held against (<<e1904>>), which uses the single name to catch a row that wrote the wrong one.
+
+*A measurement says how much of itself it could make.* A row whose case cannot be read from its text — a helper's answer, which names no case (<<example-expected>>) — is counted as unclassified rather than dropped. While there is one, a case with no rows is *undecided* rather than missing, because one of those rows may be covering it. A behavior with no rows at all is not measured: an absence of evidence is not a set of gaps.
+
+*The question is asked of a module, not of a source.* A behavior's rows are written in the module's own source and in any number of attached files (<<example-placement>>), so a source-by-source reading would report what another file covers as uncovered.
+
 [#control-flow]
 == Control structures
 

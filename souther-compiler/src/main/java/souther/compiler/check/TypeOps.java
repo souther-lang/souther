@@ -713,6 +713,18 @@ public final class TypeOps {
                 && fieldTypes(data, symbols).containsKey(key);
     }
 
+    /**
+     * The cases a position of this type can be, when it can be more than one thing: the leaf cases of
+     * a union or of a named sum, and nothing otherwise.
+     *
+     * <p>What a row's expected arm is held against, and what an adequacy report counts as declared. The
+     * two have to agree — a report that read a wider set than the rows are checked against would name a
+     * case no row is allowed to write — so the rule is here rather than stated twice.
+     */
+    public static Set<TypeName> outputCases(Type t, Symbols symbols) {
+        return t instanceof Type.Union || t instanceof Type.Ref ? leafCases(t, symbols) : Set.of();
+    }
+
     public static Set<TypeName> leafCases(Type t, Symbols symbols) {
         Set<TypeName> out = new LinkedHashSet<>();
         collectLeafCases(t, symbols, out, new HashSet<>());

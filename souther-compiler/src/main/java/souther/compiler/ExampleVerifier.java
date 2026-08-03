@@ -1228,10 +1228,7 @@ public final class ExampleVerifier {
     }
 
     private Set<TypeName> outCases(Type out) {
-        if (out instanceof Type.Union || out instanceof Type.Ref) {
-            return TypeOps.leafCases(out, symbols);
-        }
-        return Set.of();
+        return TypeOps.outputCases(out, symbols);
     }
 
     // --- raw evaluation of a fixture expression -----------------------------------------------

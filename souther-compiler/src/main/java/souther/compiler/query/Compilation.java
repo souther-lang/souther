@@ -162,6 +162,7 @@ public final class Compilation {
             for (String id : exampleSourcesOf(module)) {
                 db.ask(new Output.Examples(module, id));
             }
+            db.ask(new Adequacy.Witnesses(module));
         }
     }
 
