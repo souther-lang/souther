@@ -244,6 +244,34 @@ class CompileHelperCarriesItsVariablesTest {
                 "and so does the self-hosted one");
     }
 
+    /**
+     * What a signature says between its arguments and its result reaches the caller too.
+     * {@code Map.upsert} declares {@code Map<'k, 'a>} for its map and for what it answers, so what
+     * the result holds is what the argument held.
+     *
+     * <p>Not through the declaration: an expansion drops a declared return that carries a variable,
+     * and it is right to — the reason a declared return is carried at all is to fix an
+     * empty-collection seed the body cannot type, and a type that names a variable fixes nothing.
+     * The relation reaches the caller through what the body builds, which is built from the
+     * arguments.
+     */
+    @Test
+    void whatASignatureSaysBetweenItsArgumentsAndItsResultReachesTheCaller() throws Exception {
+        Map<?, ?> out = run("""
+                module demo
+                data In = { counts: Map<String, Int> }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let bump (k, m) = Map.upsert(k, 0, (v) -> v + 1, m)
+                let go (i) = Out { n = List.sum(Map.values(bump("a", i.counts))) }
+                """, Map.of("counts", Map.of("a", 1L, "b", 5L)));
+        assertEquals(7L, out.get("n"), "the result holds Ints because the argument did");
+        assertFalse(compiles("""
+                let bump (k, m) = Map.upsert(k, 0, (v) -> v + 1, m)
+                let use (t: Map<String, Bool>, n: Int) = Map.size(bump("a", t)) + n"""),
+                "a map of Bools does not take the Int the call decided");
+    }
+
     // --- what a position states reaches the arms, and what an arm states wins ---
 
     @Test

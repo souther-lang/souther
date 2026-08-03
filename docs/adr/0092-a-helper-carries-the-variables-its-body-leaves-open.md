@@ -90,15 +90,12 @@ each expansion. A bare unconstrained variable is not a body-determined parameter
   the position of the disagreement — which is what ADR-0066 already says happens to a settled type the
   rest of the body will not take. A mistake standing beside an open element is reported as the mistake
   it is: `let bad (xs, s: String) = List.length(xs) + (s * 2)` names the arithmetic, not `xs`.
-- **The variables are the helper's own, and a variable carries where it came from.** A library
-  signature is resolved once and shared by every call site, so two unrelated calls hand back one
-  spelling — `List.length` and `Set.size` both wrote `'a`. Variables are therefore minted where a
-  declaration is read, from the variables that declaration wrote and that call did not solve, and a
-  minted variable names the parameter it was minted for. That origin is what the rules ask, rather
-  than the spelling: a variable the core wrote is attached to nothing, one minted for the parameter
-  being settled is what is being worked out, and one minted for another parameter says this one holds
-  whatever that one holds. What links two parameters is a position that reads them together, not a
-  spelling two libraries share.
+- **The variables are the helper's own.** A library signature is resolved once and shared by every
+  call site, so two unrelated calls hand back one spelling — `List.length` and `Set.size` both wrote
+  `'a`. The instantiation that never happened is done where a callee is applied, and what a variable
+  carries is whether the compiler made it: an inferred one is shown as `_`, since its spelling is
+  internal and says nothing to a reader. What links two parameters is a position that reads them
+  together, not a spelling two libraries share.
 - **Two readings hold what a variable stands for while they are read, in both directions.** A
   variable says one thing everywhere it appears, so `('a, 'a)` read against `(Int, String)` is two
   answers rather than one left open. Holding one direction only would make the answer depend on which
