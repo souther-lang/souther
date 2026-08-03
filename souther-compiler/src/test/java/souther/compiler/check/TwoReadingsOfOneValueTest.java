@@ -13,9 +13,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
- * Taking two readings of one helper parameter together. A variable is what a reading leaves open, so
- * it yields to what the other reading says there — but it says one thing everywhere it stands, and
- * neither reading is the one being checked against the other.
+ * Every reading of one helper parameter, and what they settle between them. A variable is what a
+ * reading leaves open, so it yields to what another reading says there — but it says one thing
+ * everywhere it stands, none of the readings is the one being checked, and a reading that says what
+ * a variable is may arrive after the readings that used it.
  */
 class TwoReadingsOfOneValueTest {
 
@@ -32,24 +33,24 @@ class TwoReadingsOfOneValueTest {
 
     @Test
     void whatOneReadingStatesAndTheOtherLeavesOpenIsStated() {
-        assertEquals(Type.list(Type.INT), CandidateMerge.of(Type.list(v("a")), Type.list(Type.INT)));
-        assertEquals(Type.list(Type.INT), CandidateMerge.of(Type.list(Type.INT), Type.list(v("a"))));
+        assertEquals(Type.list(Type.INT), Readings.of(Type.list(v("a")), Type.list(Type.INT)));
+        assertEquals(Type.list(Type.INT), Readings.of(Type.list(Type.INT), Type.list(v("a"))));
     }
 
     @Test
     void twoAnswersAboutWhatTheValueIsAreNotOneLeftOpen() {
-        assertNull(CandidateMerge.of(Type.list(Type.INT), Type.set(Type.INT)));
-        assertNull(CandidateMerge.of(Type.list(Type.INT), Type.list(Type.STRING)));
-        assertNull(CandidateMerge.of(pair(Type.INT, Type.INT),
+        assertNull(Readings.of(Type.list(Type.INT), Type.set(Type.INT)));
+        assertNull(Readings.of(Type.list(Type.INT), Type.list(Type.STRING)));
+        assertNull(Readings.of(pair(Type.INT, Type.INT),
                 Type.tuple(List.of(Type.INT, Type.INT, Type.INT))));
     }
 
     /** A variable says one thing everywhere it stands, so a second appearance meets the first. */
     @Test
     void oneVariableStandingTwiceHoldsOneType() {
-        assertNull(CandidateMerge.of(pair(v("a"), v("a")), pair(Type.INT, Type.STRING)));
+        assertNull(Readings.of(pair(v("a"), v("a")), pair(Type.INT, Type.STRING)));
         assertEquals(pair(Type.INT, Type.INT),
-                CandidateMerge.of(pair(v("a"), v("a")), pair(Type.INT, Type.INT)));
+                Readings.of(pair(v("a"), v("a")), pair(Type.INT, Type.INT)));
     }
 
     /** A variable's earlier reading is itself a reading, so the two are taken together rather than
@@ -57,17 +58,17 @@ class TwoReadingsOfOneValueTest {
     @Test
     void whatAVariableStoodForAlreadyIsReadWithWhatItStandsForNow() {
         assertEquals(Type.map(Type.STRING, Type.STRING),
-                CandidateMerge.of(Type.map(v("a"), v("a")), Type.map(Type.STRING, v("b"))));
+                Readings.of(Type.map(v("a"), v("a")), Type.map(Type.STRING, v("b"))));
         assertEquals(pair(Type.INT, Type.INT),
-                CandidateMerge.of(pair(v("a"), v("a")), pair(Type.INT, v("b"))));
+                Readings.of(pair(v("a"), v("a")), pair(Type.INT, v("b"))));
     }
 
     /** Nothing built from a value holds that value, so a reading saying so is not one to take. */
     @Test
     void aVariableDoesNotStandForSomethingHoldingItself() {
-        assertNull(CandidateMerge.of(v("a"), Type.list(v("a"))));
-        assertNull(CandidateMerge.of(Type.list(v("a")), v("a")));
-        assertNull(CandidateMerge.of(v("a"), pair(Type.INT, v("a"))));
+        assertNull(Readings.of(v("a"), Type.list(v("a"))));
+        assertNull(Readings.of(Type.list(v("a")), v("a")));
+        assertNull(Readings.of(v("a"), pair(Type.INT, v("a"))));
     }
 
     /**
@@ -78,16 +79,33 @@ class TwoReadingsOfOneValueTest {
      */
     @Test
     void whatTwoReadingsSettledIsStillSettledWhenTheThirdArrives() {
-        assertNull(CandidateMerge.of(List.of(v("a"), v("b"), Type.list(v("b")))));
-        assertNull(CandidateMerge.of(List.of(Type.list(v("b")), v("b"), v("a"))));
+        assertNull(Readings.of(List.of(v("a"), v("b"), Type.list(v("b")))));
+        assertNull(Readings.of(List.of(Type.list(v("b")), v("b"), v("a"))));
 
         Type ab = pair(v("a"), v("b"));
         Type ba = pair(v("b"), v("a"));
         Type intA = pair(Type.INT, v("a"));
-        assertEquals(pair(Type.INT, Type.INT), CandidateMerge.of(List.of(ab, ba, intA)));
-        assertEquals(pair(Type.INT, Type.INT), CandidateMerge.of(List.of(ab, intA, ba)));
-        assertEquals(pair(Type.INT, Type.INT), CandidateMerge.of(List.of(ba, intA, ab)));
-        assertEquals(pair(Type.INT, Type.INT), CandidateMerge.of(List.of(intA, ab, ba)));
+        assertEquals(pair(Type.INT, Type.INT), Readings.of(List.of(ab, ba, intA)));
+        assertEquals(pair(Type.INT, Type.INT), Readings.of(List.of(ab, intA, ba)));
+        assertEquals(pair(Type.INT, Type.INT), Readings.of(List.of(ba, intA, ab)));
+        assertEquals(pair(Type.INT, Type.INT), Readings.of(List.of(intA, ab, ba)));
+    }
+
+    /**
+     * A position settled late settles the same value read earlier. The readings say {@code a} is a
+     * pair of {@code b}s and that one of those is an Int, so both of them are, wherever they were
+     * read.
+     */
+    @Test
+    void aPositionSettledLateSettlesTheSameValueReadEarlier() {
+        Type a = v("a");
+        Type b = v("b");
+        Type bb = pair(b, b);
+        Type bInt = pair(b, Type.INT);
+        Type ints = pair(Type.INT, Type.INT);
+        assertEquals(ints, Readings.of(List.of(a, bb, bInt)));
+        assertEquals(ints, Readings.of(List.of(bInt, bb, a)));
+        assertEquals(ints, Readings.of(List.of(bb, a, bInt)));
     }
 
     /** Neither reading is the one being checked, so which is given first decides nothing. */
@@ -105,7 +123,7 @@ class TwoReadingsOfOneValueTest {
                 new Type[] {pair(v("a"), v("b")), pair(v("c"), v("c"))},
                 new Type[] {v("a"), Type.list(v("a"))});
         for (Type[] two : pairs) {
-            assertEquals(CandidateMerge.of(two[0], two[1]), CandidateMerge.of(two[1], two[0]),
+            assertEquals(Readings.of(two[0], two[1]), Readings.of(two[1], two[0]),
                     Type.show(two[0]) + " with " + Type.show(two[1]));
         }
     }
@@ -116,13 +134,13 @@ class TwoReadingsOfOneValueTest {
         Type a = Type.list(v("a"));
         Type b = Type.list(Type.INT);
         Type c = Type.list(v("b"));
-        assertEquals(CandidateMerge.of(List.of(a, b, c)), CandidateMerge.of(List.of(c, b, a)));
+        assertEquals(Readings.of(List.of(a, b, c)), Readings.of(List.of(c, b, a)));
 
         Type wide = pair(v("a"), v("a"));
         Type ints = pair(Type.INT, Type.INT);
         Type mixed = pair(Type.INT, Type.STRING);
-        assertNull(CandidateMerge.of(List.of(wide, ints, mixed)));
-        assertNull(CandidateMerge.of(List.of(mixed, ints, wide)));
-        assertNull(CandidateMerge.of(List.of(ints, mixed, wide)));
+        assertNull(Readings.of(List.of(wide, ints, mixed)));
+        assertNull(Readings.of(List.of(mixed, ints, wide)));
+        assertNull(Readings.of(List.of(ints, mixed, wide)));
     }
 }

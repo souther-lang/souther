@@ -292,10 +292,8 @@ final class HelperParams {
         private boolean readingAField;
         /** The parameter being settled: a variable minted for it is what is being worked out. */
         private BindingId target;
-        /** Every reading of the parameter that leaves what it holds open, held together. */
-        private final CandidateMerge readings = new CandidateMerge();
-        private Type open;
-        private boolean openConflicted;
+        /** Every reading of the parameter that leaves what it holds open, and what they settle. */
+        private Readings readings = new Readings();
         private OpenUse openUse;
 
         BodyTyping(Symbols symbols, Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
@@ -318,9 +316,7 @@ final class HelperParams {
         Type typeOf(Ast.Binder target, Ast.Expr body, Scope env, Type answers) {
             this.target = target.id();
             this.pinned = null;
-            this.open = null;
-            this.openConflicted = false;
-            this.readings.forget();
+            this.readings = new Readings();
             this.openUse = null;
             this.freshening.forParameter(target.id());
             // A recursive helper's call is left standing rather than expanded, so the neighbouring
@@ -328,10 +324,9 @@ final class HelperParams {
             // to type `x`. Its signature goes in here, once, and every inner scope is derived from
             // this one (spec 13.1). What is bound wins over it, as it does everywhere else.
             visit(body, env.reaching(recursiveHelperFns), target.id(), answers);
-            if (pinned != null) {
-                return pinned;
-            }
-            return openConflicted ? null : open;
+            // What the readings settle is asked for once, here: a reading that says what a variable
+            // is may arrive after the readings that used it, so nothing before this is the answer.
+            return pinned != null ? pinned : readings.answer();
         }
 
         /**
@@ -342,8 +337,7 @@ final class HelperParams {
          * bound by trying one.
          */
         private void offer(Type t) {
-            open = readings.take(t);
-            openConflicted = open == null;
+            readings.add(t);
         }
 
         /** A use of the parameter that named no type, from the last {@link #typeOf} that found none. */
