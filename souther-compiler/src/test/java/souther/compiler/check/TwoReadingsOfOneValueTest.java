@@ -1,9 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BindingId;
-import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,11 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  */
 class TwoReadingsOfOneValueTest {
 
-    private static final BindingId OWNER =
-            new BindingId(new BindingOwner.OfData(new TypeName("demo", "X")), 0);
-
     private static Type v(String name) {
-        return Type.mintedVar(name, OWNER);
+        return Type.inferredVar(name);
     }
 
     private static Type pair(Type a, Type b) {

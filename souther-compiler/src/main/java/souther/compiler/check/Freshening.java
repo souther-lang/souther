@@ -36,14 +36,12 @@ import java.util.Map;
  */
 final class Freshening {
 
-    private BindingId owner;
     private String parameter = "";
     private int declarations;
 
     /** Starts again for {@code target}: another parameter's variables are not this one's. */
     void forParameter(BindingId target) {
         declarations = 0;
-        owner = target;
         parameter = target.toString();
     }
 
@@ -80,7 +78,7 @@ final class Freshening {
             if (x instanceof Type.Var v && !solved.containsKey(v.name())
                     && !rename.containsKey(v.name())) {
                 rename.put(v.name(),
-                        Type.mintedVar(v.name() + "." + parameter + "." + declarations, owner));
+                        Type.inferredVar(v.name() + "." + parameter + "." + declarations));
             }
             return false;   // a collector, not a test: every position is visited
         });

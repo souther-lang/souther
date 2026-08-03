@@ -581,13 +581,14 @@ final class HelperParams {
          * {@code x} through {@code y}, which is the shape a call to another body-typed helper inlines
          * to. A binding spelled like the parameter is another binding, and reads as one.
          *
-         * <p>What the binding demands is a declaration like any other, so the variables it wrote are
-         * minted as this parameter's own before they are read ({@link Freshening}): the type on the
-         * binding a helper's expansion writes is the callee's, and two callees spell theirs the same.
+         * <p>What the binding demands is read as it stands. The type on a binding a helper's
+         * expansion writes is the callee's signature with what that application decided already
+         * written into it, so two bindings of one expansion demand one variable and two expansions
+         * demand two.
          */
         private void visitLet(Ast.LetIn li, Scope env, BindingId target, Type expected) {
             Type demanded = li.declaredType() == null ? null
-                    : freshening.instantiate(TypeOps.resolveParamType(li.declaredType(), symbols));
+                    : TypeOps.resolveParamType(li.declaredType(), symbols);
             if (isParam(li.value(), target)) {
                 pin(demanded);
                 if (pinned != null) {

@@ -797,6 +797,49 @@ public final class HelperInliner {
         return new Ast.LetIn(bound, body, declared, true, null, Ast.Var.local(bound, pos), pos);
     }
 
+    /**
+     * What this application decides for the variables {@code helper}'s signature left open — one
+     * fresh variable per variable it wrote, over its parameters and its declared return together.
+     * Empty where it wrote none, which is every call of a helper that names its types outright.
+     *
+     * <p>Every unsolved variable in a helper's declared types is that helper's own: a variable enters
+     * a type only where the core writes one in a signature or where a helper's own settling mints one
+     * for its parameters, and a reference to a declared type carries none. So renaming by name over
+     * the whole signature at once binds nothing it should not.
+     */
+    private static Map<String, Type> instantiation(Ast.FnDef helper, BindingOwner mine) {
+        Map<String, Type> applied = new LinkedHashMap<>();
+        for (Ast.FnParam p : helper.params()) {
+            collectVariables(p.type(), mine, applied);
+        }
+        collectVariables(helper.declaredReturn(), mine, applied);
+        return applied;
+    }
+
+    private static void collectVariables(Ast.RetType declared, BindingOwner mine,
+                                         Map<String, Type> applied) {
+        if (declared == null || !mentionsRetTypeVar(declared)) {
+            return;
+        }
+        Type.mentions(TypeOps.resolveParamType(declared, null), t -> {
+            if (t instanceof Type.Var v) {
+                applied.computeIfAbsent(v.name(), name -> Type.inferredVar(name + "." + mine));
+            }
+            return false;   // a collector, not a test: every position is visited
+        });
+    }
+
+    /** {@code declared} with what this application decided written into it, or as it stands where it
+     * left nothing open. The type is written as a reference with no surface text: what it denotes is
+     * decided, and no source stands for it. */
+    private static Ast.RetType instantiated(Ast.RetType declared, Map<String, Type> applied) {
+        if (declared == null || applied.isEmpty() || !mentionsRetTypeVar(declared)) {
+            return declared;
+        }
+        Type at = TypeOps.substitute(TypeOps.resolveParamType(declared, null), applied);
+        return new Ast.RetType(List.of(Ast.TypeRef.of(at, declared.pos())), declared.pos());
+    }
+
     /** Whether a declared type has a collection anywhere inside it — the types whose element/value
      * type an empty literal leaves open until something declares it. */
     static boolean carriesCollection(Ast.TypeTerm term) {
@@ -1120,8 +1163,15 @@ public final class HelperInliner {
                 // declared return is carried on, and every binding copied out of the callee's body.
                 // One minter, so no two of them are the same binding, and a reader can ask of any of
                 // them which call it came from.
-                Ast.Binders ours = new Ast.Binders(
-                        new BindingOwner.Expansion(into, call.denotes(), counter++));
+                BindingOwner mine = new BindingOwner.Expansion(into, call.denotes(), counter++);
+                Ast.Binders ours = new Ast.Binders(mine);
+                // What the callee's signature leaves open, this call decides. Its variables are
+                // instantiated once, here, over the whole signature at once — so a variable it wrote
+                // in two of its parameters is one variable in what this expansion writes, and two
+                // calls of it decide separately. Splitting the signature into a binding per parameter
+                // is what would otherwise lose that: each binding's type would be read on its own,
+                // and nothing left afterwards says the two came from one application.
+                Map<String, Type> applied = instantiation(helper, mine);
                 Map<BindingId, String> subst = new HashMap<>();
                 // what each substituted callee resolved to at the call site, so the expansion carries
                 // the argument's own answer rather than deciding one for it
@@ -1188,7 +1238,7 @@ public final class HelperInliner {
                         // carry the parameter's declared type onto the binding, so a value known to
                         // be a sum (an annotated `s: S`) is not narrowed to the argument's specific
                         // case when the body is re-checked inline — a `match s` inside still sees S.
-                        letTypes.add(p.type());
+                        letTypes.add(instantiated(p.type(), applied));
                     }
                 }
                 // a prelude helper's body is stamped with the call site, so errors inside it point at
