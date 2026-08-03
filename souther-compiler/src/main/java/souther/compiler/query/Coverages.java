@@ -78,7 +78,7 @@ final class Coverages {
                 divided.add(axis);
             }
             boundaries.addAll(boundariesOf(axis, parameters, rows, symbols,
-                    armsMeasured && observed.complete()));
+                    armsMeasured && observed.complete(), observed.someRowsUnseen()));
         }
         return new PartitionEvidence(axes, boundaries, pairsOf(divided, parameters, rows),
                 notDerivable, partitioning.omitted());
@@ -172,7 +172,7 @@ final class Coverages {
      */
     private static List<PartitionEvidence.BoundaryCoverage> boundariesOf(
             Axis axis, List<String> parameters, List<RowOutcome> rows, Symbols symbols,
-            boolean armsMeasured) {
+            boolean armsMeasured, boolean someRowsUnseen) {
         List<PartitionEvidence.BoundaryCoverage> out = new ArrayList<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
             boolean available = !rows.isEmpty()
@@ -181,6 +181,11 @@ final class Coverages {
                 case OriginRef.GuardOrigin g -> evaluatedAt(axis, parameters, rows, each.value(), g);
                 default -> writtenAt(axis, parameters, rows, each.value());
             };
+            // A row nothing read may be the row that is at this value. Found is still found — one row
+            // at the boundary settles it whatever else went unread — but not-found is not settled.
+            if (met == Met.NO && someRowsUnseen) {
+                met = Met.UNREADABLE;
+            }
             out.add(new PartitionEvidence.BoundaryCoverage(idOf(each.axis()),
                     each.origin().describe(), each.side(), plain(each.value()),
                     met == Met.YES,
@@ -260,11 +265,16 @@ final class Coverages {
         return unreadable ? Met.UNREADABLE : Met.NO;
     }
 
-    /** Whether an observation says what the value was. A limit reached elsewhere in the same input
-     * leaves this position truncated, and a truncation is not a number that missed. */
+    /**
+     * Whether an observation says what number was at this position.
+     *
+     * <p>Asked of the number rather than of the shape, because a boundary is only ever on a numeric
+     * position and the truncation can be one layer in. A newtype is observed as a construction holding
+     * its value, and a limit reached inside it leaves the construction readable with a truncation
+     * where the number should be — which, read by shape, is a value that is simply not the boundary.
+     */
     private static boolean readable(ObservedValue at) {
-        return at != null && !(at instanceof ObservedValue.Unknown)
-                && !(at instanceof ObservedValue.Truncated);
+        return numberOf(at) != null;
     }
 
     /** A newtype and the number it wraps are the same value at this position, which is how the row

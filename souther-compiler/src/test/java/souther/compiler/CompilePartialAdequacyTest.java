@@ -265,6 +265,125 @@ class CompilePartialAdequacyTest {
                 .allMatch(b -> b.name().equals("submit")));
     }
 
+    // --- a source whose rows nothing read at all ------------------------------------------------
+
+    /**
+     * One source read, one not.
+     *
+     * <p>The attached file declares a name the module already declares, so its rows would read that
+     * other declaration and it is not evaluated (E1906). It leaves no rows and one reason — and the
+     * rows it holds are at both boundaries and in the class the module's own row is not.
+     */
+    private static final List<String> SPLIT = List.of("""
+            module example.split
+
+            data Amount = Int
+                invariant value >= 0 && value <= 1000
+
+            data Yes
+            data No
+            data Flag = Yes | No
+
+            data Draft = { cost: Amount, flag: Flag }
+            data Ok = { n: Int }
+            data Refused = { why: String }
+
+            let shared = Draft { cost = Amount(7), flag = Yes }
+
+            behavior take : (request: Draft) -> Ok | Refused
+                constructs Ok
+
+            let take (request) = Ok { n = request.cost.value }
+
+            example take
+                | (Draft { cost = Amount(7), flag = Yes }) -> Ok { n = 7 }
+            """, """
+            examples for example.split
+
+            let shared = Draft { cost = Amount(0), flag = No }
+
+            example take
+                | (Draft { cost = Amount(0), flag = No }) -> Ok { n = 0 }
+                | (Draft { cost = Amount(1000), flag = No }) -> Ok { n = 1000 }
+            """);
+
+    private static Compilation split() {
+        return COMPILED.computeIfAbsent("split", _ -> {
+            Compilation compilation = Compilation.ofSources(SPLIT,
+                    souther.compiler.meta.ModulePath.EMPTY);
+            compilation.measure(Adequacy.Asked.reportOnly());
+            compilation.answerEverything();
+            return compilation;
+        });
+    }
+
+    /**
+     * A boundary the unread rows are at is not a boundary nothing is at.
+     *
+     * <p>The axes already knew this; the boundaries were reading only the rows that remained. Being
+     * found still settles it — one row at the value is one row at the value, whatever went unread —
+     * but not being found among some of the rows settles nothing.
+     */
+    @Test
+    void aBoundaryIsUndecidedWhereSomeRowsWereNeverRead() {
+        PartitionEvidence partition = split().db()
+                .ask(new Adequacy.Coverage("example.split")).value().get("take");
+
+        assertEquals(2, partition.boundaries().size());
+        for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
+            assertEquals(MeasurementStatus.PARTIAL, boundary.status(), boundary.value());
+            assertFalse(boundary.hit());
+        }
+    }
+
+    /**
+     * And nothing is generated from it.
+     *
+     * <p>Both rows the generator would write are sitting in the file it could not read. A row that
+     * could not be classified stops its own position; a row that was never seen stops the behavior,
+     * because which positions it would have settled is exactly what is unknown.
+     */
+    @Test
+    void nothingIsGeneratedWhereSomeRowsWereNeverRead() {
+        Map<String, Adequacy.Filling> generated = split().db()
+                .ask(new Adequacy.Generated("example.split")).value();
+
+        assertEquals(List.of(), generated.get("take").pairs().rows());
+        assertEquals(List.of(), generated.get("take").boundaries().rows());
+        assertEquals("", GeneratedRows.of("example.split", generated, true));
+    }
+
+    /**
+     * A reason that names no behavior belongs to every behavior.
+     *
+     * <p>Filtering to one behavior drops the reasons about the others. A whole source that could not
+     * be evaluated is not about another behavior — it is missing rows for whatever it held, this one
+     * included — so it stays, and the status with it.
+     */
+    @Test
+    void filteringKeepsAReasonThatIsAboutNoOneBehavior() {
+        AdequacyReport one = AdequacyReport.of(split()).only(null, "take");
+
+        assertEquals(MeasurementStatus.PARTIAL, one.status());
+        assertEquals(1, one.modules().get(0).incompleteness().size());
+        assertEquals(souther.compiler.observe.Incompleteness.Code.RUNTIME_ABSENT,
+                one.modules().get(0).incompleteness().get(0).code());
+    }
+
+    /**
+     * The lines say what the summary says.
+     *
+     * <p>A `(partial)` in the margin and a flat assertion under it read as a finding with a footnote.
+     * Under partial the honest sentence is that nothing *seen* claims the case.
+     */
+    @Test
+    void aSignatureLineUnderPartialDoesNotAssert() {
+        String human = AdequacyReport.of(split()).human();
+
+        assertTrue(human.contains("undecided whether a row expects `Refused`"), human);
+        assertFalse(human.contains("· no row expects"), human);
+    }
+
     /** The row that did not finish is still there to be counted, and still says it did not. */
     @Test
     void theUnfinishedRowIsStillReported() {

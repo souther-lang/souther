@@ -148,11 +148,20 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             // What a filtered report says has to be about what it shows. A reason another behavior
             // could not be measured, carried into a report that does not mention that behavior, is a
             // status nothing in front of the reader accounts for.
+            //
+            // A reason that names no behavior at all is a different thing: a whole source that could
+            // not be evaluated is missing rows for whatever it held, this behavior included, so it
+            // stays. `subject` carries a behavior name, a source id, an axis path or a field chain in
+            // one string, and which of those it is has to be worked out from what else is known.
             Set<String> shown = behaviors.stream().map(BehaviorReport::name)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            Set<String> named = m.behaviors().stream().map(BehaviorReport::name)
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
             List<Incompleteness> gaps = behavior == null ? m.incompleteness()
                     : m.incompleteness().stream()
-                            .filter(gap -> shown.contains(gap.subject())).toList();
+                            .filter(gap -> shown.contains(gap.subject())
+                                    || !named.contains(gap.subject()))
+                            .toList();
             MeasurementStatus status = gaps.isEmpty()
                     ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
             kept.add(new ModuleReport(m.module(), status, gaps, behaviors));
@@ -214,6 +223,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         if (signature == null || signature.status() == MeasurementStatus.UNAVAILABLE) {
             return;
         }
+        // Where some rows could not be read, a case nothing here claims is a case nothing *seen*
+        // claims. The summary already says partial; each line has to say it too, or the lines read as
+        // the finding and the word in the margin as a footnote.
+        boolean decided = signature.status() == MeasurementStatus.COMPLETE;
+        String noRow = decided ? "no row " : "undecided whether a row ";
         OutputCaseEvidence output = signature.output();
         if (!output.declared().isEmpty()) {
             out.append(String.format("    signature   out specified %d/%d  observed %d/%d "
@@ -221,14 +235,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                     output.specified().size(), output.declared().size(),
                     output.observed().size(), output.declared().size(),
                     output.verified().size(), output.declared().size(),
-                    signature.status() == MeasurementStatus.PARTIAL ? "   (partial)" : ""));
+                    decided ? "" : "   (partial)"));
             for (TypeName missing : output.unspecified()) {
-                out.append(String.format("      · no row expects `%s`%n", missing.name()));
+                out.append(String.format("      · %sexpects `%s`%n", noRow, missing.name()));
             }
             if (!behavior.injected()) {
                 for (TypeName missing : output.unverified()) {
                     if (!output.unspecified().contains(missing)) {
-                        out.append(String.format("      · no row confirms `%s`%n", missing.name()));
+                        out.append(String.format("      · %sconfirms `%s`%n", noRow, missing.name()));
                     }
                 }
             }
@@ -241,7 +255,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             out.append(String.format("                in #%d specified %d/%d%n", i + 1,
                     input.specified().size(), input.declared().size()));
             for (TypeName missing : input.unspecified()) {
-                out.append(String.format("      · no row uses `%s`%n", missing.name()));
+                out.append(String.format("      · %suses `%s`%n", noRow, missing.name()));
             }
         }
     }

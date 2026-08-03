@@ -373,6 +373,22 @@ public final class Adequacy {
             return incompleteness.isEmpty();
         }
 
+        /**
+         * Whether some rows were never seen at all, as against seen and not finished.
+         *
+         * <p>The difference decides what may still be said. A row that ran out of time is here, with
+         * the values it was given — so which class it sits in is known and only where it went is not.
+         * A source that could not be evaluated left nothing: the rows it holds may cover anything, and
+         * a measure over the rows that remain is a measure over some of them.
+         *
+         * <p>{@code RUNTIME_ABSENT} is exactly that case, from either place it arises — an example
+         * block whose classes would not load, and a source whose evaluation has no answer at all.
+         */
+        public boolean someRowsUnseen() {
+            return incompleteness.stream()
+                    .anyMatch(gap -> gap.code() == Incompleteness.Code.RUNTIME_ABSENT);
+        }
+
         /** The status a measure over these rows takes before its own reading is considered. */
         public MeasurementStatus status() {
             return complete() ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
@@ -542,6 +558,14 @@ public final class Adequacy {
                 Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 ExampleVerifier.Construction building) {
+            if (observed.someRowsUnseen()) {
+                // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
+                // is unknown too — and a generated row is a specific piece of work handed to a person,
+                // which may already be sitting in the file that could not be evaluated.
+                Generator.GenerationResult stopped = new Generator.GenerationResult(List.of(),
+                        List.of(), observed.incompleteness());
+                return new Filling(stopped, stopped);
+            }
             List<RowOutcome> rows = observed.rows();
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
             souther.compiler.partition.Partitions.Partitioning partitioning =
