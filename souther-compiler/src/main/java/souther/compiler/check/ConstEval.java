@@ -3,10 +3,12 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 
 import java.math.BigDecimal;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
-import java.util.List;
-import java.util.Optional;
 
 /**
  * Folds a compile-time-constant expression to its value ({@code Long} / {@code BigDecimal} /
@@ -170,11 +172,16 @@ public final class ConstEval {
      */
     private static Optional<Object> matches(String pattern, String s) {
         try {
-            return Optional.of(Pattern.compile(pattern).matcher(new Budgeted(s)).matches());
+            return Optional.of(COMPILED.computeIfAbsent(pattern, Pattern::compile)
+                    .matcher(new Budgeted(s)).matches());
         } catch (PatternSyntaxException | Budgeted.Spent | StackOverflowError _) {
             return Optional.empty();   // a bad pattern is reported by the check that compiles it
         }
     }
+
+    /** Patterns already compiled. A declaration's pattern is asked about once per construction from
+     * it and once per reading of a branch, and compiling one is the only expensive thing here. */
+    private static final Map<String, Pattern> COMPILED = new ConcurrentHashMap<>();
 
     /** A subject the regex engine may only read so many times. */
     private static final class Budgeted implements CharSequence {

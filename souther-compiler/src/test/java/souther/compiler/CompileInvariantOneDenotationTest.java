@@ -376,4 +376,40 @@ class CompileInvariantOneDenotationTest {
                         m.formatted("Count(if x > 0 then 0 - 1 else 5)"))),
                 warnings(c), "the name answers as the conditional does");
     }
+
+    @Test
+    void aConstructionWrittenInOneBranchIsNotDischargedByTheOther() {
+        // `Count(x)` is not in the other branch to be discharged there — it is not there at all
+        String m = """
+                module demo
+                data Count = Int
+                    invariant value >= 0
+                data Wrap = { c: Count }
+                behavior mk : (x: Int) -> Wrap
+                    constructs Wrap, Count
+                let mk (x) = Wrap { c = %s }
+                """;
+        assertEquals("E2010", assertThrows(CompileException.class,
+                        () -> Compiler.compile(m.formatted("if x < 0 then Count(x) else Count(5)")))
+                .diagnostic().code(), "the branch that reaches it decides it");
+    }
+
+    @Test
+    void aConstructionBesideAConditionalIsAnsweredOnItsOwn() {
+        // `R { v = 1 }` is outside the conditional, so how many values the branches build says
+        // nothing about it
+        String m = """
+                module demo
+                data Q = { v: Int }
+                    invariant v >= 10
+                data R = { v: Int }
+                    invariant v >= 10
+                data W = { a: Int, b: R }
+                behavior mk : (x: Int, y: Int) -> W
+                    constructs W, Q, R
+                let mk (x, y) = W { a = (if x > 0 then Q { v = y }.v else y), b = R { v = 1 } }
+                """;
+        assertEquals("E2010", assertThrows(CompileException.class, () -> Compiler.compile(m))
+                .diagnostic().code(), "1 is not 10 whichever branch is taken");
+    }
 }

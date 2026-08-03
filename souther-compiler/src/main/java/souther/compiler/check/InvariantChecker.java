@@ -353,11 +353,11 @@ public final class InvariantChecker {
     }
 
     /**
-     * What a name denotes. The three are not one thing with a missing case: a location is somewhere the
-     * seeding can have written about and a clause can have named, a term is a value known only by what
-     * computes it, and nothing is nothing. Collapsing the last two would put a computed value where a
-     * location is expected, which is the shape of {@code let} answering differently from the expression
-     * it was given.
+     * What a name denotes. A location is somewhere the seeding can have written about and a clause
+     * can have named; a term is a value known only by what computes it. Merging those two would put a
+     * computed value where a location is expected, which is the shape of a {@code let} answering
+     * differently from the expression it was given. A written value is apart from both because what
+     * it is has to travel with the name, and nothing is apart because only a term is assigned a form.
      */
     private sealed interface Denotes {
 
@@ -401,13 +401,13 @@ public final class InvariantChecker {
     public static ClauseDischarge capabilityOf(Ast.Expr clause, SourcePos at, Ast.Data data,
                                                Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
-        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+        Map<String, Type> fields = c.fieldsOf(data);
         Bindings binds = Bindings.ofPaths(
                 name -> fields.containsKey(name) ? LinearForm.atom(name) : null,
                 name -> fields.containsKey(name) ? name : null, fields);
         List<Clause> owed;
         try {
-            owed = c.obligations(clause, binds);
+            owed = c.obligations(clause, binds, false);
         } catch (RuntimeException _) {
             owed = null;   // fail-open, as the walk is
         }
@@ -445,15 +445,7 @@ public final class InvariantChecker {
         if (e instanceof Ast.Var v) {
             return bound.contains(v.name()) || binds.path().apply(v.name()) != null ? null : v.name();
         }
-        Set<String> inner = bound;
-        if (e instanceof Ast.Block b && !b.params().isEmpty()) {
-            inner = new java.util.HashSet<>(bound);
-            inner.addAll(b.paramNames());
-        } else if (e instanceof Ast.LetIn li) {
-            inner = new java.util.HashSet<>(bound);
-            inner.add(li.name());
-        }
-        Set<String> scope = inner;
+        Set<String> scope = taken(e, bound);
         String[] found = {null};
         Ast.forEachChild(e, child -> {
             if (found[0] == null) {
@@ -547,16 +539,17 @@ public final class InvariantChecker {
                 // name is what made a named subexpression a term of its own, answering differently
                 // from the very expression it was given.
                 Denotes what = denotationOf(li.value(), scope, k);
-                LinearForm vf = affineOf(li.value(), scope, k);
                 Known k2 = rebind(k, li.name());
                 // A binding that denotes what it was given is an alias and introduces no value, so
                 // there is nothing to record of it: what holds of what it names already holds.
                 // Recording it anyway assigns that name its own form, and an assignment drops what
                 // was known of what it assigns to — the bound on it would be lost to the copy. A
                 // location is always this; a term is where the form is that term's own atom.
-                if (what instanceof Denotes.Term term && isNumeric(vt) && vf != null
-                        && !vf.equals(LinearForm.atom(term.key()))) {
-                    k2 = k2.with(k2.numbers().assign(term.key(), vf));
+                if (what instanceof Denotes.Term term && isNumeric(vt)) {
+                    LinearForm vf = affineOf(li.value(), scope, k);
+                    if (vf != null && !vf.equals(LinearForm.atom(term.key()))) {
+                        k2 = k2.with(k2.numbers().assign(term.key(), vf));
+                    }
                 }
                 walk(li.body(), k2, scope.binding(li.name(), vt, what), depth);
             }
@@ -664,7 +657,7 @@ public final class InvariantChecker {
                 q.binds().given(), q.binds().bodyKey(), fields);
         List<Quantified> nested = new ArrayList<>();
         quantifiedBy(q.predicate().body(), at, true, nested);
-        return assume(obligations(q.predicate().body(), at), k).and(nested);
+        return assume(obligations(q.predicate().body(), at, false), k).and(nested);
     }
 
     /** What {@code e}, asserted with polarity {@code positive}, says of every element of a container.
@@ -715,15 +708,7 @@ public final class InvariantChecker {
             }
             return;
         }
-        Set<String> inner = bound;
-        if (e instanceof Ast.Block b && !b.params().isEmpty()) {
-            inner = new java.util.HashSet<>(bound);
-            inner.addAll(b.paramNames());
-        } else if (e instanceof Ast.LetIn li) {
-            inner = new java.util.HashSet<>(bound);
-            inner.add(li.name());
-        }
-        Set<String> scope = inner;
+        Set<String> scope = taken(e, bound);
         Ast.forEachChild(e, child -> reads(child, binds, scope, out));
     }
 
@@ -737,7 +722,8 @@ public final class InvariantChecker {
                     report(type, nd.pos(), attempted, verdictOf(nd, type, k, scope));
                 }
             }
-            case Ast.Binary bin when isArith(bin.op()) -> {
+            case Ast.Expr arith when asOperator(arith) instanceof Ast.Binary bin
+                    && isArith(bin.op()) -> {
                 if (typeExpr(bin, scope) instanceof Type.Ref r
                         && symbols.get(r.name()) instanceof Ast.Data type && type.newtype()) {
                     LinearForm value = affineOf(bin, scope, k);
@@ -745,7 +731,7 @@ public final class InvariantChecker {
                         // an arithmetic result is a form, not a location, so it names no path
                         report(type, bin.pos(), attempted, verdictOf(r.name(), type,
                                 Bindings.ofPaths(name -> "value".equals(name) ? value : null, _ -> null,
-                                        TypeOps.fieldTypes(type, symbols)), k, true));
+                                        fieldsOf(type)), k, true));
                     }
                 }
             }
@@ -779,7 +765,7 @@ public final class InvariantChecker {
         }
         return verdictOf(nd.typeName().denotes(), type,
                 new Bindings(forms::get, paths::get, given::get, bodyKey,
-                        TypeOps.fieldTypes(type, symbols)), k, !constantlyBuilt(type, nd));
+                        fieldsOf(type)), k, !constantlyBuilt(type, nd));
     }
 
     /** How an invariant's leaf names resolve at a construction site: to the affine form of what the
@@ -908,8 +894,7 @@ public final class InvariantChecker {
             // position alone reads them as one; and the readings are of the same body with a
             // conditional replaced, so what a construction says differs between them by design.
             // The nth construction written at a position is the same one in both readings.
-            capturing.put(new Occurrence(pos, capturing.size()),
-                    new Reported(type, pos, verdict, attempted));
+            capturing.put(pos, new Reported(type, pos, verdict, attempted));
             return;
         }
         switch (verdict) {
@@ -937,7 +922,24 @@ public final class InvariantChecker {
      * construction is one answer: it is the branches together that decide, the same as for a
      * construction the conditional is written inside.
      */
-    private Map<Occurrence, Reported> capturing;
+    private Capture capturing;
+
+    /** What each declaration's fields are. Asked at every field read the local typer walks past, and
+     * building one walks the declaration's includes, so it is built once per declaration instead. */
+    private final Map<Ast.Data, Map<String, Type>> fieldsOf = new HashMap<>();
+
+    /** What a reading has found so far, and how many it has found at each position. */
+    private record Capture(Map<Occurrence, Reported> found, Map<SourcePos, Integer> counted) {
+
+        static Capture empty() {
+            return new Capture(new LinkedHashMap<>(), new HashMap<>());
+        }
+
+        void put(SourcePos pos, Reported what) {
+            int nth = counted.merge(pos, 1, Integer::sum) - 1;
+            found.put(new Occurrence(pos, nth), what);
+        }
+    }
 
     /** What reading {@code e} finds, or nothing where the conditions along the way contradict — a
      * branch nothing reaches finds nothing, and what is not there violates nothing. */
@@ -945,15 +947,15 @@ public final class InvariantChecker {
         if (k.numbers().isBottom()) {
             return Map.of();
         }
-        Map<Occurrence, Reported> outer = capturing;
-        Map<Occurrence, Reported> mine = new LinkedHashMap<>();
+        Capture outer = capturing;
+        Capture mine = Capture.empty();
         capturing = mine;
         try {
             walk(e, k, scope, depth + 1);
         } finally {
             capturing = outer;
         }
-        return mine;
+        return mine.found();
     }
 
     /**
@@ -967,6 +969,7 @@ public final class InvariantChecker {
             // Where the walk goes next is not a value it is handed: an `if`'s own branches, a `let`'s
             // body and a case's body are read after this, each with what is known there.
             case Ast.If iff -> conditionalIn(iff.cond());
+            case Ast.IfConstructed ic -> conditionalIn(ic.construct());
             case Ast.LetIn li -> conditionalIn(li.value());
             case Ast.Match m -> conditionalIn(m.scrutinee());
             default -> conditionalIn(e);
@@ -999,7 +1002,7 @@ public final class InvariantChecker {
      * make the guard say nothing about what is built.
      */
     private Ast.Expr without(Ast.Expr e, Ast.If was, String key, Ast.Expr becomes, Scope scope) {
-        if (e == was || (key != null && key.equals(bodyKey(e, scope)))) {
+        if (e == was || (key != null && e instanceof Ast.If && key.equals(bodyKey(e, scope)))) {
             return becomes;
         }
         if (e instanceof Ast.Block) {
@@ -1016,10 +1019,14 @@ public final class InvariantChecker {
         for (Occurrence one : at) {
             Reported x = a.get(one);
             Reported y = b.get(one);
-            Reported said = x != null ? x : y;
-            report(said.type(), said.pos(), said.attempted(),
-                    Verdict.of(x == null ? Verdict.PROVED : x.verdict(),
-                            y == null ? Verdict.PROVED : y.verdict()));
+            if (x == null || y == null) {
+                // Written inside one branch, so the other reading did not discharge it — it was not
+                // there to discharge. What the reading that reached it found is what it is.
+                Reported said = x != null ? x : y;
+                report(said.type(), said.pos(), said.attempted(), said.verdict());
+                continue;
+            }
+            report(x.type(), x.pos(), x.attempted(), Verdict.of(x.verdict(), y.verdict()));
         }
     }
 
@@ -1063,6 +1070,10 @@ public final class InvariantChecker {
      * present either one discharging the clause is enough — a guard is written one way and a clause
      * another, and which of the two routes carries it is not the author's concern.
      */
+    /** A clause that cannot hold, said in the language the domain reads: {@code -1 >= 0}. */
+    private static final Clause VIOLATED = new Clause(
+            new Constraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE), null, List.of());
+
     private record Clause(Constraint numeric, Fact fact, List<Constraint> known) {
 
         boolean dischargedBy(NumericDomain d, PredicateFacts facts) {
@@ -1080,13 +1091,10 @@ public final class InvariantChecker {
      * being given), or {@code null} if it names nothing this check can carry. A comparison the domain
      * can express is owed to the domain; anything else is owed as a fact, which a guard stating the
      * same thing of the same term settles. */
-    private List<Clause> obligations(Ast.Expr inv, Bindings binds) {
-        return obligations(inv, binds, true, false);
-    }
-
-    /** The same, where a clause folding to the other answer than it is read with is this check's to
-     * report. A newtype's constant construction is checked elsewhere, and that check names the clause
-     * that failed rather than only saying one did, so it is left to say it. */
+    /** What {@code inv} owes, where {@code decidesFalse} says a clause folding to the other answer
+     * than it is read with is this check's to report. A newtype's constant construction is checked
+     * elsewhere, and that check names the clause that failed rather than only saying one did, so it
+     * is left to say it. */
     private List<Clause> obligations(Ast.Expr inv, Bindings binds, boolean decidesFalse) {
         return obligations(inv, binds, true, decidesFalse);
     }
@@ -1111,19 +1119,17 @@ public final class InvariantChecker {
             return obligations(under, binds, !positive, decidesFalse);
         }
         Boolean folded = decidedAt(inv, binds);
-        if (folded != null && folded != positive && decidesFalse) {
-            // It folds the other way than it is read: the construction violates, and saying so needs
-            // no term to be named — the answer is already computed.
-            return List.of(new Clause(
-                    new Constraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE),
-                    null, List.of()));
-        }
-        if (folded != null && folded == positive) {
-            // The clause folds once the construction's own expressions stand where it wrote a field,
-            // and it folds the way it is being read. There is nothing to owe. Read under a negation
-            // it is the other answer that discharges, which is why the polarity is asked: folding to
-            // true under a denial is a violation and not a discharge.
-            return List.of();
+        if (folded != null) {
+            // The clause folds once the construction's own expressions stand where it wrote a field.
+            // Folding the way it is read owes nothing; folding the other way is a violation, and
+            // saying so needs no term to be named. Read under a denial it is the other answer that
+            // discharges, which is why the polarity is asked.
+            if (folded == positive) {
+                return List.of();
+            }
+            if (decidesFalse) {
+                return List.of(VIOLATED);
+            }
         }
         Constraint numeric = null;
         if (inv instanceof Ast.Binary b && relOf(b.op()) != null) {
@@ -1154,6 +1160,22 @@ public final class InvariantChecker {
         return folded instanceof Boolean b ? b : null;
     }
 
+    /** {@code bound} with whatever names {@code e} itself binds — a closure's parameters, a
+     * binding's name. A name a binding took over is that binding's and not a field's. */
+    private static Set<String> taken(Ast.Expr e, Set<String> bound) {
+        if (e instanceof Ast.Block b && !b.params().isEmpty()) {
+            Set<String> inner = new HashSet<>(bound);
+            inner.addAll(b.paramNames());
+            return inner;
+        }
+        if (e instanceof Ast.LetIn li) {
+            Set<String> inner = new HashSet<>(bound);
+            inner.add(li.name());
+            return inner;
+        }
+        return bound;
+    }
+
     /** {@code inv} with every name the construction fills replaced by the expression filling it. A
      * name a binding inside the clause has taken over is that binding's and not a field's, so it is
      * left alone: {@code List.all(x -> x > 0, x)} says two different things by one spelling. */
@@ -1165,15 +1187,15 @@ public final class InvariantChecker {
         if (given != null) {
             return given;
         }
-        Set<String> inner = bound;
-        if (e instanceof Ast.Block b && !b.params().isEmpty()) {
-            inner = new HashSet<>(bound);
-            inner.addAll(b.paramNames());
-        } else if (e instanceof Ast.LetIn li) {
-            inner = new HashSet<>(bound);
-            inner.add(li.name());
+        if (e instanceof Ast.LetIn li) {
+            // The initializer is read where the binding is not yet in scope, so a field the clause
+            // names keeps its meaning there even where the binding takes the same spelling over.
+            Set<String> inner = taken(e, bound);
+            return new Ast.LetIn(li.binder(), substituted(li.value(), binds, bound),
+                    li.declaredType(), li.annotated(), li.opens(),
+                    substituted(li.body(), binds, inner), li.pos());
         }
-        Set<String> taken = inner;
+        Set<String> taken = taken(e, bound);
         return Ast.mapChildren(e, child -> substituted(child, binds, taken), name -> name);
     }
 
@@ -1320,7 +1342,7 @@ public final class InvariantChecker {
         if (depth > 2 || !(t instanceof Type.Ref ref) || !(symbols.get(ref.name()) instanceof Ast.Data data)) {
             return k;
         }
-        Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+        Map<String, Type> fields = fieldsOf(data);
         Function<String, String> resolvePath = fieldName -> {
             if (data.newtype() && fieldName.equals("value")) {
                 return path;
@@ -1337,7 +1359,7 @@ public final class InvariantChecker {
         List<Quantified> quantified = new ArrayList<>();
         for (Ast.InvariantClause inv : invariantsOf(ref.name(), data)) {
             quantifiedBy(inv.expr(), binds, true, quantified);
-            out = assume(obligations(inv.expr(), binds), out);
+            out = assume(obligations(inv.expr(), binds, false), out);
         }
         out = out.and(quantified);
         if (data.newtype()) {
@@ -2043,18 +2065,8 @@ public final class InvariantChecker {
      * The same walk {@link #pathKey} makes, asking each name for a location instead of for whatever
      * key it has — so a chain read off a computed value is computed too. */
     private String locationKey(Ast.Expr e, Scope scope) {
-        return switch (e) {
-            case Ast.Var v -> scope.denotes(v.name()) instanceof Denotes.Location loc ? loc.key() : null;
-            case Ast.FieldAccess fa -> {
-                Type owner = typeExpr(fa.target(), scope);
-                if (fa.field().equals("value") && TypeOps.isSingleValueNewtype(owner, symbols)) {
-                    yield locationKey(fa.target(), scope);
-                }
-                String base = locationKey(fa.target(), scope);
-                yield base == null ? null : base + "." + fa.field();
-            }
-            default -> null;
-        };
+        return chainKey(e, scope,
+                name -> scope.denotes(name) instanceof Denotes.Location loc ? loc.key() : null);
     }
 
     /**
@@ -2123,7 +2135,7 @@ public final class InvariantChecker {
      * expands to binds each argument and reads it back, which is the source's own text moved. */
     private static boolean isWritten(Ast.Expr e, Set<String> written) {
         return switch (e) {
-            case Ast.IntLit _, Ast.DecimalLit _, Ast.StringLit _, Ast.BoolLit _ -> true;
+            case Ast.Expr lit when BinaryElaborator.isLiteralExpr(lit) -> true;
             case Ast.Var v -> written.contains(v.name());
             case Ast.ListLit list -> list.elements().stream().allMatch(x -> isWritten(x, written));
             case Ast.Tuple t -> t.elements().stream().allMatch(x -> isWritten(x, written));
@@ -2200,19 +2212,31 @@ public final class InvariantChecker {
     }
 
     private String pathKey(Ast.Expr e, Scope scope) {
+        // a name given a location is that location, as a newtype's `.value` is its own
+        return chainKey(e, scope, scope::keyOf);
+    }
+
+    /** The key of a {@code x}/{@code x.a.b} chain, with {@code ofName} saying what the name at its
+     * head is. A newtype's {@code .value} is the same location as the newtype, which is the one rule
+     * this walk carries and the reason there is one walk rather than one per caller. */
+    private String chainKey(Ast.Expr e, Scope scope, Function<String, String> ofName) {
         return switch (e) {
-            // a name given a location is that location, as a newtype's `.value` is its own
-            case Ast.Var v -> scope.keyOf(v.name());
+            case Ast.Var v -> ofName.apply(v.name());
             case Ast.FieldAccess fa -> {
                 Type owner = typeExpr(fa.target(), scope);
                 if (fa.field().equals("value") && TypeOps.isSingleValueNewtype(owner, symbols)) {
-                    yield pathKey(fa.target(), scope);   // a newtype's .value is the same location
+                    yield chainKey(fa.target(), scope, ofName);
                 }
-                String base = pathKey(fa.target(), scope);
+                String base = chainKey(fa.target(), scope, ofName);
                 yield base == null ? null : base + "." + fa.field();
             }
             default -> null;
         };
+    }
+
+    /** What {@code data}'s fields are, remembered. */
+    private Map<String, Type> fieldsOf(Ast.Data data) {
+        return fieldsOf.computeIfAbsent(data, d -> TypeOps.fieldTypes(d, symbols));
     }
 
     /** What is known after a binding takes over {@code name}: everything that mentioned it is dropped,
@@ -2247,7 +2271,7 @@ public final class InvariantChecker {
             case Ast.FieldAccess fa -> {
                 Type owner = typeExpr(fa.target(), scope);
                 yield owner instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.Data d
-                        ? TypeOps.fieldTypes(d, symbols).get(fa.field()) : null;
+                        ? fieldsOf(d).get(fa.field()) : null;
             }
             case Ast.NewData nd -> Type.ref(nd.typeName().denotes());
             case Ast.LetIn li -> {
@@ -2256,10 +2280,11 @@ public final class InvariantChecker {
                         scope.binding(li.name(), bound, denotationOf(li.value(), scope, Known.top())));
             }
             case Ast.Neg n -> typeExpr(n.operand(), scope);
-            // A size is a number whatever it counts, and this typer reads no signatures — without
-            // this a name bound to one has no type, and a name that has no type is not the atom the
-            // expression it was given is.
-            case Ast.Apply call when SIZE_CALLS.contains(call.reaches()) -> Type.INT;
+            // The library says what its own calls answer, so this typer asks it rather than listing
+            // the ones it has needed so far. Without a type a name bound to a call is not the atom
+            // the expression it was given is.
+            case Ast.Apply call when Prelude.entry(call.reaches()) != null ->
+                    Prelude.entry(call.reaches()).signature().result();
             case Ast.Binary b when isArith(b.op()) -> arithType(b, scope);
             default -> null;
         };

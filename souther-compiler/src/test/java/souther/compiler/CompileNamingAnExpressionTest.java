@@ -75,6 +75,12 @@ class CompileNamingAnExpressionTest {
         }
     }
 
+    /** {@code source} with the guard's departure added to what the behavior answers and builds. */
+    private static String departing(String target, String source) {
+        return said(source.replace("constructs " + target, "constructs " + target + ", Small")
+                .replace("-> " + target, "-> " + target + " | Small"));
+    }
+
     private static String module(String target, String body) {
         return MODULE.formatted(target, target, body);
     }
@@ -123,15 +129,12 @@ class CompileNamingAnExpressionTest {
     void aGuardOnTheExpressionReadsTheSameAsAGuardOnItsName(Row row) {
         // The guard states the same thing of the same value either way, so it settles the same clause
         String construct = row.target() + "(%s)";
-        String written = said(module(row.target(), "{\n        guard (" + row.expression()
-                + ") >= 1 else Small(0)\n        " + construct.formatted(row.expression()) + "\n    }")
-                .replace("constructs " + row.target(), "constructs " + row.target() + ", Small")
-                .replace("-> " + row.target(), "-> " + row.target() + " | Small"));
-        String bound = said(module(row.target(), "{\n        let v = " + row.expression()
-                + "\n        guard v >= 1 else Small(0)\n        " + construct.formatted("v")
-                + "\n    }")
-                .replace("constructs " + row.target(), "constructs " + row.target() + ", Small")
-                .replace("-> " + row.target(), "-> " + row.target() + " | Small"));
+        String written = departing(row.target(), module(row.target(), "{\n        guard ("
+                + row.expression() + ") >= 1 else Small(0)\n        "
+                + construct.formatted(row.expression()) + "\n    }"));
+        String bound = departing(row.target(), module(row.target(), "{\n        let v = "
+                + row.expression() + "\n        guard v >= 1 else Small(0)\n        "
+                + construct.formatted("v") + "\n    }"));
         assertEquals(written, bound, "one value, one guard, one answer");
     }
 
