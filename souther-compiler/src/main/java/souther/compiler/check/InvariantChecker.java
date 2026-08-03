@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,29 +40,7 @@ import java.util.function.Function;
  */
 public final class InvariantChecker {
 
-    record Findings(List<CompileException> errors, List<Diagnostic> warnings) {
-
-        /**
-         * The same, with a construction said of once. Reading a body on each branch of a conditional
-         * reads everything after it once per branch, so a construction the branches agree about is
-         * reached more than once. One construction is one position and one code, which is what makes
-         * the second reading of it the same finding rather than another one.
-         */
-        Findings said() {
-            return new Findings(distinct(errors, e -> key(e.diagnostic())),
-                    distinct(warnings, Findings::key));
-        }
-
-        private static String key(Diagnostic d) {
-            return d.code() + "@" + d.pos();
-        }
-
-        private static <T> List<T> distinct(List<T> all, Function<T, String> by) {
-            Map<String, T> first = new java.util.LinkedHashMap<>();
-            all.forEach(one -> first.putIfAbsent(by.apply(one), one));
-            return List.copyOf(first.values());
-        }
-    }
+    record Findings(List<CompileException> errors, List<Diagnostic> warnings) {}
 
     /**
      * What this check reads: one behavior's body and the invariants of the types around it, both in
@@ -494,7 +474,7 @@ public final class InvariantChecker {
     static Findings analyze(Source source, Map<String, Type> params, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, source == null ? Map.of() : source.invariants());
         if (source == null) {
-            return new Findings(c.errors, c.warnings).said();
+            return new Findings(c.errors, c.warnings);
         }
         try {
             Known k = Known.top();
@@ -505,7 +485,7 @@ public final class InvariantChecker {
         } catch (RuntimeException _) {
             // fail-open: the run-time invariant check remains the backstop
         }
-        return new Findings(c.errors, c.warnings).said();
+        return new Findings(c.errors, c.warnings);
     }
 
     // --- the walk ------------------------------------------------------------------------------
@@ -542,12 +522,10 @@ public final class InvariantChecker {
                 // body is read once with each standing there. The same reading a construction written
                 // over a conditional gets, moved to where the conditional was given a name.
                 walk(iff.cond(), k, scope, depth);
-                walk(new Ast.LetIn(li.binder(), iff.then(), li.declaredType(), li.annotated(),
-                                li.opens(), li.body(), li.pos()),
-                        assumeCond(iff.cond(), k, scope, true), scope, depth + 1);
-                walk(new Ast.LetIn(li.binder(), iff.els(), li.declaredType(), li.annotated(),
-                                li.opens(), li.body(), li.pos()),
-                        assumeCond(iff.cond(), k, scope, false), scope, depth + 1);
+                Known taken = assumeCond(iff.cond(), k, scope, true);
+                Known otherwise = assumeCond(iff.cond(), k, scope, false);
+                say(reading(li, iff.then(), taken, scope, depth),
+                        reading(li, iff.els(), otherwise, scope, depth));
             }
             case Ast.LetIn li -> {
                 walk(li.value(), k, scope, depth);
@@ -559,11 +537,13 @@ public final class InvariantChecker {
                 Denotes what = denotationOf(li.value(), scope);
                 LinearForm vf = affineOf(li.value(), scope);
                 Known k2 = rebind(k, li.name());
-                // A binding given a location is an alias and introduces no value, so there is nothing
-                // to record of it: what holds of the location already holds. Recording it anyway
-                // would be assigning the location its own form, and an assignment drops what was
-                // known of what it assigns to — the guard on it would be lost to the copy.
-                if (what instanceof Denotes.Term term && isNumeric(vt) && vf != null) {
+                // A binding that denotes what it was given is an alias and introduces no value, so
+                // there is nothing to record of it: what holds of what it names already holds.
+                // Recording it anyway assigns that name its own form, and an assignment drops what
+                // was known of what it assigns to — the bound on it would be lost to the copy. A
+                // location is always this; a term is where the form is that term's own atom.
+                if (what instanceof Denotes.Term term && isNumeric(vt) && vf != null
+                        && !vf.equals(LinearForm.atom(term.key()))) {
                     k2 = k2.with(k2.numbers().assign(term.key(), vf));
                 }
                 walk(li.body(), k2, scope.binding(li.name(), vt, what), depth);
@@ -776,10 +756,10 @@ public final class InvariantChecker {
             for (int i = 0; i < nd.inits().size(); i++) {
                 if (nd.inits().get(i).value() instanceof Ast.If iff) {
                     return Verdict.of(
-                            verdictOf(withFieldValue(nd, i, iff.then()), type,
-                                    assumeCond(iff.cond(), k, scope, true), scope, depth + 1),
-                            verdictOf(withFieldValue(nd, i, iff.els()), type,
-                                    assumeCond(iff.cond(), k, scope, false), scope, depth + 1));
+                            onBranch(withFieldValue(nd, i, iff.then()), type,
+                                    assumeCond(iff.cond(), k, scope, true), scope, depth),
+                            onBranch(withFieldValue(nd, i, iff.els()), type,
+                                    assumeCond(iff.cond(), k, scope, false), scope, depth));
                 }
             }
         }
@@ -801,6 +781,12 @@ public final class InvariantChecker {
         return verdictOf(nd.typeName().denotes(), type,
                 new Bindings(forms::get, paths::get, given::get, bodyKey,
                         TypeOps.fieldTypes(type, symbols)), k);
+    }
+
+    /** The verdict on one branch, which is none where the conditions along the way contradict. */
+    private Verdict onBranch(Ast.NewData nd, Ast.Data type, Known k, Scope scope, int depth) {
+        return k.numbers().isBottom() ? Verdict.UNREACHABLE
+                : verdictOf(nd, type, k, scope, depth + 1);
     }
 
     /** {@code nd} with the value at {@code at} replaced, everything else kept. */
@@ -865,14 +851,25 @@ public final class InvariantChecker {
         /** A clause is expressible and unproven: the construction may abort. */
         UNKNOWN,
         /** A clause is proven to fail on a path that is reached. */
-        REFUTED;
+        REFUTED,
+        /** Nothing reaches here: the conditions along the way contradict. */
+        UNREACHABLE;
 
         /**
          * What holds of a value that is one of two. It is discharged where both are, and it is proven
          * to fail only where both fail — a construction one branch satisfies does not definitely
          * violate, whichever branch is taken. Everything else is possible and unproven.
+         *
+         * <p>A branch nothing reaches says nothing either way, so it is the one the other is read
+         * against: it is not a branch the value could have taken.
          */
         static Verdict of(Verdict a, Verdict b) {
+            if (a == UNREACHABLE) {
+                return b;
+            }
+            if (b == UNREACHABLE) {
+                return a;
+            }
             return a == b ? a : UNKNOWN;
         }
     }
@@ -886,7 +883,7 @@ public final class InvariantChecker {
         }
         List<Clause> owed = new ArrayList<>();
         for (Ast.InvariantClause inv : invs) {
-            List<Clause> o = obligations(inv.expr(), binds);
+            List<Clause> o = obligations(inv.expr(), binds, !type.newtype());
             if (o != null) {
                 owed.addAll(o);
             }
@@ -918,8 +915,15 @@ public final class InvariantChecker {
      * construction raises no warning: what the warning reports is a possible abort, and an attempt
      * takes its else branch instead. */
     private void report(Ast.Data type, SourcePos pos, boolean attempted, Verdict verdict) {
+        if (capturing != null) {
+            capturing.merge(pos, new Reported(type, verdict, attempted),
+                    (was, now) -> new Reported(was.type(),
+                            Verdict.of(was.verdict(), now.verdict()), was.attempted()));
+            return;
+        }
         switch (verdict) {
             case REFUTED -> reportViolation(type, pos);
+            case UNREACHABLE -> { }
             case UNKNOWN -> {
                 if (!attempted) {
                     warnings.add(Diagnostic.of("E2011", "check.invariant.unproven")
@@ -928,6 +932,54 @@ public final class InvariantChecker {
                 }
             }
             case PROVED -> { }
+        }
+    }
+
+    /** What a construction came out as where it is being read on a branch rather than said. */
+    private record Reported(Ast.Data type, Verdict verdict, boolean attempted) {}
+
+    /**
+     * Where a walk is reading one branch, what it finds is collected here rather than said. A body
+     * read on each branch of a conditional reads every construction after it once per branch, and one
+     * construction is one answer: it is the branches together that decide, the same as for a
+     * construction the conditional is written inside.
+     */
+    private Map<SourcePos, Reported> capturing;
+
+    /** What reading the body with {@code branch} bound to the name finds, or nothing where the
+     * conditions along the way contradict — a branch nothing reaches finds nothing. */
+    private Map<SourcePos, Reported> reading(Ast.LetIn li, Ast.Expr branch, Known k, Scope scope,
+                                             int depth) {
+        if (k.numbers().isBottom()) {
+            return Map.of();
+        }
+        return found(() -> walk(new Ast.LetIn(li.binder(), branch, li.declaredType(), li.annotated(),
+                li.opens(), li.body(), li.pos()), k, scope, depth + 1));
+    }
+
+    /** What {@code reading} finds, collected instead of said. */
+    private Map<SourcePos, Reported> found(Runnable reading) {
+        Map<SourcePos, Reported> outer = capturing;
+        Map<SourcePos, Reported> mine = new LinkedHashMap<>();
+        capturing = mine;
+        try {
+            reading.run();
+        } finally {
+            capturing = outer;
+        }
+        return mine;
+    }
+
+    /** Says of each construction the two readings reached what the two of them together decide. One
+     * that only one reading reached is discharged on the other: it is not there to violate anything. */
+    private void say(Map<SourcePos, Reported> a, Map<SourcePos, Reported> b) {
+        Set<SourcePos> at = new LinkedHashSet<>(a.keySet());
+        at.addAll(b.keySet());
+        for (SourcePos pos : at) {
+            Reported one = a.containsKey(pos) ? a.get(pos) : b.get(pos);
+            report(one.type(), pos, one.attempted(), Verdict.of(
+                    a.containsKey(pos) ? a.get(pos).verdict() : Verdict.PROVED,
+                    b.containsKey(pos) ? b.get(pos).verdict() : Verdict.PROVED));
         }
     }
 
@@ -989,16 +1041,24 @@ public final class InvariantChecker {
      * can express is owed to the domain; anything else is owed as a fact, which a guard stating the
      * same thing of the same term settles. */
     private List<Clause> obligations(Ast.Expr inv, Bindings binds) {
-        return obligations(inv, binds, true);
+        return obligations(inv, binds, true, false);
     }
 
-    private List<Clause> obligations(Ast.Expr rawInv, Bindings binds, boolean positive) {
+    /** The same, where a clause folding to the other answer than it is read with is this check's to
+     * report. A newtype's constant construction is checked elsewhere, and that check names the clause
+     * that failed rather than only saying one did, so it is left to say it. */
+    private List<Clause> obligations(Ast.Expr inv, Bindings binds, boolean decidesFalse) {
+        return obligations(inv, binds, true, decidesFalse);
+    }
+
+    private List<Clause> obligations(Ast.Expr rawInv, Bindings binds, boolean positive,
+                                     boolean decidesFalse) {
         Ast.Expr inv = asSizeComparison(rawInv);
         if (inv instanceof Ast.Binary b && b.op() == Ast.BinOp.AND && positive) {
             // Each conjunct on its own: an invariant is a set of things that hold, and one the check
             // cannot read leaves its own run-time check standing without costing the others theirs.
-            List<Clause> l = obligations(b.left(), binds, true);
-            List<Clause> r = obligations(b.right(), binds, true);
+            List<Clause> l = obligations(b.left(), binds, true, decidesFalse);
+            List<Clause> r = obligations(b.right(), binds, true, decidesFalse);
             if (l == null && r == null) {
                 return null;
             }
@@ -1008,9 +1068,16 @@ public final class InvariantChecker {
         }
         Ast.Expr under = negated(inv);
         if (under != null) {
-            return obligations(under, binds, !positive);
+            return obligations(under, binds, !positive, decidesFalse);
         }
         Boolean folded = decidedAt(inv, binds);
+        if (folded != null && folded != positive && decidesFalse) {
+            // It folds the other way than it is read: the construction violates, and saying so needs
+            // no term to be named — the answer is already computed.
+            return List.of(new Clause(
+                    new Constraint(LinearForm.constant(BigDecimal.ONE.negate()), Rel.GE),
+                    null, List.of()));
+        }
         if (folded != null && folded == positive) {
             // The clause folds once the construction's own expressions stand where it wrote a field,
             // and it folds the way it is being read. There is nothing to owe. Read under a negation
@@ -1043,17 +1110,31 @@ public final class InvariantChecker {
      * names replaced by what the construction gives that field, folded. {@code null} where it does not
      * fold — which is every clause reading anything computed at run time. */
     private Boolean decidedAt(Ast.Expr inv, Bindings binds) {
-        Object folded = ConstEval.eval(substituted(inv, binds)).orElse(null);
+        Object folded = ConstEval.eval(substituted(inv, binds, Set.of())).orElse(null);
         return folded instanceof Boolean b ? b : null;
     }
 
-    /** {@code inv} with every name the construction fills replaced by the expression filling it. */
-    private static Ast.Expr substituted(Ast.Expr e, Bindings binds) {
+    /** {@code inv} with every name the construction fills replaced by the expression filling it. A
+     * name a binding inside the clause has taken over is that binding's and not a field's, so it is
+     * left alone: {@code List.all(x -> x > 0, x)} says two different things by one spelling. */
+    private static Ast.Expr substituted(Ast.Expr e, Bindings binds, Set<String> bound) {
+        if (e instanceof Ast.Var v && bound.contains(v.name())) {
+            return e;
+        }
         Ast.Expr given = atSite(e, binds);
         if (given != null) {
             return given;
         }
-        return Ast.mapChildren(e, child -> substituted(child, binds), name -> name);
+        Set<String> inner = bound;
+        if (e instanceof Ast.Block b && !b.params().isEmpty()) {
+            inner = new HashSet<>(bound);
+            inner.addAll(b.paramNames());
+        } else if (e instanceof Ast.LetIn li) {
+            inner = new HashSet<>(bound);
+            inner.add(li.name());
+        }
+        Set<String> taken = inner;
+        return Ast.mapChildren(e, child -> substituted(child, binds, taken), name -> name);
     }
 
     private static List<String> firstOnly(List<String> keys) {
@@ -1263,12 +1344,17 @@ public final class InvariantChecker {
      * {@code leaf} (which decides whether it is an atom, a resolved field, or opaque). */
     private LinearForm affine(Ast.Expr raw, Function<Ast.Expr, LinearForm> leaf) {
         Ast.Expr e = asOperator(raw);
-        return switch (e) {
+        if (e instanceof Ast.Apply) {
             // A call that folds is the number it folds to. `String.length("1A")` is 2, and a clause
             // about it is decided rather than owed — the run-time check is not what should answer a
-            // question the compiler has already computed.
-            case Ast.Apply call when constantNumber(call) != null ->
-                    LinearForm.constant(constantNumber(call));
+            // question the compiler has already computed. Asked once: folding walks the subtree, and
+            // a pattern in it is a regex to run.
+            BigDecimal folded = constantNumber(e);
+            if (folded != null) {
+                return LinearForm.constant(folded);
+            }
+        }
+        return switch (e) {
             case Ast.IntLit i -> LinearForm.constant(BigDecimal.valueOf(i.value()));
             case Ast.DecimalLit dd -> LinearForm.constant(dd.value());
             case Ast.Neg n -> negate(affine(n.operand(), leaf));

@@ -303,4 +303,77 @@ class CompileInvariantOneDenotationTest {
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
                 "a table written into the source carries no guard");
     }
+
+    @Test
+    void aClauseThatFoldsToFalseIsSaid() {
+        // the pattern and the value are both written, so whether it holds is computed, not owed
+        String m = """
+                module demo
+                data Zip = { code: String }
+                    invariant String.matches("[0-9][0-9]", code)
+                behavior bad : (x: Int) -> Zip
+                    constructs Zip
+                let bad (x) = Zip { code = "abc" }
+                """;
+        assertEquals("E2010", assertThrows(CompileException.class, () -> Compiler.compile(m))
+                .diagnostic().code(), "computed, and it does not hold");
+    }
+
+    @Test
+    void anAliasOfAComputedTermIsThatTerm() {
+        // `m` is `n` is `c.value + 1`, and copying a name must not drop what is known of it
+        String m = """
+                module demo
+                data Count = Int
+                    invariant value >= 0
+                data Positive = Int
+                    invariant value >= 1
+                behavior next : (c: Count) -> Positive
+                    constructs Positive
+                let next (c) = {
+                    let n = c.value + 1
+                    %s
+                }
+                """;
+        assertEquals(warnings(Compiler.compileWithWarnings(m.formatted("Positive(n)"))),
+                warnings(Compiler.compileWithWarnings(m.formatted("let m = n\n        Positive(m)"))),
+                "a name for a term is that term");
+    }
+
+    @Test
+    void aBranchNothingReachesSaysNothing() {
+        // under `x > 5` the inner test cannot hold, so what it would have built is not a value
+        String m = """
+                module demo
+                data Positive = Int
+                    invariant value >= 1
+                behavior mk : (x: Int) -> Positive
+                    constructs Positive
+                let mk (x) = if x > 5 then Positive(if x < 3 then 0 else 7) else Positive(9)
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a branch the conditions exclude is not one the value could have taken");
+    }
+
+    @Test
+    void aNamedConditionalOneBranchSatisfiesIsNotRefuted() {
+        // the two readings of the body are one construction, so they are answered together
+        String m = """
+                module demo
+                data Count = Int
+                    invariant value >= 0
+                behavior mk : (x: Int) -> Count
+                    constructs Count
+                let mk (x) = %s
+                """;
+        Compiler.Compiled c = Compiler.compileWithWarnings(m.formatted("""
+                {
+                        let n = if x > 0 then 0 - 1 else 5
+                        Count(n)
+                    }"""));
+        assertEquals(1, warnings(c), "possible, and not decided");
+        assertEquals(warnings(Compiler.compileWithWarnings(
+                        m.formatted("Count(if x > 0 then 0 - 1 else 5)"))),
+                warnings(c), "the name answers as the conditional does");
+    }
 }

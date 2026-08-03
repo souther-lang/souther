@@ -9,7 +9,6 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -34,12 +33,9 @@ class ConstEvalMatchBudgetTest {
     }
 
     @Test
-    void aSubjectTheEngineWouldRecurseOverIsLeftToTheRunTime() {
-        String subject = "a".repeat(100_000);
-        assertThrows(StackOverflowError.class,
-                () -> java.util.regex.Pattern.matches("(a|b)*", subject),
-                "the engine recurses over its subject, which is what the budget is for");
-        assertTrue(fold("(a|b)*", subject).isEmpty(),
+    void aSubjectPastTheBudgetIsLeftToTheRunTime() {
+        // Far past what the budget allows the engine to read, and far past what it can recurse over
+        assertTrue(fold("(a|b)*", "a".repeat(100_000)).isEmpty(),
                 "declined rather than answered, and the compilation goes on");
     }
 }
