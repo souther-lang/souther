@@ -12,24 +12,24 @@ import java.util.Set;
 /**
  * Every reading of one helper parameter, and what they settle between them.
  *
- * <p>This solves constraints, and it is fair to call what it does unification — variables are held
- * equal to each other and bound to types, constructors are taken apart, a value is refused the chance
- * to hold itself, and what was settled is substituted through at the end. What it is not is
- * {@link TypeOps#unify}: that one checks an argument against a declared parameter, in that direction,
- * and hands its bindings on to the rest of the call. Here there is no direction — several readings of
- * one value, none of them the one being checked — and nothing it settles outlives the parameter, so a
- * reading that does not go through leaves nothing behind.
+ * <p>This is unification, done locally and symmetrically. Variables are settled to types and to each
+ * other, constructors are taken apart, a variable is refused a type it stands inside, and what was
+ * settled is substituted through at the end. What it is not is {@link TypeOps#unify}: that one checks
+ * an argument against a declared parameter, in that direction, and hands its bindings on to the rest
+ * of the call. Here there is no direction — several readings of one value, none of them the one being
+ * checked — and nothing settled here outlives the parameter, so a reading that does not go through
+ * leaves nothing behind.
  *
  * <p>Readings are given one at a time as the walk finds them, and the answer is asked for once at the
  * end. That is the reason for the two steps rather than a convenience: a reading that says what a
- * variable is may arrive after the readings that used it, so what is being built while they arrive
- * is not the answer. {@code a}, then {@code (b, b)}, then {@code (b, Int)} says the value is a pair
- * of Ints, and only the last reading says which — so it is settled through the whole shape once every
+ * variable is may arrive after the readings that used it, so what is being built while they arrive is
+ * not the answer. {@code a}, then {@code (b, b)}, then {@code (b, Int)} says the value is a pair of
+ * Ints, and only the last reading says which — so it is settled through the whole shape once every
  * reading is in, not written into whatever had been assembled by the time it arrived.
  */
 final class Readings {
 
-    /** What each variable has been settled to. A variable settled to itself is settled to nothing. */
+    /** What each variable is settled to. A variable nothing has settled is not in here. */
     private final Map<Type.Var, Type> settled = new HashMap<>();
     private Type shape;
     private boolean refused;
@@ -45,7 +45,7 @@ final class Readings {
 
     /** Every reading given, as one type, or null where they cannot be one value. */
     Type answer() {
-        return refused || shape == null ? null : settledThrough(shape, new HashSet<>());
+        return refused || shape == null ? null : settledSoFar(shape);
     }
 
     /** {@code readings} taken together — the whole question asked at once. */
@@ -62,37 +62,49 @@ final class Readings {
     }
 
     /**
-     * {@code left} and {@code right} as one type, recording what that settles, or null where they
-     * cannot be one value. What it returns is what is known at this point; what is known at the end
-     * is {@link #answer}.
+     * {@code left} and {@code right} as one type, settling what that settles, or null where they
+     * cannot be one value. Each side is taken as far as what is already settled says, so what is
+     * compared and what is taken apart is what the readings have come to rather than how they were
+     * written. What this returns is what is known at this point; what is known at the end is
+     * {@link #answer}.
      */
     private Type unify(Type left, Type right) {
         if (left == null || right == null) {
             return null;
         }
-        if (left instanceof Type.Var lv) {
-            return settle(lv, right);
+        Type l = settledSoFar(left);
+        Type r = settledSoFar(right);
+        if (l.equals(r)) {
+            return l;
         }
-        if (right instanceof Type.Var rv) {
-            return settle(rv, left);
+        if (l instanceof Type.Var lv && r instanceof Type.Var rv) {
+            // Either name denotes the value equally well, so one is settled to the other by name and
+            // the answer is what the readings say rather than which of them was given first.
+            return lv.name().compareTo(rv.name()) <= 0 ? bind(rv, lv) : bind(lv, rv);
         }
-        return switch (left) {
-            case Type.ListOf l when right instanceof Type.ListOf r ->
-                    hold(Type::list, l.element(), r.element());
-            case Type.SetOf l when right instanceof Type.SetOf r ->
-                    hold(Type::set, l.element(), r.element());
-            case Type.OptionOf l when right instanceof Type.OptionOf r ->
-                    hold(Type::option, l.element(), r.element());
-            case Type.MapOf l when right instanceof Type.MapOf r -> {
-                Type key = unify(l.key(), r.key());
-                Type value = unify(l.value(), r.value());
+        if (l instanceof Type.Var lv) {
+            return bind(lv, r);
+        }
+        if (r instanceof Type.Var rv) {
+            return bind(rv, l);
+        }
+        return switch (l) {
+            case Type.ListOf a when r instanceof Type.ListOf b ->
+                    hold(Type::list, a.element(), b.element());
+            case Type.SetOf a when r instanceof Type.SetOf b ->
+                    hold(Type::set, a.element(), b.element());
+            case Type.OptionOf a when r instanceof Type.OptionOf b ->
+                    hold(Type::option, a.element(), b.element());
+            case Type.MapOf a when r instanceof Type.MapOf b -> {
+                Type key = unify(a.key(), b.key());
+                Type value = unify(a.value(), b.value());
                 yield key == null || value == null ? null : Type.map(key, value);
             }
-            case Type.TupleOf l when right instanceof Type.TupleOf r
-                    && l.elements().size() == r.elements().size() -> {
+            case Type.TupleOf a when r instanceof Type.TupleOf b
+                    && a.elements().size() == b.elements().size() -> {
                 List<Type> both = new ArrayList<>();
-                for (int i = 0; i < l.elements().size(); i++) {
-                    Type e = unify(l.elements().get(i), r.elements().get(i));
+                for (int i = 0; i < a.elements().size(); i++) {
+                    Type e = unify(a.elements().get(i), b.elements().get(i));
                     if (e == null) {
                         yield null;
                     }
@@ -103,87 +115,57 @@ final class Readings {
             // A function type is never a reading of a parameter (a function-typed parameter is
             // written), and two unequal names, primitives or unions are two answers about what the
             // value is rather than one of them leaving it open.
-            default -> left.equals(right) ? left : null;
+            default -> null;
         };
     }
 
     /**
-     * What {@code v} standing where {@code other} stands comes to, given what each of them is settled
-     * to. Both are followed to what they come to before they are put together, so a variable settled
-     * to something is read with it rather than compared to it, and two variables settled to each
-     * other do not send this back and forth. What is put together after that is headed by a
-     * constructor on both sides, so this descends.
+     * {@code variable} settled to {@code type}, or null where it cannot be. One variable and one
+     * type, so there is one question to ask: does the variable stand inside what it would be settled
+     * to. {@code type} has already been taken as far as what is settled says, so a variable reached
+     * only through another is found — {@code a} is a list of {@code b}, and {@code a} is {@code b},
+     * settles {@code b} to a list of {@code b}, which is a value that would have to hold itself.
      */
-    private Type settle(Type.Var v, Type other) {
-        Type mine = settledThrough(v, new HashSet<>());
-        Type yours = settledThrough(other, new HashSet<>());
-        // A variable cannot be settled to something holding it. Asked of what each side comes to,
-        // because what holds it may hold it only through another variable — `a` is `b`, and `b` is a
-        // list of `b`, is a value that would have to hold itself however the readings are given.
-        // Being the very thing it comes to is not holding it.
-        if (!yours.equals(mine) && Type.mentions(yours, x -> x.equals(v) || x.equals(mine))) {
+    private Type bind(Type.Var variable, Type type) {
+        if (Type.mentions(type, variable::equals)) {
             return null;
         }
-        Type both;
-        if (mine instanceof Type.Var one && yours instanceof Type.Var another) {
-            // Both readings leave this position open, and either name denotes the value equally well.
-            // One is taken, by name, so the answer is what the readings say and not what order they
-            // were given in.
-            both = one.name().compareTo(another.name()) <= 0 ? one : another;
-        } else if (mine instanceof Type.Var) {
-            both = yours;
-        } else if (yours instanceof Type.Var) {
-            both = mine;
-        } else {
-            both = unify(mine, yours);
-            if (both == null) {
-                return null;
-            }
-        }
-        // Both the variables read here and what each of them already came to. A variable settled to
-        // another is only reached through it, so settling the one in hand and not the one it came to
-        // leaves the second still standing for itself wherever else it was read.
-        settleTo(v, both);
-        settleTo(mine, both);
-        settleTo(other, both);
-        settleTo(yours, both);
-        return both;
-    }
-
-    private void settleTo(Type maybeVariable, Type both) {
-        if (maybeVariable instanceof Type.Var v) {
-            settled.put(v, both);
-        }
+        settled.put(variable, type);
+        return type;
     }
 
     /**
      * {@code t} with every variable in it replaced by what it is settled to, following what is
-     * settled to what until nothing more is said. A variable nothing has settled answers itself.
+     * settled to what until nothing more is said.
      *
      * <p>{@code following} is the one chain being followed, not everything seen: it ends a cycle of
      * variables settled to each other, and a position beside this one is another chain. Sharing it
      * would leave the second of two positions holding one variable unsettled.
      */
-    private Type settledThrough(Type t, Set<Type.Var> following) {
+    private Type settledSoFar(Type t) {
+        return settledSoFar(t, new HashSet<>());
+    }
+
+    private Type settledSoFar(Type t, Set<Type.Var> following) {
         if (t instanceof Type.Var v) {
             Type next = settled.get(v);
             if (next == null || next.equals(v) || !following.add(v)) {
                 return v;
             }
-            Type through = settledThrough(next, following);
+            Type through = settledSoFar(next, following);
             following.remove(v);
             return through;
         }
         return switch (t) {
-            case Type.ListOf l -> Type.list(settledThrough(l.element(), following));
-            case Type.SetOf s -> Type.set(settledThrough(s.element(), following));
-            case Type.OptionOf o -> Type.option(settledThrough(o.element(), following));
-            case Type.MapOf m -> Type.map(settledThrough(m.key(), following),
-                    settledThrough(m.value(), following));
+            case Type.ListOf l -> Type.list(settledSoFar(l.element(), following));
+            case Type.SetOf s -> Type.set(settledSoFar(s.element(), following));
+            case Type.OptionOf o -> Type.option(settledSoFar(o.element(), following));
+            case Type.MapOf m -> Type.map(settledSoFar(m.key(), following),
+                    settledSoFar(m.value(), following));
             case Type.TupleOf tu -> {
                 List<Type> at = new ArrayList<>();
                 for (Type e : tu.elements()) {
-                    at.add(settledThrough(e, following));
+                    at.add(settledSoFar(e, following));
                 }
                 yield Type.tuple(at);
             }

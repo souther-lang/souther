@@ -79,8 +79,12 @@ each expansion. A bare unconstrained variable is not a body-determined parameter
 - **A stated answer always wins.** The walk records an answer that leaves something open and keeps
   going; it takes it only where nothing states the whole type. Two open answers about one parameter
   are merged rather than the first winning — they are two readings of one value — and two that
-  disagree about what the value is leave the parameter as open as it was. Merging is not unification:
-  nothing is bound by asking, and the two sides are symmetric.
+  disagree about what the value is leave the parameter as open as it was. Taking them together is
+  unification, done locally and symmetrically — variables settled to types and to each other,
+  constructors taken apart, a variable refused a type it stands inside, and what was settled
+  substituted through once every reading is in. What it is not is the unification a call is typed
+  with, which checks an argument against a declared parameter in that direction and hands its
+  bindings to the rest of the call: nothing settled here reaches past the parameter.
 - **What the body gets wrong is not decided here.** A parameter whose outer type the body stated is
   that type, and a body that disagrees with it is reported by the standalone check that follows, at
   the position of the disagreement — which is what ADR-0066 already says happens to a settled type the

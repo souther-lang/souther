@@ -108,6 +108,19 @@ class TwoReadingsOfOneValueTest {
         assertEquals(ints, Readings.of(List.of(bb, a, bInt)));
     }
 
+    /**
+     * What a variable comes to is settled through what it is settled to, so a value holds itself
+     * whichever of the two positions says so. {@code (a, a)} beside {@code (List<b>, b)} says
+     * {@code a} is a list of {@code b} and also that {@code a} is {@code b}.
+     */
+    @Test
+    void aValueSettledThroughAnotherVariableStillCannotHoldItself() {
+        Type aa = pair(v("a"), v("a"));
+        Type listBAndB = pair(Type.list(v("b")), v("b"));
+        assertNull(Readings.of(aa, listBAndB));
+        assertNull(Readings.of(listBAndB, aa));
+    }
+
     /** Neither reading is the one being checked, so which is given first decides nothing. */
     @Test
     void theAnswerIsTheSameWhicheverReadingIsGivenFirst() {

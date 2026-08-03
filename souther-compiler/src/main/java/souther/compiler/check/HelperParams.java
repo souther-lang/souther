@@ -333,8 +333,9 @@ final class HelperParams {
          * One answer that leaves what the value holds open. Where the walk already has one, the two
          * are merged rather than the first winning: they are two readings of one parameter, so what
          * one of them states and the other leaves open is stated. Where they disagree about what the
-         * value is, the parameter has no answer here — a merge is not a unification, and nothing is
-         * bound by trying one.
+         * value is, the parameter has no answer here. What settles them is unification, done locally
+         * and symmetrically: nothing it settles reaches past this parameter, so a set of readings
+         * that does not go through leaves nothing behind.
          */
         private void offer(Type t) {
             readings.add(t);
