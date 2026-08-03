@@ -32,11 +32,28 @@ public sealed interface OriginRef {
         }
     }
 
+    /**
+     * A comparison in a behavior's body, and the {@code if} it is the condition of.
+     *
+     * <p>The guard is kept, not just the position, because meeting this boundary takes more than
+     * writing the value: the comparison has to have been evaluated. A row can hand the behavior the
+     * exact threshold and never reach the guard that cares about it.
+     *
+     * @param guard             which {@code if} — by the arms it owns, so a hit set answers whether
+     *                          it ran
+     * @param valueBelongsBelow which side of the line the cut value itself is on. It decides which
+     *                          neighbour is the other class's edge: {@code <= 3000} leaves 3001 over
+     *                          there, {@code < 3000} leaves 2999.
+     */
+    record GuardOrigin(souther.compiler.coverage.CoverageSites.GuardRef guard, SourceRef at,
+                       boolean valueBelongsBelow) implements OriginRef {}
+
     /** Where this came from, for a report to print. */
     default String describe() {
         return switch (this) {
             case TypeOrigin t -> "type " + t.type().name();
             case InvariantOrigin i -> "invariant " + i.type().name() + " (" + i.clause() + ")";
+            case GuardOrigin g -> "guard@" + g.at().pos();
         };
     }
 }

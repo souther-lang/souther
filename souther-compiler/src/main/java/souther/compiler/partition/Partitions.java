@@ -78,6 +78,82 @@ public final class Partitions {
         return new Partitioning(kept, omitted);
     }
 
+    /**
+     * The same axes, with what the behavior's own comparisons divide them into.
+     *
+     * <p>This is where a numeric position stops being one undivided range. A type's invariant bounds
+     * what can exist; a {@code guard} says where the behavior does something else, and both sides of
+     * that line hold values a row can write. The cuts merge into one partition and the origins stay
+     * apart, so reaching the line through one rule still leaves the others unmet.
+     */
+    public static Partitioning withThresholds(Partitioning base, List<Threshold> thresholds,
+                                              Symbols symbols) {
+        List<Axis> out = new ArrayList<>();
+        for (Axis axis : base.axes()) {
+            List<Threshold> here = thresholds.stream()
+                    .filter(t -> t.path().toString().equals(axis.path().toString())).toList();
+            if (here.isEmpty()) {
+                out.add(axis);
+                continue;
+            }
+            Bounds domain = boundsOf(axis.type(), symbols);
+            BigDecimal min = domain == null ? null : domain.min();
+            BigDecimal max = domain == null ? null : domain.max();
+            List<PartitionClass> classes = Intervals.classesOf(
+                    Intervals.of(here, min, max), axis.path(), axis.type(), symbols);
+            out.add(new Axis(axis.id(), axis.path(), axis.type(),
+                    classes.isEmpty() ? axis.classes() : classes,
+                    merged(axis.cuts(), here, domain != null && domain.decimal())));
+        }
+        return new Partitioning(out, base.omitted());
+    }
+
+    /** The cuts a position has, with a rule that drew one already there recorded rather than repeated:
+     * an invariant and a guard that state the same bound are one cut and two obligations. */
+    private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, boolean decimal) {
+        Map<String, Cut> byValue = new LinkedHashMap<>();
+        for (Cut cut : had) {
+            byValue.put(String.valueOf(cut.value()), cut);
+        }
+        for (Threshold each : thresholds) {
+            ObservedValue value = numeric(each.value(), decimal);
+            byValue.merge(String.valueOf(value), Cut.at(value, each.origin()),
+                    (there, _) -> there.and(each.origin()));
+        }
+        return List.copyOf(byValue.values());
+    }
+
+    /**
+     * The values a row has to be written at, one per rule that drew a cut.
+     *
+     * <p>An invariant's bound is met by writing the value: outside it nothing can be constructed, so
+     * the edge is the only row there is to write. A guard's line has values on both sides, so it wants
+     * the value and its neighbour — and the neighbour only where the type has one to give.
+     */
+    public static List<BoundaryObligation> obligationsOf(Axis axis, Symbols symbols) {
+        boolean decimal = TypeOps.base(axis.type(), symbols) == Type.DECIMAL;
+        BoundaryDomain domain = decimal ? BoundaryDomain.DECIMAL : BoundaryDomain.INT;
+        List<BoundaryObligation> out = new ArrayList<>();
+        for (Cut cut : axis.cuts()) {
+            for (OriginRef origin : cut.origins()) {
+                out.add(new BoundaryObligation(axis.id(), origin,
+                        BoundaryObligation.BoundarySide.AT, cut.value()));
+                if (origin instanceof OriginRef.GuardOrigin guard) {
+                    // The other class's edge is the neighbour on the side the cut value is not on.
+                    if (guard.valueBelongsBelow()) {
+                        domain.successor(cut.value()).ifPresent(next -> out.add(new BoundaryObligation(
+                                axis.id(), origin, BoundaryObligation.BoundarySide.ABOVE, next)));
+                    } else {
+                        domain.predecessor(cut.value()).ifPresent(before ->
+                                out.add(new BoundaryObligation(axis.id(), origin,
+                                        BoundaryObligation.BoundarySide.BELOW, before)));
+                    }
+                }
+            }
+        }
+        return List.copyOf(out);
+    }
+
     /** One position: measured where the model divides it or bounds it, taken apart where it is a
      * record, and recorded as not derivable where it is neither. */
     private static void walk(String behavior, TermPath path, Type type, int depth, Symbols symbols,

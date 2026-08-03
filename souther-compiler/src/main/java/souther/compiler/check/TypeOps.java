@@ -1050,7 +1050,7 @@ public final class TypeOps {
         };
     }
 
-    static boolean isSingleValueNewtype(Type t, Symbols symbols) {
+    public static boolean isSingleValueNewtype(Type t, Symbols symbols) {
         return t instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype();
     }
@@ -1161,7 +1161,7 @@ public final class TypeOps {
     /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —
      * the base of its {@code value} type, recursively (so {@code 管理職 = レベル = Int} bases to Int).
      * A newtype's value is what its comparison and equality read. */
-    static Type base(Type t, Symbols symbols) {
+    public static Type base(Type t, Symbols symbols) {
         if (isSingleValueNewtype(t, symbols)) {
             Type inner = fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
             if (inner != null) {
