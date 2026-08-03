@@ -10,6 +10,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
+import souther.compiler.coverage.Probe;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
@@ -382,10 +383,24 @@ public final class ExampleVerifier {
             this.row = row;
         }
 
+        /**
+         * The row, and the arms it went through on the way.
+         *
+         * <p>The collecting is started and stopped here because a row is a thread: this worker runs
+         * this row's body and nothing else, so what the probe saw on it is what this row reached. A row
+         * that does not finish never gets here to read it, and the set goes with the thread's state —
+         * which is what stops the next row on a reused worker from starting where this one left off.
+         */
         @Override
         public List<Diagnostic> call() {
             List<Diagnostic> mine = new ArrayList<>();
-            evaluation.checkRowNow(target, sig, outCases, row, mine, state);
+            Probe.begin();
+            try {
+                evaluation.checkRowNow(target, sig, outCases, row, mine, state);
+                state.hits = Probe.taken();
+            } finally {
+                Probe.end();
+            }
             return mine;
         }
 
@@ -414,6 +429,10 @@ public final class ExampleVerifier {
         private TypeName resultArm;
         private final List<TypeName> inputCases = new ArrayList<>();
         private final List<ObservedValue> inputs = new ArrayList<>();
+        /** The arms this row went through, where the classes it ran were generated to say. Empty
+         * otherwise, and empty for a row that did not finish — a set read from a row still running
+         * would be some of the arms rather than the arms. */
+        private Set<Integer> hits = Set.of();
 
         /** Records where the row stopped, and that it did. */
         void failed(FailurePhase phase) {
@@ -432,7 +451,7 @@ public final class ExampleVerifier {
     private RowOutcome outcomeOf(ExampleTarget target, Ast.ExampleRow row, RowState state) {
         return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.description(),
                 state.stage, state.disposition, state.failurePhase, state.expectedArm, state.resultArm,
-                state.inputCases, state.inputs, Set.of());
+                state.inputCases, state.inputs, state.hits);
     }
 
     /**

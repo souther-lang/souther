@@ -63,7 +63,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            Map<String, List<RowOutcome>> byTarget = rowsByTarget(db, name);
+            Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 Sig sig = sigs.value().get(behavior.name());
@@ -76,25 +76,6 @@ public final class Adequacy {
             return Answer.of(Map.copyOf(out));
         }
 
-        /** Every row this module's sources observed, grouped by the behavior it is about. */
-        private Map<String, List<RowOutcome>> rowsByTarget(Db db, String module) {
-            List<String> origins = db.ask(new Front.ExampleOrigins(module)).value();
-            Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
-            if (origins == null) {
-                return byTarget;
-            }
-            for (String sourceId : new LinkedHashSet<>(origins)) {
-                Output.Examples.Of observed =
-                        db.ask(new Output.Examples(module, sourceId)).value();
-                if (observed == null) {
-                    continue;
-                }
-                for (RowOutcome row : observed.rows()) {
-                    byTarget.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
-                }
-            }
-            return byTarget;
-        }
     }
 
     /**
@@ -125,6 +106,9 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
             Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
+            // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
+            // been evaluated, which only the instrumented classes say.
+            boolean armsMeasured = db.ask(new Output.Probed(name)).value() != null;
 
             Map<String, PartitionEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -136,7 +120,7 @@ public final class Adequacy {
                     continue;
                 }
                 out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
-                        plan, byTarget.getOrDefault(spec.name(), List.of())));
+                        plan, byTarget.getOrDefault(spec.name(), List.of()), armsMeasured));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -146,23 +130,155 @@ public final class Adequacy {
             return layout == null ? module : layout.idOfModule().getOrDefault(module, module);
         }
 
-        private static Map<String, List<RowOutcome>> rowsOf(Db db, String module) {
-            List<String> origins = db.ask(new Front.ExampleOrigins(module)).value();
-            Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
-            if (origins == null) {
-                return byTarget;
+    }
+
+    /**
+     * The rows of one source, run against classes that record the arms they went through.
+     *
+     * <p>Its own key rather than a mode on {@link Output.Examples}, because what a compile does with
+     * rows and what a measurement does with them are different questions asked at different times.
+     * Widening the compile's key would put instrumented bytecode into every build, where it changes the
+     * time budget a row runs under and the classes a row's constructions initialise — for the benefit
+     * of a report that build was not asked for.
+     *
+     * <p>Every adequacy measure reads these, not the compile's. Two sets of row outcomes for one model
+     * can disagree — a row that timed out under one and held under the other — and a report built half
+     * from each would say a case is verified and its branch unreached in the same breath. Where they do
+     * disagree, that is recorded rather than resolved: which of them is right is not this key's to say.
+     */
+    public record ProbedExamples(String name, String sourceId) implements Key<Output.Examples.Of> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public String sourceId() {
+            return sourceId;
+        }
+
+        @Override
+        public Answer<Output.Examples.Of> compute(Db db) {
+            Map<String, byte[]> probed = db.ask(new Output.ProbedLinked(name)).value();
+            if (probed == null) {
+                // Nothing was measured, which is not the same as nothing being reached. The rows the
+                // compile already ran are what the other measures read; the branch measure says it
+                // could not be made.
+                return db.ask(new Output.Examples(name, sourceId));
             }
-            for (String sourceId : new LinkedHashSet<>(origins)) {
-                Output.Examples.Of observed = db.ask(new Output.Examples(module, sourceId)).value();
-                if (observed == null) {
+            return Output.Examples.evaluate(db, name, sourceId, probed);
+        }
+    }
+
+    /**
+     * Which arms of each behavior's body the rows go through.
+     *
+     * <p>Branch-<em>arm</em> coverage, and nothing larger. Going through both arms of two nested
+     * conditions is four arms and says nothing about whether their combinations were tried, so nothing
+     * here calls this covering the paths a body has.
+     *
+     * @param all     every arm the behavior has
+     * @param covered the ones a row went through
+     */
+    public record BranchEvidence(List<souther.compiler.coverage.CoverageSites.Site> all,
+                                 Set<Integer> covered, MeasurementStatus status) {
+
+        public static final BranchEvidence UNAVAILABLE =
+                new BranchEvidence(List.of(), Set.of(), MeasurementStatus.UNAVAILABLE);
+
+        public BranchEvidence {
+            all = List.copyOf(all);
+            covered = Set.copyOf(covered);
+        }
+
+        public List<souther.compiler.coverage.CoverageSites.Site> unreached() {
+            return all.stream().filter(site -> !covered.contains(site.index())).toList();
+        }
+    }
+
+    /**
+     * The arms every behavior of one module has, and which of them the rows reach.
+     *
+     * <p>A hit belongs to the behavior whose arm it is, whichever behavior's row lit it: a row about
+     * {@code A} that calls {@code B} did go through {@code B}'s arm, and pretending otherwise would
+     * report an arm as unreached that runs on every build. What is <em>not</em> inherited is the
+     * question: a behavior nobody wrote a row for is not asked about its unreached arms at all. The
+     * measurement is opted into by writing a row, and reaching a behavior sideways is not opting in.
+     */
+    public record BranchCoverage(String name) implements Key<Map<String, BranchEvidence>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, BranchEvidence>> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            if (!prepared.present()) {
+                return Answer.absent();
+            }
+            boolean measured = db.ask(new Output.Probed(name)).value() != null;
+            souther.compiler.coverage.CoverageSites.Plan plan =
+                    souther.compiler.coverage.CoverageSites.Plan.NONE;
+            if (measured) {
+                plan = Output.Probed.planOf(db, name);
+            }
+            // A behavior with no `let` has no arms, which is not the same as a body whose arms nothing
+            // reaches. The bodies say which is which; the arm count cannot, since a body with no fork
+            // in it also has none.
+            souther.compiler.check.TypeChecker.Checked checked =
+                    db.ask(new Bodies.Checked(name)).value();
+            Set<String> withBodies = checked == null ? Set.of() : checked.behaviorBodies().keySet();
+            Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
+            Set<Integer> lit = new LinkedHashSet<>();
+            for (List<RowOutcome> rows : byTarget.values()) {
+                for (RowOutcome row : rows) {
+                    lit.addAll(row.hits());
+                }
+            }
+
+            Map<String, BranchEvidence> out = new LinkedHashMap<>();
+            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+                List<souther.compiler.coverage.CoverageSites.Site> arms = plan.sites().stream()
+                        .filter(site -> site.behavior().equals(behavior.name())).toList();
+                if (!measured || !withBodies.contains(behavior.name())
+                        || byTarget.getOrDefault(behavior.name(), List.of()).isEmpty()) {
+                    // Nothing to measure, or nothing asking. A behavior with no body has no arms; one
+                    // no row names has not been opted into the measurement, and reaching it through
+                    // somebody else's row is not opting in.
+                    out.put(behavior.name(), BranchEvidence.UNAVAILABLE);
                     continue;
                 }
-                for (RowOutcome row : observed.rows()) {
-                    byTarget.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
-                }
+                Set<Integer> covered = new LinkedHashSet<>(lit);
+                covered.retainAll(arms.stream()
+                        .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
+                out.put(behavior.name(),
+                        new BranchEvidence(arms, covered, MeasurementStatus.COMPLETE));
             }
+            return Answer.of(Map.copyOf(out));
+        }
+    }
+
+    /** Every row this module's sources observed, grouped by the behavior it is about, run against the
+     * classes that record where they went. */
+    static Map<String, List<RowOutcome>> rowsOf(Db db, String module) {
+        List<String> origins = db.ask(new Front.ExampleOrigins(module)).value();
+        Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
+        if (origins == null) {
             return byTarget;
         }
+        for (String sourceId : new LinkedHashSet<>(origins)) {
+            Output.Examples.Of observed = db.ask(new ProbedExamples(module, sourceId)).value();
+            if (observed == null) {
+                continue;
+            }
+            for (RowOutcome row : observed.rows()) {
+                byTarget.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
+            }
+        }
+        return byTarget;
     }
 
     /**
@@ -209,7 +325,7 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(
                             Coverage.sourceIdOf(db, name), bodies);
-            Map<String, List<RowOutcome>> byTarget = Coverage.rowsOf(db, name);
+            Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
             Symbols symbols = scope.value();
 
             Map<String, Filling> out = new LinkedHashMap<>();

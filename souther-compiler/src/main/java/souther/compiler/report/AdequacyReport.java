@@ -59,7 +59,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
     public record BehaviorReport(String name, boolean injected, int rows, int pending,
                                  MeasurementStatus status,
                                  Adequacy.SignatureEvidence signature,
-                                 PartitionEvidence partition) {}
+                                 PartitionEvidence partition,
+                                 Adequacy.BranchEvidence branch) {}
 
     /** Reads a finished compile. {@link Compilation#answerEverything()} must have been asked first;
      * otherwise there is nothing to read and every behavior looks unexampled. */
@@ -100,6 +101,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                 compilation.db().ask(new Adequacy.Witnesses(name)).value();
         Map<String, PartitionEvidence> partitions =
                 compilation.db().ask(new Adequacy.Coverage(name)).value();
+        Map<String, Adequacy.BranchEvidence> branches =
+                compilation.db().ask(new Adequacy.BranchCoverage(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef behavior : module.behaviors()) {
             List<RowOutcome> rows = byTarget.getOrDefault(behavior.name(), List.of());
@@ -115,7 +118,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             behaviors.add(new BehaviorReport(behavior.name(),
                     ExampleVerifier.isPending(module, behavior.name()), rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE, signature,
-                    partition));
+                    partition, branches == null ? Adequacy.BranchEvidence.UNAVAILABLE
+                            : branches.getOrDefault(behavior.name(),
+                                    Adequacy.BranchEvidence.UNAVAILABLE)));
         }
         MeasurementStatus status = incompleteness.isEmpty()
                 ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
@@ -163,6 +168,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                         behavior.rows(), behavior.pending()));
                 signature(out, behavior);
                 partition(out, behavior);
+                branch(out, behavior);
             }
             for (Incompleteness gap : module.incompleteness()) {
                 out.append(String.format("    · not measured: %s (%s)%n", gap.subject(),
@@ -264,6 +270,32 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
     }
 
     /**
+     * Which arms of the body the rows go through.
+     *
+     * <p>Called the arms, and never the paths. Going through both arms of two nested conditions is four
+     * arms and says nothing about their combinations, and a report that said "paths covered" would
+     * invite an author to stop looking exactly where there is more to find.
+     */
+    private static void branch(StringBuilder out, BehaviorReport behavior) {
+        Adequacy.BranchEvidence branch = behavior.branch();
+        if (branch == null || branch.status() == MeasurementStatus.UNAVAILABLE) {
+            if (branch != null && !behavior.injected() && behavior.rows() > 0) {
+                out.append("    branch      unavailable (the arms were not measured)%n"
+                        .formatted());
+            }
+            return;
+        }
+        out.append(String.format("    branch      %d/%d%n", branch.covered().size(),
+                branch.all().size()));
+        // The position alone: an arm is part of a body, and a body is written in the module's own
+        // source, which the section this is under already names. Only a row can be somewhere else.
+        for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
+            out.append(String.format("      · no row goes through `%s` (%s)%n", arm.label(),
+                    arm.at().pos()));
+        }
+    }
+
+    /**
      * The pair numbers as counts, never as one ratio.
      *
      * <p>A ratio needs a denominator that is known, and this one is not: a combination no row sits in
@@ -318,6 +350,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                 b.put("status", behavior.status().name().toLowerCase(java.util.Locale.ROOT));
                 signature(b, behavior.signature());
                 partition(b, behavior.partition());
+                branch(b, behavior.branch());
             }
         }
         return root.toPrettyString();
@@ -381,6 +414,26 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         partition.notDerivable().forEach(out.putArray("notDerivable")::add);
         ArrayNode omitted = out.putArray("omitted");
         partition.omitted().forEach(o -> omitted.add(o.subject()));
+    }
+
+    private static void branch(ObjectNode behavior, Adequacy.BranchEvidence branch) {
+        if (branch == null) {
+            return;
+        }
+        ObjectNode out = behavior.putObject("branch");
+        out.put("status", branch.status().name().toLowerCase(java.util.Locale.ROOT));
+        out.put("arms", branch.all().size());
+        out.put("covered", branch.covered().size());
+        ArrayNode unreached = out.putArray("unreached");
+        for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
+            ObjectNode a = unreached.addObject();
+            a.put("label", arm.label());
+            a.put("kind", arm.kind().name().toLowerCase(java.util.Locale.ROOT));
+            ObjectNode at = a.putObject("at");
+            at.put("sourceId", arm.at().sourceId());
+            at.put("line", arm.at().pos().line());
+            at.put("column", arm.at().pos().column());
+        }
     }
 
     /** Case names, sorted: a report that changes order between runs cannot be compared between runs,

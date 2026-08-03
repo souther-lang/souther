@@ -105,8 +105,9 @@ class CompileExampleBoundaryTest {
         assertTrue(at(edge, "0").get(0).hit(), "a row is written at the edge");
     }
 
+    /** A row that writes the value and reaches the comparison meets the line the guard drew. */
     @Test
-    void aGuardsBoundaryIsNotMeasuredUntilTheArmsAre() {
+    void aGuardsBoundaryIsMetByARowThatReachesTheComparison() {
         PartitionEvidence evidence = evidence(MODEL + """
 
                 example submit
@@ -114,10 +115,51 @@ class CompileExampleBoundaryTest {
                 """);
 
         PartitionEvidence.BoundaryCoverage hundred = at(evidence, "100").get(0);
-        assertEquals(MeasurementStatus.UNAVAILABLE, hundred.status(),
-                "the value is written, and whether the comparison ran is not yet known");
-        assertFalse(hundred.hit(), "unavailable is not met");
+        assertEquals(MeasurementStatus.COMPLETE, hundred.status());
+        assertTrue(hundred.hit(), "the row wrote 100 and the guard compared it");
         assertTrue(hundred.origin().startsWith("guard"), hundred.origin());
+    }
+
+    /**
+     * Writing the value is not reaching the comparison.
+     *
+     * <p>Here an earlier guard sends every negative cost away before the second one is evaluated, so a
+     * row at exactly 100 on that second line never gets to it. The value is in the row and the rule was
+     * never run against it, and counting that as met would report a rule as exercised that nothing has
+     * ever executed.
+     */
+    @Test
+    void aValueWrittenButNeverComparedDoesNotMeetTheLine() {
+        PartitionEvidence evidence = evidence("""
+                module example.trip
+
+                data Amount = Int
+                    invariant value >= -1000
+
+                data Draft = { cost: Amount }
+                data Submitted = { cost: Amount }
+                data Waiting = { cost: Amount }
+
+                behavior submit : (request: Draft) -> Submitted | Waiting
+                    constructs Submitted, Waiting
+
+                let submit (request) = {
+                    guard request.cost.value >= 0 else Waiting { cost = request.cost }
+                    guard request.cost.value <= 100 else Waiting { cost = request.cost }
+                    Submitted { cost = request.cost }
+                }
+
+                example submit
+                    | (Draft { cost = Amount(-1) }) -> Waiting { cost = Amount(-1) }
+                """);
+
+        PartitionEvidence.BoundaryCoverage first = at(evidence, "0").stream()
+                .filter(b -> b.origin().startsWith("guard")).findFirst().orElseThrow();
+        PartitionEvidence.BoundaryCoverage second = at(evidence, "100").get(0);
+
+        assertEquals(MeasurementStatus.COMPLETE, second.status(), "the arms were measured");
+        assertFalse(second.hit(), "no row was ever compared against 100");
+        assertFalse(first.hit(), "and the row wrote -1, not 0");
     }
 
     @Test

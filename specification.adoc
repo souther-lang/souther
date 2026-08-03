@@ -2316,6 +2316,21 @@ An input position carries the same three, with *executed* in place of *observed*
 
 *The question is asked of a module, not of a source.* A behavior's rows are written in the module's own source and in any number of attached files (<<example-placement>>), so a source-by-source reading would report what another file covers as uncovered.
 
+[#example-branch-coverage]
+=== Which arms of the body the rows go through
+
+Where a behavior has a body, `+souther examples+` also reports which of its arms the rows run through. An arm is one branch of an `+if+` or a `+guard+` (<<if>>), one arm of a `+match+` (<<match>>), or the success branch or one departure of an attempted construction (<<attempted-construction>>). Cases written together on one arm are one arm: they are one run of code, and a row takes it or does not.
+
+This is *branch-arm* coverage and nothing wider. Going through both arms of two nested conditions is four arms and says nothing about whether their combinations were tried, so covering every arm is a lower bound on covering what a body can do rather than the same thing.
+
+An `+unreachable+` (<<unreachable>>) is not an arm. Reaching one is already <<e1911>>, so counting it would leave every correct model permanently one arm short. An invariant clause is not one either: it is a property of a type rather than a fork in this body, and whether the rows reach its edges is <<example-adequacy>>'s question, asked another way.
+
+*The measurement is opted into by writing a row.* A behavior that no row names is not reported as having arms nothing reaches, whether or not another behavior's rows run through it. A row about `+A+` that calls `+B+` did go through `+B+`'s arm and that arm counts as reached; what does not follow is that `+B+`'s author has been asked anything.
+
+*A row that did not finish contributes nothing.* What such a row went through before its budget ran out (<<e1910>>) is some of what it would have gone through, and it is recorded as undecided rather than counted.
+
+*A boundary a guard drew is met by reaching the comparison, not by writing the value.* A threshold read off a `+guard+` is a boundary to reach (<<example-adequacy>>), and a row can carry exactly that value and never get to the guard because an earlier branch went the other way. Such a boundary counts as met only where a row both wrote the value and went through one of the two arms of the `+if+` whose condition compares it. A boundary an invariant drew is met by writing the value: nothing outside the bound can be constructed, so the edge is the whole of what there is to reach.
+
 [#control-flow]
 == Control structures
 

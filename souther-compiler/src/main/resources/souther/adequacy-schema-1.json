@@ -67,7 +67,36 @@
         },
         "status": { "$ref": "#/$defs/status" },
         "signature": { "$ref": "#/$defs/signature" },
-        "partition": { "$ref": "#/$defs/partition" }
+        "partition": { "$ref": "#/$defs/partition" },
+        "branch": { "$ref": "#/$defs/branch" }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "description": "Which arms of the behavior's body the rows go through. Branch-arm coverage, not path coverage: going through both arms of two nested conditions says nothing about their combinations.",
+      "required": ["status", "arms", "covered", "unreached"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/status",
+          "description": "`unavailable` where nothing measured the arms: a behavior with no `let`, one no row names, or a run whose instrumentation could not be tied back to the body."
+        },
+        "arms": { "type": "integer", "minimum": 0 },
+        "covered": { "type": "integer", "minimum": 0 },
+        "unreached": {
+          "type": "array",
+          "description": "Arms no row goes through.",
+          "items": {
+            "type": "object",
+            "required": ["label", "kind", "at"],
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string" },
+              "kind": { "enum": ["then", "else", "case", "constructed", "departure"] },
+              "at": { "$ref": "#/$defs/at" }
+            }
+          }
+        }
       }
     },
     "partition": {
@@ -213,16 +242,18 @@
                    "probe_mapping_lost", "search_limit", "axis_omitted"]
         },
         "subject": { "type": "string" },
-        "at": {
-          "type": "object",
-          "required": ["sourceId", "line", "column"],
-          "additionalProperties": false,
-          "properties": {
-            "sourceId": { "type": "string" },
-            "line": { "type": "integer" },
-            "column": { "type": "integer" }
-          }
-        }
+        "at": { "$ref": "#/$defs/at" }
+      }
+    },
+    "at": {
+      "type": "object",
+      "description": "Where in which source. A position alone cannot say which file, since a module's rows are written across its own source and any attached ones.",
+      "required": ["sourceId", "line", "column"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceId": { "type": "string" },
+        "line": { "type": "integer" },
+        "column": { "type": "integer" }
       }
     }
   }
