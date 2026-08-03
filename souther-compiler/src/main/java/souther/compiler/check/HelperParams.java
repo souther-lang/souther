@@ -202,7 +202,15 @@ final class HelperParams {
                 }
             }
         }
-        return found;
+        // What the readings settled about a variable may be settled while a later parameter is read,
+        // so what each of them is, is asked for once every parameter is in. `bothContain (xs, ys, y)`
+        // learns that the two calls' elements are one thing only while `y` is being read, and `xs`
+        // was answered before that.
+        Map<Integer, Type> settled = new LinkedHashMap<>();
+        for (Map.Entry<Integer, Type> e : found.entrySet()) {
+            settled.put(e.getKey(), typing.asSettled(e.getValue()));
+        }
+        return settled;
     }
 
     /**
@@ -302,9 +310,8 @@ final class HelperParams {
         private final CheckContext ctx;
         private final Map<String, ReqSig> reqSigs;
         private final Map<String, Type> recursiveHelperFns;
-        /** What this walk has minted for the parameter it is reading. A second position that asks
-         * the same signature is a second reading, and mints its own; the two are taken together
-         * where they answer one value. */
+        /** What each call in this body has decided for the variables its callee left open. One
+         * decision per call, read by every parameter that reaches it. */
         private final Freshening freshening = new Freshening();
         private Type pinned;
         /** Whether the position now being read is a field read off its child. */
@@ -313,8 +320,10 @@ final class HelperParams {
         private BindingId target;
         /** What every other parameter of this helper is known to be, for {@link #saysWhatAnotherHolds}. */
         private List<Type> otherParameters = List.of();
-        /** Every reading of the parameter that leaves what it holds open, and what they settle. */
-        private Readings readings = new Readings();
+        /** Every reading of a parameter that leaves what it holds open, and what they settle. One
+         * for the body: the shape is one parameter's, and what it settles about a variable is every
+         * parameter's, because they are read in one body. */
+        private final Readings readings = new Readings();
         private OpenUse openUse;
 
         BodyTyping(Symbols symbols, Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
@@ -342,9 +351,8 @@ final class HelperParams {
             this.otherParameters = others;
             this.target = target.id();
             this.pinned = null;
-            this.readings = new Readings();
+            this.readings.forParameter();
             this.openUse = null;
-            this.freshening.forParameter(target.id());
             // A recursive helper's call is left standing rather than expanded, so the neighbouring
             // expression a parameter takes its type from can be one — `x + count(t)` reads `count(t)`
             // to type `x`. Its signature goes in here, once, and every inner scope is derived from
@@ -365,6 +373,11 @@ final class HelperParams {
          */
         private void offer(Type t) {
             readings.add(t);
+        }
+
+        /** {@code t} with what the readings of this body have settled written through it. */
+        Type asSettled(Type t) {
+            return readings.asSettled(t);
         }
 
         /** A use of the parameter that named no type, from the last {@link #typeOf} that found none. */
@@ -777,14 +790,14 @@ final class HelperParams {
             } catch (CompileException _) {
                 return sig.params();   // the call does not fit its signature; the check reports it
             }
-            // What the call solved and what it left for this parameter to carry, substituted at once:
-            // a variable that arrived as one of the call's answers was minted somewhere already, and
-            // renaming after the substitution would mint it a second time.
-            Map<String, Type> minted = freshening.renaming(sig.params(), bind);
+            // What this call decided for the variables it left open, and over it what this walk
+            // solved. The decision belongs to the call, so every parameter reading it reads the same
+            // one, and what the call solved outright wins over what it only named.
+            Map<String, Type> decided = freshening.of(call, sig.params());
             Map<String, Type> settled = bind;
-            if (!minted.isEmpty()) {
-                settled = new HashMap<>(bind);
-                settled.putAll(minted);
+            if (!decided.isEmpty()) {
+                settled = new HashMap<>(decided);
+                settled.putAll(bind);
             }
             List<Type> out = new ArrayList<>();
             for (Type param : sig.params()) {
@@ -917,8 +930,9 @@ final class HelperParams {
          * out, say nothing: {@code let id (v) = v} is open however the walk reached it.
          */
         private boolean saysWhatAnotherHolds(Type.Var v) {
+            Type is = readings.asSettled(v);
             for (Type other : otherParameters) {
-                if (Type.mentions(other, x -> x.equals(v))) {
+                if (Type.mentions(readings.asSettled(other), x -> x.equals(is))) {
                     return true;
                 }
             }

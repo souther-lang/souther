@@ -1,84 +1,65 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BindingId;
+import souther.compiler.ast.Ast;
 import souther.compiler.types.Type;
 
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * The variables one helper parameter carries, minted where a declaration is read.
+ * What each call standing in one body decides for the variables its callee's signature left open.
  *
- * <p>A library signature is resolved once, when the library is loaded, and every call site reads
- * that one value; nothing instantiates it. A call builds its own bindings and substitutes, so a
- * variable the call solves becomes what it was solved to and one it does not solve comes back out as
- * the variable the library wrote. Two unrelated calls therefore hand back one name —
- * {@code List.length} and {@code Set.size} both wrote {@code 'a} — and a parameter that took its
- * answer from each of them would claim the two hold the same thing.
+ * <p>A library signature is resolved once, when the library is loaded, and every call site reads that
+ * one value; nothing instantiates it. A call builds its own bindings and substitutes, so a variable
+ * the call solves becomes what it was solved to and one it does not solve comes back out as the
+ * variable the library wrote. Two unrelated calls therefore hand back one name — {@code List.length}
+ * and {@code Set.size} both wrote {@code 'a} — and a parameter that took its answer from each of them
+ * would claim the two hold the same thing.
  *
- * <p>So the instantiation that never happened is done here, at the one place where the two can be
- * told apart: reading a declaration, with that call's bindings in hand. A variable the declaration
- * wrote and the call did not solve is the declaration's own, and is minted afresh. A variable that
- * arrived through what the position asked for was minted already — by an earlier parameter of this
- * helper, or at an outer call — and is carried through untouched. The question is where the variable
- * came from, not what it is spelled.
+ * <p>So the instantiation that never happened is done here, and it belongs to <em>the call</em>. One
+ * application of a signature decides its variables once, and every parameter of the helper that reads
+ * that call reads the same decision: {@code Set.contains(v, s)} says {@code v} is what {@code s}
+ * holds, whichever of the two the walk is settling. Deciding afresh for each parameter would say that
+ * of neither.
  *
- * <p>One declaration is instantiated once, over everything it declares at that call: a signature
- * that writes {@code 'a} in two of its parameters wrote one variable, and {@code Set.union(a, b)}
- * says the two sets hold the same thing.
- *
- * <p>A minted name is stable for a given source: it names the binding the parameter is
- * and counts the declarations read for it in the order they are read, both of which the same source
- * gives the same way twice. It carries a {@code .}, which no written type variable can — the lexer
- * takes only identifier characters after the apostrophe — so it is never a name an author or the
- * core could have written.
+ * <p>An expansion follows the same rule where it inlines a call, instantiating the callee's signature
+ * once over the bindings its arguments become. Whether a call stands or is expanded is then not
+ * something the answer depends on.
  */
 final class Freshening {
 
-    private String parameter = "";
-    private int declarations;
-
-    /** Starts again for {@code target}: another parameter's variables are not this one's. */
-    void forParameter(BindingId target) {
-        declarations = 0;
-        parameter = target.toString();
-    }
-
-    /** {@code declared} with the variables it wrote replaced by this parameter's own. */
-    Type instantiate(Type declared) {
-        Map<String, Type> rename = renaming(List.of(declared), Map.of());
-        return rename.isEmpty() ? declared : TypeOps.substitute(declared, rename);
-    }
+    /** What each call has decided, by the call it is. Two calls written the same way are two
+     * applications, so they are told apart by which node they are and not by how they read. */
+    private final Map<Ast.Apply, Map<String, Type>> decided = new IdentityHashMap<>();
 
     /**
-     * What to rename the variables {@code declared} wrote and {@code solved} did not solve to.
-     *
-     * <p>Asked of the declaration as it was written, before {@code solved} is substituted into it: a
-     * variable that came in as one of {@code solved}'s answers was minted somewhere already, and
-     * asking after the substitution would see it standing in the declaration and mint it again. The
-     * caller substitutes both at once.
+     * What {@code call} decides for the variables {@code declared} left open — one fresh variable
+     * each, and the same ones every time this call is asked. Empty where the declaration left none
+     * open, which is most calls.
      */
-    Map<String, Type> renaming(List<Type> declared, Map<String, Type> solved) {
-        Map<String, Type> rename = new LinkedHashMap<>();
+    Map<String, Type> of(Ast.Apply call, List<Type> declared) {
+        Map<String, Type> already = decided.get(call);
+        if (already != null) {
+            return already;
+        }
+        Map<String, Type> theirs = new LinkedHashMap<>();
+        String at = "c" + decided.size();
         for (Type t : declared) {
-            collect(t, solved, rename);
+            collect(t, at, theirs);
         }
-        if (!rename.isEmpty()) {
-            declarations++;
-        }
-        return rename;
+        decided.put(call, theirs);
+        return theirs;
     }
 
-    private void collect(Type t, Map<String, Type> solved, Map<String, Type> rename) {
+    private static void collect(Type t, String at, Map<String, Type> theirs) {
         if (t == null) {
             return;
         }
         Type.mentions(t, x -> {
-            if (x instanceof Type.Var v && !solved.containsKey(v.name())
-                    && !rename.containsKey(v.name())) {
-                rename.put(v.name(),
-                        Type.inferredVar(v.name() + "." + parameter + "." + declarations));
+            if (x instanceof Type.Var v && !theirs.containsKey(v.name())) {
+                theirs.put(v.name(), Type.inferredVar(v.name() + "." + at));
             }
             return false;   // a collector, not a test: every position is visited
         });
