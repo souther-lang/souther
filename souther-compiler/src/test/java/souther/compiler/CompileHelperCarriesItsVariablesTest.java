@@ -24,6 +24,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class CompileHelperCarriesItsVariablesTest {
 
+    /** Whether {@code name} settled its element to Int: it takes a List of Ints and not of Strings. */
+    private static boolean walksInts(String name, String helper) {
+        return compiles(helper + "\nlet takesInts (k: Int) = " + name + "([ 1, 2 ]) + k")
+                && !compiles(helper + "\nlet takesText (k: Int) = " + name + "([ \"a\" ]) + k");
+    }
+
     /** Whether a module holding {@code defs} and a behavior that uses none of them compiles. */
     private static boolean compiles(String defs) {
         String src = """
@@ -122,8 +128,11 @@ class CompileHelperCarriesItsVariablesTest {
      * read on its own. {@code y} is the element of {@code xs}, and nothing left after the expansion
      * says so; the annotation states it instead.
      *
-     * <p>Stated rather than left to be discovered. Before a helper could carry a variable at all,
-     * both of these parameters were annotated; this widens that to one of them.
+     * <p>Pinned as what happens rather than as what should: which side of the intrinsic /
+     * self-hosted line the library put a function on is not something an author can see, and
+     * {@code Set.union} — an intrinsic of the same shape — does link its two. Tracked as issue #313.
+     * Before a helper could carry a variable at all both of these parameters were annotated, so this
+     * widens that to one of them rather than narrowing anything.
      */
     @Test
     void aRelationInsideAnExpansionIsNotCarriedAcrossTheBindingsItBecomes() {
@@ -135,6 +144,36 @@ class CompileHelperCarriesItsVariablesTest {
                 let has (xs: List<Int>, y) = List.member(y, xs)
                 let use (b: Bool) = has([ 1 ], 2) && b"""),
                 "writing what the list holds says it");
+    }
+
+    // --- what a position states reaches the arms, and what an arm states wins ---
+
+    @Test
+    void anArmThatStatesTheWholeTypeWinsOverAPositionThatStatesTheContainer() {
+        assertTrue(walksInts("n", "let n (xs) = List.length(if true then xs else [ 1, 2, 3 ])"),
+                "the other arm names the element, so `xs` walks Ints and not anything");
+    }
+
+    @Test
+    void aPositionStatingTheContainerReachesAnArmWhereNoArmStatesMore() {
+        assertTrue(compiles("""
+                let n (bb: Bool, xs) = List.length(if bb then xs else [])
+                let use (k: Int) = n(true, [ 1 ]) + n(false, [ "a" ]) + k"""),
+                "nothing names the element, so it stays open and each call decides it");
+    }
+
+    @Test
+    void twoArmsHoldingTwoParametersHoldOneThing() {
+        // The `if` reads them together, so they are one element type — and the position's freshly
+        // minted variable must not win over the one the other arm already carries.
+        assertTrue(compiles("""
+                let n (bb: Bool, xs, ys) = List.length(if bb then xs else ys)
+                let use (k: Int) = n(true, [ 1 ], [ 2 ]) + k"""),
+                "two lists of Ints fit");
+        assertFalse(compiles("""
+                let n (bb: Bool, xs, ys) = List.length(if bb then xs else ys)
+                let use (k: Int) = n(true, [ 1 ], [ "a" ]) + k"""),
+                "a list of Ints and a list of Strings do not");
     }
 
     // --- one helper, monomorphized per expansion ---

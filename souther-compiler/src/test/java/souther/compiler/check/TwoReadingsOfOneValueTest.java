@@ -70,6 +70,26 @@ class TwoReadingsOfOneValueTest {
         assertNull(CandidateMerge.of(v("a"), pair(Type.INT, v("a"))));
     }
 
+    /**
+     * What one reading said about a variable is still said when the next reading arrives. Readings
+     * are taken one at a time as the walk finds them, so a relation two of them settle has to reach
+     * the third: {@code a} is {@code b} and {@code b} is a list of {@code b} cannot both hold,
+     * whichever pair is put together first.
+     */
+    @Test
+    void whatTwoReadingsSettledIsStillSettledWhenTheThirdArrives() {
+        assertNull(CandidateMerge.of(List.of(v("a"), v("b"), Type.list(v("b")))));
+        assertNull(CandidateMerge.of(List.of(Type.list(v("b")), v("b"), v("a"))));
+
+        Type ab = pair(v("a"), v("b"));
+        Type ba = pair(v("b"), v("a"));
+        Type intA = pair(Type.INT, v("a"));
+        assertEquals(pair(Type.INT, Type.INT), CandidateMerge.of(List.of(ab, ba, intA)));
+        assertEquals(pair(Type.INT, Type.INT), CandidateMerge.of(List.of(ab, intA, ba)));
+        assertEquals(pair(Type.INT, Type.INT), CandidateMerge.of(List.of(ba, intA, ab)));
+        assertEquals(pair(Type.INT, Type.INT), CandidateMerge.of(List.of(intA, ab, ba)));
+    }
+
     /** Neither reading is the one being checked, so which is given first decides nothing. */
     @Test
     void theAnswerIsTheSameWhicheverReadingIsGivenFirst() {
@@ -96,13 +116,13 @@ class TwoReadingsOfOneValueTest {
         Type a = Type.list(v("a"));
         Type b = Type.list(Type.INT);
         Type c = Type.list(v("b"));
-        assertEquals(CandidateMerge.of(CandidateMerge.of(a, b), c),
-                CandidateMerge.of(a, CandidateMerge.of(b, c)));
+        assertEquals(CandidateMerge.of(List.of(a, b, c)), CandidateMerge.of(List.of(c, b, a)));
 
         Type wide = pair(v("a"), v("a"));
         Type ints = pair(Type.INT, Type.INT);
         Type mixed = pair(Type.INT, Type.STRING);
-        assertNull(CandidateMerge.of(CandidateMerge.of(wide, ints), mixed));
-        assertNull(CandidateMerge.of(wide, CandidateMerge.of(ints, mixed)));
+        assertNull(CandidateMerge.of(List.of(wide, ints, mixed)));
+        assertNull(CandidateMerge.of(List.of(mixed, ints, wide)));
+        assertNull(CandidateMerge.of(List.of(ints, mixed, wide)));
     }
 }

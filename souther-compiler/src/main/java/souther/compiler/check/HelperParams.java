@@ -292,6 +292,8 @@ final class HelperParams {
         private boolean readingAField;
         /** The parameter being settled: a variable minted for it is what is being worked out. */
         private BindingId target;
+        /** Every reading of the parameter that leaves what it holds open, held together. */
+        private final CandidateMerge readings = new CandidateMerge();
         private Type open;
         private boolean openConflicted;
         private OpenUse openUse;
@@ -318,6 +320,7 @@ final class HelperParams {
             this.pinned = null;
             this.open = null;
             this.openConflicted = false;
+            this.readings.forget();
             this.openUse = null;
             this.freshening.forParameter(target.id());
             // A recursive helper's call is left standing rather than expanded, so the neighbouring
@@ -339,19 +342,8 @@ final class HelperParams {
          * bound by trying one.
          */
         private void offer(Type t) {
-            if (openConflicted) {
-                return;
-            }
-            if (open == null) {
-                open = t;
-                return;
-            }
-            Type merged = CandidateMerge.of(open, t);
-            if (merged == null) {
-                openConflicted = true;
-            } else {
-                open = merged;
-            }
+            open = readings.take(t);
+            openConflicted = open == null;
         }
 
         /** A use of the parameter that named no type, from the last {@link #typeOf} that found none. */
