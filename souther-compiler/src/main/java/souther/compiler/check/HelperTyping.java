@@ -155,7 +155,7 @@ public final class HelperTyping {
         // where it is written — is reported as the function it is.
         for (int idx : open) {
             Ast.FnParam p = h.params().get(idx);
-            if (HelperParams.isApplied(body, p.name())) {
+            if (HelperParams.isApplied(body, p.binder())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.helper.fnparam").title("check.helper.title")
                                 .at(p.pos(), p.name().length()).args(h.name(), p.name()).build(),

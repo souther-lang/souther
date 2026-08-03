@@ -195,6 +195,56 @@ class CompileHelperBodyTypingTest {
     }
 
     @Test
+    void aClosureIsReadAgainstTheResultItsSignatureDeclares() {
+        // `List.find`'s step answers a Bool, so the closure's `v` is a Bool, so `xs` is a
+        // List<Bool>. Nothing else in the call says what the list holds.
+        assertTrue(bodyTypes("let firstTrue (xs) = List.find((v) -> v, xs)"),
+                "the step's declared result types the element the closure walks");
+    }
+
+    @Test
+    void anArgumentBesideAClosureIsSolvedBeforeTheClosureIsRead() {
+        // The seed says what the fold accumulates, and the step is read knowing it: `acc` is an Int
+        // because `0` is, and `x` is one because `acc + x` puts it beside `acc`. Reading the step
+        // first would leave both open and ask for an annotation on `xs`.
+        assertTrue(bodyTypes("let total (xs) = List.fold((acc, x) -> acc + x, 0, xs)"),
+                "the seed binds the accumulator before the step is read");
+    }
+
+    @Test
+    void anArmThatAnswersNoValueDeterminesNothing() {
+        // `unreachable` answers no value, so the arm beside it says nothing about what `v` is —
+        // an arm determines its sibling only where it answers one (ADR-0066). Taking `Never` for
+        // an answer would write it onto the parameter and let every call through.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X constructs X
+                let choose (b: Bool, v) = if b then v else unreachable "impossible"
+                let f (x) = X(choose(true, x.value))
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertTrue(e.getMessage().contains("choose") && e.getMessage().contains("v"), e.getMessage());
+    }
+
+    @Test
+    void aClosureParameterSpelledLikeTheHelpersDoesNotTypeIt() {
+        // The `v` the lambda binds is another binding that happens to be spelled the same. What
+        // types it — `v * 2` — says nothing about the helper's own `v`, which nothing determines.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X constructs X
+                let ignored (v, xs: List<Int>) = List.map((v) -> v * 2, xs)
+                let f (x) = X(List.length(ignored(x, [ 1, 2 ])))
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertTrue(e.getMessage().contains("ignored") && e.getMessage().contains("v"), e.getMessage());
+    }
+
+    @Test
     void aCallSiteNoLongerTypesAParameter() {
         // `id`'s body says nothing about `v`. That the only call passes an Int is not consulted:
         // a helper is typed by its body, not by its callers.
