@@ -2281,7 +2281,9 @@ Evaluation begins by itself. The row is unchanged when the `+let+` arrives; from
 
 A `+fake+` is not what a pending row wants. A fake stands in for a dependency while some *other* behavior's row runs (<<example-fakes>>); an `+example+` of an injected behavior says what that behavior itself will have to answer. Neither is run from the other, so both belong. An injected behavior declares no `+depends on+` of its own (<<depends-on>>), so a pending row needs no fake at all.
 
-They are read against each other all the same. Where a stand-in and a recorded row answer one input differently, that is <<e1919>>. What a fake answers for an input is what the fake itself would answer — the first row stating that input, and otherwise the `+_+` row (<<example-fakes>>) — so a table's default is what a recorded row is held against wherever no explicit row states its input, and a second table written for one dependency states nothing, since the first is the one that answers.
+They are read against each other all the same. Where a stand-in and a recorded row answer one input differently, that is <<e1919>>.
+
+Each side is read the way it is read where it is used. What a fake answers for an input is what the fake itself would answer — the first row stating that input, and otherwise the `+_+` row (<<example-fakes>>) — so a table's default is what a recorded row is held against wherever no explicit row states its input; a table with a row that will not build answers nothing at all, being one no fake can stand in with; and a second table written for one dependency states nothing, since the first is the one that answers. A recorded row is read as the evaluator reads it: its arity, its inputs built against their parameter types, and its expectation held against the output's cases (<<e1904>>) and then built. A row that fails any of those states nothing here, because it states nothing there.
 
 A `+with dep = value+` is read this way only where `+dep+` takes no input. A fake row states its own inputs, so a recorded input picks the row that answers it and nothing is evaluated in between. A `+with+` states none: it is bound to the run of the row it is written on, and what reaches the dependency there is whatever the parent behavior computes and passes. Held against every recorded row it would drop the parent row's own input, and two rows faking two answers for two different inputs — each right about its own — would read as contradicting each other. A dependency taking nothing has one input, `+()+`, so there the `+with+` and the row recorded for it are about the same call. A `+with+` takes precedence over a `+fake+` table while its own row runs, and that settles nothing here: the table remains a statement about the same behavior, written for every other row and every other run.
 
@@ -3681,7 +3683,9 @@ A warning, and not one the adequacy dial turns on (<<example-adequacy>>): nothin
 
 One disagreement is said twice: once at the recorded row and once at the stand-in, each in the file it is written in, because the two may be in different sources (<<example-placement>>) and a diagnostic quotes one. The other statement is named by what it answers and by the line and column it is at.
 
-Where either side names a case and nothing under it (<<example-expected>>), the comparison is on the case. A row whose inputs or whose expectation will not build states nothing to compare, and what is wrong with it is said as the fixture error it is (<<e1903>>).
+Where either side names a case and nothing under it (<<example-expected>>), the comparison is on the case the text names, resolved to the type it denotes — not the class the value arrives in, which does not tell one module's case from another's of the same name. A side whose case the text does not name states nothing to compare against a bare case.
+
+A row whose arity is wrong, whose inputs or expectation will not build, or whose expectation is not a case the behavior answers with, states nothing to compare, and each is said as the error it is (<<e1903>>, <<e1904>>).
 
 [#e2001]
 === A recursive helper is not proven total

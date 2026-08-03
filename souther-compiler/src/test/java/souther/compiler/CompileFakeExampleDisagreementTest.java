@@ -188,6 +188,72 @@ class CompileFakeExampleDisagreementTest {
         assertEquals(0, found.size(), found.toString());
     }
 
+    /**
+     * A table with a row that will not build is one the fake cannot stand in with at all (E1908), so
+     * it answers nothing — not even for the inputs its other rows state. Reading one row of it would
+     * report what a fake answers for a table the runner refuses to build.
+     */
+    @Test
+    void aTableWithAnUnbuildableRowAnswersNothing() {
+        assertEquals(List.of(), codesOf("""
+                module example.clash
+                import String ( length )
+
+                data MemberId = String
+                    invariant length(value) > 0
+
+                data Found = { id: MemberId }
+                data Missing = { why: String }
+
+                behavior findMember : (id: MemberId) -> Found | Missing
+
+                example findMember
+                    | "m-1 is a member" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
+
+                fake findMember
+                    | (MemberId("m-1")) -> Missing { why = "none" }
+                    | (MemberId("m-2")) -> Found { id = MemberId("") }
+                """));
+    }
+
+    /**
+     * A row expecting a case the behavior has no arm for records nothing about it — that is E1904 —
+     * so there is no answer of its for a stand-in to disagree with.
+     */
+    @Test
+    void aRowExpectingACaseTheBehaviorCannotAnswerWithStatesNothing() {
+        assertEquals(List.of(), codesOf("""
+                module example.clash
+
+                data Found = { id: String }
+                data Missing = { why: String }
+                data Unauthorized = { why: String }
+
+                behavior find : (id: String) -> Found | Missing
+
+                example find
+                    | "blocked" : ("m-1") -> Unauthorized { why = "blocked" }
+
+                fake find
+                    | ("m-1") -> Missing { why = "none" }
+                """));
+    }
+
+    /** The E1919s of a compile that may also fail, read off the reports rather than the warnings —
+     * a compile that raises drops the warnings it had collected. */
+    private static List<String> codesOf(String model) {
+        souther.compiler.query.Compilation compilation =
+                souther.compiler.query.Compilation.ofSource(model, "Main");
+        compilation.answerEverything();
+        List<String> codes = new ArrayList<>();
+        for (souther.compiler.query.Db.Found found : compilation.db().allReports()) {
+            if ("E1919".equals(found.report().diagnostic().code())) {
+                codes.add(found.report().diagnostic().code());
+            }
+        }
+        return codes;
+    }
+
     // --- a row that names only a case ---------------------------------------------------------
 
     @Test

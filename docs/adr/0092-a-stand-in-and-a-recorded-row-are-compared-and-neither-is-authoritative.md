@@ -46,11 +46,19 @@ much stronger claim than reporting the disagreement needs.
    statements about what one behavior answers. What is reported is that they disagree and where each
    is written.
 
-2. **The comparison is against the answer the stand-in would actually give for that input.** The rule
-   that picks a fake's row is the fake's own — the first explicit row stating the arguments, and
-   otherwise the `_` row — and it is shared with the proxy the example runner builds, not re-derived
-   beside it. A table's default is therefore what a recorded row is held against wherever no explicit
-   row states its input.
+2. **Each side is read the way it is read where it is used.** The rule that picks a fake's row is the
+   fake's own — the first explicit row stating the arguments, and otherwise the `_` row — and the
+   table it dispatches on is built once, whole, and shared with the proxy the example runner builds.
+   A table's default is therefore what a recorded row is held against wherever no explicit row states
+   its input, and a table with a row that will not build answers nothing, because it is a table no
+   fake can stand in with. A recorded row is read the way the evaluator reads it: arity, inputs
+   against their parameter types, expectation against the output's cases and then built. A side read
+   otherwise here than there would be held to an assertion the model itself refuses.
+
+   The case a comparison turns on is the one the text names, resolved to the type it denotes. The
+   class a value arrives in is a different thing — it does not tell one module's case from another's
+   of the same name — and it is what the evaluator compares a *result* against, which is a comparison
+   between a text and a run rather than between two texts.
 
 3. **A row-local `with dep = value` is compared with recorded rows only when `dep` takes no input.**
    For a dependency that takes inputs, the `with` does not identify which dependency input is

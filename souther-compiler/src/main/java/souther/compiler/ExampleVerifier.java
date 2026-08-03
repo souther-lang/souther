@@ -242,14 +242,21 @@ public final class ExampleVerifier {
         return List.copyOf(found);
     }
 
-    /** The rows of one example, as much of each as is comparable. A row whose arity is wrong, whose
-     * inputs will not build or whose expectation will not build states nothing to compare — each is
-     * reported as the fixture error it is where the row is evaluated. */
+    /**
+     * The rows of one example, as much of each as is comparable.
+     *
+     * <p>A row is read here the way the evaluator reads it: its arity against the signature, its
+     * inputs built against their parameter types, and its expectation against the output's cases and
+     * then built. A row that fails any of those states nothing — each is reported as the arity, input,
+     * arm or fixture error it is where the row is evaluated — and a row read otherwise here than there
+     * would be held to a stand-in on an assertion the model itself refuses.
+     */
     private void readRecorded(Ast.Example ex, String origin, Map<String, List<RecordedRow>> into) {
         Sig sig = sigs.get(ex.target());
         if (sig == null) {
             return;
         }
+        Set<TypeName> cases = outCases(sig.out());
         for (Ast.ExampleRow row : ex.rows()) {
             if (row.inputs().size() != sig.ins().size()) {
                 continue;
@@ -258,8 +265,8 @@ public final class ExampleVerifier {
             if (arguments == null) {
                 continue;
             }
-            Answered answer = answered(row.expected(), sig.out());
-            if (answer instanceof Answered.Unbuildable) {
+            Answered answer = answered(row.expected(), sig.out(), cases);
+            if (answer instanceof Answered.Unreadable) {
                 continue;
             }
             into.computeIfAbsent(ex.target(), _ -> new ArrayList<>()).add(new RecordedRow(
@@ -275,27 +282,25 @@ public final class ExampleVerifier {
         if (rows == null || sig == null) {
             return;
         }
-        // A table that will not build is reported where the fake is used, and says nothing here.
-        Standins table = standins(fk, sig.ins(), new ArrayList<>());
+        // The whole table, built the one way the proxy builds it: a table with a row that will not
+        // build is one the fake cannot stand in with, and it answers nothing here either. What is
+        // wrong with it is reported where the fake is used.
+        Standins table = standins(fk, sig.ins(), sig.out(), new ArrayList<>());
         if (table == null) {
             return;
         }
-        // One row of the table commonly answers many recorded rows — a `_` row answers every input no
-        // explicit row states — and what it answers is the same each time.
-        Map<Ast.FakeRow, Answered> stood = new java.util.IdentityHashMap<>();
         for (RecordedRow row : rows) {
-            Ast.FakeRow answering = standingIn(table, row.arguments());
+            Standin answering = standingIn(table, row.arguments());
             if (answering == null) {
                 continue;   // the table answers nothing for this input; E1909's where it is used
             }
-            Answered its = stood.computeIfAbsent(answering, r -> answered(r.output(), sig.out()));
-            if (differs(row.answer(), its)) {
+            if (differs(row.answer(), answering.answer())) {
                 // The output, not the row: what disagrees is the answer, and the marker lands on it
                 // the way a row's does on its expected.
                 found.add(new Disagreement(fk.target(),
                         said(row.at(), row.expected(), sig.out()),
-                        said(new SourceRef(origin, answering.output().pos()), answering.output(),
-                                sig.out()),
+                        said(new SourceRef(origin, answering.row().output().pos()),
+                                answering.row().output(), sig.out()),
                         false));
             }
         }
@@ -333,8 +338,8 @@ public final class ExampleVerifier {
                 if (rows == null || depSig == null || !depSig.ins().isEmpty()) {
                     continue;
                 }
-                Answered constant = answered(w.value(), depSig.out());
-                if (constant instanceof Answered.Unbuildable) {
+                Answered constant = answered(w.value(), depSig.out(), outCases(depSig.out()));
+                if (constant instanceof Answered.Unreadable) {
                     continue;
                 }
                 for (RecordedRow recordedRow : rows) {
@@ -1028,59 +1033,53 @@ public final class ExampleVerifier {
         for (Ast.Param p : dep.params()) {
             paramTypes.add(TypeOps.successType(p.type(), symbols));
         }
-        Standins table = standins(fk, paramTypes, out);
+        Standins table = standins(fk, paramTypes, outType, out);
         if (table == null) {
-            return null;
-        }
-        // By identity: two rows written the same way are equal records, and which of them answered is
-        // the question this map is asked. The rows a parse produced are distinct objects.
-        Map<Ast.FakeRow, Object> answers = new java.util.IdentityHashMap<>();
-        try {
-            for (Ast.FakeRow r : fk.rows()) {
-                // A dependency that returns a sum has no single decoder; each row names one case,
-                // so decode the row's output against that case's type (as an expected value is).
-                answers.put(r, built(r.output(), fixtureType(r.output(), outType)));
-            }
-        } catch (FixtureException fe) {
-            out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
             return null;
         }
         String depName = fk.target();
         int arity = paramTypes.size();
         java.util.function.Function<Object[], Object> body = a -> {
             Object[] key = java.util.Arrays.copyOf(a, arity);
-            Ast.FakeRow answering = standingIn(table, key);
+            Standin answering = standingIn(table, key);
             if (answering == null) {
                 throw new FakeMissException("`" + depName + "` has no output for "
                         + java.util.Arrays.toString(key));
             }
-            return answers.get(answering);
+            return answering.answer().value();
         };
         return fakeInstance(dep, body, out);
     }
 
     /**
-     * A fake's table with its rows' inputs decoded — the form both the proxy and the consistency
-     * check dispatch on.
+     * A fake's table, decoded — the one form both the proxy and the consistency check read.
      *
-     * <p>The rows in declaration order, because the rule that picks one of them is order-sensitive and
-     * a check that re-derived it would be free to pick another. What the report says a fake answers
+     * <p>The whole table, not the part a reader happens to need. The rule that picks a row is
+     * order-sensitive, so a check that re-derived it would be free to pick another; and a table is
+     * valid or it is not, so a check that built only the row it was asking about would report what a
+     * fake answers for a table the proxy refuses to build at all. What the report says a fake answers
      * has to be what the fake answers.
      */
-    private record Standins(List<Standin> explicit, Ast.FakeRow fallback) {}
+    private record Standins(List<Standin> explicit, Standin fallback) {}
 
-    /** One explicit row of a fake's table, and the arguments it states. */
-    private record Standin(Object[] arguments, Ast.FakeRow row) {}
+    /** One row of a fake's table: the arguments it states — none, for the {@code _} row — and the
+     * answer it was built into. */
+    private record Standin(Object[] arguments, Ast.FakeRow row, Answered.OfValue answer) {}
 
-    /** {@code fk}'s table, its inputs decoded against {@code ins}; null (with a diagnostic reported)
-     * where a row states the wrong number of inputs or one of them will not build. */
-    private Standins standins(Ast.Fake fk, List<Type> ins, List<Diagnostic> out) {
+    /** {@code fk}'s table, decoded against {@code ins} and {@code outType}; null (with a diagnostic
+     * reported) where a row states the wrong number of inputs, or any part of any row will not
+     * build — one bad row is a table the fake cannot stand in with. */
+    private Standins standins(Ast.Fake fk, List<Type> ins, Type outType, List<Diagnostic> out) {
         List<Standin> explicit = new ArrayList<>();
-        Ast.FakeRow fallback = null;
+        Standin fallback = null;
         try {
             for (Ast.FakeRow r : fk.rows()) {
+                // A dependency that returns a sum has no single decoder; each row names one case,
+                // so decode the row's output against that case's type (as an expected value is).
+                Answered.OfValue answer = new Answered.OfValue(constructedCase(r.output()),
+                        built(r.output(), fixtureType(r.output(), outType)));
                 if (r.isDefault()) {
-                    fallback = r;
+                    fallback = new Standin(null, r, answer);
                     continue;
                 }
                 if (r.inputs().size() != ins.size()) {
@@ -1092,7 +1091,7 @@ public final class ExampleVerifier {
                 for (int i = 0; i < ins.size(); i++) {
                     arguments[i] = built(r.inputs().get(i), ins.get(i));
                 }
-                explicit.add(new Standin(arguments, r));
+                explicit.add(new Standin(arguments, r, answer));
             }
         } catch (FixtureException fe) {
             out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
@@ -1106,12 +1105,12 @@ public final class ExampleVerifier {
      * otherwise the {@code _} row. Null where the table answers nothing, which is <em>E1909</em>'s to
      * say where the fake is used.
      */
-    private static Ast.FakeRow standingIn(Standins table, Object[] arguments) {
+    private static Standin standingIn(Standins table, Object[] arguments) {
         for (Standin s : table.explicit()) {
             // by value equality (spec 22), which is the language's: a row written 1.0m is the
             // row a call arriving with 1m wants. Arrays.equals would ask the arguments' own.
             if (sameArguments(s.arguments(), arguments)) {
-                return s.row();
+                return s;
             }
         }
         return table.fallback();
@@ -1288,66 +1287,93 @@ public final class ExampleVerifier {
     sealed interface Answered {
 
         /** The case, and nothing under it: a bare name denoting one. */
-        record OfCase(String name) implements Answered {}
+        record OfCase(TypeName name) implements Answered {}
 
-        /** The whole value. Which case it is is the value's own, read the way a result's is. */
-        record OfValue(Object value) implements Answered {}
+        /** The whole value, and the case the text says it is — null where the text names none (a
+         * literal, a collection, a value a helper answered with). */
+        record OfValue(TypeName name, Object value) implements Answered {}
 
-        /** A fixture that did not build. What is wrong with it is reported where it is built; here it
-         * states nothing, and nothing is what it can be held against. */
-        record Unbuildable() implements Answered {}
+        /** A statement nothing can be read off: a fixture that did not build, or an expectation
+         * naming a case the behavior cannot answer with. What is wrong with it is reported where the
+         * row is evaluated; here it states nothing, and nothing is what it can be held against. */
+        record Unreadable() implements Answered {}
+
+        /** The case this names, or null where the text does not say. */
+        default TypeName caseName() {
+            return switch (this) {
+                case OfCase c -> c.name();
+                case OfValue v -> v.name();
+                case Unreadable _ -> null;
+            };
+        }
     }
 
-    /** What {@code written} answers at a position of type {@code outType}. */
-    private Answered answered(Ast.Expr written, Type outType) {
+    /**
+     * What {@code written} answers at a position of type {@code outType}, where {@code cases} are the
+     * cases that position can hold.
+     *
+     * <p>An expectation naming a case the behavior has no arm for states nothing about that behavior —
+     * it is <em>E1904</em> where the row is evaluated — so it is refused here rather than compared.
+     * Reading it and reporting a disagreement would hold a stand-in against an assertion the model
+     * already refuses.
+     */
+    private Answered answered(Ast.Expr written, Type outType, Set<TypeName> cases) {
         if (written == null) {
-            return new Answered.Unbuildable();
+            return new Answered.Unreadable();
         }
-        String only = caseOnly(written);
-        if (only != null) {
-            return new Answered.OfCase(only);
+        TypeName named = constructedCase(written);
+        if (named != null && !cases.isEmpty() && !cases.contains(named)) {
+            return new Answered.Unreadable();
+        }
+        if (caseOnly(written) != null) {
+            return new Answered.OfCase(named);
         }
         // Through the same builder a row's expectation goes through, so what is compared here is what
         // a row asserts: a value a helper answered with is that value, not that value read back into
         // the form a fixture is written in and decoded again (issue #214). What is wrong with a
         // fixture that will not build is reported where the row is evaluated.
         Object value = builtExpectedOrNull(written, outType);
-        return value == null ? new Answered.Unbuildable() : new Answered.OfValue(value);
+        return value == null ? new Answered.Unreadable() : new Answered.OfValue(named, value);
     }
 
     /**
-     * Whether two answers to one input state different things.
+     * Whether two written answers to one input state different things.
      *
      * <p>Where either names a case and nothing more, the comparison is on the case: there is no value
      * under it to compare, and holding a full value against it would report a disagreement the row
-     * never stated. Where either did not build, nothing is stated to disagree with.
+     * never stated. The case compared is the one the text names, resolved — not the class the value
+     * happens to arrive in, which is a different thing wherever a type's runtime representation is not
+     * a class of its own name, and which does not tell one module's `Missing` from another's.
+     *
+     * <p>Where either states nothing — a fixture that did not build, a case the behavior cannot
+     * answer with, a value whose case the text does not name — there is nothing to disagree with.
+     * Read against a written answer, silence is not a contradiction.
      */
     private static boolean differs(Answered left, Answered right) {
-        if (left instanceof Answered.Unbuildable || right instanceof Answered.Unbuildable) {
+        if (left instanceof Answered.Unreadable || right instanceof Answered.Unreadable) {
             return false;
         }
         if (left instanceof Answered.OfValue l && right instanceof Answered.OfValue r) {
             return !souther.runtime.Values.equal(l.value(), r.value());
         }
-        return !caseOf(left).equals(caseOf(right));
-    }
-
-    /** The case an answer names, whether it was written bare or built into a value. */
-    private static String caseOf(Answered a) {
-        return a instanceof Answered.OfCase named ? named.name()
-                : NeutralForm.simpleName(((Answered.OfValue) a).value());
+        TypeName one = left.caseName();
+        TypeName other = right.caseName();
+        return one != null && other != null && !one.equals(other);
     }
 
     /** Whether {@code result} matches the row's expected: a name denoting a case asserts only the
      * arm (the concrete case class); anything else asserts the whole value, {@code expectedValue}
-     * (built before the behavior ran), by structural equality. */
+     * (built before the behavior ran), by structural equality.
+     *
+     * <p>Not {@link #differs}. That compares two things a person wrote, and reads each one's case off
+     * the text; this compares what was written against what a run produced, and a result carries no
+     * text — the class it arrived in is what says which case it is. */
     private boolean matches(Ast.Expr expected, Object result, Object expectedValue) {
         String arm = caseOnly(expected);
-        if (arm == null && expectedValue == null) {
-            return false;   // nothing was built to compare against
+        if (arm != null) {
+            return NeutralForm.simpleName(result).equals(arm);
         }
-        Answered asserted = arm != null ? new Answered.OfCase(arm) : new Answered.OfValue(expectedValue);
-        return !differs(asserted, new Answered.OfValue(result));
+        return expectedValue != null && souther.runtime.Values.equal(expectedValue, result);
     }
 
     /**

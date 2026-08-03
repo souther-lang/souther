@@ -437,8 +437,8 @@ public final class Output {
      *
      * <p>Asked of the module and not of a source, because the two sides of one disagreement need not
      * be in one file: a module's fakes are what its attached files' rows run against and the other way
-     * round. Each source's key projects the ones written in it ({@link Examples#disagreements}), so
-     * one disagreement is said at both of the places it is written and computed once.
+     * round. Each source's key projects the ones written in it ({@link SaidDisagreements}), so one
+     * disagreement is said at both of the places it is written and computed once.
      */
     public record Disagreements(String name)
             implements Key<List<souther.compiler.ExampleVerifier.Disagreement>> {
@@ -484,10 +484,15 @@ public final class Output {
      * the rows in the module or beside it.
      *
      * <p>Its own key rather than a second thing {@link Examples} says. That key answers what a
-     * source's rows turned out to be and goes absent where they could not be run — an unchecked
-     * module, a name already declared — and these are readable in every one of those cases: nothing
-     * here is run. The value is {@code true} and the reports are the answer, as
-     * {@code Adequacy.Warnings} is.
+     * source's rows turned out to be, and it goes absent for reasons that have nothing to do with
+     * what two statements say about each other — a name the source declares twice, a dependency list
+     * that could not be read — and took these with it. The value is {@code true} and the reports are
+     * the answer, as {@code Adequacy.Warnings} is.
+     *
+     * <p>What is still needed is a module that checks and links: no behavior is applied, but building
+     * a fixture runs the decoders its types derive and the helpers it applies, and those are classes
+     * this compile generated. So a module with a type error says nothing here — its rows say nothing
+     * anywhere yet — and a batch compile that stops at the first error never asks.
      *
      * <p>A warning. The two contradict, and which of them the model is to be held to is not readable
      * from the text — that would be a claim about which side is derived from the other, and neither
