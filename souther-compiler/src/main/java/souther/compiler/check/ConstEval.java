@@ -147,6 +147,20 @@ public final class ConstEval {
                     return Optional.of((long) s.length());
                 }
             }
+            // matches(pattern, s): the pattern is written first and the subject last (spec §pipe).
+            // The pattern of a declaration is already required to be a written constant, so a call
+            // over a written subject is one the compiler answers rather than the run time.
+            case "String.matches" -> {
+                if (args.size() == 2
+                        && eval(args.get(0)).orElse(null) instanceof String pattern
+                        && eval(args.get(1)).orElse(null) instanceof String s) {
+                    try {
+                        return Optional.of(java.util.regex.Pattern.matches(pattern, s));
+                    } catch (java.util.regex.PatternSyntaxException _) {
+                        return Optional.empty();   // the pattern check reports this on its own
+                    }
+                }
+            }
             case "String.contains" -> {
                 // contains(sub, s): the string being searched is the last argument (spec §pipe)
                 if (args.size() == 2
