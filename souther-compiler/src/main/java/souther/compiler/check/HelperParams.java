@@ -525,7 +525,7 @@ final class HelperParams {
          * parameter stays as open as it was.
          */
         private void visitArgs(Ast.Apply call, Scope env, BindingId target, Type expected) {
-            Type.FnOf sig = calleeSignature(call.reaches());
+            Type.FnOf sig = calleeSignature(call, env);
             List<Type> params = sig == null || sig.params().size() != call.args().size()
                     ? null : solved(call, sig, env, target, expected);
             for (int i = 0; i < call.args().size(); i++) {
@@ -649,15 +649,23 @@ final class HelperParams {
         }
 
         /**
-         * The parameter types {@code fn} declares, or null when nothing here declares them. A helper
-         * that annotates its parameters has already been inlined into this body, where its annotation
-         * is on the binding the call became, and a newtype's constructor {@code X(v)} has already been
-         * desugared to a construction; what is left to read is an injected behavior, a recursive
-         * helper and an intrinsic. A built-in that is neither an intrinsic nor a self-hosted helper
-         * states its parameter types only inside {@link CallElaborator}, so an argument of one is not
-         * read here — the parameter is annotated instead.
+         * The parameter types {@code call}'s callee declares, or null when nothing here declares them.
+         * What is applied may be something this body binds — a function-typed parameter, which is
+         * always written (spec 13.1), or a binding holding a function — and a written type is a
+         * declaration wherever it stands, so it is read first. Beyond that: a helper that annotates its
+         * parameters has already been inlined into this body, where its annotation is on the binding
+         * the call became, and a newtype's constructor {@code X(v)} has already been desugared to a
+         * construction; what is left to read is an injected behavior, a recursive helper and an
+         * intrinsic. A built-in that is neither an intrinsic nor a self-hosted helper states its
+         * parameter types only inside {@link CallElaborator}, so an argument of one is not read here —
+         * the parameter is annotated instead.
          */
-        private Type.FnOf calleeSignature(String fn) {
+        private Type.FnOf calleeSignature(Ast.Apply call, Scope env) {
+            if (call.denotes() instanceof ValueName.Local local
+                    && env.typeOf(local.id()) instanceof Type.FnOf sig) {
+                return sig;
+            }
+            String fn = call.reaches();
             ReqSig req = reqSigs.get(fn);
             if (req != null) {
                 return new Type.FnOf(req.params(), req.success());

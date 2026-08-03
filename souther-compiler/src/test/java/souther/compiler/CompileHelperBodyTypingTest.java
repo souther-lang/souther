@@ -435,6 +435,26 @@ class CompileHelperBodyTypingTest {
     }
 
     @Test
+    void aFunctionParametersDeclaredInputTypesItsArgument() {
+        // `f` writes its type, so applying it says what the argument is — the same thing a declared
+        // callee's parameter says anywhere else.
+        assertTrue(bodyTypes("let apply (f: (Int) -> String, v) = f(v)"),
+                "`f`'s declared input types `v` as Int");
+    }
+
+    @Test
+    void aBindingHoldingAFunctionTypesWhatItIsAppliedTo() {
+        // The binding writes the function type, and applying it asks its argument for the input —
+        // a written type is a declaration wherever it stands.
+        assertTrue(bodyTypes("""
+                let show (v) = {
+                    let render: (Int) -> String = (x) -> String.fromInt(x)
+                    render(v)
+                }"""),
+                "`render`'s written input types `v` as Int");
+    }
+
+    @Test
     void aRecursiveHelperStillAnnotatesItsParameters() {
         // A recursive helper is lowered to a method and typed on its declaration, so it writes its
         // parameter types even where a body use would determine them.
