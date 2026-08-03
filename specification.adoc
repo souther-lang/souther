@@ -2281,7 +2281,17 @@ What a row can be held to without a body, it is held to. Its arity, each input b
 
 Evaluation begins by itself. The row is unchanged when the `+let+` arrives; from that compile on it is applied and compared like any other, and a row that stated the wrong answer is <<e1905>> then rather than never.
 
-A `+fake+` is not what a pending row wants. A fake stands in for a dependency while some *other* behavior's row runs (<<example-fakes>>); an `+example+` of an injected behavior says what that behavior itself will have to answer. The two are written about the same name and read nothing of each other, so both belong. An injected behavior declares no `+depends on+` of its own (<<depends-on>>), so a pending row needs no fake at all.
+A `+fake+` is not what a pending row wants. A fake stands in for a dependency while some *other* behavior's row runs (<<example-fakes>>); an `+example+` of an injected behavior says what that behavior itself will have to answer. Neither is run from the other, so both belong. An injected behavior declares no `+depends on+` of its own (<<depends-on>>), so a pending row needs no fake at all.
+
+They are read against each other all the same. Where a stand-in and a recorded row answer one input differently, that is <<e1919>>.
+
+Each side is read the way it is read where it is used. What a fake answers for an input is what the fake itself would answer — the first row stating that input, and otherwise the `+_+` row (<<example-fakes>>) — so a table's default is what a recorded row is held against wherever no explicit row states its input; a table with a row that will not build answers nothing at all, being one no fake can stand in with; and a second table written for one dependency states nothing, since the first is the one that answers. A recorded row is read as the evaluator reads it: its arity, its inputs built against their parameter types, and its expectation held against the output's cases (<<e1904>>) and then built. A row that fails any of those states nothing here, because it states nothing there.
+
+A stand-in and an assertion are not the same kind of thing. A recorded row may name a case and say nothing under it (<<example-expected>>); a `+fake+` row and a `+with+` may not, because what they install is a value, and a case with fields is not one. So a `+with lookup = Missing+` where `+Missing+` has fields stands in for nothing (<<e1908>>) and there is nothing for a row to disagree with.
+
+A `+with dep = value+` is read this way only where `+dep+` takes no input. A fake row states its own inputs, so a recorded input picks the row that answers it and nothing is evaluated in between. A `+with+` states none: it is bound to the run of the row it is written on, and what reaches the dependency there is whatever the parent behavior computes and passes. Held against every recorded row it would drop the parent row's own input, and two rows faking two answers for two different inputs — each right about its own — would read as contradicting each other. A dependency taking nothing has one input, `+()+`, so there the `+with+` and the row recorded for it are about the same call. A `+with+` takes precedence over a `+fake+` table while its own row runs, and that settles nothing here: the table remains a statement about the same behavior, written for every other row and every other run.
+
+Neither side is ranked. A model being migrated onto may run against a stand-in while the real answer is still being harvested, which is written the way a mistake is; what is known is that the two disagree, and where each is written. So it is a warning, and it is said at both statements rather than at one of them.
 
 [,text]
 ----
@@ -3665,6 +3675,25 @@ Hint: Either a row is missing for what this arm answers, or nothing can reach it
 ----
 
 A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at the `+if+`, `+match+` or attempted construction the arm belongs to rather than at the arm's own body: the fork is what the author wrote, and a body is what lowering rewrites. A behavior no row names is not warned about, whether or not another behavior's rows run through it.
+
+[#e1919]
+=== A stand-in and a recorded row answer one input differently
+
+[,text]
+----
+This row and the `fake findMember` row at 26:25 state different answers for the same input.
+Hint: The row says Found { id = "m-1" }; the fake says Missing { why = "no such member" }.
+----
+
+A warning, and not one the adequacy dial turns on (<<example-adequacy>>): nothing is counted and no behavior is applied, and what it costs is building the fixtures on both sides and comparing them. Emitted when a `+fake+` row, or a `+with+` for a dependency that takes no input, answers an input for which an `+example+` row records a different answer (<<example-pending>>). Which of the two the model is to be held to is not readable from the text, so neither is named as the right one.
+
+One disagreement is said twice: once at the recorded row and once at the stand-in, each in the file it is written in, because the two may be in different sources (<<example-placement>>) and a diagnostic quotes one. The other statement is named by what it answers and by the line and column it is at.
+
+Where a recorded row names a case and nothing under it (<<example-expected>>), the comparison is on the case, and the case of the other side is the one its value turned out to be — read from the value, resolved to the type this module knows it under. Which case a value is comes from the value and not from the text that produced it, so a fake row answering through a helper states the case that helper returned.
+
+A row whose fixture does not finish is read within its own budget and states nothing; the rows beside it are unaffected, and what happened is said where that row is evaluated (<<e1910>>).
+
+A row whose arity is wrong, whose inputs or expectation will not build, or whose expectation is not a case the behavior answers with, states nothing to compare, and each is said as the error it is (<<e1903>>, <<e1904>>).
 
 [#e2001]
 === A recursive helper is not proven total

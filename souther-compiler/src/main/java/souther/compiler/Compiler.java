@@ -154,6 +154,9 @@ public final class Compiler {
                 for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
                     failures.add(failure.diagnostic());
                 }
+                // Asked whether or not the rows ran: what two written statements say about each other
+                // is readable when nothing is.
+                db.ask(new Output.SaidDisagreements(module, id));
             }
             if (failures.size() == 1) {
                 throw CompileException.of(failures.get(0),
@@ -279,6 +282,7 @@ public final class Compiler {
                     // a row from an `examples for` file is positioned in that file, not this one
                     exampleSources.add(compilation.sourceIndexOfId(id));
                 }
+                db.ask(new Output.SaidDisagreements(module, id));
             }
         }
         for (String module : compilation.modules()) {

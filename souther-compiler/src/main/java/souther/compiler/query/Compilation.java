@@ -161,25 +161,31 @@ public final class Compilation {
             db.ask(new Output.ConstConstructions(module));
             for (String id : exampleSourcesOf(module)) {
                 db.ask(new Output.Examples(module, id));
+                db.ask(new Output.SaidDisagreements(module, id));
             }
             // One ask, which answers nothing and costs nothing unless the build asked to be told.
             db.ask(new Adequacy.Warnings(module));
         }
     }
 
-    /** The sources that wrote any of {@code module}'s example rows, in order. */
+    /**
+     * The sources that wrote any of {@code module}'s example rows or fakes, in order.
+     *
+     * <p>The fakes as well as the rows, because a source that wrote only a fake still has something
+     * said about it: a fake that answers otherwise than a row records is reported at both, and the
+     * fake's side is this source's to say.
+     */
     public List<String> exampleSourcesOf(String module) {
-        List<String> origins = db.ask(new Front.ExampleOrigins(module)).value();
-        if (origins == null) {
-            return List.of();
+        Set<String> distinct = new LinkedHashSet<>();
+        List<String> rows = db.ask(new Front.ExampleOrigins(module)).value();
+        List<String> fakes = db.ask(new Front.FakeOrigins(module)).value();
+        if (rows != null) {
+            distinct.addAll(rows);
         }
-        List<String> distinct = new ArrayList<>();
-        for (String id : origins) {
-            if (!distinct.contains(id)) {
-                distinct.add(id);
-            }
+        if (fakes != null) {
+            distinct.addAll(fakes);
         }
-        return distinct;
+        return List.copyOf(distinct);
     }
 
     /** What this compilation was asked to measure. Set before anything is asked; the answers are
