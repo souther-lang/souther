@@ -175,9 +175,17 @@ public final class ExampleVerifier {
      * <p>What did not finish states nothing, and nothing is what it is held against. The row it
      * belongs to reports it (E1910).
      */
-    private static <T> java.util.Optional<T> within(java.util.concurrent.Callable<T> read,
-                                                    String what) {
-        java.util.concurrent.FutureTask<T> task = new java.util.concurrent.FutureTask<>(read);
+    private <T> java.util.Optional<T> within(java.util.function.Function<ExampleVerifier, T> read,
+                                             String what) {
+        // On its own reader. A worker that runs out of budget is asked to stop and cannot be made to
+        // — a fixture reaches no interrupt point — so it may still be inside `expandedValue`, holding
+        // a binding or a half-walked expansion. Nothing it can still write to is read by the
+        // statement after it, which is why {@link RowEvaluation} does the same for a row.
+        ExampleVerifier reader = new ExampleVerifier(module, symbols, sigs, requirements, loader,
+                values);
+        reader.sourceId = sourceId;
+        java.util.concurrent.FutureTask<T> task =
+                new java.util.concurrent.FutureTask<>(() -> read.apply(reader));
         Thread worker = new Thread(task, "souther-reading");
         worker.setDaemon(true);
         worker.start();
@@ -306,12 +314,12 @@ public final class ExampleVerifier {
             if (row.inputs().size() != sig.ins().size()) {
                 continue;
             }
-            RecordedRow read = within(() -> {
-                Object[] arguments = builtOrNull(row.inputs(), sig.ins());
+            RecordedRow read = within(reader -> {
+                Object[] arguments = reader.builtOrNull(row.inputs(), sig.ins());
                 if (arguments == null) {
                     return null;
                 }
-                Asserted answer = readExpected(row.expected(), sig.out(), cases);
+                Asserted answer = reader.readExpected(row.expected(), sig.out(), cases);
                 return answer instanceof Asserted.Unreadable ? null
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
@@ -334,7 +342,7 @@ public final class ExampleVerifier {
         // The whole table, built the one way the proxy builds it: a table with a row that will not
         // build is one the fake cannot stand in with, and it answers nothing here either. What is
         // wrong with it is reported where the fake is used.
-        Standins table = within(() -> standins(fk, sig.ins(), sig.out(), new ArrayList<>()),
+        Standins table = within(reader -> reader.standins(fk, sig.ins(), sig.out(), new ArrayList<>()),
                 "the `fake " + fk.target() + "` table").orElse(null);
         if (table == null) {
             return;
@@ -344,13 +352,14 @@ public final class ExampleVerifier {
             if (answering == null) {
                 continue;   // the table answers nothing for this input; E1909's where it is used
             }
-            if (differs(row.answer(), answering.answer())) {
+            Asserted stood = new Asserted.Whole(answering.answer());
+            if (differs(row.answer(), stood)) {
                 // The output, not the row: what disagrees is the answer, and the marker lands on it
                 // the way a row's does on its expected.
                 found.add(new Disagreement(fk.target(),
-                        said(row.at(), row.expected(), sig.out()),
+                        said(row.at(), row.expected(), row.answer()),
                         said(new SourceRef(origin, answering.row().output().pos()),
-                                answering.row().output(), sig.out()),
+                                answering.row().output(), stood),
                         false));
             }
         }
@@ -389,7 +398,7 @@ public final class ExampleVerifier {
                     continue;
                 }
                 Asserted constant = within(
-                        () -> readStandIn(w.value(), depSig.out(), outCases(depSig.out())),
+                        reader -> reader.readStandIn(w.value(), depSig.out(), outCases(depSig.out())),
                         "a `with " + w.dep() + "`").orElse(new Asserted.Unreadable());
                 if (constant instanceof Asserted.Unreadable) {
                     continue;
@@ -397,8 +406,8 @@ public final class ExampleVerifier {
                 for (RecordedRow recordedRow : rows) {
                     if (differs(recordedRow.answer(), constant)) {
                         found.add(new Disagreement(w.dep(),
-                                said(recordedRow.at(), recordedRow.expected(), depSig.out()),
-                                said(new SourceRef(origin, w.value().pos()), w.value(), depSig.out()),
+                                said(recordedRow.at(), recordedRow.expected(), recordedRow.answer()),
+                                said(new SourceRef(origin, w.value().pos()), w.value(), constant),
                                 true));
                     }
                 }
@@ -415,9 +424,20 @@ public final class ExampleVerifier {
      * date is its ISO form, a qualified case name is its short one — so a marker measured from it
      * underlines the wrong columns and can run past the end of the line.
      */
-    private Statement said(SourceRef at, Ast.Expr written, Type outType) {
-        return new Statement(at, souther.compiler.check.Elaborator.width(written),
-                describeExpected(written, outType));
+    private Statement said(SourceRef at, Ast.Expr written, Asserted asserted) {
+        return new Statement(at, souther.compiler.check.Elaborator.width(written), shown(asserted));
+    }
+
+    /** What an assertion says, from what was already read. Rendering from the text again would build
+     * the fixture a second time — running whatever helpers it applies, outside the budget the first
+     * reading was held to — and could show a value other than the one that was compared. */
+    private String shown(Asserted asserted) {
+        return switch (asserted) {
+            case Asserted.CaseOnly only -> only.name().name();
+            case Asserted.Whole whole -> describeActual(whole.fixture().value());
+            case Asserted.Unreadable _ ->
+                    throw new IllegalStateException("nothing was read, so nothing disagreed");
+        };
     }
 
     /** The written inputs decoded against {@code types}, or null where one would not build — that is
@@ -1098,7 +1118,7 @@ public final class ExampleVerifier {
                 throw new FakeMissException("`" + depName + "` has no output for "
                         + java.util.Arrays.toString(key));
             }
-            return ((Asserted.Whole) answering.answer()).fixture().value();
+            return answering.answer().value();
         };
         return fakeInstance(dep, body, out);
     }
@@ -1116,7 +1136,7 @@ public final class ExampleVerifier {
 
     /** One row of a fake's table: the arguments it states — none, for the {@code _} row — and the
      * answer it was built into. */
-    private record Standin(Object[] arguments, Ast.FakeRow row, Asserted answer) {}
+    private record Standin(Object[] arguments, Ast.FakeRow row, BuiltFixture answer) {}
 
     /**
      * {@code fk}'s table, decoded against {@code ins} and {@code outType}; null (with a diagnostic
@@ -1142,7 +1162,7 @@ public final class ExampleVerifier {
             for (Ast.FakeRow r : fk.rows()) {
                 // A dependency that returns a sum has no single decoder; each row names one case,
                 // so decode the row's output against that case's type (as an expected value is).
-                Asserted answer = new Asserted.Whole(buildFixture(r.output(), outType));
+                BuiltFixture answer = buildFixture(r.output(), outType);
                 if (r.isDefault()) {
                     fallback = new Standin(null, r, answer);
                     continue;
@@ -1387,11 +1407,48 @@ public final class ExampleVerifier {
         // decoder route does not, and a stand-in built the other way stated nothing for a fake whose
         // row applies a helper (the shape of issue #214, on the other side).
         Object value = builtExpected(written, outType);
-        // What it turned out to be, and where that is not a type this module knows — a primitive, a
-        // collection — what the text says it constructs. A helper answered a value like any other, so
-        // which case it is comes from the value rather than from the call that produced it.
-        TypeName was = value == null ? null : symbols.resolve(NeutralForm.simpleName(value));
+        TypeName was = caseOfValue(value, outType);
         return new BuiltFixture(was != null ? was : constructedCase(written), value);
+    }
+
+    /**
+     * Which of the cases {@code outType} holds the built {@code value} is, or null where none of them
+     * is what it turned out to be.
+     *
+     * <p>Matched against the cases the position declares rather than looked up by the name of the
+     * class the value arrived in. A class name is not a case name — {@code Int} arrives as a
+     * {@code Long} and {@code Date} as a {@code LocalDate}, so a lookup finds nothing and a primitive
+     * case reads as no case at all — and resolving one in this module's scope would answer for a case
+     * this module happens to declare under the same spelling rather than for the one the value is.
+     */
+    private TypeName caseOfValue(Object value, Type outType) {
+        if (value == null) {
+            return null;
+        }
+        for (TypeName candidate : TypeOps.leafCases(outType, symbols)) {
+            if (represents(candidate, value)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    /** Whether {@code value} is how {@code candidate} is represented at run time: the class a data
+     * case is generated as, and for a primitive case the class its values arrive in. */
+    private static boolean represents(TypeName candidate, Object value) {
+        String carried = switch (candidate.name()) {
+            case "Int" -> "java.lang.Long";
+            case "String" -> "java.lang.String";
+            case "Bool" -> "java.lang.Boolean";
+            case "Decimal" -> "java.math.BigDecimal";
+            case "Date" -> "java.time.LocalDate";
+            case "DateTime" -> "java.time.LocalDateTime";
+            default -> null;
+        };
+        String is = value.getClass().getName();
+        return TypeName.PRIMITIVE.equals(candidate.module())
+                ? carried != null && carried.equals(is)
+                : is.equals(candidate.qualified());
     }
 
     /**

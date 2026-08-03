@@ -372,6 +372,28 @@ class CompileFakeExampleDisagreementTest {
                 """));
     }
 
+    /**
+     * A primitive case of a union is a case like any other. Its values arrive as the class that
+     * carries them — an `Int` as a `Long` — so a case read off the class a value is in finds nothing
+     * and the row naming the other case is held against nothing.
+     */
+    @Test
+    void aPrimitiveCaseOfAUnionIsACaseLikeAnyOther() {
+        assertEquals(List.of("E1919", "E1919"), allCodesOf("""
+                module example.prim
+
+                data Missing = { why: String }
+
+                behavior lookup : () -> Int | Missing
+
+                example lookup
+                    | "absent" : () -> Missing
+
+                fake lookup
+                    | _ -> 1
+                """));
+    }
+
     /** The E1919s of a compile that may also fail, read off the reports rather than the warnings —
      * a compile that raises drops the warnings it had collected. */
     private static List<String> codesOf(String model) {
