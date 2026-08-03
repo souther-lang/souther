@@ -110,6 +110,17 @@ final class Descriptors {
             ClassDesc.of("souther.runtime.ConstraintViolation");
     static final ClassDesc CD_UnreachableReached =
             ClassDesc.of("souther.runtime.UnreachableReached");
+    /**
+     * Where a run went, called by classes generated for measuring and by nothing that ships.
+     *
+     * <p>The compiler's own class rather than the runtime's. A probed class is loaded by a loader
+     * whose parent chain ends at the compiler's, so this resolves while measuring; and since only the
+     * measuring build emits the call, a shipped jar has no reference to it to fail on.
+     */
+    static final ClassDesc CD_Probe = ClassDesc.of("souther.compiler.coverage.Probe");
+    /** {@code Probe.hit(int)}: records one arm and leaves the stack as it was. */
+    static final MethodTypeDesc MTD_Probe_hit =
+            MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int);
     /** {@code UnreachableReached.reached(String)}: aborts, typed as answering the position's value. */
     static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String);
     /** The failure side of {@code __construct}: which clause of which type did not hold. */

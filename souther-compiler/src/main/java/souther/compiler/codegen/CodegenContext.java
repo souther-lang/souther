@@ -75,6 +75,42 @@ final class CodegenContext {
         return dischargeInvariants;
     }
 
+    /**
+     * The arms to record, where this generation is one that measures. Empty otherwise, which is every
+     * generation whose classes are meant to be shipped.
+     *
+     * <p>Keyed by the identity of the nodes being emitted, so what is set here has to be the plan made
+     * from <em>these</em> bodies. Core nodes are records: a plan made from an equal body would answer
+     * for the wrong arm and never say so.
+     */
+    private souther.compiler.coverage.CoverageSites.Plan coverage =
+            souther.compiler.coverage.CoverageSites.Plan.NONE;
+
+    void setCoveragePlan(souther.compiler.coverage.CoverageSites.Plan plan) {
+        this.coverage = plan;
+    }
+
+    boolean measuring() {
+        return !coverage.isEmpty();
+    }
+
+    /**
+     * The arm numbers of one node, in the order the emitter emits them.
+     *
+     * <p>Throws where a measuring generation meets a node the plan does not know. Going on without a
+     * probe would leave an arm that ran reported as one no row reaches, which reads as a gap in the
+     * model rather than as a fault in the measurement — the one failure this must not be quiet about.
+     */
+    int[] probesOf(souther.compiler.core.Core node) {
+        int[] arms = coverage.probesOf(node);
+        if (arms == null) {
+            throw new IllegalStateException("no probe was planned for a "
+                    + node.getClass().getSimpleName() + " at " + node.pos()
+                    + "; the plan was made from other nodes than these");
+        }
+        return arms;
+    }
+
     /** The module being generated. Module is package (spec 4), so this is also {@link #pkg}. */
     String module() {
         return pkg;

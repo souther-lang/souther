@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.codegen.Backend;
+import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.frontend.CstFrontend;
@@ -53,6 +54,35 @@ public final class Output {
 
         @Override
         public Answer<Map<String, byte[]>> compute(Db db) {
+            Inputs in = inputs(db, name);
+            if (in == null) {
+                return Answer.absent();
+            }
+            try {
+                Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
+                        in.lowered(), in.scope(), in.typePackages(), in.imported(), in.injected(),
+                        in.callees(), in.requirements(), in.checked(), in.dischargeClauses()));
+                stamp(db, classes);
+                return Answer.of(Ordered.map(classes));
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            }
+        }
+
+        /**
+         * The parts of a generation both {@link Classes} and {@link Probed} need, asked once.
+         *
+         * <p>Both answer with a module's bytecode and differ only in whether each arm records that it
+         * ran. Two copies of this would be two chances for the measured classes and the shipped ones to
+         * stop being the same program, which is the one thing a measurement of them may not do.
+         */
+        record Inputs(Ast.Module lowered, Symbols scope, Map<String, String> typePackages,
+                      Map<String, Sig> imported, Set<String> injected, Map<String, ReqSig> callees,
+                      Map<String, List<BehaviorRequirement>> requirements,
+                      TypeChecker.Checked checked,
+                      Map<TypeName, List<Ast.InvariantClause>> dischargeClauses) {}
+
+        static Inputs inputs(Db db, String name) {
             Answer<TypeChecker.Checked> checked = db.ask(new Bodies.Checked(name));
             Answer<Lower.Lowered> lowering = db.ask(new Bodies.Lowering(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
@@ -69,18 +99,11 @@ public final class Output {
             if (!checked.present() || !lowering.present() || !scope.present() || !imported.present()
                     || !injected.present() || !callees.present() || !prepared.present()
                     || !requirements.present() || !dischargeClauses.present()) {
-                return Answer.absent();
+                return null;
             }
-            try {
-                Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
-                        lowering.value().lowered(), scope.value(), typePackages(prepared.value()),
-                        imported.value(), injected.value(), callees.value(), requirements.value(),
-                        checked.value(), dischargeClauses.value()));
-                stamp(db, classes);
-                return Answer.of(Ordered.map(classes));
-            } catch (CompileException e) {
-                return Answer.absent(e);
-            }
+            return new Inputs(lowering.value().lowered(), scope.value(),
+                    typePackages(prepared.value()), imported.value(), injected.value(),
+                    callees.value(), requirements.value(), checked.value(), dischargeClauses.value());
         }
 
         /**
@@ -106,7 +129,7 @@ public final class Output {
         }
 
         /** Maps each imported type name to its declaring module, for cross-package references. */
-        private Map<String, String> typePackages(Ast.Module m) {
+        private static Map<String, String> typePackages(Ast.Module m) {
             Map<String, String> packages = new LinkedHashMap<>();
             for (Ast.Import imp : m.imports()) {
                 for (String imported : imp.names()) {
@@ -210,6 +233,85 @@ public final class Output {
                 }
             }
             return Answer.of(Ordered.map(linked));
+        }
+    }
+
+    /**
+     * The same classes, with each arm recording that it ran.
+     *
+     * <p>Its own key rather than an argument to {@link Classes}, because {@link Classes} is what
+     * ships. Widening it to mean "with probes, sometimes" would put the decision of whether a jar
+     * refers to the compiler inside a parameter, and a caller that got it wrong would find out at
+     * someone else's run time. These are never stamped and never written out.
+     *
+     * <p>Absent where the plan and the bodies do not line up, which is the one thing this must not
+     * paper over: emitting a body an arm short reports the arm that ran as one nothing reaches, and
+     * that reads as a gap in the model rather than a fault in the measurement.
+     */
+    public record Probed(String name) implements Key<Map<String, byte[]>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, byte[]>> compute(Db db) {
+            Classes.Inputs in = Classes.inputs(db, name);
+            if (in == null) {
+                return Answer.absent();
+            }
+            CoverageSites.Plan plan = CoverageSites.of(sourceIdOf(db, name),
+                    in.checked().behaviorBodies());
+            try {
+                return Answer.of(Ordered.map(new LinkedHashMap<>(Backend.generate(
+                        in.lowered(), in.scope(), in.typePackages(), in.imported(), in.injected(),
+                        in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
+                        plan))));
+            } catch (CompileException e) {
+                return Answer.absent(e);
+            } catch (IllegalStateException _) {
+                return Answer.absent();   // the plan is not about these bodies
+            }
+        }
+
+        /** The plan of the same module, for a caller that needs to read what a hit set means. Made
+         * from the same answer the classes were generated from, so the numbers agree. */
+        public static CoverageSites.Plan planOf(Db db, String module) {
+            TypeChecker.Checked checked = db.ask(new Bodies.Checked(module)).value();
+            return checked == null ? CoverageSites.Plan.NONE
+                    : CoverageSites.of(sourceIdOf(db, module), checked.behaviorBodies());
+        }
+
+        private static String sourceIdOf(Db db, String module) {
+            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
+            return layout == null ? module : layout.idOfModule().getOrDefault(module, module);
+        }
+    }
+
+    /**
+     * What a probed evaluation of one module loads: this module's measured classes over the plain
+     * ones of everything it reaches.
+     *
+     * <p>Only this module's are replaced. Its imports' arms belong to their own modules and are
+     * measured when those modules are asked about; probing them here would number arms against a plan
+     * this module's report has no way to read.
+     */
+    public record ProbedLinked(String name) implements Key<Map<String, byte[]>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, byte[]>> compute(Db db) {
+            Map<String, byte[]> linked = db.ask(new Linked(name)).value();
+            Map<String, byte[]> probed = db.ask(new Probed(name)).value();
+            if (linked == null || probed == null) {
+                return Answer.absent();
+            }
+            Map<String, byte[]> out = new LinkedHashMap<>(linked);
+            out.putAll(probed);
+            return Answer.of(Ordered.map(out));
         }
     }
 
@@ -366,6 +468,18 @@ public final class Output {
 
         @Override
         public Answer<Of> compute(Db db) {
+            return evaluate(db, name, sourceId, db.ask(new Linked(name)).value());
+        }
+
+        /**
+         * The rows of one source, run against {@code classes}.
+         *
+         * <p>Which classes is the only thing that varies between running rows to compile a module and
+         * running them to measure it, and it is passed in rather than decided here so the two cannot
+         * become two evaluations. A row that held under one and failed under the other would be a
+         * difference in the measurement, not in the model, and the report has no way to tell.
+         */
+        static Answer<Of> evaluate(Db db, String name, String sourceId, Map<String, byte[]> classes) {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -375,11 +489,10 @@ public final class Output {
             if (db.ask(new Bodies.Checked(name)).value() == null) {
                 return Answer.absent();   // a module that did not check has nothing to run
             }
-            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
             if (classes == null) {
                 return Answer.absent();
             }
-            Ast.Module rows = written(db, prepared.value());
+            Ast.Module rows = written(db, name, sourceId, prepared.value());
             if (rows.examples().isEmpty()) {
                 return Answer.of(Of.NONE);
             }
@@ -388,7 +501,7 @@ public final class Output {
             if (requirements == null) {
                 return Answer.absent();
             }
-            List<Report> reports = new ArrayList<>(alreadyDeclared(db));
+            List<Report> reports = new ArrayList<>(alreadyDeclared(db, name, sourceId));
             if (!reports.isEmpty()) {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
@@ -412,7 +525,7 @@ public final class Output {
          * is a line and a column: the module's key can only be quoted against the module's file, and the
          * position is in this one.
          */
-        private List<Report> alreadyDeclared(Db db) {
+        private static List<Report> alreadyDeclared(Db db, String name, String sourceId) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             if (layout == null || sourceId == null || sourceId.equals(layout.idOfModule().get(name))) {
                 return List.of();   // the module's own source declares what it declares
@@ -440,7 +553,7 @@ public final class Output {
         }
 
         /** The names the values of one source declare, or none where nothing parsed it. */
-        private Set<String> declaredIn(Db db, String id) {
+        private static Set<String> declaredIn(Db db, String id) {
             Set<String> names = new LinkedHashSet<>();
             CstFrontend.Parsed parsed = id == null ? null : db.ask(new Front.Parsed(id)).value();
             if (parsed != null) {
@@ -454,7 +567,7 @@ public final class Output {
         /** The module carrying only the rows written in {@code sourceId}. The fakes stay whole: a
          * module's own fakes are what its attached files' rows run against, and the other way
          * round. */
-        private Ast.Module written(Db db, Ast.Module m) {
+        private static Ast.Module written(Db db, String name, String sourceId, Ast.Module m) {
             List<String> origins = db.ask(new Front.ExampleOrigins(name)).value();
             if (origins == null || origins.size() != m.examples().size()) {
                 return m;

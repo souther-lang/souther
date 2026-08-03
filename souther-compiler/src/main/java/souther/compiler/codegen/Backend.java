@@ -15,6 +15,7 @@ import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
+import souther.compiler.coverage.CoverageSites;
 
 import java.lang.classfile.Annotation;
 import java.lang.classfile.ClassBuilder;
@@ -108,6 +109,31 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                TypeChecker.Checked checked,
                                                Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants) {
+        return generate(module, symbols, typePackage, importedSigs, importedInjected, calleeSigs,
+                requirements, checked, dischargeInvariants, CoverageSites.Plan.NONE);
+    }
+
+    /**
+     * The same classes, with each arm of each body recording that it ran.
+     *
+     * <p>An overload rather than a mode on the one signature, because these classes are not the
+     * module's classes. They call into the compiler, they are never written out, and the only thing
+     * that asks for them is a measurement. Anything that ships goes through the signature above and
+     * gets bytecode with no reference to a probe in it at all.
+     *
+     * <p>{@code plan} must have been made from the bodies in {@code checked} — the same instances, not
+     * equal ones. The emitter looks each node up by identity and refuses to emit a body it cannot find
+     * an arm for, rather than emit one arm short and report the arm that ran as one nothing reaches.
+     */
+    public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
+                                               Map<String, String> typePackage,
+                                               Map<String, Sig> importedSigs,
+                                               Set<String> importedInjected,
+                                               Map<String, ReqSig> calleeSigs,
+                                               Map<String, List<BehaviorRequirement>> requirements,
+                                               TypeChecker.Checked checked,
+                                               Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
+                                               CoverageSites.Plan plan) {
         Map<String, List<String>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
@@ -135,6 +161,7 @@ public final class Backend {
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers);
         ctx.setDischargeInvariants(dischargeInvariants);
+        ctx.setCoveragePlan(plan);
         Backend b = new Backend(ctx, checked);
         // A behavior's class capitalizes its first letter (spec 19.5). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named

@@ -385,8 +385,10 @@ final class BodyGen {
                     genExpr(iff.cond());
                     Label elseL = code.newLabel();
                     code.ifeq(elseL);
+                    probe(iff, 0);
                     emitTail(iff.then(), cdB, requiredNames, requiredSuccess, expected);
                     code.labelBinding(elseL);
+                    probe(iff, 1);
                     emitTail(iff.els(), cdB, requiredNames, requiredSuccess, expected);
                 }
                 // Both branches stay in tail position, so a self-recursive helper guarded by an
@@ -395,6 +397,7 @@ final class BodyGen {
                 case Core.IfConstructed ic -> {
                     Attempt a = emitAttempt(ic);
                     bind(ic.binder(), a.slot(), ic.construct().type());
+                    probe(ic, 0);
                     emitTail(ic.then(), cdB, requiredNames, requiredSuccess, expected);
                     code.labelBinding(a.elseLabel());
                     // Each departure is in tail position too, so it returns on its own and needs no
@@ -556,6 +559,21 @@ final class BodyGen {
          * — an invariant abort above all — points back to the {@code .sou} line. Consecutive nodes on
          * the same line (a subexpression tree, or a tail node re-lined by {@code genExpr}) collapse to
          * one entry. */
+        /**
+         * Records that this arm ran, where this generation is one that measures.
+         *
+         * <p>Nothing before it on the stack and nothing after: an {@code int} constant in, nothing out.
+         * So it can go at the head of any arm without the arm's own emission having to know it is
+         * there, and a measuring build and a shipping build differ by these calls and by nothing else.
+         */
+        private void probe(Core node, int arm) {
+            if (!ctx.measuring()) {
+                return;
+            }
+            code.loadConstant(ctx.probesOf(node)[arm]);
+            code.invokestatic(CD_Probe, "hit", MTD_Probe_hit);
+        }
+
         private void emitLine(Core e) {
             int line = e.pos() != null ? e.pos().line() : 0;
             if (line > 0 && line != lastEmittedLine) {
@@ -632,9 +650,11 @@ final class BodyGen {
                     Label end = code.newLabel();
                     Type want = shapeOf(iff, expected);
                     code.ifeq(elseL);
+                    probe(iff, 0);
                     genExpr(iff.then(), want);
                     code.goto_(end);
                     code.labelBinding(elseL);
+                    probe(iff, 1);
                     genExpr(iff.els(), want);
                     code.labelBinding(end);
                 }
@@ -642,6 +662,7 @@ final class BodyGen {
                     Attempt a = emitAttempt(ic);
                     Label end = code.newLabel();
                     bind(ic.binder(), a.slot(), ic.construct().type());
+                    probe(ic, 0);
                     genExpr(ic.then(), shapeOf(ic, expected));
                     code.goto_(end);
 
@@ -747,12 +768,14 @@ final class BodyGen {
             Type element = st instanceof Type.OptionOf oo ? oo.element() : null;
             Label end = code.newLabel();
             Type want = shapeOf(m, expected);
-            for (Core.Case c : m.cases()) {
+            for (int i = 0; i < m.cases().size(); i++) {
+                Core.Case c = m.cases().get(i);
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm: save any outer binding it shadows and restore it
                 // after the arm, or a later arm reusing the name would resolve to this arm's slot.
 
                 emitCaseGuard(c, sSlot, st, element, nextCase);
+                probe(m, i);
                 genExpr(c.body(), want);
                 if (c.binding() != null) {
                 }
@@ -773,12 +796,14 @@ final class BodyGen {
             int sSlot = slot(st);
             store(code, sSlot, st);
             Type element = st instanceof Type.OptionOf oo ? oo.element() : null;
-            for (Core.Case c : m.cases()) {
+            for (int i = 0; i < m.cases().size(); i++) {
+                Core.Case c = m.cases().get(i);
                 Label nextCase = code.newLabel();
                 // A case binding is scoped to its arm (see {@link #match}): restore any outer binding it
                 // shadows before the next arm's dispatch.
 
                 emitCaseGuard(c, sSlot, st, element, nextCase);
+                probe(m, i);
                 emitTail(c.body(), cdB, requiredNames, requiredSuccess, expected);
                 if (c.binding() != null) {
                 }
@@ -953,7 +978,9 @@ final class BodyGen {
          */
         private void emitDepartures(Core.IfConstructed ic, Attempt a, Consumer<Core> emit, Label end) {
             List<Core.ElseArm> arms = ic.els();
+            // The attempt's own arm is 0, so a departure's number is one past where it sits.
             if (arms.size() == 1 && arms.get(0).clause().isEmpty()) {
+                probe(ic, 1);
                 emit.accept(arms.get(0).body());
                 return;
             }
@@ -988,6 +1015,7 @@ final class BodyGen {
                 code.invokevirtual(CD_String, "equals", MTD_equalsObject);
                 code.ifne(armL);
             }
+            probe(ic, fallthrough + 1);
             emit.accept(arms.get(fallthrough).body());
             for (int i = 0; i < arms.size(); i++) {
                 if (i == fallthrough) {
@@ -997,6 +1025,7 @@ final class BodyGen {
                     code.goto_(end);
                 }
                 code.labelBinding(labels.get(i));
+                probe(ic, i + 1);
                 emit.accept(arms.get(i).body());
             }
         }
