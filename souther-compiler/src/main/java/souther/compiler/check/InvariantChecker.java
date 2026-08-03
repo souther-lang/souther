@@ -367,11 +367,12 @@ public final class InvariantChecker {
         record Location(String key) implements Denotes {}
 
         /**
-         * A value named by the expression that computes it. {@code byRule} is true where the check has
-         * a rule about how it was built — a container the preservation table covers — and that rule is
-         * what names it however it is reached; false where only a guard naming it can.
+         * A value named by the expression that computes it. {@code readable} is true where there is
+         * something to say of it however it is reached — a form the numeric domain built, or a rule
+         * about how it was made; false where only a guard naming it makes a clause readable against
+         * it.
          */
-        record Term(String key, boolean byRule) implements Denotes {}
+        record Term(String key, boolean readable) implements Denotes {}
 
         /** Nothing this check can name. */
         record Nothing() implements Denotes {
@@ -491,6 +492,20 @@ public final class InvariantChecker {
     // --- the walk ------------------------------------------------------------------------------
 
     private void walk(Ast.Expr e, Known k, Scope scope, int depth) {
+        Ast.If value = conditionalValueIn(e);
+        if (value != null && depth < BRANCHES_OPENED) {
+            // A conditional in a value position is one of its two branches, and which one is decided
+            // by its condition. So this is read once with each standing there, under that condition,
+            // and what the two readings find is said once. Every place a conditional can be given —
+            // to a field, to a name, to a guard — is this one place.
+            walk(value.cond(), k, scope, depth);
+            String same = bodyKey(value, scope);
+            say(reading(without(e, value, same, value.then(), scope),
+                            assumeCond(value.cond(), k, scope, true), scope, depth),
+                    reading(without(e, value, same, value.els(), scope),
+                            assumeCond(value.cond(), k, scope, false), scope, depth));
+            return;
+        }
         checkIfConstruction(e, k, scope, false);
         switch (e) {
             case Ast.If iff -> {
@@ -517,16 +532,6 @@ public final class InvariantChecker {
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
                 ic.els().forEach(arm -> walk(arm.body(), k, scope, depth));
             }
-            case Ast.LetIn li when li.value() instanceof Ast.If iff && depth < BRANCHES_OPENED -> {
-                // The name is given one of the two, and which one is decided by the condition, so the
-                // body is read once with each standing there. The same reading a construction written
-                // over a conditional gets, moved to where the conditional was given a name.
-                walk(iff.cond(), k, scope, depth);
-                Known taken = assumeCond(iff.cond(), k, scope, true);
-                Known otherwise = assumeCond(iff.cond(), k, scope, false);
-                say(reading(li, iff.then(), taken, scope, depth),
-                        reading(li, iff.els(), otherwise, scope, depth));
-            }
             case Ast.LetIn li -> {
                 walk(li.value(), k, scope, depth);
                 Type vt = typeExpr(li.value(), scope);
@@ -534,8 +539,8 @@ public final class InvariantChecker {
                 // is recorded under that denotation and not under the spelling. Recording it under the
                 // name is what made a named subexpression a term of its own, answering differently
                 // from the very expression it was given.
-                Denotes what = denotationOf(li.value(), scope);
-                LinearForm vf = affineOf(li.value(), scope);
+                Denotes what = denotationOf(li.value(), scope, k);
+                LinearForm vf = affineOf(li.value(), scope, k);
                 Known k2 = rebind(k, li.name());
                 // A binding that denotes what it was given is an alias and introduces no value, so
                 // there is nothing to record of it: what holds of what it names already holds.
@@ -722,13 +727,13 @@ public final class InvariantChecker {
         switch (e) {
             case Ast.NewData nd when nd.spreads().isEmpty() -> {
                 if (symbols.get(nd.typeName().denotes()) instanceof Ast.Data type) {
-                    report(type, nd.pos(), attempted, verdictOf(nd, type, k, scope, 0));
+                    report(type, nd.pos(), attempted, verdictOf(nd, type, k, scope));
                 }
             }
             case Ast.Binary bin when isArith(bin.op()) -> {
                 if (typeExpr(bin, scope) instanceof Type.Ref r
                         && symbols.get(r.name()) instanceof Ast.Data type && type.newtype()) {
-                    LinearForm value = affineOf(bin, scope);
+                    LinearForm value = affineOf(bin, scope, k);
                     if (value != null) {
                         // an arithmetic result is a form, not a location, so it names no path
                         report(type, bin.pos(), attempted, verdictOf(r.name(), type,
@@ -742,33 +747,17 @@ public final class InvariantChecker {
     }
 
     /**
-     * The verdict for one construction, read on each branch of a conditional it is given. A field
-     * given {@code if c then a else b} is given one of the two, and which one is decided by
-     * {@code c}, so the construction is checked with each standing there under its own condition and
-     * answered by whichever answer is worse. Reading the conditional as a term of its own instead
-     * would say only that it is that term, which reports every construction over one — including
-     * where both branches satisfy the clause.
-     *
-     * <p>{@code depth} bounds how many conditionals are opened, since each doubles the paths.
+     * The verdict for one construction, over what each field is being given. A conditional never
+     * reaches here: the walk opens it before anything is checked, so what a field is given is a
+     * value and not a choice of two.
      */
-    private Verdict verdictOf(Ast.NewData nd, Ast.Data type, Known k, Scope scope, int depth) {
-        if (depth < BRANCHES_OPENED) {
-            for (int i = 0; i < nd.inits().size(); i++) {
-                if (nd.inits().get(i).value() instanceof Ast.If iff) {
-                    return Verdict.of(
-                            onBranch(withFieldValue(nd, i, iff.then()), type,
-                                    assumeCond(iff.cond(), k, scope, true), scope, depth),
-                            onBranch(withFieldValue(nd, i, iff.els()), type,
-                                    assumeCond(iff.cond(), k, scope, false), scope, depth));
-                }
-            }
-        }
+    private Verdict verdictOf(Ast.NewData nd, Ast.Data type, Known k, Scope scope) {
         Map<String, LinearForm> forms = new HashMap<>();
         Map<String, String> paths = new HashMap<>();
         Map<String, Ast.Expr> given = new HashMap<>();
         Function<Ast.Expr, String> bodyKey = value -> siteKey(value, scope, k);
         for (Ast.FieldInit fi : nd.inits()) {
-            LinearForm f = affineOf(fi.value(), scope);
+            LinearForm f = affineOf(fi.value(), scope, k);
             if (f != null) {
                 forms.put(fi.name(), f);
             }
@@ -781,21 +770,6 @@ public final class InvariantChecker {
         return verdictOf(nd.typeName().denotes(), type,
                 new Bindings(forms::get, paths::get, given::get, bodyKey,
                         TypeOps.fieldTypes(type, symbols)), k);
-    }
-
-    /** The verdict on one branch, which is none where the conditions along the way contradict. */
-    private Verdict onBranch(Ast.NewData nd, Ast.Data type, Known k, Scope scope, int depth) {
-        return k.numbers().isBottom() ? Verdict.UNREACHABLE
-                : verdictOf(nd, type, k, scope, depth + 1);
-    }
-
-    /** {@code nd} with the value at {@code at} replaced, everything else kept. */
-    private static Ast.NewData withFieldValue(Ast.NewData nd, int at, Ast.Expr value) {
-        List<Ast.FieldInit> inits = new ArrayList<>(nd.inits());
-        Ast.FieldInit was = inits.get(at);
-        inits.set(at, new Ast.FieldInit(was.name(), value, was.pos()));
-        return new Ast.NewData(nd.typeName(), List.copyOf(inits), nd.spreads(), nd.origin(),
-                nd.pos());
     }
 
     /** How an invariant's leaf names resolve at a construction site: to the affine form of what the
@@ -946,15 +920,65 @@ public final class InvariantChecker {
      */
     private Map<SourcePos, Reported> capturing;
 
-    /** What reading the body with {@code branch} bound to the name finds, or nothing where the
-     * conditions along the way contradict — a branch nothing reaches finds nothing. */
-    private Map<SourcePos, Reported> reading(Ast.LetIn li, Ast.Expr branch, Known k, Scope scope,
-                                             int depth) {
+    /** What reading {@code e} finds, or nothing where the conditions along the way contradict — a
+     * branch nothing reaches finds nothing, and what is not there violates nothing. */
+    private Map<SourcePos, Reported> reading(Ast.Expr e, Known k, Scope scope, int depth) {
         if (k.numbers().isBottom()) {
             return Map.of();
         }
-        return found(() -> walk(new Ast.LetIn(li.binder(), branch, li.declaredType(), li.annotated(),
-                li.opens(), li.body(), li.pos()), k, scope, depth + 1));
+        return found(() -> walk(e, k, scope, depth + 1));
+    }
+
+    /**
+     * The first conditional {@code e} gives a value to, or {@code null} where it gives none. A
+     * conditional in tail position — an {@code if}'s own branches, a {@code let}'s body, a case's
+     * body — is where the walk goes next rather than a value it is handed, and a closure's body is
+     * read where the closure is applied.
+     */
+    private static Ast.If conditionalValueIn(Ast.Expr e) {
+        return switch (e) {
+            // Where the walk goes next is not a value it is handed: an `if`'s own branches, a `let`'s
+            // body and a case's body are read after this, each with what is known there.
+            case Ast.If iff -> conditionalIn(iff.cond());
+            case Ast.LetIn li -> conditionalIn(li.value());
+            case Ast.Match m -> conditionalIn(m.scrutinee());
+            default -> conditionalIn(e);
+        };
+    }
+
+    /** The first conditional inside a value. Everything under one is part of it, including the body
+     * of a binding an expansion introduced — {@code let $0 = r in if $0.a > b then ...} is a helper
+     * called on an argument, which is one value however many bindings writing it took. */
+    private static Ast.If conditionalIn(Ast.Expr e) {
+        if (e instanceof Ast.If iff) {
+            return iff;
+        }
+        if (e instanceof Ast.Block) {
+            return null;   // read where the closure is applied
+        }
+        Ast.If[] found = {null};
+        Ast.forEachChild(e, child -> {
+            if (found[0] == null) {
+                found[0] = conditionalIn(child);
+            }
+        });
+        return found[0];
+    }
+
+    /**
+     * {@code e} with every occurrence of {@code was} replaced by {@code becomes}. Occurrence is by
+     * what it computes and not by where it is written: an author who writes one conditional twice —
+     * once to guard on and once to build from — wrote one value, and reading the two as two would
+     * make the guard say nothing about what is built.
+     */
+    private Ast.Expr without(Ast.Expr e, Ast.If was, String key, Ast.Expr becomes, Scope scope) {
+        if (e == was || (key != null && key.equals(bodyKey(e, scope)))) {
+            return becomes;
+        }
+        if (e instanceof Ast.Block) {
+            return e;
+        }
+        return Ast.mapChildren(e, child -> without(child, was, key, becomes, scope), name -> name);
     }
 
     /** What {@code reading} finds, collected instead of said. */
@@ -1165,8 +1189,8 @@ public final class InvariantChecker {
         if (cond instanceof Ast.Binary b) {
             Rel rel = relOf(b.op());
             Rel eff = rel == null ? null : positive ? rel : negateRel(rel);
-            LinearForm la = eff == null ? null : affineOf(b.left(), scope);
-            LinearForm ra = eff == null ? null : affineOf(b.right(), scope);
+            LinearForm la = eff == null ? null : affineOf(b.left(), scope, out);
+            LinearForm ra = eff == null ? null : affineOf(b.right(), scope, out);
             if (la != null && ra != null) {
                 out = out.with(out.numbers().assume(la.minus(ra), eff));
             }
@@ -1403,14 +1427,21 @@ public final class InvariantChecker {
 
     /** The affine form of a body expression: a numeric atom, a newtype construct's wrapped value, or
      * {@code null}. */
-    private LinearForm affineOf(Ast.Expr e, Scope scope) {
+    private LinearForm affineOf(Ast.Expr e, Scope scope, Known k) {
         return affine(e, n -> {
             if (n instanceof Ast.NewData nd && nd.spreads().isEmpty() && nd.inits().size() == 1
                     && nd.inits().get(0).name().equals("value")
                     && numericNewtype(Type.ref(nd.typeName().denotes()))) {
-                return affineOf(nd.inits().get(0).value(), scope);
+                return affineOf(nd.inits().get(0).value(), scope, k);
             }
-            String atom = atomOf(n, scope);
+            if (n instanceof Ast.LetIn li) {
+                // A binding an expansion introduced is read the way the walk reads one: the name is
+                // what it was given. Without that, a helper called on a record is opaque here while
+                // the body it expands to is not, and the call and its expansion disagree.
+                return affineOf(li.body(), scope.binding(li.name(),
+                        typeExpr(li.value(), scope), denotationOf(li.value(), scope, k)), k);
+            }
+            String atom = atomOf(n, scope, k);
             return atom == null ? null : LinearForm.atom(atom);
         });
     }
@@ -1518,12 +1549,22 @@ public final class InvariantChecker {
 
     /** The canonical atom key of a numeric location ({@code x}, {@code p.a}, a newtype's value) or of
      * a size call over a nameable container, or {@code null} if {@code e} is neither. */
-    private String atomOf(Ast.Expr e, Scope scope) {
+    private String atomOf(Ast.Expr e, Scope scope, Known k) {
         String size = sizeAtom(e, arg -> bodyKey(arg, scope));
         if (size != null) {
             return size;
         }
-        return isNumeric(typeExpr(e, scope)) ? pathKey(e, scope) : null;
+        if (!isNumeric(typeExpr(e, scope))) {
+            return null;
+        }
+        // A path rooted at a name is the atom of what that name denotes, and only where a clause
+        // could be read against it — otherwise a name would be an atom where the expression it was
+        // given is not one, and the two spellings would answer differently.
+        String root = rootName(e);
+        if (root != null && !readable(scope.denotes(root), k)) {
+            return null;
+        }
+        return pathKey(e, scope);
     }
 
     /** A body expression's canonical key: a location names itself, and everything else is read
@@ -1557,15 +1598,8 @@ public final class InvariantChecker {
         if (isWritten(e)) {
             return null;
         }
-        String located = locationKey(e, scope);
-        if (located != null) {
-            return located;
-        }
-        String term = bodyKey(e, scope);
-        if (term == null) {
-            return null;
-        }
-        return namedByRule(e, scope) || k.speaksOf(term) ? term : null;
+        Denotes d = denotationOf(e, scope, k);
+        return readable(d, k) ? d.key() : null;
     }
 
     /** The atom key of {@code SIZE_CALL(container)} when {@code key} can name the container, else
@@ -2011,13 +2045,36 @@ public final class InvariantChecker {
      * that decides it, so an expression answers the same whether it was written where it is used or
      * given a name first.
      */
-    private Denotes denotationOf(Ast.Expr e, Scope scope) {
+    private Denotes denotationOf(Ast.Expr e, Scope scope, Known k) {
         String located = locationKey(e, scope);
         if (located != null) {
             return new Denotes.Location(located);
         }
         String term = bodyKey(e, scope);
-        return term == null ? new Denotes.Nothing() : new Denotes.Term(term, namedByRule(e, scope));
+        if (term == null) {
+            return new Denotes.Nothing();
+        }
+        // Readable where there is something to say of it: a form the numeric domain built, or a rule
+        // about how it was made. This is asked of the expression, so a name for it answers the same.
+        return new Denotes.Term(term,
+                affineOf(e, scope, k) != null || namedByRule(e, scope));
+    }
+
+    /**
+     * Whether a clause may be read against what {@code d} denotes. A location always may: the seeding
+     * writes about locations. A computed term may where something can be said of it, or where a guard
+     * on this path has said something. Nothing never may.
+     *
+     * <p>Every question of the form "is this value one a clause can be read against" asks this, and
+     * asking it of a name gives the same answer as asking it of the expression the name was bound to.
+     * That is what makes naming an expression not change what is known of it.
+     */
+    private static boolean readable(Denotes d, Known k) {
+        return switch (d) {
+            case Denotes.Location _ -> true;
+            case Denotes.Term term -> term.readable() || k.speaksOf(term.key());
+            case Denotes.Nothing _ -> false;
+        };
     }
 
     /**
@@ -2076,7 +2133,7 @@ public final class InvariantChecker {
             return true;
         }
         if (e instanceof Ast.Var v) {
-            return scope.denotes(v.name()) instanceof Denotes.Term t && t.byRule();
+            return scope.denotes(v.name()) instanceof Denotes.Term t && t.readable();
         }
         Ast.Expr read = asOperator(e);
         if (read instanceof Ast.Apply call && !readsAsATerm(call)) {
@@ -2165,9 +2222,13 @@ public final class InvariantChecker {
             case Ast.LetIn li -> {
                 Type bound = typeExpr(li.value(), scope);
                 yield typeExpr(li.body(),
-                        scope.binding(li.name(), bound, denotationOf(li.value(), scope)));
+                        scope.binding(li.name(), bound, denotationOf(li.value(), scope, Known.top())));
             }
             case Ast.Neg n -> typeExpr(n.operand(), scope);
+            // A size is a number whatever it counts, and this typer reads no signatures — without
+            // this a name bound to one has no type, and a name that has no type is not the atom the
+            // expression it was given is.
+            case Ast.Apply call when SIZE_CALLS.contains(call.reaches()) -> Type.INT;
             case Ast.Binary b when isArith(b.op()) -> arithType(b, scope);
             default -> null;
         };
