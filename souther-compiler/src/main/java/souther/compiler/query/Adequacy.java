@@ -32,6 +32,73 @@ import java.util.Set;
 /** How well a module's {@code example} rows cover what it declares. */
 public final class Adequacy {
 
+    /**
+     * How much of this a build asked to be told.
+     *
+     * <p>Off by default, and one dial rather than several. What separates the levels is what they
+     * cost: reading what the rows already established is free, and finding out which arms they went
+     * through means generating a second set of classes and running every row again. A build that did
+     * not ask for the second should not pay for it, and a report that quietly measured anyway would
+     * make every keystroke in an editor generate bytecode nobody reads.
+     */
+    public enum Level {
+        /** Nothing is measured and nothing is said. */
+        OFF,
+        /** The cases of the signature, read off rows the compile already ran. */
+        WITNESS,
+        /** Those, and what the arms and the boundaries took running the rows again to find out. */
+        ALL;
+
+        public boolean measuresArms() {
+            return this == ALL;
+        }
+
+        public boolean reports() {
+            return this != OFF;
+        }
+    }
+
+    /**
+     * What a build asked for: how much to measure, and whether to be told it as warnings.
+     *
+     * <p>Two things rather than one, because a caller can want the measurement without the warnings.
+     * {@code souther examples} is that caller — its whole output is the report, which says everything
+     * these warnings would say and says it in one place, so printing both would be the same news
+     * twice.
+     */
+    public record Asked(Level level, boolean warn) {
+
+        public static final Asked NOTHING = new Asked(Level.OFF, false);
+
+        /** Measured and said. */
+        public static Asked warningsAt(Level level) {
+            return new Asked(level, true);
+        }
+
+        /** Measured for a report to read, and not said again. */
+        public static Asked reportOnly() {
+            return new Asked(Level.ALL, false);
+        }
+    }
+
+    /** What the build asked for. Absent is {@link Asked#NOTHING}. */
+    public record Requested() implements Input<Asked> {}
+
+    /** Everything measured about one module, for a caller that wants it in one piece. A map is null
+     * where the question could not be answered at all, which is not the same as an empty one. */
+    public record Of(Map<String, SignatureEvidence> signatures,
+                     Map<String, PartitionEvidence> partitions,
+                     Map<String, BranchEvidence> branches) {}
+
+    static Asked askedOf(Db db) {
+        Asked asked = db.ask(new Requested()).value();
+        return asked == null ? Asked.NOTHING : asked;
+    }
+
+    static Level levelOf(Db db) {
+        return askedOf(db).level();
+    }
+
     /** What the rows say about one behavior's signature. */
     public record SignatureEvidence(OutputCaseEvidence output, List<InputCaseEvidence> inputs,
                                     MeasurementStatus status) {
@@ -107,8 +174,10 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
             Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
-            // been evaluated, which only the instrumented classes say.
-            boolean armsMeasured = db.ask(new Output.Probed(name)).value() != null;
+            // been evaluated, which only the instrumented classes say, and only a build that asked
+            // for that has them.
+            boolean armsMeasured = levelOf(db).measuresArms()
+                    && db.ask(new Output.Probed(name)).value() != null;
 
             Map<String, PartitionEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -160,7 +229,8 @@ public final class Adequacy {
 
         @Override
         public Answer<Output.Examples.Of> compute(Db db) {
-            Map<String, byte[]> probed = db.ask(new Output.ProbedLinked(name)).value();
+            Map<String, byte[]> probed = levelOf(db).measuresArms()
+                    ? db.ask(new Output.ProbedLinked(name)).value() : null;
             if (probed == null) {
                 // Nothing was measured, which is not the same as nothing being reached. The rows the
                 // compile already ran are what the other measures read; the branch measure says it
@@ -219,7 +289,8 @@ public final class Adequacy {
             if (!prepared.present()) {
                 return Answer.absent();
             }
-            boolean measured = db.ask(new Output.Probed(name)).value() != null;
+            boolean measured = levelOf(db).measuresArms()
+                    && db.ask(new Output.Probed(name)).value() != null;
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.Plan.NONE;
             if (measured) {
@@ -389,6 +460,115 @@ public final class Adequacy {
                 unmet.addAll(Coverages.unmet(axis, parameters, rows, symbols));
             }
             return new Filling(pairs, Generator.forBoundaries(subject, unmet, check));
+        }
+    }
+
+    /**
+     * What a build asked to be told, as warnings on the declarations they are about.
+     *
+     * <p>Only what a person can act on. A position the model draws no line through is named in the
+     * report and is not a warning: 398 of them across the corpus this was measured on, and every one
+     * of them says "no rule was written here", which is a fact about the model and not a mistake in
+     * it. A row waiting for a {@code let} is not one either — waiting is the normal state of a model
+     * being written.
+     *
+     * <p>A gap is reported only where the measurement was complete. An undecided one — a row whose
+     * value could not be read — is a fact about the reading, and telling an author to write a row
+     * they may already have written is worse than saying nothing.
+     */
+    public record Warnings(String name) implements Key<Boolean> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            Asked asked = askedOf(db);
+            Level level = asked.level();
+            if (!asked.warn() || !level.reports()) {
+                return Answer.of(true);
+            }
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            if (!prepared.present()) {
+                return Answer.absent();
+            }
+            Map<String, SignatureEvidence> signatures = db.ask(new Witnesses(name)).value();
+            Map<String, PartitionEvidence> partitions =
+                    level.measuresArms() ? db.ask(new Coverage(name)).value() : null;
+            Map<String, BranchEvidence> branches =
+                    level.measuresArms() ? db.ask(new BranchCoverage(name)).value() : null;
+
+            List<Report> reports = new ArrayList<>();
+            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+                SignatureEvidence signature =
+                        signatures == null ? null : signatures.get(behavior.name());
+                signatureGaps(behavior, signature, reports);
+                if (partitions != null) {
+                    boundaryGaps(behavior, partitions.get(behavior.name()), reports);
+                }
+                if (branches != null) {
+                    armGaps(branches.get(behavior.name()), reports);
+                }
+            }
+            return Answer.of(true, reports);
+        }
+
+        /** A case of the signature no row says anything about, on the declaration that owes it. */
+        private static void signatureGaps(Ast.BehaviorDef behavior, SignatureEvidence signature,
+                                          List<Report> reports) {
+            if (signature == null || signature.status() != MeasurementStatus.COMPLETE) {
+                return;
+            }
+            for (TypeName missing : signature.output().unspecified()) {
+                reports.add(warning("E1913", "check.example.witness.out", behavior,
+                        missing.name(), behavior.name()));
+            }
+            for (int i = 0; i < signature.inputs().size(); i++) {
+                for (TypeName missing : signature.inputs().get(i).unspecified()) {
+                    reports.add(warning("E1915", "check.example.witness.in", behavior,
+                            missing.name(), i + 1, behavior.name()));
+                }
+            }
+        }
+
+        private static void boundaryGaps(Ast.BehaviorDef behavior, PartitionEvidence partition,
+                                         List<Report> reports) {
+            if (partition == null) {
+                return;
+            }
+            for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
+                if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.hit()) {
+                    reports.add(warning("E1916", "check.example.boundary", behavior,
+                            boundary.axis(), boundary.value(), boundary.origin()));
+                }
+            }
+        }
+
+        /** An arm no row goes through, quoted at the arm and not at the declaration: what to do about
+         * it is written there. */
+        private static void armGaps(BranchEvidence branch, List<Report> reports) {
+            if (branch == null || branch.status() != MeasurementStatus.COMPLETE) {
+                return;
+            }
+            for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
+                reports.add(Report.of(souther.compiler.diag.Diagnostic
+                        .of("E1918", "check.example.unreachedarm").warning()
+                        .title("check.example.title")
+                        .at(arm.at().pos())
+                        .args(arm.label(), arm.behavior())
+                        .build()));
+            }
+        }
+
+        private static Report warning(String code, String key, Ast.BehaviorDef behavior,
+                                      Object... args) {
+            return Report.of(souther.compiler.diag.Diagnostic.of(code, key).warning()
+                    .title("check.example.title")
+                    .at(behavior.pos())
+                    .args(args)
+                    .build());
         }
     }
 

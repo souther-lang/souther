@@ -4,6 +4,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.query.Report;
@@ -119,7 +120,14 @@ public final class Compiler {
      *  {@code warningsOut}. */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut) {
+        return compiled(source, defaultModuleName, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, Adequacy.Asked measure) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName);
+        compilation.measure(measure);
         Db db = compilation.db();
 
         CompileException structural = compilation.firstError(compilation.structuralReports());
@@ -154,6 +162,9 @@ public final class Compiler {
             if (!failures.isEmpty()) {
                 throw CompileException.ofAll(failures, ExampleVerifier.legacySummary(failures));
             }
+        }
+        for (String module : compilation.modules()) {
+            db.ask(new Adequacy.Warnings(module));
         }
         warningsOut.addAll(compilation.warnings(db.allReports()));
         return compilation;
@@ -217,17 +228,25 @@ public final class Compiler {
      */
     public static Compilation compiledModules(List<String> sources, ModulePath path,
                                               List<Located> warningsOut) {
-        return linked(sources, path, warningsOut);
+        return linked(sources, path, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
+    public static Compilation compiledModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure) {
+        return linked(sources, path, warningsOut, measure);
     }
 
     private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
                                                List<Located> warningsOut) {
-        return new LinkedHashMap<>(linked(sources, path, warningsOut).classes());
+        return new LinkedHashMap<>(
+                linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes());
     }
 
     private static Compilation linked(List<String> sources, ModulePath path,
-                                      List<Located> warningsOut) {
+                                      List<Located> warningsOut, Adequacy.Asked measure) {
         Compilation compilation = Compilation.ofSources(sources, path);
+        compilation.measure(measure);
         Db db = compilation.db();
 
         CompileException structural = compilation.firstError(compilation.structuralReports());
@@ -261,6 +280,9 @@ public final class Compiler {
                     exampleSources.add(compilation.sourceIndexOfId(id));
                 }
             }
+        }
+        for (String module : compilation.modules()) {
+            db.ask(new Adequacy.Warnings(module));
         }
         warningsOut.addAll(compilation.warnings(db.allReports()));
         if (!exampleFailures.isEmpty()) {

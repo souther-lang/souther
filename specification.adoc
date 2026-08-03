@@ -3597,6 +3597,50 @@ that `unreachable` does not hold.
 
 Emitted when a row's evaluation reaches an `+unreachable+` (<<unreachable>>). The reason the model wrote is shown with the line and column it was written at, because the row and the declaration are usually in different rules; the diagnostic's own place is the row's. It is not a failed comparison: the row produced no answer to compare, and what it found is a premise that does not hold.
 
+[#e1913]
+=== No row expects a case the signature declares
+
+[,text]
+----
+No row expects `Waiting`, so nothing says `submit` owes that answer.
+Hint: Write a row whose expected value is a `Waiting`, or drop the case from the
+signature.
+----
+
+A warning, off unless the build asks for it (<<example-adequacy>>). Emitted at the behavior's declaration when its output is a sum and no row expects one of its cases. Only where the measurement was complete: a row whose expected case could not be read leaves the question undecided, and telling an author to write a row they may already have written is worse than saying nothing.
+
+[#e1915]
+=== No row uses a case an input declares
+
+[,text]
+----
+No row applies `submit` to a `Overseas`, so input #1 has a case nothing was tried with.
+----
+
+The same warning for an input position that is a sum. Covering every case an input can be is the mechanised half of asking whether the behavior is total (<<match>>).
+
+[#e1916]
+=== No row is at a boundary
+
+[,text]
+----
+No row is at submit/cost = 100, which is where guard@14:5 draws its line.
+Hint: A row on the line is what tells a rule written `<=` from one written `<`.
+----
+
+A warning, and one that needs the arms measured where the line was drawn by a `+guard+` (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a boundary of several and reaching it through one leaves the others unmet.
+
+[#e1918]
+=== No row goes through an arm
+
+[,text]
+----
+No row goes through the `else` arm of `submit`.
+Hint: Either a row is missing for what this arm answers, or nothing can reach it.
+----
+
+A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at the `+if+`, `+match+` or attempted construction the arm belongs to rather than at the arm's own body: the fork is what the author wrote, and a body is what lowering rewrites. A behavior no row names is not warned about, whether or not another behavior's rows run through it.
+
 [#e2001]
 === A recursive helper is not proven total
 

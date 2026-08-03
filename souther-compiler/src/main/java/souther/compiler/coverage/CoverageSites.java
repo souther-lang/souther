@@ -126,9 +126,21 @@ public final class CoverageSites {
             walk(body);
         }
 
-        private int site(Site.Kind kind, String label, Core arm) {
+        /**
+         * One arm, quoted at the fork it belongs to rather than at its own body.
+         *
+         * <p>The fork is written by the author and survives lowering; an arm's body is what lowering
+         * rewrites, and a rewritten node carries whatever position it was built from — which for a
+         * body assembled out of comprehensions and accumulated failures is somewhere else in the file
+         * entirely. An arm quoted at a comment sends the author to the wrong place, and there is
+         * nothing in the position itself to notice that by.
+         *
+         * @param owner the {@code if}, {@code match} or attempted construction the arm is one of
+         * @param arm   the arm's body, which says what the arm is made of and not where it is
+         */
+        private int site(Site.Kind kind, String label, Core owner, Core arm) {
             int index = sites.size();
-            sites.add(new Site(behavior, kind, label, new SourceRef(sourceId, arm.pos()),
+            sites.add(new Site(behavior, kind, label, new SourceRef(sourceId, owner.pos()),
                     index, ordinal++, Fingerprint.of(kind, label, arm)));
             return index;
         }
@@ -165,9 +177,9 @@ public final class CoverageSites {
                 case Core.NewData nd -> nd.inits().forEach(init -> walk(init.value()));
                 case Core.If iff -> {
                     walk(iff.cond());
-                    int then = site(Site.Kind.THEN, "then", iff.then());
+                    int then = site(Site.Kind.THEN, "then", iff, iff.then());
                     walk(iff.then());
-                    int els = site(Site.Kind.ELSE, "else", iff.els());
+                    int els = site(Site.Kind.ELSE, "else", iff, iff.els());
                     walk(iff.els());
                     byNode.put(iff, new int[] {then, els});
                     guards.add(new GuardRef(behavior, then, els,
@@ -178,7 +190,7 @@ public final class CoverageSites {
                     int[] arms = new int[m.cases().size()];
                     for (int i = 0; i < m.cases().size(); i++) {
                         Core.Case arm = m.cases().get(i);
-                        arms[i] = site(Site.Kind.CASE, label(arm), arm.body());
+                        arms[i] = site(Site.Kind.CASE, label(arm), m, arm.body());
                         walk(arm.body());
                     }
                     byNode.put(m, arms);
@@ -186,11 +198,11 @@ public final class CoverageSites {
                 case Core.IfConstructed ic -> {
                     ic.construct().inits().forEach(init -> walk(init.value()));
                     int[] arms = new int[1 + ic.els().size()];
-                    arms[0] = site(Site.Kind.CONSTRUCTED, "constructed", ic.then());
+                    arms[0] = site(Site.Kind.CONSTRUCTED, "constructed", ic, ic.then());
                     walk(ic.then());
                     for (int i = 0; i < ic.els().size(); i++) {
                         Core.ElseArm arm = ic.els().get(i);
-                        arms[i + 1] = site(Site.Kind.DEPARTURE, label(arm), arm.body());
+                        arms[i + 1] = site(Site.Kind.DEPARTURE, label(arm), ic, arm.body());
                         walk(arm.body());
                     }
                     byNode.put(ic, arms);
