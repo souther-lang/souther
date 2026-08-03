@@ -92,13 +92,27 @@ class CompileExampleTest {
         assertEquals("E1904", err(bad).diagnostic().code());
     }
 
+    /** An injected behavior has no body to run, which is a reason to record its rows and not a reason
+     * to refuse them: they say what it will owe, and they start being evaluated when a `let` arrives. */
     @Test
-    void injectedTargetIsNotEvaluableE1902() {
+    void anInjectedTargetsRowsAreRecordedRatherThanRefused() {
         String model = BASE + """
                 behavior 現在時刻 : () -> String
 
                 example 現在時刻
-                  | () -> 提出済み
+                  | () -> "2026-07-20T09:00"
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(model));
+    }
+
+    /** What E1902 is left for: a target that is not a behavior at all. */
+    @Test
+    void aPureHelperTargetIsE1902() {
+        String model = BASE + """
+                let 倍 (n: Int) = n * 2
+
+                example 倍
+                  | (2) -> 4
                 """;
         assertEquals("E1902", err(model).diagnostic().code());
     }

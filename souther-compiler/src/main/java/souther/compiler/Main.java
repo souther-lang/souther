@@ -11,6 +11,10 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,9 +41,19 @@ public final class Main {
               compile <file.sou>... -d <outdir> [-cp <path>]      compile to .class files
               run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
               fmt <file.sou>... [-w] [--check]                     format source (stdout, or -w in place)
+              examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
+            options (examples):
+              --module <name>           report only this module
+              --behavior <name>         report only this behavior
+              --generate                print commented rows for what nothing covers
+              --boundaries              with --generate, add rows at the untried boundaries
+              --strict                  exit non-zero while rows are waiting for a `let`
             options (compile):
+              --adequacy off|witness|all  warn about what the `example`s do not cover (default off)
+            options (compile/examples):
               -cp, --class-path <path>  where to find modules another project compiled
-            options (compile/run):
+
+            options (compile/run/examples):
               --format human|json      how to render a compile error (default: human)
               --lang <tag>             message locale, e.g. ja or en (default: system, then ja)
               --color auto|always|never  color the human output (default: auto)""";
@@ -51,6 +65,7 @@ public final class Main {
             case "run" -> runSubcommand(rest);
             case "compile" -> compileSubcommand(rest);
             case "fmt" -> fmtSubcommand(rest);
+            case "examples" -> examplesSubcommand(rest);
             default -> {
                 String hint = command.endsWith(".sou")
                         ? "no command given — did you mean `souther compile " + command
@@ -70,8 +85,17 @@ public final class Main {
         List<Path> sources = new ArrayList<>();
         List<Path> classPath = new ArrayList<>();
         Path outDir = Path.of(".");
+        Adequacy.Asked measure = Adequacy.Asked.NOTHING;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
+                case "--adequacy" -> {
+                    if (++i >= args.length || adequacyLevel(args[i]) == null) {
+                        System.err.println("`--adequacy` takes off, witness or all");
+                        System.exit(2);
+                        return;
+                    }
+                    measure = Adequacy.Asked.warningsAt(adequacyLevel(args[i]));
+                }
                 case "-d" -> {
                     if (++i >= args.length) {
                         System.err.println("`-d` needs an output directory");
@@ -105,7 +129,7 @@ public final class Main {
         }
         List<Located> warnings = new ArrayList<>();
         try {
-            List<Path> written = compileToDir(sources, outDir, classPath, warnings);
+            List<Path> written = compileToDir(sources, outDir, classPath, warnings, measure);
             // Before the written files: the warnings are about the source, and a long list of paths
             // between them and the command would bury them.
             report(warnings, sources, render);
@@ -122,6 +146,116 @@ public final class Main {
             System.err.println("io error: " + e.getMessage());
             System.exit(1);
         }
+    }
+
+    /**
+     * {@code souther examples <file.sou>...}: how well the model's {@code example}s cover it.
+     *
+     * <p>Its own command rather than a flag on {@code compile}, because the two answer different
+     * questions. {@code compile} writes classes out and stops at the first error; this asks a model
+     * that already compiles how much of it the rows have pinned down. Mixing them would put a report
+     * on stdout next to {@code wrote <path>} and make a failing build the only way to see it.
+     */
+    private static void examplesSubcommand(String[] rawArgs) {
+        RenderOptions render = new RenderOptions();
+        String[] args = render.extract(rawArgs);
+        List<Path> sources = new ArrayList<>();
+        List<Path> classPath = new ArrayList<>();
+        String module = null;
+        String behavior = null;
+        boolean strict = false;
+        boolean generate = false;
+        boolean boundaries = false;
+        // The report is this command's whole output, so everything is measured and nothing is said
+        // twice: what the warnings would say, the report says in one place.
+        Adequacy.Asked measure = Adequacy.Asked.reportOnly();
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "-cp", "--class-path" -> {
+                    if (++i >= args.length) {
+                        System.err.println("`" + args[i - 1] + "` needs a class path");
+                        System.err.println(USAGE);
+                        System.exit(2);
+                        return;
+                    }
+                    for (String entry : args[i].split(java.io.File.pathSeparator)) {
+                        if (!entry.isBlank()) {
+                            classPath.add(Path.of(entry));
+                        }
+                    }
+                }
+                case "--module" -> {
+                    if (++i >= args.length) {
+                        System.err.println("`--module` needs a module name");
+                        System.exit(2);
+                        return;
+                    }
+                    module = args[i];
+                }
+                case "--behavior" -> {
+                    if (++i >= args.length) {
+                        System.err.println("`--behavior` needs a behavior name");
+                        System.exit(2);
+                        return;
+                    }
+                    behavior = args[i];
+                }
+                case "--generate" -> generate = true;
+                case "--boundaries" -> boundaries = true;
+                case "--strict" -> strict = true;
+                default -> sources.add(Path.of(args[i]));
+            }
+        }
+        if (sources.isEmpty()) {
+            System.err.println("examples takes at least one .sou file");
+            System.err.println(USAGE);
+            System.exit(2);
+            return;
+        }
+        List<Located> warnings = new ArrayList<>();
+        try {
+            List<String> texts = new ArrayList<>();
+            for (Path source : sources) {
+                texts.add(Files.readString(source));
+            }
+            ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY
+                    : ModulePath.ofClassPath(classPath);
+            Compilation compilation = texts.size() == 1 && classPath.isEmpty()
+                    ? Compiler.compiled(texts.get(0), Runner.moduleName(sources.get(0)), warnings,
+                            measure)
+                    : Compiler.compiledModules(texts, path, warnings, measure);
+            AdequacyReport report = AdequacyReport.of(compilation).only(module, behavior);
+            report(warnings, sources, render);
+            String rendered = render.json() ? report.json() + System.lineSeparator() : report.human();
+            System.out.print(rendered);
+            // After the report, because the rows are what to do about what the report just said.
+            // Beside it rather than in it where the report is JSON: the rows are source, and source in
+            // the middle of a JSON document is not a document.
+            if (generate) {
+                String rows = GeneratedRows.of(compilation, module, behavior, boundaries);
+                (render.json() ? System.err : System.out).print(rows);
+            }
+            if (strict && report.pendingRows() > 0) {
+                System.err.println(report.pendingRows() + " example row(s) are waiting for a `let`");
+                System.exit(1);
+            }
+        } catch (CompileException e) {
+            reportCompileError(e, sources, render);
+            System.exit(1);
+        } catch (IOException e) {
+            System.err.println("io error: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    /** The level {@code --adequacy} names, or null where it names none. */
+    private static Adequacy.Level adequacyLevel(String written) {
+        return switch (written) {
+            case "off" -> Adequacy.Level.OFF;
+            case "witness" -> Adequacy.Level.WITNESS;
+            case "all" -> Adequacy.Level.ALL;
+            default -> null;
+        };
     }
 
     /**
@@ -363,6 +497,14 @@ public final class Main {
      *  {@code warningsOut} for the caller to render — the CLI does, with the flags it was given. */
     static List<Path> compileToDir(List<Path> sources, Path outDir, List<Path> classPath,
                                    List<Located> warningsOut) throws IOException {
+        return compileToDir(sources, outDir, classPath, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, warning about what the model's {@code example}s do not cover, at the level the
+     * caller asked for. Off leaves the compile exactly as it was. */
+    static List<Path> compileToDir(List<Path> sources, Path outDir, List<Path> classPath,
+                                   List<Located> warningsOut, Adequacy.Asked measure)
+            throws IOException {
         List<String> texts = new ArrayList<>();
         for (Path source : sources) {
             texts.add(Files.readString(source));
@@ -371,11 +513,13 @@ public final class Main {
         // A single header-less file is named after the file (F#/Elm; ADR-0043); a multi-file build
         // links by imports, so each must declare its own module header. One file that imports another
         // project's module is a module set of one, not a self-contained module.
-        Compiler.Compiled compiled = texts.size() == 1 && classPath.isEmpty()
-                ? Compiler.compileWithWarnings(texts.get(0), Runner.moduleName(sources.get(0)))
-                : Compiler.compileModulesWithWarnings(texts, path);
-        warningsOut.addAll(compiled.locatedWarnings());
-        Map<String, byte[]> classes = compiled.classes();
+        List<Located> compileWarnings = new ArrayList<>();
+        Compilation compilation = texts.size() == 1 && classPath.isEmpty()
+                ? Compiler.compiled(texts.get(0), Runner.moduleName(sources.get(0)),
+                        compileWarnings, measure)
+                : Compiler.compiledModules(texts, path, compileWarnings, measure);
+        warningsOut.addAll(compileWarnings);
+        Map<String, byte[]> classes = compilation.classes();
         List<Path> written = new ArrayList<>();
         for (Map.Entry<String, byte[]> entry : classes.entrySet()) {
             Path file = outDir.resolve(entry.getKey().replace('.', '/') + ".class");

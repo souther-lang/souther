@@ -1,0 +1,21 @@
+package souther.compiler.partition;
+
+import java.math.BigDecimal;
+
+/**
+ * A value a behavior compares an input against, and which side of it the value itself falls on.
+ *
+ * <p>This is what actually divides the values a row can write. A type's invariant does not — everything
+ * outside it is refused at construction — but {@code cost <= 100000} leaves two ranges a row can reach,
+ * and which one it lands in is what the behavior does differently.
+ *
+ * @param path             the input position compared
+ * @param value            where the behavior changes
+ * @param valueBelongsBelow whether {@code value} itself is on the low side. {@code x <= c} puts it
+ *                          there; {@code x < c} puts it on the high side. Getting this wrong moves
+ *                          the boundary by one and asks for a row that proves nothing.
+ * @param origin           the guard that drew it
+ */
+public record Threshold(TermPath path, BigDecimal value, boolean valueBelongsBelow,
+                        OriginRef.GuardOrigin origin) {
+}

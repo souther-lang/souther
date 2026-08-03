@@ -1,0 +1,55 @@
+package souther.compiler.observe;
+
+import souther.compiler.types.TypeName;
+
+import java.util.List;
+import java.util.Set;
+
+/**
+ * What a behavior's {@code example} rows establish about the cases it can answer with.
+ *
+ * <p>Three sets rather than one, because how far a row got decides what it proves.
+ *
+ * <ul>
+ *   <li>{@link #specified} — a row expects this case. Somebody wrote down that the model owes it.</li>
+ *   <li>{@link #observed} — the behavior was seen to answer with this case. A row that expected
+ *       something else still saw what it saw: expecting {@code Approved} and getting {@code Rejected}
+ *       is no evidence for {@code Approved} and is evidence that {@code Rejected} can happen.</li>
+ *   <li>{@link #verified} — a row expected this case and the behavior produced it.</li>
+ * </ul>
+ *
+ * <p>A behavior with no {@code let} can reach {@link #specified} and no further, which is the honest
+ * account of a model that has been described and not yet written.
+ *
+ * @param unclassifiedRows rows whose case could not be read. While this is above zero a missing case
+ *                         is undecided rather than missing, because one of those rows may cover it.
+ */
+public record OutputCaseEvidence(Set<TypeName> declared, Set<TypeName> specified,
+                                 Set<TypeName> observed, Set<TypeName> verified,
+                                 int unclassifiedRows) {
+
+    public OutputCaseEvidence {
+        declared = Evidence.ordered(declared);
+        specified = Evidence.ordered(specified);
+        observed = Evidence.ordered(observed);
+        verified = Evidence.ordered(verified);
+    }
+
+    public static OutputCaseEvidence none() {
+        return new OutputCaseEvidence(Set.of(), Set.of(), Set.of(), Set.of(), 0);
+    }
+
+    /** Cases the behavior can answer with that no row expects. */
+    public List<TypeName> unspecified() {
+        return Evidence.missingFrom(declared, specified);
+    }
+
+    /** Cases no row has confirmed the behavior answers with. */
+    public List<TypeName> unverified() {
+        return Evidence.missingFrom(declared, verified);
+    }
+
+    public MeasurementStatus status() {
+        return Evidence.status(declared, unclassifiedRows);
+    }
+}

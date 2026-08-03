@@ -2190,7 +2190,7 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 [#example-evaluable]
 === What can carry an example
 
-A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) cannot be — you fake one, you do not example it (<<e1902>>). A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
+A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) has nothing to run, so its rows are *recorded* rather than evaluated (<<example-pending>>). A target that is not a behavior at all — a helper `+let+` of that name — is <<e1902>>. A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
 A composition's row is written like any other. Its arguments are the first stage's (<<sequential-composition>>), and its expected result is any case of the composition's output — including one that departed the main line at an earlier stage (<<type-routing>>), which is the part no stage's own example can state, because the routing is not any stage's rule.
 
@@ -2270,10 +2270,87 @@ Each dependency of the target must have a fake — a `+with+` on the row or a `+
 
 A composition's dependencies are its stages' (<<composition-with-requirements>>), so a row exampling one supplies a fake for each of those. That holds whichever path the row takes: an input that departs the main line at the first stage never reaches the second, and the second stage's dependency is faked all the same. What a row has to supply is a property of the composition, not of the input this row happens to use. One dependency two stages share is one fake — the composition holds one of it (<<composition-with-requirements>>) — and the diagnostic names the stage that wants it (<<e1908>>).
 
+[#example-pending]
+=== A row waits for the implementation it is about
+
+An injected behavior (<<injected-behavior>>) has no `+let+` to apply, so a row naming one is *recorded* rather than evaluated. It is not refused. A model that a system is being migrated onto is injected everywhere at the start, and the rows harvested from the system it replaces are the record of what each behavior will owe; refusing them would mean keeping that record somewhere the compiler cannot read, which is where it stops being checked.
+
+What a row can be held to without a body, it is held to. Its arity, each input built against its parameter type — through that type's derived Decoder, so an input that breaks an invariant is <<e1903>> the day it is written — the expected arm against the output's cases (<<e1904>>), and the expected value built (<<e1903>>). What is left needs something to run.
+
+Evaluation begins by itself. The row is unchanged when the `+let+` arrives; from that compile on it is applied and compared like any other, and a row that stated the wrong answer is <<e1905>> then rather than never.
+
+A `+fake+` is not what a pending row wants. A fake stands in for a dependency while some *other* behavior's row runs (<<example-fakes>>); an `+example+` of an injected behavior says what that behavior itself will have to answer. The two are written about the same name and read nothing of each other, so both belong. An injected behavior declares no `+depends on+` of its own (<<depends-on>>), so a pending row needs no fake at all.
+
+[,text]
+----
+behavior findMember : (id: MemberId) -> Found | Missing
+
+example findMember
+    | "a member that is registered" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
+    | "a member that is not"        : (MemberId("m-9")) -> Missing { reason = "no such member" }
+----
+
+How many rows are waiting is what `+souther examples+` reports; it is not a compile warning, because waiting is the normal state of a model being written and a warning on every one of them says nothing.
+
 [#example-placement]
 === Inline or an attached file
 
 The base form is written inline, in the same source as the behavior. To keep fixtures out of the model source, examples may instead be written in an attached file that begins with `+examples for <module>+`. It holds the rows, the `+fake+` tables they run against, and the values they name; a data, a behavior, an `+import+` and a `+let+` with parameters belong in the module itself, and writing one there is <<e1906>>. The compiler merges an attached file into its target module; it is not a module of its own and needs no `+import+` (it sees the target module's names directly). Its values join the module the rows join, so a name the module already declares is <<e1906>> too — the rows would read that declaration and the one written here would say nothing. An attached file that names a module not being compiled is <<e1907>>.
+
+[#example-adequacy]
+=== What the rows establish
+
+An `+example+` fixes the value rule for one input. Whether a model's rows together say enough about it is a different question, and `+souther examples+` answers it from what evaluating them observed. Nothing here changes what compiles; it reports.
+
+*Evidence is graded, not counted.* How far a row got decides what it proves, and three claims are kept apart rather than collapsed into one:
+
+* *specified* — a row expects this case. Somebody wrote down that the model owes it.
+* *observed* — the behavior was seen to answer with this case. A row that expected something else still saw what it saw: a row expecting `+Approved+` that got `+Rejected+` is no evidence for `+Approved+`, and is evidence that `+Rejected+` can happen.
+* *verified* — a row expected this case and the behavior produced it.
+
+A pending row (<<example-pending>>) reaches *specified* and no further, which is the honest account of a behavior that has been described and not yet written. A row that failed reaches *observed* — a measure that dropped it would report the case it produced as one nothing produces.
+
+An input position carries the same three, with *executed* in place of *observed*: the behavior was applied to a value of that case, which claims nothing about what came back. Covering every case an input can be is the mechanised half of asking whether the behavior is total (<<match>>).
+
+*What counts as a case to cover.* A position that is a sum — a union, or a named `+data S = A | B+` — has cases to cover, folded to their leaves. A position typed as one data has one, and covering it is not a question any row can fail, so it is not counted. This is narrower than what a row's expected arm is held against (<<e1904>>), which uses the single name to catch a row that wrote the wrong one.
+
+*A measurement says how much of itself it could make.* A row whose case cannot be read from its text — a helper's answer, which names no case (<<example-expected>>) — is counted as unclassified rather than dropped. While there is one, a case with no rows is *undecided* rather than missing, because one of those rows may be covering it. A behavior with no rows at all is not measured: an absence of evidence is not a set of gaps.
+
+*An editor answers from the workspace or not at all.* Analysing one document cannot say what a behavior's rows cover, because they are written across its module's own source and any number of attached files (<<example-placement>>); reading one file would report what another covers as uncovered. So an editor computes this from the workspace compile, and where it has only a single document the measures are unavailable and nothing is reported.
+
+*Not every measure has a code.* Which of these a build is told about is a separate decision from measuring them, and it is made per measure: a case of the signature nothing claims (<<e1913>>, <<e1915>>), a boundary nothing was written at (<<e1916>>) and an arm nothing goes through (<<e1918>>) are warnings a build can ask for; the rest — how many rows are waiting for a `+let+`, and which positions have no finite partition to derive — are reported by `+souther examples+` and never warned about. A position the model draws no line through is a fact about the model rather than a mistake in it, and a row waiting for a `+let+` is the normal state of a model being written. The warnings are off unless a build asks for them, and asking for the arms costs a second run of every row.
+
+*The question is asked of a module, not of a source.* A behavior's rows are written in the module's own source and in any number of attached files (<<example-placement>>), so a source-by-source reading would report what another file covers as uncovered.
+
+[#example-partition]
+=== The classes a model already states
+
+The equivalence classes an input is measured at are read off what the model already declares. Nothing is invented: a position the model draws no line through has no classes, and is reported as *not derivable* rather than filled in with values nobody asked for. An `+Int+` with no invariant is not split at zero, because a partition nobody wrote is a rule nobody wrote, and reporting coverage of it reports a gap for failing to test something the model does not say.
+
+A type says the classes. `+Bool+` is two; an optional is `+None+` and `+Some+`; a sum is its cases, folded to their leaves (<<sum-data>>). A record is not a class of its own — it is taken apart field by field, two levels deep, which reaches a field of a record a parameter holds and stops where a report would stop being about anything the author recognises as one input.
+
+A threshold says where one class ends and the next begins. A `+guard+` compares an input against a constant (<<guard>>), and both sides of that comparison hold values a row can write, so the comparison divides the position. Thresholds at one position merge into one partition, intersected with what the type admits: an invariant of `+x >= 0+` and a guard of `+x < 10+` divide the position into `+0 <= x < 10+` and `+10 <= x+`, and nothing below zero, because nothing below zero can be constructed.
+
+Only a comparison written as the whole of a `+guard+`'s condition is read. In `+kind == Domestic && cost <= 100000+` the arm is reached without `+cost+` having been compared at all, so taking the arm as evidence about `+cost+` would be wrong; a condition built from `+&&+`, `+||+` or `+!+` therefore contributes no threshold.
+
+An invariant's bound is a boundary and not a partition. Everything outside it is refused at construction (<<e1903>>), so there is no class on the far side to cover — what remains is an edge worth a row. Both sides of a `+guard+`'s line do have values, so it wants the line and its neighbour, and the neighbour only where the type has one: `+cost <= 100000+` asks for 100001 on an `+Int+`, and asks for nothing beside it on a `+Decimal+`, which has no next value.
+
+A rule that drew a line is kept per line. The same value can be a boundary of an invariant and of two separate `+guard+`s, and reaching it through one says nothing about the others, so one value can be several obligations.
+
+[#example-branch-coverage]
+=== Which arms of the body the rows go through
+
+Where a behavior has a body, `+souther examples+` also reports which of its arms the rows run through. An arm is one branch of an `+if+` or a `+guard+` (<<if>>), one arm of a `+match+` (<<match>>), or the success branch or one departure of an attempted construction (<<attempted-construction>>). Cases written together on one arm are one arm: they are one run of code, and a row takes it or does not.
+
+This is *branch-arm* coverage and nothing wider. Going through both arms of two nested conditions is four arms and says nothing about whether their combinations were tried, so covering every arm is a lower bound on covering what a body can do rather than the same thing.
+
+An `+unreachable+` (<<unreachable>>) is not an arm. Reaching one is already <<e1911>>, so counting it would leave every correct model permanently one arm short. An invariant clause is not one either: it is a property of a type rather than a fork in this body, and whether the rows reach its edges is <<example-adequacy>>'s question, asked another way.
+
+*The measurement is opted into by writing a row.* A behavior that no row names is not reported as having arms nothing reaches, whether or not another behavior's rows run through it. A row about `+A+` that calls `+B+` did go through `+B+`'s arm and that arm counts as reached; what does not follow is that `+B+`'s author has been asked anything.
+
+*A row that did not finish contributes nothing.* What such a row went through before its budget ran out (<<e1910>>) is some of what it would have gone through, and it is recorded as undecided rather than counted.
+
+*A boundary a guard drew is met by reaching the comparison, not by writing the value.* A threshold read off a `+guard+` is a boundary to reach (<<example-adequacy>>), and a row can carry exactly that value and never get to the guard because an earlier branch went the other way. Such a boundary counts as met only where a row both wrote the value and went through one of the two arms of the `+if+` whose condition compares it. A boundary an invariant drew is met by writing the value: nothing outside the bound can be constructed, so the edge is the whole of what there is to reach.
 
 [#control-flow]
 == Control structures
@@ -3434,12 +3511,12 @@ Emitted when an `+example+` names a target that is not a behavior of the module 
 
 [,text]
 ----
-`now` cannot be evaluated as an example.
+`taxIncluded` cannot be evaluated as an example.
 Hint: An example runs a behavior with a `let` body, or a `>->` composition of them; here
-it is injected from Java (no `let`) — fake it, do not example it.
+it is a helper `let`, and this module declares no behavior of that name.
 ----
 
-Emitted when an `+example+` targets a behavior with no implementation to evaluate: an injected behavior (<<example-evaluable>>). A `+depends on+` dependency is not a reason — it is supplied by a fake (<<example-fakes>>) — and neither is a `+>->+` composition, which is evaluated by running its stages.
+Emitted when an `+example+` names something this module declares that is not a behavior — a helper `+let+` (<<fn-declaration>>). Being injected is not a reason: an injected behavior is a behavior, and its rows are recorded (<<example-pending>>). Neither is a `+depends on+` dependency, which is supplied by a fake (<<example-fakes>>), nor a `+>->+` composition, which is evaluated by running its stages.
 
 [#e1903]
 === Example input cannot be built
@@ -3540,6 +3617,50 @@ that `unreachable` does not hold.
 ----
 
 Emitted when a row's evaluation reaches an `+unreachable+` (<<unreachable>>). The reason the model wrote is shown with the line and column it was written at, because the row and the declaration are usually in different rules; the diagnostic's own place is the row's. It is not a failed comparison: the row produced no answer to compare, and what it found is a premise that does not hold.
+
+[#e1913]
+=== No row expects a case the signature declares
+
+[,text]
+----
+No row expects `Waiting`, so nothing says `submit` owes that answer.
+Hint: Write a row whose expected value is a `Waiting`, or drop the case from the
+signature.
+----
+
+A warning, off unless the build asks for it (<<example-adequacy>>). Emitted at the behavior's declaration when its output is a sum and no row expects one of its cases. Only where the measurement was complete: a row whose expected case could not be read leaves the question undecided, and telling an author to write a row they may already have written is worse than saying nothing.
+
+[#e1915]
+=== No row uses a case an input declares
+
+[,text]
+----
+No row applies `submit` to a `Overseas`, so input #1 has a case nothing was tried with.
+----
+
+The same warning for an input position that is a sum. Covering every case an input can be is the mechanised half of asking whether the behavior is total (<<match>>).
+
+[#e1916]
+=== No row is at a boundary
+
+[,text]
+----
+No row is at submit/cost = 100, which is where guard@14:5 draws its line.
+Hint: A row on the line is what tells a rule written `<=` from one written `<`.
+----
+
+A warning, and one that needs the arms measured where the line was drawn by a `+guard+` (<<example-branch-coverage>>): meeting such a line takes reaching the comparison, not writing the value. A line an invariant drew is decided without that. The rule that drew it is named, because the same value can be a boundary of several and reaching it through one leaves the others unmet.
+
+[#e1918]
+=== No row goes through an arm
+
+[,text]
+----
+No row goes through the `else` arm of `submit`.
+Hint: Either a row is missing for what this arm answers, or nothing can reach it.
+----
+
+A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at the `+if+`, `+match+` or attempted construction the arm belongs to rather than at the arm's own body: the fork is what the author wrote, and a body is what lowering rewrites. A behavior no row names is not warned about, whether or not another behavior's rows run through it.
 
 [#e2001]
 === A recursive helper is not proven total

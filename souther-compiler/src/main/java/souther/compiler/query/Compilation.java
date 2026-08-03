@@ -162,6 +162,8 @@ public final class Compilation {
             for (String id : exampleSourcesOf(module)) {
                 db.ask(new Output.Examples(module, id));
             }
+            // One ask, which answers nothing and costs nothing unless the build asked to be told.
+            db.ask(new Adequacy.Warnings(module));
         }
     }
 
@@ -178,6 +180,25 @@ public final class Compilation {
             }
         }
         return distinct;
+    }
+
+    /** What this compilation was asked to measure. Set before anything is asked; the answers are
+     * memoised, so a later change would leave one measured and the next not. */
+    public void measure(Adequacy.Asked asked) {
+        db.set(new Adequacy.Requested(), asked);
+    }
+
+    /** Measured and warned about, at {@code level}. */
+    public void measure(Adequacy.Level level) {
+        measure(Adequacy.Asked.warningsAt(level));
+    }
+
+    /** How well one module's rows cover it. {@link #answerEverything()} need not have run: the
+     * measures ask for what they read. */
+    public Adequacy.Of adequacy(String module) {
+        return new Adequacy.Of(db.ask(new Adequacy.Witnesses(module)).value(),
+                db.ask(new Adequacy.Coverage(module)).value(),
+                db.ask(new Adequacy.BranchCoverage(module)).value());
     }
 
     public Db db() {

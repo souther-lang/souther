@@ -398,10 +398,10 @@ class CompileExampleCompositionTest {
         assertEquals("check.fake.missing", e.diagnostic().messageKey());
     }
 
-    /** An injected behavior is still refused: it has nothing to run. */
+    /** An injected behavior has nothing to run yet, so its rows are recorded rather than refused. */
     @Test
-    void anInjectedTargetIsStillE1902() {
-        assertEquals("E1902", err("""
+    void anInjectedTargetsRowsAreRecorded() {
+        assertDoesNotThrow(() -> Compiler.compile("""
                 module example.injected
 
                 data Priced = { amount: Int }
@@ -410,24 +410,25 @@ class CompileExampleCompositionTest {
 
                 example rateFor
                   | ("JPY") -> Priced { amount = 1 }
-                """).diagnostic().code());
+                """));
     }
 
-    /** E1902 has one reason left: the target is injected. */
+    /** E1902 has one reason left, and it is not the injection: the target is not a behavior. */
     @Test
-    void theRefusalReasonIsTheInjection() {
+    void theRefusalIsLeftForATargetThatIsNotABehavior() {
         CompileException e = err("""
-                module example.injectedreason
+                module example.helperrow
 
                 data Priced = { amount: Int }
 
-                behavior rateFor : (currency: String) -> Priced
+                let doubled (n: Int) = n * 2
 
-                example rateFor
-                  | ("JPY") -> Priced { amount = 1 }
+                example doubled
+                  | (2) -> 4
                 """);
+        assertEquals("E1902", e.diagnostic().code());
         String hint = String.valueOf(e.diagnostic().notes().get(0).args()[0]);
-        assertTrue(hint.contains("injected"), hint);
-        assertFalse(hint.contains(">->"), hint);
+        assertTrue(hint.contains("helper"), hint);
+        assertFalse(hint.contains("injected"), hint);
     }
 }

@@ -23,75 +23,75 @@ import java.util.Optional;
  * domain accepts, and would do so at the boundary where it reads as bad input. Anything this cannot
  * prove equivalent is left to the emitter's fallback.
  */
-final class InvariantConstraints {
+public final class InvariantConstraints {
 
     private InvariantConstraints() {}
 
     /** The name a newtype's single field carries, and so the name its invariant reads it by. */
     private static final String VALUE = "value";
 
-    sealed interface Constraint {}
+    public sealed interface Constraint {}
 
     /** A {@code StringDecoder} constraint. */
-    sealed interface OfString extends Constraint {}
+    public sealed interface OfString extends Constraint {}
 
-    record MinLength(int n) implements OfString {}
+    public record MinLength(int n) implements OfString {}
 
-    record MaxLength(int n) implements OfString {}
+    public record MaxLength(int n) implements OfString {}
 
-    record FixedLength(int n) implements OfString {}
+    public record FixedLength(int n) implements OfString {}
 
-    record Pattern(String regex) implements OfString {}
+    public record Pattern(String regex) implements OfString {}
 
     /** A {@code LongDecoder} constraint — Souther's {@code Int} is carried as a long. */
-    sealed interface OfInt extends Constraint {}
+    public sealed interface OfInt extends Constraint {}
 
-    record Min(long n) implements OfInt {}
+    public record Min(long n) implements OfInt {}
 
-    record Max(long n) implements OfInt {}
+    public record Max(long n) implements OfInt {}
 
-    record Positive() implements OfInt {}
+    public record Positive() implements OfInt {}
 
-    record NonNegative() implements OfInt {}
+    public record NonNegative() implements OfInt {}
 
     /** A {@code DecimalDecoder} constraint. */
-    sealed interface OfDecimal extends Constraint {}
+    public sealed interface OfDecimal extends Constraint {}
 
-    record DecimalMin(BigDecimal n) implements OfDecimal {}
+    public record DecimalMin(BigDecimal n) implements OfDecimal {}
 
-    record DecimalMax(BigDecimal n) implements OfDecimal {}
+    public record DecimalMax(BigDecimal n) implements OfDecimal {}
 
-    record DecimalPositive() implements OfDecimal {}
+    public record DecimalPositive() implements OfDecimal {}
 
-    record DecimalNonNegative() implements OfDecimal {}
+    public record DecimalNonNegative() implements OfDecimal {}
 
     /** A {@code ListDecoder} constraint — a newtype over a {@code List}, whose decoder Raoh answers
      * typed until something untyped is chained onto it. */
-    sealed interface OfList extends Constraint {}
+    public sealed interface OfList extends Constraint {}
 
     /** {@code nonempty()} rather than {@code minSize(1)}: Raoh states emptiness on its own, and says so
      * in the message. */
-    record NonEmpty() implements OfList {}
+    public record NonEmpty() implements OfList {}
 
-    record MinSize(int n) implements OfList {}
+    public record MinSize(int n) implements OfList {}
 
-    record MaxSize(int n) implements OfList {}
+    public record MaxSize(int n) implements OfList {}
 
-    record FixedSize(int n) implements OfList {}
+    public record FixedSize(int n) implements OfList {}
 
     /** {@code unique()}: no element appears twice, compared by value as Souther compares. */
-    record Unique() implements OfList {}
+    public record Unique() implements OfList {}
 
     /** A {@code RecordDecoder} constraint — a newtype over a {@code Map}, which crosses the boundary as
      * an object and is decoded as a record of its values. */
-    sealed interface OfMap extends Constraint {}
+    public sealed interface OfMap extends Constraint {}
 
-    record MapMinSize(int n) implements OfMap {}
+    public record MapMinSize(int n) implements OfMap {}
 
-    record MapMaxSize(int n) implements OfMap {}
+    public record MapMaxSize(int n) implements OfMap {}
 
     /** An invariant's clauses: {@code a && b} is two rules, each mappable on its own. */
-    static List<Ast.Expr> clauses(Ast.Expr invariant) {
+    public static List<Ast.Expr> clauses(Ast.Expr invariant) {
         List<Ast.Expr> out = new ArrayList<>();
         collectClauses(invariant, out);
         return out;
@@ -110,7 +110,7 @@ final class InvariantConstraints {
      * The Raoh constraint equivalent to {@code clause} on a newtype whose value is {@code base}, or
      * empty when this cannot prove one.
      */
-    static Optional<Constraint> of(Ast.Expr clause, Type base) {
+    public static Optional<Constraint> of(Ast.Expr clause, Type base) {
         if (clause instanceof Ast.Apply call) {
             return ofCall(call, base);
         }

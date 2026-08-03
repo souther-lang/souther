@@ -1,0 +1,378 @@
+package souther.compiler.query;
+
+import souther.compiler.ast.Ast;
+import souther.compiler.check.Sig;
+import souther.compiler.check.Symbols;
+import souther.compiler.core.Core;
+import souther.compiler.coverage.CoverageSites;
+import souther.compiler.observe.Classification;
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.partition.Axis;
+import souther.compiler.partition.AxisId;
+import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.GuardThresholds;
+import souther.compiler.partition.OriginRef;
+import souther.compiler.partition.PartitionClass;
+import souther.compiler.partition.Partitions;
+import souther.compiler.partition.RowClasses;
+
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Measuring one behavior's rows against the distinctions its model draws.
+ *
+ * <p>Each position is measured on its own. A row that could not be read at one position still says
+ * what it says at the others, so an unreadable value leaves that axis undecided and nothing else.
+ */
+final class Coverages {
+
+    /**
+     * The positions one behavior is measured at, with what its own comparisons divide them into.
+     *
+     * <p>Asked here rather than worked out again wherever it is needed. What a report says is not
+     * covered and what a generator writes a row for have to be the same positions and the same classes,
+     * and two derivations of them would be two chances to disagree.
+     */
+    static Partitions.Partitioning partitioningOf(Ast.SpecBehavior behavior, Sig sig, Symbols symbols,
+                                                  Core body, CoverageSites.Plan plan) {
+        List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
+        Partitions.Partitioning partitioning = Partitions.of(behavior, sig, symbols);
+        if (body == null) {
+            return partitioning;
+        }
+        return Partitions.withThresholds(partitioning,
+                GuardThresholds.of(behavior.name(), body, plan, parameters, symbols), symbols);
+    }
+
+    /**
+     * @param armsMeasured whether the rows were run against classes that record which arms they went
+     *                     through. A boundary a {@code guard} drew is not decided without that: the
+     *                     value being written is not the same as the comparison having been evaluated.
+     */
+    static PartitionEvidence of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols, Core body,
+                                CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
+                                boolean armsMeasured) {
+        List<RowOutcome> rows = observed.rows();
+        List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
+        Partitions.Partitioning partitioning = partitioningOf(behavior, sig, symbols, body, plan);
+
+        List<PartitionEvidence.AxisCoverage> axes = new ArrayList<>();
+        List<PartitionEvidence.BoundaryCoverage> boundaries = new ArrayList<>();
+        List<String> notDerivable = new ArrayList<>();
+
+        List<Axis> divided = new ArrayList<>();
+        Readings readings = Readings.of(rows, parameters, partitioning.axes(),
+                observed.someRowsUnseen());
+        for (Axis axis : partitioning.axes()) {
+            if (!axis.measurable()) {
+                notDerivable.add(axis.path().toString());
+                continue;
+            }
+            if (axis.derivable()) {
+                axes.add(coverageOf(axis, readings));
+                divided.add(axis);
+            }
+            // Whether the arms were measured, and nothing else. A row that did not finish makes a
+            // *missing* hit undecidable and takes nothing away from one that was found: a row that
+            // wrote the value and went through the comparison did so whatever else stopped.
+            boundaries.addAll(boundariesOf(axis, parameters, rows, symbols,
+                    armsMeasured, observed.someRowsUnseen()));
+        }
+        return new PartitionEvidence(axes, boundaries, pairsOf(divided, readings),
+                notDerivable, partitioning.omitted());
+    }
+
+    /**
+     * What every row said at every position, read once.
+     *
+     * <p>The measures below were putting the same question to the rows — which class is this row in,
+     * here — and answering the follow-up differently. The single-position coverage counted the rows
+     * that could not say and reported them as undecided; the combinations left those rows out and
+     * reported what remained as untried. One reading, so that a row nothing could place is the same
+     * fact wherever it is read.
+     *
+     * @param someRowsUnseen rows that were never observed at all, which no reading can show
+     */
+    private record Readings(List<Map<AxisId, Classification>> byRow, boolean someRowsUnseen) {
+
+        static Readings of(List<RowOutcome> rows, List<String> parameters, List<Axis> axes,
+                           boolean someRowsUnseen) {
+            List<Map<AxisId, Classification>> read = new ArrayList<>();
+            for (RowOutcome row : rows) {
+                read.add(RowClasses.of(row, parameters, axes));
+            }
+            return new Readings(List.copyOf(read), someRowsUnseen);
+        }
+
+        boolean noRows() {
+            return byRow.isEmpty();
+        }
+
+        /** Which class a row fell in at one position, or null where it did not say. */
+        static String classIn(Map<AxisId, Classification> where, Axis axis) {
+            return where.get(axis.id()) instanceof Classification.Classified in ? in.classId() : null;
+        }
+
+        /** How many rows could not say where they were at this position. */
+        int couldNotSay(Axis axis) {
+            return (int) byRow.stream().filter(where -> classIn(where, axis) == null).count();
+        }
+
+        /**
+         * Whether every row that bears on {@code axes} said where it was at all of them.
+         *
+         * <p>Only then does a class or a combination nothing sits in mean nothing reaches it. One row
+         * that could not be placed at one of the positions leaves every class of that position, and
+         * every combination it takes part in, undecided rather than untried.
+         */
+        MeasurementStatus status(List<Axis> axes) {
+            if (someRowsUnseen) {
+                return MeasurementStatus.PARTIAL;
+            }
+            for (Axis axis : axes) {
+                if (couldNotSay(axis) > 0) {
+                    return MeasurementStatus.PARTIAL;
+                }
+            }
+            return MeasurementStatus.COMPLETE;
+        }
+    }
+
+    /** How many pairs of classes across two positions the rows are enough to sit in at once. */
+    private static final int PAIR_LIMIT = 20_000;
+
+    /**
+     * The two-class combinations the rows reach.
+     *
+     * <p>A combination a row sits in is <em>proven reachable</em>, and the row is the proof. One no row
+     * sits in has not been shown unreachable — nothing has tried to build a value for it — so it is
+     * unknown rather than missing. The difference matters: calling it unreachable flatters the number,
+     * and calling it missing sends the author after a row that may not exist.
+     *
+     * <p>Pairs, rather than the full product, for the reason pairwise testing exists: most rules that
+     * two inputs are involved in are decided by those two, and the product of every input is more rows
+     * than anyone writes. A behavior with one divided position has no pairs at all, which is why the
+     * single-position coverage is measured on its own and not derived from this.
+     */
+    private static PartitionEvidence.PairSpace pairsOf(List<Axis> axes, Readings readings) {
+        long total = 0;
+        for (int i = 0; i < axes.size(); i++) {
+            for (int j = i + 1; j < axes.size(); j++) {
+                total += (long) axes.get(i).classes().size() * axes.get(j).classes().size();
+            }
+        }
+        if (total == 0) {
+            return PartitionEvidence.PairSpace.NONE;
+        }
+        if (total > PAIR_LIMIT) {
+            return new PartitionEvidence.PairSpace((int) Math.min(total, Integer.MAX_VALUE), 0, 0, 0,
+                    (int) Math.min(total, Integer.MAX_VALUE), true, MeasurementStatus.PARTIAL);
+        }
+        Set<String> covered = new LinkedHashSet<>();
+        for (Map<AxisId, Classification> where : readings.byRow()) {
+            for (int i = 0; i < axes.size(); i++) {
+                for (int j = i + 1; j < axes.size(); j++) {
+                    String left = Readings.classIn(where, axes.get(i));
+                    String right = Readings.classIn(where, axes.get(j));
+                    if (left != null && right != null) {
+                        // Which positions, and not only which classes. A class id is unique within
+                        // its axis and not across axes — three `Flag` inputs all have a `Yes` — so a
+                        // key of two class names alone collapses every pair one row covers into one.
+                        covered.add(i + "/" + left + " " + j + "/" + right);
+                    }
+                }
+            }
+        }
+        int reached = covered.size();
+        return new PartitionEvidence.PairSpace((int) total, reached, reached, 0,
+                (int) total - reached, false, readings.status(axes));
+    }
+
+    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {
+        Set<String> covered = new LinkedHashSet<>();
+        for (Map<AxisId, Classification> where : readings.byRow()) {
+            String in = Readings.classIn(where, axis);
+            if (in != null) {
+                covered.add(in);
+            }
+        }
+        MeasurementStatus status = readings.noRows() && !readings.someRowsUnseen()
+                ? MeasurementStatus.UNAVAILABLE : readings.status(List.of(axis));
+        return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.path().toString(),
+                axis.classes().stream().map(PartitionClass::id).toList(), covered,
+                readings.couldNotSay(axis), status);
+    }
+
+    /**
+     * Whether a row was written at each boundary.
+     *
+     * <p>An invariant's bound is met by writing the value: outside it nothing can be constructed, so
+     * the value is the whole of what there is to reach. A guard's is not — the comparison has to have
+     * been evaluated, and a row can carry the exact value and never reach the guard that cares about
+     * it because an earlier branch went the other way. Nothing measures that until the arms are
+     * instrumented, so a guard's boundary reports as unavailable rather than as met or missed.
+     */
+    private static List<PartitionEvidence.BoundaryCoverage> boundariesOf(
+            Axis axis, List<String> parameters, List<RowOutcome> rows, Symbols symbols,
+            boolean armsMeasured, boolean someRowsUnseen) {
+        List<PartitionEvidence.BoundaryCoverage> out = new ArrayList<>();
+        for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
+            boolean available = !rows.isEmpty()
+                    && (!(each.origin() instanceof OriginRef.GuardOrigin) || armsMeasured);
+            Met met = !available ? Met.UNDECIDED : switch (each.origin()) {
+                case OriginRef.GuardOrigin g -> evaluatedAt(axis, parameters, rows, each.value(), g);
+                default -> writtenAt(axis, parameters, rows, each.value());
+            };
+            // A row nothing read may be the row that is at this value. Found is still found — one row
+            // at the boundary settles it whatever else went unread — but not-found is not settled.
+            if (met == Met.NO && someRowsUnseen) {
+                met = Met.UNREADABLE;
+            }
+            // Nor is a hit that could not be looked for: a row that never finished left no hits, and
+            // a guard's line is met by going through the comparison.
+            if (met == Met.NO && each.origin() instanceof OriginRef.GuardOrigin
+                    && rows.stream().anyMatch(
+                            row -> row.disposition() == souther.compiler.observe.Disposition.INCOMPLETE)) {
+                met = Met.UNREADABLE;
+            }
+            out.add(new PartitionEvidence.BoundaryCoverage(idOf(each.axis()),
+                    each.origin().describe(), each.side(), plain(each.value()),
+                    met == Met.YES,
+                    met == Met.UNDECIDED ? MeasurementStatus.UNAVAILABLE
+                            : met == Met.UNREADABLE ? MeasurementStatus.PARTIAL
+                                    : MeasurementStatus.COMPLETE));
+        }
+        return out;
+    }
+
+    /**
+     * Whether a row was at a boundary, and whether that could be told at all.
+     *
+     * <p>Three answers, because a value the observer could not read is not a value that missed. A row
+     * writing the very number the rule names, whose observation was cut short by a limit somewhere
+     * else in the same input, reads as "no row is at this boundary" — which is a sentence about the
+     * model that is not true.
+     */
+    private enum Met { YES, NO, UNREADABLE, UNDECIDED }
+
+    /**
+     * Whether a row wrote the boundary value <em>and</em> got as far as the comparison that cares
+     * about it.
+     *
+     * <p>Both, because either alone is a different claim. A row can hand a behavior exactly 100000 and
+     * take an earlier branch that never reaches {@code cost <= 100000}, and counting that as having
+     * tried the boundary would report a rule as exercised that nothing has run. Reaching either arm of
+     * the {@code if} is enough: the comparison was evaluated to get to either one.
+     */
+    private static Met evaluatedAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
+                                   ObservedValue boundary, OriginRef.GuardOrigin origin) {
+        boolean unreadable = false;
+        for (RowOutcome row : rows) {
+            ObservedValue at = RowClasses.valueAt(row, parameters, axis.path());
+            if (!readable(at)) {
+                unreadable = true;
+                continue;
+            }
+            if (sameNumber(at, boundary)
+                    && (row.hits().contains(origin.guard().siteIndexThen())
+                            || row.hits().contains(origin.guard().siteIndexElse()))) {
+                return Met.YES;
+            }
+        }
+        return unreadable ? Met.UNREADABLE : Met.NO;
+    }
+
+    /**
+     * The boundaries a row could have been written at and demonstrably none was.
+     *
+     * <p>Includes a line a {@code guard} drew, where the arms were measured. Writing the row and
+     * meeting the line are different questions and the second needs the arms — but the row to write is
+     * the same row either way, and a line the report names as unmet that the generator will not offer
+     * is the one place an author is told about a gap and left to fill it by hand.
+     *
+     * <p>Left out where the arms were not measured, and where some row wrote the position unreadably:
+     * a row generated for either may be a row that is already there.
+     */
+    static List<BoundaryObligation> unmet(Axis axis, List<String> parameters, List<RowOutcome> rows,
+                                          Symbols symbols, boolean armsMeasured) {
+        List<BoundaryObligation> out = new ArrayList<>();
+        for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
+            boolean guard = each.origin() instanceof OriginRef.GuardOrigin;
+            if (guard && !armsMeasured) {
+                continue;
+            }
+            Met met = guard
+                    ? evaluatedAt(axis, parameters, rows, each.value(),
+                            (OriginRef.GuardOrigin) each.origin())
+                    : writtenAt(axis, parameters, rows, each.value());
+            if (met == Met.NO) {
+                out.add(each);
+            }
+        }
+        return out;
+    }
+
+    private static Met writtenAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
+                                 ObservedValue boundary) {
+        boolean unreadable = false;
+        for (RowOutcome row : rows) {
+            ObservedValue at = RowClasses.valueAt(row, parameters, axis.path());
+            if (readable(at)) {
+                if (sameNumber(at, boundary)) {
+                    return Met.YES;
+                }
+            } else {
+                unreadable = true;
+            }
+        }
+        return unreadable ? Met.UNREADABLE : Met.NO;
+    }
+
+    /**
+     * Whether an observation says what number was at this position.
+     *
+     * <p>Asked of the number rather than of the shape, because a boundary is only ever on a numeric
+     * position and the truncation can be one layer in. A newtype is observed as a construction holding
+     * its value, and a limit reached inside it leaves the construction readable with a truncation
+     * where the number should be — which, read by shape, is a value that is simply not the boundary.
+     */
+    private static boolean readable(ObservedValue at) {
+        return numberOf(at) != null;
+    }
+
+    /** A newtype and the number it wraps are the same value at this position, which is how the row
+     * writes it and how the boundary was read. */
+    private static boolean sameNumber(ObservedValue a, ObservedValue b) {
+        java.math.BigDecimal left = numberOf(a);
+        java.math.BigDecimal right = numberOf(b);
+        return left != null && right != null && left.compareTo(right) == 0;
+    }
+
+    private static java.math.BigDecimal numberOf(ObservedValue v) {
+        return switch (v) {
+            case ObservedValue.Integer i -> java.math.BigDecimal.valueOf(i.value());
+            case ObservedValue.Decimal d -> d.value();
+            case ObservedValue.Constructed c when c.field("value") != null -> numberOf(c.field("value"));
+            case null, default -> null;
+        };
+    }
+
+    private static String idOf(AxisId axis) {
+        return axis.toString();
+    }
+
+    /** A boundary as the author would write it, not as a record prints itself. */
+    private static String plain(ObservedValue value) {
+        java.math.BigDecimal number = numberOf(value);
+        return number == null ? String.valueOf(value) : number.stripTrailingZeros().toPlainString();
+    }
+
+    private Coverages() {}
+}

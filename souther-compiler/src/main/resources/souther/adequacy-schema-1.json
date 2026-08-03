@@ -1,0 +1,268 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://souther-lang.org/schema/adequacy-1.json",
+  "title": "Souther adequacy report",
+  "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it.",
+  "type": "object",
+  "required": ["schemaVersion", "compilerVersion", "status", "modules"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "compilerVersion": {
+      "type": "string",
+      "description": "The compiler that produced the report, or `unreleased` when it ran from class files."
+    },
+    "status": {
+      "$ref": "#/$defs/status",
+      "description": "The weakest status among the modules. `partial` means something could not be read, so an absent number is not evidence of a gap."
+    },
+    "modules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/module" }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": ["complete", "partial", "unavailable"]
+    },
+    "module": {
+      "type": "object",
+      "required": ["module", "status", "incompleteness", "behaviors"],
+      "additionalProperties": false,
+      "properties": {
+        "module": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "incompleteness": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/incompleteness" }
+        },
+        "behaviors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/behavior" }
+        }
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "required": ["name", "implementation", "rows", "pending", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "implementation": {
+          "enum": ["implemented", "injected"],
+          "description": "`injected` is a behavior with no `let` yet; its rows are recorded rather than evaluated."
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many example rows name this behavior, across every source that writes one."
+        },
+        "pending": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many of those rows are recorded rather than evaluated."
+        },
+        "status": { "$ref": "#/$defs/status" },
+        "signature": { "$ref": "#/$defs/signature" },
+        "partition": { "$ref": "#/$defs/partition" },
+        "branch": { "$ref": "#/$defs/branch" }
+      }
+    },
+    "branch": {
+      "type": "object",
+      "description": "Which arms of the behavior's body the rows go through. Branch-arm coverage, not path coverage: going through both arms of two nested conditions says nothing about their combinations.",
+      "required": ["status", "arms", "covered", "unreached"],
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/status",
+          "description": "`unavailable` where nothing measured the arms: a behavior with no `let`, one no row names, or a run whose instrumentation could not be tied back to the body."
+        },
+        "arms": { "type": "integer", "minimum": 0 },
+        "covered": { "type": "integer", "minimum": 0 },
+        "unreached": {
+          "type": "array",
+          "description": "Arms no row goes through.",
+          "items": {
+            "type": "object",
+            "required": ["label", "kind", "at"],
+            "additionalProperties": false,
+            "properties": {
+              "label": { "type": "string" },
+              "kind": { "enum": ["then", "else", "case", "constructed", "departure"] },
+              "at": { "$ref": "#/$defs/at" }
+            }
+          }
+        }
+      }
+    },
+    "partition": {
+      "type": "object",
+      "description": "How much of what the model distinguishes about this behavior's inputs the rows reach.",
+      "required": ["axes", "boundaries", "pairs", "notDerivable", "omitted"],
+      "additionalProperties": false,
+      "properties": {
+        "axes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["axis", "path", "classes", "covered", "unclassifiedRows", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "axis": { "type": "string" },
+              "path": { "type": "string", "description": "The input position, as a parameter and the fields read off it. A newtype's `value` is never a step." },
+              "classes": { "type": "array", "items": { "type": "string" } },
+              "covered": { "type": "array", "items": { "type": "string" } },
+              "unclassifiedRows": { "type": "integer", "minimum": 0 },
+              "status": { "$ref": "#/$defs/status" }
+            }
+          }
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["axis", "origin", "side", "value", "hit", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "axis": { "type": "string" },
+              "origin": { "type": "string", "description": "The rule that drew this line — a type's invariant, or a guard." },
+              "side": { "enum": ["below", "at", "above"] },
+              "value": { "type": "string" },
+              "hit": { "type": "boolean" },
+              "status": {
+                "$ref": "#/$defs/status",
+                "description": "`unavailable` for a guard's boundary: meeting it takes the comparison having run, which nothing measures until the arms are instrumented."
+              }
+            }
+          }
+        },
+        "pairs": {
+          "type": "object",
+          "description": "Two-class combinations across two positions. Counts rather than a ratio: a combination no row reaches has not been shown unreachable, only untried, so the denominator is not known.",
+          "required": ["total", "covered", "witnessedFeasible", "provenInfeasible", "unknown", "truncated", "status"],
+          "additionalProperties": false,
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "covered": { "type": "integer", "minimum": 0 },
+            "witnessedFeasible": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Combinations proven reachable, each by a row that sits in it."
+            },
+            "provenInfeasible": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Combinations shown impossible. A candidate that failed to build is not one of these — another value of the same two classes may build."
+            },
+            "unknown": { "type": "integer", "minimum": 0 },
+            "status": {
+            "$ref": "#/$defs/status",
+            "description": "`partial` where some rows were not read at all: a combination none of the rows seen reaches has not been left untried by anybody."
+          },
+          "truncated": { "type": "boolean" }
+          }
+        },
+        "notDerivable": {
+          "type": "array",
+          "description": "Positions the model draws no line through. Not a gap — a statement that there was nothing to measure.",
+          "items": { "type": "string" }
+        },
+        "omitted": {
+          "type": "array",
+          "description": "Positions dropped for being past the axis limit.",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "description": "What the rows establish about the cases of the behavior's inputs and its output. Absent where the behavior has no signature to read.",
+      "required": ["status", "output", "inputs"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "$ref": "#/$defs/status" },
+        "output": {
+          "type": "object",
+          "required": ["declared", "specified", "observed", "verified", "unclassifiedRows"],
+          "additionalProperties": false,
+          "properties": {
+            "declared": { "$ref": "#/$defs/caseNames" },
+            "specified": {
+              "$ref": "#/$defs/caseNames",
+              "description": "Cases a row expects. Somebody wrote down that the model owes this answer."
+            },
+            "observed": {
+              "$ref": "#/$defs/caseNames",
+              "description": "Cases the behavior was seen to answer with, including from a row that expected something else."
+            },
+            "verified": {
+              "$ref": "#/$defs/caseNames",
+              "description": "Cases a row expected and the behavior produced."
+            },
+            "unclassifiedRows": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Rows whose case could not be read. Above zero, a missing case is undecided rather than missing."
+            }
+          }
+        },
+        "inputs": {
+          "type": "array",
+          "description": "One entry per parameter, in order. A parameter that is not a sum has nothing to cover and reports empty sets.",
+          "items": {
+            "type": "object",
+            "required": ["declared", "specified", "executed", "verified", "unclassifiedRows"],
+            "additionalProperties": false,
+            "properties": {
+              "declared": { "$ref": "#/$defs/caseNames" },
+              "specified": { "$ref": "#/$defs/caseNames" },
+              "executed": {
+                "$ref": "#/$defs/caseNames",
+                "description": "Cases the behavior was applied to. Not `observed`: nothing is claimed about what came back."
+              },
+              "verified": { "$ref": "#/$defs/caseNames" },
+              "unclassifiedRows": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "caseNames": {
+      "type": "array",
+      "description": "Case names, sorted, so that two runs of the same model compare.",
+      "items": { "type": "string" }
+    },
+    "incompleteness": {
+      "type": "object",
+      "required": ["code", "scope", "subject"],
+      "additionalProperties": false,
+      "properties": {
+        "scope": {
+          "enum": ["behavior", "source", "module", "position"],
+          "description": "What `subject` names, and so what the reason counts against. Anything larger than a behavior counts against every behavior inside it."
+        },
+        "code": {
+          "enum": ["value_unreadable", "value_truncated", "row_timed_out", "runtime_absent",
+                   "probe_mapping_lost", "search_limit", "axis_omitted"]
+        },
+        "subject": { "type": "string" },
+        "at": { "$ref": "#/$defs/at" }
+      }
+    },
+    "at": {
+      "type": "object",
+      "description": "Where in which source. A position alone cannot say which file, since a module's rows are written across its own source and any attached ones.",
+      "required": ["sourceId", "line", "column"],
+      "additionalProperties": false,
+      "properties": {
+        "sourceId": { "type": "string" },
+        "line": { "type": "integer" },
+        "column": { "type": "integer" }
+      }
+    }
+  }
+}

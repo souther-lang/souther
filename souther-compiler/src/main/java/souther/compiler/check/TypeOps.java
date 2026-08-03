@@ -713,6 +713,18 @@ public final class TypeOps {
                 && fieldTypes(data, symbols).containsKey(key);
     }
 
+    /**
+     * The cases a position of this type can be, when it can be more than one thing: the leaf cases of
+     * a union or of a named sum, and nothing otherwise.
+     *
+     * <p>What a row's expected arm is held against, and what an adequacy report counts as declared. The
+     * two have to agree — a report that read a wider set than the rows are checked against would name a
+     * case no row is allowed to write — so the rule is here rather than stated twice.
+     */
+    public static Set<TypeName> outputCases(Type t, Symbols symbols) {
+        return t instanceof Type.Union || t instanceof Type.Ref ? leafCases(t, symbols) : Set.of();
+    }
+
     public static Set<TypeName> leafCases(Type t, Symbols symbols) {
         Set<TypeName> out = new LinkedHashSet<>();
         collectLeafCases(t, symbols, out, new HashSet<>());
@@ -958,7 +970,7 @@ public final class TypeOps {
 
     /** The type a newtype wraps ({@code data X = Y} gives {@code Y}), or null when {@code name} is not
      * a newtype — the implicit inner field is {@code value}. */
-    static Type newtypeInner(TypeName name, Symbols symbols) {
+    public static Type newtypeInner(TypeName name, Symbols symbols) {
         if (symbols.get(name) instanceof Ast.Data d && d.newtype()) {
             return fieldTypes(d, symbols).get("value");
         }
@@ -1038,7 +1050,7 @@ public final class TypeOps {
         };
     }
 
-    static boolean isSingleValueNewtype(Type t, Symbols symbols) {
+    public static boolean isSingleValueNewtype(Type t, Symbols symbols) {
         return t instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data d && d.newtype();
     }
@@ -1149,7 +1161,7 @@ public final class TypeOps {
     /** The underlying base of a type: itself, or — for a single-value newtype ({@code data X = Y}) —
      * the base of its {@code value} type, recursively (so {@code 管理職 = レベル = Int} bases to Int).
      * A newtype's value is what its comparison and equality read. */
-    static Type base(Type t, Symbols symbols) {
+    public static Type base(Type t, Symbols symbols) {
         if (isSingleValueNewtype(t, symbols)) {
             Type inner = fieldTypes((Ast.Data) symbols.get(((Type.Ref) t).name()), symbols).get("value");
             if (inner != null) {

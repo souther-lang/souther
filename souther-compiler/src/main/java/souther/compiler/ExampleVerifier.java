@@ -10,9 +10,18 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
+import souther.compiler.coverage.Probe;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.diag.SourceRef;
+import souther.compiler.observe.Disposition;
+import souther.compiler.observe.FailurePhase;
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.Limits;
+import souther.compiler.observe.ObservedValue;
+import souther.compiler.observe.RowOutcome;
+import souther.compiler.observe.Stage;
 import souther.runtime.Sets;
 
 import net.unit8.raoh.Err;
@@ -74,26 +83,99 @@ public final class ExampleVerifier {
      * <p>{@code values} are the values a row may name beyond this module's own: the ones its imports
      * bring in, each already closed over the module that published it (ADR-0074).
      */
-    public static List<Diagnostic> check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
-                                         Map<String, byte[]> classes,
-                                         Map<String, List<BehaviorRequirement>> requirements,
-                                         ClassLoader parent, Map<String, Ast.FnDef> values) {
+    public static Observations check(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
+                                     Map<String, byte[]> classes,
+                                     Map<String, List<BehaviorRequirement>> requirements,
+                                     ClassLoader parent, Map<String, Ast.FnDef> values,
+                                     String sourceId) {
         if (module.examples().isEmpty()) {
-            return List.of();
+            return Observations.NONE;
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values);
+        v.sourceId = sourceId;
         List<Diagnostic> failures = new ArrayList<>();
+        List<RowOutcome> rows = new ArrayList<>();
+        List<Incompleteness> incompleteness = new ArrayList<>();
         for (Ast.Example ex : module.examples()) {
             try {
-                v.checkExample(ex, failures);
+                v.checkExample(ex, failures, rows);
             } catch (LinkageError _) {
                 // The runtime is not on this host's classpath (it is `provided`, like CTFE), so the
                 // generated classes cannot be loaded to evaluate here; the build-time pass, where the
-                // runtime is present, still checks this example.
+                // runtime is present, still checks this example. Nothing was observed, and a measure
+                // that read the empty result as "no row covers this" would report a gap nobody left.
+                incompleteness.add(Incompleteness.at(Incompleteness.Code.RUNTIME_ABSENT,
+                        Incompleteness.Scope.BEHAVIOR, ex.target(),
+                        new SourceRef(sourceId, ex.pos())));
             }
         }
-        return failures;
+        // A row that could not be decided is read here rather than restated at each place it happens,
+        // so what a measure sees and what stopped it can never disagree.
+        for (RowOutcome outcome : rows) {
+            if (outcome.disposition() == Disposition.INCOMPLETE) {
+                incompleteness.add(new Incompleteness(Incompleteness.Code.ROW_TIMED_OUT,
+                        Incompleteness.Scope.BEHAVIOR, outcome.target(),
+                        java.util.Optional.of(outcome.at())));
+            }
+        }
+        return new Observations(failures, rows, incompleteness);
+    }
+
+    /**
+     * Whether a value composed elsewhere can be built at this module's boundary.
+     *
+     * <p>The question a generator cannot answer for itself. Which values a type admits together is the
+     * derived decoder's business — an invariant relating two fields refuses a pair that each field
+     * would have accepted alone — so the only way to know is to put the value through the decoder that
+     * a row's own fixture goes through.
+     */
+    @FunctionalInterface
+    public interface Construction {
+
+        /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
+         * the runtime is absent, which is not a fact about the value. */
+        java.util.Optional<String> refuse(Type type, Ast.Expr fixture);
+    }
+
+    /** A way to build values against this module's generated classes, without any rows to run. */
+    public static Construction constructing(Ast.Module module, Symbols symbols,
+                                            Map<String, Sig> sigs, Map<String, byte[]> classes,
+                                            Map<String, List<BehaviorRequirement>> requirements,
+                                            ClassLoader parent, Map<String, Ast.FnDef> values) {
+        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
+                new MemoryClassLoader(classes, parent), values);
+        return v::refuse;
+    }
+
+    private java.util.Optional<String> refuse(Type type, Ast.Expr fixture) {
+        try {
+            decode(type, raw(fixture, type));
+            return java.util.Optional.empty();
+        } catch (FixtureException e) {
+            return java.util.Optional.of(e.getMessage());
+        } catch (RuntimeException e) {
+            return java.util.Optional.of(String.valueOf(e.getMessage()));
+        }
+    }
+
+    /**
+     * What evaluating a source's rows turned up: the diagnostics it reports, the observation each row
+     * left, and what stopped it from observing.
+     *
+     * <p>Not named {@code Result} because {@code net.unit8.raoh.Result} is what a decoder answers with
+     * here, and a nested type of that name would take the spelling away from it.
+     */
+    public record Observations(List<Diagnostic> failures, List<RowOutcome> rows,
+                               List<Incompleteness> incompleteness) {
+
+        public static final Observations NONE = new Observations(List.of(), List.of(), List.of());
+
+        public Observations {
+            failures = List.copyOf(failures);
+            rows = List.copyOf(rows);
+            incompleteness = List.copyOf(incompleteness);
+        }
     }
 
     /** The one-line form for a set of failures gathered across modules: the count, then the first
@@ -135,6 +217,10 @@ public final class ExampleVerifier {
     private final HelperInvoker helpers;
     /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
     private final NeutralForm neutral;
+    /** Which source the rows being evaluated are written in. A module's rows come from its own source
+     * and from any number of attached {@code examples for} files, and a position alone stops saying
+     * which once they are gathered under the module's name. */
+    private String sourceId;
 
     private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
@@ -151,8 +237,8 @@ public final class ExampleVerifier {
 
     // --- one example (a target and its rows) --------------------------------------------------
 
-    private void checkExample(Ast.Example ex, List<Diagnostic> out) {
-        ExampleTarget target = runnableTarget(ex.target());
+    private void checkExample(Ast.Example ex, List<Diagnostic> out, List<RowOutcome> rows) {
+        ExampleTarget target = targetOf(ex.target());
         if (target == null) {
             out.add(notRunnable(ex));
             return;
@@ -163,7 +249,7 @@ public final class ExampleVerifier {
         }
         Set<TypeName> outCases = outCases(sig.out());
         for (Ast.ExampleRow row : ex.rows()) {
-            checkRow(target, sig, outCases, row, out);
+            checkRow(target, sig, outCases, row, out, rows);
         }
     }
 
@@ -175,35 +261,61 @@ public final class ExampleVerifier {
      * emitted, and that class is reached the same way whichever way the behavior was written — the
      * name says which, and the requirements say what to hand it.
      */
-    private record ExampleTarget(String name, List<BehaviorRequirement> requirements) {}
+    private record ExampleTarget(String name, List<BehaviorRequirement> requirements,
+                                 boolean pending) {}
 
     /**
-     * The target as something a row can run: a behavior with a {@code let} body, or a {@code >->}
-     * composition; null when nothing of that name is evaluable. The dependencies of either are
-     * satisfied by fakes at the example (checked per row).
+     * The behavior a row is about, and whether there is anything to run it against.
+     *
+     * <p>A behavior with a {@code let} body and a {@code >->} composition are applied; an injected one
+     * has no body yet, so its rows are <em>recorded</em> rather than evaluated (spec
+     * {@code example-pending}). That is not a lesser state: a model being migrated onto is injected
+     * everywhere at the start, and the rows harvested from the system it replaces are what says what
+     * each behavior owes. They are checked as far as they can be — every fixture is built, so a value
+     * that breaks an invariant is found the day it is written — and evaluation begins by itself the
+     * moment a {@code let} arrives.
+     *
+     * <p>Null when this module declares no behavior of that name; what to say about that is
+     * {@link #notRunnable}'s.
      *
      * <p>A composition is run by applying the class its module emits, the same class normal execution
      * applies. Its stages with a body are constructed by it and handed the fields they need, so what
      * a row has to supply are the injected behaviors the stages reach — which is what its requirement
      * list holds, in the order its constructor takes them.
      */
-    private ExampleTarget runnableTarget(String name) {
+    private ExampleTarget targetOf(String name) {
         for (Ast.BehaviorDef b : module.behaviors()) {
             if (!b.name().equals(name)) {
                 continue;
             }
-            boolean runnable = switch (b) {
-                case Ast.SpecBehavior _ -> hasFn(name);
-                case Ast.PipeBehavior _ -> true;
-            };
-            if (runnable) {
-                return new ExampleTarget(name, requirements.getOrDefault(name, List.of()));
-            }
+            return new ExampleTarget(name, requirements.getOrDefault(name, List.of()),
+                    isPending(module, name));
         }
         return null;
     }
 
+    /**
+     * Whether a behavior of {@code module} has no implementation to run — an injected one (spec
+     * {@code injected-behavior}).
+     *
+     * <p>Asked here by the row evaluation and by the adequacy report, which decides what it can measure
+     * from the same answer. Two statements of it would let a report say a behavior is implemented while
+     * its rows are being recorded rather than run.
+     */
+    public static boolean isPending(Ast.Module module, String name) {
+        for (Ast.BehaviorDef b : module.behaviors()) {
+            if (b.name().equals(name)) {
+                return b instanceof Ast.SpecBehavior && !hasFn(module, name);
+            }
+        }
+        return false;
+    }
+
     private boolean hasFn(String name) {
+        return hasFn(module, name);
+    }
+
+    private static boolean hasFn(Ast.Module module, String name) {
         return module.fns().stream().anyMatch(f -> f.name().equals(name));
     }
 
@@ -218,34 +330,25 @@ public final class ExampleVerifier {
         return null;
     }
 
-    /** The diagnostic for a target that cannot be evaluated: unknown (E1901) or present but with no
-     * body to run (E1902), with the reason (injected / a helper). */
+    /**
+     * The diagnostic for a target this module declares no behavior for: a name it does not know
+     * ({@code E1901}), or a helper {@code let} of that name ({@code E1902}).
+     *
+     * <p>Only reached when {@link #targetOf} found no behavior, so being injected is not one of the
+     * reasons any more: an injected behavior is a behavior, and its rows are recorded. What is left
+     * for {@code E1902} is a target that is not a behavior at all.
+     */
     private Diagnostic notRunnable(Ast.Example ex) {
         String name = ex.target();
-        boolean known = false;
-        String reason = null;
-        for (Ast.BehaviorDef b : module.behaviors()) {
-            if (!b.name().equals(name)) {
-                continue;
-            }
-            known = true;
-            if (b instanceof Ast.SpecBehavior && !hasFn(name)) {
-                reason = "it is injected from Java (no `let`) — fake it, do not example it";
-            }
-        }
-        boolean isHelper = module.fns().stream().anyMatch(f -> f.name().equals(name)
-                && module.behaviors().stream().noneMatch(b -> b.name().equals(name)));
-        if (isHelper) {
-            known = true;
-            reason = "a pure helper example is not evaluated yet";
-        }
-        if (!known) {
+        boolean isHelper = module.fns().stream().anyMatch(f -> f.name().equals(name));
+        if (!isHelper) {
             return Diagnostic.of("E1901", "check.example.unknown").title("check.example.title")
                     .at(ex.pos()).args(name).build();
         }
         return Diagnostic.of("E1902", "check.example.notrunnable").title("check.example.title")
                 .at(ex.pos()).args(name)
-                .hint("check.example.notrunnable.hint", reason == null ? "it is not runnable" : reason)
+                .hint("check.example.notrunnable.hint",
+                        "it is a helper `let`, and this module declares no behavior of that name")
                 .build();
     }
 
@@ -269,21 +372,37 @@ public final class ExampleVerifier {
         private final Sig sig;
         private final Set<TypeName> outCases;
         private final Ast.ExampleRow row;
+        private final RowState state = new RowState();
 
         RowEvaluation(ExampleVerifier of, ExampleTarget target, Sig sig,
                       Set<TypeName> outCases, Ast.ExampleRow row) {
             this.evaluation = new ExampleVerifier(of.module, of.symbols, of.sigs, of.requirements,
                     of.loader, of.values);
+            this.evaluation.sourceId = of.sourceId;
             this.target = target;
             this.sig = sig;
             this.outCases = outCases;
             this.row = row;
         }
 
+        /**
+         * The row, and the arms it went through on the way.
+         *
+         * <p>The collecting is started and stopped here because a row is a thread: this worker runs
+         * this row's body and nothing else, so what the probe saw on it is what this row reached. A row
+         * that does not finish never gets here to read it, and the set goes with the thread's state —
+         * which is what stops the next row on a reused worker from starting where this one left off.
+         */
         @Override
         public List<Diagnostic> call() {
             List<Diagnostic> mine = new ArrayList<>();
-            evaluation.checkRowNow(target, sig, outCases, row, mine);
+            Probe.begin();
+            try {
+                evaluation.checkRowNow(target, sig, outCases, row, mine, state);
+                state.hits = Probe.taken();
+            } finally {
+                Probe.end();
+            }
             return mine;
         }
 
@@ -294,13 +413,57 @@ public final class ExampleVerifier {
     }
 
     /**
+     * What a row's evaluation reached and saw.
+     *
+     * <p>{@link #stage} is written by the row's worker and read by the caller when the row runs out of
+     * time — the one field read across that boundary, so it is the one field that is volatile. Whether
+     * the row stopped in a fixture's helper or inside the behavior is exactly that difference, and a
+     * timeout that cannot say which reports the same thing for two different problems.
+     *
+     * <p>Everything else is written by the worker and read only after it has finished, which the future
+     * establishes: a row that does not finish has its state dropped rather than read.
+     */
+    private static final class RowState {
+        private volatile Stage stage = Stage.NONE;
+        private Disposition disposition = Disposition.FAILED;
+        private FailurePhase failurePhase = FailurePhase.NONE;
+        private TypeName expectedArm;
+        private TypeName resultArm;
+        private final List<TypeName> inputCases = new ArrayList<>();
+        private final List<ObservedValue> inputs = new ArrayList<>();
+        /** The arms this row went through, where the classes it ran were generated to say. Empty
+         * otherwise, and empty for a row that did not finish — a set read from a row still running
+         * would be some of the arms rather than the arms. */
+        private Set<Integer> hits = Set.of();
+
+        /** Records where the row stopped, and that it did. */
+        void failed(FailurePhase phase) {
+            this.disposition = Disposition.FAILED;
+            this.failurePhase = phase;
+        }
+
+        /** Records that the row could not be decided — an absence of evidence, not a failure. */
+        void incomplete(FailurePhase phase) {
+            this.disposition = Disposition.INCOMPLETE;
+            this.failurePhase = phase;
+        }
+    }
+
+    /** What the row turned out to be, from the state its worker left. */
+    private RowOutcome outcomeOf(ExampleTarget target, Ast.ExampleRow row, RowState state) {
+        return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.description(),
+                state.stage, state.disposition, state.failurePhase, state.expectedArm, state.resultArm,
+                state.inputCases, state.inputs, state.hits);
+    }
+
+    /**
      * One row, evaluated within the budget: building its fixtures, running the helpers they apply,
      * applying the behavior and comparing the result are one evaluation, so a row cannot buy more time
      * by applying more helpers (ADR-0077). Only this thread adds to {@code out} — see
      * {@link RowEvaluation} for why the row's own worker must not.
      */
-    private void checkRow(ExampleTarget target, Sig sig,
-                          Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
+    private void checkRow(ExampleTarget target, Sig sig, Set<TypeName> outCases, Ast.ExampleRow row,
+                          List<Diagnostic> out, List<RowOutcome> rows) {
         RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
         java.util.concurrent.FutureTask<List<Diagnostic>> task =
                 new java.util.concurrent.FutureTask<>(evaluation);
@@ -309,19 +472,29 @@ public final class ExampleVerifier {
         worker.start();
         try {
             out.addAll(task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
+            rows.add(outcomeOf(target, row, evaluation.state));
         } catch (java.util.concurrent.TimeoutException _) {
             // Read what the row was doing before cancelling: the interrupt may let the worker leave the
             // helper it is in, and then the reason would depend on which thread got there first.
             String helper = evaluation.helper();
+            // Only the stage, which the worker publishes: the rest of its state is still being written.
+            // How far it got is the difference between a fixture's helper that will not stop and a
+            // behavior that will not stop, which is what the author has to know.
+            Stage reached = evaluation.state.stage;
             task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
             out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
                     .at(row.pos()).args("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms"
                             + (helper == null ? "" : " while calling `" + helper + "`")).build());
+            rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
+                    row.description(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
+                    null, null, List.of(), List.of(), Set.of()));
         } catch (java.util.concurrent.ExecutionException ee) {
             Throwable cause = ee.getCause();
             if (cause instanceof NonTerminationException nt) {
                 out.add(Diagnostic.of("E1910", "check.example.nonterminating")
                         .title("check.example.title").at(row.pos()).args(nt.getMessage()).build());
+                evaluation.state.incomplete(FailurePhase.TIMEOUT);
+                rows.add(outcomeOf(target, row, evaluation.state));
                 return;
             }
             if (cause instanceof RuntimeException re) {
@@ -339,12 +512,13 @@ public final class ExampleVerifier {
         }
     }
 
-    private void checkRowNow(ExampleTarget target, Sig sig,
-                             Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out) {
+    private void checkRowNow(ExampleTarget target, Sig sig, Set<TypeName> outCases,
+                             Ast.ExampleRow row, List<Diagnostic> out, RowState state) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of("E1903", "check.example.arity").title("check.example.title")
                     .at(row.pos()).args(target.name(), ins.size(), row.inputs().size()).build());
+            state.failed(FailurePhase.INPUT_FIXTURE);
             return;
         }
         Object[] args = new Object[ins.size()];
@@ -355,8 +529,11 @@ public final class ExampleVerifier {
             } catch (FixtureException fe) {
                 out.add(Diagnostic.of("E1903", "check.example.input").title("check.example.title")
                         .at(row.pos()).args(target.name(), i + 1, fe.getMessage()).build());
+                state.failed(FailurePhase.INPUT_FIXTURE);
                 return;
             }
+            state.inputCases.add(caseWritten(row.inputs().get(i)));
+            state.inputs.add(observed(args[i]));
         }
         // validate the expected arm/value against the output cases before running. Which case the row
         // asserts is read through what it names, so a row may name a value where it may name a case.
@@ -364,6 +541,7 @@ public final class ExampleVerifier {
         // case nothing here can read off the text, and reporting that as an arm the target cannot produce
         // refused a row whose expectation was right (issue #214).
         TypeName named = constructedCase(row.expected());
+        state.expectedArm = named;
         if (named != null && !outCases.isEmpty() && !outCases.contains(named)) {
             String expectedArm = expectedArm(row.expected());
             List<String> names = new ArrayList<>();
@@ -373,6 +551,7 @@ public final class ExampleVerifier {
             out.add(Diagnostic.of("E1904", "check.example.arm").title("check.example.title")
                     .at(row.pos()).args(expectedArm != null ? expectedArm : named.name(), target.name())
                     .hint("check.example.arm.hint", String.join(", ", names)).build());
+            state.failed(FailurePhase.EXPECTED_FIXTURE);
             return;
         }
         // Build the expected value before running: a row whose expectation cannot be built states no
@@ -385,35 +564,78 @@ public final class ExampleVerifier {
         } catch (FixtureException fe) {
             out.add(Diagnostic.of("E1903", "check.example.expected").title("check.example.title")
                     .at(row.pos()).args(target.name(), fe.getMessage()).build());
+            state.failed(FailurePhase.EXPECTED_FIXTURE);
+            return;
+        }
+        state.stage = Stage.FIXTURES_VALIDATED;
+        if (target.pending()) {
+            // Everything a row can be held to without a body has been: its arity, its inputs against
+            // their types and invariants, and its expectation against the output's cases. What is left
+            // needs something to run, and there is nothing yet. A fake is not it — a fake stands in for
+            // a dependency while some *other* behavior's row runs, and this row is about this behavior.
+            state.disposition = Disposition.PENDING;
+            state.failurePhase = FailurePhase.NONE;
             return;
         }
         Object[] fakes = resolveFakes(target, row, out);
         if (fakes == null) {
+            state.failed(FailurePhase.FAKE_RESOLUTION);
             return;   // a fake was missing/invalid; the diagnostic is already reported
         }
         Object result;
+        state.stage = Stage.INVOKED;
         try {
             result = invoke(target, args, fakes);
         } catch (FakeMissException fm) {
             out.add(Diagnostic.of("E1909", "check.fake.miss").title("check.example.title")
                     .at(row.pos()).args(fm.getMessage()).build());
+            state.failed(FailurePhase.FAKE_RESOLUTION);
             return;
         } catch (UnreachableException ue) {
             out.add(Diagnostic.of("E1911", "check.example.unreachable").title("check.example.title")
                     .at(row.pos()).args(ue.getMessage())
                     .hint("check.example.unreachable.hint").build());
+            state.failed(FailurePhase.INVOCATION);
             return;
         } catch (AbortException ae) {
             out.add(mismatch(row, describeExpected(row.expected(), sig.out()), "aborted: " + ae.getMessage()));
+            state.failed(FailurePhase.INVOCATION);
             return;
         } catch (NonTerminationException nt) {
             out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
                     .at(row.pos()).args(nt.getMessage()).build());
+            state.incomplete(FailurePhase.TIMEOUT);
             return;
         }
         result = projected(result, sig.out());
+        state.resultArm = symbols.resolve(NeutralForm.simpleName(result));
+        state.stage = Stage.COMPARED;
         if (!matches(row.expected(), result, expectedValue)) {
             out.add(mismatch(row, describeExpected(row.expected(), sig.out()), describeActual(result)));
+            state.failed(FailurePhase.COMPARISON);
+            return;
+        }
+        state.disposition = Disposition.HELD;
+        state.failurePhase = FailurePhase.NONE;
+    }
+
+    /** The case an input fixture constructs, or null where its text does not say. A form this cannot
+     * read is not a reason to lose the row: the measure that reads it says it could not classify. */
+    private TypeName caseWritten(Ast.Expr fixture) {
+        try {
+            return constructedCase(fixture);
+        } catch (RuntimeException _) {
+            return null;
+        }
+    }
+
+    /** One decoded input, in the form the compiler owns. Never throws: a value that cannot be read is
+     * an unreadable value, and a row that carries one still carries everything else. */
+    private ObservedValue observed(Object decoded) {
+        try {
+            return ObservedValues.of(decoded, symbols, neutral, Limits.DEFAULT);
+        } catch (RuntimeException | LinkageError e) {
+            return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
 
@@ -1064,10 +1286,7 @@ public final class ExampleVerifier {
     }
 
     private Set<TypeName> outCases(Type out) {
-        if (out instanceof Type.Union || out instanceof Type.Ref) {
-            return TypeOps.leafCases(out, symbols);
-        }
-        return Set.of();
+        return TypeOps.outputCases(out, symbols);
     }
 
     // --- raw evaluation of a fixture expression -----------------------------------------------

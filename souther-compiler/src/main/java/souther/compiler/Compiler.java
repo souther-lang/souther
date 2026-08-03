@@ -4,6 +4,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Db;
 import souther.compiler.query.Report;
@@ -119,7 +120,14 @@ public final class Compiler {
      *  {@code warningsOut}. */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut) {
+        return compiled(source, defaultModuleName, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, Adequacy.Asked measure) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName);
+        compilation.measure(measure);
         Db db = compilation.db();
 
         CompileException structural = compilation.firstError(compilation.structuralReports());
@@ -141,7 +149,9 @@ public final class Compiler {
             }
             List<Diagnostic> failures = new ArrayList<>();
             for (String id : compilation.exampleSourcesOf(module)) {
-                for (Report failure : db.ask(new Output.Examples(module, id)).reports()) {
+                // Only the errors: this key also carries what a clean run wants to say about how well
+                // the rows cover the model, and a warning is not a reason to fail the build.
+                for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
                     failures.add(failure.diagnostic());
                 }
             }
@@ -152,6 +162,9 @@ public final class Compiler {
             if (!failures.isEmpty()) {
                 throw CompileException.ofAll(failures, ExampleVerifier.legacySummary(failures));
             }
+        }
+        for (String module : compilation.modules()) {
+            db.ask(new Adequacy.Warnings(module));
         }
         warningsOut.addAll(compilation.warnings(db.allReports()));
         return compilation;
@@ -206,9 +219,34 @@ public final class Compiler {
      * collected, and that every module's examples are evaluated before any failing one is reported
      * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
      */
+    /**
+     * The compilation of a module set, driven to completion, with the first error raised — what
+     * {@link #linking} returns the classes of, for a caller that wants more than the classes.
+     *
+     * <p>{@code souther examples} is such a caller: it asks how well the rows cover the model, which
+     * is read off the same compile that would have written the classes out.
+     */
+    public static Compilation compiledModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut) {
+        return linked(sources, path, warningsOut, Adequacy.Asked.NOTHING);
+    }
+
+    /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
+    public static Compilation compiledModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut, Adequacy.Asked measure) {
+        return linked(sources, path, warningsOut, measure);
+    }
+
     private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
                                                List<Located> warningsOut) {
+        return new LinkedHashMap<>(
+                linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes());
+    }
+
+    private static Compilation linked(List<String> sources, ModulePath path,
+                                      List<Located> warningsOut, Adequacy.Asked measure) {
         Compilation compilation = Compilation.ofSources(sources, path);
+        compilation.measure(measure);
         Db db = compilation.db();
 
         CompileException structural = compilation.firstError(compilation.structuralReports());
@@ -216,7 +254,7 @@ public final class Compiler {
             throw structural;
         }
 
-        Map<String, byte[]> out = new LinkedHashMap<>(db.ask(new Output.All()).value());
+        db.ask(new Output.All());
         CompileException failed = compilation.firstError(db.allReports());
         if (failed != null) {
             throw failed;
@@ -236,19 +274,22 @@ public final class Compiler {
                 continue;
             }
             for (String id : compilation.exampleSourcesOf(module)) {
-                for (Report failure : db.ask(new Output.Examples(module, id)).reports()) {
+                for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
                     exampleFailures.add(failure.diagnostic());
                     // a row from an `examples for` file is positioned in that file, not this one
                     exampleSources.add(compilation.sourceIndexOfId(id));
                 }
             }
         }
+        for (String module : compilation.modules()) {
+            db.ask(new Adequacy.Warnings(module));
+        }
         warningsOut.addAll(compilation.warnings(db.allReports()));
         if (!exampleFailures.isEmpty()) {
             throw CompileException.ofAllInSources(exampleFailures, exampleSources,
                     ExampleVerifier.legacySummary(exampleFailures));
         }
-        return out;
+        return compilation;
     }
     /**
      * Links a module set like {@link #compileModules}, but collects diagnostics per source — keyed by

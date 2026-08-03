@@ -75,6 +75,67 @@ final class CodegenContext {
         return dischargeInvariants;
     }
 
+    /**
+     * The arms to record, where this generation is one that measures. Empty otherwise, which is every
+     * generation whose classes are meant to be shipped.
+     *
+     * <p>Keyed by the identity of the nodes being emitted, so what is set here has to be the plan made
+     * from <em>these</em> bodies. Core nodes are records: a plan made from an equal body would answer
+     * for the wrong arm and never say so.
+     */
+    private souther.compiler.coverage.CoverageSites.Plan coverage =
+            souther.compiler.coverage.CoverageSites.Plan.NONE;
+
+    void setCoveragePlan(souther.compiler.coverage.CoverageSites.Plan plan) {
+        this.coverage = plan;
+    }
+
+    boolean measuring() {
+        return !coverage.isEmpty();
+    }
+
+    /**
+     * The arm numbers of one node, in the order the emitter emits them.
+     *
+     * <p>Throws where a measuring generation meets a node the plan does not know. Only bodies the plan
+     * was made from ask this, so a node it does not hold is a plan made from other nodes than these —
+     * and going on would leave an arm that ran reported as one no row reaches, which reads as a gap in
+     * the model rather than as a fault in the measurement.
+     */
+    int[] probesOf(souther.compiler.core.Core node) {
+        int[] arms = coverage.probesOf(node);
+        if (arms == null) {
+            throw new IllegalStateException("no probe was planned for a "
+                    + node.getClass().getSimpleName() + " at " + node.pos()
+                    + "; the plan was made from other nodes than these");
+        }
+        return arms;
+    }
+
+    /** Records that one planned arm was emitted. */
+    void emitted(int site) {
+        emittedSites.add(site);
+    }
+
+    private final Set<Integer> emittedSites = new java.util.LinkedHashSet<>();
+
+    /**
+     * Which planned arms never reached the bytecode.
+     *
+     * <p>What makes an omission loud. A body the emitter walks without counting its arms — a path
+     * nobody thought to say either way about — takes the arms of that behavior out of the measurement
+     * silently, and every one of them is then reported as an arm no row goes through.
+     */
+    List<Integer> plannedButNotEmitted() {
+        List<Integer> missing = new java.util.ArrayList<>();
+        for (souther.compiler.coverage.CoverageSites.Site site : coverage.sites()) {
+            if (!emittedSites.contains(site.index())) {
+                missing.add(site.index());
+            }
+        }
+        return missing;
+    }
+
     /** The module being generated. Module is package (spec 4), so this is also {@link #pkg}. */
     String module() {
         return pkg;

@@ -5,7 +5,9 @@ import souther.lsp.analysis.Analyzer;
 import souther.lsp.analysis.DocumentStore;
 import souther.lsp.analysis.ModuleGraph;
 import souther.lsp.analysis.Workspace;
+import souther.compiler.query.Adequacy;
 import souther.lsp.protocol.CodeAction;
+import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
@@ -112,6 +114,7 @@ public final class LspServer {
             case "textDocument/references" -> respond(id, references(params));
             case "textDocument/completion" -> respond(id, completion(params));
             case "textDocument/codeAction" -> respond(id, codeActions(params));
+            case "textDocument/codeLens" -> respond(id, codeLenses(params));
             case "textDocument/rename" -> respond(id, rename(params));
             case "textDocument/formatting" -> respond(id, formatting(params));
             case "shutdown" -> respond(id, null);
@@ -148,6 +151,30 @@ public final class LspServer {
             roots.add(rootUri.asString());
         }
         workspace.setRoots(roots);
+        analyzer.measure(adequacyAsked(params));
+    }
+
+    /**
+     * How much of what the rows cover this client asked to be told, from
+     * {@code initializationOptions.souther.adequacy}: {@code off}, {@code witness} or {@code all}.
+     *
+     * <p>Off unless asked, and one setting rather than one per measure. What separates them is what
+     * they cost: {@code witness} reads what the compile already ran, and {@code all} generates a
+     * second set of classes and runs every row again — on every save, in an editor. Nothing that
+     * costs that should arrive by default.
+     */
+    private static Adequacy.Asked adequacyAsked(JsonNode params) {
+        JsonNode options = params.get("initializationOptions");
+        JsonNode souther = options == null ? null : options.get("souther");
+        JsonNode asked = souther == null ? null : souther.get("adequacy");
+        if (asked == null || asked.isNull()) {
+            return Adequacy.Asked.NOTHING;
+        }
+        return switch (asked.asString()) {
+            case "witness" -> Adequacy.Asked.reportOnly(Adequacy.Level.WITNESS);
+            case "all" -> Adequacy.Asked.reportOnly(Adequacy.Level.ALL);
+            default -> Adequacy.Asked.NOTHING;
+        };
     }
 
     private Map<String, Object> initializeResult() {
@@ -160,6 +187,7 @@ public final class LspServer {
         capabilities.put("renameProvider", true);
         capabilities.put("completionProvider", Map.of());   // invoked completion; no trigger characters
         capabilities.put("codeActionProvider", true);
+        capabilities.put("codeLensProvider", Map.of("resolveProvider", false));
         capabilities.put("documentFormattingProvider", true);
         Map<String, Object> semanticTokens = new LinkedHashMap<>();
         semanticTokens.put("legend", Map.of("tokenTypes", Analyzer.TOKEN_TYPES,
@@ -279,20 +307,48 @@ public final class LspServer {
         return items;
     }
 
+    // --- code lenses ---
+
+    /**
+     * The line above each behavior saying what its rows cover of it.
+     *
+     * <p>Answered from the workspace snapshot rather than from this document alone: a behavior's rows
+     * are written across its module's source and any attached files, and one file cannot say what the
+     * others cover. Empty unless the client asked to be measured, which it does through
+     * {@code souther.adequacy} at initialization.
+     */
+    private Object codeLenses(JsonNode params) {
+        String uri = InboundDecoders.decode(InboundDecoders.DOC_REF, params)
+                .map(Params.DocRef::uri).orElse(null);
+        if (uri == null || documents.get(uri) == null) {
+            return List.of();
+        }
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        List<Object> out = new ArrayList<>();
+        for (CodeLens lens : analyzer.codeLenses(uri, graph)) {
+            out.add(Map.of("range", rangeJson(lens.range()),
+                    "command", Map.of("title", lens.title(), "command", "")));
+        }
+        return out;
+    }
+
     // --- code actions ---
 
     private Object codeActions(JsonNode params) {
         Params.CodeActionParams p = InboundDecoders.decode(InboundDecoders.CODE_ACTION, params)
                 .orElse(null);
         String text = p == null ? null : documents.get(p.uri());
-        // Only the range's diagnostics can be fixed, so with none in context there is nothing to offer.
-        // Short-circuiting here avoids a recompile — the analyzer's fix lookup compiles the file — on
-        // every lightbulb over clean code, which is the overwhelmingly common case.
-        if (text == null || !hasContextDiagnostics(params)) {
+        // Only the range's diagnostics can be fixed, so with none in context there is usually nothing
+        // to offer. Short-circuiting here avoids a recompile — the analyzer's fix lookup compiles the
+        // file — on every lightbulb over clean code, which is the overwhelmingly common case. Where
+        // adequacy is being measured there is one offer that is not about a diagnostic — the rows a
+        // behavior does not cover — so the short cut is skipped, and only for a client that asked.
+        if (text == null || (!hasContextDiagnostics(params) && !analyzer.measuring())) {
             return List.of();
         }
         List<Object> out = new ArrayList<>();
-        for (CodeAction a : analyzer.codeActions(p.uri(), text, p.range())) {
+        ModuleGraph graph = workspace.snapshot(documents.openDocuments());
+        for (CodeAction a : analyzer.codeActions(p.uri(), text, p.range(), graph)) {
             Map<String, Object> action = new LinkedHashMap<>();
             action.put("title", a.title());
             action.put("kind", "quickfix");

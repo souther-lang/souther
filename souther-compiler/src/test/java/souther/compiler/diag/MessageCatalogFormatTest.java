@@ -118,6 +118,34 @@ class MessageCatalogFormatTest {
         assertEquals(Set.of(), named);
     }
 
+    /**
+     * The other direction, over the one namespace where it holds: an example message the catalog
+     * defines and nothing shows.
+     *
+     * <p>Narrower than the check above on purpose. Elsewhere a key is often built from parts — a
+     * title from a code, a kind from a type — and a scan for literals cannot see those. Here every
+     * key is written out at the site that uses it, which is what makes a hint nobody attaches
+     * findable at all. That is the mistake this catches: a hint added beside a new message and never
+     * passed to the diagnostic renders nowhere, and the message still reads fine on its own.
+     */
+    @Test
+    void noExampleMessageIsDefinedAndNeverShown() throws IOException {
+        Set<String> named = new TreeSet<>();
+        for (Path source : mainSources()) {
+            Matcher m = KEY_LITERAL.matcher(Files.readString(source, StandardCharsets.UTF_8));
+            while (m.find()) {
+                named.add(m.group(1));
+            }
+        }
+        Set<String> unshown = new TreeSet<>();
+        for (String key : keysOf("/souther/compiler/diag/messages.properties")) {
+            if (key.startsWith("check.example.") && !named.contains(key)) {
+                unshown.add(key);
+            }
+        }
+        assertEquals(Set.of(), unshown);
+    }
+
     @Test
     void bothCatalogsDefineTheSameKeys() throws IOException {
         Set<String> english = keysOf("/souther/compiler/diag/messages.properties");
