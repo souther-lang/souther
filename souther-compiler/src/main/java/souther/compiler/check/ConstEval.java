@@ -3,6 +3,8 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 
 import java.math.BigDecimal;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 import java.util.List;
 import java.util.Optional;
 
@@ -149,6 +151,78 @@ public final class ConstEval {
         return a.equals(b);
     }
 
+    /**
+     * Whether {@code s} matches {@code pattern}, or empty where answering it here would cost more
+     * than leaving it to the run time.
+     *
+     * <p>A backtracking engine can take exponential time on a pattern written to make it, and can
+     * exhaust the stack on one written to make that. Neither is this compiler's to survive by luck:
+     * the walk that asks fails open on a {@code RuntimeException} and a {@code StackOverflowError} is
+     * not one, so an unbounded attempt here ends the compilation rather than the fold. The subject is
+     * handed over through a reader that stops the engine past a budget, and what the engine spends
+     * before answering is what decides whether the answer is worth having.
+     */
+    private static Optional<Object> matches(String pattern, String s) {
+        try {
+            return Optional.of(Pattern.compile(pattern).matcher(new Budgeted(s)).matches());
+        } catch (PatternSyntaxException | Budgeted.Spent _) {
+            return Optional.empty();   // the pattern check reports a bad pattern on its own
+        } catch (StackOverflowError _) {
+            return Optional.empty();
+        }
+    }
+
+    /** A subject the regex engine may only read so many times. */
+    private static final class Budgeted implements CharSequence {
+
+        /** Enough for any pattern written to say what a value is, and far short of what one written
+         * to backtrack costs. */
+        private static final int READS = 200_000;
+
+        /** Raised where the engine has read past the budget. Not an error in the program: it says
+         * only that this is not answered here. */
+        static final class Spent extends RuntimeException {
+            Spent() {
+                super(null, null, false, false);
+            }
+        }
+
+        private final String of;
+        private final int[] read;
+
+        Budgeted(String of) {
+            this(of, new int[1]);
+        }
+
+        private Budgeted(String of, int[] read) {
+            this.of = of;
+            this.read = read;
+        }
+
+        @Override
+        public char charAt(int at) {
+            if (++read[0] > READS) {
+                throw new Spent();
+            }
+            return of.charAt(at);
+        }
+
+        @Override
+        public int length() {
+            return of.length();
+        }
+
+        @Override
+        public CharSequence subSequence(int from, int to) {
+            return new Budgeted(of.substring(from, to), read);
+        }
+
+        @Override
+        public String toString() {
+            return of;
+        }
+    }
+
     private static Optional<Object> call(Ast.Apply call) {
         List<Ast.Expr> args = call.args();
         switch (call.reaches()) {
@@ -164,11 +238,7 @@ public final class ConstEval {
                 if (args.size() == 2
                         && eval(args.get(0)).orElse(null) instanceof String pattern
                         && eval(args.get(1)).orElse(null) instanceof String s) {
-                    try {
-                        return Optional.of(java.util.regex.Pattern.matches(pattern, s));
-                    } catch (java.util.regex.PatternSyntaxException _) {
-                        return Optional.empty();   // the pattern check reports this on its own
-                    }
+                    return matches(pattern, s);
                 }
             }
             case "String.contains" -> {
