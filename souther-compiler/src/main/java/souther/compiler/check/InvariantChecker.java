@@ -38,7 +38,29 @@ import java.util.function.Function;
  */
 public final class InvariantChecker {
 
-    record Findings(List<CompileException> errors, List<Diagnostic> warnings) {}
+    record Findings(List<CompileException> errors, List<Diagnostic> warnings) {
+
+        /**
+         * The same, with a construction said of once. Reading a body on each branch of a conditional
+         * reads everything after it once per branch, so a construction the branches agree about is
+         * reached more than once. One construction is one position and one code, which is what makes
+         * the second reading of it the same finding rather than another one.
+         */
+        Findings said() {
+            return new Findings(distinct(errors, e -> key(e.diagnostic())),
+                    distinct(warnings, Findings::key));
+        }
+
+        private static String key(Diagnostic d) {
+            return d.code() + "@" + d.pos();
+        }
+
+        private static <T> List<T> distinct(List<T> all, Function<T, String> by) {
+            Map<String, T> first = new java.util.LinkedHashMap<>();
+            all.forEach(one -> first.putIfAbsent(by.apply(one), one));
+            return List.copyOf(first.values());
+        }
+    }
 
     /**
      * What this check reads: one behavior's body and the invariants of the types around it, both in
@@ -171,6 +193,11 @@ public final class InvariantChecker {
      * far the statement travels is what {@link #CARRIED} already answers of any predicate — so a
      * quantifier is the name and nothing else. {@code List.all} is the only one the library has. */
     private static final Set<String> QUANTIFIERS = Set.of("List.all");
+
+    /** How many conditionals a construction opens before the rest is left to the run-time check.
+     * Each one doubles the paths, and a value written over three of them is not what the bound is
+     * protecting against so much as what it declines to spend the time on. */
+    private static final int BRANCHES_OPENED = 3;
 
     /** Emptiness, by the size call it means. This is not a rule about what an operation does to a
      * property (spec §invariant-discharge-preservation) but about what a predicate <em>says</em>:
@@ -467,29 +494,29 @@ public final class InvariantChecker {
     static Findings analyze(Source source, Map<String, Type> params, Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, source == null ? Map.of() : source.invariants());
         if (source == null) {
-            return new Findings(c.errors, c.warnings);
+            return new Findings(c.errors, c.warnings).said();
         }
         try {
             Known k = Known.top();
             for (Map.Entry<String, Type> p : params.entrySet()) {
                 k = c.seedParam(p.getKey(), p.getValue(), k);
             }
-            c.walk(source.body(), k, Scope.of(params));
+            c.walk(source.body(), k, Scope.of(params), 0);
         } catch (RuntimeException _) {
             // fail-open: the run-time invariant check remains the backstop
         }
-        return new Findings(c.errors, c.warnings);
+        return new Findings(c.errors, c.warnings).said();
     }
 
     // --- the walk ------------------------------------------------------------------------------
 
-    private void walk(Ast.Expr e, Known k, Scope scope) {
+    private void walk(Ast.Expr e, Known k, Scope scope, int depth) {
         checkIfConstruction(e, k, scope, false);
         switch (e) {
             case Ast.If iff -> {
-                walk(iff.cond(), k, scope);
-                walk(iff.then(), assumeCond(iff.cond(), k, scope, true), scope);
-                walk(iff.els(), assumeCond(iff.cond(), k, scope, false), scope);
+                walk(iff.cond(), k, scope, depth);
+                walk(iff.then(), assumeCond(iff.cond(), k, scope, true), scope, depth);
+                walk(iff.els(), assumeCond(iff.cond(), k, scope, false), scope, depth);
             }
             case Ast.IfConstructed ic -> {
                 // The attempt's own construction cannot abort — a failing invariant is the else
@@ -497,7 +524,7 @@ public final class InvariantChecker {
                 // possible one. Its field values are walked on their own so a construction nested
                 // inside an argument is still an ordinary, aborting one.
                 checkIfConstruction(ic.construct(), k, scope, true);
-                Ast.forEachChild(ic.construct(), child -> walk(child, k, scope));
+                Ast.forEachChild(ic.construct(), child -> walk(child, k, scope, depth));
                 Known k2 = rebind(k, ic.binderName());
                 Type built = typeExpr(ic.construct(), scope);
                 // The attempt built the value, so the binding is that construction and no location
@@ -505,13 +532,25 @@ public final class InvariantChecker {
                     k2 = seedParam(ic.binderName(), built, k2);   // on this branch the invariant holds
                 }
                 walk(ic.then(), k2, scope.binding(ic.binderName(), built,
-                        new Denotes.Location(ic.binderName())));
+                        new Denotes.Location(ic.binderName())), depth);
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
-                ic.els().forEach(arm -> walk(arm.body(), k, scope));
+                ic.els().forEach(arm -> walk(arm.body(), k, scope, depth));
+            }
+            case Ast.LetIn li when li.value() instanceof Ast.If iff && depth < BRANCHES_OPENED -> {
+                // The name is given one of the two, and which one is decided by the condition, so the
+                // body is read once with each standing there. The same reading a construction written
+                // over a conditional gets, moved to where the conditional was given a name.
+                walk(iff.cond(), k, scope, depth);
+                walk(new Ast.LetIn(li.binder(), iff.then(), li.declaredType(), li.annotated(),
+                                li.opens(), li.body(), li.pos()),
+                        assumeCond(iff.cond(), k, scope, true), scope, depth + 1);
+                walk(new Ast.LetIn(li.binder(), iff.els(), li.declaredType(), li.annotated(),
+                                li.opens(), li.body(), li.pos()),
+                        assumeCond(iff.cond(), k, scope, false), scope, depth + 1);
             }
             case Ast.LetIn li -> {
-                walk(li.value(), k, scope);
+                walk(li.value(), k, scope, depth);
                 Type vt = typeExpr(li.value(), scope);
                 // The name is an alias for what its initializer denotes, so what is recorded about it
                 // is recorded under that denotation and not under the spelling. Recording it under the
@@ -520,13 +559,17 @@ public final class InvariantChecker {
                 Denotes what = denotationOf(li.value(), scope);
                 LinearForm vf = affineOf(li.value(), scope);
                 Known k2 = rebind(k, li.name());
-                if (isNumeric(vt) && vf != null && what.key() != null) {
-                    k2 = k2.with(k2.numbers().assign(what.key(), vf));
+                // A binding given a location is an alias and introduces no value, so there is nothing
+                // to record of it: what holds of the location already holds. Recording it anyway
+                // would be assigning the location its own form, and an assignment drops what was
+                // known of what it assigns to — the guard on it would be lost to the copy.
+                if (what instanceof Denotes.Term term && isNumeric(vt) && vf != null) {
+                    k2 = k2.with(k2.numbers().assign(term.key(), vf));
                 }
-                walk(li.body(), k2, scope.binding(li.name(), vt, what));
+                walk(li.body(), k2, scope.binding(li.name(), vt, what), depth);
             }
             case Ast.Match m -> {
-                walk(m.scrutinee(), k, scope);
+                walk(m.scrutinee(), k, scope, depth);
                 for (Ast.Case c : m.cases()) {
                     Scope s2 = scope;
                     Known k2 = k;
@@ -538,17 +581,17 @@ public final class InvariantChecker {
                         // clause could have named — the case's value names only itself.
                         s2 = scope.binding(c.bindingName(), bound, new Denotes.Location(c.bindingName()));
                     }
-                    walk(c.body(), k2, s2);
+                    walk(c.body(), k2, s2, depth);
                 }
             }
-            case Ast.Apply call -> walkCall(call, k, scope);
-            default -> Ast.forEachChild(e, child -> walk(child, k, scope));
+            case Ast.Apply call -> walkCall(call, k, scope, depth);
+            default -> Ast.forEachChild(e, child -> walk(child, k, scope, depth));
         }
     }
 
     /** Walks a call, binding a combinator closure's element parameter to the list's element type (and
      * seeding its invariant) so a construction inside the closure is analyzed rather than left opaque. */
-    private void walkCall(Ast.Apply call, Known k, Scope scope) {
+    private void walkCall(Ast.Apply call, Known k, Scope scope, int depth) {
         Combinator combo = COMBINATORS.get(call.reaches());
         for (int i = 0; i < call.args().size(); i++) {
             Ast.Expr arg = call.args().get(i);
@@ -577,9 +620,9 @@ public final class InvariantChecker {
                         k2 = instantiate(q, p, elem, k2);
                     }
                 }
-                walk(step.body(), k2, s2);
+                walk(step.body(), k2, s2, depth);
             } else {
-                walk(arg, k, scope);
+                walk(arg, k, scope, depth);
             }
         }
     }
@@ -699,25 +742,7 @@ public final class InvariantChecker {
         switch (e) {
             case Ast.NewData nd when nd.spreads().isEmpty() -> {
                 if (symbols.get(nd.typeName().denotes()) instanceof Ast.Data type) {
-                    Map<String, LinearForm> forms = new HashMap<>();
-                    Map<String, String> paths = new HashMap<>();
-                    Map<String, Ast.Expr> given = new HashMap<>();
-                    Function<Ast.Expr, String> bodyKey = value -> siteKey(value, scope, k);
-                    for (Ast.FieldInit fi : nd.inits()) {
-                        LinearForm f = affineOf(fi.value(), scope);
-                        if (f != null) {
-                            forms.put(fi.name(), f);
-                        }
-                        String p = bodyKey.apply(fi.value());
-                        if (p != null) {
-                            paths.put(fi.name(), p);
-                        }
-                        given.put(fi.name(), fi.value());
-                    }
-                    check(nd.typeName().denotes(), type,
-                            new Bindings(forms::get, paths::get, given::get, bodyKey,
-                                    TypeOps.fieldTypes(type, symbols)),
-                            k, nd.pos(), attempted);
+                    report(type, nd.pos(), attempted, verdictOf(nd, type, k, scope, 0));
                 }
             }
             case Ast.Binary bin when isArith(bin.op()) -> {
@@ -726,15 +751,65 @@ public final class InvariantChecker {
                     LinearForm value = affineOf(bin, scope);
                     if (value != null) {
                         // an arithmetic result is a form, not a location, so it names no path
-                        check(r.name(), type,
+                        report(type, bin.pos(), attempted, verdictOf(r.name(), type,
                                 Bindings.ofPaths(name -> "value".equals(name) ? value : null, _ -> null,
-                                        TypeOps.fieldTypes(type, symbols)),
-                                k, bin.pos(), attempted);
+                                        TypeOps.fieldTypes(type, symbols)), k));
                     }
                 }
             }
             default -> { }
         }
+    }
+
+    /**
+     * The verdict for one construction, read on each branch of a conditional it is given. A field
+     * given {@code if c then a else b} is given one of the two, and which one is decided by
+     * {@code c}, so the construction is checked with each standing there under its own condition and
+     * answered by whichever answer is worse. Reading the conditional as a term of its own instead
+     * would say only that it is that term, which reports every construction over one — including
+     * where both branches satisfy the clause.
+     *
+     * <p>{@code depth} bounds how many conditionals are opened, since each doubles the paths.
+     */
+    private Verdict verdictOf(Ast.NewData nd, Ast.Data type, Known k, Scope scope, int depth) {
+        if (depth < BRANCHES_OPENED) {
+            for (int i = 0; i < nd.inits().size(); i++) {
+                if (nd.inits().get(i).value() instanceof Ast.If iff) {
+                    return Verdict.worse(
+                            verdictOf(withFieldValue(nd, i, iff.then()), type,
+                                    assumeCond(iff.cond(), k, scope, true), scope, depth + 1),
+                            verdictOf(withFieldValue(nd, i, iff.els()), type,
+                                    assumeCond(iff.cond(), k, scope, false), scope, depth + 1));
+                }
+            }
+        }
+        Map<String, LinearForm> forms = new HashMap<>();
+        Map<String, String> paths = new HashMap<>();
+        Map<String, Ast.Expr> given = new HashMap<>();
+        Function<Ast.Expr, String> bodyKey = value -> siteKey(value, scope, k);
+        for (Ast.FieldInit fi : nd.inits()) {
+            LinearForm f = affineOf(fi.value(), scope);
+            if (f != null) {
+                forms.put(fi.name(), f);
+            }
+            String p = bodyKey.apply(fi.value());
+            if (p != null) {
+                paths.put(fi.name(), p);
+            }
+            given.put(fi.name(), fi.value());
+        }
+        return verdictOf(nd.typeName().denotes(), type,
+                new Bindings(forms::get, paths::get, given::get, bodyKey,
+                        TypeOps.fieldTypes(type, symbols)), k);
+    }
+
+    /** {@code nd} with the value at {@code at} replaced, everything else kept. */
+    private static Ast.NewData withFieldValue(Ast.NewData nd, int at, Ast.Expr value) {
+        List<Ast.FieldInit> inits = new ArrayList<>(nd.inits());
+        Ast.FieldInit was = inits.get(at);
+        inits.set(at, new Ast.FieldInit(was.name(), value, was.pos()));
+        return new Ast.NewData(nd.typeName(), List.copyOf(inits), nd.spreads(), nd.origin(),
+                nd.pos());
     }
 
     /** How an invariant's leaf names resolve at a construction site: to the affine form of what the
@@ -779,15 +854,31 @@ public final class InvariantChecker {
         return e instanceof Ast.Var v ? binds.given().apply(v.name()) : null;
     }
 
-    /** Runs the discharge check for a construction of {@code type} whose field values resolve through
-     * {@code binds}. A definite violation is an error; an unproven one a warning; a fully-discharged
-     * or non-expressible invariant is silent. An {@code attempted} construction raises no warning:
-     * what the warning reports is a possible abort, and an attempt takes its else branch instead. */
-    private void check(TypeName named, Ast.Data type, Bindings binds, Known k, SourcePos pos,
-                       boolean attempted) {
+    /**
+     * How a construction came out. A construction is checked before it is reported so that one
+     * written over a conditional can be checked on each branch and answered once — which of the two
+     * values it is is not decided here, so what holds of the construction is what holds of both.
+     */
+    private enum Verdict {
+        /** Every clause is discharged, or none of them is expressible. */
+        PROVED,
+        /** A clause is expressible and unproven: the construction may abort. */
+        UNKNOWN,
+        /** A clause is proven to fail on a path that is reached. */
+        REFUTED;
+
+        /** The worse of two answers, which is what holds of a value that is one of two. */
+        static Verdict worse(Verdict a, Verdict b) {
+            return a.compareTo(b) >= 0 ? a : b;
+        }
+    }
+
+    /** The discharge verdict for a construction of {@code type} whose field values resolve through
+     * {@code binds}. */
+    private Verdict verdictOf(TypeName named, Ast.Data type, Bindings binds, Known k) {
         List<Ast.InvariantClause> invs = invariantsOf(named, type);
         if (invs.isEmpty()) {
-            return;
+            return Verdict.PROVED;
         }
         List<Clause> owed = new ArrayList<>();
         for (Ast.InvariantClause inv : invs) {
@@ -797,7 +888,7 @@ public final class InvariantChecker {
             }
         }
         if (owed.isEmpty()) {
-            return;   // nothing here is expressible — the run-time check stands for all of it
+            return Verdict.PROVED;   // nothing here is expressible — the run-time check stands for it
         }
         NumericDomain dom = k.numbers();
         for (Clause c : owed) {
@@ -805,22 +896,34 @@ public final class InvariantChecker {
                 dom = dom.assume(known.form(), known.rel());
             }
         }
-        boolean possible = false;
+        Verdict out = Verdict.PROVED;
         for (Clause c : owed) {
             if (c.dischargedBy(dom, k.facts())) {
                 continue;
             }
             if (c.refutedBy(dom, k.facts())) {
-                reportViolation(type, pos);
-                return;
+                return Verdict.REFUTED;
             }
-            possible = true;
+            out = Verdict.UNKNOWN;
         }
-        if (possible && !attempted) {
-            warnings.add(
-                    Diagnostic.of("E2011", "check.invariant.unproven").title("check.invariant.title")
-                            .at(pos).args(type.name()).hint("check.invariant.reify", type.name())
-                            .warning().build());
+        return out;
+    }
+
+    /** Says what {@code verdict} found. A definite violation is an error and an unproven one a
+     * warning; a discharged or non-expressible invariant says nothing. An {@code attempted}
+     * construction raises no warning: what the warning reports is a possible abort, and an attempt
+     * takes its else branch instead. */
+    private void report(Ast.Data type, SourcePos pos, boolean attempted, Verdict verdict) {
+        switch (verdict) {
+            case REFUTED -> reportViolation(type, pos);
+            case UNKNOWN -> {
+                if (!attempted) {
+                    warnings.add(Diagnostic.of("E2011", "check.invariant.unproven")
+                            .title("check.invariant.title").at(pos).args(type.name())
+                            .hint("check.invariant.reify", type.name()).warning().build());
+                }
+            }
+            case PROVED -> { }
         }
     }
 
