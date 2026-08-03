@@ -224,39 +224,58 @@ class PatternValuesTest {
     /**
      * A pattern whose answer would take longer to check than anyone will wait.
      *
-     * <p>Every part of {@code (?:x?x){40}} is a construct this reads. What it cannot do is check the
-     * answer: the value it would offer is forty characters, and the engine matching it has forty
-     * places to back up to, which multiply. Measured on this machine before the bound went in, thirty
-     * took 40ms, thirty-three took 172ms, and each further one doubled — so a valid model was enough
-     * to stop the compiler.
+     * <p>Every part of these is a construct the reader understands; what it cannot do is check the
+     * answer. A repetition written over something of more than one length gives the engine somewhere
+     * to back up to for every copy in the string — {@code (?:x?x){40}} took 22 seconds before the
+     * check was bounded — and so does any pair of variable-length parts competing for the same
+     * characters, which no shape gives away: {@code x*x*…x{16}} reads seventy-seven million characters
+     * of a sixteen-character string.
      *
-     * <p>The check runs preemptively because the failure being guarded against is not a wrong answer
-     * but no answer at all.
+     * <p>Which is why nothing here estimates. What is bounded is the reading itself, so a pattern that
+     * runs away is stopped whatever made it run away. The check runs preemptively because the failure
+     * being guarded against is not a wrong answer but no answer at all.
      */
     @Test
-    void aPatternWithNestedVariableRepetitionIsNotEvaluated() {
+    void aPatternWhoseAnswerCannotBeCheckedInTimeIsNotOffered() {
         assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
             for (String regex : List.of("(?:x?x){30}", "(?:x?x){40}", "(?:x?x){200}",
-                    "(?:(?:x?x){8}){8}", "(?:(a|aa)x){30}")) {
+                    "(?:(?:x?x){8}){8}")) {
+                assertEquals(Optional.empty(), PatternValues.shortestAccepted(regex), regex);
+            }
+        });
+    }
+
+    /** The same, where what runs away is two neighbours rather than a nesting. */
+    @Test
+    void adjacentVariableQuantifiersCannotExhaustTheMatcher() {
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
+            for (int repeats : List.of(12, 16, 20, 32)) {
+                String regex = "x*".repeat(repeats) + "x{" + repeats + "}";
                 assertEquals(Optional.empty(), PatternValues.shortestAccepted(regex), regex);
             }
         });
     }
 
     /**
-     * And what that bound must not cost.
+     * And what the bound must not cost.
      *
      * <p>A repetition over something of more than one length is not by itself expensive — what costs
-     * is how many copies of it end up in the answer, and a `+` or a `*` writes as few as it can. The
-     * rule for a domain name nests them three deep and is answered in under a millisecond, so a bound
-     * drawn at the shape rather than at what the answer asks for would refuse it for nothing.
+     * is how much of the answer the engine ends up reading, and a `+` or a `*` writes as few copies as
+     * it can. The rule for a domain name nests them three deep and is checked in five reads, so a
+     * bound drawn at the shape rather than at the reading would refuse it for nothing.
      */
     @Test
     void aNestedRepetitionWhoseAnswerIsShortIsStillRead() {
         assertEquals(Optional.of("a.a"), PatternValues.shortestAccepted(
                 "[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)+"));
         assertEquals(Optional.of("b"), PatternValues.shortestAccepted("(a|aa)*b"));
-        assertEquals(Optional.of("x".repeat(20)), PatternValues.shortestAccepted("(?:x?x){20}"));
+        assertEquals(Optional.of("x".repeat(20)), PatternValues.shortestAccepted("(?:x?x){20}"),
+                "and one that does back up, within what it is given to");
+        // Thirty repetitions of a two-branch group, which an estimate of the shape refused and which
+        // the engine checks in sixty reads: the branches are separated, so there is nothing to
+        // back up over.
+        assertEquals(Optional.of("ax".repeat(30)),
+                PatternValues.shortestAccepted("(?:(a|aa)x){30}"));
     }
 
     /**
