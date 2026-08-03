@@ -62,11 +62,8 @@ public final class BottomInfer {
         if (e instanceof Ast.ListLit l) {
             return l.elements().isEmpty();
         }
-        if (!(e instanceof Ast.Var v && v.denotes() instanceof ValueName.Stdlib lib)) {
-            return false;
-        }
-        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
-        return entry != null && entry.declaration().params().isEmpty();
+        return e instanceof Ast.Var v && v.denotes() instanceof ValueName.Stdlib lib
+                && Prelude.isEmptyCollectionValue(lib.qualified());
     }
 
     /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context
