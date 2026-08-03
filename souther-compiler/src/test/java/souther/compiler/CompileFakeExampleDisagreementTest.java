@@ -195,7 +195,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aTableWithAnUnbuildableRowAnswersNothing() {
-        assertEquals(List.of(), codesOf("""
+        assertEquals(List.of("E1908"), allCodesOf("""
                 module example.clash
                 import String ( length )
 
@@ -207,12 +207,19 @@ class CompileFakeExampleDisagreementTest {
 
                 behavior findMember : (id: MemberId) -> Found | Missing
 
+                behavior place : (id: MemberId) -> Found | Missing
+                    depends on findMember
+                let place (id, findMember) = findMember(id)
+
                 example findMember
                     | "m-1 is a member" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
 
                 fake findMember
                     | (MemberId("m-1")) -> Missing { why = "none" }
                     | (MemberId("m-2")) -> Found { id = MemberId("") }
+
+                example place
+                    | "runs" : (MemberId("m-1")) -> Missing { why = "none" }
                 """));
     }
 
@@ -222,7 +229,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aRowExpectingACaseTheBehaviorCannotAnswerWithStatesNothing() {
-        assertEquals(List.of(), codesOf("""
+        assertEquals(List.of("E1904"), allCodesOf("""
                 module example.clash
 
                 data Found = { id: String }
@@ -276,16 +283,119 @@ class CompileFakeExampleDisagreementTest {
         assertFalse(codes.contains("E1919"), codes.toString());
     }
 
+    /**
+     * A `with` stands in with a value or it stands in with nothing. A bare case name is an assertion
+     * a row may make and a stand-in may not: `Missing` has fields, so there is no `Missing` to
+     * install, and the row is left with nothing to disagree with (E1908 says why).
+     */
+    @Test
+    void aWithThatCannotBeBuiltStandsInForNothing() {
+        assertEquals(List.of("E1908"), allCodesOf("""
+                module example.b1
+
+                data Found = { id: String }
+                data Missing = { why: String }
+                data Done
+
+                behavior lookup : () -> Found | Missing
+
+                behavior use : () -> Done
+                    depends on lookup
+                    constructs Done
+                let use (lookup) = match lookup() with
+                    | Found   -> Done
+                    | Missing -> Done
+
+                example lookup
+                    | "found" : () -> Found
+
+                example use
+                    | "runs" : () with lookup = Missing -> Done
+                """));
+    }
+
+    /**
+     * A fixture that will not finish costs its own reading and no other. One row read within one
+     * budget would let a row nobody is asking about spend what every other statement in the module
+     * needed, and a plain contradiction elsewhere would go unsaid because of it.
+     */
+    @Test
+    void aRowThatWillNotFinishDoesNotTakeTheRestOfTheModuleWithIt() {
+        assertEquals(List.of("E1910", "E1919", "E1919"), allCodesOf("""
+                module example.b2
+
+                data N = Int
+                data Found = { id: String }
+                data Missing = { why: String }
+
+                partial let spin (n: Int): Int = spin(n)
+
+                behavior findMember : (id: String) -> Found | Missing
+                behavior other : (n: N) -> Found | Missing
+
+                example findMember
+                    | "clash" : ("m-1") -> Found { id = "m-1" }
+
+                fake findMember
+                    | ("m-1") -> Missing { why = "none" }
+
+                example other
+                    | "loops" : (N(spin(1))) -> Found { id = "x" }
+
+                fake other
+                    | (N(1)) -> Missing { why = "none" }
+                """));
+    }
+
+    /**
+     * Which case a value is comes from the value, not from the call that produced it. A fake row
+     * answering through a helper states the case that helper returned, and a row naming only a case
+     * is held against that.
+     */
+    @Test
+    void aCaseAHelperAnsweredWithIsWhatTheFakeStates() {
+        assertEquals(List.of("E1919", "E1919"), allCodesOf("""
+                module example.m3b
+
+                data Found = { id: String }
+                data Missing = { why: String }
+
+                let missing (reason: String): Missing = Missing { why = reason }
+
+                behavior lookup : () -> Found | Missing
+
+                example lookup
+                    | "found" : () -> Found
+
+                fake lookup
+                    | _ -> missing("none")
+                """));
+    }
+
     /** The E1919s of a compile that may also fail, read off the reports rather than the warnings —
      * a compile that raises drops the warnings it had collected. */
     private static List<String> codesOf(String model) {
+        List<String> codes = new ArrayList<>();
+        for (String code : allCodesOf(model)) {
+            if ("E1919".equals(code)) {
+                codes.add(code);
+            }
+        }
+        return codes;
+    }
+
+    /** Every example-family code the compile reported, in order. Read off the reports so that the
+     * error a case is really about is visible beside the E1919s, and a test cannot pass by the whole
+     * comparison having stopped working. */
+    private static List<String> allCodesOf(String model) {
         souther.compiler.query.Compilation compilation =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         compilation.answerEverything();
         List<String> codes = new ArrayList<>();
         for (souther.compiler.query.Db.Found found : compilation.db().allReports()) {
-            if ("E1919".equals(found.report().diagnostic().code())) {
-                codes.add(found.report().diagnostic().code());
+            String code = found.report().diagnostic().code();
+            if (code != null && code.startsWith("E19")) {
+                codes.add(code);
             }
         }
         return codes;

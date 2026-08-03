@@ -55,19 +55,31 @@ much stronger claim than reporting the disagreement needs.
    against their parameter types, expectation against the output's cases and then built. A side read
    otherwise here than there would be held to an assertion the model itself refuses.
 
-   The case a comparison turns on is the one the text names, resolved to the type it denotes. The
-   class a value arrives in is a different thing — it does not tell one module's case from another's
-   of the same name — and it is what the evaluator compares a *result* against, which is a comparison
-   between a text and a run rather than between two texts.
+   The case a comparison turns on is the one the value turned out to be, resolved to the type this
+   module knows it under — read from the value, because which case a value is comes from the value
+   and not from the text that produced it, and a fake answering through a helper has no case in its
+   text at all. The raw class a value arrives in is a third thing, and it is what the evaluator
+   compares a *result* against: that is a comparison between a text and a run rather than between two
+   texts.
 
-3. **A row-local `with dep = value` is compared with recorded rows only when `dep` takes no input.**
+3. **A stand-in and an assertion are read apart.** A recorded row may assert a case and nothing under
+   it. A `fake` row and a `with` may not: what they install is a value, and a case with fields is not
+   one. Reading a stand-in as an assertion let a `with` that cannot be built at all be compared as
+   though it named a case, and report a disagreement with something that stands in for nothing.
+
+   Each is read within its own share of the time budget, not one share for the module. Building a
+   fixture runs the helpers it applies, and a `partial` one may not stop; a budget covering the whole
+   reading is one that a single slow row can spend, and spending it would drop every other reading
+   with it — a plain contradiction elsewhere going unsaid because of a row it has nothing to do with.
+
+4. **A row-local `with dep = value` is compared with recorded rows only when `dep` takes no input.**
    For a dependency that takes inputs, the `with` does not identify which dependency input is
    answered without evaluating the parent behavior, so no written-statement disagreement is reported.
    A dependency taking nothing has one input, `()`, so there the two are about the same call. A
    `with` takes precedence over a `fake` table while its own row runs; that is dispatch and it settles
    nothing here, since the table remains a statement written for every other row and every other run.
 
-4. **The diagnostic is a warning, and it does not belong to adequacy.** Nothing is counted, no second
+5. **The diagnostic is a warning, and it does not belong to adequacy.** Nothing is counted, no second
    compile is needed and no behavior is applied, so the adequacy dial has no say over it; what it
    costs is building the fixtures on both sides and comparing them. Building one runs the helpers it
    applies (ADR-0077), so the reading is held to the same budget a row's evaluation is.
