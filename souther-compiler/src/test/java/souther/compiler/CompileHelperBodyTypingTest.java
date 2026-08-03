@@ -505,6 +505,35 @@ class CompileHelperBodyTypingTest {
     }
 
     @Test
+    void anElementThatAnswersNoTypeDoesNotHideALaterOne() {
+        // The elements share one type. `[]` answers none of it, so what says what the list holds is
+        // `[1]`, further along.
+        assertTrue(bodyTypes("let nested (v) = List.length([v, [], [1]])"),
+                "the later element types `v` as List<Int>");
+    }
+
+    @Test
+    void anArmThatAnswersNoValueDoesNotHideALaterOne() {
+        // `unreachable` answers no value, so the arm beside it that does is what types the parameter.
+        String src = """
+                module demo
+                data A
+                data B
+                data C
+                data S = A | B | C
+                data X = Int
+                behavior f : (x: X) -> X
+                let choose (v, s: S) = match s with
+                    | A -> v
+                    | B -> unreachable "not here"
+                    | C -> 0
+                let f (x) = x
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "the third arm types `v` as Int");
+    }
+
+    @Test
     void aRecursiveHelperStillAnnotatesItsParameters() {
         // A recursive helper is lowered to a method and typed on its declaration, so it writes its
         // parameter types even where a body use would determine them.

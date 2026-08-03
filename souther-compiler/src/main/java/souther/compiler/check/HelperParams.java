@@ -318,21 +318,20 @@ final class HelperParams {
                         openUse = v;   // a use of the parameter that no enclosing position typed
                     }
                 }
-                case Ast.LetIn li ->                     visitLet(li, env, target, expected);
+                case Ast.LetIn li -> visitLet(li, env, target, expected);
                 case Ast.Binary bin -> {
                     Type both = bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR
                             ? Type.BOOL : null;
-                    visitBeside(bin.left(), bin.right(), env, target, both);
-                    visitBeside(bin.right(), bin.left(), env, target, both);
+                    visitShared(readings(List.of(bin.left(), bin.right()), env), target, both);
                 }
                 case Ast.If iff -> {
                     visit(iff.cond(), env, target, Type.BOOL);
-                    visitBeside(iff.then(), iff.els(), env, target, expected);
-                    visitBeside(iff.els(), iff.then(), env, target, expected);
+                    visitShared(readings(List.of(iff.then(), iff.els()), env), target, expected);
                 }
-                case Ast.Match m ->                     visitMatch(m, env, target, expected);
-                case Ast.ListLit list ->                     visitElements(list.elements(), env, target, expected);
-                case Ast.Apply call ->                     visitArgs(call, env, target, expected);
+                case Ast.Match m -> visitMatch(m, env, target, expected);
+                case Ast.ListLit list -> visitShared(readings(list.elements(), env), target,
+                        expected instanceof Type.ListOf l ? l.element() : null);
+                case Ast.Apply call -> visitArgs(call, env, target, expected);
                 case Ast.NewData nd -> visitInits(nd, env, target);
                 case Ast.IfConstructed ic -> visitAttempt(ic, env, target, expected);
                 case Ast.ListComp comp -> {
@@ -394,51 +393,64 @@ final class HelperParams {
             // the value the attempt built is in force over the success arm, at the type it was built as
             Scope built = ic.construct() instanceof Ast.NewData nd
                     ? env.with(ic.binder(), Type.ref(nd.typeName().denotes())) : env;
-            Type answers = settles(expected) ? expected : armAnswer(ic, env, built, target);
-            visit(ic.then(), built, target, answers);
+            List<Reading> arms = new ArrayList<>();
+            arms.add(new Reading(ic.then(), built));
             for (Ast.ElseArm arm : ic.els()) {
-                if (pinned != null) {
-                    return;
-                }
-                visit(arm.body(), env, target, answers);
+                arms.add(new Reading(arm.body(), env));
             }
+            visitShared(arms, target, expected);
+        }
+
+        /** An expression and the scope it is read in — an arm carries what its own pattern binds. */
+        private record Reading(Ast.Expr expr, Scope scope) {}
+
+        /** {@code expressions} read in one scope, in the order they are written. */
+        private static List<Reading> readings(List<Ast.Expr> expressions, Scope scope) {
+            List<Reading> out = new ArrayList<>();
+            for (Ast.Expr e : expressions) {
+                out.add(new Reading(e, scope));
+            }
+            return out;
         }
 
         /**
-         * The type an arm of {@code ic} that does not hold the parameter answers — the arms share one
-         * type. The success arm is read where the built value is in force, as it is when it is visited.
+         * Reads positions that answer one type — the operands of an operator, the arms of an {@code if}
+         * or a {@code match} or an attempted construction, the elements of a collection literal. Each is
+         * asked for what the enclosing position states, and otherwise for what one of the others
+         * answers: they share a type, so one of them answering is the answer for all of them.
+         *
+         * <p>What counts as answering is a type the parameter could take, which is the same question
+         * asked of the answer itself. A position holding the parameter is not asked — this scope cannot
+         * type it, which is the question being worked out — and one that answers no type does not end
+         * the search: an empty collection and an {@code unreachable} stand in a position without saying
+         * what it holds, and the position after them may say it.
          */
-        private Type armAnswer(Ast.IfConstructed ic, Scope env, Scope built, BindingId target) {
-            if (!mentions(ic.then(), target)) {
-                Type t = typed(ic.then(), built);
-                if (t != null) {
-                    return t;
+        private void visitShared(List<Reading> readings, BindingId target, Type expected) {
+            if (readings.stream().noneMatch(r -> mentions(r.expr(), target))) {
+                return;
+            }
+            Type answers = settles(expected) ? expected : answered(readings, target);
+            for (Reading r : readings) {
+                if (mentions(r.expr(), target)) {
+                    visit(r.expr(), r.scope(), target, answers);
+                    if (pinned != null) {
+                        return;
+                    }
                 }
             }
-            for (Ast.ElseArm arm : ic.els()) {
-                if (!mentions(arm.body(), target)) {
-                    Type t = typed(arm.body(), env);
-                    if (t != null) {
+        }
+
+        /** The type one of {@code readings} answers, or null where none of them answers one. */
+        private Type answered(List<Reading> readings, BindingId target) {
+            for (Reading r : readings) {
+                if (!mentions(r.expr(), target)) {
+                    Type t = typed(r.expr(), r.scope());
+                    if (settles(t)) {
                         return t;
                     }
                 }
             }
             return null;
-        }
-
-        /**
-         * Reads {@code e} for a position it shares with {@code sibling} — the two operands of an
-         * operator, the two arms of an {@code if} — which is asked for {@code expected} where the
-         * enclosing position states one and otherwise for whatever the sibling answers. The sibling is
-         * typed only when {@code e} holds the parameter at all: typing a neighbour to answer a
-         * question nothing in {@code e} asks is the walk's most expensive way of learning nothing.
-         */
-        private void visitBeside(Ast.Expr e, Ast.Expr sibling, Scope env, BindingId target,
-                                 Type expected) {
-            if (pinned != null || !mentions(e, target)) {
-                return;
-            }
-            visit(e, env, target, settles(expected) ? expected : typed(sibling, env));
         }
 
         /**
@@ -494,42 +506,6 @@ final class HelperParams {
         }
 
         /**
-         * The parameter standing where a sibling of it answers a value of the same type: an element
-         * of a collection literal beside another element. The positions have one type, so the one
-         * that names a type names the parameter's.
-         */
-        private void visitElements(List<Ast.Expr> elements, Scope env, BindingId target, Type expected) {
-            if (elements.stream().noneMatch(e -> mentions(e, target))) {
-                return;
-            }
-            Type element = expected instanceof Type.ListOf list && settles(list.element())
-                    ? list.element() : sibling(elements, env, target);
-            for (Ast.Expr e : elements) {
-                visit(e, env, target, element);
-                if (pinned != null) {
-                    return;
-                }
-            }
-        }
-
-        /**
-         * The type an element that does not hold the parameter answers — the elements share one type,
-         * so one of them answering is the answer for all of them. An element holding the parameter is
-         * not asked: this scope cannot type it, which is the question being worked out.
-         */
-        private Type sibling(List<Ast.Expr> elements, Scope env, BindingId target) {
-            for (Ast.Expr e : elements) {
-                if (!mentions(e, target)) {
-                    Type t = typed(e, env);
-                    if (t != null) {
-                        return t;
-                    }
-                }
-            }
-            return null;
-        }
-
-        /**
          * Each arm of a {@code match}, asked for what the match as a whole is asked for and otherwise
          * for what a sibling arm answers — the arms have one type. An arm is read in a scope its own
          * binding is in force over, which is what the scrutinee's type gives: the case a named-sum arm
@@ -537,38 +513,15 @@ final class HelperParams {
          */
         private void visitMatch(Ast.Match m, Scope env, BindingId target, Type expected) {
             visit(m.scrutinee(), env, target, null);
-            if (pinned != null || m.cases().stream().noneMatch(c -> holds(c, target))) {
+            if (pinned != null) {
                 return;
             }
             Type scrutinee = typed(m.scrutinee(), env);
-            Type answers = settles(expected) ? expected : siblingArm(m, env, target, scrutinee);
+            List<Reading> arms = new ArrayList<>();
             for (Ast.Case c : m.cases()) {
-                if (holds(c, target)) {
-                    visit(c.body(), armScope(env, c, scrutinee), target, answers);
-                    if (pinned != null) {
-                        return;
-                    }
-                }
+                arms.add(new Reading(c.body(), armScope(env, c, scrutinee)));
             }
-        }
-
-        /** Whether arm {@code c} reads the parameter. An arm binding a name spelled like it binds
-         * another binding, whose uses are not the parameter's. */
-        private boolean holds(Ast.Case c, BindingId target) {
-            return mentions(c.body(), target);
-        }
-
-        /** The type an arm that does not hold the parameter answers — the arms share one type. */
-        private Type siblingArm(Ast.Match m, Scope env, BindingId target, Type scrutinee) {
-            for (Ast.Case c : m.cases()) {
-                if (!holds(c, target)) {
-                    Type t = typed(c.body(), armScope(env, c, scrutinee));
-                    if (t != null) {
-                        return t;
-                    }
-                }
-            }
-            return null;
+            visitShared(arms, target, expected);
         }
 
         /** {@code env} with what arm {@code c} binds, where the scrutinee's type says what that is. */
