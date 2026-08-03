@@ -171,9 +171,29 @@ public final class ExampleVerifier {
         worker.start();
         try {
             return task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS);
-        } catch (java.util.concurrent.TimeoutException | java.util.concurrent.ExecutionException _) {
+        } catch (java.util.concurrent.TimeoutException _) {
             task.cancel(true);
             return List.of();
+        } catch (java.util.concurrent.ExecutionException ee) {
+            task.cancel(true);
+            Throwable cause = ee.getCause();
+            // Two things end a reading without the model being at fault: a fixture whose helper will
+            // not stop, and a host with no runtime to build a value against (the runtime is
+            // `provided`, as it is for CTFE). Both are said where a row is evaluated — E1910, and the
+            // row recorded as incomplete — so the reading is dropped and nothing is claimed.
+            if (cause instanceof NonTerminationException || cause instanceof LinkageError) {
+                return List.of();
+            }
+            // Anything else is this code being wrong. An empty reading says the statements agree, so
+            // answering with one would leave a broken compiler reporting every model consistent, and
+            // only a test that reached the broken shape would ever say otherwise.
+            if (cause instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+            throw new IllegalStateException(cause);
         } catch (InterruptedException _) {
             task.cancel(true);
             Thread.currentThread().interrupt();

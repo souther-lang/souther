@@ -239,6 +239,43 @@ class CompileFakeExampleDisagreementTest {
                 """));
     }
 
+    /**
+     * A row whose fixture will not finish states nothing, so nothing is held against it. What
+     * happened is said where the row is evaluated (E1910), and the reading adds nothing beside it.
+     *
+     * <p>This reaches the reading through {@code builtOrNull}, which drops the row as the fixture
+     * failure it is. The other way a reading can end — a helper that overruns the budget on the
+     * reading's own worker — is handled where the worker is joined, and nothing here provokes it.
+     */
+    @Test
+    void aRowWhoseFixtureWillNotFinishIsHeldAgainstNothing() {
+        CompileException e = org.junit.jupiter.api.Assertions.assertThrows(CompileException.class,
+                () -> Compiler.compile("""
+                        module example.spin
+
+                        data N = Int
+                        data Found = { n: N }
+                        data Missing = { why: String }
+
+                        partial let spin (n: Int): Int = spin(n)
+
+                        behavior find : (n: N) -> Found | Missing
+
+                        example find
+                            | "loops" : (N(spin(1))) -> Found { n = N(0) }
+
+                        fake find
+                            | (N(1)) -> Missing { why = "none" }
+                        """));
+
+        List<String> codes = new ArrayList<>();
+        for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
+            codes.add(d.code());
+        }
+        assertTrue(codes.contains("E1910"), codes.toString());
+        assertFalse(codes.contains("E1919"), codes.toString());
+    }
+
     /** The E1919s of a compile that may also fail, read off the reports rather than the warnings —
      * a compile that raises drops the warnings it had collected. */
     private static List<String> codesOf(String model) {
