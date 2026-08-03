@@ -253,7 +253,8 @@ public final class Adequacy {
                 return plain;
             }
             List<Incompleteness> why = new ArrayList<>(plain.value().incompleteness());
-            why.add(Incompleteness.of(Incompleteness.Code.PROBE_MAPPING_LOST, name));
+            why.add(Incompleteness.of(Incompleteness.Code.PROBE_MAPPING_LOST,
+                    Incompleteness.Scope.MODULE, name));
             return Answer.of(new Output.Examples.Of(plain.value().rows(), why), plain.reports());
         }
     }
@@ -431,29 +432,27 @@ public final class Adequacy {
         if (origins == null) {
             return Map.of();
         }
-        Ast.Module prepared = db.ask(new Shapes.Prepared(module)).value();
-        Set<String> declared = prepared == null ? Set.of() : prepared.behaviors().stream()
-                .map(Ast.BehaviorDef::name).collect(java.util.stream.Collectors
-                        .toCollection(LinkedHashSet::new));
         for (String sourceId : new LinkedHashSet<>(origins)) {
             Output.Examples.Of observed = db.ask(new ProbedExamples(module, sourceId)).value();
             if (observed == null) {
                 // The source was not evaluated at all. Which behaviors it wrote rows for is exactly
                 // what cannot be read, so it counts against every one of them.
-                everywhere.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT, sourceId));
+                everywhere.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                        Incompleteness.Scope.SOURCE, sourceId));
                 continue;
             }
             for (RowOutcome row : observed.rows()) {
                 rows.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
             }
             for (Incompleteness gap : observed.incompleteness()) {
-                if (gap.isAboutOneOf(declared)) {
+                if (gap.scope().isOneBehavior()) {
                     stopped.computeIfAbsent(gap.subject(), _ -> new ArrayList<>()).add(gap);
                 } else {
                     everywhere.add(gap);   // about the module or the source, so about all of them
                 }
             }
         }
+        everywhere = distinct(everywhere);
         Set<String> named = new LinkedHashSet<>(rows.keySet());
         named.addAll(stopped.keySet());
         Map<String, Observed> out = new LinkedHashMap<>();
@@ -463,6 +462,16 @@ public final class Adequacy {
             out.put(behavior, new Observed(rows.getOrDefault(behavior, List.of()), gaps));
         }
         return new WithFallback(out, everywhere);
+    }
+
+    /** One entry per reason. A module's classes failing to be instrumented is one fact, and looking
+     * for them once per source is not three facts. */
+    private static List<Incompleteness> distinct(List<Incompleteness> gaps) {
+        Map<Object, Incompleteness> byIdentity = new LinkedHashMap<>();
+        for (Incompleteness gap : gaps) {
+            byIdentity.putIfAbsent(gap.identity(), gap);
+        }
+        return List.copyOf(byIdentity.values());
     }
 
     /** The map above, answering for a behavior nothing named with whatever stopped every source. A
@@ -564,8 +573,8 @@ public final class Adequacy {
                     // The runtime is not on this host's classpath, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
                     // impossible, so none of them is reported as one.
-                    out.put(spec.name(), Filling.stopped(Incompleteness.of(
-                            Incompleteness.Code.RUNTIME_ABSENT, spec.name())));
+                    out.put(spec.name(), Filling.stopped(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                            Incompleteness.Scope.BEHAVIOR, spec.name())));
                 }
             }
             return Answer.of(Map.copyOf(out));

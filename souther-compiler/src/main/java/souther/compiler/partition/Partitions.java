@@ -72,7 +72,8 @@ public final class Partitions {
                 kept.add(axis);
                 measured++;
             } else {
-                omitted.add(Incompleteness.of(Incompleteness.Code.AXIS_OMITTED, axis.id().toString()));
+                omitted.add(Incompleteness.of(Incompleteness.Code.AXIS_OMITTED,
+                        Incompleteness.Scope.POSITION, axis.id().toString()));
             }
         }
         return new Partitioning(kept, omitted);

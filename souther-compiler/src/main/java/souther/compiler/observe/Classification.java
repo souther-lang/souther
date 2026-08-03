@@ -20,7 +20,8 @@ public sealed interface Classification {
     }
 
     static Classification unreadable(Incompleteness.Code code, String subject) {
-        return new Unclassified(Incompleteness.of(code, subject));
+        return new Unclassified(Incompleteness.of(code, Incompleteness.Scope.POSITION,
+                subject));
     }
 
     default boolean isClassified() {

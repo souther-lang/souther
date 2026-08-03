@@ -105,7 +105,8 @@ public final class ExampleVerifier {
                 // generated classes cannot be loaded to evaluate here; the build-time pass, where the
                 // runtime is present, still checks this example. Nothing was observed, and a measure
                 // that read the empty result as "no row covers this" would report a gap nobody left.
-                incompleteness.add(Incompleteness.at(Incompleteness.Code.RUNTIME_ABSENT, ex.target(),
+                incompleteness.add(Incompleteness.at(Incompleteness.Code.RUNTIME_ABSENT,
+                        Incompleteness.Scope.BEHAVIOR, ex.target(),
                         new SourceRef(sourceId, ex.pos())));
             }
         }
@@ -114,7 +115,8 @@ public final class ExampleVerifier {
         for (RowOutcome outcome : rows) {
             if (outcome.disposition() == Disposition.INCOMPLETE) {
                 incompleteness.add(new Incompleteness(Incompleteness.Code.ROW_TIMED_OUT,
-                        outcome.target(), java.util.Optional.of(outcome.at())));
+                        Incompleteness.Scope.BEHAVIOR, outcome.target(),
+                        java.util.Optional.of(outcome.at())));
             }
         }
         return new Observations(failures, rows, incompleteness);

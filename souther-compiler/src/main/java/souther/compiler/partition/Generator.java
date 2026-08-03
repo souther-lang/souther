@@ -169,7 +169,7 @@ public final class Generator {
                 axes.add(axis);
             } else {
                 undecided.add(Incompleteness.of(Incompleteness.Code.VALUE_UNREADABLE,
-                        axis.path().toString()));
+                        Incompleteness.Scope.POSITION, axis.path().toString()));
             }
         }
         if (axes.isEmpty()) {
@@ -190,7 +190,7 @@ public final class Generator {
         while (!pairs.isEmpty() || !singles.isEmpty()) {
             if (rows.size() >= MAX_ROWS) {
                 int left = pairs.size() + singles.size();
-                incompleteness.add(Incompleteness.of(Incompleteness.Code.SEARCH_LIMIT,
+                incompleteness.add(Incompleteness.of(Incompleteness.Code.SEARCH_LIMIT, Incompleteness.Scope.MODULE,
                         left + " combinations past the row limit"));
                 // Both sets: the count above is of both, and reporting one of them would promise
                 // more than it names.

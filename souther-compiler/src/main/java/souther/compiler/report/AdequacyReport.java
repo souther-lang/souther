@@ -121,10 +121,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             if (observed == null) {
                 // The rows of this source were never evaluated, so nothing here can be counted as
                 // covered or as missing. Which is a fact about the measurement, not about the model.
-                incompleteness.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT, sourceId));
+                incompleteness.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT,
+                        Incompleteness.Scope.SOURCE, sourceId));
                 continue;
             }
-            incompleteness.addAll(observed.incompleteness());
+            for (Incompleteness gap : observed.incompleteness()) {
+                // One entry per reason. A module-level failure found from each of three attached files
+                // is one failure, and a build that counts these should count one.
+                if (incompleteness.stream().noneMatch(had -> had.identity().equals(gap.identity()))) {
+                    incompleteness.add(gap);
+                }
+            }
             for (RowOutcome row : observed.rows()) {
                 byTarget.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
             }
@@ -141,8 +148,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             int pending = (int) rows.stream()
                     .filter(r -> r.disposition() == souther.compiler.observe.Disposition.PENDING)
                     .count();
+            // Anything larger than a behavior holds this one: a source that could not be evaluated is
+            // missing rows for whatever it wrote, and a module whose classes could not be instrumented
+            // is missing arms for all of them. The scope says which, so nothing here has to guess.
             boolean unreadable = incompleteness.stream()
-                    .anyMatch(i -> behavior.name().equals(i.subject()));
+                    .anyMatch(i -> i.countsAgainst(behavior.name()));
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
             PartitionEvidence partition = partitions == null ? null
@@ -177,16 +187,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             // could not be measured, carried into a report that does not mention that behavior, is a
             // status nothing in front of the reader accounts for.
             //
-            // A reason that names no behavior at all is a different thing: a whole source that could
-            // not be evaluated is missing rows for whatever it held, this behavior included, so it
-            // stays. Which a subject is, is {@link Incompleteness#isAboutOneOf}'s to say.
+            // A reason larger than a behavior stays: a whole source that could not be evaluated is
+            // missing rows for whatever it held, this behavior included.
             Set<String> shown = behaviors.stream().map(BehaviorReport::name)
-                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-            Set<String> named = m.behaviors().stream().map(BehaviorReport::name)
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
             List<Incompleteness> gaps = behavior == null ? m.incompleteness()
                     : m.incompleteness().stream()
-                            .filter(gap -> gap.isAboutOneOf(shown) || !gap.isAboutOneOf(named))
+                            .filter(gap -> !gap.scope().isOneBehavior()
+                                    || shown.contains(gap.subject()))
                             .toList();
             MeasurementStatus status = gaps.isEmpty()
                     ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
@@ -409,6 +417,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             for (Incompleteness gap : module.incompleteness()) {
                 ObjectNode g = gaps.addObject();
                 g.put("code", gap.code().name().toLowerCase(java.util.Locale.ROOT));
+                g.put("scope", gap.scope().name().toLowerCase(java.util.Locale.ROOT));
                 g.put("subject", gap.subject());
                 gap.at().ifPresent(where -> {
                     ObjectNode at = g.putObject("at");

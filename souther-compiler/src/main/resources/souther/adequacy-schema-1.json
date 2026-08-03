@@ -238,9 +238,13 @@
     },
     "incompleteness": {
       "type": "object",
-      "required": ["code", "subject"],
+      "required": ["code", "scope", "subject"],
       "additionalProperties": false,
       "properties": {
+        "scope": {
+          "enum": ["behavior", "source", "module", "position"],
+          "description": "What `subject` names, and so what the reason counts against. Anything larger than a behavior counts against every behavior inside it."
+        },
         "code": {
           "enum": ["value_unreadable", "value_truncated", "row_timed_out", "runtime_absent",
                    "probe_mapping_lost", "search_limit", "axis_omitted"]

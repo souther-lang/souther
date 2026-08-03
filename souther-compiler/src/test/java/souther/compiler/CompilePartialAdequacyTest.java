@@ -548,6 +548,60 @@ class CompilePartialAdequacyTest {
                 "and the one nothing was found at is undecided, not missed");
     }
 
+    // --- who a reason counts against ---------------------------------------------------------------
+
+    /**
+     * A reason larger than a behavior counts against every behavior it holds.
+     *
+     * <p>`subject` carried a behavior name, a source id, the module or a position in one string, and
+     * three readers worked out which from the shape of it — differently. The aggregate treated a
+     * module-wide reason as a behavior nobody declared, the report matched it by name and found none,
+     * and each was a defect found on its own. The scope is on the reason now, so nobody guesses.
+     */
+    @Test
+    void aReasonAboutASourceCountsAgainstTheBehaviorsInIt() {
+        souther.compiler.observe.Incompleteness aboutOne =
+                souther.compiler.observe.Incompleteness.of(
+                        souther.compiler.observe.Incompleteness.Code.ROW_TIMED_OUT,
+                        souther.compiler.observe.Incompleteness.Scope.BEHAVIOR, "submit");
+        souther.compiler.observe.Incompleteness aboutTheSource =
+                souther.compiler.observe.Incompleteness.of(
+                        souther.compiler.observe.Incompleteness.Code.RUNTIME_ABSENT,
+                        souther.compiler.observe.Incompleteness.Scope.SOURCE, "3");
+
+        assertTrue(aboutOne.countsAgainst("submit"));
+        assertFalse(aboutOne.countsAgainst("cancel"));
+        assertTrue(aboutTheSource.countsAgainst("submit"));
+        assertTrue(aboutTheSource.countsAgainst("cancel"),
+                "nothing in the source was read, whichever behaviors it wrote rows for");
+    }
+
+    /** And the report says so: a behavior held by an unread source is not complete. */
+    @Test
+    void aBehaviorHeldByAnUnreadSourceIsNotComplete() {
+        AdequacyReport report = AdequacyReport.of(split());
+
+        assertEquals(MeasurementStatus.PARTIAL, report.status());
+        for (AdequacyReport.BehaviorReport behavior : report.modules().get(0).behaviors()) {
+            assertEquals(MeasurementStatus.PARTIAL, behavior.status(), behavior.name());
+        }
+    }
+
+    /**
+     * One reason is one entry, however many sources went looking.
+     *
+     * <p>These are structured rather than written out so that a build can count them, and a count that
+     * grows with the number of attached files is counting the looking rather than the failure.
+     */
+    @Test
+    void oneReasonIsReportedOnce() {
+        List<souther.compiler.observe.Incompleteness> gaps =
+                AdequacyReport.of(split()).modules().get(0).incompleteness();
+
+        assertEquals(gaps.stream().map(souther.compiler.observe.Incompleteness::identity)
+                        .distinct().count(), gaps.size(), gaps.toString());
+    }
+
     /** The row that did not finish is still there to be counted, and still says it did not. */
     @Test
     void theUnfinishedRowIsStillReported() {

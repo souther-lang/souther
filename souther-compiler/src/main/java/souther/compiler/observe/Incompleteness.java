@@ -2,6 +2,7 @@ package souther.compiler.observe;
 
 import souther.compiler.diag.SourceRef;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -12,11 +13,33 @@ import java.util.Optional;
  * cannot be counted, filtered, or matched against the next run.
  *
  * @param code    what happened
- * @param subject what it happened to — a row's target, an axis path, a value's field chain
+ * @param scope   what {@link #subject} names, so that a reader does not have to work it out. Every
+ *                reader of these has to know whether a reason is about one behavior or about
+ *                everything in a source — and while that was a guess from the shape of a string, three
+ *                readers guessed differently and each was found separately
+ * @param subject what it happened to — a behavior, a source, the module, or a position in a value
  * @param at      where, when there is a source to point at; empty for something with no position of
  *                its own, such as an invariant that arrived from a module compiled elsewhere
  */
-public record Incompleteness(Code code, String subject, Optional<SourceRef> at) {
+public record Incompleteness(Code code, Scope scope, String subject, Optional<SourceRef> at) {
+
+    /** What a reason is about, and so who it counts against. */
+    public enum Scope {
+        /** One behavior. Only that behavior's measures are affected. */
+        BEHAVIOR,
+        /** One source: whatever it holds, which is exactly what could not be read. */
+        SOURCE,
+        /** The module, and so everything in it. */
+        MODULE,
+        /** A position inside a value — an axis path, a field chain. */
+        POSITION;
+
+        /** Whether this is about one behavior in particular, as against something larger holding it.
+         * A reason about something larger is a reason about every behavior inside it. */
+        public boolean isOneBehavior() {
+            return this == BEHAVIOR;
+        }
+    }
 
     public enum Code {
         /** A value could not be read back into an observed form at all. */
@@ -39,24 +62,23 @@ public record Incompleteness(Code code, String subject, Optional<SourceRef> at) 
         at = at == null ? Optional.empty() : at;
     }
 
-    public static Incompleteness of(Code code, String subject) {
-        return new Incompleteness(code, subject, Optional.empty());
+    public static Incompleteness of(Code code, Scope scope, String subject) {
+        return new Incompleteness(code, scope, subject, Optional.empty());
     }
 
-    public static Incompleteness at(Code code, String subject, SourceRef where) {
-        return new Incompleteness(code, subject, Optional.ofNullable(where));
+    public static Incompleteness at(Code code, Scope scope, String subject, SourceRef where) {
+        return new Incompleteness(code, scope, subject, Optional.ofNullable(where));
     }
 
-    /**
-     * Whether this is about one of {@code behaviors}, as against about the module or a source whole.
-     *
-     * <p>{@link #subject} carries a behavior name, a source id, an axis path or a field chain in one
-     * string, and which of those it is has to be worked out from what else is known. What is known
-     * wherever this is asked is the names the module declares — so a subject that is none of them
-     * names something larger, and a reason about something larger is a reason about every behavior
-     * inside it. Asked in one place so that two readers cannot answer it differently.
-     */
-    public boolean isAboutOneOf(java.util.Set<String> behaviors) {
-        return behaviors.contains(subject);
+    /** Whether this counts against {@code behavior} — either by naming it, or by being about
+     * something larger that holds it. */
+    public boolean countsAgainst(String behavior) {
+        return scope.isOneBehavior() ? subject.equals(behavior) : true;
+    }
+
+    /** What makes two of these the same reason. A module's classes failing to be instrumented is one
+     * fact however many sources went looking for them. */
+    public Object identity() {
+        return List.of(code, scope, subject);
     }
 }
