@@ -455,6 +455,56 @@ class CompileHelperBodyTypingTest {
     }
 
     @Test
+    void aComprehensionGuardTypesTheParameter() {
+        // A guard decides whether the one element is there, so it answers a Bool.
+        assertTrue(bodyTypes("let guarded (b) = [1 | b]"),
+                "the comprehension guard types `b` as Bool");
+    }
+
+    @Test
+    void aDeclaredTupleTypeReachesTheElementItNames() {
+        assertTrue(bodyTypes("let pair (v): (String, Int) = (\"key\", v)"),
+                "the declared tuple type types `v` as Int");
+    }
+
+    @Test
+    void anArmOfAnAttemptedConstructionTypesTheParameter() {
+        // The arms of `if X(v) as n then … else …` answer one type, and the success arm reads the
+        // value that was built.
+        String src = """
+                module demo
+                data Amount = Int
+                    invariant value >= 0
+                data X = Int
+                behavior f : (x: X) -> X
+                let wrap (n, fallback) = if Amount(n) as a then a.value else fallback
+                let f (x) = x
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "the sibling arm types `fallback` as Int");
+    }
+
+    @Test
+    void aLocalBindingIsNotTypedByADeclarationOfTheSameName() {
+        // The applied `fetch` is the binding, not the injected behavior that shares its spelling.
+        // Nothing in the body says what the binding holds, so the parameter is annotated.
+        String src = """
+                module demo
+                data X = Int
+                data Y = Int
+                behavior fetch : (x: X) -> Y
+                behavior work : (x: X) -> Y depends on fetch
+                let work (x, fetch) = fetch(x)
+                let choose (b: Bool, v) = {
+                    let fetch = if b then (x) -> 1 else (x) -> 2
+                    fetch(v)
+                }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
     void aRecursiveHelperStillAnnotatesItsParameters() {
         // A recursive helper is lowered to a method and typed on its declaration, so it writes its
         // parameter types even where a body use would determine them.

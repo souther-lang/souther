@@ -317,47 +317,113 @@ final class HelperParams {
                     if (pinned == null && openUse == null) {
                         openUse = v;   // a use of the parameter that no enclosing position typed
                     }
-                    return;
                 }
-                case Ast.LetIn li -> {
-                    visitLet(li, env, target, expected);
-                    return;
-                }
+                case Ast.LetIn li ->                     visitLet(li, env, target, expected);
                 case Ast.Binary bin -> {
                     Type both = bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR
                             ? Type.BOOL : null;
                     visitBeside(bin.left(), bin.right(), env, target, both);
                     visitBeside(bin.right(), bin.left(), env, target, both);
-                    return;
                 }
                 case Ast.If iff -> {
                     visit(iff.cond(), env, target, Type.BOOL);
                     visitBeside(iff.then(), iff.els(), env, target, expected);
                     visitBeside(iff.els(), iff.then(), env, target, expected);
-                    return;
                 }
-                case Ast.Match m -> {
-                    visitMatch(m, env, target, expected);
-                    return;
+                case Ast.Match m ->                     visitMatch(m, env, target, expected);
+                case Ast.ListLit list ->                     visitElements(list.elements(), env, target, expected);
+                case Ast.Apply call ->                     visitArgs(call, env, target, expected);
+                case Ast.NewData nd -> visitInits(nd, env, target);
+                case Ast.IfConstructed ic -> visitAttempt(ic, env, target, expected);
+                case Ast.ListComp comp -> {
+                    for (Ast.Expr guard : comp.guards()) {
+                        visit(guard, env, target, Type.BOOL);
+                    }
+                    visit(comp.element(), env, target,
+                            expected instanceof Type.ListOf list ? list.element() : null);
                 }
-                case Ast.ListLit list -> {
-                    visitElements(list.elements(), env, target, expected);
-                    return;
+                case Ast.Tuple tuple -> visitTuple(tuple, env, target, expected);
+                case Ast.Block block -> {
+                    // A closure is read against what it was handed: its parameters are in force over
+                    // its body at the types the position gives them, and its body answers the result.
+                    Type.FnOf want = expected instanceof Type.FnOf fn
+                            && fn.params().size() == block.params().size() ? fn : null;
+                    visit(block.body(), want == null ? env : walking(env, block, want), target,
+                            want == null ? null : want.result());
                 }
-                case Ast.Apply call -> {
-                    visitArgs(call, env, target, expected);
-                    return;
-                }
-                case Ast.NewData nd -> {
-                    visitInits(nd, env, target);
-                    return;
-                }
-                default -> { }
+                // The operand of a unary minus is the number the whole expression is, so what the
+                // position asks of one it asks of the other.
+                case Ast.Neg neg -> visit(neg.operand(), env, target, expected);
+                // A field is read off a value, and reading it says nothing about what that value is;
+                // an element is taken out of a tuple the same way. Neither asks its child anything.
+                case Ast.FieldAccess fa -> visit(fa.target(), env, target, null);
+                case Ast.TupleGet tg -> visit(tg.tuple(), env, target, null);
+                // Nothing inside to ask: a literal has no children, and `unreachable` carries a
+                // reason rather than an expression.
+                case Ast.IntLit _, Ast.DecimalLit _, Ast.StringLit _, Ast.BoolLit _,
+                        Ast.Unreachable _, Ast.Var _ -> { }
             }
+        }
+
+        /**
+         * The elements of a tuple, each asked for what the position gives that element. A tuple type
+         * reaches its elements one by one, so a written {@code (String, Int)} says what the second
+         * element is without anything else in the body saying it.
+         */
+        private void visitTuple(Ast.Tuple tuple, Scope env, BindingId target, Type expected) {
+            List<Type> want = expected instanceof Type.TupleOf te
+                    && te.elements().size() == tuple.elements().size() ? te.elements() : null;
+            for (int i = 0; i < tuple.elements().size(); i++) {
+                visit(tuple.elements().get(i), env, target, want == null ? null : want.get(i));
+                if (pinned != null) {
+                    return;
+                }
+            }
+        }
+
+        /**
+         * An attempted construction: its arms answer what the whole attempt answers, and the success
+         * arm reads the value that was built at the type it was built as. The construction itself is
+         * asked nothing — what it builds is written on it.
+         */
+        private void visitAttempt(Ast.IfConstructed ic, Scope env, BindingId target, Type expected) {
+            visit(ic.construct(), env, target, null);
             if (pinned != null) {
                 return;
             }
-            TypeChecker.forEachChild(e, c -> visit(c, env, target, null));
+            // the value the attempt built is in force over the success arm, at the type it was built as
+            Scope built = ic.construct() instanceof Ast.NewData nd
+                    ? env.with(ic.binder(), Type.ref(nd.typeName().denotes())) : env;
+            Type answers = settles(expected) ? expected : armAnswer(ic, env, built, target);
+            visit(ic.then(), built, target, answers);
+            for (Ast.ElseArm arm : ic.els()) {
+                if (pinned != null) {
+                    return;
+                }
+                visit(arm.body(), env, target, answers);
+            }
+        }
+
+        /**
+         * The type an arm of {@code ic} that does not hold the parameter answers — the arms share one
+         * type. The success arm is read where the built value is in force, as it is when it is visited.
+         */
+        private Type armAnswer(Ast.IfConstructed ic, Scope env, Scope built, BindingId target) {
+            if (!mentions(ic.then(), target)) {
+                Type t = typed(ic.then(), built);
+                if (t != null) {
+                    return t;
+                }
+            }
+            for (Ast.ElseArm arm : ic.els()) {
+                if (!mentions(arm.body(), target)) {
+                    Type t = typed(arm.body(), env);
+                    if (t != null) {
+                        return t;
+                    }
+                }
+            }
+            return null;
         }
 
         /**
@@ -529,13 +595,9 @@ final class HelperParams {
             List<Type> params = sig == null || sig.params().size() != call.args().size()
                     ? null : solved(call, sig, env, target, expected);
             for (int i = 0; i < call.args().size(); i++) {
-                Type param = params == null ? null : params.get(i);
-                Ast.Expr arg = call.args().get(i);
-                if (arg instanceof Ast.Block lambda && param instanceof Type.FnOf step) {
-                    visit(lambda.body(), walking(env, lambda, step), target, step.result());
-                } else {
-                    visit(arg, env, target, param);
-                }
+                // a closure argument is asked for the declared parameter type like any other, and
+                // reading a closure against what it was handed is what that asking means
+                visit(call.args().get(i), env, target, params == null ? null : params.get(i));
                 if (pinned != null) {
                     return;
                 }
@@ -661,9 +723,11 @@ final class HelperParams {
          * the parameter is annotated instead.
          */
         private Type.FnOf calleeSignature(Ast.Apply call, Scope env) {
-            if (call.denotes() instanceof ValueName.Local local
-                    && env.typeOf(local.id()) instanceof Type.FnOf sig) {
-                return sig;
+            if (call.denotes() instanceof ValueName.Local local) {
+                // What is applied is this binding, whatever else carries its spelling. A declaration
+                // of the same name is a different thing, so where the scope cannot say what the
+                // binding holds, nothing here can.
+                return env.typeOf(local.id()) instanceof Type.FnOf sig ? sig : null;
             }
             String fn = call.reaches();
             ReqSig req = reqSigs.get(fn);
