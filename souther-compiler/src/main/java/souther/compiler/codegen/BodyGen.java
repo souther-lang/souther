@@ -127,17 +127,23 @@ final class BodyGen {
         /**
          * Whether the arms of this body are ones a coverage plan counted.
          *
-         * <p>A recursive helper's are not, and deliberately: a helper is a method every behavior that
-         * calls it shares, so its forks belong to no one behavior's branch coverage
-         * ({@link souther.compiler.coverage.CoverageSites}). Saying so here rather than letting the
-         * lookup fail is what keeps a real mismatch — a plan made from other nodes than these — the
-         * loud error it is meant to be.
+         * <p>Off unless said otherwise, because most of what goes through here is not a behavior's
+         * body: an invariant's clause, a codec, a recursive helper shared by every behavior that
+         * calls it. None of those is a fork in any one behavior
+         * ({@link souther.compiler.coverage.CoverageSites}), and the plan holds no arm for them.
+         *
+         * <p>It was the other way round, on the reasoning that a path nobody had thought about should
+         * fail loudly rather than go unmeasured. It does not fail loudly: the generation is abandoned
+         * and the whole module's arms come back unmeasured, which is the quietest failure there is.
+         * What makes the omission loud is counting the arms that were emitted against the arms that
+         * were planned, which is done once at the end.
          */
-        private boolean armsAreCounted = true;
+        private boolean armsAreCounted = false;
 
-        /** Emits this body without recording where a run went through it. */
-        void armsAreNotCounted() {
-            this.armsAreCounted = false;
+        /** Emits this body recording where a run went through it. Said where the plan was made from
+         * these very nodes, which is a behavior's body and what it encloses. */
+        void armsAreCounted() {
+            this.armsAreCounted = true;
         }
 
         BodyGen(CodegenContext ctx, CodeBuilder code, Ast.Data data, ClassDesc cdName, int firstSlot) {
@@ -313,6 +319,10 @@ final class BodyGen {
                 }
                 cb.withMethodBody("apply", MTD_Fn_apply, ClassFile.ACC_PUBLIC, code -> {
                     BodyGen g = new BodyGen(ctx, code, null, cd, 2);   // slot 0 = this, slot 1 = the Object[] args
+                    // A lambda lifted out of a body is still that body's forks.
+                    if (armsAreCounted) {
+                        g.armsAreCounted();
+                    }
                     if (!injectedNames.isEmpty()) {
                         // the captured behaviors live in this closure's own fields; requiredCall reads
                         // `this.<name>`, so route them the same way the enclosing behavior does
@@ -585,7 +595,9 @@ final class BodyGen {
             if (!armsAreCounted || !ctx.measuring()) {
                 return;
             }
-            code.loadConstant(ctx.probesOf(node)[arm]);
+            int site = ctx.probesOf(node)[arm];
+            ctx.emitted(site);
+            code.loadConstant(site);
             code.invokestatic(CD_Probe, "hit", MTD_Probe_hit);
         }
 

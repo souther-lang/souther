@@ -68,13 +68,15 @@ final class Coverages {
         List<String> notDerivable = new ArrayList<>();
 
         List<Axis> divided = new ArrayList<>();
+        Readings readings = Readings.of(rows, parameters, partitioning.axes(),
+                observed.someRowsUnseen());
         for (Axis axis : partitioning.axes()) {
             if (!axis.measurable()) {
                 notDerivable.add(axis.path().toString());
                 continue;
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, parameters, rows, !observed.someRowsUnseen()));
+                axes.add(coverageOf(axis, readings));
                 divided.add(axis);
             }
             // Whether the arms were measured, and nothing else. A row that did not finish makes a
@@ -83,10 +85,64 @@ final class Coverages {
             boundaries.addAll(boundariesOf(axis, parameters, rows, symbols,
                     armsMeasured, observed.someRowsUnseen()));
         }
-        PartitionEvidence.PairSpace pairs = pairsOf(divided, parameters, rows);
-        return new PartitionEvidence(axes, boundaries,
-                observed.someRowsUnseen() ? pairs.overSomeOfTheRows() : pairs,
+        return new PartitionEvidence(axes, boundaries, pairsOf(divided, readings),
                 notDerivable, partitioning.omitted());
+    }
+
+    /**
+     * What every row said at every position, read once.
+     *
+     * <p>The measures below were putting the same question to the rows — which class is this row in,
+     * here — and answering the follow-up differently. The single-position coverage counted the rows
+     * that could not say and reported them as undecided; the combinations left those rows out and
+     * reported what remained as untried. One reading, so that a row nothing could place is the same
+     * fact wherever it is read.
+     *
+     * @param someRowsUnseen rows that were never observed at all, which no reading can show
+     */
+    private record Readings(List<Map<AxisId, Classification>> byRow, boolean someRowsUnseen) {
+
+        static Readings of(List<RowOutcome> rows, List<String> parameters, List<Axis> axes,
+                           boolean someRowsUnseen) {
+            List<Map<AxisId, Classification>> read = new ArrayList<>();
+            for (RowOutcome row : rows) {
+                read.add(RowClasses.of(row, parameters, axes));
+            }
+            return new Readings(List.copyOf(read), someRowsUnseen);
+        }
+
+        boolean noRows() {
+            return byRow.isEmpty();
+        }
+
+        /** Which class a row fell in at one position, or null where it did not say. */
+        static String classIn(Map<AxisId, Classification> where, Axis axis) {
+            return where.get(axis.id()) instanceof Classification.Classified in ? in.classId() : null;
+        }
+
+        /** How many rows could not say where they were at this position. */
+        int couldNotSay(Axis axis) {
+            return (int) byRow.stream().filter(where -> classIn(where, axis) == null).count();
+        }
+
+        /**
+         * Whether every row that bears on {@code axes} said where it was at all of them.
+         *
+         * <p>Only then does a class or a combination nothing sits in mean nothing reaches it. One row
+         * that could not be placed at one of the positions leaves every class of that position, and
+         * every combination it takes part in, undecided rather than untried.
+         */
+        MeasurementStatus status(List<Axis> axes) {
+            if (someRowsUnseen) {
+                return MeasurementStatus.PARTIAL;
+            }
+            for (Axis axis : axes) {
+                if (couldNotSay(axis) > 0) {
+                    return MeasurementStatus.PARTIAL;
+                }
+            }
+            return MeasurementStatus.COMPLETE;
+        }
     }
 
     /** How many pairs of classes across two positions the rows are enough to sit in at once. */
@@ -105,8 +161,7 @@ final class Coverages {
      * than anyone writes. A behavior with one divided position has no pairs at all, which is why the
      * single-position coverage is measured on its own and not derived from this.
      */
-    private static PartitionEvidence.PairSpace pairsOf(List<Axis> axes, List<String> parameters,
-                                                       List<RowOutcome> rows) {
+    private static PartitionEvidence.PairSpace pairsOf(List<Axis> axes, Readings readings) {
         long total = 0;
         for (int i = 0; i < axes.size(); i++) {
             for (int j = i + 1; j < axes.size(); j++) {
@@ -118,15 +173,14 @@ final class Coverages {
         }
         if (total > PAIR_LIMIT) {
             return new PartitionEvidence.PairSpace((int) Math.min(total, Integer.MAX_VALUE), 0, 0, 0,
-                    (int) Math.min(total, Integer.MAX_VALUE), true);
+                    (int) Math.min(total, Integer.MAX_VALUE), true, MeasurementStatus.PARTIAL);
         }
         Set<String> covered = new LinkedHashSet<>();
-        for (RowOutcome row : rows) {
-            Map<AxisId, Classification> where = RowClasses.of(row, parameters, axes);
+        for (Map<AxisId, Classification> where : readings.byRow()) {
             for (int i = 0; i < axes.size(); i++) {
                 for (int j = i + 1; j < axes.size(); j++) {
-                    String left = classIn(where, axes.get(i));
-                    String right = classIn(where, axes.get(j));
+                    String left = Readings.classIn(where, axes.get(i));
+                    String right = Readings.classIn(where, axes.get(j));
                     if (left != null && right != null) {
                         // Which positions, and not only which classes. A class id is unique within
                         // its axis and not across axes — three `Flag` inputs all have a `Yes` — so a
@@ -138,32 +192,22 @@ final class Coverages {
         }
         int reached = covered.size();
         return new PartitionEvidence.PairSpace((int) total, reached, reached, 0,
-                (int) total - reached, false);
+                (int) total - reached, false, readings.status(axes));
     }
 
-    private static String classIn(Map<AxisId, Classification> where, Axis axis) {
-        return where.get(axis.id()) instanceof Classification.Classified in ? in.classId() : null;
-    }
-
-    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, List<String> parameters,
-                                                             List<RowOutcome> rows,
-                                                             boolean everythingWasSeen) {
+    private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, Readings readings) {
         Set<String> covered = new LinkedHashSet<>();
-        int unclassified = 0;
-        for (RowOutcome row : rows) {
-            Classification where = RowClasses.of(row, parameters, List.of(axis)).get(axis.id());
-            if (where instanceof Classification.Classified in) {
-                covered.add(in.classId());
-            } else {
-                unclassified++;
+        for (Map<AxisId, Classification> where : readings.byRow()) {
+            String in = Readings.classIn(where, axis);
+            if (in != null) {
+                covered.add(in);
             }
         }
-        MeasurementStatus status = rows.isEmpty() && everythingWasSeen ? MeasurementStatus.UNAVAILABLE
-                : unclassified == 0 && everythingWasSeen ? MeasurementStatus.COMPLETE
-                        : MeasurementStatus.PARTIAL;
+        MeasurementStatus status = readings.noRows() && !readings.someRowsUnseen()
+                ? MeasurementStatus.UNAVAILABLE : readings.status(List.of(axis));
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.path().toString(),
-                axis.classes().stream().map(PartitionClass::id).toList(), covered, unclassified,
-                status);
+                axis.classes().stream().map(PartitionClass::id).toList(), covered,
+                readings.couldNotSay(axis), status);
     }
 
     /**

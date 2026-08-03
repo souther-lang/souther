@@ -46,4 +46,17 @@ public record Incompleteness(Code code, String subject, Optional<SourceRef> at) 
     public static Incompleteness at(Code code, String subject, SourceRef where) {
         return new Incompleteness(code, subject, Optional.ofNullable(where));
     }
+
+    /**
+     * Whether this is about one of {@code behaviors}, as against about the module or a source whole.
+     *
+     * <p>{@link #subject} carries a behavior name, a source id, an axis path or a field chain in one
+     * string, and which of those it is has to be worked out from what else is known. What is known
+     * wherever this is asked is the names the module declares — so a subject that is none of them
+     * names something larger, and a reason about something larger is a reason about every behavior
+     * inside it. Asked in one place so that two readers cannot answer it differently.
+     */
+    public boolean isAboutOneOf(java.util.Set<String> behaviors) {
+        return behaviors.contains(subject);
+    }
 }

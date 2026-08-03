@@ -374,6 +374,16 @@ public final class Backend {
             out.put(module.name() + ".$Fns", b.generateRecursiveHelpers(recHelpers));
         }
         out.putAll(b.ctx.synthClasses());   // escaping lambdas compiled to Fn classes (spec §blocks)
+        // Every arm the plan counted has to be in the bytecode, or the ones that are missing come back
+        // as arms no row goes through. A body the emitter walks without counting its arms is the way
+        // that happens, and it is silent at the site — so it is caught here, where the two can be
+        // compared.
+        List<Integer> missed = b.ctx.plannedButNotEmitted();
+        if (!missed.isEmpty()) {
+            throw new IllegalStateException("the plan counted " + missed.size()
+                    + " arm(s) that nothing emitted: " + missed
+                    + "; a body was walked without counting its arms");
+        }
         return out;
     }
 
@@ -410,9 +420,6 @@ public final class Backend {
                         MethodTypeDesc.of(CD_Object, params), ClassFile.ACC_STATIC,
                         code -> {
                     BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
-                    // A helper is shared by every behavior that calls it, so a fork in one is a fork
-                    // in none of them and the plan holds no arm for it.
-                    gen.armsAreNotCounted();
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. resolveParamType handles both shapes.
@@ -930,6 +937,8 @@ public final class Backend {
             emitInjection(cb, cdB, injected);
             cb.withMethodBody("apply", mtdApply, ClassFile.ACC_PUBLIC, code -> {
                 BodyGen gen = new BodyGen(ctx, code, null, cdB, n + 1);
+                // The one body a coverage plan is made from, so the one body whose arms are counted.
+                gen.armsAreCounted();
                 gen.injectsInto(successType(spec.ret()));
                 gen.requireds(requiredNames, requiredSuccess, requiredParam);
                 for (int i = 0; i < n; i++) {

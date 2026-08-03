@@ -181,10 +181,9 @@ public final class Adequacy {
                     souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
             Map<String, Observed> byTarget = rowsOf(db, name);
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
-            // been evaluated, which only the instrumented classes say, and only a build that asked
-            // for that has them.
-            boolean armsMeasured = levelOf(db).measuresArms()
-                    && db.ask(new Output.Probed(name)).value() != null;
+            // been evaluated, which only the instrumented classes say. Read off the rows rather than
+            // off what was asked for — asking is not evidence that it happened.
+            boolean armsMeasured = levelOf(db).measuresArms();
 
             Map<String, PartitionEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
@@ -195,8 +194,9 @@ public final class Adequacy {
                 if (sig == null) {
                     continue;
                 }
+                Observed seen = byTarget.getOrDefault(spec.name(), Observed.NONE);
                 out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
-                        plan, byTarget.getOrDefault(spec.name(), Observed.NONE), armsMeasured));
+                        plan, seen, armsMeasured && !seen.armsUnseen()));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -236,15 +236,25 @@ public final class Adequacy {
 
         @Override
         public Answer<Output.Examples.Of> compute(Db db) {
-            Map<String, byte[]> probed = levelOf(db).measuresArms()
-                    ? db.ask(new Output.ProbedLinked(name)).value() : null;
-            if (probed == null) {
-                // Nothing was measured, which is not the same as nothing being reached. The rows the
-                // compile already ran are what the other measures read; the branch measure says it
-                // could not be made.
-                return db.ask(new Output.Examples(name, sourceId));
+            if (!levelOf(db).measuresArms()) {
+                return db.ask(new Output.Examples(name, sourceId));   // nothing asked for the arms
             }
-            return Output.Examples.evaluate(db, name, sourceId, probed);
+            Map<String, byte[]> probed = db.ask(new Output.ProbedLinked(name)).value();
+            if (probed != null) {
+                return Output.Examples.evaluate(db, name, sourceId, probed);
+            }
+            // Asked for and not produced. That is not the same as not asked for, and the difference
+            // has to travel: the rows below ran without instrumentation, so they carry no arms, and a
+            // measure reading them would take an empty set of arms for a set of arms nothing reached.
+            // It goes in the same channel every other reason does, so that nothing downstream needs a
+            // second way of hearing about it.
+            Answer<Output.Examples.Of> plain = db.ask(new Output.Examples(name, sourceId));
+            if (plain.value() == null) {
+                return plain;
+            }
+            List<Incompleteness> why = new ArrayList<>(plain.value().incompleteness());
+            why.add(Incompleteness.of(Incompleteness.Code.PROBE_MAPPING_LOST, name));
+            return Answer.of(new Output.Examples.Of(plain.value().rows(), why), plain.reports());
         }
     }
 
@@ -296,8 +306,7 @@ public final class Adequacy {
             if (!prepared.present()) {
                 return Answer.absent();
             }
-            boolean measured = levelOf(db).measuresArms()
-                    && db.ask(new Output.Probed(name)).value() != null;
+            boolean measured = levelOf(db).measuresArms();
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.Plan.NONE;
             if (measured) {
@@ -322,7 +331,7 @@ public final class Adequacy {
                 List<souther.compiler.coverage.CoverageSites.Site> arms = plan.sites().stream()
                         .filter(site -> site.behavior().equals(behavior.name())).toList();
                 Observed observed = byTarget.getOrDefault(behavior.name(), Observed.NONE);
-                if (!measured || !withBodies.contains(behavior.name())
+                if (!measured || observed.armsUnseen() || !withBodies.contains(behavior.name())
                         || observed.rows().isEmpty()) {
                     // Nothing to measure, or nothing asking. A behavior with no body has no arms; one
                     // no row names has not been opted into the measurement, and reaching it through
@@ -374,12 +383,24 @@ public final class Adequacy {
         }
 
         /**
+         * Whether the arms were asked for and not produced.
+         *
+         * <p>The rows below then ran without instrumentation and carry no arms at all, which reads
+         * exactly like a body no row goes through. Not the same as arms nobody asked for.
+         */
+        public boolean armsUnseen() {
+            return incompleteness.stream()
+                    .anyMatch(gap -> gap.code() == Incompleteness.Code.PROBE_MAPPING_LOST);
+        }
+
+        /**
          * Whether some rows were never seen at all, as against seen and not finished.
          *
-         * <p>The difference decides what may still be said. A row that ran out of time is here, with
-         * the values it was given — so which class it sits in is known and only where it went is not.
-         * A source that could not be evaluated left nothing: the rows it holds may cover anything, and
-         * a measure over the rows that remain is a measure over some of them.
+         * <p>The difference decides who has to notice. A row that ran out of time is here, and says
+         * so: its state is dropped rather than read, so it arrives with no inputs and no expected arm
+         * and every measure that reads a row finds one it cannot place. A source that could not be
+         * evaluated leaves no row to find — the rows it holds may cover anything, and a measure over
+         * the rows that remain is a measure over some of them with nothing in it to say so.
          *
          * <p>{@code RUNTIME_ABSENT} is exactly that case, from either place it arises — an example
          * block whose classes would not load, and a source whose evaluation has no answer at all.
@@ -410,6 +431,10 @@ public final class Adequacy {
         if (origins == null) {
             return Map.of();
         }
+        Ast.Module prepared = db.ask(new Shapes.Prepared(module)).value();
+        Set<String> declared = prepared == null ? Set.of() : prepared.behaviors().stream()
+                .map(Ast.BehaviorDef::name).collect(java.util.stream.Collectors
+                        .toCollection(LinkedHashSet::new));
         for (String sourceId : new LinkedHashSet<>(origins)) {
             Output.Examples.Of observed = db.ask(new ProbedExamples(module, sourceId)).value();
             if (observed == null) {
@@ -422,7 +447,11 @@ public final class Adequacy {
                 rows.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
             }
             for (Incompleteness gap : observed.incompleteness()) {
-                stopped.computeIfAbsent(gap.subject(), _ -> new ArrayList<>()).add(gap);
+                if (gap.isAboutOneOf(declared)) {
+                    stopped.computeIfAbsent(gap.subject(), _ -> new ArrayList<>()).add(gap);
+                } else {
+                    everywhere.add(gap);   // about the module or the source, so about all of them
+                }
             }
         }
         Set<String> named = new LinkedHashSet<>(rows.keySet());
@@ -528,7 +557,9 @@ public final class Adequacy {
                 try {
                     out.put(spec.name(), rowsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
                             byTarget.getOrDefault(spec.name(), Observed.NONE), building,
-                            levelOf(db).measuresArms()));
+                            levelOf(db).measuresArms()
+                                    && !byTarget.getOrDefault(spec.name(), Observed.NONE)
+                                            .armsUnseen()));
                 } catch (LinkageError _) {
                     // The runtime is not on this host's classpath, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are

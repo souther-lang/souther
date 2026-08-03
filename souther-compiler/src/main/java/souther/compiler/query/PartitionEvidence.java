@@ -50,6 +50,9 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> 
      *
      * @param truncated whether the space was too large to enumerate, so these numbers describe part
      *                  of it
+     * @param status    {@code PARTIAL} where the rows these were counted from are not all the rows
+     *                  there were, or not all of them could be placed. Reached is still reached; what
+     *                  is not reached is then undecided rather than untried
      */
     public record PairSpace(int total, int covered, int witnessedFeasible, int provenInfeasible,
                             int unknown, boolean truncated, MeasurementStatus status) {
@@ -57,22 +60,9 @@ public record PartitionEvidence(List<AxisCoverage> axes, List<BoundaryCoverage> 
         public static final PairSpace NONE =
                 new PairSpace(0, 0, 0, 0, 0, false, MeasurementStatus.COMPLETE);
 
-        public PairSpace(int total, int covered, int witnessedFeasible, int provenInfeasible,
-                         int unknown, boolean truncated) {
-            this(total, covered, witnessedFeasible, provenInfeasible, unknown, truncated,
-                    MeasurementStatus.COMPLETE);
-        }
-
         /** Whether a single ratio would say anything. With unknowns in the denominator it would not. */
         public boolean decided() {
             return unknown == 0 && !truncated;
-        }
-
-        /** The same numbers, over a population some of which nothing read. What is reached is still
-         * reached; what is not reached is not known to be untried. */
-        public PairSpace overSomeOfTheRows() {
-            return new PairSpace(total, covered, witnessedFeasible, provenInfeasible, unknown,
-                    truncated, MeasurementStatus.PARTIAL);
         }
     }
 

@@ -119,6 +119,53 @@ class CompileAdequacyShapesTest {
     }
 
     /**
+     * A fork somewhere that is not a behavior's body.
+     *
+     * <p>An invariant's clause is emitted through the same generator a body is, and a rule written
+     * with a condition in it has forks. They are not arms of any behavior — an invariant is a property
+     * of a type — so the plan holds none, and the emitter must not go looking for one.
+     *
+     * <p>It did, and the failure was as quiet as a failure gets: the generation was abandoned, the
+     * measured classes came back absent, and every behavior in the module reported its arms as
+     * unmeasured. Two of the eleven models measured here were in that state, which is where 121 of
+     * their arms had gone.
+     */
+    @Test
+    void aForkOutsideABehaviorsBodyDoesNotStopTheModuleBeingMeasured() {
+        Compilation compilation = measured("""
+                module example.rule
+
+                data Sku = String
+
+                data Line = { sku: Sku, quantity: Int }
+
+                data Stock = { rows: List<Line> }
+                    invariant List.allUniqueBy(.sku, rows)
+
+                data Ok = { n: Int }
+                data Empty = { n: Int }
+
+                behavior count : (stock: Stock) -> Ok | Empty
+                    constructs Ok, Empty
+
+                let count (stock) = {
+                    guard List.length(stock.rows) > 0 else Empty { n = 0 }
+                    Ok { n = List.length(stock.rows) }
+                }
+
+                example count
+                    | (Stock { rows = [] }) -> Empty { n = 0 }
+                """);
+
+        Adequacy.BranchEvidence branch = compilation.db()
+                .ask(new Adequacy.BranchCoverage("example.rule")).value().get("count");
+        assertEquals(MeasurementStatus.COMPLETE, branch.status(),
+                "the invariant's own fork is not this behavior's, and does not stop it being counted");
+        assertEquals(2, branch.all().size(), "the guard's two arms, and none of the invariant's");
+        assertEquals(1, branch.covered().size());
+    }
+
+    /**
      * Three positions of one type.
      *
      * <p>A class is named uniquely within its position and not across positions — three `Flag` inputs

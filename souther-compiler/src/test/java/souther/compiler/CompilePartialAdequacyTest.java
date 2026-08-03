@@ -432,12 +432,71 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void thePairSpaceSaysWhetherItSawEveryRow() {
-        PartitionEvidence over = split().db()
-                .ask(new Adequacy.Coverage("example.split")).value().get("take");
+        Compilation compilation = measured("""
+                module example.pair
 
-        assertEquals(MeasurementStatus.PARTIAL, over.pairs().status());
-        assertFalse(AdequacyReport.of(split()).human().contains("untried"),
-                AdequacyReport.of(split()).human());
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Ok = { n: Int }
+
+                partial let spin (n: Int): Int = spin(n)
+
+                behavior pick : (a: Flag, b: Flag) -> Ok
+                    constructs Ok
+
+                let pick (a, b) = Ok { n = spin(1) }
+
+                example pick
+                    | (Yes, Yes) -> Ok { n = 0 }
+                """);
+        PartitionEvidence partition = compilation.db()
+                .ask(new Adequacy.Coverage("example.pair")).value().get("pick");
+
+        assertEquals(4, partition.pairs().total());
+        assertEquals(MeasurementStatus.PARTIAL, partition.pairs().status(),
+                "the one row could not be placed at either position");
+        assertFalse(AdequacyReport.of(compilation).human().contains("untried"),
+                AdequacyReport.of(compilation).human());
+    }
+
+    /**
+     * The positions and the combinations over them answer from one reading.
+     *
+     * <p>They were putting the same question to the rows and answering the follow-up differently: the
+     * positions counted the row nothing could place and called their classes undecided, the
+     * combinations left it out and called theirs untried. Two sentences from one row, printed one
+     * after the other.
+     */
+    @Test
+    void thePositionsAndTheCombinationsAgree() {
+        Compilation compilation = measured("""
+                module example.agree
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Ok = { n: Int }
+
+                partial let spin (n: Int): Int = spin(n)
+
+                behavior pick : (a: Flag, b: Flag) -> Ok
+                    constructs Ok
+
+                let pick (a, b) = Ok { n = spin(1) }
+
+                example pick
+                    | (Yes, Yes) -> Ok { n = 0 }
+                """);
+        PartitionEvidence partition = compilation.db()
+                .ask(new Adequacy.Coverage("example.agree")).value().get("pick");
+
+        for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
+            assertEquals(MeasurementStatus.PARTIAL, axis.status(), axis.path());
+        }
+        assertEquals(MeasurementStatus.PARTIAL, partition.pairs().status());
     }
 
     /**

@@ -97,9 +97,10 @@ final class CodegenContext {
     /**
      * The arm numbers of one node, in the order the emitter emits them.
      *
-     * <p>Throws where a measuring generation meets a node the plan does not know. Going on without a
-     * probe would leave an arm that ran reported as one no row reaches, which reads as a gap in the
-     * model rather than as a fault in the measurement — the one failure this must not be quiet about.
+     * <p>Throws where a measuring generation meets a node the plan does not know. Only bodies the plan
+     * was made from ask this, so a node it does not hold is a plan made from other nodes than these —
+     * and going on would leave an arm that ran reported as one no row reaches, which reads as a gap in
+     * the model rather than as a fault in the measurement.
      */
     int[] probesOf(souther.compiler.core.Core node) {
         int[] arms = coverage.probesOf(node);
@@ -109,6 +110,30 @@ final class CodegenContext {
                     + "; the plan was made from other nodes than these");
         }
         return arms;
+    }
+
+    /** Records that one planned arm was emitted. */
+    void emitted(int site) {
+        emittedSites.add(site);
+    }
+
+    private final Set<Integer> emittedSites = new java.util.LinkedHashSet<>();
+
+    /**
+     * Which planned arms never reached the bytecode.
+     *
+     * <p>What makes an omission loud. A body the emitter walks without counting its arms — a path
+     * nobody thought to say either way about — takes the arms of that behavior out of the measurement
+     * silently, and every one of them is then reported as an arm no row goes through.
+     */
+    List<Integer> plannedButNotEmitted() {
+        List<Integer> missing = new java.util.ArrayList<>();
+        for (souther.compiler.coverage.CoverageSites.Site site : coverage.sites()) {
+            if (!emittedSites.contains(site.index())) {
+                missing.add(site.index());
+            }
+        }
+        return missing;
     }
 
     /** The module being generated. Module is package (spec 4), so this is also {@link #pkg}. */

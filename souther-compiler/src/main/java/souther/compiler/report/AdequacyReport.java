@@ -179,16 +179,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             //
             // A reason that names no behavior at all is a different thing: a whole source that could
             // not be evaluated is missing rows for whatever it held, this behavior included, so it
-            // stays. `subject` carries a behavior name, a source id, an axis path or a field chain in
-            // one string, and which of those it is has to be worked out from what else is known.
+            // stays. Which a subject is, is {@link Incompleteness#isAboutOneOf}'s to say.
             Set<String> shown = behaviors.stream().map(BehaviorReport::name)
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
             Set<String> named = m.behaviors().stream().map(BehaviorReport::name)
                     .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
             List<Incompleteness> gaps = behavior == null ? m.incompleteness()
                     : m.incompleteness().stream()
-                            .filter(gap -> shown.contains(gap.subject())
-                                    || !named.contains(gap.subject()))
+                            .filter(gap -> gap.isAboutOneOf(shown) || !gap.isAboutOneOf(named))
                             .toList();
             MeasurementStatus status = gaps.isEmpty()
                     ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;

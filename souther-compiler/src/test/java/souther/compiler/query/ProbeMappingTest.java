@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import souther.compiler.codegen.Backend;
 import souther.compiler.coverage.CoverageSites;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -63,6 +65,39 @@ class ProbeMappingTest {
                         in.dischargeClauses(), somewhereElse));
 
         assertTrue(stopped.getMessage().contains("no probe was planned"), stopped.getMessage());
+    }
+
+    /**
+     * An arm the plan counted that nothing put in the bytecode.
+     *
+     * <p>The other half of the same guarantee, and the half that was missing. A body walked without
+     * counting its arms does not fail where it is walked — it just leaves them out, and every one of
+     * them then reads as an arm no row goes through. Catching it means comparing what was planned with
+     * what was emitted, which can only be done once, at the end.
+     */
+    @Test
+    void anArmPlannedAndNotEmittedStopsTheGeneration() {
+        Compilation emitting = compiled();
+        String module = emitting.modules().get(0);
+        Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
+        assertNotNull(in);
+        CoverageSites.Plan real = Output.Probed.planOf(emitting.db(), module);
+        assertTrue(real.sites().size() > 0);
+
+        // The same plan with one more arm in it than any body will emit.
+        CoverageSites.Site extra = real.sites().get(0);
+        List<CoverageSites.Site> longer = new java.util.ArrayList<>(real.sites());
+        longer.add(new CoverageSites.Site(extra.behavior(), extra.kind(), "phantom", extra.at(),
+                real.sites().size(), real.sites().size(), extra.fingerprint()));
+        CoverageSites.Plan overcounted =
+                new CoverageSites.Plan(longer, real.guards(), real.byNode());
+
+        IllegalStateException stopped = assertThrows(IllegalStateException.class,
+                () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.imported(),
+                        in.injected(), in.callees(), in.requirements(), in.checked(),
+                        in.dischargeClauses(), overcounted));
+
+        assertTrue(stopped.getMessage().contains("nothing emitted"), stopped.getMessage());
     }
 
     /** And the plan made from these bodies emits them, so what the case above rejects is the mismatch
