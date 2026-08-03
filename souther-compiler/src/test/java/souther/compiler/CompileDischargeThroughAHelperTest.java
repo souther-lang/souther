@@ -125,17 +125,18 @@ class CompileDischargeThroughAHelperTest {
                     Qty(c)
                 }
                 """;
-        // A conditional is one of its branches, and which one is not decided here. Naming it as a
-        // term of its own reported every construction over one, including where both branches satisfy
-        // the clause; leaving it unnamed reports none. Reading it is checking the construction on each
-        // branch under its own condition, which this walk does not do, so the run-time check stands
-        // for it. What is asked here is that the name answer as the expression does, either way.
-        assertEquals(warnings(m.replace("""
+        // A conditional is one of its branches, so the construction is read on each under its own
+        // condition: `cart.quantity` is at least one and `other.quantity` is not, so one branch
+        // leaves the clause unproven and that is the answer. What is asked here is that the name
+        // answer as the conditional it was given does.
+        String inline = m.replace("""
                         {
                     let c = if pick then cart.quantity else other.quantity
                     Qty(c)
-                }""", "Qty(if pick then cart.quantity else other.quantity)")),
-                warnings(m), "the name answers as the conditional it was given does");
+                }""", "Qty(if pick then cart.quantity else other.quantity)");
+        assertEquals(1, warnings(m), "one branch leaves the clause unproven");
+        assertEquals(warnings(inline), warnings(m),
+                "the name answers as the conditional it was given does");
     }
 
     @Test

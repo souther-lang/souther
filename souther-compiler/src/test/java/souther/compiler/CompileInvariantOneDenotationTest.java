@@ -221,4 +221,51 @@ class CompileInvariantOneDenotationTest {
         assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
                 "a written value carries no guard the author could add");
     }
+
+    private static final String CLAMP = """
+            module demo
+            data Count = Int
+                invariant value >= 0
+            behavior mk : (x: Int) -> Count
+                constructs Count
+            let mk (x) = %s
+            """;
+
+    @Test
+    void aConstructionOverAConditionalIsReadOnEachBranch() {
+        // x is at least one where the condition holds, and the other branch is zero, so both satisfy
+        assertEquals(0, warnings(Compiler.compileWithWarnings(
+                        CLAMP.formatted("Count(if x > 0 then x else 0)"))),
+                "each branch discharges under its own condition");
+    }
+
+    @Test
+    void namingAConditionalDoesNotChangeWhatIsKnownOfIt() {
+        assertEquals(warnings(Compiler.compileWithWarnings(
+                        CLAMP.formatted("Count(if x > 0 then x else 0)"))),
+                warnings(Compiler.compileWithWarnings(CLAMP.formatted("""
+                        {
+                                let c = if x > 0 then x else 0
+                                Count(c)
+                            }"""))),
+                "the name answers as the conditional does");
+    }
+
+    @Test
+    void aConstructionEveryBranchViolatesIsRefuted() {
+        assertEquals("E2010", assertThrows(CompileException.class,
+                        () -> Compiler.compile(CLAMP.formatted("Count(if x > 0 then 0 - 1 else 0 - 2)")))
+                .diagnostic().code(), "neither branch can satisfy it");
+    }
+
+    @Test
+    void anAliasKeepsWhatTheGuardSaidOfWhatItNames() {
+        // `c` is `x`, so the condition bounding x bounds it; copying it must not drop that
+        assertEquals(0, warnings(Compiler.compileWithWarnings(CLAMP.formatted("""
+                        if x > 0 then {
+                                let c = x
+                                Count(c)
+                            } else Count(0)"""))),
+                "a name for a location is that location");
+    }
 }
