@@ -20,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Getting from text to a set of named modules: the inputs, the parse of each source, which module
@@ -485,30 +486,56 @@ public final class Front {
 
         @Override
         public Answer<List<String>> compute(Db db) {
-            Layout.Of layout = db.ask(new Layout()).value();
-            if (layout == null) {
-                return Answer.of(List.of());
+            return origins(db, name, m -> m.examples());
+        }
+    }
+
+    /**
+     * Which source wrote each of the things {@code written} takes off a module, in the order
+     * {@link Prepared} gathers them: the module's own first, then each attached file's, in the order
+     * the layout holds them. Read together with what it gathered, by index.
+     */
+    private static Answer<List<String>> origins(Db db, String name,
+                                                Function<Ast.Module, List<?>> written) {
+        Layout.Of layout = db.ask(new Layout()).value();
+        if (layout == null) {
+            return Answer.of(List.of());
+        }
+        List<String> origins = new ArrayList<>();
+        String own = layout.idOfModule().get(name);
+        List<String> sources = new ArrayList<>();
+        if (own != null) {
+            sources.add(own);
+        }
+        sources.addAll(layout.exampleFilesOf().getOrDefault(name, List.of()));
+        for (String id : sources) {
+            CstFrontend.Parsed parsed = db.ask(new Parsed(id)).value();
+            if (parsed == null) {
+                continue;
             }
-            String own = layout.idOfModule().get(name);
-            List<String> origins = new ArrayList<>();
-            if (own != null) {
-                CstFrontend.Parsed parsed = db.ask(new Parsed(own)).value();
-                if (parsed != null) {
-                    for (int i = 0; i < parsed.module().examples().size(); i++) {
-                        origins.add(own);
-                    }
-                }
-            }
-            for (String id : layout.exampleFilesOf().getOrDefault(name, List.of())) {
-                CstFrontend.Parsed file = db.ask(new Parsed(id)).value();
-                if (file == null) {
-                    continue;
-                }
-                for (int i = 0; i < file.module().examples().size(); i++) {
-                    origins.add(id);
-                }
-            }
-            return Answer.of(List.copyOf(origins));
+            origins.addAll(java.util.Collections.nCopies(written.apply(parsed.module()).size(), id));
+        }
+        return Answer.of(List.copyOf(origins));
+    }
+
+    /**
+     * Which source each of a module's fakes was written in, in the order they appear — the same
+     * order {@link Prepared} gathers them in, so the two are read together by index.
+     *
+     * <p>A fake is written in the module or in any attached file, as a row is, and once they are
+     * gathered under the module's name a position alone no longer says which file it came from. What
+     * needs to know is what reads a fake against a row: the two may be in different sources, and each
+     * is reported where it is written.
+     */
+    public record FakeOrigins(String name) implements Key<List<String>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<String>> compute(Db db) {
+            return origins(db, name, m -> m.fakes());
         }
     }
 

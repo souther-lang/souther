@@ -431,6 +431,124 @@ public final class Output {
     }
 
     /**
+     * Every input for which two of a module's written statements about one behavior answer
+     * differently — a {@code fake} row or a {@code with} against an {@code example} row that records
+     * what the behavior owes.
+     *
+     * <p>Asked of the module and not of a source, because the two sides of one disagreement need not
+     * be in one file: a module's fakes are what its attached files' rows run against and the other way
+     * round. Each source's key projects the ones written in it ({@link Examples#disagreements}), so
+     * one disagreement is said at both of the places it is written and computed once.
+     */
+    public record Disagreements(String name)
+            implements Key<List<souther.compiler.ExampleVerifier.Disagreement>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<souther.compiler.ExampleVerifier.Disagreement>> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !scope.present() || !sigs.present()) {
+                return Answer.absent();
+            }
+            if (db.ask(new Bodies.Checked(name)).value() == null) {
+                return Answer.of(List.of());   // a module that did not check states nothing yet
+            }
+            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
+            Map<String, List<BehaviorRequirement>> requirements =
+                    db.ask(new Bodies.Requirements(name)).value();
+            List<String> exampleOrigins = db.ask(new Front.ExampleOrigins(name)).value();
+            List<String> fakeOrigins = db.ask(new Front.FakeOrigins(name)).value();
+            if (classes == null || requirements == null
+                    || exampleOrigins == null || fakeOrigins == null) {
+                return Answer.absent();
+            }
+            Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
+            return Answer.of(souther.compiler.ExampleVerifier.disagreements(prepared.value(),
+                    scope.value(), sigs.value(), classes, requirements, loader(db, Map.of()),
+                    values == null ? Map.of() : values, exampleOrigins, fakeOrigins));
+        }
+    }
+
+    /**
+     * The module's disagreements ({@link Disagreements}), as one source says them.
+     *
+     * <p>One disagreement is two written statements, and each is reported where it is written: a
+     * source says the ones whose recorded row is in it, and the ones whose stand-in is. Where both are
+     * in this source it says both, so what a reader is told does not depend on whether the author kept
+     * the rows in the module or beside it.
+     *
+     * <p>Its own key rather than a second thing {@link Examples} says. That key answers what a
+     * source's rows turned out to be and goes absent where they could not be run — an unchecked
+     * module, a name already declared — and these are readable in every one of those cases: nothing
+     * here is run. The value is {@code true} and the reports are the answer, as
+     * {@code Adequacy.Warnings} is.
+     *
+     * <p>A warning. The two contradict, and which of them the model is to be held to is not readable
+     * from the text — that would be a claim about which side is derived from the other, and neither
+     * is.
+     */
+    public record SaidDisagreements(String name, String sourceId) implements Key<Boolean> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public String sourceId() {
+            return sourceId;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            List<souther.compiler.ExampleVerifier.Disagreement> found =
+                    db.ask(new Disagreements(name)).value();
+            if (found == null) {
+                return Answer.of(true);
+            }
+            List<Report> reports = new ArrayList<>();
+            for (souther.compiler.ExampleVerifier.Disagreement d : found) {
+                String rowKey = d.viaWith() ? "check.example.disagreement.from.row.with"
+                        : "check.example.disagreement.from.row";
+                String rowHint = d.viaWith() ? "check.example.disagreement.from.row.with.hint"
+                        : "check.example.disagreement.from.row.hint";
+                String standInKey = d.viaWith() ? "check.example.disagreement.from.with"
+                        : "check.example.disagreement.from.fake";
+                String standInHint = d.viaWith() ? "check.example.disagreement.from.with.hint"
+                        : "check.example.disagreement.from.fake.hint";
+                if (d.recorded().at().sourceId().equals(sourceId)) {
+                    reports.add(Report.of(
+                            said(d, d.recorded(), d.standIn(), rowKey, rowHint)));
+                }
+                if (d.standIn().at().sourceId().equals(sourceId)) {
+                    reports.add(Report.of(
+                            said(d, d.standIn(), d.recorded(), standInKey, standInHint)));
+                }
+            }
+            return Answer.of(true, reports);
+        }
+
+        /** One disagreement from the side of {@code here}: the caret on what this source wrote, and
+         * the other statement named by what it answers and where it is. */
+        private static Diagnostic said(souther.compiler.ExampleVerifier.Disagreement d,
+                                       souther.compiler.ExampleVerifier.Statement here,
+                                       souther.compiler.ExampleVerifier.Statement there,
+                                       String key, String hintKey) {
+            return Diagnostic.of("E1919", key).warning().title("check.example.title")
+                    .at(here.at().pos(), here.width())
+                    .args(d.behavior(), there.at().pos())
+                    .hint(hintKey, here.answer(), there.answer())
+                    .build();
+        }
+    }
+
+    /**
      * The examples of one module, evaluated. Every module's examples are evaluated before any
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.

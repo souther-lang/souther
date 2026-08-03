@@ -1112,7 +1112,7 @@ public final class Elaborator {
 
     /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source
      * text is known, otherwise 1. The renderer underlines this many columns from the node's start. */
-    static int width(Ast.Expr e) {
+    public static int width(Ast.Expr e) {
         return switch (e) {
             case Ast.Var v -> v.name().length();
             case Ast.StringLit s -> s.value().length() + 2;
