@@ -73,7 +73,7 @@
     "partition": {
       "type": "object",
       "description": "How much of what the model distinguishes about this behavior's inputs the rows reach.",
-      "required": ["axes", "boundaries", "notDerivable", "omitted"],
+      "required": ["axes", "boundaries", "pairs", "notDerivable", "omitted"],
       "additionalProperties": false,
       "properties": {
         "axes": {
@@ -109,6 +109,28 @@
                 "description": "`unavailable` for a guard's boundary: meeting it takes the comparison having run, which nothing measures until the arms are instrumented."
               }
             }
+          }
+        },
+        "pairs": {
+          "type": "object",
+          "description": "Two-class combinations across two positions. Counts rather than a ratio: a combination no row reaches has not been shown unreachable, only untried, so the denominator is not known.",
+          "required": ["total", "covered", "witnessedFeasible", "provenInfeasible", "unknown", "truncated"],
+          "additionalProperties": false,
+          "properties": {
+            "total": { "type": "integer", "minimum": 0 },
+            "covered": { "type": "integer", "minimum": 0 },
+            "witnessedFeasible": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Combinations proven reachable, each by a row that sits in it."
+            },
+            "provenInfeasible": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Combinations shown impossible. A candidate that failed to build is not one of these — another value of the same two classes may build."
+            },
+            "unknown": { "type": "integer", "minimum": 0 },
+            "truncated": { "type": "boolean" }
           }
         },
         "notDerivable": {

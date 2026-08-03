@@ -235,8 +235,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         }
         int classes = partition.axes().stream().mapToInt(a -> a.classes().size()).sum();
         int covered = partition.axes().stream().mapToInt(a -> a.covered().size()).sum();
-        out.append(String.format("    partition   axes %d   single-axis %d/%d%n",
-                partition.axes().size(), covered, classes));
+        out.append(String.format("    partition   axes %d   single-axis %d/%d%s%n",
+                partition.axes().size(), covered, classes, pairs(partition.pairs())));
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             for (String missing : axis.uncovered()) {
                 out.append(String.format("      · no row is in `%s`%s%n", missing,
@@ -261,6 +261,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         for (Incompleteness dropped : partition.omitted()) {
             out.append(String.format("      · omitted: %s (axis limit)%n", dropped.subject()));
         }
+    }
+
+    /**
+     * The pair numbers as counts, never as one ratio.
+     *
+     * <p>A ratio needs a denominator that is known, and this one is not: a combination no row sits in
+     * has not been shown unreachable, only untried. Printing 3/8 would read as five gaps when it may
+     * be five impossibilities.
+     */
+    private static String pairs(PartitionEvidence.PairSpace pairs) {
+        if (pairs == null || pairs.total() == 0) {
+            return "";
+        }
+        if (pairs.truncated()) {
+            return String.format("   pairs %d, too many to enumerate", pairs.total());
+        }
+        if (pairs.decided()) {
+            return String.format("   pairs %d/%d", pairs.covered(), pairs.total());
+        }
+        return String.format("   pairs %d reached / %d known reachable, %d untried",
+                pairs.covered(), pairs.witnessedFeasible(), pairs.unknown());
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -350,6 +371,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             b.put("hit", boundary.hit());
             b.put("status", boundary.status().name().toLowerCase(java.util.Locale.ROOT));
         }
+        ObjectNode pairs = out.putObject("pairs");
+        pairs.put("total", partition.pairs().total());
+        pairs.put("covered", partition.pairs().covered());
+        pairs.put("witnessedFeasible", partition.pairs().witnessedFeasible());
+        pairs.put("provenInfeasible", partition.pairs().provenInfeasible());
+        pairs.put("unknown", partition.pairs().unknown());
+        pairs.put("truncated", partition.pairs().truncated());
         partition.notDerivable().forEach(out.putArray("notDerivable")::add);
         ArrayNode omitted = out.putArray("omitted");
         partition.omitted().forEach(o -> omitted.add(o.subject()));
