@@ -2,7 +2,10 @@
 
 Status: Accepted. Amended by ADR-0028 (decided and implemented 2026-07-18): the user-facing
 restriction stands, but the stdlib generics move from compiler machinery into a privileged
-`core` written in Souther.
+`core` written in Souther. Narrowed by ADR-0092 (2026-08-03): "no user-defined generics" below reads
+as four things — no user-written type parameters, no generic `data`, no generic `behavior`, no
+polymorphic values — all of which stand. What it does not decide is the type inference gives a `let`,
+and a non-recursive helper is now generalised by the compiler over what its body left open.
 
 ## Context
 

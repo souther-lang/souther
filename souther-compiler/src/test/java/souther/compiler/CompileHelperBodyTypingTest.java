@@ -263,7 +263,9 @@ class CompileHelperBodyTypingTest {
     @Test
     void aFieldAccessDoesNotTypeTheParameterAndTheReportNamesTheUse() {
         // `line.qty` reads a field off `line` without naming a type — no type is determined by it
-        // (F# reports the same shape). The report points at the use that left the parameter open.
+        // (F# reports the same shape). The report points at the use that left the parameter open,
+        // and says it was a field: reaching a type from one is a question a nominal model does not
+        // ask, so no amount of writing more body will settle it.
         String src = """
                 module demo
                 data Line = { qty: Int, price: Int }
@@ -273,9 +275,9 @@ class CompileHelperBodyTypingTest {
                 let f (l) = X(total(l))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("check.helper.infer.field", e.diagnostic().messageKey(), e.getMessage());
         assertFalse(e.diagnostic().secondary().isEmpty(), "the open use is labelled");
-        assertEquals("check.helper.infer.use", e.diagnostic().secondary().get(0).labelKey());
+        assertEquals("check.helper.infer.field.use", e.diagnostic().secondary().get(0).labelKey());
         assertEquals(5, e.diagnostic().secondary().get(0).region().start().line(),
                 "the label sits on `line.qty`, the use that names no type");
     }
@@ -723,6 +725,109 @@ class CompileHelperBodyTypingTest {
                 Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)).get("demo.sou").stream()
                         .map(souther.compiler.diag.Diagnostic::messageKey).toList(),
                 "the undeclared recursive helper is reported, and nothing else is");
+    }
+
+    // --- what the body leaves open ---
+
+    @Test
+    void aContainerWhoseElementNothingSettlesCarriesTheVariable() {
+        // The body says what each parameter is — a List, a Set, a Map — and nothing says what it
+        // holds. The outer type constructor is determined, so the parameter takes it with the
+        // element still open, monomorphized at each expansion as a core helper is.
+        assertTrue(bodyTypes("let count (xs) = List.length(xs)"), "`xs` is a List of something");
+        assertTrue(bodyTypes("let firstOf (xs) = List.get(0, xs)"), "so is `firstOf`'s");
+        assertTrue(bodyTypes("let sizeOf (s) = Set.size(s)"), "`s` is a Set of something");
+        assertTrue(bodyTypes("let keysOf (m) = Map.keys(m)"), "`m` is a Map of something");
+    }
+
+    @Test
+    void aContainerWithTwoVariablesCarriesBoth() {
+        // `Map.keys` names the Map and neither its key nor its value, so both stay open together.
+        assertTrue(bodyTypes("let keyCount (m) = List.length(Map.keys(m))"),
+                "`m` is a Map of something to something");
+    }
+
+    @Test
+    void aBareVariableIsNotADeterminedType() {
+        // Nothing about `v` is settled — not even what shape it is — so this is annotated as it was.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X constructs X
+                let id (v) = v
+                let f (x) = X(id(x.value))
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void aConcreteAnswerAnywhereInTheBodyStillWins() {
+        // Each of these puts the parameter where a signature writes `List<'a>` and somewhere else
+        // says what the element is. The concrete answer is the one taken, whichever comes first,
+        // and the helper walks Ints rather than anything.
+        assertTrue(walksInts("total", "let total (xs) = List.sum(xs) + 1"),
+                "`+ 1` says the element is an Int");
+        assertTrue(walksInts("doubled", "let doubled (xs) = List.map((v) -> v * 2, xs)"),
+                "the closure's body says the element is an Int");
+    }
+
+    @Test
+    void whatEachUseSaysDoesNotDependOnWhichWasWrittenFirst() {
+        // Both uses hand `xs` to a signature that names the container and not the element, and the
+        // two answers are the same whichever is written first. Neither says the element is an Int:
+        // `List.sum`'s result is the element, and reading it as one asks what the element is.
+        assertEquals(compiles("let a (xs) = List.length(xs) + List.sum(xs)"),
+                compiles("let b (xs) = List.sum(xs) + List.length(xs)"),
+                "written order decides nothing here");
+    }
+
+    /** Whether {@code helper} settled its element to Int: it takes a List of Ints and not of Strings. */
+    private static boolean walksInts(String name, String helper) {
+        return compiles(helper + "\nlet takesInts (n: Int) = if n > 0 then " + name + "([ 1, 2 ]) else "
+                        + name + "([ 3 ])")
+                && !compiles(helper + "\nlet takesStrings (n: Int) = if n > 0 then " + name
+                        + "([ \"a\" ]) else " + name + "([ \"b\" ])");
+    }
+
+    @Test
+    void anErrorBesideAnOpenElementIsReportedAsTheErrorItIs() {
+        // `xs` is a List of something and that is what it is. What the body gets wrong is the `+`,
+        // and that is what is reported, at the position of the disagreement — the parameter is not
+        // blamed for an error that has nothing to do with what it holds.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X constructs X
+                let bad (xs) = List.length(xs) + "s"
+                let f (x) = X(bad([ 1 ]))
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.type.mismatch.msg", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void anErrorUnrelatedToTheOpenElementIsNotBlamedOnTheParameter() {
+        // The mistake is `s * 2` and it says nothing about `xs`. Annotating `xs` would change nothing.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X constructs X
+                let bad (xs, s: String) = List.length(xs) + (s * 2)
+                let f (x) = X(bad([ 1 ], "a"))
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue(e.getMessage().contains("arithmetic"), e.getMessage());
+        assertTrue(!e.getMessage().contains("not determined"), e.getMessage());
+    }
+
+    /** {@link #bodyTypes} asked as a question rather than as an assertion. */
+    private static boolean compiles(String defs) {
+        try {
+            return bodyTypes(defs);
+        } catch (CompileException _) {
+            return false;
+        }
     }
 
     @Test

@@ -1,6 +1,8 @@
 # ADR-0066: A helper's parameter types come from its body, never from its call sites
 
-Status: Accepted. Supersedes ADR-0050.
+Status: Accepted. Supersedes ADR-0050. Amended by ADR-0092 — a non-recursive helper may carry the
+type variables its body leaves open, so the bullet below that requires an annotation where the
+container is named and the element is not no longer holds; everything else stands.
 
 ## Context
 

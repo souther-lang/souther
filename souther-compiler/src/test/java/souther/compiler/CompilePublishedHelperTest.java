@@ -547,4 +547,80 @@ class CompilePublishedHelperTest {
         assertEquals(0, classes.keySet().stream().filter(n -> n.endsWith("$Fns")).count(),
                 classes.keySet().toString());
     }
+
+    // --- a helper whose element its body left open ---
+
+    /** A published helper that names its container and not what it holds. Nothing about it is
+     * written: the reader settles it from the same body, by the same rule. */
+    private static final String COUNTING = """
+            module counting exposing ( count )
+
+            let count (xs) = List.length(xs)
+            """;
+
+    @Test
+    void aHelperWhoseElementIsOpenIsPublishedAndUsedAtTwoElementTypes() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(COUNTING, """
+                module report exposing ( Counted, tally )
+
+                import counting ( count )
+
+                data Counted = { n: Int }
+
+                behavior tally : (ns: List<Int>) -> Counted constructs Counted
+                let tally (ns) = Counted { n = count(ns) + count([ "a", "b" ]) }
+                """)));
+    }
+
+    /** Two readers, each at its own element type. A variable held anywhere but in the definition
+     * that carries it would be settled by whichever module was compiled first. */
+    @Test
+    void twoReadersUseOnePublishedHelperAtDifferentElementTypes() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of(COUNTING, """
+                module ints exposing ( Ints, countInts )
+                import counting ( count )
+                data Ints = { n: Int }
+                behavior countInts : (ns: List<Int>) -> Ints constructs Ints
+                let countInts (ns) = Ints { n = count(ns) }
+                """, """
+                module texts exposing ( Texts, countTexts )
+                import counting ( count )
+                data Texts = { n: Int }
+                behavior countTexts : (ss: List<String>) -> Texts constructs Texts
+                let countTexts (ss) = Texts { n = count(ss) }
+                """)));
+    }
+
+    /**
+     * Across a project boundary the helper travels as the source its author wrote, which carries no
+     * annotation at all, and the reader's own front end settles it again. So nothing has to write a
+     * type variable for it to cross — and the reader still may not write one itself.
+     */
+    @Test
+    void aHelperWhoseElementIsOpenCrossesAProjectBoundary() {
+        Map<String, byte[]> library = Compiler.compile(COUNTING);
+        ModulePath path = library::get;
+
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module app.report exposing ( Counted, tally )
+
+                import counting ( count )
+
+                data Counted = { n: Int }
+
+                behavior tally : (ns: List<Int>) -> Counted constructs Counted
+                let tally (ns) = Counted { n = count(ns) + count([ "a" ]) }
+                """), path));
+
+        CompileException written = assertThrows(CompileException.class,
+                () -> Compiler.compileModules(List.of("""
+                        module app.written
+                        import counting ( count )
+                        data N = Int
+                        behavior go : (n: N) -> N constructs N
+                        let sized (xs: List<'a>) = count(xs)
+                        let go (n) = N(sized([ 1 ]))
+                        """), path));
+        assertEquals("parse.typevar.core", written.diagnostic().messageKey(), written.getMessage());
+    }
 }

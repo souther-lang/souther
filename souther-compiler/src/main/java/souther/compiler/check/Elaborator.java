@@ -289,7 +289,7 @@ public final class Elaborator {
                                         "check.if.else", Type.show(et))
                                 .hint("check.if.hint")
                                 .build(),
-                        "if branches disagree: " + tt + " vs " + et);
+                        "if branches disagree: " + Type.show(tt) + " vs " + Type.show(et));
             }
             case Ast.IfConstructed ic -> {
                 Core built = elaborate(ic.construct(), env, ctx);
@@ -339,7 +339,7 @@ public final class Elaborator {
                                                 "check.if.else", Type.show(body.type()))
                                         .hint("check.if.hint")
                                         .build(),
-                                "if branches disagree: " + joined + " vs " + body.type());
+                                "if branches disagree: " + Type.show(joined) + " vs " + Type.show(body.type()));
                     }
                     joined = next;
                 }
@@ -863,7 +863,7 @@ public final class Elaborator {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.fn.branchtypes").title("check.fn.title")
                                     .at(iff.pos(), 2).args(Type.show(t), Type.show(f)).build(),
-                            "the two branches produce different function types: " + t + " vs " + f);
+                            "the two branches produce different function types: " + Type.show(t) + " vs " + Type.show(f));
                 }
                 yield new Core.If(cond, then, els, t, iff.pos());
             }
