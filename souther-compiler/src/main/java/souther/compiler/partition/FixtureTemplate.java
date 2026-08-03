@@ -60,6 +60,17 @@ public record FixtureTemplate(String text, Ast.Expr value) {
         return new FixtureTemplate(Boolean.toString(value), new Ast.BoolLit(value, NOWHERE));
     }
 
+    /** A date, written the way a row writes one: the constructor applied to an ISO 8601 string. */
+    public static FixtureTemplate date(String iso) {
+        return new FixtureTemplate("Date(\"" + iso + "\")",
+                new Ast.Apply("Date", List.of(new Ast.StringLit(iso, NOWHERE)), NOWHERE));
+    }
+
+    public static FixtureTemplate dateTime(String iso) {
+        return new FixtureTemplate("DateTime(\"" + iso + "\")",
+                new Ast.Apply("DateTime", List.of(new Ast.StringLit(iso, NOWHERE)), NOWHERE));
+    }
+
     /** The absent optional, which the language names rather than any module. */
     public static FixtureTemplate none() {
         return new FixtureTemplate("None",

@@ -354,6 +354,15 @@ public final class Partitions {
         if (type == Type.BOOL) {
             return List.of(FixtureTemplate.bool(true));
         }
+        // A date is built from its ISO 8601 form, which is how a row writes one. One fixed day rather
+        // than today's: a generated row is compared with the last one to see what changed, and a value
+        // that read the clock would change every time nothing had.
+        if (type == Type.DATE) {
+            return List.of(FixtureTemplate.date("2000-01-01"));
+        }
+        if (type == Type.DATETIME) {
+            return List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
+        }
         // The empty one, for every collection. It is the value that always builds — a rule about a
         // collection bounds its size or its elements, and neither can refuse having none — and a row
         // whose collection is not what it is about should say so by carrying nothing.
@@ -372,13 +381,41 @@ public final class Partitions {
                 && data.newtype()) {
             Bounds bounds = boundsOf(type, symbols);
             List<FixtureTemplate> inner = bounds == null || bounds.isEmpty()
-                    ? representativesOf(TypeOps.newtypeInner(ref.name(), symbols), symbols)
+                    ? insideTheFormat(ref.name(), symbols)
                     : List.of(bounds.decimal()
                             ? FixtureTemplate.decimal(inside(bounds))
                             : FixtureTemplate.integer(inside(bounds).longValueExact()));
             return inner.stream().map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
         }
         return List.of();
+    }
+
+    /**
+     * What a newtype wraps, written so that the rules on it hold.
+     *
+     * <p>A format rule is what an identifier usually says about itself, and a value that ignores it is
+     * refused at construction — so a record holding one could not be composed at all, and every
+     * combination that record took part in came back as one whose values the model refused. Reading
+     * the pattern is what turns those back into rows somebody can write.
+     *
+     * <p>Only the pattern is read. A rule this cannot produce a value for leaves the position with
+     * none, which is what it had before.
+     */
+    private static List<FixtureTemplate> insideTheFormat(TypeName newtype, Symbols symbols) {
+        Type base = TypeOps.newtypeInner(newtype, symbols);
+        if (base != Type.STRING || !(symbols.get(newtype) instanceof Ast.Data data)) {
+            return representativesOf(base, symbols);
+        }
+        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+            for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
+                if (InvariantConstraints.of(each, base).orElse(null)
+                        instanceof InvariantConstraints.Pattern format) {
+                    return PatternValues.shortestAccepted(format.regex())
+                            .map(FixtureTemplate::string).map(List::of).orElseGet(List::of);
+                }
+            }
+        }
+        return representativesOf(base, symbols);
     }
 
     /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge

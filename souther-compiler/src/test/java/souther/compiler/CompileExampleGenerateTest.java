@@ -205,6 +205,76 @@ class CompileExampleGenerateTest {
                 "the invariant's edge and both sides of the guard's line");
     }
 
+    /**
+     * A value a format rule accepts, and one the model then builds.
+     *
+     * <p>An identifier saying what it looks like is the commonest rule there is, and nothing could
+     * write one — so a record holding an id could not be composed at all, and every combination that
+     * record took part in came back as one whose values the model refused. What settles this is not
+     * that the string looks right but that the derived decoder takes it, which is what the check here
+     * is: the row is offered only if it built.
+     */
+    @Test
+    void anIdentifierWithAFormatRuleGetsAValueTheModelAccepts() {
+        String formatted = """
+                module example.office
+
+                data OfficeId = String
+                    invariant String.matches("[0-9]{2}-[0-9]{6}", value)
+
+                data Prefecture = String
+                    invariant String.matches("0[1-9]|[1-3][0-9]|4[0-7]", value)
+
+                data Domestic
+                data Overseas
+                data Kind = Domestic | Overseas
+
+                data Office = { id: OfficeId, prefecture: Prefecture, kind: Kind }
+                data Ok = { n: Int }
+
+                behavior register : (office: Office) -> Ok
+                    constructs Ok
+
+                let register (office) = Ok { n = 0 }
+
+                example register
+                    | (Office { id = OfficeId("12-345678"), prefecture = Prefecture("13"),
+                                kind = Domestic }) -> Ok { n = 0 }
+                """;
+
+        assertEquals(List.of(
+                        "Office { id = OfficeId(\"00-000000\"), prefecture = Prefecture(\"01\"),"
+                                + " kind = Overseas }"),
+                inputs(generated(formatted).get("register").pairs()),
+                "the class nothing covers, with an id and a prefecture the rules accept");
+    }
+
+    /** And a date, which a row writes as its ISO form. */
+    @Test
+    void aDateGetsAValueTheModelAccepts() {
+        String dated = """
+                module example.dated
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Request = { on: Date, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (request: Request) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = 0 }
+
+                example take
+                    | (Request { on = Date("2026-08-03"), flag = Yes }) -> Ok { n = 0 }
+                """;
+
+        assertEquals(List.of("Request { on = Date(\"2000-01-01\"), flag = No }"),
+                inputs(generated(dated).get("take").pairs()));
+    }
+
     // --- the block, put back through the compiler ------------------------------------------------
 
     /** The rows of the block, with the placeholder answered the way an author answers it. */
