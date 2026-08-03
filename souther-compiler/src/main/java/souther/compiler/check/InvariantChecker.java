@@ -903,10 +903,12 @@ public final class InvariantChecker {
         if (under != null) {
             return obligations(under, binds, !positive);
         }
-        if (Boolean.TRUE.equals(decidedAt(inv, binds))) {
-            // The clause folds to true once the construction's own expressions stand where it wrote a
-            // field, so there is nothing to owe. A clause that folds to false is left to the constant
-            // check, which says which clause failed rather than only that one did.
+        Boolean folded = decidedAt(inv, binds);
+        if (folded != null && folded == positive) {
+            // The clause folds once the construction's own expressions stand where it wrote a field,
+            // and it folds the way it is being read. There is nothing to owe. Read under a negation
+            // it is the other answer that discharges, which is why the polarity is asked: folding to
+            // true under a denial is a violation and not a discharge.
             return List.of();
         }
         Constraint numeric = null;
@@ -1361,6 +1363,13 @@ public final class InvariantChecker {
      * a stated result type or a stdlib rule would enter.
      */
     private String siteKey(Ast.Expr e, Scope scope, Known k) {
+        // A value written out is not something a guard can be written about: there is nothing to
+        // state of `"xyz"` that the text does not already say. Where a clause reading it folds it is
+        // decided before this is asked, and where it does not fold there is no guard that would
+        // discharge it, so naming it here would only report what the author cannot answer.
+        if (isWritten(e)) {
+            return null;
+        }
         String located = locationKey(e, scope);
         if (located != null) {
             return located;
@@ -1822,6 +1831,12 @@ public final class InvariantChecker {
         }
         String term = bodyKey(e, scope);
         return term == null ? new Denotes.Nothing() : new Denotes.Term(term, namedByRule(e, scope));
+    }
+
+    /** Whether {@code e} is a value written out rather than computed from anything. */
+    private static boolean isWritten(Ast.Expr e) {
+        return e instanceof Ast.IntLit || e instanceof Ast.DecimalLit || e instanceof Ast.StringLit
+                || e instanceof Ast.BoolLit;
     }
 
     /** Whether {@code e} is a container built by an operation the preservation table covers, over an

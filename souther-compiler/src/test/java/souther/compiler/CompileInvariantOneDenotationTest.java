@@ -176,4 +176,49 @@ class CompileInvariantOneDenotationTest {
         assertEquals(1, warnings(Compiler.compileWithWarnings(named)), "stated, and still unproven");
         assertEquals(1, warnings(Compiler.compileWithWarnings(inline)), "the same written inline");
     }
+
+    @Test
+    void aClauseFoldsTheWayItIsRead() {
+        // read under a denial, folding to true is the violation and not the discharge
+        String m = """
+                module demo
+                data Pair = { lo: Int, hi: Int }
+                    invariant Bool.not(lo > hi)
+                behavior mk : (x: Int) -> Pair
+                    constructs Pair
+                let mk (x) = Pair { lo = 5, hi = 3 }
+                """;
+        assertEquals("E2010", assertThrows(CompileException.class, () -> Compiler.compile(m))
+                .diagnostic().code(), "5 > 3, and the clause denies it");
+    }
+
+    @Test
+    void aWrittenDecimalComparesByAmount() {
+        // 1.0m and 1.00m are one number, so `/=` of the two is false where it is constructed
+        String m = """
+                module demo
+                data Pair = { a: Decimal, b: Decimal }
+                    invariant a /= b
+                behavior mk : (x: Int) -> Pair
+                    constructs Pair
+                let mk (x) = Pair { a = 1.0m, b = 1.00m }
+                """;
+        assertEquals("E2010", assertThrows(CompileException.class, () -> Compiler.compile(m))
+                .diagnostic().code(), "scale is not part of what a decimal is");
+    }
+
+    @Test
+    void aWrittenValueIsNotSomethingToGuard() {
+        // nothing can be stated of `"xyz"` that the text does not say, so nothing is reported of it
+        String m = """
+                module demo
+                data Code = String
+                    invariant String.startsWith("x", value)
+                behavior mk : (x: Int) -> Code
+                    constructs Code
+                let mk (x) = Code("xyz")
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a written value carries no guard the author could add");
+    }
 }

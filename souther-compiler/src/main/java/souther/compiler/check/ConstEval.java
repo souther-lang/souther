@@ -78,8 +78,8 @@ public final class ConstEval {
                     ? Optional.of(x && y) : Optional.empty();
             case OR -> a instanceof Boolean x && b instanceof Boolean y
                     ? Optional.of(x || y) : Optional.empty();
-            case EQ -> Optional.of(a.equals(b));
-            case NE -> Optional.of(!a.equals(b));
+            case EQ -> Optional.of(equal(a, b));
+            case NE -> Optional.of(!equal(a, b));
             case LT, LE, GT, GE -> compare(bin.op(), a, b);
             case ADD, SUB, MUL -> arith(bin.op(), a, b);
             // `++` appends two strings or two lists (spec 18.1); the string case folds, and a list is
@@ -137,6 +137,16 @@ public final class ConstEval {
             });
         }
         return Optional.empty();
+    }
+
+    /** Whether two folded values are the one value. A {@code Decimal} answers by amount and not by
+     * how it was written, as it does everywhere else: {@code 1.0m} and {@code 1.00m} are one number,
+     * and a comparison folding the other way would decide at compile time what the run time denies. */
+    private static boolean equal(Object a, Object b) {
+        if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
+            return x.compareTo(y) == 0;
+        }
+        return a.equals(b);
     }
 
     private static Optional<Object> call(Ast.Apply call) {
