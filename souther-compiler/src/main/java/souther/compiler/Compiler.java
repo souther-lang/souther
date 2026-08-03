@@ -141,7 +141,9 @@ public final class Compiler {
             }
             List<Diagnostic> failures = new ArrayList<>();
             for (String id : compilation.exampleSourcesOf(module)) {
-                for (Report failure : db.ask(new Output.Examples(module, id)).reports()) {
+                // Only the errors: this key also carries what a clean run wants to say about how well
+                // the rows cover the model, and a warning is not a reason to fail the build.
+                for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
                     failures.add(failure.diagnostic());
                 }
             }
@@ -206,8 +208,25 @@ public final class Compiler {
      * collected, and that every module's examples are evaluated before any failing one is reported
      * (issue #114) — so a change to a widely-imported data says how far it reaches in one compile.
      */
+    /**
+     * The compilation of a module set, driven to completion, with the first error raised — what
+     * {@link #linking} returns the classes of, for a caller that wants more than the classes.
+     *
+     * <p>{@code souther examples} is such a caller: it asks how well the rows cover the model, which
+     * is read off the same compile that would have written the classes out.
+     */
+    public static Compilation compiledModules(List<String> sources, ModulePath path,
+                                              List<Located> warningsOut) {
+        return linked(sources, path, warningsOut);
+    }
+
     private static Map<String, byte[]> linking(List<String> sources, ModulePath path,
                                                List<Located> warningsOut) {
+        return new LinkedHashMap<>(linked(sources, path, warningsOut).classes());
+    }
+
+    private static Compilation linked(List<String> sources, ModulePath path,
+                                      List<Located> warningsOut) {
         Compilation compilation = Compilation.ofSources(sources, path);
         Db db = compilation.db();
 
@@ -216,7 +235,7 @@ public final class Compiler {
             throw structural;
         }
 
-        Map<String, byte[]> out = new LinkedHashMap<>(db.ask(new Output.All()).value());
+        db.ask(new Output.All());
         CompileException failed = compilation.firstError(db.allReports());
         if (failed != null) {
             throw failed;
@@ -236,7 +255,7 @@ public final class Compiler {
                 continue;
             }
             for (String id : compilation.exampleSourcesOf(module)) {
-                for (Report failure : db.ask(new Output.Examples(module, id)).reports()) {
+                for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
                     exampleFailures.add(failure.diagnostic());
                     // a row from an `examples for` file is positioned in that file, not this one
                     exampleSources.add(compilation.sourceIndexOfId(id));
@@ -248,7 +267,7 @@ public final class Compiler {
             throw CompileException.ofAllInSources(exampleFailures, exampleSources,
                     ExampleVerifier.legacySummary(exampleFailures));
         }
-        return out;
+        return compilation;
     }
     /**
      * Links a module set like {@link #compileModules}, but collects diagnostics per source — keyed by

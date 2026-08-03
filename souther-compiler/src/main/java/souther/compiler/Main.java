@@ -11,6 +11,8 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.meta.ModulePath;
+import souther.compiler.query.Compilation;
+import souther.compiler.report.AdequacyReport;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -37,9 +39,14 @@ public final class Main {
               compile <file.sou>... -d <outdir> [-cp <path>]      compile to .class files
               run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
               fmt <file.sou>... [-w] [--check]                     format source (stdout, or -w in place)
-            options (compile):
+              examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
+            options (examples):
+              --module <name>           report only this module
+              --behavior <name>         report only this behavior
+              --strict                  exit non-zero while rows are waiting for a `let`
+            options (compile/examples):
               -cp, --class-path <path>  where to find modules another project compiled
-            options (compile/run):
+            options (compile/run/examples):
               --format human|json      how to render a compile error (default: human)
               --lang <tag>             message locale, e.g. ja or en (default: system, then ja)
               --color auto|always|never  color the human output (default: auto)""";
@@ -51,6 +58,7 @@ public final class Main {
             case "run" -> runSubcommand(rest);
             case "compile" -> compileSubcommand(rest);
             case "fmt" -> fmtSubcommand(rest);
+            case "examples" -> examplesSubcommand(rest);
             default -> {
                 String hint = command.endsWith(".sou")
                         ? "no command given — did you mean `souther compile " + command
@@ -119,6 +127,91 @@ public final class Main {
             // The compile itself finished — these warnings are the whole set, and what stopped the
             // command was writing the classes out, which says nothing about the source.
             report(warnings, sources, render);
+            System.err.println("io error: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    /**
+     * {@code souther examples <file.sou>...}: how well the model's {@code example}s cover it.
+     *
+     * <p>Its own command rather than a flag on {@code compile}, because the two answer different
+     * questions. {@code compile} writes classes out and stops at the first error; this asks a model
+     * that already compiles how much of it the rows have pinned down. Mixing them would put a report
+     * on stdout next to {@code wrote <path>} and make a failing build the only way to see it.
+     */
+    private static void examplesSubcommand(String[] rawArgs) {
+        RenderOptions render = new RenderOptions();
+        String[] args = render.extract(rawArgs);
+        List<Path> sources = new ArrayList<>();
+        List<Path> classPath = new ArrayList<>();
+        String module = null;
+        String behavior = null;
+        boolean strict = false;
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
+                case "-cp", "--class-path" -> {
+                    if (++i >= args.length) {
+                        System.err.println("`" + args[i - 1] + "` needs a class path");
+                        System.err.println(USAGE);
+                        System.exit(2);
+                        return;
+                    }
+                    for (String entry : args[i].split(java.io.File.pathSeparator)) {
+                        if (!entry.isBlank()) {
+                            classPath.add(Path.of(entry));
+                        }
+                    }
+                }
+                case "--module" -> {
+                    if (++i >= args.length) {
+                        System.err.println("`--module` needs a module name");
+                        System.exit(2);
+                        return;
+                    }
+                    module = args[i];
+                }
+                case "--behavior" -> {
+                    if (++i >= args.length) {
+                        System.err.println("`--behavior` needs a behavior name");
+                        System.exit(2);
+                        return;
+                    }
+                    behavior = args[i];
+                }
+                case "--strict" -> strict = true;
+                default -> sources.add(Path.of(args[i]));
+            }
+        }
+        if (sources.isEmpty()) {
+            System.err.println("examples takes at least one .sou file");
+            System.err.println(USAGE);
+            System.exit(2);
+            return;
+        }
+        List<Located> warnings = new ArrayList<>();
+        try {
+            List<String> texts = new ArrayList<>();
+            for (Path source : sources) {
+                texts.add(Files.readString(source));
+            }
+            ModulePath path = classPath.isEmpty() ? ModulePath.EMPTY
+                    : ModulePath.ofClassPath(classPath);
+            Compilation compilation = texts.size() == 1 && classPath.isEmpty()
+                    ? Compiler.compiled(texts.get(0), Runner.moduleName(sources.get(0)), warnings)
+                    : Compiler.compiledModules(texts, path, warnings);
+            AdequacyReport report = AdequacyReport.of(compilation).only(module, behavior);
+            report(warnings, sources, render);
+            String rendered = render.json() ? report.json() + System.lineSeparator() : report.human();
+            System.out.print(rendered);
+            if (strict && report.pendingRows() > 0) {
+                System.err.println(report.pendingRows() + " example row(s) are waiting for a `let`");
+                System.exit(1);
+            }
+        } catch (CompileException e) {
+            reportCompileError(e, sources, render);
+            System.exit(1);
+        } catch (IOException e) {
             System.err.println("io error: " + e.getMessage());
             System.exit(1);
         }

@@ -333,7 +333,27 @@ public final class Output {
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.
      */
-    public record Examples(String name, String sourceId) implements Key<Boolean> {
+    public record Examples(String name, String sourceId) implements Key<Examples.Of> {
+
+        /**
+         * What this source's rows turned out to be.
+         *
+         * <p>The answer carries a value even when rows failed, because a failing row is still an
+         * observation: it says which case the behavior actually produced, and which inputs were legal.
+         * An answer that went absent on the first failure would leave every adequacy measure reading
+         * nothing and reporting gaps that the rows in front of it already covered.
+         */
+        public record Of(List<souther.compiler.observe.RowOutcome> rows,
+                         List<souther.compiler.observe.Incompleteness> incompleteness) {
+
+            public static final Of NONE = new Of(List.of(), List.of());
+
+            public Of {
+                rows = List.copyOf(rows);
+                incompleteness = List.copyOf(incompleteness);
+            }
+        }
+
         @Override
         public String module() {
             return name;
@@ -345,7 +365,7 @@ public final class Output {
         }
 
         @Override
-        public Answer<Boolean> compute(Db db) {
+        public Answer<Of> compute(Db db) {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -361,7 +381,7 @@ public final class Output {
             }
             Ast.Module rows = written(db, prepared.value());
             if (rows.examples().isEmpty()) {
-                return Answer.of(Boolean.TRUE);
+                return Answer.of(Of.NONE);
             }
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
@@ -373,12 +393,14 @@ public final class Output {
                 return Answer.absent(reports);   // a row naming one would read the other declaration
             }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
-            for (Diagnostic failure : souther.compiler.ExampleVerifier.check(rows, scope.value(),
-                    sigs.value(), classes, requirements, loader(db, Map.of()),
-                    values == null ? Map.of() : values)) {
+            souther.compiler.ExampleVerifier.Observations observed =
+                    souther.compiler.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
+                            requirements, loader(db, Map.of()),
+                            values == null ? Map.of() : values, sourceId);
+            for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }
-            return reports.isEmpty() ? Answer.of(Boolean.TRUE) : Answer.absent(reports);
+            return Answer.of(new Of(observed.rows(), observed.incompleteness()), reports);
         }
 
         /**

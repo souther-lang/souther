@@ -2188,7 +2188,7 @@ Types make totality and the case set exhaustive (<<match>>, <<unmarked-sum>>); a
 [#example-evaluable]
 === What can carry an example
 
-A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) cannot be — you fake one, you do not example it (<<e1902>>). A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
+A behavior with a `+let+` implementation is evaluated (<<fn>>), and so is a `+>->+` composition (<<composition>>). An injected behavior (no `+let+`, <<injected-behavior>>) has nothing to run, so its rows are *recorded* rather than evaluated (<<example-pending>>). A target that is not a behavior at all — a helper `+let+` of that name — is <<e1902>>. A behavior's `+depends on+` dependencies are supplied by fakes at the example (<<example-fakes>>).
 
 A composition's row is written like any other. Its arguments are the first stage's (<<sequential-composition>>), and its expected result is any case of the composition's output — including one that departed the main line at an earlier stage (<<type-routing>>), which is the part no stage's own example can state, because the routing is not any stage's rule.
 
@@ -2267,6 +2267,28 @@ fake findManager
 Each dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file, and is local to its module. `+fake+` is a contextual keyword.
 
 A composition's dependencies are its stages' (<<composition-with-requirements>>), so a row exampling one supplies a fake for each of those. That holds whichever path the row takes: an input that departs the main line at the first stage never reaches the second, and the second stage's dependency is faked all the same. What a row has to supply is a property of the composition, not of the input this row happens to use. One dependency two stages share is one fake — the composition holds one of it (<<composition-with-requirements>>) — and the diagnostic names the stage that wants it (<<e1908>>).
+
+[#example-pending]
+=== A row waits for the implementation it is about
+
+An injected behavior (<<injected-behavior>>) has no `+let+` to apply, so a row naming one is *recorded* rather than evaluated. It is not refused. A model that a system is being migrated onto is injected everywhere at the start, and the rows harvested from the system it replaces are the record of what each behavior will owe; refusing them would mean keeping that record somewhere the compiler cannot read, which is where it stops being checked.
+
+What a row can be held to without a body, it is held to. Its arity, each input built against its parameter type — through that type's derived Decoder, so an input that breaks an invariant is <<e1903>> the day it is written — the expected arm against the output's cases (<<e1904>>), and the expected value built (<<e1903>>). What is left needs something to run.
+
+Evaluation begins by itself. The row is unchanged when the `+let+` arrives; from that compile on it is applied and compared like any other, and a row that stated the wrong answer is <<e1905>> then rather than never.
+
+A `+fake+` is not what a pending row wants. A fake stands in for a dependency while some *other* behavior's row runs (<<example-fakes>>); an `+example+` of an injected behavior says what that behavior itself will have to answer. The two are written about the same name and read nothing of each other, so both belong. An injected behavior declares no `+depends on+` of its own (<<depends-on>>), so a pending row needs no fake at all.
+
+[,text]
+----
+behavior findMember : (id: MemberId) -> Found | Missing
+
+example findMember
+    | "a member that is registered" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
+    | "a member that is not"        : (MemberId("m-9")) -> Missing { reason = "no such member" }
+----
+
+How many rows are waiting is what `+souther examples+` reports; it is not a compile warning, because waiting is the normal state of a model being written and a warning on every one of them says nothing.
 
 [#example-placement]
 === Inline or an attached file
@@ -3432,12 +3454,12 @@ Emitted when an `+example+` names a target that is not a behavior of the module 
 
 [,text]
 ----
-`now` cannot be evaluated as an example.
+`taxIncluded` cannot be evaluated as an example.
 Hint: An example runs a behavior with a `let` body, or a `>->` composition of them; here
-it is injected from Java (no `let`) — fake it, do not example it.
+it is a helper `let`, and this module declares no behavior of that name.
 ----
 
-Emitted when an `+example+` targets a behavior with no implementation to evaluate: an injected behavior (<<example-evaluable>>). A `+depends on+` dependency is not a reason — it is supplied by a fake (<<example-fakes>>) — and neither is a `+>->+` composition, which is evaluated by running its stages.
+Emitted when an `+example+` names something this module declares that is not a behavior — a helper `+let+` (<<fn-declaration>>). Being injected is not a reason: an injected behavior is a behavior, and its rows are recorded (<<example-pending>>). Neither is a `+depends on+` dependency, which is supplied by a fake (<<example-fakes>>), nor a `+>->+` composition, which is evaluated by running its stages.
 
 [#e1903]
 === Example input cannot be built

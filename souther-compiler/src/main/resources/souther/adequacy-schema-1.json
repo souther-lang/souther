@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://souther-lang.org/schema/adequacy-1.json",
+  "title": "Souther adequacy report",
+  "description": "How well a model's `example`s cover it. Emitted by `souther examples --format json`. A reader keys on `schemaVersion`: a change that removes or renames anything here raises it.",
+  "type": "object",
+  "required": ["schemaVersion", "compilerVersion", "status", "modules"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "compilerVersion": {
+      "type": "string",
+      "description": "The compiler that produced the report, or `unreleased` when it ran from class files."
+    },
+    "status": {
+      "$ref": "#/$defs/status",
+      "description": "The weakest status among the modules. `partial` means something could not be read, so an absent number is not evidence of a gap."
+    },
+    "modules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/module" }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": ["complete", "partial", "unavailable"]
+    },
+    "module": {
+      "type": "object",
+      "required": ["module", "status", "incompleteness", "behaviors"],
+      "additionalProperties": false,
+      "properties": {
+        "module": { "type": "string" },
+        "status": { "$ref": "#/$defs/status" },
+        "incompleteness": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/incompleteness" }
+        },
+        "behaviors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/behavior" }
+        }
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "required": ["name", "implementation", "rows", "pending", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "implementation": {
+          "enum": ["implemented", "injected"],
+          "description": "`injected` is a behavior with no `let` yet; its rows are recorded rather than evaluated."
+        },
+        "rows": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many example rows name this behavior, across every source that writes one."
+        },
+        "pending": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "How many of those rows are recorded rather than evaluated."
+        },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+    "incompleteness": {
+      "type": "object",
+      "required": ["code", "subject"],
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": ["value_unreadable", "value_truncated", "row_timed_out", "runtime_absent",
+                   "probe_mapping_lost", "search_limit", "axis_omitted"]
+        },
+        "subject": { "type": "string" },
+        "at": {
+          "type": "object",
+          "required": ["sourceId", "line", "column"],
+          "additionalProperties": false,
+          "properties": {
+            "sourceId": { "type": "string" },
+            "line": { "type": "integer" },
+            "column": { "type": "integer" }
+          }
+        }
+      }
+    }
+  }
+}

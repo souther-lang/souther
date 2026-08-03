@@ -76,13 +76,23 @@ class CompileFakeTest {
         assertEquals("E1908", err(bad).diagnostic().code());
     }
 
+    /**
+     * A fake and an example of the same injected behavior say different things and both belong.
+     *
+     * <p>A fake stands in for 現在時刻 while some other behavior's row runs — it is that row's
+     * scaffolding. An example of 現在時刻 says what 現在時刻 itself will have to answer once it has a
+     * `let`. Neither reads the other.
+     */
     @Test
-    void examplingAnInjectedBehaviorIsE1902() {
-        String bad = CLOCK + """
+    void anInjectedBehaviorTakesBothAFakeAndAnExampleOfItsOwn() {
+        String ok = CLOCK + """
+                example 受け付ける
+                  | (申請 { 額 = 1 }) with 現在時刻 = "2026-07-20T09:00" -> 受理 { 時刻 = "2026-07-20T09:00" }
+
                 example 現在時刻
-                  | () -> 受理
+                  | () -> "2026-07-20T09:00"
                 """;
-        assertEquals("E1902", err(bad).diagnostic().code());
+        assertDoesNotThrow(() -> Compiler.compile(ok));
     }
 
     // --- function dependency via `fake` table -------------------------------------------------
