@@ -38,12 +38,12 @@ public final class Generator {
 
     /** How many rows one call will write. Past this the output stops being something a person reads
      * and pastes, and a model that wants more than this has axes it should be measured at fewer of. */
-    /** How many assignments of values one row is tried at. The choices multiply, so this is a bound on
-     * the search and not on any one position — and reaching it is reported as the search having
-     * stopped, which is a different thing from every assignment having been refused. */
-    private static final int MAX_TUPLES = 256;
-
     static final int MAX_ROWS = 200;
+
+    /** How many assignments of values one parameter is tried at. The choices multiply, so this is a
+     * bound on the search and not on any one position — and reaching it is reported as the search
+     * having stopped, which is a different thing from every assignment having been refused. */
+    private static final int MAX_TUPLES = 256;
 
     /** How deep a record is built. Past this a value stops being anything an author recognises as one
      * input, and a type that refers to itself would not stop at all. */
@@ -251,20 +251,24 @@ public final class Generator {
                         UnresolvedCombination.Reason.NO_REPRESENTATIVE));
                 continue;
             }
-            Choices choices = choicesOf(subject,
-                    Map.of(axis.path().toString(), List.of(at)));
-            if (choices.missingAt() != null) {
-                unresolved.add(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.NO_REPRESENTATIVE, choices.missingAt()));
+            List<FixtureTemplate> inputs = new ArrayList<>();
+            UnresolvedCombination left = null;
+            for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
+                Map<String, List<FixtureTemplate>> here =
+                        TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
+                                ? Map.of(axis.path().toString(), List.of(at)) : Map.of();
+                Outcome tried = valueAt(subject, p, here, check);
+                if (tried.value() == null) {
+                    left = new UnresolvedCombination(List.of(label), tried.reason(), tried.detail());
+                    break;
+                }
+                inputs.add(tried.value());
+            }
+            if (left != null) {
+                unresolved.add(left);
                 continue;
             }
-            Outcome tried = walk(subject, choices, check);
-            if (tried.inputs() == null) {
-                unresolved.add(new UnresolvedCombination(List.of(label), tried.reason(),
-                        tried.detail()));
-                continue;
-            }
-            rows.add(new GeneratedRow(List.of(label), tried.inputs()));
+            rows.add(new GeneratedRow(List.of(label), inputs));
         }
         return new GenerationResult(rows, unresolved, List.of());
     }
@@ -472,15 +476,50 @@ public final class Generator {
             }
             decided.put(axes.get(i).path().toString(), candidates);
         }
-        Choices choices = choicesOf(subject, decided);
-        if (choices.missingAt() != null) {
-            return new Attempt(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
-                    choices.missingAt());
+        List<FixtureTemplate> inputs = new ArrayList<>();
+        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
+            Outcome tried = valueFor(subject, p, axes, decided, check);
+            if (tried.value() == null) {
+                return new Attempt(null, tried.reason(), tried.detail());
+            }
+            inputs.add(tried.value());
         }
-        Outcome tried = walk(subject, choices, check);
-        return tried.inputs() != null
-                ? new Attempt(new GeneratedRow(labels(axes, where), tried.inputs()), null, null)
-                : new Attempt(null, tried.reason(), tried.detail());
+        return new Attempt(new GeneratedRow(labels(axes, where), inputs), null, null);
+    }
+
+    /**
+     * One parameter's value, searched for on its own.
+     *
+     * <p>Each parameter is built and refused on its own — the check is the model's constructor for that
+     * one type, and a rule relating two of them is not something a model can write. So the choices
+     * under one parameter and the choices under another do not multiply, and searching them together
+     * would spend the bound on assignments that differ only in a parameter already settled. Two
+     * parameters of eight either-or fields are two searches of 256, not one of 65,536.
+     */
+    private static Outcome valueFor(Subject subject, int p, List<Axis> axes,
+                                    Map<String, List<FixtureTemplate>> decided,
+                                    CandidateCheck check) {
+        TermPath at = TermPath.of(subject.parameters().get(p));
+        Map<String, List<FixtureTemplate>> here = new LinkedHashMap<>();
+        for (Axis axis : axes) {
+            if (axis.path().head().equals(at.head())
+                    && decided.containsKey(axis.path().toString())) {
+                here.put(axis.path().toString(), decided.get(axis.path().toString()));
+            }
+        }
+        return valueAt(subject, p, here, check);
+    }
+
+    /** One parameter's value, with the positions the caller fixed already decided. */
+    private static Outcome valueAt(Subject subject, int p,
+                                   Map<String, List<FixtureTemplate>> decided,
+                                   CandidateCheck check) {
+        Choices choices = choicesOf(subject.types().get(p),
+                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided);
+        return choices.missingAt() != null
+                ? new Outcome(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
+                        choices.missingAt())
+                : walk(subject, p, choices, check);
     }
 
     /**
@@ -509,17 +548,12 @@ public final class Generator {
      * @param decided what the caller fixed: the classes of an axis, or the single value a boundary is
      *                to be reached at
      */
-    private static Choices choicesOf(Subject subject, Map<String, List<FixtureTemplate>> decided) {
-        List<String> at = new ArrayList<>(decided.keySet());
+    private static Choices choicesOf(Type type, TermPath at, Symbols symbols,
+                                     Map<String, List<FixtureTemplate>> decided) {
+        List<String> paths = new ArrayList<>(decided.keySet());
         List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
-        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            String missing = choicesUnder(subject.types().get(p),
-                    TermPath.of(subject.parameters().get(p)), subject.symbols(), 0, at, values);
-            if (missing != null) {
-                return Choices.missing(missing);
-            }
-        }
-        return new Choices(at, values, null);
+        String missing = choicesUnder(type, at, symbols, 0, paths, values);
+        return missing != null ? Choices.missing(missing) : new Choices(paths, values, null);
     }
 
     /** The positions under one parameter, appended in the order they are composed. Returns the path
@@ -555,8 +589,8 @@ public final class Generator {
         return null;
     }
 
-    /** What came of trying the assignments: the values, or why there are none. */
-    private record Outcome(List<FixtureTemplate> inputs, UnresolvedCombination.Reason reason,
+    /** What came of trying the assignments for one parameter: its value, or why there is none. */
+    private record Outcome(FixtureTemplate value, UnresolvedCombination.Reason reason,
                            String detail) {}
 
     /**
@@ -567,7 +601,7 @@ public final class Generator {
      * positions were collected in is the order their steps are taken in, and a row is compared against
      * the last run's to see what changed.
      */
-    private static Outcome walk(Subject subject, Choices choices, CandidateCheck check) {
+    private static Outcome walk(Subject subject, int p, Choices choices, CandidateCheck check) {
         int positions = choices.at().size();
         ArrayDeque<int[]> next = new ArrayDeque<>();
         Set<String> seen = new LinkedHashSet<>();
@@ -579,9 +613,14 @@ public final class Generator {
         while (!next.isEmpty() && tried < MAX_TUPLES) {
             int[] assignment = next.poll();
             tried++;
-            List<FixtureTemplate> inputs = inputsOf(subject, choices, assignment, check);
-            if (inputs != null) {
-                return new Outcome(inputs, null, null);
+            Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
+            for (int i = 0; i < positions; i++) {
+                chosen.put(choices.at().get(i), choices.values().get(i).get(assignment[i]));
+            }
+            FixtureTemplate built = compose(subject.types().get(p),
+                    TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0);
+            if (built != null && check.refuse(p, built).isEmpty()) {
+                return new Outcome(built, null, null);
             }
             for (int i = 0; i < positions; i++) {
                 if (assignment[i] + 1 >= choices.values().get(i).size()) {
@@ -601,25 +640,6 @@ public final class Generator {
         return next.isEmpty()
                 ? new Outcome(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null)
                 : new Outcome(null, UnresolvedCombination.Reason.SEARCH_LIMIT, null);
-    }
-
-    /** One assignment built into the parameters, or null where the model refused it. */
-    private static List<FixtureTemplate> inputsOf(Subject subject, Choices choices, int[] assignment,
-                                                  CandidateCheck check) {
-        Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
-        for (int i = 0; i < choices.at().size(); i++) {
-            chosen.put(choices.at().get(i), choices.values().get(i).get(assignment[i]));
-        }
-        List<FixtureTemplate> inputs = new ArrayList<>();
-        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            FixtureTemplate built = compose(subject.types().get(p),
-                    TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0);
-            if (built == null || check.refuse(p, built).isPresent()) {
-                return null;
-            }
-            inputs.add(built);
-        }
-        return inputs;
     }
 
     /** The value at one position: what the assignment chose there, or a record built out of its

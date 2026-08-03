@@ -449,6 +449,53 @@ class CompileExampleGenerateTest {
     }
 
     /**
+     * One parameter's choices do not multiply with another's.
+     *
+     * <p>Each parameter is built and refused on its own, so searching them together spends the bound
+     * on assignments differing only in a parameter already settled. Here every field's value is the
+     * second of the two it was offered, which is four steps out in each of two parameters — reachable
+     * on its own and, taken together, eight steps into a space of two hundred and fifty-six.
+     */
+    @Test
+    void eachParameterIsSearchedOnItsOwn() {
+        StringBuilder declarations = new StringBuilder();
+        for (char c = 'a'; c <= 'h'; c++) {
+            declarations.append("""
+                    data V%1$s = String
+                        invariant String.matches("[a-z]+", value)
+                        invariant String.matches("x+", value)
+
+                    """.formatted(Character.toUpperCase(c)));
+        }
+        String source = """
+                module example.two
+
+                %sdata Yes
+                data No
+                data Flag = Yes | No
+
+                data One = { a: VA, b: VB, c: VC, d: VD }
+                data Two = { e: VE, f: VF, g: VG, h: VH, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (one: One, two: Two) -> Ok
+                    constructs Ok
+
+                let take (one, two) = Ok { n = 0 }
+                """.formatted(declarations);
+
+        List<String> rows = inputs(generated(source).get("take").pairs());
+
+        assertEquals(2, rows.size(), "one row per class of the only axis: " + rows);
+        for (String row : rows) {
+            for (char c = 'a'; c <= 'h'; c++) {
+                assertTrue(row.contains("V%1$s(\"x\")".formatted(Character.toUpperCase(c))),
+                        "every field at the value its rules allow: " + row);
+            }
+        }
+    }
+
+    /**
      * A search that stopped says so, rather than saying everything was refused.
      *
      * <p>The choices multiply, so a row is tried at a bounded number of assignments. Past that bound

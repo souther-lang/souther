@@ -37,6 +37,21 @@ final class PatternValues {
     private static final int LONGEST = 1024;
 
     /**
+     * How much backing up the answer is allowed to ask the engine for.
+     *
+     * <p>The answer is checked by putting it back through the pattern, and that check is the only
+     * unbounded thing here: the engine tries and backs up, and a repetition written over something of
+     * more than one length gives it somewhere to back up to for every copy in the string. Those
+     * multiply, so a pattern this reads perfectly well can take longer to check than anybody will wait
+     * — {@code (?:x?x){40}} is one, and the value it asks to have checked is forty characters long.
+     *
+     * <p>Twenty, because at twenty the check is under a millisecond and at thirty-three it is a fifth
+     * of a second and still doubling. What a real rule asks for is nothing like either: the most any
+     * of the format rules in the example models asks for is five.
+     */
+    private static final int MOST_BACKTRACKING = 20;
+
+    /**
      * Where a negated class takes its character from, in order.
      *
      * <p>A letter first, because a class that excludes something usually excludes punctuation, and a
@@ -94,7 +109,7 @@ final class PatternValues {
         PatternValues reader = new PatternValues(regex);
         String built;
         try {
-            built = reader.alternation();
+            built = reader.alternation().text();
             if (!reader.done()) {
                 return Optional.empty();   // stopped early — an unbalanced bracket, say
             }
@@ -107,9 +122,10 @@ final class PatternValues {
         try {
             return java.util.regex.Pattern.matches(regex, built)
                     ? Optional.of(built) : Optional.empty();
-        } catch (java.util.regex.PatternSyntaxException _) {
-            // Not a pattern at all. The compiler settles that where it is written, so nothing here
-            // reports it again; what it means for a value is that there is none.
+        } catch (java.util.regex.PatternSyntaxException | StackOverflowError _) {
+            // Not a pattern at all, or one the engine cannot walk to the end of. The compiler settles
+            // the first where it is written, so nothing here reports it again; what either means for a
+            // value is that there is none.
             return Optional.empty();
         }
     }
@@ -132,27 +148,54 @@ final class PatternValues {
 
     // --- the grammar ------------------------------------------------------------------------------
 
+    /**
+     * What one part of a pattern writes, and what putting it back through the engine will cost.
+     *
+     * <p>The second is the point. The engine matches by trying and backing up, and where a repetition
+     * is written over something that can itself match more than one length, every copy of it in the
+     * generated string is another place to back up to — which multiplies. {@code (?:x?x){40}} is
+     * forty of them over a forty-character string, and no part of it is a construct this cannot read.
+     *
+     * @param ambiguity how many places in {@code text} the engine may have to back up to, counted so
+     *                  that a repetition multiplies what is under it rather than adding to it
+     */
+    private record Piece(String text, int ambiguity) {
+
+        static final Piece NOTHING = new Piece("", 0);
+
+        static Piece plain(String text) {
+            return new Piece(text, 0);
+        }
+
+        Piece then(Piece next) {
+            return new Piece(text + next.text(), ambiguity + next.ambiguity());
+        }
+    }
+
     /** {@code a|b|c} — the first branch, always. The rest is still read, because a pattern this
-     * cannot read all of is one it will not offer a value for. */
-    private String alternation() {
-        String first = sequence();
+     * cannot read all of is one it will not offer a value for. A branch not taken is still somewhere
+     * the engine can back up to, so having more than one costs. */
+    private Piece alternation() {
+        Piece first = sequence();
+        int branches = 0;
         while (peek() == '|') {
             take();
             sequence();
+            branches++;
         }
-        return first;
+        return branches == 0 ? first : new Piece(first.text(), first.ambiguity() + branches);
     }
 
-    private String sequence() {
-        StringBuilder out = new StringBuilder();
+    private Piece sequence() {
+        Piece out = Piece.NOTHING;
         while (!done() && peek() != '|' && peek() != ')') {
-            out.append(quantified());
+            out = out.then(quantified());
         }
-        return out.toString();
+        return out;
     }
 
-    private String quantified() {
-        String one = atom();
+    private Piece quantified() {
+        Piece one = atom();
         int least = 1;
         int most = 1;
         switch (peek()) {
@@ -176,13 +219,25 @@ final class PatternValues {
             take();
         }
         int times = least + (most == least ? 0 : Math.min(BEYOND_MINIMUM, most - least));
-        if ((long) one.length() * times > LONGEST) {
+        if ((long) one.text().length() * times > LONGEST) {
             throw new Unreadable();   // longer than a row will carry, so there is no row to write
         }
-        return one.repeat(times);
+        // A repetition that can stop early is a place to back up to whatever it wrote — even where it
+        // wrote nothing, since the engine still has the choice. Each copy carries what is under it,
+        // which is how a repetition of a repetition becomes the product of the two.
+        boolean variable = most != least;
+        int copies = Math.max(times, 1);
+        long cost = (long) copies * one.ambiguity() + (variable ? copies : 0);
+        if (cost > MOST_BACKTRACKING) {
+            // Not a construct this cannot read — every part of it was read. What it cannot do is
+            // check the answer in the time anybody has, and an answer it did not check is not one it
+            // offers.
+            throw new Unreadable();
+        }
+        return new Piece(one.text().repeat(times), (int) cost);
     }
 
-    private String atom() {
+    private Piece atom() {
         char c = peek();
         switch (c) {
             case '(' -> {
@@ -196,31 +251,31 @@ final class PatternValues {
                     }
                     take();
                 }
-                String inside = alternation();
+                Piece inside = alternation();
                 expect(')');
                 return inside;
             }
             case '[' -> {
                 take();
-                return characterClass();
+                return Piece.plain(characterClass());
             }
             case '\\' -> {
                 take();
-                return escaped();
+                return Piece.plain(escaped());
             }
             case '.' -> {
                 take();
-                return "a";
+                return Piece.plain("a");
             }
             case '^', '$' -> {
                 // The whole string is matched anyway, so an anchor at either end says nothing extra.
                 take();
-                return "";
+                return Piece.NOTHING;
             }
             case 0 -> throw new Unreadable();
             default -> {
                 take();
-                return String.valueOf(c);
+                return Piece.plain(String.valueOf(c));
             }
         }
     }

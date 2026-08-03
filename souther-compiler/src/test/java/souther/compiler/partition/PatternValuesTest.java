@@ -3,12 +3,14 @@ package souther.compiler.partition;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -217,6 +219,44 @@ class PatternValuesTest {
         for (String regex : beyondIt) {
             assertEquals(Optional.empty(), PatternValues.shortestAccepted(regex), regex);
         }
+    }
+
+    /**
+     * A pattern whose answer would take longer to check than anyone will wait.
+     *
+     * <p>Every part of {@code (?:x?x){40}} is a construct this reads. What it cannot do is check the
+     * answer: the value it would offer is forty characters, and the engine matching it has forty
+     * places to back up to, which multiply. Measured on this machine before the bound went in, thirty
+     * took 40ms, thirty-three took 172ms, and each further one doubled — so a valid model was enough
+     * to stop the compiler.
+     *
+     * <p>The check runs preemptively because the failure being guarded against is not a wrong answer
+     * but no answer at all.
+     */
+    @Test
+    void aPatternWithNestedVariableRepetitionIsNotEvaluated() {
+        assertTimeoutPreemptively(Duration.ofSeconds(5), () -> {
+            for (String regex : List.of("(?:x?x){30}", "(?:x?x){40}", "(?:x?x){200}",
+                    "(?:(?:x?x){8}){8}", "(?:(a|aa)x){30}")) {
+                assertEquals(Optional.empty(), PatternValues.shortestAccepted(regex), regex);
+            }
+        });
+    }
+
+    /**
+     * And what that bound must not cost.
+     *
+     * <p>A repetition over something of more than one length is not by itself expensive — what costs
+     * is how many copies of it end up in the answer, and a `+` or a `*` writes as few as it can. The
+     * rule for a domain name nests them three deep and is answered in under a millisecond, so a bound
+     * drawn at the shape rather than at what the answer asks for would refuse it for nothing.
+     */
+    @Test
+    void aNestedRepetitionWhoseAnswerIsShortIsStillRead() {
+        assertEquals(Optional.of("a.a"), PatternValues.shortestAccepted(
+                "[a-z0-9]([a-z0-9\\-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9\\-]*[a-z0-9])?)+"));
+        assertEquals(Optional.of("b"), PatternValues.shortestAccepted("(a|aa)*b"));
+        assertEquals(Optional.of("x".repeat(20)), PatternValues.shortestAccepted("(?:x?x){20}"));
     }
 
     /**
