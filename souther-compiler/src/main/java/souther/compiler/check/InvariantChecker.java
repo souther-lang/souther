@@ -1330,12 +1330,6 @@ public final class InvariantChecker {
         if (size != null) {
             return size;
         }
-        // A conditional is a number this walk can name but cannot say a form for: which branch it
-        // takes is not decided here. It is that term and nothing is guaranteed of it, so a clause
-        // reading it is owed and a guard naming it settles it.
-        if (e instanceof Ast.If && isNumeric(typeExpr(e, scope))) {
-            return bodyKey(e, scope);
-        }
         return isNumeric(typeExpr(e, scope)) ? pathKey(e, scope) : null;
     }
 
@@ -1875,6 +1869,13 @@ public final class InvariantChecker {
         if (read instanceof Ast.Binary bin && isArith(bin.op())) {
             return false;
         }
+        // A conditional is one of its branches and which one is not decided here. Saying only that it
+        // is that term reports every construction over one, including where both branches satisfy the
+        // clause. Reading it is checking the construction on each branch under its own condition,
+        // which this walk does not do, so it is not named until it does.
+        if (read instanceof Ast.If) {
+            return false;
+        }
         boolean[] all = {true};
         // A closure is not part of what names the value: the tables are rules about how many elements
         // there are and where they came from, and how each one is made has no bearing on either.
@@ -1947,10 +1948,6 @@ public final class InvariantChecker {
                         scope.binding(li.name(), bound, denotationOf(li.value(), scope)));
             }
             case Ast.Neg n -> typeExpr(n.operand(), scope);
-            case Ast.If iff -> {
-                Type t = typeExpr(iff.then(), scope);
-                yield t != null ? t : typeExpr(iff.els(), scope);
-            }
             case Ast.Binary b when isArith(b.op()) -> arithType(b, scope);
             default -> null;
         };

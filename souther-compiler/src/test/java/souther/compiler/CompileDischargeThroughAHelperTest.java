@@ -110,7 +110,7 @@ class CompileDischargeThroughAHelperTest {
     }
 
     @Test
-    void aBindingGivenSomethingThatIsNotALocationNamesItself() {
+    void aBindingGivenAConditionalIsThatConditional() {
         String m = """
                 module demo
                 data Qty = Int
@@ -125,7 +125,17 @@ class CompileDischargeThroughAHelperTest {
                     Qty(c)
                 }
                 """;
-        assertEquals(1, warnings(m), "a choice of two is neither of them");
+        // A conditional is one of its branches, and which one is not decided here. Naming it as a
+        // term of its own reported every construction over one, including where both branches satisfy
+        // the clause; leaving it unnamed reports none. Reading it is checking the construction on each
+        // branch under its own condition, which this walk does not do, so the run-time check stands
+        // for it. What is asked here is that the name answer as the expression does, either way.
+        assertEquals(warnings(m.replace("""
+                        {
+                    let c = if pick then cart.quantity else other.quantity
+                    Qty(c)
+                }""", "Qty(if pick then cart.quantity else other.quantity)")),
+                warnings(m), "the name answers as the conditional it was given does");
     }
 
     @Test
