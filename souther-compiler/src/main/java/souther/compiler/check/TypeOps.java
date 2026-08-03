@@ -970,7 +970,7 @@ public final class TypeOps {
 
     /** The type a newtype wraps ({@code data X = Y} gives {@code Y}), or null when {@code name} is not
      * a newtype — the implicit inner field is {@code value}. */
-    static Type newtypeInner(TypeName name, Symbols symbols) {
+    public static Type newtypeInner(TypeName name, Symbols symbols) {
         if (symbols.get(name) instanceof Ast.Data d && d.newtype()) {
             return fieldTypes(d, symbols).get("value");
         }
