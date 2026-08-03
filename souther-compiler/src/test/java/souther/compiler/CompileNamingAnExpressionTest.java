@@ -57,11 +57,6 @@ class CompileNamingAnExpressionTest {
             let mk (c, p, n, xs) = %s
             """;
 
-    /** How the same expression is written: in place, given a name, and given a name for that name. */
-    private static String inline(String e) {
-        return e;
-    }
-
     private static String named(String e) {
         return "{\n        let v = " + e + "\n        %s\n    }";
     }
@@ -106,7 +101,7 @@ class CompileNamingAnExpressionTest {
     @MethodSource("rows")
     void namingAnExpressionDoesNotChangeWhatIsKnownOfIt(Row row) {
         String construct = row.target() + "(%s)";
-        String written = said(module(row.target(), construct.formatted(inline(row.expression()))));
+        String written = said(module(row.target(), construct.formatted(row.expression())));
         String bound = said(module(row.target(),
                 named(row.expression()).formatted(construct.formatted("v"))));
         assertEquals(written, bound, "a name for the expression is that expression");
@@ -116,7 +111,7 @@ class CompileNamingAnExpressionTest {
     @MethodSource("rows")
     void aChainOfNamesEndsAtTheExpression(Row row) {
         String construct = row.target() + "(%s)";
-        String written = said(module(row.target(), construct.formatted(inline(row.expression()))));
+        String written = said(module(row.target(), construct.formatted(row.expression())));
         String chained = said(module(row.target(), "{\n        let v = " + row.expression()
                 + "\n        let w = v\n        let y = w\n        " + construct.formatted("y")
                 + "\n    }"));
@@ -138,5 +133,54 @@ class CompileNamingAnExpressionTest {
                 .replace("constructs " + row.target(), "constructs " + row.target() + ", Small")
                 .replace("-> " + row.target(), "-> " + row.target() + " | Small"));
         assertEquals(written, bound, "one value, one guard, one answer");
+    }
+
+    /** Values written into the source rather than computed: what a name for one has to carry is not
+     * a key but the text, since what a clause reading it says is decided by folding that text. */
+    private static final List<String> WRITTEN = List.of(
+            "Code(%s)|\"12\"",
+            "Code(%s)|\"ab\"",
+            "Table(%s)|[ Row { grade = 1 }, Row { grade = 2 } ]",
+            "Table(%s)|[ ]",
+            "Wrapped(%s)|Row { grade = 1 }",
+            "Wrapped(%s)|row(1)");
+
+    private static final String WRITTEN_MODULE = """
+            module demo
+            data Code = String
+                invariant String.matches("[0-9][0-9]", value)
+            data Row = { grade: Int }
+            data Table = List<Row>
+                invariant List.length(value) >= 1
+            data Wrapped = { of: Row }
+                invariant of.grade >= 1
+            let row (n: Int) = Row { grade = n }
+            behavior mk : (x: Int) -> %s
+                constructs Code, Table, Wrapped, Row
+            let mk (x) = %s
+            """;
+
+    private static List<String> written() {
+        return WRITTEN;
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("written")
+    void namingAWrittenValueDoesNotChangeWhatIsKnownOfIt(String row) {
+        String construct = row.split("\\|")[0];
+        String value = row.split("\\|")[1];
+        String target = construct.substring(0, construct.indexOf('('));
+        String inline = WRITTEN_MODULE.formatted(target, construct.formatted(value));
+        String bound = WRITTEN_MODULE.formatted(target,
+                "{\n        let v = " + value + "\n        " + construct.formatted("v") + "\n    }");
+        assertEquals(kindOf(said(inline)), kindOf(said(bound)),
+                "a name for a written value carries what was written");
+    }
+
+    /** Whether it was an error or not. Which check named the error is not what is being fixed here:
+     * a construction from a value written where it is built is the constant check's to report, and
+     * one from a name for that value is this check's, and they word it differently. */
+    private static String kindOf(String said) {
+        return said.startsWith("warnings=") ? said : "error";
     }
 }

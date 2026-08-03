@@ -123,12 +123,18 @@ public final class ConstEval {
 
     private static Optional<Object> arith(Ast.BinOp op, Object a, Object b) {
         if (a instanceof Long x && b instanceof Long y) {
-            return Optional.of(switch (op) {
-                case ADD -> x + y;
-                case SUB -> x - y;
-                case MUL -> x * y;
-                default -> throw new IllegalStateException();
-            });
+            // The same kernels the operators emit: an Int that overflows aborts rather than wrapping,
+            // so a fold that wrapped would answer what the run time refuses to compute.
+            try {
+                return Optional.of(switch (op) {
+                    case ADD -> Math.addExact(x, y);
+                    case SUB -> Math.subtractExact(x, y);
+                    case MUL -> Math.multiplyExact(x, y);
+                    default -> throw new IllegalStateException();
+                });
+            } catch (ArithmeticException _) {
+                return Optional.empty();
+            }
         }
         if (a instanceof BigDecimal x && b instanceof BigDecimal y) {
             return Optional.of(switch (op) {
@@ -165,10 +171,8 @@ public final class ConstEval {
     private static Optional<Object> matches(String pattern, String s) {
         try {
             return Optional.of(Pattern.compile(pattern).matcher(new Budgeted(s)).matches());
-        } catch (PatternSyntaxException | Budgeted.Spent _) {
-            return Optional.empty();   // the pattern check reports a bad pattern on its own
-        } catch (StackOverflowError _) {
-            return Optional.empty();
+        } catch (PatternSyntaxException | Budgeted.Spent | StackOverflowError _) {
+            return Optional.empty();   // a bad pattern is reported by the check that compiles it
         }
     }
 
