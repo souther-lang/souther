@@ -4,6 +4,7 @@ import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -12,6 +13,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 /**
  * Settles the type of every helper parameter the author left unwritten, reading it off the helper's
@@ -165,6 +167,7 @@ final class HelperParams {
                                         Map<String, Type> recursiveHelperFns,
                                         Map<Integer, Ast.Var> openUses) {
         BodyTyping typing = new BodyTyping(symbols, reqSigs, recursiveHelperFns);
+        Type answers = declaredReturn(h, symbols);
         Map<Integer, Type> found = new LinkedHashMap<>();
         List<Integer> value = new ArrayList<>();
         for (int idx : open) {
@@ -183,7 +186,7 @@ final class HelperParams {
                 if (env.holds(param.id())) {
                     continue;
                 }
-                Type t = typing.typeOf(name, body, env);
+                Type t = typing.typeOf(name, body, env, answers);
                 if (t == null) {
                     openUses.put(idx, typing.openUse());
                 } else {
@@ -202,13 +205,28 @@ final class HelperParams {
      * is not this parameter.
      */
     static boolean isApplied(Ast.Expr e, String name) {
-        if (e instanceof Ast.Apply call && call.reaches().equals(name)) {
+        return existsInScope(e, name,
+                x -> x instanceof Ast.Apply call && call.reaches().equals(name));
+    }
+
+    /** Whether {@code name} still means the parameter somewhere inside {@code e}. */
+    static boolean mentions(Ast.Expr e, String name) {
+        return existsInScope(e, name, x -> x instanceof Ast.Var v && v.name().equals(name));
+    }
+
+    /**
+     * Whether anything {@code name} still means the parameter in satisfies {@code leaf}. One search
+     * for every question asked of a body about its parameter: a binder that rebinds the name hides
+     * what it binds over, and that decision belongs in one place.
+     */
+    private static boolean existsInScope(Ast.Expr e, String name, Predicate<Ast.Expr> leaf) {
+        if (leaf.test(e)) {
             return true;
         }
         boolean[] found = {false};
         forEachInScope(e, name, c -> {
             if (!found[0]) {
-                found[0] = isApplied(c, name);
+                found[0] = existsInScope(c, name, leaf);
             }
         });
         return found[0];
@@ -235,13 +253,30 @@ final class HelperParams {
             case Ast.Match m -> {
                 f.accept(m.scrutinee());
                 for (Ast.Case c : m.cases()) {
-                    if (!name.equals(c.binding())) {
+                    if (!binds(c, name)) {
                         f.accept(c.body());
                     }
                 }
             }
             default -> TypeChecker.forEachChild(e, f);
         }
+    }
+
+    /** The return type {@code h} declares, or null where it declares none or names something unknown. */
+    private static Type declaredReturn(Ast.FnDef h, Symbols symbols) {
+        if (h.declaredReturn() == null) {
+            return null;
+        }
+        try {
+            return TypeOps.successType(h.declaredReturn(), symbols);
+        } catch (CompileException _) {
+            return null;   // a return type that does not resolve; the check reports it
+        }
+    }
+
+    /** Whether arm {@code c} binds {@code name} itself, so the name means the binding inside it. */
+    static boolean binds(Ast.Case c, String name) {
+        return name.equals(c.bindingName());
     }
 
     /**
@@ -269,15 +304,19 @@ final class HelperParams {
             this.recursiveHelperFns = recursiveHelperFns;
         }
 
-        /** The type {@code body} gives {@code name}, or null when it gives none. */
-        Type typeOf(String name, Ast.Expr body, Scope env) {
+        /**
+         * The type {@code body} gives {@code name}, or null when it gives none. {@code answers} is
+         * what the body as a whole is asked for — the helper's declared return type, where it wrote
+         * one — so a body that answers the parameter itself takes the type written beside it.
+         */
+        Type typeOf(String name, Ast.Expr body, Scope env, Type answers) {
             this.pinned = null;
             this.openUse = null;
             // A recursive helper's call is left standing rather than expanded, so the neighbouring
             // expression a parameter takes its type from can be one — `x + count(t)` reads `count(t)`
             // to type `x`. Its signature goes in here, once, and every inner scope is derived from
             // this one (spec 13.1). What is bound wins over it, as it does everywhere else.
-            visit(body, env.reaching(recursiveHelperFns), name);
+            visit(body, env.reaching(recursiveHelperFns), name, answers);
             return pinned;
         }
 
@@ -286,44 +325,78 @@ final class HelperParams {
             return openUse;
         }
 
-        private void visit(Ast.Expr e, Scope env, String name) {
-            if (pinned != null) {
+        /**
+         * Reads {@code e} for the type it gives {@code name}. {@code expected} is what this position
+         * is asked for, which every arm passes on in its own terms: an operand names it for the
+         * operand beside it, an arm for its sibling arms, a call for its arguments. A use of the
+         * parameter standing at a position that names a type is what settles it, so the same rule
+         * answers a bare use, a use one arm down, and a use inside a construction.
+         */
+        private void visit(Ast.Expr e, Scope env, String name, Type expected) {
+            if (pinned != null || !mentions(e, name)) {
                 return;
             }
             switch (e) {
+                case Ast.Var v when v.name().equals(name) -> {
+                    pin(expected);
+                    if (pinned == null && openUse == null) {
+                        openUse = v;   // a use of the parameter that no enclosing position typed
+                    }
+                    return;
+                }
                 case Ast.LetIn li -> {
-                    visitLet(li, env, name);
+                    visitLet(li, env, name, expected);
                     return;
                 }
                 case Ast.Binary bin -> {
-                    if (bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR) {
-                        if (isParam(bin.left(), name) || isParam(bin.right(), name)) {
-                            pin(Type.BOOL);
-                        }
-                    } else if (isParam(bin.left(), name)) {
-                        pin(typed(bin.right(), env));
-                    } else if (isParam(bin.right(), name)) {
-                        pin(typed(bin.left(), env));
-                    }
+                    Type both = bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR
+                            ? Type.BOOL : null;
+                    visitBeside(bin.left(), bin.right(), env, name, both);
+                    visitBeside(bin.right(), bin.left(), env, name, both);
+                    return;
                 }
                 case Ast.If iff -> {
-                    if (isParam(iff.cond(), name)) {
-                        pin(Type.BOOL);
-                    }
+                    visit(iff.cond(), env, name, Type.BOOL);
+                    visitBeside(iff.then(), iff.els(), env, name, expected);
+                    visitBeside(iff.els(), iff.then(), env, name, expected);
+                    return;
                 }
-                case Ast.Apply call -> pinFromCall(call, name);
-                case Ast.NewData nd -> pinFromInits(nd.typeName(), nd.inits(), name);
-                case Ast.Var v when v.name().equals(name) -> {
-                    if (openUse == null) {
-                        openUse = v;   // a use of the parameter that no enclosing position typed
-                    }
+                case Ast.Match m -> {
+                    visitMatch(m, env, name, expected);
+                    return;
+                }
+                case Ast.ListLit list -> {
+                    visitElements(list.elements(), env, name, expected);
+                    return;
+                }
+                case Ast.Apply call -> {
+                    visitArgs(call, env, name, expected);
+                    return;
+                }
+                case Ast.NewData nd -> {
+                    visitInits(nd, env, name);
+                    return;
                 }
                 default -> { }
             }
             if (pinned != null) {
                 return;
             }
-            forEachInScope(e, name, c -> visit(c, env, name));
+            forEachInScope(e, name, c -> visit(c, env, name, null));
+        }
+
+        /**
+         * Reads {@code e} for a position it shares with {@code sibling} — the two operands of an
+         * operator, the two arms of an {@code if} — which is asked for {@code expected} where the
+         * enclosing position states one and otherwise for whatever the sibling answers. The sibling is
+         * typed only when {@code e} holds the parameter at all: typing a neighbour to answer a
+         * question nothing in {@code e} asks is the walk's most expensive way of learning nothing.
+         */
+        private void visitBeside(Ast.Expr e, Ast.Expr sibling, Scope env, String name, Type expected) {
+            if (pinned != null || !mentions(e, name)) {
+                return;
+            }
+            visit(e, env, name, settles(expected) ? expected : typed(sibling, env));
         }
 
         /**
@@ -333,7 +406,7 @@ final class HelperParams {
          * {@code x} through {@code y}, which is the shape a call to another body-typed helper inlines
          * to. A binding of the parameter's own name shadows it, so its body is not walked for it.
          */
-        private void visitLet(Ast.LetIn li, Scope env, String name) {
+        private void visitLet(Ast.LetIn li, Scope env, String name, Type expected) {
             Type demanded = li.declaredType() == null ? null
                     : TypeOps.resolveParamType(li.declaredType(), symbols);
             if (isParam(li.value(), name)) {
@@ -342,18 +415,34 @@ final class HelperParams {
                     return;
                 }
                 Ast.Var use = openUse;
-                visit(li.body(), env, li.name());   // the binding stands for the parameter
+                visit(li.body(), env, li.name(), expected);   // the binding stands for the parameter
                 openUse = use;                      // its uses are the binding's, not the parameter's
                 if (pinned != null) {
                     return;
                 }
             }
-            visit(li.value(), env, name);
+            visit(li.value(), env, name, demanded);
             if (pinned != null || li.name().equals(name)) {
                 return;
             }
-            Type bound = demanded != null ? demanded : carried(li, env);
-            visit(li.body(), bound == null ? env : env.with(li.binder(), bound), name);
+            visit(li.body(), bound(li, demanded, env), name, expected);
+        }
+
+        /**
+         * {@code env} with what the binding is in force as. The written type says it, except where it
+         * names a type variable: the binding a helper's expansion writes carries the callee's declared
+         * type, so a combinator's {@code List<'a>} would stand in front of the {@code List<Int>} the
+         * argument actually is. A variable names nothing (spec 13.1), so what the value is wins there.
+         */
+        private Scope bound(Ast.LetIn li, Type demanded, Scope env) {
+            Type type = demanded;
+            if (type == null || Type.mentions(type, x -> x instanceof Type.Var)) {
+                Type value = carried(li, env);
+                if (value != null) {
+                    type = value;
+                }
+            }
+            return type == null ? env : env.with(li.binder(), type);
         }
 
         /** The type a binding carries into its body, or null where this scope cannot type its value. */
@@ -362,28 +451,209 @@ final class HelperParams {
             return value == null ? null : Elaborator.carriedType(li, value, symbols);
         }
 
-        /** The parameter passed where a callee declares the type of that argument. */
-        private void pinFromCall(Ast.Apply call, String name) {
-            List<Type> params = calleeParams(call.reaches());
-            if (params == null || params.size() != call.args().size()) {
+        /**
+         * The parameter standing where a sibling of it answers a value of the same type: an element
+         * of a collection literal beside another element. The positions have one type, so the one
+         * that names a type names the parameter's.
+         */
+        private void visitElements(List<Ast.Expr> elements, Scope env, String name, Type expected) {
+            if (elements.stream().noneMatch(e -> mentions(e, name))) {
                 return;
             }
-            for (int i = 0; i < call.args().size(); i++) {
-                if (isParam(call.args().get(i), name)) {
-                    pin(params.get(i));
+            Type element = expected instanceof Type.ListOf list && settles(list.element())
+                    ? list.element() : sibling(elements, env, name);
+            for (Ast.Expr e : elements) {
+                visit(e, env, name, element);
+                if (pinned != null) {
                     return;
                 }
             }
         }
 
-        /** The parameter written as a field of a construction takes that field's type. */
-        private void pinFromInits(Ast.Name typeName, List<Ast.FieldInit> inits, String name) {
-            if (!(symbols.get(typeName.denotes()) instanceof Ast.Data data)) {
+        /**
+         * The type an element that does not hold the parameter answers — the elements share one type,
+         * so one of them answering is the answer for all of them. An element holding the parameter is
+         * not asked: this scope cannot type it, which is the question being worked out.
+         */
+        private Type sibling(List<Ast.Expr> elements, Scope env, String name) {
+            for (Ast.Expr e : elements) {
+                if (!mentions(e, name)) {
+                    Type t = typed(e, env);
+                    if (t != null) {
+                        return t;
+                    }
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Each arm of a {@code match}, asked for what the match as a whole is asked for and otherwise
+         * for what a sibling arm answers — the arms have one type. An arm is read in a scope its own
+         * binding is in force over, which is what the scrutinee's type gives: the case a named-sum arm
+         * binds, or the element an {@code Option} arm unwraps.
+         */
+        private void visitMatch(Ast.Match m, Scope env, String name, Type expected) {
+            visit(m.scrutinee(), env, name, null);
+            if (pinned != null || m.cases().stream().noneMatch(c -> holds(c, name))) {
                 return;
             }
-            for (Ast.FieldInit init : inits) {
-                if (isParam(init.value(), name)) {
-                    pin(TypeOps.fieldType(data, init.name(), symbols));
+            Type scrutinee = typed(m.scrutinee(), env);
+            Type answers = settles(expected) ? expected : siblingArm(m, env, name, scrutinee);
+            for (Ast.Case c : m.cases()) {
+                if (holds(c, name)) {
+                    visit(c.body(), armScope(env, c, scrutinee), name, answers);
+                    if (pinned != null) {
+                        return;
+                    }
+                }
+            }
+        }
+
+        /** Whether arm {@code c} reads the parameter — an arm binding the name reads its own. */
+        private boolean holds(Ast.Case c, String name) {
+            return !binds(c, name) && mentions(c.body(), name);
+        }
+
+        /** The type an arm that does not hold the parameter answers — the arms share one type. */
+        private Type siblingArm(Ast.Match m, Scope env, String name, Type scrutinee) {
+            for (Ast.Case c : m.cases()) {
+                if (!holds(c, name)) {
+                    Type t = typed(c.body(), armScope(env, c, scrutinee));
+                    if (t != null) {
+                        return t;
+                    }
+                }
+            }
+            return null;
+        }
+
+        /** {@code env} with what arm {@code c} binds, where the scrutinee's type says what that is. */
+        private Scope armScope(Scope env, Ast.Case c, Type scrutinee) {
+            if (c.binding() == null || c.caseTypes().size() != 1) {
+                return env;
+            }
+            TypeName arm = c.caseTypes().get(0).denotes();
+            Type bound = scrutinee instanceof Type.OptionOf opt && TypeName.SOME.equals(arm)
+                    ? opt.element() : MatchElaborator.caseBindType(arm);
+            return bound == null ? env : MatchElaborator.bound(env, c.binding(), bound);
+        }
+
+        /**
+         * Each argument of a call, asked for the type the callee declares of that argument. Where the
+         * declaration carries type variables, they are solved at this call first — from the arguments
+         * that do not hold the parameter and from what the call as a whole is asked for — so a
+         * parameter passed where a signature says {@code 'a} takes what {@code 'a} turned out to be.
+         * Nothing is reported: a call the checker will refuse leaves the variables unsolved, and the
+         * parameter stays as open as it was.
+         */
+        private void visitArgs(Ast.Apply call, Scope env, String name, Type expected) {
+            Type.FnOf sig = calleeSignature(call.reaches());
+            List<Type> params = sig == null || sig.params().size() != call.args().size()
+                    ? null : solved(call, sig, env, name, expected);
+            for (int i = 0; i < call.args().size(); i++) {
+                Type param = params == null ? null : params.get(i);
+                Ast.Expr arg = call.args().get(i);
+                if (arg instanceof Ast.Block lambda && param instanceof Type.FnOf step) {
+                    visit(lambda.body(), walking(env, lambda, step), name, step.result());
+                } else {
+                    visit(arg, env, name, param);
+                }
+                if (pinned != null) {
+                    return;
+                }
+            }
+            visit(call.function(), env, name, null);
+        }
+
+        /**
+         * The signature's variables that a closure argument settles. A combinator names its element only
+         * through the closure it hands it to — nothing else in {@code List.map((v) -> v * 2, xs)} says
+         * what {@code xs} holds — so the closure's parameters are read the way a helper's are, by the
+         * same rule one step in. Only the positions its body determines are answered; the rest stay
+         * the variables the signature wrote, which unify against anything.
+         */
+        private void solveFromClosure(Ast.Expr arg, Type.FnOf step, Scope env,
+                                      Map<String, Type> bind, Ast.Apply call) {
+            if (!(arg instanceof Ast.Block lambda)
+                    || lambda.params().size() != step.params().size()) {
+                return;
+            }
+            for (int i = 0; i < lambda.params().size(); i++) {
+                Type t = new BodyTyping(symbols, reqSigs, recursiveHelperFns)
+                        .typeOf(lambda.params().get(i).name(), lambda.body(), env, null);
+                if (t != null) {
+                    // only a position the closure's body settled: unifying an undetermined one
+                    // against the variable the signature wrote would bind that variable to itself
+                    TypeOps.unify(step.params().get(i), t, bind, symbols, call.pos(), "closure");
+                }
+            }
+        }
+
+        /**
+         * {@code env} with the lambda's own parameters bound to the types the call gives them. A
+         * combinator says what it hands its closure — {@code List.map} over a {@code List<Int>} walks
+         * Ints — so an operand beside the lambda's parameter is a value of known type, as it is
+         * anywhere else. A parameter the call does not settle (an accumulator seeded with {@code []})
+         * is left unbound rather than bound to a bottom nothing follows from.
+         */
+        private Scope walking(Scope env, Ast.Block lambda, Type.FnOf step) {
+            Scope walked = env;
+            for (int i = 0; i < lambda.params().size() && i < step.params().size(); i++) {
+                Type t = step.params().get(i);
+                if (settles(t)) {
+                    walked = walked.with(lambda.params().get(i), t);
+                }
+            }
+            return walked;
+        }
+
+        /** {@code sig}'s parameter types with the variables this call site settles substituted in. */
+        private List<Type> solved(Ast.Apply call, Type.FnOf sig, Scope env, String name,
+                                  Type expected) {
+            if (!Type.mentions(sig, x -> x instanceof Type.Var)) {
+                return sig.params();
+            }
+            Map<String, Type> bind = new HashMap<>();
+            try {
+                if (settles(expected)) {
+                    // tolerantly: a result that does not fit leaves what the arguments settled
+                    // standing, as it does where a call is typed for real
+                    BottomInfer.pinResultTypeVars(sig.result(), expected, bind, symbols, call.pos(),
+                            "result of " + call.written());
+                }
+                for (int i = 0; i < call.args().size(); i++) {
+                    Ast.Expr arg = call.args().get(i);
+                    Type param = sig.params().get(i);
+                    if (mentions(arg, name)) {
+                        continue;   // this argument is the one being typed
+                    }
+                    if (param instanceof Type.FnOf step) {
+                        solveFromClosure(arg, step, env, bind, call);
+                        continue;
+                    }
+                    Type actual = typed(arg, env);
+                    if (actual != null) {
+                        TypeOps.unify(param, actual, bind, symbols, call.pos(), "argument");
+                    }
+                }
+            } catch (CompileException _) {
+                return sig.params();   // the call does not fit its signature; the check reports it
+            }
+            List<Type> out = new ArrayList<>();
+            for (Type param : sig.params()) {
+                out.add(TypeOps.substitute(param, bind));
+            }
+            return out;
+        }
+
+        /** Each field of a construction, asked for the type that field holds. */
+        private void visitInits(Ast.NewData nd, Scope env, String name) {
+            Ast.Data data = symbols.get(nd.typeName().denotes()) instanceof Ast.Data d ? d : null;
+            for (Ast.FieldInit init : nd.inits()) {
+                visit(init.value(), env, name,
+                        data == null ? null : TypeOps.fieldType(data, init.name(), symbols));
+                if (pinned != null) {
                     return;
                 }
             }
@@ -398,19 +668,21 @@ final class HelperParams {
          * states its parameter types only inside {@link CallElaborator}, so an argument of one is not
          * read here — the parameter is annotated instead.
          */
-        private List<Type> calleeParams(String fn) {
+        private Type.FnOf calleeSignature(String fn) {
             ReqSig req = reqSigs.get(fn);
             if (req != null) {
-                return req.params();
+                return new Type.FnOf(req.params(), req.success());
             }
             if (recursiveHelperFns.get(fn) instanceof Type.FnOf sig) {
-                return sig.params();
+                return sig;
             }
             // Only a kernel's signature: a Souther-bodied library callee here is a recursive
             // helper, and those are answered above with the types their call site instantiated.
             Prelude.PreludeEntry entry = Prelude.entry(fn);
-            return entry != null && entry.declaration().body() instanceof Ast.FnBody.Intrinsic
-                    ? entry.signature().params() : null;
+            if (entry == null || !(entry.declaration().body() instanceof Ast.FnBody.Intrinsic)) {
+                return null;
+            }
+            return new Type.FnOf(entry.signature().params(), entry.signature().result());
         }
 
         private boolean isParam(Ast.Expr e, String name) {
@@ -423,11 +695,20 @@ final class HelperParams {
          * collection carries — each of those leaves the parameter as open as it was.
          */
         private void pin(Type t) {
-            if (t == null || t instanceof Type.FnOf || Type.mentions(t, x -> x instanceof Type.Var)
-                    || Type.mentions(t, BottomInfer::isBottom)) {
-                return;
+            if (settles(t)) {
+                pinned = t;
             }
-            pinned = t;
+        }
+
+        /**
+         * Whether {@code t} is a type the parameter can take: not a function type (which must be
+         * written), not a signature's type variable, and not the bottom an empty collection carries —
+         * each of those leaves the parameter as open as it was.
+         */
+        private boolean settles(Type t) {
+            return t != null && !(t instanceof Type.FnOf)
+                    && !Type.mentions(t, x -> x instanceof Type.Var)
+                    && !Type.mentions(t, BottomInfer::isBottom);
         }
 
         /** The type of a neighbouring expression, or null where this scope cannot type it. */

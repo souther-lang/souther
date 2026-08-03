@@ -7,12 +7,14 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -164,6 +166,14 @@ public final class HelperTyping {
         }
         Map<Integer, Ast.Var> openUses = new HashMap<>();
         HelperParams.determine(h, open, env, body, symbols, reqSigs, recursiveHelperFns, openUses);
+        // What the body reaches for decides whether an annotation is what is missing. A helper does
+        // not reach a behavior at all, and the type of an argument to a call that cannot be written is
+        // nothing for the author to supply, so that call is what is reported.
+        if (open.stream().anyMatch(idx -> !env.holds(h.params().get(idx).binder().id()))) {
+            callToABehavior(body).ifPresent(call -> {
+                throw CallElaborator.noCallee(call);
+            });
+        }
         for (int idx : open) {
             Ast.FnParam p = h.params().get(idx);
             if (env.holds(p.binder().id())) {
@@ -178,6 +188,16 @@ public final class HelperTyping {
                     "helper `let " + h.name() + "` parameter `" + p.name() + "` is not determined by"
                             + " its body; annotate it with its type (spec 13.1)");
         }
+    }
+
+    /** A call in {@code body} to a behavior, which no helper reaches (spec [#calling-a-behavior]). */
+    private static Optional<Ast.Apply> callToABehavior(Ast.Expr body) {
+        if (body instanceof Ast.Apply call && call.denotes() instanceof ValueName.Behavior) {
+            return Optional.of(call);
+        }
+        List<Ast.Apply> found = new ArrayList<>();
+        TypeChecker.forEachChild(body, child -> callToABehavior(child).ifPresent(found::add));
+        return found.isEmpty() ? Optional.empty() : Optional.of(found.get(0));
     }
 
     /**
