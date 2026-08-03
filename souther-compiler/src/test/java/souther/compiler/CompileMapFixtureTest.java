@@ -35,6 +35,46 @@ class CompileMapFixtureTest {
                 """);
     }
 
+    /** The empty map has two spellings and a row takes both: the brackets a row writes a collection
+     * with, and the name the body it is exampling writes. */
+    @Test
+    void aRowNamesTheEmptyMapTheWayTheBodyWritesIt() {
+        Compiler.compile("""
+                module demo
+
+                data In = { names: List<String> }
+                data Out = { counts: Map<String, Int> }
+
+                behavior count : (i: In) -> Out constructs Out
+
+                let count (i) = Out {
+                    counts = List.fold((acc, n) -> Map.upsert(n, 1, c -> c + 1, acc), Map.empty, i.names)
+                }
+
+                example count
+                    | "no names, no counts" : (In { names = [] }) -> Out { counts = Map.empty }
+                """);
+    }
+
+    /** A `Set` field the same way, on the input side. */
+    @Test
+    void aRowNamesTheEmptySet() {
+        Compiler.compile("""
+                module demo
+
+                data In = { tags: Set<String> }
+                data Out = { n: Int }
+
+                behavior count : (i: In) -> Out constructs Out
+
+                let count (i) = Out { n = Set.size(i.tags) }
+
+                example count
+                    | "no tags" : (In { tags = Set.empty }) -> Out { n = 0 }
+                    | "two tags" : (In { tags = Set.fromList([ "a", "b" ]) }) -> Out { n = 2 }
+                """);
+    }
+
     @Test
     void aMapFixtureIsAlsoAnInput() {
         Compiler.compile("""
