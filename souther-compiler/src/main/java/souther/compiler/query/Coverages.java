@@ -57,8 +57,9 @@ final class Coverages {
      *                     value being written is not the same as the comparison having been evaluated.
      */
     static PartitionEvidence of(Ast.SpecBehavior behavior, Sig sig, Symbols symbols, Core body,
-                                CoverageSites.Plan plan, List<RowOutcome> rows,
+                                CoverageSites.Plan plan, souther.compiler.query.Adequacy.Observed observed,
                                 boolean armsMeasured) {
+        List<RowOutcome> rows = observed.rows();
         List<String> parameters = behavior.params().stream().map(Ast.Param::name).toList();
         Partitions.Partitioning partitioning = partitioningOf(behavior, sig, symbols, body, plan);
 
@@ -73,10 +74,11 @@ final class Coverages {
                 continue;
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, parameters, rows));
+                axes.add(coverageOf(axis, parameters, rows, observed.complete()));
                 divided.add(axis);
             }
-            boundaries.addAll(boundariesOf(axis, parameters, rows, symbols, armsMeasured));
+            boundaries.addAll(boundariesOf(axis, parameters, rows, symbols,
+                    armsMeasured && observed.complete()));
         }
         return new PartitionEvidence(axes, boundaries, pairsOf(divided, parameters, rows),
                 notDerivable, partitioning.omitted());
@@ -139,7 +141,8 @@ final class Coverages {
     }
 
     private static PartitionEvidence.AxisCoverage coverageOf(Axis axis, List<String> parameters,
-                                                             List<RowOutcome> rows) {
+                                                             List<RowOutcome> rows,
+                                                             boolean everythingWasSeen) {
         Set<String> covered = new LinkedHashSet<>();
         int unclassified = 0;
         for (RowOutcome row : rows) {
@@ -150,8 +153,9 @@ final class Coverages {
                 unclassified++;
             }
         }
-        MeasurementStatus status = rows.isEmpty() ? MeasurementStatus.UNAVAILABLE
-                : unclassified == 0 ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
+        MeasurementStatus status = rows.isEmpty() && everythingWasSeen ? MeasurementStatus.UNAVAILABLE
+                : unclassified == 0 && everythingWasSeen ? MeasurementStatus.COMPLETE
+                        : MeasurementStatus.PARTIAL;
         return new PartitionEvidence.AxisCoverage(axis.id().toString(), axis.path().toString(),
                 axis.classes().stream().map(PartitionClass::id).toList(), covered, unclassified,
                 status);
@@ -171,19 +175,31 @@ final class Coverages {
             boolean armsMeasured) {
         List<PartitionEvidence.BoundaryCoverage> out = new ArrayList<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
-            boolean decided = rows.isEmpty() ? false
-                    : each.origin() instanceof OriginRef.GuardOrigin ? armsMeasured : true;
-            boolean met = decided && switch (each.origin()) {
-                case OriginRef.GuardOrigin g ->
-                        evaluatedAt(axis, parameters, rows, each.value(), g);
+            boolean available = !rows.isEmpty()
+                    && (!(each.origin() instanceof OriginRef.GuardOrigin) || armsMeasured);
+            Met met = !available ? Met.UNDECIDED : switch (each.origin()) {
+                case OriginRef.GuardOrigin g -> evaluatedAt(axis, parameters, rows, each.value(), g);
                 default -> writtenAt(axis, parameters, rows, each.value());
             };
             out.add(new PartitionEvidence.BoundaryCoverage(idOf(each.axis()),
-                    each.origin().describe(), each.side(), plain(each.value()), met,
-                    decided ? MeasurementStatus.COMPLETE : MeasurementStatus.UNAVAILABLE));
+                    each.origin().describe(), each.side(), plain(each.value()),
+                    met == Met.YES,
+                    met == Met.UNDECIDED ? MeasurementStatus.UNAVAILABLE
+                            : met == Met.UNREADABLE ? MeasurementStatus.PARTIAL
+                                    : MeasurementStatus.COMPLETE));
         }
         return out;
     }
+
+    /**
+     * Whether a row was at a boundary, and whether that could be told at all.
+     *
+     * <p>Three answers, because a value the observer could not read is not a value that missed. A row
+     * writing the very number the rule names, whose observation was cut short by a limit somewhere
+     * else in the same input, reads as "no row is at this boundary" — which is a sentence about the
+     * model that is not true.
+     */
+    private enum Met { YES, NO, UNREADABLE, UNDECIDED }
 
     /**
      * Whether a row wrote the boundary value <em>and</em> got as far as the comparison that cares
@@ -194,43 +210,61 @@ final class Coverages {
      * tried the boundary would report a rule as exercised that nothing has run. Reaching either arm of
      * the {@code if} is enough: the comparison was evaluated to get to either one.
      */
-    private static boolean evaluatedAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                       ObservedValue boundary, OriginRef.GuardOrigin origin) {
+    private static Met evaluatedAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
+                                   ObservedValue boundary, OriginRef.GuardOrigin origin) {
+        boolean unreadable = false;
         for (RowOutcome row : rows) {
             ObservedValue at = RowClasses.valueAt(row, parameters, axis.path());
-            if (at != null && sameNumber(at, boundary)
+            if (!readable(at)) {
+                unreadable = true;
+                continue;
+            }
+            if (sameNumber(at, boundary)
                     && (row.hits().contains(origin.guard().siteIndexThen())
                             || row.hits().contains(origin.guard().siteIndexElse()))) {
-                return true;
+                return Met.YES;
             }
         }
-        return false;
+        return unreadable ? Met.UNREADABLE : Met.NO;
     }
 
-    /** The boundaries a row could have been written at and none was. A guard's line is not one of
-     * these: whether a row met it is not decided by the value alone, and nothing decides it until the
-     * arms are instrumented. */
+    /** The boundaries a row could have been written at and demonstrably none was. A guard's line is
+     * not one of these — whether a row met it is not decided by the value alone — and neither is one
+     * whose position some row wrote unreadably, since a row generated for it may be a row that is
+     * already there. */
     static List<BoundaryObligation> unmet(Axis axis, List<String> parameters, List<RowOutcome> rows,
                                           Symbols symbols) {
         List<BoundaryObligation> out = new ArrayList<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
             if (!(each.origin() instanceof OriginRef.GuardOrigin)
-                    && !writtenAt(axis, parameters, rows, each.value())) {
+                    && writtenAt(axis, parameters, rows, each.value()) == Met.NO) {
                 out.add(each);
             }
         }
         return out;
     }
 
-    private static boolean writtenAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                     ObservedValue boundary) {
+    private static Met writtenAt(Axis axis, List<String> parameters, List<RowOutcome> rows,
+                                 ObservedValue boundary) {
+        boolean unreadable = false;
         for (RowOutcome row : rows) {
             ObservedValue at = RowClasses.valueAt(row, parameters, axis.path());
-            if (at != null && sameNumber(at, boundary)) {
-                return true;
+            if (readable(at)) {
+                if (sameNumber(at, boundary)) {
+                    return Met.YES;
+                }
+            } else {
+                unreadable = true;
             }
         }
-        return false;
+        return unreadable ? Met.UNREADABLE : Met.NO;
+    }
+
+    /** Whether an observation says what the value was. A limit reached elsewhere in the same input
+     * leaves this position truncated, and a truncation is not a number that missed. */
+    private static boolean readable(ObservedValue at) {
+        return at != null && !(at instanceof ObservedValue.Unknown)
+                && !(at instanceof ObservedValue.Truncated);
     }
 
     /** A newtype and the number it wraps are the same value at this position, which is how the row

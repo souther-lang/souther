@@ -157,9 +157,23 @@ public final class Generator {
     public static GenerationResult fill(Subject subject,
                                         List<Map<AxisId, Classification>> existing,
                                         CandidateCheck check) {
-        List<Axis> axes = ordered(subject);
+        List<Axis> ordered = ordered(subject);
+        // A position where some row's value could not be read is a position nothing is known about.
+        // A row generated for a class there may be a row that is already written, and telling an
+        // author to write one is worse than saying nothing: it is a specific piece of work that is
+        // already done.
+        List<Incompleteness> undecided = new ArrayList<>();
+        List<Axis> axes = new ArrayList<>();
+        for (Axis axis : ordered) {
+            if (readEverywhere(axis, existing)) {
+                axes.add(axis);
+            } else {
+                undecided.add(Incompleteness.of(Incompleteness.Code.VALUE_UNREADABLE,
+                        axis.path().toString()));
+            }
+        }
         if (axes.isEmpty()) {
-            return GenerationResult.NONE;
+            return new GenerationResult(List.of(), List.of(), undecided);
         }
         // Both, because one does not imply the other. A behavior with one divided position has no
         // pairs at all and can still have a class nothing has been written in, and a set of rows that
@@ -172,7 +186,7 @@ public final class Generator {
 
         List<GeneratedRow> rows = new ArrayList<>();
         List<UnresolvedCombination> unresolved = new ArrayList<>();
-        List<Incompleteness> incompleteness = new ArrayList<>();
+        List<Incompleteness> incompleteness = new ArrayList<>(undecided);
         while (!pairs.isEmpty() || !singles.isEmpty()) {
             if (rows.size() >= MAX_ROWS) {
                 int left = pairs.size() + singles.size();
@@ -308,6 +322,19 @@ public final class Generator {
             }
         }
         return all;
+    }
+
+    /** Whether every existing row said where it sat at this position. One that did not leaves the
+     * position undecided: what the rows cover there is unknown, so what they do not cover is unknown
+     * too. */
+    private static boolean readEverywhere(Axis axis, List<Map<AxisId, Classification>> existing) {
+        for (Map<AxisId, Classification> row : existing) {
+            Classification where = row.get(axis.id());
+            if (where != null && !(where instanceof Classification.Classified)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /** Which class each ordered axis fell in for one row, or -1 where the row did not say. */

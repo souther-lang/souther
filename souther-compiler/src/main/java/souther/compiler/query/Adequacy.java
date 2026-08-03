@@ -137,7 +137,7 @@ public final class Adequacy {
             if (!prepared.present() || !scope.present() || !sigs.present()) {
                 return Answer.absent();
             }
-            Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
+            Map<String, Observed> byTarget = rowsOf(db, name);
             Map<String, SignatureEvidence> out = new LinkedHashMap<>();
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 Sig sig = sigs.value().get(behavior.name());
@@ -145,7 +145,7 @@ public final class Adequacy {
                     continue;   // a behavior whose signature did not work out has nothing to measure
                 }
                 out.put(behavior.name(), evidenceOf(sig, scope.value(),
-                        byTarget.getOrDefault(behavior.name(), List.of())));
+                        byTarget.getOrDefault(behavior.name(), Observed.NONE)));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -179,7 +179,7 @@ public final class Adequacy {
                     checked == null ? Map.of() : checked.behaviorBodies();
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
-            Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
+            Map<String, Observed> byTarget = rowsOf(db, name);
             // Whether a guard's boundary can be decided at all: meeting it takes the comparison having
             // been evaluated, which only the instrumented classes say, and only a build that asked
             // for that has them.
@@ -196,7 +196,7 @@ public final class Adequacy {
                     continue;
                 }
                 out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
-                        plan, byTarget.getOrDefault(spec.name(), List.of()), armsMeasured));
+                        plan, byTarget.getOrDefault(spec.name(), Observed.NONE), armsMeasured));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -309,10 +309,10 @@ public final class Adequacy {
             souther.compiler.check.TypeChecker.Checked checked =
                     db.ask(new Bodies.Checked(name)).value();
             Set<String> withBodies = checked == null ? Set.of() : checked.behaviorBodies().keySet();
-            Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
+            Map<String, Observed> byTarget = rowsOf(db, name);
             Set<Integer> lit = new LinkedHashSet<>();
-            for (List<RowOutcome> rows : byTarget.values()) {
-                for (RowOutcome row : rows) {
+            for (Observed observed : byTarget.values()) {
+                for (RowOutcome row : observed.rows()) {
                     lit.addAll(row.hits());
                 }
             }
@@ -321,8 +321,9 @@ public final class Adequacy {
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 List<souther.compiler.coverage.CoverageSites.Site> arms = plan.sites().stream()
                         .filter(site -> site.behavior().equals(behavior.name())).toList();
+                Observed observed = byTarget.getOrDefault(behavior.name(), Observed.NONE);
                 if (!measured || !withBodies.contains(behavior.name())
-                        || byTarget.getOrDefault(behavior.name(), List.of()).isEmpty()) {
+                        || observed.rows().isEmpty()) {
                     // Nothing to measure, or nothing asking. A behavior with no body has no arms; one
                     // no row names has not been opted into the measurement, and reaching it through
                     // somebody else's row is not opting in.
@@ -332,8 +333,13 @@ public final class Adequacy {
                 Set<Integer> covered = new LinkedHashSet<>(lit);
                 covered.retainAll(arms.stream()
                         .map(souther.compiler.coverage.CoverageSites.Site::index).toList());
-                out.put(behavior.name(),
-                        new BranchEvidence(arms, covered, MeasurementStatus.COMPLETE));
+                // A row that did not finish went somewhere before it stopped, and what it went through
+                // was dropped with it. So the arms it did not light are undecided rather than
+                // unreached, and the whole measure says so — the arms that were lit are still lit.
+                boolean partial = !observed.complete() || observed.rows().stream()
+                        .anyMatch(row -> row.disposition() == Disposition.INCOMPLETE);
+                out.put(behavior.name(), new BranchEvidence(arms, covered,
+                        partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE));
             }
             return Answer.of(Map.copyOf(out));
         }
@@ -341,22 +347,108 @@ public final class Adequacy {
 
     /** Every row this module's sources observed, grouped by the behavior it is about, run against the
      * classes that record where they went. */
-    static Map<String, List<RowOutcome>> rowsOf(Db db, String module) {
+    /**
+     * What a module's sources saw of one behavior: the rows, and what stopped them being seen.
+     *
+     * <p>Both, and carried together, because a measure that reads only the rows cannot tell a case no
+     * row covers from a case a row it never saw covers. The evaluation keeps the two apart on purpose
+     * — a source with no runtime to run against contributes no rows and one reason — and an aggregate
+     * that kept only the rows would answer as if the reason were nothing.
+     *
+     * @param rows           what was observed
+     * @param incompleteness why what was observed is not all there was
+     */
+    public record Observed(List<RowOutcome> rows, List<Incompleteness> incompleteness) {
+
+        public static final Observed NONE = new Observed(List.of(), List.of());
+
+        public Observed {
+            rows = List.copyOf(rows);
+            incompleteness = List.copyOf(incompleteness);
+        }
+
+        /** Whether everything there was to see was seen. Only then does an unreached thing mean
+         * nothing reaches it, rather than nothing was watching. */
+        public boolean complete() {
+            return incompleteness.isEmpty();
+        }
+
+        /** The status a measure over these rows takes before its own reading is considered. */
+        public MeasurementStatus status() {
+            return complete() ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
+        }
+    }
+
+    /**
+     * Every behavior of one module, with what its sources saw and what stopped them.
+     *
+     * <p>A reason with no behavior to attach it to — a whole source that could not be evaluated —
+     * belongs to all of them: nothing in it was seen, so nothing about any behavior it holds rows for
+     * is settled.
+     */
+    static Map<String, Observed> rowsOf(Db db, String module) {
         List<String> origins = db.ask(new Front.ExampleOrigins(module)).value();
-        Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
+        Map<String, List<RowOutcome>> rows = new LinkedHashMap<>();
+        Map<String, List<Incompleteness>> stopped = new LinkedHashMap<>();
+        List<Incompleteness> everywhere = new ArrayList<>();
         if (origins == null) {
-            return byTarget;
+            return Map.of();
         }
         for (String sourceId : new LinkedHashSet<>(origins)) {
             Output.Examples.Of observed = db.ask(new ProbedExamples(module, sourceId)).value();
             if (observed == null) {
+                // The source was not evaluated at all. Which behaviors it wrote rows for is exactly
+                // what cannot be read, so it counts against every one of them.
+                everywhere.add(Incompleteness.of(Incompleteness.Code.RUNTIME_ABSENT, sourceId));
                 continue;
             }
             for (RowOutcome row : observed.rows()) {
-                byTarget.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
+                rows.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
+            }
+            for (Incompleteness gap : observed.incompleteness()) {
+                stopped.computeIfAbsent(gap.subject(), _ -> new ArrayList<>()).add(gap);
             }
         }
-        return byTarget;
+        Set<String> named = new LinkedHashSet<>(rows.keySet());
+        named.addAll(stopped.keySet());
+        Map<String, Observed> out = new LinkedHashMap<>();
+        for (String behavior : named) {
+            List<Incompleteness> gaps = new ArrayList<>(everywhere);
+            gaps.addAll(stopped.getOrDefault(behavior, List.of()));
+            out.put(behavior, new Observed(rows.getOrDefault(behavior, List.of()), gaps));
+        }
+        return new WithFallback(out, everywhere);
+    }
+
+    /** The map above, answering for a behavior nothing named with whatever stopped every source. A
+     * behavior with no rows of its own is still not measurable where a source went unread. */
+    private static final class WithFallback extends java.util.AbstractMap<String, Observed> {
+
+        private final Map<String, Observed> known;
+        private final Observed fallback;
+
+        WithFallback(Map<String, Observed> known, List<Incompleteness> everywhere) {
+            this.known = known;
+            this.fallback = everywhere.isEmpty() ? Observed.NONE
+                    : new Observed(List.of(), everywhere);
+        }
+
+        @Override
+        public Observed get(Object key) {
+            Observed there = known.get(key);
+            return there != null ? there : fallback;
+        }
+
+        @Override
+        public Observed getOrDefault(Object key, Observed absent) {
+            Observed there = known.get(key);
+            return there != null ? there : (fallback.complete() ? absent : fallback);
+        }
+
+        @Override
+        public Set<Entry<String, Observed>> entrySet() {
+            return known.entrySet();
+        }
     }
 
     /**
@@ -403,7 +495,7 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.of(
                             Coverage.sourceIdOf(db, name), bodies);
-            Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
+            Map<String, Observed> byTarget = rowsOf(db, name);
             Symbols symbols = scope.value();
 
             Map<String, Filling> out = new LinkedHashMap<>();
@@ -419,7 +511,7 @@ public final class Adequacy {
                 }
                 try {
                     out.put(spec.name(), rowsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
-                            byTarget.getOrDefault(spec.name(), List.of()), building));
+                            byTarget.getOrDefault(spec.name(), Observed.NONE), building));
                 } catch (LinkageError _) {
                     // The runtime is not on this host's classpath, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -448,8 +540,9 @@ public final class Adequacy {
 
         private static Filling rowsFor(
                 Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
-                souther.compiler.coverage.CoverageSites.Plan plan, List<RowOutcome> rows,
+                souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
                 ExampleVerifier.Construction building) {
+            List<RowOutcome> rows = observed.rows();
             List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
             souther.compiler.partition.Partitions.Partitioning partitioning =
                     Coverages.partitioningOf(spec, sig, symbols, body, plan);
@@ -614,7 +707,8 @@ public final class Adequacy {
         return TypeOps.isSumType(t, symbols) ? TypeOps.leafCases(t, symbols) : Set.of();
     }
 
-    static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, List<RowOutcome> rows) {
+    static SignatureEvidence evidenceOf(Sig sig, Symbols symbols, Observed seen) {
+        List<RowOutcome> rows = seen.rows();
         Set<TypeName> declaredOut = coverableCases(sig.out(), symbols);
         Set<TypeName> specified = new LinkedHashSet<>();
         Set<TypeName> observed = new LinkedHashSet<>();
@@ -681,7 +775,11 @@ public final class Adequacy {
         }
         // Nothing was measured where nothing was written: a behavior with no rows has no gaps to
         // report, only an absence of evidence, and saying so is not the same as saying it is covered.
-        MeasurementStatus status = rows.isEmpty() ? MeasurementStatus.UNAVAILABLE
+        // A source that could not be evaluated is a set of rows nothing has seen, and a case they may
+        // have covered reads exactly like a case nothing covers.
+        partial |= !seen.complete();
+        MeasurementStatus status = rows.isEmpty() && seen.complete()
+                ? MeasurementStatus.UNAVAILABLE
                 : partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
         return new SignatureEvidence(output, inputs, status);
     }

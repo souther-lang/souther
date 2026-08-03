@@ -20,8 +20,10 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * How well a model's {@code example}s cover it, as something a person reads and a build reads.
@@ -136,15 +138,27 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
      * nothing leaves an empty report rather than the whole one. */
     public AdequacyReport only(String module, String behavior) {
         List<ModuleReport> kept = new ArrayList<>();
+        MeasurementStatus overall = MeasurementStatus.COMPLETE;
         for (ModuleReport m : modules) {
             if (module != null && !module.equals(m.module())) {
                 continue;
             }
             List<BehaviorReport> behaviors = behavior == null ? m.behaviors()
                     : m.behaviors().stream().filter(b -> behavior.equals(b.name())).toList();
-            kept.add(new ModuleReport(m.module(), m.status(), m.incompleteness(), behaviors));
+            // What a filtered report says has to be about what it shows. A reason another behavior
+            // could not be measured, carried into a report that does not mention that behavior, is a
+            // status nothing in front of the reader accounts for.
+            Set<String> shown = behaviors.stream().map(BehaviorReport::name)
+                    .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+            List<Incompleteness> gaps = behavior == null ? m.incompleteness()
+                    : m.incompleteness().stream()
+                            .filter(gap -> shown.contains(gap.subject())).toList();
+            MeasurementStatus status = gaps.isEmpty()
+                    ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
+            kept.add(new ModuleReport(m.module(), status, gaps, behaviors));
+            overall = overall.and(status);
         }
-        return new AdequacyReport(schemaVersion, compilerVersion, status, List.copyOf(kept));
+        return new AdequacyReport(schemaVersion, compilerVersion, overall, List.copyOf(kept));
     }
 
     /** How many rows are recorded and waiting for a {@code let}, across everything reported. */
@@ -250,18 +264,24 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                 partition.axes().size(), covered, classes, pairs(partition.pairs())));
         for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
             for (String missing : axis.uncovered()) {
-                out.append(String.format("      · no row is in `%s`%s%n", missing,
-                        axis.status() == MeasurementStatus.PARTIAL ? " (undecided)" : ""));
+                out.append(String.format("      · %s `%s`%n",
+                        axis.status() == MeasurementStatus.PARTIAL
+                                ? "undecided whether a row is in" : "no row is in", missing));
             }
         }
         List<PartitionEvidence.BoundaryCoverage> measured = partition.boundaries().stream()
                 .filter(b -> b.status() != MeasurementStatus.UNAVAILABLE).toList();
         long met = measured.stream().filter(PartitionEvidence.BoundaryCoverage::hit).count();
         long deferred = partition.boundaries().size() - measured.size();
-        out.append(String.format("    boundary    %d/%d%s%n", met, measured.size(),
-                deferred == 0 ? "" : "   (" + deferred + " not measured until branches are)"));
+        long undecided = measured.stream()
+                .filter(b -> b.status() == MeasurementStatus.PARTIAL).filter(b -> !b.hit()).count();
+        out.append(String.format("    boundary    %d/%d%s%s%n", met, measured.size(),
+                deferred == 0 ? "" : "   (" + deferred + " not measured until branches are)",
+                undecided == 0 ? "" : "   (" + undecided + " undecided: a value was not read)"));
+        // Named only where the position was read on every row. A row writing the very number the rule
+        // names, whose observation was cut short elsewhere in the same input, is not a row that missed.
         for (PartitionEvidence.BoundaryCoverage boundary : measured) {
-            if (!boundary.hit()) {
+            if (!boundary.hit() && boundary.status() == MeasurementStatus.COMPLETE) {
                 out.append(String.format("      · no row is at %s = %s (%s)%n", boundary.axis(),
                         boundary.value(), boundary.origin()));
             }
@@ -290,10 +310,16 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             }
             return;
         }
-        out.append(String.format("    branch      %d/%d%n", branch.covered().size(),
-                branch.all().size()));
+        boolean decided = branch.status() == MeasurementStatus.COMPLETE;
+        out.append(String.format("    branch      %d/%d%s%n", branch.covered().size(),
+                branch.all().size(), decided ? "" : "   (undecided: a row was not read)"));
         // The position alone: an arm is part of a body, and a body is written in the module's own
         // source, which the section this is under already names. Only a row can be somewhere else.
+        // Named only where every row was read: an arm a row that never finished might have gone
+        // through is undecided, and calling it unreached sends the author after a row that exists.
+        if (!decided) {
+            return;
+        }
         for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
             out.append(String.format("      · no row goes through `%s` (%s)%n", arm.label(),
                     arm.at().pos()));
