@@ -18,9 +18,8 @@ public interface RepresentativeSource {
 
     List<FixtureTemplate> candidates();
 
-    static RepresentativeSource of(String... texts) {
-        List<FixtureTemplate> templates = java.util.Arrays.stream(texts)
-                .map(FixtureTemplate::new).toList();
+    static RepresentativeSource of(FixtureTemplate... values) {
+        List<FixtureTemplate> templates = List.of(values);
         return () -> templates;
     }
 

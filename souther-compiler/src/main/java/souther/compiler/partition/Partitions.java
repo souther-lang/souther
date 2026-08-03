@@ -191,15 +191,15 @@ public final class Partitions {
         if (type == Type.BOOL) {
             return List.of(
                     PartitionClass.of("true", "true", v -> isBool(v, true),
-                            RepresentativeSource.of("true")),
+                            RepresentativeSource.of(FixtureTemplate.bool(true))),
                     PartitionClass.of("false", "false", v -> isBool(v, false),
-                            RepresentativeSource.of("false")));
+                            RepresentativeSource.of(FixtureTemplate.bool(false))));
         }
         if (type instanceof Type.OptionOf option) {
             List<FixtureTemplate> some = representativesOf(option.element(), symbols);
             return List.of(
-                    PartitionClass.of("None", "None",
-                            v -> v instanceof ObservedValue.Absent, RepresentativeSource.of("None")),
+                    PartitionClass.of("None", "None", v -> v instanceof ObservedValue.Absent,
+                            RepresentativeSource.of(FixtureTemplate.none())),
                     some.isEmpty()
                             ? PartitionClass.ungeneratable("Some", "Some",
                                     v -> !(v instanceof ObservedValue.Absent),
@@ -229,7 +229,7 @@ public final class Partitions {
         };
         if (!(symbols.get(leaf) instanceof Ast.Data data)) {
             return PartitionClass.of(leaf.name(), leaf.name(), is,
-                    RepresentativeSource.of(leaf.name()));   // a unit case is its own name
+                    RepresentativeSource.of(FixtureTemplate.unitCase(leaf)));   // naming it builds it
         }
         if (data.newtype()) {
             List<FixtureTemplate> inner = representativesOf(TypeOps.newtypeInner(leaf, symbols),
@@ -238,9 +238,7 @@ public final class Partitions {
                     ? PartitionClass.ungeneratable(leaf.name(), leaf.name(), is,
                             "no value of what `" + leaf.name() + "` wraps can be written")
                     : PartitionClass.of(leaf.name(), leaf.name(), is,
-                            () -> inner.stream()
-                                    .map(t -> new FixtureTemplate(leaf.name() + "(" + t.text() + ")"))
-                                    .toList());
+                            () -> inner.stream().map(t -> FixtureTemplate.newtype(leaf, t)).toList());
         }
         // A record case is written field by field, which is the generator's composition and not a
         // value this position can hand over on its own.
@@ -318,21 +316,24 @@ public final class Partitions {
 
     // --- small helpers ----------------------------------------------------------------------------
 
-    private static List<FixtureTemplate> representativesOf(Type type, Symbols symbols) {
+    /** Values that could stand for a type wherever nothing else has been said about the position — the
+     * inner value of a newtype, a field no axis divides. A record is not one of these: its fields are
+     * composed, which is the generator's work and not a value this can hand over. */
+    static List<FixtureTemplate> representativesOf(Type type, Symbols symbols) {
         if (type == null) {
             return List.of();
         }
         if (type == Type.INT) {
-            return List.of(new FixtureTemplate("0"));
+            return List.of(FixtureTemplate.integer(0));
         }
         if (type == Type.DECIMAL) {
-            return List.of(new FixtureTemplate("0m"));
+            return List.of(FixtureTemplate.decimal(BigDecimal.ZERO));
         }
         if (type == Type.STRING) {
-            return List.of(new FixtureTemplate("\"x\""));
+            return List.of(FixtureTemplate.string("x"));
         }
         if (type == Type.BOOL) {
-            return List.of(new FixtureTemplate("true"));
+            return List.of(FixtureTemplate.bool(true));
         }
         List<PartitionClass> classes = classesOf(type, symbols);
         for (PartitionClass each : classes) {
@@ -340,7 +341,26 @@ public final class Partitions {
                 return each.representatives().candidates();
             }
         }
+        // A newtype the model only bounds has no classes — everything outside the bound is refused at
+        // construction — but it does have values, and the edge of the bound is one that builds.
+        if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
+                && data.newtype()) {
+            Bounds bounds = boundsOf(type, symbols);
+            List<FixtureTemplate> inner = bounds == null || bounds.isEmpty()
+                    ? representativesOf(TypeOps.newtypeInner(ref.name(), symbols), symbols)
+                    : List.of(bounds.decimal()
+                            ? FixtureTemplate.decimal(inside(bounds))
+                            : FixtureTemplate.integer(inside(bounds).longValueExact()));
+            return inner.stream().map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
+        }
         return List.of();
+    }
+
+    /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
+     * there is, and it is the value a boundary wants written anyway. */
+    private static BigDecimal inside(Bounds bounds) {
+        return bounds.min() != null ? bounds.min()
+                : bounds.max() != null ? bounds.max() : BigDecimal.ZERO;
     }
 
     private static boolean isBool(ObservedValue v, boolean expected) {

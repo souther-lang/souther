@@ -1,15 +1,24 @@
 package souther.compiler.query;
 
+import souther.compiler.ExampleVerifier;
 import souther.compiler.ast.Ast;
+import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
+import souther.compiler.observe.Classification;
 import souther.compiler.observe.Disposition;
+import souther.compiler.observe.Incompleteness;
 import souther.compiler.observe.InputCaseEvidence;
 import souther.compiler.observe.MeasurementStatus;
 import souther.compiler.observe.OutputCaseEvidence;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
+import souther.compiler.partition.Axis;
+import souther.compiler.partition.AxisId;
+import souther.compiler.partition.BoundaryObligation;
+import souther.compiler.partition.Generator;
+import souther.compiler.partition.RowClasses;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -74,8 +83,7 @@ public final class Adequacy {
             if (origins == null) {
                 return byTarget;
             }
-            Set<String> sources = new LinkedHashSet<>(origins);
-            for (String sourceId : sources) {
+            for (String sourceId : new LinkedHashSet<>(origins)) {
                 Output.Examples.Of observed =
                         db.ask(new Output.Examples(module, sourceId)).value();
                 if (observed == null) {
@@ -154,6 +162,117 @@ public final class Adequacy {
                 }
             }
             return byTarget;
+        }
+    }
+
+    /**
+     * Rows that would fill what every behavior of one module has not covered.
+     *
+     * <p>Its own key rather than part of the coverage, because it costs what the coverage does not: it
+     * builds values through the derived decoders to find out which of them a model admits. A report
+     * nobody asked to generate rows for should not pay for that.
+     *
+     * <p>The two kinds of row stay apart in the answer. Filling a combination and writing a row at an
+     * edge are different requests, asked with different flags, and a caller that merged them could not
+     * take one without the other.
+     */
+    public record Filling(Generator.GenerationResult pairs, Generator.GenerationResult boundaries) {
+
+        public static final Filling NONE =
+                new Filling(Generator.GenerationResult.NONE, Generator.GenerationResult.NONE);
+
+        static Filling stopped(Incompleteness why) {
+            return new Filling(new Generator.GenerationResult(List.of(), List.of(), List.of(why)),
+                    Generator.GenerationResult.NONE);
+        }
+    }
+
+    public record Generated(String name) implements Key<Map<String, Filling>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, Filling>> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !scope.present() || !sigs.present()) {
+                return Answer.absent();
+            }
+            souther.compiler.check.TypeChecker.Checked checked =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> bodies =
+                    checked == null ? Map.of() : checked.behaviorBodies();
+            souther.compiler.coverage.CoverageSites.Plan plan =
+                    souther.compiler.coverage.CoverageSites.of(
+                            Coverage.sourceIdOf(db, name), bodies);
+            Map<String, List<RowOutcome>> byTarget = Coverage.rowsOf(db, name);
+            Symbols symbols = scope.value();
+
+            Map<String, Filling> out = new LinkedHashMap<>();
+            ExampleVerifier.Construction building =
+                    constructing(db, name, prepared.value(), symbols, sigs.value());
+            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+                    continue;
+                }
+                Sig sig = sigs.value().get(spec.name());
+                if (sig == null) {
+                    continue;
+                }
+                try {
+                    out.put(spec.name(), rowsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
+                            byTarget.getOrDefault(spec.name(), List.of()), building));
+                } catch (LinkageError _) {
+                    // The runtime is not on this host's classpath, so nothing can be built to find out
+                    // what a model admits. Saying so is not the same as saying the combinations are
+                    // impossible, so none of them is reported as one.
+                    out.put(spec.name(), Filling.stopped(Incompleteness.of(
+                            Incompleteness.Code.RUNTIME_ABSENT, spec.name())));
+                }
+            }
+            return Answer.of(Map.copyOf(out));
+        }
+
+        /** A way to build values against this module's own classes, or nothing where there are none to
+         * build against. */
+        private static ExampleVerifier.Construction constructing(
+                Db db, String module, Ast.Module written, Symbols symbols, Map<String, Sig> sigs) {
+            Map<String, byte[]> classes = db.ask(new Output.Linked(module)).value();
+            Map<String, List<BehaviorRequirement>> requirements =
+                    db.ask(new Bodies.Requirements(module)).value();
+            if (classes == null || requirements == null) {
+                return null;
+            }
+            Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(module)).value();
+            return ExampleVerifier.constructing(written, symbols, sigs, classes, requirements,
+                    Output.loader(db, Map.of()), values == null ? Map.of() : values);
+        }
+
+        private static Filling rowsFor(
+                Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
+                souther.compiler.coverage.CoverageSites.Plan plan, List<RowOutcome> rows,
+                ExampleVerifier.Construction building) {
+            List<String> parameters = spec.params().stream().map(Ast.Param::name).toList();
+            souther.compiler.partition.Partitions.Partitioning partitioning =
+                    Coverages.partitioningOf(spec, sig, symbols, body, plan);
+            Generator.Subject subject = new Generator.Subject(parameters, sig.ins(),
+                    partitioning.axes(), symbols);
+            Generator.CandidateCheck check = building == null ? Generator.CandidateCheck.ANY
+                    : (at, candidate) -> building.refuse(sig.ins().get(at), candidate.value());
+
+            List<Map<AxisId, Classification>> existing = rows.stream()
+                    .map(row -> RowClasses.of(row, parameters, partitioning.axes())).toList();
+            Generator.GenerationResult pairs = Generator.fill(subject, existing, check);
+
+            List<BoundaryObligation> unmet = new ArrayList<>();
+            for (Axis axis : partitioning.axes()) {
+                unmet.addAll(Coverages.unmet(axis, parameters, rows, symbols));
+            }
+            return new Filling(pairs, Generator.forBoundaries(subject, unmet, check));
         }
     }
 

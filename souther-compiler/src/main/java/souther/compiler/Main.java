@@ -13,6 +13,7 @@ import souther.compiler.fmt.Formatter;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
 import souther.compiler.report.AdequacyReport;
+import souther.compiler.report.GeneratedRows;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -43,6 +44,8 @@ public final class Main {
             options (examples):
               --module <name>           report only this module
               --behavior <name>         report only this behavior
+              --generate                print commented rows for what nothing covers
+              --boundaries              with --generate, add rows at the untried boundaries
               --strict                  exit non-zero while rows are waiting for a `let`
             options (compile/examples):
               -cp, --class-path <path>  where to find modules another project compiled
@@ -148,6 +151,8 @@ public final class Main {
         String module = null;
         String behavior = null;
         boolean strict = false;
+        boolean generate = false;
+        boolean boundaries = false;
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "-cp", "--class-path" -> {
@@ -179,6 +184,8 @@ public final class Main {
                     }
                     behavior = args[i];
                 }
+                case "--generate" -> generate = true;
+                case "--boundaries" -> boundaries = true;
                 case "--strict" -> strict = true;
                 default -> sources.add(Path.of(args[i]));
             }
@@ -204,6 +211,13 @@ public final class Main {
             report(warnings, sources, render);
             String rendered = render.json() ? report.json() + System.lineSeparator() : report.human();
             System.out.print(rendered);
+            // After the report, because the rows are what to do about what the report just said.
+            // Beside it rather than in it where the report is JSON: the rows are source, and source in
+            // the middle of a JSON document is not a document.
+            if (generate) {
+                String rows = GeneratedRows.of(compilation, module, behavior, boundaries);
+                (render.json() ? System.err : System.out).print(rows);
+            }
             if (strict && report.pendingRows() > 0) {
                 System.err.println(report.pendingRows() + " example row(s) are waiting for a `let`");
                 System.exit(1);

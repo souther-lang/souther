@@ -107,8 +107,8 @@ final class Intervals {
     static List<PartitionClass> classesOf(List<Interval> intervals, TermPath path, Type type,
                                           Symbols symbols) {
         boolean decimal = TypeOps.base(type, symbols) == Type.DECIMAL;
-        String wrapper = type instanceof Type.Ref ref
-                && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name().name() : null;
+        souther.compiler.types.TypeName wrapper = type instanceof Type.Ref ref
+                && TypeOps.isSingleValueNewtype(type, symbols) ? ref.name() : null;
         List<PartitionClass> classes = new ArrayList<>();
         for (Interval range : intervals) {
             String id = path + "/" + range.label();
@@ -163,9 +163,11 @@ final class Intervals {
         };
     }
 
-    private static String written(BigDecimal value, String wrapper, boolean decimal) {
-        String literal = value.stripTrailingZeros().toPlainString() + (decimal ? "m" : "");
-        return wrapper == null ? literal : wrapper + "(" + literal + ")";
+    private static FixtureTemplate written(BigDecimal value, souther.compiler.types.TypeName wrapper,
+                                           boolean decimal) {
+        FixtureTemplate literal = decimal ? FixtureTemplate.decimal(value)
+                : FixtureTemplate.integer(value.longValueExact());
+        return wrapper == null ? literal : FixtureTemplate.newtype(wrapper, literal);
     }
 
     private Intervals() {}

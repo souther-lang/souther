@@ -63,20 +63,32 @@ class MainExamplesSubcommandTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     private static String run(String... extraArgs) throws Exception {
+        return both(extraArgs).out();
+    }
+
+    /** What the command wrote, kept apart: a build reads one of these and a person reads the other. */
+    private record Streams(String out, String err) {}
+
+    private static Streams both(String... extraArgs) throws Exception {
         Path file = Files.createTempDirectory("souther-examples").resolve("trip.sou");
         Files.writeString(file, MODEL);
         List<String> args = new ArrayList<>(List.of("examples", file.toString()));
         args.addAll(List.of(extraArgs));
 
-        PrintStream original = System.out;
-        ByteArrayOutputStream captured = new ByteArrayOutputStream();
-        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        PrintStream originalOut = System.out;
+        PrintStream originalErr = System.err;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        System.setErr(new PrintStream(err, true, StandardCharsets.UTF_8));
         try {
             Main.main(args.toArray(String[]::new));
         } finally {
-            System.setOut(original);
+            System.setOut(originalOut);
+            System.setErr(originalErr);
         }
-        return captured.toString(StandardCharsets.UTF_8);
+        return new Streams(out.toString(StandardCharsets.UTF_8),
+                err.toString(StandardCharsets.UTF_8));
     }
 
     @Test
@@ -97,6 +109,44 @@ class MainExamplesSubcommandTest {
         assertTrue(out.contains("submit"), out);
         assertFalse(out.contains("findMember"), out);
         assertTrue(out.contains("1 behavior: 1 implemented, 0 injected; 0 rows waiting"), out);
+    }
+
+    /**
+     * The rows are something the flag asks for, and they arrive after the report rather than inside it.
+     *
+     * <p>Stated as what the output is made of rather than as text to match: without the flag the
+     * command prints the report and stops, and with it the same report is followed by something more.
+     * A build that parses the report has to keep working when somebody adds the flag.
+     */
+    @Test
+    void theRowsAreAskedForAndComeAfterTheReport() throws Exception {
+        String report = run("--behavior", "submit");
+        String withRows = run("--generate", "--behavior", "submit");
+
+        assertTrue(withRows.startsWith(report), withRows);
+        assertFalse(withRows.substring(report.length()).isBlank(), "the flag added rows");
+    }
+
+    /** Rows are source, and source in the middle of a JSON document is not a document. Asked for
+     * together, the document stays a document and the rows go beside it. */
+    @Test
+    void rowsGoBesideTheJsonRatherThanIntoIt() throws Exception {
+        Streams streams = both("--generate", "--behavior", "submit", "--format", "json");
+
+        assertNotNull(JSON.readTree(streams.out()), "the document is still a document");
+        assertFalse(streams.err().isBlank(), "the rows are still written");
+    }
+
+    /** An edge nothing was written at is a different request from a class nothing covers, so asking
+     * for one does not bring the other. */
+    @Test
+    void theBoundaryRowsNeedTheirOwnFlag() throws Exception {
+        String classes = run("--generate", "--behavior", "submit");
+        String andEdges = run("--generate", "--boundaries", "--behavior", "submit");
+
+        assertTrue(andEdges.length() > classes.length(),
+                "the edges are more rows than the classes alone:\n" + andEdges);
+        assertTrue(classes.lines().count() < andEdges.lines().count(), andEdges);
     }
 
     @Test

@@ -120,6 +120,43 @@ public final class ExampleVerifier {
     }
 
     /**
+     * Whether a value composed elsewhere can be built at this module's boundary.
+     *
+     * <p>The question a generator cannot answer for itself. Which values a type admits together is the
+     * derived decoder's business — an invariant relating two fields refuses a pair that each field
+     * would have accepted alone — so the only way to know is to put the value through the decoder that
+     * a row's own fixture goes through.
+     */
+    @FunctionalInterface
+    public interface Construction {
+
+        /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
+         * the runtime is absent, which is not a fact about the value. */
+        java.util.Optional<String> refuse(Type type, Ast.Expr fixture);
+    }
+
+    /** A way to build values against this module's generated classes, without any rows to run. */
+    public static Construction constructing(Ast.Module module, Symbols symbols,
+                                            Map<String, Sig> sigs, Map<String, byte[]> classes,
+                                            Map<String, List<BehaviorRequirement>> requirements,
+                                            ClassLoader parent, Map<String, Ast.FnDef> values) {
+        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
+                new MemoryClassLoader(classes, parent), values);
+        return v::refuse;
+    }
+
+    private java.util.Optional<String> refuse(Type type, Ast.Expr fixture) {
+        try {
+            decode(type, raw(fixture, type));
+            return java.util.Optional.empty();
+        } catch (FixtureException e) {
+            return java.util.Optional.of(e.getMessage());
+        } catch (RuntimeException e) {
+            return java.util.Optional.of(String.valueOf(e.getMessage()));
+        }
+    }
+
+    /**
      * What evaluating a source's rows turned up: the diagnostics it reports, the observation each row
      * left, and what stopped it from observing.
      *
