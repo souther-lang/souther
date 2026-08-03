@@ -74,13 +74,18 @@ final class Coverages {
                 continue;
             }
             if (axis.derivable()) {
-                axes.add(coverageOf(axis, parameters, rows, observed.complete()));
+                axes.add(coverageOf(axis, parameters, rows, !observed.someRowsUnseen()));
                 divided.add(axis);
             }
+            // Whether the arms were measured, and nothing else. A row that did not finish makes a
+            // *missing* hit undecidable and takes nothing away from one that was found: a row that
+            // wrote the value and went through the comparison did so whatever else stopped.
             boundaries.addAll(boundariesOf(axis, parameters, rows, symbols,
-                    armsMeasured && observed.complete(), observed.someRowsUnseen()));
+                    armsMeasured, observed.someRowsUnseen()));
         }
-        return new PartitionEvidence(axes, boundaries, pairsOf(divided, parameters, rows),
+        PartitionEvidence.PairSpace pairs = pairsOf(divided, parameters, rows);
+        return new PartitionEvidence(axes, boundaries,
+                observed.someRowsUnseen() ? pairs.overSomeOfTheRows() : pairs,
                 notDerivable, partitioning.omitted());
     }
 
@@ -184,6 +189,13 @@ final class Coverages {
             // A row nothing read may be the row that is at this value. Found is still found — one row
             // at the boundary settles it whatever else went unread — but not-found is not settled.
             if (met == Met.NO && someRowsUnseen) {
+                met = Met.UNREADABLE;
+            }
+            // Nor is a hit that could not be looked for: a row that never finished left no hits, and
+            // a guard's line is met by going through the comparison.
+            if (met == Met.NO && each.origin() instanceof OriginRef.GuardOrigin
+                    && rows.stream().anyMatch(
+                            row -> row.disposition() == souther.compiler.observe.Disposition.INCOMPLETE)) {
                 met = Met.UNREADABLE;
             }
             out.add(new PartitionEvidence.BoundaryCoverage(idOf(each.axis()),

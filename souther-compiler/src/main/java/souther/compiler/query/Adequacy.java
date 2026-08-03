@@ -801,8 +801,10 @@ public final class Adequacy {
         // Nothing was measured where nothing was written: a behavior with no rows has no gaps to
         // report, only an absence of evidence, and saying so is not the same as saying it is covered.
         // A source that could not be evaluated is a set of rows nothing has seen, and a case they may
-        // have covered reads exactly like a case nothing covers.
-        partial |= !seen.complete();
+        // have covered reads exactly like a case nothing covers. A row that did not finish is already
+        // counted, above: its state is dropped rather than read, so it has no arm and no input case
+        // and shows up as one nothing could classify.
+        partial |= seen.someRowsUnseen();
         MeasurementStatus status = rows.isEmpty() && seen.complete()
                 ? MeasurementStatus.UNAVAILABLE
                 : partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;

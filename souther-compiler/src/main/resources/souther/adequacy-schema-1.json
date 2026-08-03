@@ -143,7 +143,7 @@
         "pairs": {
           "type": "object",
           "description": "Two-class combinations across two positions. Counts rather than a ratio: a combination no row reaches has not been shown unreachable, only untried, so the denominator is not known.",
-          "required": ["total", "covered", "witnessedFeasible", "provenInfeasible", "unknown", "truncated"],
+          "required": ["total", "covered", "witnessedFeasible", "provenInfeasible", "unknown", "truncated", "status"],
           "additionalProperties": false,
           "properties": {
             "total": { "type": "integer", "minimum": 0 },
@@ -159,7 +159,11 @@
               "description": "Combinations shown impossible. A candidate that failed to build is not one of these — another value of the same two classes may build."
             },
             "unknown": { "type": "integer", "minimum": 0 },
-            "truncated": { "type": "boolean" }
+            "status": {
+            "$ref": "#/$defs/status",
+            "description": "`partial` where some rows were not read at all: a combination none of the rows seen reaches has not been left untried by anybody."
+          },
+          "truncated": { "type": "boolean" }
           }
         },
         "notDerivable": {

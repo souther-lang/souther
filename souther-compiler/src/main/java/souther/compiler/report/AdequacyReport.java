@@ -82,6 +82,31 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                 List.copyOf(modules));
     }
 
+    /**
+     * What a behavior's own measures make of it.
+     *
+     * <p>A measure that came back partial is a measure that could not be made, and the status above it
+     * has to say so — a report opening with `complete` over a line reading `undecided` is the one
+     * confusion this field exists to prevent. `UNAVAILABLE` is not a degradation: a measure nobody
+     * asked for, or one a behavior has nothing to answer, is not a measure that failed.
+     */
+    private static MeasurementStatus statusOf(Adequacy.SignatureEvidence signature,
+                                              PartitionEvidence partition,
+                                              Adequacy.BranchEvidence branch) {
+        boolean partial = signature != null && signature.status() == MeasurementStatus.PARTIAL;
+        partial |= branch != null && branch.status() == MeasurementStatus.PARTIAL;
+        if (partition != null) {
+            partial |= partition.axes().stream()
+                    .anyMatch(a -> a.status() == MeasurementStatus.PARTIAL);
+            partial |= partition.boundaries().stream()
+                    .anyMatch(b -> b.status() == MeasurementStatus.PARTIAL);
+            partial |= partition.pairs().status() == MeasurementStatus.PARTIAL;
+            // What was dropped for being past a limit is measurement that did not happen either.
+            partial |= !partition.omitted().isEmpty() || partition.pairs().truncated();
+        }
+        return partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE;
+    }
+
     private static ModuleReport moduleReport(Compilation compilation, String name, Ast.Module module) {
         Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
@@ -122,15 +147,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                     signatures == null ? null : signatures.get(behavior.name());
             PartitionEvidence partition = partitions == null ? null
                     : partitions.getOrDefault(behavior.name(), PartitionEvidence.NONE);
+            Adequacy.BranchEvidence branch = branches == null ? Adequacy.BranchEvidence.UNAVAILABLE
+                    : branches.getOrDefault(behavior.name(), Adequacy.BranchEvidence.UNAVAILABLE);
             behaviors.add(new BehaviorReport(behavior.name(),
                     ExampleVerifier.isPending(module, behavior.name()), rows.size(), pending,
-                    unreadable ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE, signature,
-                    partition, branches == null ? Adequacy.BranchEvidence.UNAVAILABLE
-                            : branches.getOrDefault(behavior.name(),
-                                    Adequacy.BranchEvidence.UNAVAILABLE)));
+                    unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
+                    signature, partition, branch));
         }
         MeasurementStatus status = incompleteness.isEmpty()
                 ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
+        for (BehaviorReport behavior : behaviors) {
+            status = status.and(behavior.status());
+        }
         return new ModuleReport(name, status, incompleteness, behaviors);
     }
 
@@ -164,6 +192,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                             .toList();
             MeasurementStatus status = gaps.isEmpty()
                     ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
+            for (BehaviorReport shownBehavior : behaviors) {
+                status = status.and(shownBehavior.status());
+            }
             kept.add(new ModuleReport(m.module(), status, gaps, behaviors));
             overall = overall.and(status);
         }
@@ -354,11 +385,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         if (pairs.truncated()) {
             return String.format("   pairs %d, too many to enumerate", pairs.total());
         }
-        if (pairs.decided()) {
+        if (pairs.decided() && pairs.status() == MeasurementStatus.COMPLETE) {
             return String.format("   pairs %d/%d", pairs.covered(), pairs.total());
         }
-        return String.format("   pairs %d reached / %d known reachable, %d untried",
-                pairs.covered(), pairs.witnessedFeasible(), pairs.unknown());
+        // Untried where every row was read, undecided where some were not: a combination an unread row
+        // may sit in has not been left untried by anybody.
+        return String.format("   pairs %d reached / %d known reachable, %d %s",
+                pairs.covered(), pairs.witnessedFeasible(), pairs.unknown(),
+                pairs.status() == MeasurementStatus.COMPLETE ? "untried" : "undecided");
     }
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -456,6 +490,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         pairs.put("provenInfeasible", partition.pairs().provenInfeasible());
         pairs.put("unknown", partition.pairs().unknown());
         pairs.put("truncated", partition.pairs().truncated());
+        pairs.put("status", partition.pairs().status().name().toLowerCase(java.util.Locale.ROOT));
         partition.notDerivable().forEach(out.putArray("notDerivable")::add);
         ArrayNode omitted = out.putArray("omitted");
         partition.omitted().forEach(o -> omitted.add(o.subject()));
@@ -469,8 +504,13 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         out.put("status", branch.status().name().toLowerCase(java.util.Locale.ROOT));
         out.put("arms", branch.all().size());
         out.put("covered", branch.covered().size());
+        // Only where every row was read. An arm a row that never finished might have gone through is
+        // undecided, and a field called `unreached` holding it says something that is not so — which
+        // reading `status` beside it does not undo.
         ArrayNode unreached = out.putArray("unreached");
-        for (souther.compiler.coverage.CoverageSites.Site arm : branch.unreached()) {
+        List<souther.compiler.coverage.CoverageSites.Site> named =
+                branch.status() == MeasurementStatus.COMPLETE ? branch.unreached() : List.of();
+        for (souther.compiler.coverage.CoverageSites.Site arm : named) {
             ObjectNode a = unreached.addObject();
             a.put("label", arm.label());
             a.put("kind", arm.kind().name().toLowerCase(java.util.Locale.ROOT));

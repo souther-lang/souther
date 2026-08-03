@@ -12,6 +12,9 @@ import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 import souther.compiler.report.GeneratedRows;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -382,6 +385,108 @@ class CompilePartialAdequacyTest {
 
         assertTrue(human.contains("undecided whether a row expects `Refused`"), human);
         assertFalse(human.contains("· no row expects"), human);
+    }
+
+    // --- what the status above a measure says -----------------------------------------------------
+
+    /**
+     * A measure that could not be made shows in the status over it.
+     *
+     * <p>Here nothing is recorded as a reason at all: the truncation is inside the value a row wrote,
+     * and the measure that reads it is where it becomes visible. A report opening with `complete` over
+     * a line reading `undecided` is the confusion this field exists to prevent.
+     */
+    @Test
+    void aPartialMeasureMakesTheStatusAboveItPartial() {
+        AdequacyReport report = AdequacyReport.of(measured(budgetSpent("")));
+
+        assertEquals(MeasurementStatus.PARTIAL, report.status());
+        assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).status());
+        assertEquals(MeasurementStatus.PARTIAL, report.modules().get(0).behaviors().get(0).status());
+        assertEquals(List.of(), report.modules().get(0).incompleteness(),
+                "and it is not because something was reported as a reason");
+    }
+
+    /**
+     * What the human report suppresses, the JSON suppresses.
+     *
+     * <p>A field named `unreached` holding an arm nothing watched says something that is not so, and
+     * reading `status` beside it does not undo the name.
+     */
+    @Test
+    void theJsonNamesNoUnreachedArmUnderPartial() throws Exception {
+        JsonNode branch = JsonMapper.builder().build().readTree(
+                AdequacyReport.of(measured(TIMES_OUT)).json())
+                .get("modules").get(0).get("behaviors").get(0).get("branch");
+
+        assertEquals("partial", branch.get("status").asString());
+        assertEquals(2, branch.get("arms").asInt());
+        assertEquals(0, branch.get("unreached").size());
+    }
+
+    /**
+     * A combination an unread row may sit in has not been left untried by anybody.
+     *
+     * <p>The other measures each say whether their numbers are over all the rows or some of them; the
+     * pair space was the one that could not, so its count of untried combinations read as a finding.
+     */
+    @Test
+    void thePairSpaceSaysWhetherItSawEveryRow() {
+        PartitionEvidence over = split().db()
+                .ask(new Adequacy.Coverage("example.split")).value().get("take");
+
+        assertEquals(MeasurementStatus.PARTIAL, over.pairs().status());
+        assertFalse(AdequacyReport.of(split()).human().contains("untried"),
+                AdequacyReport.of(split()).human());
+    }
+
+    /**
+     * A hit is a hit whatever else stopped.
+     *
+     * <p>Found is decidable over some of the rows; not-found is not. A row that wrote the boundary
+     * value and went through the comparison did so, and hiding that because another row never
+     * finished throws away the one thing that was settled.
+     */
+    @Test
+    void aBoundaryARowDemonstrablyMetStaysMet() {
+        PartitionEvidence partition = measured("""
+                module example.mix
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data Domestic
+                data Overseas
+                data Kind = Domestic | Overseas
+
+                data Draft = { kind: Kind, cost: Amount }
+                data Ok = { n: Int }
+                data Big = { n: Int }
+
+                partial let spin (n: Int): Int = spin(n)
+
+                behavior take : (request: Draft) -> Ok | Big
+                    constructs Ok, Big
+
+                let take (request) = {
+                    guard request.cost.value <= 100 else Big { n = spin(request.cost.value) }
+                    Ok { n = request.cost.value }
+                }
+
+                example take
+                    | (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
+                    | (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
+                """).db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
+
+        PartitionEvidence.BoundaryCoverage line = partition.boundaries().stream()
+                .filter(b -> b.value().equals("100")).findFirst().orElseThrow();
+        assertTrue(line.hit(), "a row wrote 100 and went through the comparison");
+        assertEquals(MeasurementStatus.COMPLETE, line.status());
+
+        PartitionEvidence.BoundaryCoverage beyond = partition.boundaries().stream()
+                .filter(b -> b.value().equals("101")).findFirst().orElseThrow();
+        assertEquals(MeasurementStatus.PARTIAL, beyond.status(),
+                "and the one nothing was found at is undecided, not missed");
     }
 
     /** The row that did not finish is still there to be counted, and still says it did not. */
