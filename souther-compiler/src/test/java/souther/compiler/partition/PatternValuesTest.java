@@ -2,6 +2,7 @@ package souther.compiler.partition;
 
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -168,6 +169,32 @@ class PatternValuesTest {
 
         assertEquals(Optional.of("\n"), PatternValues.shortestAccepted("\\n"),
                 "and the ones a literal does spell are written");
+    }
+
+    /**
+     * Half of a character is not a value.
+     *
+     * <p>A row is a line of a source file. A lone surrogate is one half of a pair, which UTF-8 has
+     * nothing to write for and replaces with a `?` — so the value that reaches the file is not the
+     * value that was generated, and the row somebody pastes back means something else. A whole pair
+     * is a character like any other and is written.
+     */
+    @Test
+    void anUnpairedSurrogateIsNotWritable() {
+        assertEquals(Optional.empty(), PatternValues.shortestAccepted("\\uD800"));
+        assertEquals(Optional.empty(), PatternValues.shortestAccepted("[\\uD800-\\uD801]"));
+
+        String pair = PatternValues.shortestAccepted("\\uD83D\\uDE00")
+                .orElseThrow(() -> new AssertionError("a whole character is still written"));
+        assertEquals(2, pair.length());
+        assertTrue(StandardCharsets.UTF_8.newEncoder().canEncode(pair));
+    }
+
+    /** And the one a negated class had nothing left but. */
+    @Test
+    void aRuleLeavingOnlyACarriageReturnGetsOne() {
+        assertEquals(Optional.of("\r"),
+                PatternValues.shortestAccepted("[^\\x00-\\x0C\\x0E-\\uFFFF]"));
     }
 
     /**

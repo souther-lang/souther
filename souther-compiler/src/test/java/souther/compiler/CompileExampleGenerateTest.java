@@ -328,6 +328,117 @@ class CompileExampleGenerateTest {
         }
     }
 
+    /** A model where the position under test is a field of the input and one flag divides the rows. */
+    private static String withField(String declarations, String field) {
+        return """
+                module example.candidates
+
+                %s
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Req = { v: %s, f: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (r: Req) -> Ok
+                    constructs Ok
+
+                let take (r) = Ok { n = 0 }
+
+                example take
+                    | (Req { v = %s, f = Yes }) -> Ok { n = 0 }
+                """.formatted(declarations, field, "%s");
+    }
+
+    /**
+     * A rule this cannot read leaves the position what it had.
+     *
+     * <p>Reading a format rule is a way to offer a value, not a way to decide there is none. A lookahead
+     * is past what the reader understands, and the plain representative for the position — which built
+     * before any of this existed, and which this rule happens to accept — is still offered.
+     */
+    @Test
+    void unsupportedPatternThatAcceptsTheDefaultCandidateStillGenerates() {
+        String source = withField("""
+                data V = String
+                    invariant String.matches("(?=x)x", value)""", "V").formatted("V(\"x\")");
+
+        assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
+                inputs(generated(source).get("take").pairs()));
+    }
+
+    /**
+     * Two rules on one position, in either order.
+     *
+     * <p>Every clause of an invariant has to hold, so the order they are written in cannot decide
+     * whether a value can be found. Each readable rule contributes a candidate and the constructor
+     * settles which of them stands — reading only the first would make `[a-z]+` before `x+` produce
+     * `"a"` and stop, and the same two rules the other way round produce a value.
+     */
+    @Test
+    void conjoinedPatternsDoNotDependOnDeclarationOrder() {
+        String forwards = withField("""
+                data V = String
+                    invariant String.matches("[a-z]+", value)
+                    invariant String.matches("x+", value)""", "V").formatted("V(\"x\")");
+        String backwards = withField("""
+                data V = String
+                    invariant String.matches("x+", value)
+                    invariant String.matches("[a-z]+", value)""", "V").formatted("V(\"x\")");
+
+        assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
+                inputs(generated(forwards).get("take").pairs()));
+        assertEquals(inputs(generated(forwards).get("take").pairs()),
+                inputs(generated(backwards).get("take").pairs()),
+                "the same two rules, written the other way round");
+    }
+
+    /**
+     * A newtype's rules are read wherever it is asked for a value.
+     *
+     * <p>A newtype is asked for one from two places — a field of a record, and a case of a sum — and
+     * the rules on it are the same rules in both. Read in only one of them, a formatted identifier
+     * composes as a field and is refused as a case, which is the same model reporting a position as
+     * unfillable depending on where it was written.
+     */
+    @Test
+    void aFormattedNewtypeUsedAsASumCaseGetsARepresentative() {
+        String source = """
+                module example.cases
+
+                data Email = String
+                    invariant String.matches("[a-z]+@[a-z]+", value)
+
+                data Amount = Int
+                    invariant value >= 100
+
+                data NoContact
+                data Contact = Email | NoContact
+                data NoAmount
+                data Wallet = NoAmount | Amount
+
+                data Req = { contact: Contact, w: Wallet }
+                data Ok = { n: Int }
+
+                behavior take : (r: Req) -> Ok
+                    constructs Ok
+
+                let take (r) = Ok { n = 0 }
+
+                example take
+                    | (Req { contact = NoContact, w = NoAmount }) -> Ok { n = 0 }
+                """;
+
+        List<String> rows = inputs(generated(source).get("take").pairs());
+
+        assertTrue(rows.stream().anyMatch(r -> r.contains("Email(\"a@a\")")),
+                "a case whose rule states a format: " + rows);
+        assertTrue(rows.stream().anyMatch(r -> r.contains("Amount(100)")),
+                "and one whose rule states a bound: " + rows);
+    }
+
     // --- the block, put back through the compiler ------------------------------------------------
 
     /** The rows of the block, with the placeholder answered the way an author answers it. */

@@ -251,8 +251,7 @@ public final class Partitions {
                     RepresentativeSource.of(FixtureTemplate.unitCase(leaf)));   // naming it builds it
         }
         if (data.newtype()) {
-            List<FixtureTemplate> inner = representativesOf(TypeOps.newtypeInner(leaf, symbols),
-                    symbols);
+            List<FixtureTemplate> inner = insideTheNewtype(leaf, symbols);
             return inner.isEmpty()
                     ? PartitionClass.ungeneratable(leaf.name(), leaf.name(), is,
                             "no value of what `" + leaf.name() + "` wraps can be written")
@@ -379,43 +378,55 @@ public final class Partitions {
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
                 && data.newtype()) {
-            Bounds bounds = boundsOf(type, symbols);
-            List<FixtureTemplate> inner = bounds == null || bounds.isEmpty()
-                    ? insideTheFormat(ref.name(), symbols)
-                    : List.of(bounds.decimal()
-                            ? FixtureTemplate.decimal(inside(bounds))
-                            : FixtureTemplate.integer(inside(bounds).longValueExact()));
-            return inner.stream().map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
+            return insideTheNewtype(ref.name(), symbols).stream()
+                    .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
         }
         return List.of();
     }
 
     /**
-     * What a newtype wraps, written so that the rules on it hold.
+     * What a newtype wraps: every value for it this can think of, in the order to try them.
      *
-     * <p>A format rule is what an identifier usually says about itself, and a value that ignores it is
-     * refused at construction — so a record holding one could not be composed at all, and every
-     * combination that record took part in came back as one whose values the model refused. Reading
-     * the pattern is what turns those back into rows somebody can write.
+     * <p>Candidates, not an answer. Whether a newtype accepts a value is decided by its own
+     * constructor, and this only proposes — so a rule it reads is a reason to offer another value
+     * rather than to withdraw the ones already there. A format rule that cannot be read leaves the
+     * position with what it had before this could read any of them, and a newtype carrying two rules
+     * gets a value from each, which is why the order they are declared in does not decide whether one
+     * builds.
      *
-     * <p>Only the pattern is read. A rule this cannot produce a value for leaves the position with
-     * none, which is what it had before.
+     * <p>Both the bound on a number and the format of a string, in one place, because a newtype is
+     * asked for a value from two: a field of a record, and a case of a sum. Reading the rules in only
+     * one of them is how a value that holds everywhere came to be written in one place and not the
+     * other.
      */
-    private static List<FixtureTemplate> insideTheFormat(TypeName newtype, Symbols symbols) {
+    private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
         Type base = TypeOps.newtypeInner(newtype, symbols);
-        if (base != Type.STRING || !(symbols.get(newtype) instanceof Ast.Data data)) {
-            return representativesOf(base, symbols);
+        List<FixtureTemplate> candidates = new ArrayList<>();
+
+        Bounds bounds = boundsOf(new Type.Ref(newtype), symbols);
+        if (bounds != null && !bounds.isEmpty()) {
+            candidates.add(bounds.decimal()
+                    ? FixtureTemplate.decimal(inside(bounds))
+                    : FixtureTemplate.integer(inside(bounds).longValueExact()));
         }
-        for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
-            for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
-                if (InvariantConstraints.of(each, base).orElse(null)
-                        instanceof InvariantConstraints.Pattern format) {
-                    return PatternValues.shortestAccepted(format.regex())
-                            .map(FixtureTemplate::string).map(List::of).orElseGet(List::of);
+        if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
+            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
+                    if (InvariantConstraints.of(each, base).orElse(null)
+                            instanceof InvariantConstraints.Pattern format) {
+                        PatternValues.shortestAccepted(format.regex())
+                                .map(FixtureTemplate::string).ifPresent(candidates::add);
+                    }
                 }
             }
         }
-        return representativesOf(base, symbols);
+        candidates.addAll(representativesOf(base, symbols));
+
+        Map<String, FixtureTemplate> once = new LinkedHashMap<>();
+        for (FixtureTemplate each : candidates) {
+            once.putIfAbsent(each.text(), each);
+        }
+        return List.copyOf(once.values());
     }
 
     /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge

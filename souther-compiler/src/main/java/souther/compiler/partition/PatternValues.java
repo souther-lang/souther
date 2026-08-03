@@ -1,5 +1,6 @@
 package souther.compiler.partition;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -41,8 +42,9 @@ final class PatternValues {
      * <p>A letter first, because a class that excludes something usually excludes punctuation, and a
      * value made of letters is the one a reader recognises. Then the rest of printable ASCII, and then
      * a character from each of the alphabets a model here is written in — a rule excluding ASCII
-     * entirely is asking for one of those. A tab or a newline last: they read as nothing at all in a
-     * row, so they are what is left when a rule excludes every character that reads as something.
+     * entirely is asking for one of those. The three a literal spells but nobody sees last: they read
+     * as nothing at all in a row, so they are what is left when a rule excludes every character that
+     * reads as something.
      */
     private static final String PREFERRED = build();
 
@@ -53,20 +55,31 @@ final class PatternValues {
             out.append(c);
         }
         out.append("あアー一　ｦ");
-        return out.append('\t').append('\n').toString();
+        return out.append('\t').append('\n').append('\r').toString();
     }
 
     /**
      * Whether a row can be written carrying this.
      *
-     * <p>A value is offered to be pasted into a model as a string literal, and the literal reads five
-     * escapes. A character outside them and outside the printable ones cannot be written at all: what
-     * would go in is the character itself, which is not a value anybody can read, and for some of them
-     * not something a file holds. There is no value here, which is what the caller already handles.
+     * <p>Two things have to hold, and they are about different places. The literal reads five escapes,
+     * so a control character outside them would go into the row as itself — not a value anybody can
+     * read. And the row is a line of a source file, so the value has to survive being encoded into
+     * one: a lone surrogate is half of a character, which UTF-8 has nothing to write and replaces with
+     * a `?`, and the value somebody pastes is then not the value that was generated.
+     *
+     * <p>Either way there is no value here, which is what the caller already handles.
      */
     private static boolean writable(String value) {
-        return value.length() <= LONGEST && value.chars().allMatch(c ->
-                c == '\n' || c == '\t' || c == '\r' || (c >= 0x20 && c != 0x7f));
+        if (value.length() > LONGEST) {
+            return false;
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c != '\n' && c != '\t' && c != '\r' && (c < 0x20 || c == 0x7f)) {
+                return false;
+            }
+        }
+        return StandardCharsets.UTF_8.newEncoder().canEncode(value);
     }
 
     /**

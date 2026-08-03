@@ -35,6 +35,10 @@ public final class Generator {
 
     /** How many rows one call will write. Past this the output stops being something a person reads
      * and pastes, and a model that wants more than this has axes it should be measured at fewer of. */
+    /** How many candidates one position is asked for. A rule can only put so many values in front of
+     * a position, and a model that put more there than this is one whose row nobody would read. */
+    private static final int MAX_CANDIDATES = 16;
+
     static final int MAX_ROWS = 200;
 
     /** How deep a record is built. Past this a value stops being anything an author recognises as one
@@ -245,7 +249,7 @@ public final class Generator {
             }
             Map<String, FixtureTemplate> byPath = new LinkedHashMap<>();
             byPath.put(axis.path().toString(), at);
-            Composed composed = inputsOf(subject, byPath, check);
+            Composed composed = attempts(subject, check, 1, _ -> byPath);
             if (composed.inputs() == null) {
                 unresolved.add(new UnresolvedCombination(List.of(label), composed.reason(),
                         composed.detail()));
@@ -434,13 +438,19 @@ public final class Generator {
     /**
      * One assignment of classes, built into the values a row would carry.
      *
-     * <p>Each class offers more than one value, and they are tried in order: a value refused at
-     * construction says nothing about the class, only about that value, and the next one may well
+     * <p>Each position offers more than one value, and they are tried in order: a value refused at
+     * construction says nothing about the position, only about that value, and the next one may well
      * build. What is tried is the same index at every position at once, which keeps the attempts linear
      * in the longest candidate list rather than multiplying them.
+     *
+     * <p>Every position, which includes the ones no axis divides. A field carrying a format rule is
+     * usually not an axis — a format has no classes to cover — and it is exactly the kind of position
+     * whose first candidate gets refused. How many candidates those have is not known before composing
+     * once, so the bound on the attempts is raised by what composing reports rather than being counted
+     * up front.
      */
     private static Attempt build(Subject subject, List<Axis> axes, int[] where, CandidateCheck check) {
-        int deepest = 0;
+        int deepest = 1;
         for (int i = 0; i < axes.size(); i++) {
             List<FixtureTemplate> candidates =
                     axes.get(i).classes().get(where[i]).representatives().candidates();
@@ -450,7 +460,7 @@ public final class Generator {
             }
             deepest = Math.max(deepest, candidates.size());
         }
-        for (int attempt = 0; attempt < deepest; attempt++) {
+        Composed composed = attempts(subject, check, deepest, attempt -> {
             Map<String, FixtureTemplate> byPath = new LinkedHashMap<>();
             for (int i = 0; i < axes.size(); i++) {
                 List<FixtureTemplate> candidates =
@@ -458,80 +468,114 @@ public final class Generator {
                 byPath.put(axes.get(i).path().toString(),
                         candidates.get(Math.min(attempt, candidates.size() - 1)));
             }
-            Composed composed = inputsOf(subject, byPath, check);
-            if (composed.inputs() != null) {
-                return new Attempt(new GeneratedRow(labels(axes, where), composed.inputs()), null,
-                        null);
-            }
-            if (composed.reason() == UnresolvedCombination.Reason.NO_REPRESENTATIVE) {
-                // Another candidate changes nothing: the position has no values at all.
-                return new Attempt(null, composed.reason(), composed.detail());
-            }
-        }
-        return new Attempt(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+            return byPath;
+        });
+        return composed.inputs() != null
+                ? new Attempt(new GeneratedRow(labels(axes, where), composed.inputs()), null, null)
+                : new Attempt(null, composed.reason(), composed.detail());
     }
 
     /**
-     * One value per parameter, or null where one of them could not be produced or would not build.
+     * The inputs for a row, asking each position for its next value until one set builds.
      *
-     * <p>Several axes on one parameter are one value, not several: {@code request.kind} and
-     * {@code request.cost} are two positions of one {@code Request}, and a row writes one of those.
+     * <p>The one place the candidates are walked. Both the rows that fill a combination and the rows
+     * that reach a boundary compose the same way and are refused the same way, and a walk written only
+     * where the combinations are is a boundary row that gives up on the first value a rule refuses.
+     *
+     * @param axisDeepest how many values the axes themselves offer, which is known before composing;
+     *                    what the positions no axis divides offer is not, and raises the bound as it
+     *                    is discovered
      */
+    private static Composed attempts(Subject subject, CandidateCheck check, int axisDeepest,
+                                     java.util.function.IntFunction<Map<String, FixtureTemplate>> fixed) {
+        int deepest = Math.max(1, axisDeepest);
+        Composed last = new Composed(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                null, 1);
+        for (int attempt = 0; attempt < deepest && attempt < MAX_CANDIDATES; attempt++) {
+            last = inputsOf(subject, fixed.apply(attempt), check, attempt);
+            if (last.inputs() != null
+                    || last.reason() == UnresolvedCombination.Reason.NO_REPRESENTATIVE) {
+                // Built, or a position with no values at all — where another candidate changes
+                // nothing.
+                return last;
+            }
+            deepest = Math.max(deepest, last.candidates());
+        }
+        return new Composed(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED,
+                last.detail(), last.candidates());
+    }
+
+    /** One set of values for the parameters, with every position taking its {@code attempt}-th
+     * candidate. */
     private static Composed inputsOf(Subject subject, Map<String, FixtureTemplate> byPath,
-                                     CandidateCheck check) {
+                                     CandidateCheck check, int attempt) {
         List<FixtureTemplate> inputs = new ArrayList<>();
+        int candidates = 1;
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
             TermPath at = TermPath.of(subject.parameters().get(p));
-            Composition built = compose(subject.types().get(p), at, byPath, subject.symbols(), 0);
+            Composition built = compose(subject.types().get(p), at, byPath, subject.symbols(), 0,
+                    attempt);
+            candidates = Math.max(candidates, built.candidates());
             if (built.value() == null) {
                 // Nothing could be written at all: a field of a type nothing stands for. Which is not
                 // the same as a value that was written and refused, and reporting it as one sends the
                 // author looking for a rule relating two inputs that has nothing to do with it.
                 return new Composed(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
-                        built.missingAt());
+                        built.missingAt(), candidates);
             }
             if (check.refuse(p, built.value()).isPresent()) {
-                return new Composed(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+                return new Composed(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null,
+                        candidates);
             }
             inputs.add(built.value());
         }
-        return new Composed(inputs, null, null);
+        return new Composed(inputs, null, null, candidates);
     }
 
-    /** One attempt at a row's inputs: the values, or why there are none. */
+    /**
+     * One attempt at a row's inputs: the values, or why there are none.
+     *
+     * @param candidates the most any one position under here had to offer, which is how far the
+     *                   attempts have to go before the row can be called unbuildable
+     */
     private record Composed(List<FixtureTemplate> inputs, UnresolvedCombination.Reason reason,
-                            String detail) {}
+                            String detail, int candidates) {}
 
-    /** One position's value, or the position that had none. */
-    private record Composition(FixtureTemplate value, String missingAt) {}
+    /** One position's value, or the position that had none, with what it had to offer. */
+    private record Composition(FixtureTemplate value, String missingAt, int candidates) {}
 
-    /** The value at one position: what an axis fixed there, or a record built out of its fields, or a
-     * value that stands for the type. Null where nothing can be written. */
+    /** The value at one position: what an axis fixed there, or a record built out of its fields, or the
+     * {@code attempt}-th value that stands for the type. Null where nothing can be written. */
     private static Composition compose(Type type, TermPath at, Map<String, FixtureTemplate> byPath,
-                                       Symbols symbols, int depth) {
+                                       Symbols symbols, int depth, int attempt) {
         FixtureTemplate fixed = byPath.get(at.toString());
         if (fixed != null) {
-            return new Composition(fixed, null);
+            return new Composition(fixed, null, 1);   // an axis already chose, and this is its choice
         }
         if (depth < MAX_DEPTH && type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
             Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
             if (!fields.isEmpty()) {
                 Map<String, FixtureTemplate> built = new LinkedHashMap<>();
+                int candidates = 1;
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
                     Composition value = compose(field.getValue(), at.then(field.getKey()), byPath,
-                            symbols, depth + 1);
+                            symbols, depth + 1, attempt);
+                    candidates = Math.max(candidates, value.candidates());
                     if (value.value() == null) {
-                        return value;   // the field that had none, not the record that wanted it
+                        // The field that had none, not the record that wanted it — but carrying what
+                        // the fields before it could have offered, so the attempts are not cut short.
+                        return new Composition(null, value.missingAt(), candidates);
                     }
                     built.put(field.getKey(), value.value());
                 }
-                return new Composition(FixtureTemplate.record(ref.name(), built), null);
+                return new Composition(FixtureTemplate.record(ref.name(), built), null, candidates);
             }
         }
         List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols);
-        return stands.isEmpty() ? new Composition(null, at + ": " + Type.show(type))
-                : new Composition(stands.get(0), null);
+        return stands.isEmpty() ? new Composition(null, at + ": " + Type.show(type), 1)
+                : new Composition(stands.get(Math.min(attempt, stands.size() - 1)), null,
+                        stands.size());
     }
 
     /** A boundary value written the way the position takes it: bare where the position is a number,
