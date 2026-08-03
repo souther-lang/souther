@@ -527,7 +527,8 @@ public final class Adequacy {
                 }
                 try {
                     out.put(spec.name(), rowsFor(spec, sig, symbols, bodies.get(spec.name()), plan,
-                            byTarget.getOrDefault(spec.name(), Observed.NONE), building));
+                            byTarget.getOrDefault(spec.name(), Observed.NONE), building,
+                            levelOf(db).measuresArms()));
                 } catch (LinkageError _) {
                     // The runtime is not on this host's classpath, so nothing can be built to find out
                     // what a model admits. Saying so is not the same as saying the combinations are
@@ -557,7 +558,7 @@ public final class Adequacy {
         private static Filling rowsFor(
                 Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                ExampleVerifier.Construction building) {
+                ExampleVerifier.Construction building, boolean armsMeasured) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,
@@ -581,7 +582,7 @@ public final class Adequacy {
 
             List<BoundaryObligation> unmet = new ArrayList<>();
             for (Axis axis : partitioning.axes()) {
-                unmet.addAll(Coverages.unmet(axis, parameters, rows, symbols));
+                unmet.addAll(Coverages.unmet(axis, parameters, rows, symbols, armsMeasured));
             }
             return new Filling(pairs, Generator.forBoundaries(subject, unmet, check));
         }

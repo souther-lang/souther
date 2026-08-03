@@ -233,16 +233,30 @@ final class Coverages {
         return unreadable ? Met.UNREADABLE : Met.NO;
     }
 
-    /** The boundaries a row could have been written at and demonstrably none was. A guard's line is
-     * not one of these — whether a row met it is not decided by the value alone — and neither is one
-     * whose position some row wrote unreadably, since a row generated for it may be a row that is
-     * already there. */
+    /**
+     * The boundaries a row could have been written at and demonstrably none was.
+     *
+     * <p>Includes a line a {@code guard} drew, where the arms were measured. Writing the row and
+     * meeting the line are different questions and the second needs the arms — but the row to write is
+     * the same row either way, and a line the report names as unmet that the generator will not offer
+     * is the one place an author is told about a gap and left to fill it by hand.
+     *
+     * <p>Left out where the arms were not measured, and where some row wrote the position unreadably:
+     * a row generated for either may be a row that is already there.
+     */
     static List<BoundaryObligation> unmet(Axis axis, List<String> parameters, List<RowOutcome> rows,
-                                          Symbols symbols) {
+                                          Symbols symbols, boolean armsMeasured) {
         List<BoundaryObligation> out = new ArrayList<>();
         for (BoundaryObligation each : Partitions.obligationsOf(axis, symbols)) {
-            if (!(each.origin() instanceof OriginRef.GuardOrigin)
-                    && writtenAt(axis, parameters, rows, each.value()) == Met.NO) {
+            boolean guard = each.origin() instanceof OriginRef.GuardOrigin;
+            if (guard && !armsMeasured) {
+                continue;
+            }
+            Met met = guard
+                    ? evaluatedAt(axis, parameters, rows, each.value(),
+                            (OriginRef.GuardOrigin) each.origin())
+                    : writtenAt(axis, parameters, rows, each.value());
+            if (met == Met.NO) {
                 out.add(each);
             }
         }

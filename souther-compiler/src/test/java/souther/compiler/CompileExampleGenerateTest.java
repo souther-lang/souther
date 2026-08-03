@@ -47,6 +47,9 @@ class CompileExampleGenerateTest {
 
     private static Map<String, Adequacy.Filling> generated(String source) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        // What `souther examples` asks for. A line a `guard` drew is only decidable where the arms
+        // were measured, so below this the generator has nothing to say about one.
+        compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         Map<String, Adequacy.Filling> all = compilation.db()
                 .ask(new Adequacy.Generated(compilation.modules().get(0))).value();
@@ -160,6 +163,46 @@ class CompileExampleGenerateTest {
         assertEquals(List.of("Request { kind = Domestic, cost = Amount(0) }",
                         "Request { kind = Domestic, cost = Amount(1000) }"),
                 inputs(filling.boundaries()), "the edges, at exactly the value the rule names");
+    }
+
+    /**
+     * A line a `guard` drew is offered, not only named.
+     *
+     * <p>Writing the row and meeting the line are different questions, and only the second needs the
+     * arms — but the row to write is the same row either way. A boundary the report names as unmet and
+     * the generator will not offer is the one place an author is told about a gap and left to close it
+     * by hand.
+     */
+    @Test
+    void aGuardsLineIsOfferedAsWellAsNamed() {
+        String guarded = """
+                module example.trip
+
+                data Amount = Int
+                    invariant value >= 0
+
+                data Draft = { cost: Amount }
+                data Submitted = { cost: Amount }
+                data Waiting = { cost: Amount }
+
+                behavior submit : (request: Draft) -> Submitted | Waiting
+                    constructs Submitted, Waiting
+
+                let submit (request) = {
+                    guard request.cost.value <= 100 else Waiting { cost = request.cost }
+                    Submitted { cost = request.cost }
+                }
+
+                example submit
+                    | (Draft { cost = Amount(50) })  -> Submitted { cost = Amount(50) }
+                    | (Draft { cost = Amount(500) }) -> Waiting { cost = Amount(500) }
+                """;
+
+        assertEquals(List.of("Draft { cost = Amount(0) }",
+                        "Draft { cost = Amount(100) }",
+                        "Draft { cost = Amount(101) }"),
+                inputs(generated(guarded).get("submit").boundaries()),
+                "the invariant's edge and both sides of the guard's line");
     }
 
     // --- the block, put back through the compiler ------------------------------------------------
