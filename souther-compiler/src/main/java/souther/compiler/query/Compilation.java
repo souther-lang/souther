@@ -163,6 +163,7 @@ public final class Compilation {
                 db.ask(new Output.Examples(module, id));
             }
             db.ask(new Adequacy.Witnesses(module));
+            db.ask(new Adequacy.Coverage(module));
         }
     }
 

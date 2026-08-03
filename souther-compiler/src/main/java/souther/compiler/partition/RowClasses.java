@@ -36,6 +36,16 @@ public final class RowClasses {
         return Map.copyOf(out);
     }
 
+    /** The value this row put at {@code path}, or null where it did not put a readable one there.
+     * What a boundary asks of a row: not which class it fell in, but whether it was the value. */
+    public static ObservedValue valueAt(RowOutcome row, List<String> parameters, TermPath path) {
+        int at = parameters.indexOf(path.head());
+        if (at < 0 || at >= row.inputs().size()) {
+            return null;
+        }
+        return walk(row.inputs().get(at), path.fields());
+    }
+
     private static Classification classify(RowOutcome row, List<String> parameters, Axis axis) {
         int at = parameters.indexOf(axis.path().head());
         if (at < 0 || at >= row.inputs().size()) {

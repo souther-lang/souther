@@ -66,7 +66,61 @@
           "description": "How many of those rows are recorded rather than evaluated."
         },
         "status": { "$ref": "#/$defs/status" },
-        "signature": { "$ref": "#/$defs/signature" }
+        "signature": { "$ref": "#/$defs/signature" },
+        "partition": { "$ref": "#/$defs/partition" }
+      }
+    },
+    "partition": {
+      "type": "object",
+      "description": "How much of what the model distinguishes about this behavior's inputs the rows reach.",
+      "required": ["axes", "boundaries", "notDerivable", "omitted"],
+      "additionalProperties": false,
+      "properties": {
+        "axes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["axis", "path", "classes", "covered", "unclassifiedRows", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "axis": { "type": "string" },
+              "path": { "type": "string", "description": "The input position, as a parameter and the fields read off it. A newtype's `value` is never a step." },
+              "classes": { "type": "array", "items": { "type": "string" } },
+              "covered": { "type": "array", "items": { "type": "string" } },
+              "unclassifiedRows": { "type": "integer", "minimum": 0 },
+              "status": { "$ref": "#/$defs/status" }
+            }
+          }
+        },
+        "boundaries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["axis", "origin", "side", "value", "hit", "status"],
+            "additionalProperties": false,
+            "properties": {
+              "axis": { "type": "string" },
+              "origin": { "type": "string", "description": "The rule that drew this line — a type's invariant, or a guard." },
+              "side": { "enum": ["below", "at", "above"] },
+              "value": { "type": "string" },
+              "hit": { "type": "boolean" },
+              "status": {
+                "$ref": "#/$defs/status",
+                "description": "`unavailable` for a guard's boundary: meeting it takes the comparison having run, which nothing measures until the arms are instrumented."
+              }
+            }
+          }
+        },
+        "notDerivable": {
+          "type": "array",
+          "description": "Positions the model draws no line through. Not a gap — a statement that there was nothing to measure.",
+          "items": { "type": "string" }
+        },
+        "omitted": {
+          "type": "array",
+          "description": "Positions dropped for being past the axis limit.",
+          "items": { "type": "string" }
+        }
       }
     },
     "signature": {

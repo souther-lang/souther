@@ -11,6 +11,7 @@ import souther.compiler.observe.RowOutcome;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Output;
+import souther.compiler.query.PartitionEvidence;
 import souther.compiler.types.TypeName;
 
 import tools.jackson.databind.node.ArrayNode;
@@ -57,7 +58,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
      */
     public record BehaviorReport(String name, boolean injected, int rows, int pending,
                                  MeasurementStatus status,
-                                 Adequacy.SignatureEvidence signature) {}
+                                 Adequacy.SignatureEvidence signature,
+                                 PartitionEvidence partition) {}
 
     /** Reads a finished compile. {@link Compilation#answerEverything()} must have been asked first;
      * otherwise there is nothing to read and every behavior looks unexampled. */
@@ -96,6 +98,8 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         }
         Map<String, Adequacy.SignatureEvidence> signatures =
                 compilation.db().ask(new Adequacy.Witnesses(name)).value();
+        Map<String, PartitionEvidence> partitions =
+                compilation.db().ask(new Adequacy.Coverage(name)).value();
         List<BehaviorReport> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef behavior : module.behaviors()) {
             List<RowOutcome> rows = byTarget.getOrDefault(behavior.name(), List.of());
@@ -106,9 +110,12 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                     .anyMatch(i -> behavior.name().equals(i.subject()));
             Adequacy.SignatureEvidence signature =
                     signatures == null ? null : signatures.get(behavior.name());
+            PartitionEvidence partition = partitions == null ? null
+                    : partitions.getOrDefault(behavior.name(), PartitionEvidence.NONE);
             behaviors.add(new BehaviorReport(behavior.name(),
                     ExampleVerifier.isPending(module, behavior.name()), rows.size(), pending,
-                    unreadable ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE, signature));
+                    unreadable ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE, signature,
+                    partition));
         }
         MeasurementStatus status = incompleteness.isEmpty()
                 ? MeasurementStatus.COMPLETE : MeasurementStatus.PARTIAL;
@@ -155,6 +162,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                         behavior.injected() ? "injected" : "implemented",
                         behavior.rows(), behavior.pending()));
                 signature(out, behavior);
+                partition(out, behavior);
             }
             for (Incompleteness gap : module.incompleteness()) {
                 out.append(String.format("    · not measured: %s (%s)%n", gap.subject(),
@@ -213,6 +221,48 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
         }
     }
 
+    /**
+     * How much of what the model distinguishes the rows reach.
+     *
+     * <p>A boundary a guard drew is printed as not measured rather than as missed. Meeting it takes
+     * more than writing the value — the comparison has to have run — and nothing counts that yet.
+     */
+    private static void partition(StringBuilder out, BehaviorReport behavior) {
+        PartitionEvidence partition = behavior.partition();
+        if (partition == null || (partition.axes().isEmpty() && partition.boundaries().isEmpty()
+                && partition.notDerivable().isEmpty())) {
+            return;
+        }
+        int classes = partition.axes().stream().mapToInt(a -> a.classes().size()).sum();
+        int covered = partition.axes().stream().mapToInt(a -> a.covered().size()).sum();
+        out.append(String.format("    partition   axes %d   single-axis %d/%d%n",
+                partition.axes().size(), covered, classes));
+        for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
+            for (String missing : axis.uncovered()) {
+                out.append(String.format("      · no row is in `%s`%s%n", missing,
+                        axis.status() == MeasurementStatus.PARTIAL ? " (undecided)" : ""));
+            }
+        }
+        List<PartitionEvidence.BoundaryCoverage> measured = partition.boundaries().stream()
+                .filter(b -> b.status() != MeasurementStatus.UNAVAILABLE).toList();
+        long met = measured.stream().filter(PartitionEvidence.BoundaryCoverage::hit).count();
+        long deferred = partition.boundaries().size() - measured.size();
+        out.append(String.format("    boundary    %d/%d%s%n", met, measured.size(),
+                deferred == 0 ? "" : "   (" + deferred + " not measured until branches are)"));
+        for (PartitionEvidence.BoundaryCoverage boundary : measured) {
+            if (!boundary.hit()) {
+                out.append(String.format("      · no row is at %s = %s (%s)%n", boundary.axis(),
+                        boundary.value(), boundary.origin()));
+            }
+        }
+        for (String position : partition.notDerivable()) {
+            out.append(String.format("      · not derivable: %s%n", position));
+        }
+        for (Incompleteness dropped : partition.omitted()) {
+            out.append(String.format("      · omitted: %s (axis limit)%n", dropped.subject()));
+        }
+    }
+
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     public String json() {
@@ -246,6 +296,7 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
                 b.put("pending", behavior.pending());
                 b.put("status", behavior.status().name().toLowerCase(java.util.Locale.ROOT));
                 signature(b, behavior.signature());
+                partition(b, behavior.partition());
             }
         }
         return root.toPrettyString();
@@ -272,6 +323,36 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
             names(in.putArray("verified"), input.verified());
             in.put("unclassifiedRows", input.unclassifiedRows());
         }
+    }
+
+    private static void partition(ObjectNode behavior, PartitionEvidence partition) {
+        if (partition == null) {
+            return;
+        }
+        ObjectNode out = behavior.putObject("partition");
+        ArrayNode axes = out.putArray("axes");
+        for (PartitionEvidence.AxisCoverage axis : partition.axes()) {
+            ObjectNode a = axes.addObject();
+            a.put("axis", axis.axis());
+            a.put("path", axis.path());
+            axis.classes().forEach(a.putArray("classes")::add);
+            axis.covered().stream().sorted().forEach(a.putArray("covered")::add);
+            a.put("unclassifiedRows", axis.unclassifiedRows());
+            a.put("status", axis.status().name().toLowerCase(java.util.Locale.ROOT));
+        }
+        ArrayNode boundaries = out.putArray("boundaries");
+        for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
+            ObjectNode b = boundaries.addObject();
+            b.put("axis", boundary.axis());
+            b.put("origin", boundary.origin());
+            b.put("side", boundary.side().name().toLowerCase(java.util.Locale.ROOT));
+            b.put("value", boundary.value());
+            b.put("hit", boundary.hit());
+            b.put("status", boundary.status().name().toLowerCase(java.util.Locale.ROOT));
+        }
+        partition.notDerivable().forEach(out.putArray("notDerivable")::add);
+        ArrayNode omitted = out.putArray("omitted");
+        partition.omitted().forEach(o -> omitted.add(o.subject()));
     }
 
     /** Case names, sorted: a report that changes order between runs cannot be compared between runs,

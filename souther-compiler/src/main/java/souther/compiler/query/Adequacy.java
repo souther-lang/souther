@@ -90,6 +90,74 @@ public final class Adequacy {
     }
 
     /**
+     * What every behavior of one module reaches of the distinctions its model draws.
+     *
+     * <p>A module's question for the same reason the witnesses are: a behavior's rows are written
+     * across its own source and any attached files, and a class covered in one of them is covered.
+     */
+    public record Coverage(String name) implements Key<Map<String, PartitionEvidence>> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Map<String, PartitionEvidence>> compute(Db db) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !scope.present() || !sigs.present()) {
+                return Answer.absent();
+            }
+            souther.compiler.check.TypeChecker.Checked checked =
+                    db.ask(new Bodies.Checked(name)).value();
+            Map<String, souther.compiler.core.Core> bodies =
+                    checked == null ? Map.of() : checked.behaviorBodies();
+            souther.compiler.coverage.CoverageSites.Plan plan =
+                    souther.compiler.coverage.CoverageSites.of(sourceIdOf(db, name), bodies);
+            Map<String, List<RowOutcome>> byTarget = rowsOf(db, name);
+
+            Map<String, PartitionEvidence> out = new LinkedHashMap<>();
+            for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
+                if (!(behavior instanceof Ast.SpecBehavior spec)) {
+                    continue;   // a composition's inputs are its first stage's, measured there
+                }
+                Sig sig = sigs.value().get(spec.name());
+                if (sig == null) {
+                    continue;
+                }
+                out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
+                        plan, byTarget.getOrDefault(spec.name(), List.of())));
+            }
+            return Answer.of(Map.copyOf(out));
+        }
+
+        private static String sourceIdOf(Db db, String module) {
+            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
+            return layout == null ? module : layout.idOfModule().getOrDefault(module, module);
+        }
+
+        private static Map<String, List<RowOutcome>> rowsOf(Db db, String module) {
+            List<String> origins = db.ask(new Front.ExampleOrigins(module)).value();
+            Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
+            if (origins == null) {
+                return byTarget;
+            }
+            for (String sourceId : new LinkedHashSet<>(origins)) {
+                Output.Examples.Of observed = db.ask(new Output.Examples(module, sourceId)).value();
+                if (observed == null) {
+                    continue;
+                }
+                for (RowOutcome row : observed.rows()) {
+                    byTarget.computeIfAbsent(row.target(), _ -> new ArrayList<>()).add(row);
+                }
+            }
+            return byTarget;
+        }
+    }
+
+    /**
      * What a behavior's rows establish about its signature.
      *
      * <p>Which set a row lands in is decided by how far it got, never by whether it passed. A row that
