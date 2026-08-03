@@ -28,10 +28,25 @@ final class PatternValues {
      * shortest string the pattern accepts is the one that says least about anything else. */
     private static final int BEYOND_MINIMUM = 0;
 
-    /** Where a negated class takes its character from, in order. A letter first, because an
-     * identifier that excludes something usually excludes punctuation. */
-    private static final String PREFERRED = "abcdefghijklmnopqrstuvwxyz"
-            + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    /**
+     * Where a negated class takes its character from, in order.
+     *
+     * <p>A letter first, because a class that excludes something usually excludes punctuation, and a
+     * value made of letters is the one a reader recognises. Then the rest of printable ASCII, and then
+     * a character from each of the alphabets a model here is written in — a rule that excludes ASCII
+     * entirely is asking for one of those, and had nothing to give before.
+     */
+    private static final String PREFERRED = build();
+
+    private static String build() {
+        StringBuilder out = new StringBuilder("abcdefghijklmnopqrstuvwxyz"
+                + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+        for (char c = 0x20; c <= 0x7e; c++) {
+            out.append(c);
+        }
+        out.append('\n').append('\t');
+        return out.append("あアー一　ｦ").toString();
+    }
 
     /**
      * The shortest string {@code regex} accepts, or empty where this cannot say.
@@ -221,7 +236,9 @@ final class PatternValues {
             case 'n' -> '\n';
             case 't' -> '\t';
             case 'r' -> '\r';
-            case 'D', 'W', 'S', 'p', 'P', 'b', 'B' -> throw new Unreadable();
+            case 'x' -> hex(2);
+            case 'u' -> hex(4);
+            case 'D', 'W', 'S', 'p', 'P', 'b', 'B', 'c' -> throw new Unreadable();
             default -> kind;   // an escaped literal: `\-`, `\.`, `\\`, `\+`
         };
     }
@@ -236,11 +253,28 @@ final class PatternValues {
             case 'n' -> "\n";
             case 't' -> "\t";
             case 'r' -> "\r";
-            case 'D', 'W', 'S', 'p', 'P', 'b', 'B', 'k', 'Q', 'E', 'G', 'A', 'Z', 'z' ->
+            case 'x' -> String.valueOf(hex(2));
+            case 'u' -> String.valueOf(hex(4));
+            case 'D', 'W', 'S', 'p', 'P', 'b', 'B', 'c', 'k', 'Q', 'E', 'G', 'A', 'Z', 'z' ->
                     throw new Unreadable();
             case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9' -> throw new Unreadable();   // a back reference
             default -> String.valueOf(kind);
         };
+    }
+
+    /** A hex escape — two digits after {@code x}, four after {@code u} — as the character it names.
+     * Read rather than refused because a class written that way is usually one excluding ASCII, and
+     * what it is asking for is a character from one of the alphabets a model is written in. */
+    private char hex(int digits) {
+        int value = 0;
+        for (int i = 0; i < digits; i++) {
+            int digit = Character.digit(take(), 16);
+            if (digit < 0) {
+                throw new Unreadable();
+            }
+            value = value * 16 + digit;
+        }
+        return (char) value;
     }
 
     // --- reading ------------------------------------------------------------------------------------

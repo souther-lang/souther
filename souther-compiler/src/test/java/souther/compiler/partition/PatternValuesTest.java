@@ -91,6 +91,43 @@ class PatternValuesTest {
     }
 
     /**
+     * An alphabet other than ASCII, on either side of a class.
+     *
+     * <p>A model here is as likely to state a rule in kana as in letters, and a rule that excludes
+     * something is as likely to exclude ASCII as to exclude punctuation. Neither is a special case for
+     * a reader that works in characters; what needed saying was where a negated class looks for one it
+     * is allowed, which was letters and digits and nothing else.
+     */
+    @Test
+    void aClassWrittenInAnotherAlphabetIsRead() {
+        assertEquals(Optional.of("ぁ"), PatternValues.shortestAccepted("[ぁ-ん]+"));
+        assertEquals(Optional.of("一一"), PatternValues.shortestAccepted("[一-龯]{2}"));
+        assertEquals(Optional.of("ｦ"), PatternValues.shortestAccepted("[ｦ-ﾟ]"));
+
+        assertEquals(Optional.of("a"), PatternValues.shortestAccepted("[^あいう]"),
+                "a letter is not one of the three, so it is what a negated class takes");
+        assertEquals(Optional.of("aaa"), PatternValues.shortestAccepted("[^あいう]{3}"));
+    }
+
+    /**
+     * A negated class that leaves no letter or digit.
+     *
+     * <p>It had nothing to give: the characters it looked through were the alphanumerics, and a rule
+     * excluding all of them is a rule asking for something else — punctuation, or a character outside
+     * ASCII altogether. What it looks through now goes on past those.
+     */
+    @Test
+    void aNegatedClassWithNoLetterLeftLooksFurther() {
+        for (String regex : List.of("[^a-zA-Z0-9]", "[^a-zA-Z0-9 ]+", "[^ -~]", "[^\\x00-\\x7F]")) {
+            String value = PatternValues.shortestAccepted(regex)
+                    .orElseThrow(() -> new AssertionError("nothing written for " + regex));
+            assertTrue(Pattern.matches(regex, value), regex + " -> \"" + value + "\"");
+        }
+        assertEquals(Optional.of("あ"), PatternValues.shortestAccepted("[^\\x00-\\x7F]"),
+                "a rule excluding ASCII is asking for a character from somewhere else");
+    }
+
+    /**
      * What it does not read, it does not guess at.
      *
      * <p>The alternative is a value that does not match, which is refused at construction and reported
