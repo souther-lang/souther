@@ -785,14 +785,15 @@ public final class HelperInliner {
      * leaving those bodies bare keeps a constant-foldable expression ({@code 金額(税込(100))}) a plain
      * expression for the compile-time invariant check. A union return is left alone too: the binding
      * would name one type where the body may produce several. */
-    private Ast.Expr keepDeclaredReturn(Ast.FnDef helper, Ast.Expr body, SourcePos pos, int k) {
+    private Ast.Expr keepDeclaredReturn(Ast.FnDef helper, Ast.Expr body, SourcePos pos,
+                                        Ast.Binders ours) {
         Ast.RetType declared = helper.declaredReturn();
         if (declared == null || declared.cases().size() != 1
                 || !carriesCollection(declared.cases().get(0))
                 || mentionsTypeVar(declared.cases().get(0))) {
             return body;
         }
-        Ast.Binder bound = binders.binder("$r" + k, pos);
+        Ast.Binder bound = ours.binder("$r", pos);
         return new Ast.LetIn(bound, body, declared, true, null, Ast.Var.local(bound, pos), pos);
     }
 
@@ -1114,7 +1115,13 @@ public final class HelperInliner {
                             "helper `let " + helper.name() + "` takes " + helper.params().size()
                                     + " argument(s) but is called with " + args.size());
                 }
-                int k = counter++;
+                // Everything this expansion writes belongs to it: the bindings its arguments become,
+                // the one a lambda given to a function parameter is registered under, the one its
+                // declared return is carried on, and every binding copied out of the callee's body.
+                // One minter, so no two of them are the same binding, and a reader can ask of any of
+                // them which call it came from.
+                Ast.Binders ours = new Ast.Binders(
+                        new BindingOwner.Expansion(into, call.denotes(), counter++));
                 Map<BindingId, String> subst = new HashMap<>();
                 // what each substituted callee resolved to at the call site, so the expansion carries
                 // the argument's own answer rather than deciding one for it
@@ -1135,7 +1142,7 @@ public final class HelperInliner {
                             subst.put(p.binder().id(), fnName.name());
                             substDenotes.put(p.binder().id(), fnName.denotes());
                         } else if (arg instanceof Ast.Block lambda) {
-                            Ast.Binder f = binders.binder("$" + k + "_" + p.name(), lambda.pos());
+                            Ast.Binder f = ours.binder("$" + p.name(), lambda.pos());
                             subst.put(p.binder().id(), f.name());
                             substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
                             given.add(f.id());
@@ -1173,7 +1180,7 @@ public final class HelperInliner {
                         // the binding the argument is bound to; the reads of the parameter inside the
                         // body are answered with it, so a read says which binding it is rather than
                         // where it happens to be written
-                        Ast.Binder f = binders.binder(p.name(), call.pos());
+                        Ast.Binder f = ours.binder(p.name(), call.pos());
                         subst.put(p.binder().id(), f.name());
                         substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
                         letBinders.add(f);
@@ -1187,11 +1194,10 @@ public final class HelperInliner {
                 // a prelude helper's body is stamped with the call site, so errors inside it point at
                 // the user's call, not at the shipped source of souther.*
                 SourcePos at = keepsItsPositions(call) ? null : call.pos();
-                Copy copy = new Copy(helper.written(),
-                        new BindingOwner.Expansion(into, call.denotes(), k));
+                Copy copy = new Copy(helper.written(), ours);
                 Ast.Expr body = inline(rename(helper.written(), subst, substDenotes, at, copy));   // expand nested helpers too
                 given.forEach(scopedLambdas::remove);
-                body = keepDeclaredReturn(helper, body, call.pos(), k);
+                body = keepDeclaredReturn(helper, body, call.pos(), ours);
                 // wrap innermost-first so the value parameters bind in declared order
                 for (int i = letBinders.size() - 1; i >= 0; i--) {
                     body = new Ast.LetIn(letBinders.get(i), letValues.get(i), letTypes.get(i), body, call.pos());
@@ -1462,8 +1468,7 @@ public final class HelperInliner {
          * whatever order the copy is written in: a read met before its binder would otherwise be
          * left on the original while the binder moved, and the two would no longer be one binding.
          */
-        private Copy(Ast.Expr body, BindingOwner owner) {
-            Ast.Binders binders = new Ast.Binders(owner);
+        private Copy(Ast.Expr body, Ast.Binders binders) {
             eachBinder(body, binder ->
                     mine.put(binder.id(), binders.binder(binder.name(), binder.pos()).id()));
         }
