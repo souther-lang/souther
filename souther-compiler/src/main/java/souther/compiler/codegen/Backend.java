@@ -410,6 +410,9 @@ public final class Backend {
                         MethodTypeDesc.of(CD_Object, params), ClassFile.ACC_STATIC,
                         code -> {
                     BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
+                    // A helper is shared by every behavior that calls it, so a fork in one is a fork
+                    // in none of them and the plan holds no arm for it.
+                    gen.armsAreNotCounted();
                     for (int i = 0; i < n; i++) {
                         // a function parameter arrives as an Fn value (a closure); every other parameter
                         // as its boxed value. resolveParamType handles both shapes.

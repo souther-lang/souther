@@ -72,7 +72,9 @@ final class Intervals {
      * Thresholds outside that domain are dropped: they cut a range no row can reach.
      */
     static List<Interval> of(List<Threshold> thresholds, BigDecimal min, BigDecimal max) {
-        Map<BigDecimal, Split> distinct = new LinkedHashMap<>();
+        // Keyed by the number and not by the BigDecimal: `0.00` and `0` are one line, and
+        // BigDecimal's own equality says they are two, which would leave two ranges holding zero.
+        Map<String, Split> distinct = new LinkedHashMap<>();
         for (Threshold each : thresholds) {
             if (min != null && each.value().compareTo(min) < 0) {
                 continue;
@@ -80,7 +82,8 @@ final class Intervals {
             if (max != null && each.value().compareTo(max) > 0) {
                 continue;
             }
-            distinct.putIfAbsent(each.value(), new Split(each.value(), each.valueBelongsBelow()));
+            distinct.putIfAbsent(each.value().stripTrailingZeros().toPlainString(),
+                    new Split(each.value(), each.valueBelongsBelow()));
         }
         List<Split> splits = new ArrayList<>(distinct.values());
         splits.sort(Comparator.comparing(Split::value));

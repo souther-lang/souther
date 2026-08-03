@@ -124,6 +124,21 @@ final class BodyGen {
         /** Members of this body's declared output union that reach it through a bridge case; empty
          * for every other body. @see #injectsInto */
         private List<TypeName> injectMembers = List.of();
+        /**
+         * Whether the arms of this body are ones a coverage plan counted.
+         *
+         * <p>A recursive helper's are not, and deliberately: a helper is a method every behavior that
+         * calls it shares, so its forks belong to no one behavior's branch coverage
+         * ({@link souther.compiler.coverage.CoverageSites}). Saying so here rather than letting the
+         * lookup fail is what keeps a real mismatch — a plan made from other nodes than these — the
+         * loud error it is meant to be.
+         */
+        private boolean armsAreCounted = true;
+
+        /** Emits this body without recording where a run went through it. */
+        void armsAreNotCounted() {
+            this.armsAreCounted = false;
+        }
 
         BodyGen(CodegenContext ctx, CodeBuilder code, Ast.Data data, ClassDesc cdName, int firstSlot) {
             this.ctx = ctx;
@@ -567,7 +582,7 @@ final class BodyGen {
          * there, and a measuring build and a shipping build differ by these calls and by nothing else.
          */
         private void probe(Core node, int arm) {
-            if (!ctx.measuring()) {
+            if (!armsAreCounted || !ctx.measuring()) {
                 return;
             }
             code.loadConstant(ctx.probesOf(node)[arm]);

@@ -178,9 +178,13 @@ public final class Generator {
                 int left = pairs.size() + singles.size();
                 incompleteness.add(Incompleteness.of(Incompleteness.Code.SEARCH_LIMIT,
                         left + " combinations past the row limit"));
-                for (Pair still : pairs.isEmpty() ? singles : pairs) {
-                    unresolved.add(new UnresolvedCombination(labels(axes, still),
-                            UnresolvedCombination.Reason.SEARCH_LIMIT));
+                // Both sets: the count above is of both, and reporting one of them would promise
+                // more than it names.
+                for (Set<Pair> remaining : List.of(pairs, singles)) {
+                    for (Pair still : remaining) {
+                        unresolved.add(new UnresolvedCombination(labels(axes, still),
+                                UnresolvedCombination.Reason.SEARCH_LIMIT));
+                    }
                 }
                 break;
             }

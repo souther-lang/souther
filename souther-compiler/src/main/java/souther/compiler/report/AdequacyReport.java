@@ -83,9 +83,14 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Measurem
     private static ModuleReport moduleReport(Compilation compilation, String name, Ast.Module module) {
         Map<String, List<RowOutcome>> byTarget = new LinkedHashMap<>();
         List<Incompleteness> incompleteness = new ArrayList<>();
+        // The same rows every measure beside them reads (Adequacy.ProbedExamples). Two evaluations of
+        // one model can disagree — a row that ran out of time under the instrumented one and held
+        // under the other — and a report whose counts came from one while its coverage came from the
+        // other would say a case is verified and its arm unreached in the same breath. It is also
+        // what `--strict` exits on, so the exit code and the numbers printed above it agree.
         for (String sourceId : compilation.exampleSourcesOf(name)) {
             Output.Examples.Of observed =
-                    compilation.db().ask(new Output.Examples(name, sourceId)).value();
+                    compilation.db().ask(new Adequacy.ProbedExamples(name, sourceId)).value();
             if (observed == null) {
                 // The rows of this source were never evaluated, so nothing here can be counted as
                 // covered or as missing. Which is a fact about the measurement, not about the model.

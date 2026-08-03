@@ -101,9 +101,14 @@ public final class Partitions {
             BigDecimal max = domain == null ? null : domain.max();
             List<PartitionClass> classes = Intervals.classesOf(
                     Intervals.of(here, min, max), axis.path(), axis.type(), symbols);
+            // What the position is, not what an invariant said about it. There is a bound to read
+            // only where the type is a newtype carrying one, and a plain `Decimal` has none — read
+            // off the bound, every such position would be called an integer and a threshold of
+            // `0.5m` would be asked for its exact `long`.
+            boolean decimal = TypeOps.base(axis.type(), symbols) == Type.DECIMAL;
             out.add(new Axis(axis.id(), axis.path(), axis.type(),
                     classes.isEmpty() ? axis.classes() : classes,
-                    merged(axis.cuts(), here, domain != null && domain.decimal())));
+                    merged(axis.cuts(), here, decimal)));
         }
         return new Partitioning(out, base.omitted());
     }
@@ -113,14 +118,27 @@ public final class Partitions {
     private static List<Cut> merged(List<Cut> had, List<Threshold> thresholds, boolean decimal) {
         Map<String, Cut> byValue = new LinkedHashMap<>();
         for (Cut cut : had) {
-            byValue.put(String.valueOf(cut.value()), cut);
+            byValue.put(same(cut.value()), cut);
         }
         for (Threshold each : thresholds) {
             ObservedValue value = numeric(each.value(), decimal);
-            byValue.merge(String.valueOf(value), Cut.at(value, each.origin()),
+            byValue.merge(same(value), Cut.at(value, each.origin()),
                     (there, _) -> there.and(each.origin()));
         }
         return List.copyOf(byValue.values());
+    }
+
+    /**
+     * What makes two cuts one cut: the number, not how it was written.
+     *
+     * <p>`+invariant value >= 0.00+` and `+guard x <= 0m+` draw one line. Keyed by the value's own
+     * spelling they are two, and then a position has two classes both holding zero — which is not a
+     * partition, and the classifier that reads a row against it has no answer — and one boundary is
+     * owed twice under one printed number.
+     */
+    private static String same(ObservedValue value) {
+        return value instanceof ObservedValue.Decimal d
+                ? "d" + d.value().stripTrailingZeros().toPlainString() : String.valueOf(value);
     }
 
     /**
@@ -373,16 +391,6 @@ public final class Partitions {
         return v instanceof ObservedValue.Bool b && b.value() == expected;
     }
 
-    private static int compare(ObservedValue v, BigDecimal against) {
-        return switch (v) {
-            case ObservedValue.Integer i -> BigDecimal.valueOf(i.value()).compareTo(against);
-            case ObservedValue.Decimal d -> d.value().compareTo(against);
-            case ObservedValue.Constructed c when c.field("value") != null ->
-                    compare(c.field("value"), against);
-            case null, default -> Integer.MIN_VALUE;
-        };
-    }
-
     private static ObservedValue numeric(BigDecimal value, boolean decimal) {
         return decimal ? new ObservedValue.Decimal(value)
                 : new ObservedValue.Integer(value.longValueExact());
@@ -394,10 +402,6 @@ public final class Partitions {
 
     private static BigDecimal lowest(BigDecimal had, BigDecimal one) {
         return had == null || one.compareTo(had) < 0 ? one : had;
-    }
-
-    private static String plain(BigDecimal value) {
-        return value.stripTrailingZeros().toPlainString();
     }
 
     private Partitions() {}
