@@ -147,7 +147,7 @@ public final class Adequacy {
                 out.put(behavior.name(), evidenceOf(sig, scope.value(),
                         byTarget.getOrDefault(behavior.name(), Observed.NONE)));
             }
-            return Answer.of(Map.copyOf(out));
+            return Answer.of(Ordered.map(out));
         }
 
     }
@@ -198,7 +198,7 @@ public final class Adequacy {
                 out.put(spec.name(), Coverages.of(spec, sig, scope.value(), bodies.get(spec.name()),
                         plan, seen, armsMeasured && !seen.armsUnseen()));
             }
-            return Answer.of(Map.copyOf(out));
+            return Answer.of(Ordered.map(out));
         }
 
         private static String sourceIdOf(Db db, String module) {
@@ -351,7 +351,7 @@ public final class Adequacy {
                 out.put(behavior.name(), new BranchEvidence(arms, covered,
                         partial ? MeasurementStatus.PARTIAL : MeasurementStatus.COMPLETE));
             }
-            return Answer.of(Map.copyOf(out));
+            return Answer.of(Ordered.map(out));
         }
     }
 
@@ -577,7 +577,9 @@ public final class Adequacy {
                             Incompleteness.Scope.BEHAVIOR, spec.name())));
                 }
             }
-            return Answer.of(Map.copyOf(out));
+            // In the order the module declares them, because the block printed from this is read
+            // against the one before it.
+            return Answer.of(Ordered.map(out));
         }
 
         /** A way to build values against this module's own classes, or nothing where there are none to
