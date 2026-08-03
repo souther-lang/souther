@@ -51,13 +51,42 @@ public record FixtureTemplate(String text, Ast.Expr value) {
                 value.signum() < 0 ? new Ast.Neg(literal, NOWHERE) : literal);
     }
 
+    /**
+     * A string, written the way the language reads one back.
+     *
+     * <p>Every escape a string literal has, because a row is offered as text to paste into a model and
+     * has to come back as the value it was made from. A tab or a newline written as itself would end
+     * the line the row is on as well.
+     */
     public static FixtureTemplate string(String value) {
-        return new FixtureTemplate("\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"",
-                new Ast.StringLit(value, NOWHERE));
+        StringBuilder written = new StringBuilder("\"");
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '\\' -> written.append("\\\\");
+                case '"' -> written.append("\\\"");
+                case '\n' -> written.append("\\n");
+                case '\t' -> written.append("\\t");
+                case '\r' -> written.append("\\r");
+                default -> written.append(c);
+            }
+        }
+        return new FixtureTemplate(written.append('"').toString(), new Ast.StringLit(value, NOWHERE));
     }
 
     public static FixtureTemplate bool(boolean value) {
         return new FixtureTemplate(Boolean.toString(value), new Ast.BoolLit(value, NOWHERE));
+    }
+
+    /** A date, written the way a row writes one: the constructor applied to an ISO 8601 string. */
+    public static FixtureTemplate date(String iso) {
+        return new FixtureTemplate("Date(\"" + iso + "\")",
+                new Ast.Apply("Date", List.of(new Ast.StringLit(iso, NOWHERE)), NOWHERE));
+    }
+
+    public static FixtureTemplate dateTime(String iso) {
+        return new FixtureTemplate("DateTime(\"" + iso + "\")",
+                new Ast.Apply("DateTime", List.of(new Ast.StringLit(iso, NOWHERE)), NOWHERE));
     }
 
     /** The absent optional, which the language names rather than any module. */

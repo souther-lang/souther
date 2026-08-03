@@ -205,6 +205,390 @@ class CompileExampleGenerateTest {
                 "the invariant's edge and both sides of the guard's line");
     }
 
+    /**
+     * A value a format rule accepts, and one the model then builds.
+     *
+     * <p>An identifier saying what it looks like is the commonest rule there is, and nothing could
+     * write one — so a record holding an id could not be composed at all, and every combination that
+     * record took part in came back as one whose values the model refused. What settles this is not
+     * that the string looks right but that the derived decoder takes it, which is what the check here
+     * is: the row is offered only if it built.
+     */
+    @Test
+    void anIdentifierWithAFormatRuleGetsAValueTheModelAccepts() {
+        String formatted = """
+                module example.office
+
+                data OfficeId = String
+                    invariant String.matches("[0-9]{2}-[0-9]{6}", value)
+
+                data Prefecture = String
+                    invariant String.matches("0[1-9]|[1-3][0-9]|4[0-7]", value)
+
+                data Domestic
+                data Overseas
+                data Kind = Domestic | Overseas
+
+                data Office = { id: OfficeId, prefecture: Prefecture, kind: Kind }
+                data Ok = { n: Int }
+
+                behavior register : (office: Office) -> Ok
+                    constructs Ok
+
+                let register (office) = Ok { n = 0 }
+
+                example register
+                    | (Office { id = OfficeId("12-345678"), prefecture = Prefecture("13"),
+                                kind = Domestic }) -> Ok { n = 0 }
+                """;
+
+        assertEquals(List.of(
+                        "Office { id = OfficeId(\"00-000000\"), prefecture = Prefecture(\"01\"),"
+                                + " kind = Overseas }"),
+                inputs(generated(formatted).get("register").pairs()),
+                "the class nothing covers, with an id and a prefecture the rules accept");
+    }
+
+    /** And a date, which a row writes as its ISO form. */
+    @Test
+    void aDateGetsAValueTheModelAccepts() {
+        String dated = """
+                module example.dated
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Request = { on: Date, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (request: Request) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = 0 }
+
+                example take
+                    | (Request { on = Date("2026-08-03"), flag = Yes }) -> Ok { n = 0 }
+                """;
+
+        assertEquals(List.of("Request { on = Date(\"2000-01-01\"), flag = No }"),
+                inputs(generated(dated).get("take").pairs()));
+    }
+
+    /**
+     * A value carrying a character a literal has to escape.
+     *
+     * <p>The row is text somebody pastes, so what it says has to read back as what it was made from.
+     * Written as itself, a tab is invisible in the row and a newline ends it — the rest of the row
+     * lands on a line that is not commented out, and what was pasted is not what was offered. So this
+     * asks the compiler rather than the text: the block goes back in, and the rows have to hold.
+     */
+    @Test
+    void aValueWithACharacterALiteralEscapesSurvivesBeingPasted() {
+        String tabbed = """
+                module example.tabbed
+
+                data Spaced = String
+                    invariant String.matches("a[\\\\t]b", value)
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Note = { text: Spaced, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (note: Note) -> Ok
+                    constructs Ok
+
+                let take (note) = Ok { n = 0 }
+
+                example take
+                    | (Note { text = Spaced("a\\tb"), flag = Yes }) -> Ok { n = 0 }
+                """;
+
+        assertEquals(List.of("Note { text = Spaced(\"a\\tb\"), flag = No }"),
+                inputs(generated(tabbed).get("take").pairs()),
+                "the tab is written the way a literal spells one");
+
+        String block = GeneratedRows.of("example.tabbed", generated(tabbed), false);
+        String pasted = tabbed + block.lines()
+                .filter(line -> line.startsWith("//     ") || line.equals("// example take"))
+                .map(line -> line.substring("// ".length()).replace("<?>", "Ok { n = 0 }"))
+                .reduce("", (all, line) -> all + line + "\n");
+
+        Compilation compilation = Compilation.ofSource(pasted, "Main");
+        compilation.answerEverything();
+        List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
+
+        assertEquals(2, rows.size(), "the row that was there, and the one generated");
+        for (souther.compiler.observe.RowOutcome row : rows) {
+            assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
+                    row.description() + " -> " + row.failurePhase());
+        }
+    }
+
+    /** A model where the position under test is a field of the input and one flag divides the rows. */
+    private static String withField(String declarations, String field) {
+        return """
+                module example.candidates
+
+                %s
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Req = { v: %s, f: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (r: Req) -> Ok
+                    constructs Ok
+
+                let take (r) = Ok { n = 0 }
+
+                example take
+                    | (Req { v = %s, f = Yes }) -> Ok { n = 0 }
+                """.formatted(declarations, field, "%s");
+    }
+
+    /**
+     * A rule this cannot read leaves the position what it had.
+     *
+     * <p>Reading a format rule is a way to offer a value, not a way to decide there is none. A lookahead
+     * is past what the reader understands, and the plain representative for the position — which built
+     * before any of this existed, and which this rule happens to accept — is still offered.
+     */
+    @Test
+    void unsupportedPatternThatAcceptsTheDefaultCandidateStillGenerates() {
+        String source = withField("""
+                data V = String
+                    invariant String.matches("(?=x)x", value)""", "V").formatted("V(\"x\")");
+
+        assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
+                inputs(generated(source).get("take").pairs()));
+    }
+
+    /**
+     * Two rules on one position, in either order.
+     *
+     * <p>Every clause of an invariant has to hold, so the order they are written in cannot decide
+     * whether a value can be found. Each readable rule contributes a candidate and the constructor
+     * settles which of them stands — reading only the first would make `[a-z]+` before `x+` produce
+     * `"a"` and stop, and the same two rules the other way round produce a value.
+     */
+    @Test
+    void conjoinedPatternsDoNotDependOnDeclarationOrder() {
+        String forwards = withField("""
+                data V = String
+                    invariant String.matches("[a-z]+", value)
+                    invariant String.matches("x+", value)""", "V").formatted("V(\"x\")");
+        String backwards = withField("""
+                data V = String
+                    invariant String.matches("x+", value)
+                    invariant String.matches("[a-z]+", value)""", "V").formatted("V(\"x\")");
+
+        assertEquals(List.of("Req { v = V(\"x\"), f = No }"),
+                inputs(generated(forwards).get("take").pairs()));
+        assertEquals(inputs(generated(forwards).get("take").pairs()),
+                inputs(generated(backwards).get("take").pairs()),
+                "the same two rules, written the other way round");
+    }
+
+    /**
+     * Two positions, each needing a different one of the values it was offered.
+     *
+     * <p>What has to build is the whole input at once — the check is the model's own constructor — so
+     * what is being tried is the tuple, not a value. Here the two positions carry the same two rules
+     * written the other way round, so their values come out in opposite orders and the assignment that
+     * builds is the first value of one with the second of the other. Trying one index across every
+     * position walks the diagonal of the choices and never reaches it.
+     */
+    @Test
+    void candidatesAtDifferentPositionsAreNotWalkedInLockstep() {
+        String source = """
+                module example.lock
+
+                data Left = String
+                    invariant String.matches("[a-z]+", value)
+                    invariant String.matches("x+", value)
+
+                data Right = String
+                    invariant String.matches("x+", value)
+                    invariant String.matches("[a-z]+", value)
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Req = { left: Left, right: Right, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (request: Req) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = 0 }
+
+                example take
+                    | (Req { left = Left("x"), right = Right("x"), flag = Yes }) -> Ok { n = 0 }
+                """;
+
+        assertEquals(List.of("Req { left = Left(\"x\"), right = Right(\"x\"), flag = No }"),
+                inputs(generated(source).get("take").pairs()));
+        // And the same model with one of the two rewritten to declare its rules in the other order,
+        // which is the same model. Order decided this before the assignments were walked as tuples.
+        assertEquals(inputs(generated(source).get("take").pairs()),
+                inputs(generated(source.replace("module example.lock", "module example.lock2")
+                        .replace("""
+                                data Right = String
+                                    invariant String.matches("x+", value)
+                                    invariant String.matches("[a-z]+", value)""", """
+                                data Right = String
+                                    invariant String.matches("[a-z]+", value)
+                                    invariant String.matches("x+", value)""")).get("take").pairs()));
+    }
+
+    /**
+     * One parameter's choices do not multiply with another's.
+     *
+     * <p>Each parameter is built and refused on its own, so searching them together spends the bound
+     * on assignments differing only in a parameter already settled. Here every field's value is the
+     * second of the two it was offered, which is four steps out in each of two parameters — reachable
+     * on its own and, taken together, eight steps into a space of two hundred and fifty-six.
+     */
+    @Test
+    void eachParameterIsSearchedOnItsOwn() {
+        StringBuilder declarations = new StringBuilder();
+        for (char c = 'a'; c <= 'h'; c++) {
+            declarations.append("""
+                    data V%1$s = String
+                        invariant String.matches("[a-z]+", value)
+                        invariant String.matches("x+", value)
+
+                    """.formatted(Character.toUpperCase(c)));
+        }
+        String source = """
+                module example.two
+
+                %sdata Yes
+                data No
+                data Flag = Yes | No
+
+                data One = { a: VA, b: VB, c: VC, d: VD }
+                data Two = { e: VE, f: VF, g: VG, h: VH, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (one: One, two: Two) -> Ok
+                    constructs Ok
+
+                let take (one, two) = Ok { n = 0 }
+                """.formatted(declarations);
+
+        List<String> rows = inputs(generated(source).get("take").pairs());
+
+        assertEquals(2, rows.size(), "one row per class of the only axis: " + rows);
+        for (String row : rows) {
+            for (char c = 'a'; c <= 'h'; c++) {
+                assertTrue(row.contains("V%1$s(\"x\")".formatted(Character.toUpperCase(c))),
+                        "every field at the value its rules allow: " + row);
+            }
+        }
+    }
+
+    /**
+     * A search that stopped says so, rather than saying everything was refused.
+     *
+     * <p>The choices multiply, so a row is tried at a bounded number of assignments. Past that bound
+     * the ones not reached were not refused — nothing was written and nothing built — and calling them
+     * refused tells an author their model rules out a combination it does not.
+     */
+    @Test
+    void whatTheSearchDidNotReachIsNotReportedAsRefused() {
+        StringBuilder declarations = new StringBuilder();
+        StringBuilder fields = new StringBuilder();
+        for (char c = 'a'; c <= 'i'; c++) {
+            declarations.append("""
+                    data V%1$s = String
+                        invariant String.matches("[a-z]+", value)
+                        invariant String.matches("x+", value)
+
+                    """.formatted(Character.toUpperCase(c)));
+            fields.append(c).append(": V").append(Character.toUpperCase(c)).append(", ");
+        }
+        String source = """
+                module example.wide
+
+                %sdata Yes
+                data No
+                data Flag = Yes | No
+
+                data Req = { %sflag: Flag }
+                    invariant String.length(a.value) > 1000
+
+                data Ok = { n: Int }
+
+                behavior take : (request: Req) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = 0 }
+                """.formatted(declarations, fields);
+
+        List<Generator.UnresolvedCombination> left = generated(source).get("take").pairs()
+                .unresolved();
+
+        assertFalse(left.isEmpty(), "nothing builds, so something is left");
+        for (Generator.UnresolvedCombination each : left) {
+            assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT, each.reason(),
+                    each.toString());
+            assertTrue(each.subject().startsWith("request.flag="),
+                    "and it is still about the combination: " + each.subject());
+        }
+    }
+
+    /**
+     * A newtype's rules are read wherever it is asked for a value.
+     *
+     * <p>A newtype is asked for one from two places — a field of a record, and a case of a sum — and
+     * the rules on it are the same rules in both. Read in only one of them, a formatted identifier
+     * composes as a field and is refused as a case, which is the same model reporting a position as
+     * unfillable depending on where it was written.
+     */
+    @Test
+    void aFormattedNewtypeUsedAsASumCaseGetsARepresentative() {
+        String source = """
+                module example.cases
+
+                data Email = String
+                    invariant String.matches("[a-z]+@[a-z]+", value)
+
+                data Amount = Int
+                    invariant value >= 100
+
+                data NoContact
+                data Contact = Email | NoContact
+                data NoAmount
+                data Wallet = NoAmount | Amount
+
+                data Req = { contact: Contact, w: Wallet }
+                data Ok = { n: Int }
+
+                behavior take : (r: Req) -> Ok
+                    constructs Ok
+
+                let take (r) = Ok { n = 0 }
+
+                example take
+                    | (Req { contact = NoContact, w = NoAmount }) -> Ok { n = 0 }
+                """;
+
+        List<String> rows = inputs(generated(source).get("take").pairs());
+
+        assertTrue(rows.stream().anyMatch(r -> r.contains("Email(\"a@a\")")),
+                "a case whose rule states a format: " + rows);
+        assertTrue(rows.stream().anyMatch(r -> r.contains("Amount(100)")),
+                "and one whose rule states a bound: " + rows);
+    }
+
     // --- the block, put back through the compiler ------------------------------------------------
 
     /** The rows of the block, with the placeholder answered the way an author answers it. */

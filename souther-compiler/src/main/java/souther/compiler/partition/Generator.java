@@ -9,9 +9,12 @@ import souther.compiler.observe.ObservedValue;
 import souther.compiler.types.Type;
 
 import java.math.BigDecimal;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +39,11 @@ public final class Generator {
     /** How many rows one call will write. Past this the output stops being something a person reads
      * and pastes, and a model that wants more than this has axes it should be measured at fewer of. */
     static final int MAX_ROWS = 200;
+
+    /** How many assignments of values one parameter is tried at. The choices multiply, so this is a
+     * bound on the search and not on any one position — and reaching it is reported as the search
+     * having stopped, which is a different thing from every assignment having been refused. */
+    private static final int MAX_TUPLES = 256;
 
     /** How deep a record is built. Past this a value stops being anything an author recognises as one
      * input, and a type that refers to itself would not stop at all. */
@@ -243,15 +251,24 @@ public final class Generator {
                         UnresolvedCombination.Reason.NO_REPRESENTATIVE));
                 continue;
             }
-            Map<String, FixtureTemplate> byPath = new LinkedHashMap<>();
-            byPath.put(axis.path().toString(), at);
-            Composed composed = inputsOf(subject, byPath, check);
-            if (composed.inputs() == null) {
-                unresolved.add(new UnresolvedCombination(List.of(label), composed.reason(),
-                        composed.detail()));
+            List<FixtureTemplate> inputs = new ArrayList<>();
+            UnresolvedCombination left = null;
+            for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
+                Map<String, List<FixtureTemplate>> here =
+                        TermPath.of(subject.parameters().get(p)).head().equals(axis.path().head())
+                                ? Map.of(axis.path().toString(), List.of(at)) : Map.of();
+                Outcome tried = valueAt(subject, p, here, check);
+                if (tried.value() == null) {
+                    left = new UnresolvedCombination(List.of(label), tried.reason(), tried.detail());
+                    break;
+                }
+                inputs.add(tried.value());
+            }
+            if (left != null) {
+                unresolved.add(left);
                 continue;
             }
-            rows.add(new GeneratedRow(List.of(label), composed.inputs()));
+            rows.add(new GeneratedRow(List.of(label), inputs));
         }
         return new GenerationResult(rows, unresolved, List.of());
     }
@@ -434,13 +451,22 @@ public final class Generator {
     /**
      * One assignment of classes, built into the values a row would carry.
      *
-     * <p>Each class offers more than one value, and they are tried in order: a value refused at
-     * construction says nothing about the class, only about that value, and the next one may well
-     * build. What is tried is the same index at every position at once, which keeps the attempts linear
-     * in the longest candidate list rather than multiplying them.
+     * <p>What a position offers is values, and what has to build is all of them together: the check is
+     * the model's own constructor over the whole input, so a field's value can be refused for what
+     * another field was given. The unit being tried is the tuple, not the value — walking one index
+     * across every position at once tries the diagonal of the choices and misses the rest, and two
+     * fields whose rules are the same but written in a different order then land on different indices
+     * and never meet.
+     *
+     * <p>So the assignments are walked outward from the one where every position takes its first
+     * value: then the ones a single position has moved one step from, then two, and so on. Nearest
+     * first, because a position's first value is the one that stands for it, and a row that took a
+     * later one at every position is a row further from what the model says it is about. The walk
+     * stops at {@link #MAX_TUPLES}, and stopping is reported as having stopped rather than as
+     * everything having been refused.
      */
     private static Attempt build(Subject subject, List<Axis> axes, int[] where, CandidateCheck check) {
-        int deepest = 0;
+        Map<String, List<FixtureTemplate>> decided = new LinkedHashMap<>();
         for (int i = 0; i < axes.size(); i++) {
             List<FixtureTemplate> candidates =
                     axes.get(i).classes().get(where[i]).representatives().candidates();
@@ -448,70 +474,181 @@ public final class Generator {
                 return new Attempt(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
                         label(axes.get(i), where[i]));
             }
-            deepest = Math.max(deepest, candidates.size());
+            decided.put(axes.get(i).path().toString(), candidates);
         }
-        for (int attempt = 0; attempt < deepest; attempt++) {
-            Map<String, FixtureTemplate> byPath = new LinkedHashMap<>();
-            for (int i = 0; i < axes.size(); i++) {
-                List<FixtureTemplate> candidates =
-                        axes.get(i).classes().get(where[i]).representatives().candidates();
-                byPath.put(axes.get(i).path().toString(),
-                        candidates.get(Math.min(attempt, candidates.size() - 1)));
+        List<FixtureTemplate> inputs = new ArrayList<>();
+        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
+            Outcome tried = valueFor(subject, p, axes, decided, check);
+            if (tried.value() == null) {
+                return new Attempt(null, tried.reason(), tried.detail());
             }
-            Composed composed = inputsOf(subject, byPath, check);
-            if (composed.inputs() != null) {
-                return new Attempt(new GeneratedRow(labels(axes, where), composed.inputs()), null,
-                        null);
-            }
-            if (composed.reason() == UnresolvedCombination.Reason.NO_REPRESENTATIVE) {
-                // Another candidate changes nothing: the position has no values at all.
-                return new Attempt(null, composed.reason(), composed.detail());
-            }
+            inputs.add(tried.value());
         }
-        return new Attempt(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+        return new Attempt(new GeneratedRow(labels(axes, where), inputs), null, null);
     }
 
     /**
-     * One value per parameter, or null where one of them could not be produced or would not build.
+     * One parameter's value, searched for on its own.
      *
-     * <p>Several axes on one parameter are one value, not several: {@code request.kind} and
-     * {@code request.cost} are two positions of one {@code Request}, and a row writes one of those.
+     * <p>Each parameter is built and refused on its own — the check is the model's constructor for that
+     * one type, and a rule relating two of them is not something a model can write. So the choices
+     * under one parameter and the choices under another do not multiply, and searching them together
+     * would spend the bound on assignments that differ only in a parameter already settled. Two
+     * parameters of eight either-or fields are two searches of 256, not one of 65,536.
      */
-    private static Composed inputsOf(Subject subject, Map<String, FixtureTemplate> byPath,
-                                     CandidateCheck check) {
-        List<FixtureTemplate> inputs = new ArrayList<>();
-        for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            TermPath at = TermPath.of(subject.parameters().get(p));
-            Composition built = compose(subject.types().get(p), at, byPath, subject.symbols(), 0);
-            if (built.value() == null) {
-                // Nothing could be written at all: a field of a type nothing stands for. Which is not
-                // the same as a value that was written and refused, and reporting it as one sends the
-                // author looking for a rule relating two inputs that has nothing to do with it.
-                return new Composed(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
-                        built.missingAt());
+    private static Outcome valueFor(Subject subject, int p, List<Axis> axes,
+                                    Map<String, List<FixtureTemplate>> decided,
+                                    CandidateCheck check) {
+        TermPath at = TermPath.of(subject.parameters().get(p));
+        Map<String, List<FixtureTemplate>> here = new LinkedHashMap<>();
+        for (Axis axis : axes) {
+            if (axis.path().head().equals(at.head())
+                    && decided.containsKey(axis.path().toString())) {
+                here.put(axis.path().toString(), decided.get(axis.path().toString()));
             }
-            if (check.refuse(p, built.value()).isPresent()) {
-                return new Composed(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
-            }
-            inputs.add(built.value());
         }
-        return new Composed(inputs, null, null);
+        return valueAt(subject, p, here, check);
     }
 
-    /** One attempt at a row's inputs: the values, or why there are none. */
-    private record Composed(List<FixtureTemplate> inputs, UnresolvedCombination.Reason reason,
-                            String detail) {}
+    /** One parameter's value, with the positions the caller fixed already decided. */
+    private static Outcome valueAt(Subject subject, int p,
+                                   Map<String, List<FixtureTemplate>> decided,
+                                   CandidateCheck check) {
+        Choices choices = choicesOf(subject.types().get(p),
+                TermPath.of(subject.parameters().get(p)), subject.symbols(), decided);
+        return choices.missingAt() != null
+                ? new Outcome(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
+                        choices.missingAt())
+                : walk(subject, p, choices, check);
+    }
 
-    /** One position's value, or the position that had none. */
-    private record Composition(FixtureTemplate value, String missingAt) {}
+    /**
+     * Every position a row chooses a value at, in the order they are decided.
+     *
+     * @param at        the paths, so that an assignment can be read back as which value went where
+     * @param values    what each of those positions can take, never empty
+     * @param missingAt the position nothing at all can be written at, where there is one — which is
+     *                  not a choice to make but a reason there is no row
+     */
+    private record Choices(List<String> at, List<List<FixtureTemplate>> values, String missingAt) {
 
-    /** The value at one position: what an axis fixed there, or a record built out of its fields, or a
-     * value that stands for the type. Null where nothing can be written. */
-    private static Composition compose(Type type, TermPath at, Map<String, FixtureTemplate> byPath,
-                                       Symbols symbols, int depth) {
-        FixtureTemplate fixed = byPath.get(at.toString());
-        if (fixed != null) {
-            return new Composition(fixed, null);
+        static Choices missing(String at) {
+            return new Choices(List.of(), List.of(), at);
+        }
+    }
+
+    /**
+     * What the positions of one row can take: the axes at the classes this assignment fixes, and every
+     * other position at whatever stands for its type.
+     *
+     * <p>The same walk the values are composed by, which is what keeps the two agreeing about where the
+     * positions are. A record is not a position but the fields under it are, and a position the caller
+     * has already decided keeps what it was given.
+     *
+     * @param decided what the caller fixed: the classes of an axis, or the single value a boundary is
+     *                to be reached at
+     */
+    private static Choices choicesOf(Type type, TermPath at, Symbols symbols,
+                                     Map<String, List<FixtureTemplate>> decided) {
+        List<String> paths = new ArrayList<>(decided.keySet());
+        List<List<FixtureTemplate>> values = new ArrayList<>(decided.values());
+        String missing = choicesUnder(type, at, symbols, 0, paths, values);
+        return missing != null ? Choices.missing(missing) : new Choices(paths, values, null);
+    }
+
+    /** The positions under one parameter, appended in the order they are composed. Returns the path
+     * nothing can be written at, where there is one. */
+    private static String choicesUnder(Type type, TermPath at, Symbols symbols, int depth,
+                                       List<String> paths, List<List<FixtureTemplate>> values) {
+        if (paths.contains(at.toString())) {
+            return null;   // an axis decides here
+        }
+        if (depth < MAX_DEPTH && type instanceof Type.Ref ref
+                && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
+            Map<String, Type> fields = TypeOps.fieldTypes(data, symbols);
+            if (!fields.isEmpty()) {
+                for (Map.Entry<String, Type> field : fields.entrySet()) {
+                    String missing = choicesUnder(field.getValue(), at.then(field.getKey()), symbols,
+                            depth + 1, paths, values);
+                    if (missing != null) {
+                        return missing;
+                    }
+                }
+                return null;
+            }
+        }
+        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols);
+        if (stands.isEmpty()) {
+            // Nothing could be written at all: a position of a type nothing stands for. Which is not
+            // the same as a value that was written and refused, and reporting it as one sends the
+            // author looking for a rule relating two inputs that has nothing to do with it.
+            return at + ": " + Type.show(type);
+        }
+        paths.add(at.toString());
+        values.add(stands);
+        return null;
+    }
+
+    /** What came of trying the assignments for one parameter: its value, or why there is none. */
+    private record Outcome(FixtureTemplate value, UnresolvedCombination.Reason reason,
+                           String detail) {}
+
+    /**
+     * The assignments, nearest first, until one builds.
+     *
+     * <p>Breadth-first over the choices: the assignment where every position takes its first value,
+     * then every assignment one step from one already tried. Deterministic, because the order the
+     * positions were collected in is the order their steps are taken in, and a row is compared against
+     * the last run's to see what changed.
+     */
+    private static Outcome walk(Subject subject, int p, Choices choices, CandidateCheck check) {
+        int positions = choices.at().size();
+        ArrayDeque<int[]> next = new ArrayDeque<>();
+        Set<String> seen = new LinkedHashSet<>();
+        int[] first = new int[positions];
+        next.add(first);
+        seen.add(Arrays.toString(first));
+
+        int tried = 0;
+        while (!next.isEmpty() && tried < MAX_TUPLES) {
+            int[] assignment = next.poll();
+            tried++;
+            Map<String, FixtureTemplate> chosen = new LinkedHashMap<>();
+            for (int i = 0; i < positions; i++) {
+                chosen.put(choices.at().get(i), choices.values().get(i).get(assignment[i]));
+            }
+            FixtureTemplate built = compose(subject.types().get(p),
+                    TermPath.of(subject.parameters().get(p)), chosen, subject.symbols(), 0);
+            if (built != null && check.refuse(p, built).isEmpty()) {
+                return new Outcome(built, null, null);
+            }
+            for (int i = 0; i < positions; i++) {
+                if (assignment[i] + 1 >= choices.values().get(i).size()) {
+                    continue;
+                }
+                int[] stepped = assignment.clone();
+                stepped[i]++;
+                if (seen.add(Arrays.toString(stepped))) {
+                    next.add(stepped);
+                }
+            }
+        }
+        // Nothing left to try is every assignment refused; something left is the search having stopped,
+        // and the difference is what the reader is owed. Neither carries a detail: what these are
+        // about is the combination, and a detail is read as the position that is the fact behind
+        // several of them.
+        return next.isEmpty()
+                ? new Outcome(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null)
+                : new Outcome(null, UnresolvedCombination.Reason.SEARCH_LIMIT, null);
+    }
+
+    /** The value at one position: what the assignment chose there, or a record built out of its
+     * fields. Null only where the walk that collected the choices and this one disagree. */
+    private static FixtureTemplate compose(Type type, TermPath at, Map<String, FixtureTemplate> chosen,
+                                           Symbols symbols, int depth) {
+        FixtureTemplate here = chosen.get(at.toString());
+        if (here != null) {
+            return here;
         }
         if (depth < MAX_DEPTH && type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
@@ -519,19 +656,17 @@ public final class Generator {
             if (!fields.isEmpty()) {
                 Map<String, FixtureTemplate> built = new LinkedHashMap<>();
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
-                    Composition value = compose(field.getValue(), at.then(field.getKey()), byPath,
+                    FixtureTemplate value = compose(field.getValue(), at.then(field.getKey()), chosen,
                             symbols, depth + 1);
-                    if (value.value() == null) {
-                        return value;   // the field that had none, not the record that wanted it
+                    if (value == null) {
+                        return null;
                     }
-                    built.put(field.getKey(), value.value());
+                    built.put(field.getKey(), value);
                 }
-                return new Composition(FixtureTemplate.record(ref.name(), built), null);
+                return FixtureTemplate.record(ref.name(), built);
             }
         }
-        List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols);
-        return stands.isEmpty() ? new Composition(null, at + ": " + Type.show(type))
-                : new Composition(stands.get(0), null);
+        return null;
     }
 
     /** A boundary value written the way the position takes it: bare where the position is a number,

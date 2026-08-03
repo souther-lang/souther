@@ -251,8 +251,7 @@ public final class Partitions {
                     RepresentativeSource.of(FixtureTemplate.unitCase(leaf)));   // naming it builds it
         }
         if (data.newtype()) {
-            List<FixtureTemplate> inner = representativesOf(TypeOps.newtypeInner(leaf, symbols),
-                    symbols);
+            List<FixtureTemplate> inner = insideTheNewtype(leaf, symbols);
             return inner.isEmpty()
                     ? PartitionClass.ungeneratable(leaf.name(), leaf.name(), is,
                             "no value of what `" + leaf.name() + "` wraps can be written")
@@ -354,6 +353,15 @@ public final class Partitions {
         if (type == Type.BOOL) {
             return List.of(FixtureTemplate.bool(true));
         }
+        // A date is built from its ISO 8601 form, which is how a row writes one. One fixed day rather
+        // than today's: a generated row is compared with the last one to see what changed, and a value
+        // that read the clock would change every time nothing had.
+        if (type == Type.DATE) {
+            return List.of(FixtureTemplate.date("2000-01-01"));
+        }
+        if (type == Type.DATETIME) {
+            return List.of(FixtureTemplate.dateTime("2000-01-01T00:00:00"));
+        }
         // The empty one, for every collection. It is the value that always builds — a rule about a
         // collection bounds its size or its elements, and neither can refuse having none — and a row
         // whose collection is not what it is about should say so by carrying nothing.
@@ -370,15 +378,55 @@ public final class Partitions {
         // construction — but it does have values, and the edge of the bound is one that builds.
         if (type instanceof Type.Ref ref && symbols.get(ref.name()) instanceof Ast.Data data
                 && data.newtype()) {
-            Bounds bounds = boundsOf(type, symbols);
-            List<FixtureTemplate> inner = bounds == null || bounds.isEmpty()
-                    ? representativesOf(TypeOps.newtypeInner(ref.name(), symbols), symbols)
-                    : List.of(bounds.decimal()
-                            ? FixtureTemplate.decimal(inside(bounds))
-                            : FixtureTemplate.integer(inside(bounds).longValueExact()));
-            return inner.stream().map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
+            return insideTheNewtype(ref.name(), symbols).stream()
+                    .map(t -> FixtureTemplate.newtype(ref.name(), t)).toList();
         }
         return List.of();
+    }
+
+    /**
+     * What a newtype wraps: every value for it this can think of, in the order to try them.
+     *
+     * <p>Candidates, not an answer. Whether a newtype accepts a value is decided by its own
+     * constructor, and this only proposes — so a rule it reads is a reason to offer another value
+     * rather than to withdraw the ones already there. A format rule that cannot be read leaves the
+     * position with what it had before this could read any of them, and a newtype carrying two rules
+     * gets a value from each, which is why the order they are declared in does not decide whether one
+     * builds.
+     *
+     * <p>Both the bound on a number and the format of a string, in one place, because a newtype is
+     * asked for a value from two: a field of a record, and a case of a sum. Reading the rules in only
+     * one of them is how a value that holds everywhere came to be written in one place and not the
+     * other.
+     */
+    private static List<FixtureTemplate> insideTheNewtype(TypeName newtype, Symbols symbols) {
+        Type base = TypeOps.newtypeInner(newtype, symbols);
+        List<FixtureTemplate> candidates = new ArrayList<>();
+
+        Bounds bounds = boundsOf(new Type.Ref(newtype), symbols);
+        if (bounds != null && !bounds.isEmpty()) {
+            candidates.add(bounds.decimal()
+                    ? FixtureTemplate.decimal(inside(bounds))
+                    : FixtureTemplate.integer(inside(bounds).longValueExact()));
+        }
+        if (base == Type.STRING && symbols.get(newtype) instanceof Ast.Data data) {
+            for (Ast.InvariantClause clause : TypeOps.effectiveInvariants(data, symbols)) {
+                for (Ast.Expr each : InvariantConstraints.clauses(clause.expr())) {
+                    if (InvariantConstraints.of(each, base).orElse(null)
+                            instanceof InvariantConstraints.Pattern format) {
+                        PatternValues.shortestAccepted(format.regex())
+                                .map(FixtureTemplate::string).ifPresent(candidates::add);
+                    }
+                }
+            }
+        }
+        candidates.addAll(representativesOf(base, symbols));
+
+        Map<String, FixtureTemplate> once = new LinkedHashMap<>();
+        for (FixtureTemplate each : candidates) {
+            once.putIfAbsent(each.text(), each);
+        }
+        return List.copyOf(once.values());
     }
 
     /** A number the bound admits. The lower edge where there is one: it is inside whatever upper edge
