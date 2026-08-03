@@ -52,6 +52,21 @@ public final class BottomInfer {
     }
 
     /**
+     * Whether {@code t} answers no value, so nothing about a value follows from standing beside it:
+     * the bottom an empty collection carries, the {@link Type.Never} an {@code unreachable} answers
+     * with, and the {@link Type.Erroneous} an error already reported stands in for.
+     *
+     * <p>These are the types that fit every expectation because they state nothing, which is the
+     * opposite of what a type read off a position has to do. A reader asking "does this position say
+     * what the value is" asks this and takes the answer's negation — it is the one place that decides
+     * which types carry no information, so a type added with that property is added here rather than
+     * in each reader's own exclusion list.
+     */
+    static boolean answersNoValue(Type t) {
+        return t instanceof Type.Nothing || t instanceof Type.Never || t instanceof Type.Erroneous;
+    }
+
+    /**
      * An empty collection whose element/value type is fixed by context rather than written: the
      * literal {@code []}, and a library value that takes no argument to learn its type from.
      *
@@ -62,11 +77,8 @@ public final class BottomInfer {
         if (e instanceof Ast.ListLit l) {
             return l.elements().isEmpty();
         }
-        if (!(e instanceof Ast.Var v && v.denotes() instanceof ValueName.Stdlib lib)) {
-            return false;
-        }
-        Prelude.PreludeEntry entry = Prelude.entry(lib.qualified());
-        return entry != null && entry.declaration().params().isEmpty();
+        return e instanceof Ast.Var v && v.denotes() instanceof ValueName.Stdlib lib
+                && Prelude.isEmptyCollectionValue(lib.qualified());
     }
 
     /** Best-effort: bind the type variables of {@code result} from an {@code expected} type the context

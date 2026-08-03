@@ -4,6 +4,8 @@ import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,9 +16,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * to refer to one.
  *
  * <p>What a fixture may name is a property of the value graph, not of one definition's text: a value
- * is fixture-evaluable when it is a literal, a construction, a spread, a helper applied to those, or a
- * reference to another fixture-evaluable value. So a chain of values holds even though each link names
- * the next.
+ * is fixture-evaluable when it is a literal, a construction, a spread, an empty collection, a helper
+ * applied to those, or a reference to another fixture-evaluable value. So a chain of values holds even
+ * though each link names the next.
  */
 class CompileFixtureNamesAValueTest {
 
@@ -111,6 +113,60 @@ class CompileFixtureNamesAValueTest {
                 example staffed
                     | "two deciders is enough" : (acme) -> Enough
                 """));
+    }
+
+    /** A value whose body is `Map.empty` — the form a fold seed takes, and the one a row could not
+     * name while it could name the `Map.fromList([ ])` denoting the same map. */
+    @Test
+    void aValueReachesTheEmptyMapByName() {
+        assertDoesNotThrow(() -> Compiler.compile("""
+                module demo
+
+                data AccountCode = String
+                data Ledger = { balances: Map<AccountCode, Int> }
+                data Balanced
+                data Unbalanced
+
+                let start: Map<AccountCode, Int> = Map.empty
+                let opening = Ledger { balances = start }
+
+                behavior settle : (l: Ledger) -> Balanced | Unbalanced
+                    constructs Balanced, Unbalanced
+
+                let settle (l) = if Map.size(l.balances) == 0 then Balanced else Unbalanced
+
+                example settle
+                    | "an opening ledger is balanced" : (opening) -> Balanced
+                """));
+    }
+
+    /** The same across a module boundary, named and spread: a published value crosses closed, and the
+     * empty collection inside it is still the library's name. */
+    @Test
+    void aPublishedValueCarriesTheEmptyMapAcross() {
+        assertDoesNotThrow(() -> Compiler.compileModules(List.of("""
+                module up exposing ( AccountCode, Ledger, opening )
+
+                data AccountCode = String
+                data Ledger = { balances: Map<AccountCode, Int> }
+
+                let opening = Ledger { balances = Map.empty }
+                """, """
+                module down
+                import up ( Ledger, opening )
+
+                data Balanced
+                data Unbalanced
+
+                behavior settle : (l: Ledger) -> Balanced | Unbalanced
+                    constructs Balanced, Unbalanced
+
+                let settle (l) = if Map.size(l.balances) == 0 then Balanced else Unbalanced
+
+                example settle
+                    | "an imported opening ledger is balanced" : (opening) -> Balanced
+                    | "and so is a spread of it" : (Ledger { ...opening }) -> Balanced
+                """)));
     }
 
     @Test

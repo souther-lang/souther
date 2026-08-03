@@ -195,6 +195,56 @@ class CompileHelperBodyTypingTest {
     }
 
     @Test
+    void aClosureIsReadAgainstTheResultItsSignatureDeclares() {
+        // `List.find`'s step answers a Bool, so the closure's `v` is a Bool, so `xs` is a
+        // List<Bool>. Nothing else in the call says what the list holds.
+        assertTrue(bodyTypes("let firstTrue (xs) = List.find((v) -> v, xs)"),
+                "the step's declared result types the element the closure walks");
+    }
+
+    @Test
+    void anArgumentBesideAClosureIsSolvedBeforeTheClosureIsRead() {
+        // The seed says what the fold accumulates, and the step is read knowing it: `acc` is an Int
+        // because `0` is, and `x` is one because `acc + x` puts it beside `acc`. Reading the step
+        // first would leave both open and ask for an annotation on `xs`.
+        assertTrue(bodyTypes("let total (xs) = List.fold((acc, x) -> acc + x, 0, xs)"),
+                "the seed binds the accumulator before the step is read");
+    }
+
+    @Test
+    void anArmThatAnswersNoValueDeterminesNothing() {
+        // `unreachable` answers no value, so the arm beside it says nothing about what `v` is —
+        // an arm determines its sibling only where it answers one (ADR-0066). Taking `Never` for
+        // an answer would write it onto the parameter and let every call through.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X constructs X
+                let choose (b: Bool, v) = if b then v else unreachable "impossible"
+                let f (x) = X(choose(true, x.value))
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertTrue(e.getMessage().contains("choose") && e.getMessage().contains("v"), e.getMessage());
+    }
+
+    @Test
+    void aClosureParameterSpelledLikeTheHelpersDoesNotTypeIt() {
+        // The `v` the lambda binds is another binding that happens to be spelled the same. What
+        // types it — `v * 2` — says nothing about the helper's own `v`, which nothing determines.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X constructs X
+                let ignored (v, xs: List<Int>) = List.map((v) -> v * 2, xs)
+                let f (x) = X(List.length(ignored(x, [ 1, 2 ])))
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+        assertTrue(e.getMessage().contains("ignored") && e.getMessage().contains("v"), e.getMessage());
+    }
+
+    @Test
     void aCallSiteNoLongerTypesAParameter() {
         // `id`'s body says nothing about `v`. That the only call passes an Int is not consulted:
         // a helper is typed by its body, not by its callers.
@@ -258,6 +308,278 @@ class CompileHelperBodyTypingTest {
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         assertEquals("check.helper.fnparam", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void theOtherArmOfAnIfTypesTheParameter() {
+        // `v` is one arm of the `if`; the other answers an Int, and the two arms have one type.
+        assertTrue(bodyTypes("let pick (b: Bool, v) = if b then v else 0"),
+                "the other arm of the `if` types `v` as Int");
+    }
+
+    @Test
+    void aSiblingArmOfAMatchTypesTheParameter() {
+        // `v` is the `None` arm; the `Some` arm answers the Int the optional carries.
+        assertTrue(bodyTypes("""
+                let orElse (v, opt: Option<Int>) = match opt with
+                    | Some got -> got
+                    | None -> v"""),
+                "the sibling arm types `v` as Int");
+    }
+
+    @Test
+    void aSiblingElementOfACollectionLiteralTypesTheParameter() {
+        // A list literal's elements have one type, and the sibling names it.
+        assertTrue(bodyTypes("let pair (v) = List.length([v, 1])"),
+                "the sibling element types `v` as Int");
+    }
+
+    @Test
+    void theDeclaredReturnTypeTypesTheParameterItAnswers() {
+        // The body answers the parameter itself, and the return type beside it says what that is.
+        assertTrue(bodyTypes("let same (v): Int = v"),
+                "the declared return type types `v` as Int");
+    }
+
+    @Test
+    void aCaseBindingOfTheSameNameShadowsTheParameter() {
+        // The `v` in the `Some` arm is the arm's own binding, so `v * 2` says nothing about the
+        // parameter — the same rule a `let` of the same name follows.
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X
+                let g (v, opt: Option<Int>) = match opt with
+                    | Some v -> v * 2
+                    | None -> 0
+                let f (x) = x
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void aSiblingArgumentSettlesTheSignaturesTypeVariable() {
+        // `contains` is declared `(value: 'a, s: Set<'a>) -> Bool`. The set says what `'a` is, and
+        // `'a` is what the first argument's type is.
+        assertTrue(bodyTypes("let has (v, s: Set<Int>) = Set.contains(v, s)"),
+                "the set argument settles `'a`, which types `v` as Int");
+    }
+
+    @Test
+    void aMapsValueTypeSettlesTheArgumentItIsInsertedAs() {
+        assertTrue(bodyTypes("let put (v, m: Map<String, Int>) = Map.insert(\"k\", v, m)"),
+                "the map argument settles the value type, which types `v` as Int");
+    }
+
+    @Test
+    void theResultPositionSettlesTheSignaturesTypeVariable() {
+        // `sum` is declared `(List<'a>) -> 'a`, and `+ 1` says the answer is an Int, so the list is
+        // a List<Int>.
+        assertTrue(bodyTypes("let total (xs) = List.sum(xs) + 1"),
+                "the result position settles `'a`, which types `xs` as List<Int>");
+    }
+
+    @Test
+    void aLambdaParameterTypesTheOperandBesideIt() {
+        // The lambda walks a List<Int>, so its own parameter is an Int, and `x + k` types `k`.
+        assertTrue(bodyTypes("let bumpAll (k, xs: List<Int>) = List.map((x) -> x + k, xs)"),
+                "the lambda parameter types `k` as Int");
+    }
+
+    @Test
+    void aFoldStepsParameterTypesTheOperandBesideIt() {
+        assertTrue(bodyTypes("""
+                let total (k, xs: List<Int>) = List.fold((acc, x) -> acc + x + k, 0, xs)"""),
+                "the step's element parameter types `k` as Int");
+    }
+
+    @Test
+    void aFieldOfALambdaParameterTypesWhatItIsComparedTo() {
+        String src = """
+                module demo
+                data Line = { qty: Int }
+                data X = Bool
+                behavior f : (l: Line) -> X constructs X
+                let anyOver (k, ls: List<Line>) = List.any((l) -> l.qty > k, ls)
+                let f (l) = X(anyOver(3, [l]))
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "the lambda parameter is a Line, so `l.qty > k` types `k` as Int");
+    }
+
+    @Test
+    void aLambdaBodySettlesTheElementOfTheCollectionItWalks() {
+        // Nothing but the lambda says what the list holds: `v * 2` types the closure's parameter, and
+        // that is the element type the combinator's `List<'a>` asks for.
+        assertTrue(bodyTypes("let doubled (xs) = List.map((v) -> v * 2, xs)"),
+                "the lambda body settles `'a`, which types `xs` as List<Int>");
+    }
+
+    @Test
+    void aHelperCallingABehaviorIsToldThatBeforeItIsAskedForAnAnnotation() {
+        // A helper does not reach a behavior at all, so asking for the parameter's type first sends
+        // the author to write an annotation that changes nothing.
+        String src = """
+                module demo
+                data X = Int
+                data Y = Int
+                behavior g : (x: X) -> Y constructs Y
+                let g (x) = Y(x.value)
+                behavior f : (x: X) -> Y constructs Y
+                let call (x) = g(x)
+                let f (x) = call(x)
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("e1401.behavior", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void aFunctionParametersDeclaredInputTypesItsArgument() {
+        // `f` writes its type, so applying it says what the argument is — the same thing a declared
+        // callee's parameter says anywhere else.
+        assertTrue(bodyTypes("let apply (f: (Int) -> String, v) = f(v)"),
+                "`f`'s declared input types `v` as Int");
+    }
+
+    @Test
+    void aBindingHoldingAFunctionTypesWhatItIsAppliedTo() {
+        // The binding writes the function type, and applying it asks its argument for the input —
+        // a written type is a declaration wherever it stands.
+        assertTrue(bodyTypes("""
+                let show (v) = {
+                    let render: (Int) -> String = (x) -> String.fromInt(x)
+                    render(v)
+                }"""),
+                "`render`'s written input types `v` as Int");
+    }
+
+    @Test
+    void aComprehensionGuardTypesTheParameter() {
+        // A guard decides whether the one element is there, so it answers a Bool.
+        assertTrue(bodyTypes("let guarded (b) = [1 | b]"),
+                "the comprehension guard types `b` as Bool");
+    }
+
+    @Test
+    void aDeclaredTupleTypeReachesTheElementItNames() {
+        assertTrue(bodyTypes("let pair (v): (String, Int) = (\"key\", v)"),
+                "the declared tuple type types `v` as Int");
+    }
+
+    @Test
+    void anArmOfAnAttemptedConstructionTypesTheParameter() {
+        // The arms of `if X(v) as n then … else …` answer one type, and the success arm reads the
+        // value that was built.
+        String src = """
+                module demo
+                data Amount = Int
+                    invariant value >= 0
+                data X = Int
+                behavior f : (x: X) -> X
+                let wrap (n, fallback) = if Amount(n) as a then a.value else fallback
+                let f (x) = x
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "the sibling arm types `fallback` as Int");
+    }
+
+    @Test
+    void aLocalBindingIsNotTypedByADeclarationOfTheSameName() {
+        // The applied `fetch` is the binding, not the injected behavior that shares its spelling.
+        // Nothing in the body says what the binding holds, so the parameter is annotated.
+        String src = """
+                module demo
+                data X = Int
+                data Y = Int
+                behavior fetch : (x: X) -> Y
+                behavior work : (x: X) -> Y depends on fetch
+                let work (x, fetch) = fetch(x)
+                let choose (b: Bool, v) = {
+                    let fetch = if b then (x) -> 1 else (x) -> 2
+                    fetch(v)
+                }
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    @Test
+    void anElementThatAnswersNoTypeDoesNotHideALaterOne() {
+        // The elements share one type. `[]` answers none of it, so what says what the list holds is
+        // `[1]`, further along.
+        assertTrue(bodyTypes("let nested (v) = List.length([v, [], [1]])"),
+                "the later element types `v` as List<Int>");
+    }
+
+    @Test
+    void anArmThatAnswersNoValueDoesNotHideALaterOne() {
+        // `unreachable` answers no value, so the arm beside it that does is what types the parameter.
+        String src = """
+                module demo
+                data A
+                data B
+                data C
+                data S = A | B | C
+                data X = Int
+                behavior f : (x: X) -> X
+                let choose (v, s: S) = match s with
+                    | A -> v
+                    | B -> unreachable "not here"
+                    | C -> 0
+                let f (x) = x
+                """;
+        assertTrue(Compiler.compile(src).containsKey("demo.F"),
+                "the third arm types `v` as Int");
+    }
+
+    /** Compiles a module declaring a numeric newtype whose only helper is {@code helper}. */
+    private static boolean scales(String helper) {
+        String src = """
+                module demo
+                data N = Int
+                data X = Int
+                behavior f : (x: X) -> X
+                %s
+                let f (x) = x
+                """.formatted(helper);
+        return Compiler.compile(src).containsKey("demo.F");
+    }
+
+    @Test
+    void aNumericNewtypeAsksItsScalarForTheBaseType() {
+        // `N * Int` stays in `N` and `N * N` is a dimension change the model does not have, so what
+        // stands beside the newtype is the base it wraps — not the newtype.
+        assertTrue(scales("let scale (factor, n: N) = n * factor"),
+                "the scalar beside the newtype is an Int");
+    }
+
+    @Test
+    void aScalarOnTheLeftOfAMultiplicationTakesTheBaseType() {
+        assertTrue(scales("let scale (factor, n: N) = factor * n"),
+                "a scalar multiplies from either side");
+    }
+
+    @Test
+    void aDivisorOfANumericNewtypeTakesTheBaseType() {
+        assertTrue(scales("let split (factor, n: N) = n / factor"),
+                "dividing a newtype by a scalar stays in the newtype");
+    }
+
+    @Test
+    void aScalarDividedByANewtypeDeterminesNothing() {
+        // `s / N` is an inverse — a dimension change — so nothing the operator admits stands there and
+        // the parameter is annotated rather than settled at a type the body would then refuse.
+        String src = """
+                module demo
+                data N = Int
+                data X = Int
+                behavior f : (x: X) -> X
+                let invert (factor, n: N) = factor / n
+                let f (x) = x
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test

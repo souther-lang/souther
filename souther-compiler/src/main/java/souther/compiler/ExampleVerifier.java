@@ -1367,6 +1367,12 @@ public final class ExampleVerifier {
                 }
                 yield expandedValue(helper, value, expected);
             }
+            // `Map.empty` / `Set.empty`: a library value, not a library call, so there is no method to
+            // run and its value is known from the name alone. It is the empty collection, which a row
+            // writes `[]` — admitted for the reason `fromList` is (see `collectionOrNewtype`), so a
+            // body and a row spell an empty map the one way.
+            case ValueName.Stdlib lib when Prelude.isEmptyCollectionValue(lib.qualified()) ->
+                    new ArrayList<>();
             case null, default ->
                     throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
         };
@@ -1466,6 +1472,9 @@ public final class ExampleVerifier {
      * value is the argument's. A value has to be ordinary code, where a list literal is a
      * {@code List} whatever the position declares, so this is what lets one record serve as both a
      * value and a fixture. Anything else applied here is a newtype or nothing.
+     *
+     * <p>The empty collection is admitted for the same reason, but it is named rather than applied
+     * ({@code Map.empty}), so it is read in {@link #named}.
      */
     private Object collectionOrNewtype(Ast.Apply c, Type expected) {
         if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())) {

@@ -159,6 +159,15 @@ public final class Prelude {
         return ENTRIES.get(qualifiedName);
     }
 
+    /** Whether {@code qualifiedName} is a library <em>value</em> standing for an empty collection —
+     *  {@code Map.empty}, {@code Set.empty}. Written with no parameter list, so it has no argument to
+     *  learn its element type from and takes it from the position it is written in, as {@code []}
+     *  does. Asked rather than spelled out: which names those are is the library's own to say. */
+    public static boolean isEmptyCollectionValue(String qualifiedName) {
+        PreludeEntry entry = ENTRIES.get(qualifiedName);
+        return entry != null && entry.declaration().params().isEmpty();
+    }
+
     /** Every entry, keyed by qualified name, in declaration order. */
     public static Map<String, PreludeEntry> entries() {
         return Collections.unmodifiableMap(ENTRIES);

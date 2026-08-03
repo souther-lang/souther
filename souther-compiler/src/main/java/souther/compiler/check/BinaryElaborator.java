@@ -266,6 +266,37 @@ public final class BinaryElaborator {
         return op == Ast.BinOp.MUL && rn != null && ln == null && lt.equals(rn);
     }
 
+    /**
+     * What {@code op} asks of one operand, given that the operand beside it is {@code other}.
+     * {@code onTheRight} says which side the asked-about operand stands on, because the rule is not
+     * symmetric.
+     *
+     * <p>Arithmetic and comparison relate two values of one type, so mostly the answer is {@code other}
+     * itself. Scaling a numeric newtype is where they differ: {@code N * s}, {@code s * N} and
+     * {@code N / s} stay in {@code N}, so the operand beside a numeric newtype is the bare base it
+     * wraps, and {@code N × N} is a dimension change the model does not have. Where the operator admits
+     * neither — {@code s / N} is an inverse — nothing follows and the answer is null.
+     *
+     * <p>This is the rule {@link #elaborateBinary} checks, answered for the question a reader of an
+     * operand asks: what does standing here make me? Both are stated here so that neither can be
+     * changed without the other in view.
+     */
+    static Type operandBeside(Ast.BinOp op, Type other, boolean onTheRight, Symbols symbols) {
+        if (op == Ast.BinOp.AND || op == Ast.BinOp.OR) {
+            return Type.BOOL;
+        }
+        if (other == null) {
+            return null;
+        }
+        Type base = TypeOps.directNumericNewtypeBase(other, symbols);
+        if (base == null || !(op == Ast.BinOp.MUL || op == Ast.BinOp.DIV)) {
+            return other;
+        }
+        Type lt = onTheRight ? other : base;
+        Type rt = onTheRight ? base : other;
+        return scalarNewtypeArith(lt, rt, op, symbols) ? base : null;
+    }
+
     /** One side is a single-value newtype and the other is a bare literal (not itself a newtype). */
     static boolean literalPairsNewtype(Type lt, Type rt, Ast.Expr le, Ast.Expr re,
                                                Symbols symbols) {
