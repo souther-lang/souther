@@ -110,7 +110,7 @@ class CompileDischargeThroughAHelperTest {
     }
 
     @Test
-    void aBindingGivenSomethingThatIsNotALocationNamesItself() {
+    void aBindingGivenAConditionalIsThatConditional() {
         String m = """
                 module demo
                 data Qty = Int
@@ -125,7 +125,18 @@ class CompileDischargeThroughAHelperTest {
                     Qty(c)
                 }
                 """;
-        assertEquals(1, warnings(m), "a choice of two is neither of them");
+        // A conditional is one of its branches, so the construction is read on each under its own
+        // condition: `cart.quantity` is at least one and `other.quantity` is not, so one branch
+        // leaves the clause unproven and that is the answer. What is asked here is that the name
+        // answer as the conditional it was given does.
+        String inline = m.replace("""
+                        {
+                    let c = if pick then cart.quantity else other.quantity
+                    Qty(c)
+                }""", "Qty(if pick then cart.quantity else other.quantity)");
+        assertEquals(1, warnings(m), "one branch leaves the clause unproven");
+        assertEquals(warnings(inline), warnings(m),
+                "the name answers as the conditional it was given does");
     }
 
     @Test
