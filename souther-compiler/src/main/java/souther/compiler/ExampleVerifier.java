@@ -2134,6 +2134,14 @@ public final class ExampleVerifier {
                         + "` has no type a fixture can be built against");
             }
             Type paramType = TypeOps.resolveParamType(p.type(), symbols);
+            // A parameter whose element each call decides has no one type here. A call settles it
+            // from the argument it is given; a fixture is built before there is a call to settle it,
+            // so the order is what refuses this rather than the type being unsupported.
+            if (Type.mentions(paramType, t -> t instanceof Type.Var)) {
+                throw new FixtureException("`" + c.written() + "` parameter `" + p.name() + "` is "
+                        + Type.show(paramType) + "; what it holds is decided by each call, and a"
+                        + " fixture is built before a call can decide it");
+            }
             args[i] = built(c.args().get(i), paramType);
         }
         return helpers.invoke(c.written(), args);

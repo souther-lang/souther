@@ -318,6 +318,31 @@ class ExampleCallsHelperTest {
     }
 
     @Test
+    void aHelperWhoseElementEachCallDecidesCannotBuildAFixture() {
+        // `count` compiles and runs at every element type, but a fixture is built before
+        // there is a call to say which one — so the row is refused for the order, not for the type
+        // being one the compiler does not support.
+        CompileException e = err("""
+                module demo
+
+                data Amount = Int
+                data Receipt = { total: Amount }
+
+                behavior bill : (a: Amount) -> Receipt
+                    constructs Receipt
+
+                let bill (a) = Receipt { total = a }
+                let count (xs) = List.length(xs)
+
+                example bill
+                  | (Amount(count([ 1, 2 ]))) -> Receipt { total = Amount(2) }
+                """);
+        assertTrue(e.getMessage().contains("E1903"), e.getMessage());
+        assertTrue(e.getMessage().contains("decided by each call"),
+                "the report says why a call works where a fixture does not: " + e.getMessage());
+    }
+
+    @Test
     void aValueWhoseBodyCallsAHelperIsAFixture() {
         assertDoesNotThrow(() -> Compiler.compile(BASE + """
                 let standard = taxed(Amount(100))

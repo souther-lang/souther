@@ -1,4 +1,4 @@
-# ADR-0092: A stand-in and a recorded row are compared, and neither is authoritative
+# ADR-0093: A stand-in and a recorded row are compared, and neither is authoritative
 
 Status: Accepted. Builds on ADR-0088, which made an injected behavior's `example` row a recorded
 statement rather than an error.

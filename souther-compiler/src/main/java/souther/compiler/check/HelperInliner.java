@@ -796,11 +796,15 @@ public final class HelperInliner {
         return new Ast.LetIn(bound, body, declared, true, null, Ast.Var.local(bound, pos), pos);
     }
 
-    /** Whether a written type has a collection anywhere inside it — the types whose element/value type
-     * an empty literal leaves open until something declares it. */
-    private static boolean carriesCollection(Ast.TypeTerm term) {
+    /** Whether a declared type has a collection anywhere inside it — the types whose element/value
+     * type an empty literal leaves open until something declares it. */
+    static boolean carriesCollection(Ast.TypeTerm term) {
         if (!(term instanceof Ast.TypeRef ref)) {
             return false;   // a function type carries no collection a literal could leave open
+        }
+        if (ref.denotes() != null) {
+            return Type.mentions(ref.denotes(), t -> t instanceof Type.ListOf
+                    || t instanceof Type.MapOf || t instanceof Type.SetOf);
         }
         if ("List".equals(ref.name()) || "Map".equals(ref.name()) || "Set".equals(ref.name())) {
             return true;
@@ -818,20 +822,28 @@ public final class HelperInliner {
         return false;
     }
 
-    /** Whether a written type has a type variable inside it. A generic declared return ({@code
+    /** Whether a declared type has a type variable inside it. A generic declared return ({@code
      * Map.upsert}'s {@code Map<'k, 'a>}) says nothing concrete at a call site, so it is not carried —
      * the caller's own arguments are what fix those variables. */
     private static boolean mentionsRetTypeVar(Ast.RetType ret) {
         return ret != null && ret.cases().stream().anyMatch(HelperInliner::mentionsTypeVar);
     }
 
-    private static boolean mentionsTypeVar(Ast.TypeTerm term) {
+    /**
+     * Asked of what the reference denotes, not of how it was spelled. A reference a
+     * helper's own settling wrote carries its type and no surface text at all
+     * ({@link Ast.TypeRef#of}), so reading the spelling answers no about every one of them.
+     */
+    static boolean mentionsTypeVar(Ast.TypeTerm term) {
         if (term instanceof Ast.FnType fn) {
             return fn.params().stream().anyMatch(HelperInliner::mentionsRetTypeVar)
                     || mentionsRetTypeVar(fn.result());
         }
         if (!(term instanceof Ast.TypeRef ref)) {
             return false;
+        }
+        if (ref.denotes() != null) {
+            return Type.mentions(ref.denotes(), t -> t instanceof Type.Var);
         }
         if (ref.name() != null && ref.name().startsWith("'")) {
             return true;
