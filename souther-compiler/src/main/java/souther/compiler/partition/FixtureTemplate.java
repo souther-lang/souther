@@ -78,6 +78,12 @@ public record FixtureTemplate(String text, Ast.Expr value) {
                 new Ast.Apply(type.name(), List.of(inner.value()), NOWHERE));
     }
 
+    /** No elements. A list, a set and a map are all written this way in a fixture: what the position
+     * is decides what the empty brackets become. */
+    public static FixtureTemplate emptyCollection() {
+        return new FixtureTemplate("[]", new Ast.ListLit(List.of(), NOWHERE));
+    }
+
     /** A record, field by field, in the order the fields were declared. */
     public static FixtureTemplate record(TypeName type, Map<String, FixtureTemplate> fields) {
         List<String> written = new ArrayList<>();

@@ -335,6 +335,12 @@ public final class Partitions {
         if (type == Type.BOOL) {
             return List.of(FixtureTemplate.bool(true));
         }
+        // The empty one, for every collection. It is the value that always builds — a rule about a
+        // collection bounds its size or its elements, and neither can refuse having none — and a row
+        // whose collection is not what it is about should say so by carrying nothing.
+        if (type instanceof Type.ListOf || type instanceof Type.SetOf || type instanceof Type.MapOf) {
+            return List.of(FixtureTemplate.emptyCollection());
+        }
         List<PartitionClass> classes = classesOf(type, symbols);
         for (PartitionClass each : classes) {
             if (each.generatable()) {

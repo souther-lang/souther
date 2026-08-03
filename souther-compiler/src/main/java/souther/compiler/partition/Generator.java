@@ -79,7 +79,7 @@ public final class Generator {
      * every value this tried was refused, which is a fact about the values tried; another value of the
      * same classes may well build. Nothing here writes into {@code provenInfeasible} for that reason.
      */
-    public record UnresolvedCombination(List<String> classes, Reason reason) {
+    public record UnresolvedCombination(List<String> classes, Reason reason, String detail) {
 
         public enum Reason {
             /** One of the classes has no value that can be written for it. */
@@ -92,6 +92,21 @@ public final class Generator {
 
         public UnresolvedCombination {
             classes = List.copyOf(classes);
+        }
+
+        public UnresolvedCombination(List<String> classes, Reason reason) {
+            this(classes, reason, null);
+        }
+
+        /**
+         * What one of these is really about, where several say the same thing.
+         *
+         * <p>A position nothing can write a value for makes every combination it takes part in
+         * unfillable, and saying so once per combination is one fact repeated a hundred times. The
+         * position is the fact; the combinations are arithmetic on it.
+         */
+        public String subject() {
+            return detail == null ? String.join(" x ", classes) : detail;
         }
     }
 
@@ -180,7 +195,8 @@ public final class Generator {
                 // same combination through the same values on the next turn and never finish.
                 pairs.remove(seed);
                 singles.remove(seed);
-                unresolved.add(new UnresolvedCombination(labels(axes, seed), built.reason()));
+                unresolved.add(new UnresolvedCombination(labels(axes, seed), built.reason(),
+                        built.detail()));
             }
         }
         return new GenerationResult(rows, unresolved, incompleteness);
@@ -211,13 +227,13 @@ public final class Generator {
             }
             Map<String, FixtureTemplate> byPath = new LinkedHashMap<>();
             byPath.put(axis.path().toString(), at);
-            List<FixtureTemplate> inputs = inputsOf(subject, byPath, check);
-            if (inputs == null) {
-                unresolved.add(new UnresolvedCombination(List.of(label),
-                        UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED));
+            Composed composed = inputsOf(subject, byPath, check);
+            if (composed.inputs() == null) {
+                unresolved.add(new UnresolvedCombination(List.of(label), composed.reason(),
+                        composed.detail()));
                 continue;
             }
-            rows.add(new GeneratedRow(List.of(label), inputs));
+            rows.add(new GeneratedRow(List.of(label), composed.inputs()));
         }
         return new GenerationResult(rows, unresolved, List.of());
     }
@@ -382,7 +398,7 @@ public final class Generator {
 
     // --- turning classes into a row -------------------------------------------------------------
 
-    private record Attempt(GeneratedRow row, UnresolvedCombination.Reason reason) {}
+    private record Attempt(GeneratedRow row, UnresolvedCombination.Reason reason, String detail) {}
 
     /**
      * One assignment of classes, built into the values a row would carry.
@@ -398,7 +414,8 @@ public final class Generator {
             List<FixtureTemplate> candidates =
                     axes.get(i).classes().get(where[i]).representatives().candidates();
             if (candidates.isEmpty()) {
-                return new Attempt(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE);
+                return new Attempt(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
+                        label(axes.get(i), where[i]));
             }
             deepest = Math.max(deepest, candidates.size());
         }
@@ -410,12 +427,17 @@ public final class Generator {
                 byPath.put(axes.get(i).path().toString(),
                         candidates.get(Math.min(attempt, candidates.size() - 1)));
             }
-            List<FixtureTemplate> inputs = inputsOf(subject, byPath, check);
-            if (inputs != null) {
-                return new Attempt(new GeneratedRow(labels(axes, where), inputs), null);
+            Composed composed = inputsOf(subject, byPath, check);
+            if (composed.inputs() != null) {
+                return new Attempt(new GeneratedRow(labels(axes, where), composed.inputs()), null,
+                        null);
+            }
+            if (composed.reason() == UnresolvedCombination.Reason.NO_REPRESENTATIVE) {
+                // Another candidate changes nothing: the position has no values at all.
+                return new Attempt(null, composed.reason(), composed.detail());
             }
         }
-        return new Attempt(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED);
+        return new Attempt(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
     }
 
     /**
@@ -424,27 +446,41 @@ public final class Generator {
      * <p>Several axes on one parameter are one value, not several: {@code request.kind} and
      * {@code request.cost} are two positions of one {@code Request}, and a row writes one of those.
      */
-    private static List<FixtureTemplate> inputsOf(Subject subject, Map<String, FixtureTemplate> byPath,
-                                                  CandidateCheck check) {
+    private static Composed inputsOf(Subject subject, Map<String, FixtureTemplate> byPath,
+                                     CandidateCheck check) {
         List<FixtureTemplate> inputs = new ArrayList<>();
         for (int p = 0; p < subject.parameters().size() && p < subject.types().size(); p++) {
-            FixtureTemplate value = compose(subject.types().get(p),
-                    TermPath.of(subject.parameters().get(p)), byPath, subject.symbols(), 0);
-            if (value == null || check.refuse(p, value).isPresent()) {
-                return null;
+            TermPath at = TermPath.of(subject.parameters().get(p));
+            Composition built = compose(subject.types().get(p), at, byPath, subject.symbols(), 0);
+            if (built.value() == null) {
+                // Nothing could be written at all: a field of a type nothing stands for. Which is not
+                // the same as a value that was written and refused, and reporting it as one sends the
+                // author looking for a rule relating two inputs that has nothing to do with it.
+                return new Composed(null, UnresolvedCombination.Reason.NO_REPRESENTATIVE,
+                        built.missingAt());
             }
-            inputs.add(value);
+            if (check.refuse(p, built.value()).isPresent()) {
+                return new Composed(null, UnresolvedCombination.Reason.ALL_CANDIDATES_REJECTED, null);
+            }
+            inputs.add(built.value());
         }
-        return inputs;
+        return new Composed(inputs, null, null);
     }
+
+    /** One attempt at a row's inputs: the values, or why there are none. */
+    private record Composed(List<FixtureTemplate> inputs, UnresolvedCombination.Reason reason,
+                            String detail) {}
+
+    /** One position's value, or the position that had none. */
+    private record Composition(FixtureTemplate value, String missingAt) {}
 
     /** The value at one position: what an axis fixed there, or a record built out of its fields, or a
      * value that stands for the type. Null where nothing can be written. */
-    private static FixtureTemplate compose(Type type, TermPath at, Map<String, FixtureTemplate> byPath,
-                                           Symbols symbols, int depth) {
+    private static Composition compose(Type type, TermPath at, Map<String, FixtureTemplate> byPath,
+                                       Symbols symbols, int depth) {
         FixtureTemplate fixed = byPath.get(at.toString());
         if (fixed != null) {
-            return fixed;
+            return new Composition(fixed, null);
         }
         if (depth < MAX_DEPTH && type instanceof Type.Ref ref
                 && symbols.get(ref.name()) instanceof Ast.Data data && !data.newtype()) {
@@ -452,18 +488,19 @@ public final class Generator {
             if (!fields.isEmpty()) {
                 Map<String, FixtureTemplate> built = new LinkedHashMap<>();
                 for (Map.Entry<String, Type> field : fields.entrySet()) {
-                    FixtureTemplate value = compose(field.getValue(), at.then(field.getKey()), byPath,
+                    Composition value = compose(field.getValue(), at.then(field.getKey()), byPath,
                             symbols, depth + 1);
-                    if (value == null) {
-                        return null;
+                    if (value.value() == null) {
+                        return value;   // the field that had none, not the record that wanted it
                     }
-                    built.put(field.getKey(), value);
+                    built.put(field.getKey(), value.value());
                 }
-                return FixtureTemplate.record(ref.name(), built);
+                return new Composition(FixtureTemplate.record(ref.name(), built), null);
             }
         }
         List<FixtureTemplate> stands = Partitions.representativesOf(type, symbols);
-        return stands.isEmpty() ? null : stands.get(0);
+        return stands.isEmpty() ? new Composition(null, at + ": " + Type.show(type))
+                : new Composition(stands.get(0), null);
     }
 
     /** A boundary value written the way the position takes it: bare where the position is a number,

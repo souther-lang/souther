@@ -2314,7 +2314,24 @@ An input position carries the same three, with *executed* in place of *observed*
 
 *A measurement says how much of itself it could make.* A row whose case cannot be read from its text — a helper's answer, which names no case (<<example-expected>>) — is counted as unclassified rather than dropped. While there is one, a case with no rows is *undecided* rather than missing, because one of those rows may be covering it. A behavior with no rows at all is not measured: an absence of evidence is not a set of gaps.
 
+*Not every measure has a code.* Which of these a build is told about is a separate decision from measuring them, and it is made per measure: a case of the signature nothing claims (<<e1913>>, <<e1915>>), a boundary nothing was written at (<<e1916>>) and an arm nothing goes through (<<e1918>>) are warnings a build can ask for; the rest — how many rows are waiting for a `+let+`, and which positions have no finite partition to derive — are reported by `+souther examples+` and never warned about. A position the model draws no line through is a fact about the model rather than a mistake in it, and a row waiting for a `+let+` is the normal state of a model being written. The warnings are off unless a build asks for them, and asking for the arms costs a second run of every row.
+
 *The question is asked of a module, not of a source.* A behavior's rows are written in the module's own source and in any number of attached files (<<example-placement>>), so a source-by-source reading would report what another file covers as uncovered.
+
+[#example-partition]
+=== The classes a model already states
+
+The equivalence classes an input is measured at are read off what the model already declares. Nothing is invented: a position the model draws no line through has no classes, and is reported as *not derivable* rather than filled in with values nobody asked for. An `+Int+` with no invariant is not split at zero, because a partition nobody wrote is a rule nobody wrote, and reporting coverage of it reports a gap for failing to test something the model does not say.
+
+A type says the classes. `+Bool+` is two; an optional is `+None+` and `+Some+`; a sum is its cases, folded to their leaves (<<sum-data>>). A record is not a class of its own — it is taken apart field by field, two levels deep, which reaches a field of a record a parameter holds and stops where a report would stop being about anything the author recognises as one input.
+
+A threshold says where one class ends and the next begins. A `+guard+` compares an input against a constant (<<guard>>), and both sides of that comparison hold values a row can write, so the comparison divides the position. Thresholds at one position merge into one partition, intersected with what the type admits: an invariant of `+x >= 0+` and a guard of `+x < 10+` divide the position into `+0 <= x < 10+` and `+10 <= x+`, and nothing below zero, because nothing below zero can be constructed.
+
+Only a comparison written as the whole of a `+guard+`'s condition is read. In `+kind == Domestic && cost <= 100000+` the arm is reached without `+cost+` having been compared at all, so taking the arm as evidence about `+cost+` would be wrong; a condition built from `+&&+`, `+||+` or `+!+` therefore contributes no threshold.
+
+An invariant's bound is a boundary and not a partition. Everything outside it is refused at construction (<<e1903>>), so there is no class on the far side to cover — what remains is an edge worth a row. Both sides of a `+guard+`'s line do have values, so it wants the line and its neighbour, and the neighbour only where the type has one: `+cost <= 100000+` asks for 100001 on an `+Int+`, and asks for nothing beside it on a `+Decimal+`, which has no next value.
+
+A rule that drew a line is kept per line. The same value can be a boundary of an invariant and of two separate `+guard+`s, and reaching it through one says nothing about the others, so one value can be several obligations.
 
 [#example-branch-coverage]
 === Which arms of the body the rows go through

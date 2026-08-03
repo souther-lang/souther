@@ -522,13 +522,14 @@ public final class Adequacy {
                 return;
             }
             for (TypeName missing : signature.output().unspecified()) {
-                reports.add(warning("E1913", "check.example.witness.out", behavior,
+                reports.add(warning("E1913", "check.example.witness.out",
+                        "check.example.witness.out.hint", List.of(missing.name()), behavior,
                         missing.name(), behavior.name()));
             }
             for (int i = 0; i < signature.inputs().size(); i++) {
                 for (TypeName missing : signature.inputs().get(i).unspecified()) {
-                    reports.add(warning("E1915", "check.example.witness.in", behavior,
-                            missing.name(), i + 1, behavior.name()));
+                    reports.add(warning("E1915", "check.example.witness.in", null, List.of(),
+                            behavior, missing.name(), i + 1, behavior.name()));
                 }
             }
         }
@@ -540,7 +541,8 @@ public final class Adequacy {
             }
             for (PartitionEvidence.BoundaryCoverage boundary : partition.boundaries()) {
                 if (boundary.status() == MeasurementStatus.COMPLETE && !boundary.hit()) {
-                    reports.add(warning("E1916", "check.example.boundary", behavior,
+                    reports.add(warning("E1916", "check.example.boundary",
+                            "check.example.boundary.hint", List.of(), behavior,
                             boundary.axis(), boundary.value(), boundary.origin()));
                 }
             }
@@ -558,17 +560,30 @@ public final class Adequacy {
                         .title("check.example.title")
                         .at(arm.at().pos())
                         .args(arm.label(), arm.behavior())
+                        .hint("check.example.unreachedarm.hint")
                         .build()));
             }
         }
 
-        private static Report warning(String code, String key, Ast.BehaviorDef behavior,
+        /**
+         * One warning on a behavior's declaration.
+         *
+         * <p>{@code hint} is null where the message says all there is to say. Written out at the call
+         * site rather than derived from the message's key, so that a scan for the keys this names
+         * finds them — a key built by concatenation is one nothing can see is used.
+         */
+        private static Report warning(String code, String key, String hint,
+                                      List<Object> hintArgs, Ast.BehaviorDef behavior,
                                       Object... args) {
-            return Report.of(souther.compiler.diag.Diagnostic.of(code, key).warning()
-                    .title("check.example.title")
-                    .at(behavior.pos())
-                    .args(args)
-                    .build());
+            souther.compiler.diag.Diagnostic.Builder built =
+                    souther.compiler.diag.Diagnostic.of(code, key).warning()
+                            .title("check.example.title")
+                            .at(behavior.pos())
+                            .args(args);
+            if (hint != null) {
+                built.hint(hint, hintArgs.toArray());
+            }
+            return Report.of(built.build());
         }
     }
 

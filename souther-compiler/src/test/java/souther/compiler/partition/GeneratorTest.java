@@ -220,6 +220,31 @@ class GeneratorTest {
     }
 
     /**
+     * What could not be written names what had nothing, not the combinations that wanted it.
+     *
+     * <p>A position nothing can write a value for makes every combination it takes part in unfillable.
+     * Saying so per combination is one fact repeated as many times as the arithmetic allows — 547 lines
+     * on one model measured here — and not one of them says which position it was.
+     */
+    @Test
+    void whatHadNoValueIsNamedRatherThanTheCombinationsThatWantedIt() {
+        Symbols symbols = modelOf(TRIP, "submit").symbols();
+        Generator.Subject subject = twoNumbers(symbols,
+                List.of(PartitionClass.ungeneratable("opaque", "opaque", _ -> false, "no value"),
+                        number("low", 1)),
+                List.of(number("high", 10), number("higher", 20)));
+
+        Generator.GenerationResult filled =
+                Generator.fill(subject, List.of(), Generator.CandidateCheck.ANY);
+
+        List<String> subjects = filled.unresolved().stream()
+                .map(Generator.UnresolvedCombination::subject).distinct().toList();
+        assertEquals(List.of("a=opaque"), subjects,
+                "the class with nothing, once — not the three combinations it is in");
+        assertEquals(2, filled.rows().size(), "the rest is still filled");
+    }
+
+    /**
      * One divided position has no pairs at all, and still owes a row for each of its classes.
      *
      * <p>Which is why the two are counted separately rather than one derived from the other. A

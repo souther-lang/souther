@@ -9,9 +9,11 @@ import souther.compiler.query.Compilation;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Rows a person completes, printed rather than written.
@@ -152,13 +154,23 @@ public final class GeneratedRows {
         return out.toString();
     }
 
-    /** What could not be written, said rather than left out. A block that printed only the rows it
-     * managed would read as though it had filled everything. */
+    /**
+     * What could not be written, said rather than left out — and said once.
+     *
+     * <p>A block that printed only the rows it managed would read as though it had filled everything.
+     * One that printed a line per combination would say the same thing hundreds of times: a position
+     * nothing can write a value for makes every combination it takes part in unfillable, and the
+     * position is the fact while the combinations are arithmetic on it.
+     */
     private static void notes(StringBuilder out, String behavior,
                               Generator.GenerationResult result) {
+        Set<String> said = new LinkedHashSet<>();
         for (Generator.UnresolvedCombination left : result.unresolved()) {
-            out.append(String.format("// no row written for %s in `%s`: %s%n",
-                    String.join(" x ", left.classes()), behavior, why(left.reason())));
+            String line = String.format("// no row for `%s` in `%s`: %s%n",
+                    left.subject(), behavior, why(left.reason()));
+            if (said.add(line)) {
+                out.append(line);
+            }
         }
         for (Incompleteness stopped : result.incompleteness()) {
             out.append(String.format("// generation stopped for `%s`: %s (%s)%n", behavior,
@@ -168,7 +180,7 @@ public final class GeneratedRows {
 
     private static String why(Generator.UnresolvedCombination.Reason reason) {
         return switch (reason) {
-            case NO_REPRESENTATIVE -> "no value can be written for one of its classes";
+            case NO_REPRESENTATIVE -> "no value can be written there";
             case ALL_CANDIDATES_REJECTED ->
                     "every value tried was refused at construction, which does not make the"
                             + " combination impossible";
