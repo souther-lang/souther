@@ -691,6 +691,64 @@ class CompileExampleGenerateTest {
         }
     }
 
+    /**
+     * The behaviors come out in the order the module declares them.
+     *
+     * <p>A block is read against the one before it, to see what the last change to the model added. So
+     * where a behavior's rows sit has to be a fact about the model and not about the run that printed
+     * them: rows that moved make every line look changed, and there is nothing left to read the block
+     * for. Declaration order is the order the module already has, and the one the report prints in.
+     */
+    @Test
+    void theBlockNamesTheBehaviorsInTheOrderTheyAreDeclared() {
+        List<String> declared = List.of("submit", "approve", "reject", "withdraw", "reopen", "close");
+        StringBuilder behaviors = new StringBuilder();
+        StringBuilder rows = new StringBuilder();
+        for (String name : declared) {
+            behaviors.append("""
+                    behavior %1$s : (r: Req) -> Ok
+                        constructs Ok
+
+                    let %1$s (r) = Ok { n = 0 }
+
+                    """.formatted(name));
+            rows.append("""
+                    example %s
+                        | (Req { flag = Yes }) -> Ok { n = 0 }
+
+                    """.formatted(name));
+        }
+        String model = """
+                module example.order
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Req = { flag: Flag }
+                data Ok = { n: Int }
+
+                %s""".formatted(behaviors);
+        // The rows sit in a companion source, which is where a module with this many behaviors puts
+        // them, and which is the arrangement the block is read against.
+        String companion = """
+                examples for example.order
+
+                %s""".formatted(rows);
+
+        Compilation compilation = Compilation.ofSources(List.of(model, companion),
+                souther.compiler.meta.ModulePath.EMPTY);
+        compilation.measure(Adequacy.Asked.reportOnly());
+        compilation.answerEverything();
+        String block = GeneratedRows.of(compilation, null, null, false);
+
+        assertEquals(declared, block.lines()
+                        .filter(line -> line.startsWith("// example "))
+                        .map(line -> line.substring("// example ".length()))
+                        .toList(),
+                block);
+    }
+
     /** Nothing to fill is nothing printed, rather than a header over an empty list. */
     @Test
     void aModelTheRowsCoverPrintsNothing() {
