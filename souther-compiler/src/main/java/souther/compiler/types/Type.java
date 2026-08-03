@@ -51,10 +51,19 @@ public sealed interface Type
      */
     record Erroneous() implements Type {}
 
-    /** A type variable ({@code 'a}), written only in the shipped core (ADR-0028). It stands for any
-     * type; a non-recursive core helper carrying one is monomorphised by inline expansion, so the
-     * variable is resolved to the concrete argument type at each call site. */
-    record Var(String name) implements Type {}
+    /**
+     * A type variable ({@code 'a}). It stands for any type; a non-recursive helper carrying one is
+     * monomorphised by inline expansion, so the variable is resolved to the concrete argument type at
+     * each call site.
+     *
+     * <p>{@code mintedFor} is where the variable came from, which is not the same question as what it
+     * is spelled. A variable the shipped core wrote has none: it stands for anything and nothing has
+     * attached it to a value yet. One a helper's own settling minted names the parameter it was minted
+     * for, so a reader can ask whether a variable standing somewhere is one the body has already
+     * attached to another position — which is the difference between a value nothing says anything
+     * about and one the body said is whatever that other parameter holds.
+     */
+    record Var(String name, BindingId mintedFor) implements Type {}
 
     /** A reference to a named data type (product or sum). */
     record Ref(TypeName name) implements Type {
@@ -151,8 +160,14 @@ public sealed interface Type
         return new TupleOf(elements);
     }
 
+    /** A variable as the core wrote it: it stands for anything, and nothing has attached it. */
     static Type var(String name) {
-        return new Var(name);
+        return new Var(name, null);
+    }
+
+    /** A variable minted while settling {@code mintedFor}, which is what it is attached to. */
+    static Type mintedVar(String name, BindingId mintedFor) {
+        return new Var(name, mintedFor);
     }
 
     /** A user-facing rendering of {@code t} in surface syntax: {@code Int}, {@code List<Int>},
@@ -234,10 +249,10 @@ public sealed interface Type
             };
             case Ref r -> showName(r.name(), qualify);
             // A variable the core wrote is shown as the core wrote it; the name carries the `'`
-            // (`'a`), so it is not added twice. A variable a helper's own settling minted is shown as
-            // `_`: it names something an author never wrote and could not write, so its spelling
-            // says nothing to the reader, while what is open about the type is what they need.
-            case Var v -> v.name().contains(".") ? "_"
+            // (`'a`), so it is not added twice. A minted one is shown as `_`: it names something an
+            // author never wrote and could not write, so its spelling says nothing to the reader,
+            // while what is open about the type is what they need.
+            case Var v -> v.mintedFor() != null ? "_"
                     : v.name().startsWith("'") ? v.name() : "'" + v.name();
             case Nothing _ -> "_";
             case Never _ -> "Never";

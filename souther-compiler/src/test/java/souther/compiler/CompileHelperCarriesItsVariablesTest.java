@@ -115,6 +115,28 @@ class CompileHelperCarriesItsVariablesTest {
                 "two key types do not fit");
     }
 
+    /**
+     * A relation one signature makes is not carried across the bindings its expansion becomes.
+     * {@code List.member} writes one variable for its element and for its list, but it is
+     * self-hosted, so the call expands to a binding per parameter and each binding's declared type is
+     * read on its own. {@code y} is the element of {@code xs}, and nothing left after the expansion
+     * says so; the annotation states it instead.
+     *
+     * <p>Stated rather than left to be discovered. Before a helper could carry a variable at all,
+     * both of these parameters were annotated; this widens that to one of them.
+     */
+    @Test
+    void aRelationInsideAnExpansionIsNotCarriedAcrossTheBindingsItBecomes() {
+        assertFalse(compiles("""
+                let has (xs, y) = List.member(y, xs)
+                let use (b: Bool) = has([ 1 ], 2) && b"""),
+                "`y` is the element of `xs`, and what the expansion leaves does not say so");
+        assertTrue(compiles("""
+                let has (xs: List<Int>, y) = List.member(y, xs)
+                let use (b: Bool) = has([ 1 ], 2) && b"""),
+                "writing what the list holds says it");
+    }
+
     // --- one helper, monomorphized per expansion ---
 
     /** Runs {@code demo.go} over {@code in}, so what the expansions decided is what actually ran. */

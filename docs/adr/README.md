@@ -30,7 +30,7 @@ specification is in Japanese.
 | [0007](0007-unmarked-sum-output-and-railway.md) | Business results are an unmarked sum; the off-ramp is decided by composition | `[#unmarked-sum]`, `[#unmarked-output]`, `[#composition]` |
 | [0008](0008-asymmetric-java-interop.md) | Java interop is asymmetric | `[#asymmetric-interop]`, `[#out-of-scope]` |
 | [0009](0009-decimal-ignores-scale.md) | Decimal does not include scale in identity | `[#primitives]` |
-| [0010](0010-polymorphism-limited-to-stdlib.md) | Polymorphism is limited to stdlib types; no user-defined generics | `[#algebraic-types]` |
+| [0010](0010-polymorphism-limited-to-stdlib.md) | Polymorphism is limited to stdlib types; no user-written type parameters, no generic `data` or `behavior`, no polymorphic values (narrowed by ADR-0092) | `[#algebraic-types]` |
 | [0011](0011-option-never-unit-not-surface-types.md) | Option, Never, and Unit are not surface-writable types. Revised for `Option` by ADR-0078 — the `Never` and `Unit` decisions stand | `[#algebraic-types]`, `[#optional]` |
 | [0012](0012-nominal-include-no-intersection-types.md) | Field composition is nominal `include`; no structural intersection types | `[#field-spread]`, `[#union-intersection]` |
 | [0013](0013-sum-cases-are-named-data-references.md) | Sum-data cases are references to already-declared named data | `[#sum-data]` |

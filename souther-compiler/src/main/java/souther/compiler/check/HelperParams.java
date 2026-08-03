@@ -289,6 +289,8 @@ final class HelperParams {
         private Type pinned;
         /** Whether the position now being read is a field read off its child. */
         private boolean readingAField;
+        /** The parameter being settled: a variable minted for it is what is being worked out. */
+        private BindingId target;
         private Type open;
         private boolean openConflicted;
         private OpenUse openUse;
@@ -311,6 +313,7 @@ final class HelperParams {
          * was — the body asked for two different things and neither is what it is.
          */
         Type typeOf(Ast.Binder target, Ast.Expr body, Scope env, Type answers) {
+            this.target = target.id();
             this.pinned = null;
             this.open = null;
             this.openConflicted = false;
@@ -829,7 +832,7 @@ final class HelperParams {
          * an arm determines its sibling only where it answers a value (ADR-0066), and `Never` is
          * exactly the arm that answers none.
          */
-        private static boolean settles(Type t) {
+        private boolean settles(Type t) {
             return determinesOuterType(t) && !Type.mentions(t, x -> x instanceof Type.Var);
         }
 
@@ -843,23 +846,39 @@ final class HelperParams {
          * everything open. It is stated over what a type is rather than over a list of the
          * constructors there are, so a constructor added later means what this already says of it.
          *
-         * <p>A function type is refused wherever it stands: a function-typed parameter is written
-         * (spec 13.1). A type that answers no value is refused at any depth, which is the existing
-         * rule about the bottom an empty collection carries — that one says nothing about what it
-         * holds either, and this is not the place to revisit it. The cheap question is asked first,
-         * because a bare variable and a function type are the common answers here and neither needs
-         * the walk.
+         * <p>A function type is refused where the value is one: a parameter that is applied is written
+         * (spec 13.1). A collection of functions is not that — it is a value the expansion carries
+         * like any other — so the question is asked of the outermost layer here as it is everywhere
+         * else. A type that answers no value is refused at any depth, which is the existing rule
+         * about the bottom an empty collection carries; that one says nothing about what it holds
+         * either, and this is not the place to revisit it. The cheap question is asked first, because
+         * a bare variable and a function type are the common answers here and neither needs a walk.
          */
-        private static boolean determinesOuterType(Type t) {
+        private boolean determinesOuterType(Type t) {
             if (t == null) {
                 return false;
             }
             boolean outer = switch (t) {
-                case Type.Var _, Type.FnOf _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> false;
+                case Type.Var v -> attachedElsewhere(v);
+                case Type.FnOf _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> false;
                 case Type.Prim _, Type.Ref _, Type.Union _, Type.ListOf _, Type.SetOf _,
                         Type.MapOf _, Type.OptionOf _, Type.TupleOf _ -> true;
             };
             return outer && !Type.mentions(t, BottomInfer::answersNoValue);
+        }
+
+        /**
+         * Whether {@code v} is a variable this walk has already attached to another of the helper's
+         * parameters. Standing alone it then says something after all — that this parameter holds
+         * whatever that one holds — which is a relation the body made and not a value nothing states.
+         * {@code List.member(y, xs)} says exactly that about {@code y}.
+         *
+         * <p>A variable the core wrote is attached to nothing, and one minted for the parameter being
+         * settled is what is being worked out, so neither says anything: {@code let id (v) = v} is
+         * open however the walk reached it.
+         */
+        private boolean attachedElsewhere(Type.Var v) {
+            return v.mintedFor() != null && !v.mintedFor().equals(target);
         }
 
         /** The type of a neighbouring expression, or null where this scope cannot type it. */

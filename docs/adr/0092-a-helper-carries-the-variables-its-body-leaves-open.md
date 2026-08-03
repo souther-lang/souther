@@ -31,10 +31,15 @@ no generics, no recursion, no intrinsic." ADR-0038 returned the recursion half a
 factual claim under it was wrong. This is the same move on the generics half, and ADR-0028's own
 consequences already say only that half is left standing.
 
-ADR-0010 is not amended and is not reopened. It decides that neither `data` nor `behavior` takes type
-parameters and that there are no user-defined generics. Both stay true: nothing here is user-defined —
-the author writes no type parameter, cannot write one, and never reads one. What changes is the type
-inference gives a `let`, which ADR-0010 did not ask about. Its vocabulary argument runs through
+ADR-0010 is not reopened, but what it decides has to be said more narrowly than "no user-defined
+generics", because that phrase mixes what an author writes with what the language means. A helper an
+author defined is now usable at two element types in one module, which is limited parametric
+polymorphism over a user-written definition however it is compiled; inline expansion is an
+implementation of it, not a reason it is not one. What ADR-0010 decides, stated as four things and all
+still true: no user-written type parameters, no generic `data`, no generic `behavior`, and no
+polymorphic values. What is added is the fourth thing it never asked about — that a non-recursive
+helper is generalised by the compiler over what its body left open, and instantiated at each
+expansion. Its vocabulary argument runs through
 ADR-0001's correspondence with the spec DSL, and a helper does not appear in the spec DSL at all
 (ADR-0075), so that argument does not reach one.
 
@@ -65,9 +70,12 @@ each expansion. A bare unconstrained variable is not a body-determined parameter
 - **What counts as determined.** The outermost layer of the type denotes a concrete type constructor,
   and nothing inside it answers no value. `List<'a>` says the value is a list; `'a` says nothing.
   The rule is stated over what a type is, not over a list of the constructors there are, so a
-  constructor added later means what this already says of it. A function type is refused wherever it
-  stands, as it was: a function-typed parameter is written. A type that answers no value is refused at
-  any depth, which is the existing rule about the bottom an empty collection carries.
+  constructor added later means what this already says of it. It is asked of the outermost layer,
+  which is also where a function type is refused: what must be written is a parameter that is
+  *applied*, and a collection of functions is a value the expansion carries like any other
+  (`let forwarded (fs) = countFns(fs)` takes the `List<(Int) -> Int>` its callee declares, as it did
+  before this). A type that answers no value is refused at any depth, which is the existing rule about
+  the bottom an empty collection carries.
 - **A stated answer always wins.** The walk records an answer that leaves something open and keeps
   going; it takes it only where nothing states the whole type. Two open answers about one parameter
   are merged rather than the first winning — they are two readings of one value — and two that
@@ -78,12 +86,19 @@ each expansion. A bare unconstrained variable is not a body-determined parameter
   the position of the disagreement — which is what ADR-0066 already says happens to a settled type the
   rest of the body will not take. A mistake standing beside an open element is reported as the mistake
   it is: `let bad (xs, s: String) = List.length(xs) + (s * 2)` names the arithmetic, not `xs`.
-- **The variables are the helper's own.** A library signature is resolved once and shared by every
-  call site, so two unrelated calls hand back one spelling — `List.length` and `Set.size` both wrote
-  `'a`. Variables are therefore minted where a declaration is read, from the variables that
-  declaration wrote and that call did not solve. A variable that arrived through what the position
-  asked for was minted already and is carried through. What links two parameters is a position that
-  reads them together, not a spelling two libraries share.
+- **The variables are the helper's own, and a variable carries where it came from.** A library
+  signature is resolved once and shared by every call site, so two unrelated calls hand back one
+  spelling — `List.length` and `Set.size` both wrote `'a`. Variables are therefore minted where a
+  declaration is read, from the variables that declaration wrote and that call did not solve, and a
+  minted variable names the parameter it was minted for. That origin is what the rules ask, rather
+  than the spelling: a variable the core wrote is attached to nothing, one minted for the parameter
+  being settled is what is being worked out, and one minted for another parameter says this one holds
+  whatever that one holds. What links two parameters is a position that reads them together, not a
+  spelling two libraries share.
+- **Two readings hold what a variable stands for while they are read, in both directions.** A
+  variable says one thing everywhere it appears, so `('a, 'a)` read against `(Int, String)` is two
+  answers rather than one left open. Holding one direction only would make the answer depend on which
+  reading was found first, and the two readings are of one value — neither is the one being checked.
 - **A recursive helper is unchanged.** It is lowered to a method and has no expansion to monomorphize,
   so it writes all of its parameter types and its return type.
 - **`exposing` is unchanged.** A published helper crosses as its own source and the reader settles it,
