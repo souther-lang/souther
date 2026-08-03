@@ -1,0 +1,214 @@
+package souther.compiler;
+
+import souther.compiler.diag.CompileException;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * Which of a helper's parameters hold one thing and which hold two, where the body named the
+ * containers and not what they hold.
+ *
+ * <p>The relationship is the body's to make. A library signature is read once and shared by every
+ * call site, so {@code List.length} and {@code Set.size} both hand back the {@code 'a} the library
+ * wrote; two parameters that took their answer from those two calls are not thereby one. What links
+ * two parameters is a position that reads them together — an operator that takes one type on both
+ * sides, an argument beside another argument of one signature.
+ */
+class CompileHelperCarriesItsVariablesTest {
+
+    /** Whether a module holding {@code defs} and a behavior that uses none of them compiles. */
+    private static boolean compiles(String defs) {
+        String src = """
+                module demo
+                data X = Int
+                behavior f : (x: X) -> X
+                %s
+                let f (x) = x
+                """.formatted(defs);
+        try {
+            return Compiler.compile(src).containsKey("demo.F");
+        } catch (CompileException _) {
+            return false;
+        }
+    }
+
+    // --- the body does not link them ---
+
+    @Test
+    void twoParametersTheBodyDoesNotLinkHoldDifferentThings() {
+        // Each is handed to a signature that names the container and not the element, and `+` runs
+        // between two Ints rather than between the elements. Nothing here says the two lists hold
+        // one thing, and they are both read at once to prove it.
+        assertTrue(compiles("""
+                let sizes (xs, ys) = List.length(xs) + List.length(ys)
+                let use (n: Int) = sizes([ 1, 2 ], [ "a" ]) + n"""),
+                "one List of Ints and one of Strings fit `sizes` at the same call");
+    }
+
+    @Test
+    void twoLibrarySignaturesSpellingOneVariableDoNotLinkTwoParameters() {
+        // `List.length` and `Set.size` both wrote `'a`. The spelling is the library's, not this
+        // body's, so it links nothing.
+        assertTrue(compiles("""
+                let mixed (xs, s) = List.length(xs) + Set.size(s)
+                let use (n: Int, s: Set<String>) = mixed([ 1, 2 ], s) + n"""),
+                "the List holds Ints and the Set holds Strings");
+    }
+
+    // --- the body links them ---
+
+    @Test
+    void anOperatorThatTakesOneTypeLinksTwoParameters() {
+        // `==` reads both sides as one type, so what the two lists hold is one thing.
+        assertTrue(compiles("""
+                let sameHead (xs, ys) = List.get(0, xs) == List.get(0, ys)
+                let use (b: Bool) = sameHead([ 1 ], [ 2 ]) && b"""),
+                "two Lists of Ints fit");
+        assertFalse(compiles("""
+                let sameHead (xs, ys) = List.get(0, xs) == List.get(0, ys)
+                let use (b: Bool) = sameHead([ 1 ], [ "a" ]) && b"""),
+                "a List of Ints and a List of Strings do not");
+    }
+
+    @Test
+    void oneSignatureWritingOneVariableTwiceLinksTwoParameters() {
+        // `Set.union` declares both of its sets as `Set<'a>` — one variable, written twice.
+        assertTrue(compiles("""
+                let both (a, b) = Set.union(a, b)
+                let use (p: Set<Int>, q: Set<Int>) = Set.size(both(p, q))"""),
+                "two Sets of Ints fit");
+        assertFalse(compiles("""
+                let both (a, b) = Set.union(a, b)
+                let use (p: Set<Int>, q: Set<String>) = Set.size(both(p, q))"""),
+                "a Set of Ints and a Set of Strings do not");
+    }
+
+    @Test
+    void oneParameterReadTwiceHoldsOneThing() {
+        // Both arguments of `List.zip` are the same parameter, so whatever minting happens at that
+        // call has to give the two positions one variable rather than two.
+        assertTrue(compiles("""
+                let paired (xs) = List.zip(xs, xs)
+                let use (n: Int) = List.length(paired([ 1, 2 ])) + n"""),
+                "`xs` holds one thing, read at two positions of one call");
+    }
+
+    @Test
+    void aMapIsLinkedOnlyWhereTheBodyReadsIt() {
+        // `Map.keys` answers the keys, and `==` reads two key lists as one type. What the two maps
+        // hold as values is not read, so it is not linked.
+        assertTrue(compiles("""
+                let sameKeys (m1, m2) = Map.keys(m1) == Map.keys(m2)
+                let use (a: Map<String, Int>, b: Map<String, Bool>) = sameKeys(a, b)"""),
+                "one key type, two value types");
+        assertFalse(compiles("""
+                let sameKeys (m1, m2) = Map.keys(m1) == Map.keys(m2)
+                let use (a: Map<String, Int>, b: Map<Int, Int>) = sameKeys(a, b)"""),
+                "two key types do not fit");
+    }
+
+    // --- one helper, monomorphized per expansion ---
+
+    /** Runs {@code demo.go} over {@code in}, so what the expansions decided is what actually ran. */
+    private static Map<?, ?> run(String source, Map<String, Object> in) throws Exception {
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(source),
+                CompileHelperCarriesItsVariablesTest.class.getClassLoader());
+        Object behavior = loader.loadClass("demo.Go$Impl").getConstructor().newInstance();
+        return (Map<?, ?>) Codecs.encode(loader, "demo.Out",
+                Codecs.apply(behavior, Codecs.decoded(loader, "demo.In", in)));
+    }
+
+    @Test
+    void oneHelperIsUsedAtTwoElementTypesInOneModule() throws Exception {
+        // The visible change: `count` walks a List of Ints and a List of Strings in one body, each
+        // expansion resolving the element to what that call passed.
+        Map<?, ?> out = run("""
+                module demo
+                data In = { ns: List<Int> }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let count (xs) = List.length(xs)
+                let go (i) = Out { n = count(i.ns) + count([ "a", "b", "c" ]) }
+                """, Map.of("ns", List.of(1L, 2L)));
+        assertEquals(5L, out.get("n"));
+    }
+
+    @Test
+    void anEmptyCollectionIsCountedTwiceWithoutTheTwoExpansionsMeeting() throws Exception {
+        // Neither call says what the list holds and the result does not carry it either, so nothing
+        // downstream can tie the two expansions together — which is what a shared variable would do.
+        Map<?, ?> out = run("""
+                module demo
+                data In = { ns: List<Int> }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let count (xs) = List.length(xs)
+                let go (i) = Out { n = count([]) + count([]) + List.length(i.ns) }
+                """, Map.of("ns", List.of(1L)));
+        assertEquals(1L, out.get("n"));
+    }
+
+    @Test
+    void aCallThatDoesNotFitIsReportedWhereTheHelperReadsIt() {
+        // `count` takes a List, so an Int is refused. The report comes from inside the expansion,
+        // as it does for `let double (x) = x * 2` applied to a String — the helper is the body, and
+        // the body is what refuses it.
+        assertFalse(compiles("""
+                let count (xs) = List.length(xs)
+                let use (n: Int) = count(n) + n"""),
+                "an Int is not a List of anything");
+    }
+
+    @Test
+    void aVariableCarryingHelperIsHandedToACombinatorByName() throws Exception {
+        // Named rather than called, it is still expanded where the combinator applies it, so the
+        // element is resolved there. What it is not is a value of a polymorphic type: what travels
+        // is the declaration, and each use instantiates it afresh.
+        Map<?, ?> out = run("""
+                module demo
+                data In = { ns: List<Int> }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let count (xs) = List.length(xs)
+                let go (i) = Out { n = List.sum(List.map(count, [ i.ns, [ 7 ] ])) }
+                """, Map.of("ns", List.of(1L, 2L)));
+        assertEquals(3L, out.get("n"));
+    }
+
+    @Test
+    void aVariableCarryingHelperIsSettledOnceAtEachPlaceItIsNeeded() {
+        // An invariant is expanded well before the module is lowered, so the settling runs twice over
+        // the same helper. It has to answer the same both times: a second run that minted another set
+        // of variables would leave the invariant and the body reading two different declarations.
+        String src = """
+                module demo
+                data Rows = List<Int>
+                    invariant count(value) >= 1
+                data Out = { n: Int }
+                behavior go : (r: Rows) -> Out constructs Out
+                let count (xs) = List.length(xs)
+                let go (r) = Out { n = count(r.value) }
+                """;
+        Map<String, byte[]> first = Compiler.compile(src);
+        Map<String, byte[]> second = Compiler.compile(src);
+        assertEquals(first.keySet(), second.keySet());
+        for (String name : first.keySet()) {
+            assertArrayEquals(first.get(name), second.get(name), name + " differs between two reads");
+        }
+    }
+
+    @Test
+    void aRecursiveHelperStillWritesItsTypes() {
+        // It is lowered to a method rather than expanded, so it has no expansion to monomorphize.
+        assertFalse(compiles("let size (xs) = if List.isEmpty(xs) then 0 else 1 + size(List.drop(1, xs))"),
+                "a recursive helper writes its parameter and return types");
+    }
+}

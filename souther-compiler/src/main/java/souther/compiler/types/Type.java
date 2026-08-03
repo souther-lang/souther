@@ -233,8 +233,12 @@ public sealed interface Type
                 case RAW -> "Raw";
             };
             case Ref r -> showName(r.name(), qualify);
-            // the name carries the `'` it was written with (`'a`), so it is not added twice
-            case Var v -> v.name().startsWith("'") ? v.name() : "'" + v.name();
+            // A variable the core wrote is shown as the core wrote it; the name carries the `'`
+            // (`'a`), so it is not added twice. A variable a helper's own settling minted is shown as
+            // `_`: it names something an author never wrote and could not write, so its spelling
+            // says nothing to the reader, while what is open about the type is what they need.
+            case Var v -> v.name().contains(".") ? "_"
+                    : v.name().startsWith("'") ? v.name() : "'" + v.name();
             case Nothing _ -> "_";
             case Never _ -> "Never";
             // An error type should not reach a message: it absorbs, so nothing compares against it

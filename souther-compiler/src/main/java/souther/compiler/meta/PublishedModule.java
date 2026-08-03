@@ -17,9 +17,15 @@ import java.util.Set;
  * another project needs in order to {@code import} it, without its {@code .sou}.
  *
  * <p>The declarations are put back together as one source and handed to the parser, so what an
- * importing project sees is what the declaring project wrote, read by the same front end. Nothing
- * about the module's implementation comes back — its {@code let} bodies were never published — with
- * one exception: a helper an invariant calls, because the invariant cannot be read without it.
+ * importing project sees is what the declaring project wrote, read by the same front end. What comes
+ * back of the module's implementation is what its declarations cannot be read without: the helpers
+ * an invariant calls, and the {@code let}s it publishes, which a reader substitutes and expands for
+ * itself. Every other body stays where it was written.
+ *
+ * <p>Travelling as source is also what a published body's meaning rests on. A helper is read back by
+ * the same rule that read it in the first place, so one whose parameter types its body settles
+ * arrives with no types written and is settled again here — including one that names what a value is
+ * and leaves what it holds open, which is why no type variable has to be written for it to cross.
  *
  * <p>{@code injected} does not survive as source. A behavior is an injection target when its module
  * writes no {@code let} for it, and no {@code let} came back for any of them, so the flag that was

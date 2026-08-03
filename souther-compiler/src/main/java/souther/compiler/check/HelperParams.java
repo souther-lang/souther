@@ -163,11 +163,16 @@ final class HelperParams {
      * can settle an earlier one — {@code f(x, y)} where {@code y}'s type follows from {@code x}'s —
      * so the rounds run to a fixpoint. {@code env} is completed as they are found, and
      * {@code openUses} collects, for each parameter still open, a use of it that named no type.
+     *
+     * <p>What a body gets wrong is not decided here. A type the rest of the body disagrees with is
+     * reported by the standalone check that follows, at the position of the disagreement, so a
+     * mistake beside an open element is reported as the mistake it is rather than as a parameter
+     * nothing determined.
      */
     static Map<Integer, Type> determine(Ast.FnDef h, List<Integer> open, Scope env,
                                         Ast.Expr body, Symbols symbols, Map<String, ReqSig> reqSigs,
                                         Map<String, Type> recursiveHelperFns,
-                                        Map<Integer, Ast.Var> openUses) {
+                                        Map<Integer, OpenUse> openUses) {
         BodyTyping typing = new BodyTyping(symbols, reqSigs, recursiveHelperFns);
         Type answers = declaredReturn(h, symbols);
         Map<Integer, Type> found = new LinkedHashMap<>();
@@ -199,6 +204,15 @@ final class HelperParams {
         }
         return found;
     }
+
+    /**
+     * A use of a parameter that named no type, and how the body reached it. Reading a field off it
+     * is one of the two ways a body can leave a parameter with nothing at all, and it is the one the
+     * language decided elsewhere rather than one this rule could widen: reaching a type from a field
+     * is a structural question a nominal model does not ask. The report says which it was.
+     */
+    record OpenUse(Ast.Var use, boolean readAField) {}
+
 
     /**
      * Whether {@code param} is applied in {@code e} — the shape only a function parameter has.
@@ -269,8 +283,15 @@ final class HelperParams {
         private final CheckContext ctx;
         private final Map<String, ReqSig> reqSigs;
         private final Map<String, Type> recursiveHelperFns;
+        /** What this walk has minted for the parameter it is reading, so a second position that
+         * asks the same signature is answered with the same variables. */
+        private final Freshening freshening = new Freshening();
         private Type pinned;
-        private Ast.Var openUse;
+        /** Whether the position now being read is a field read off its child. */
+        private boolean readingAField;
+        private Type open;
+        private boolean openConflicted;
+        private OpenUse openUse;
 
         BodyTyping(Symbols symbols, Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
             this.symbols = symbols;
@@ -283,20 +304,54 @@ final class HelperParams {
          * The type {@code body} gives {@code target}, or null when it gives none. {@code answers} is
          * what the body as a whole is asked for — the helper's declared return type, where it wrote
          * one — so a body that answers the parameter itself takes the type written beside it.
+         *
+         * <p>A type stated outright wins over one that leaves what the value holds open, wherever
+         * either was found: the walk keeps going past an open answer, and takes it only where nothing
+         * states the whole type. Two open answers that do not agree leave the parameter as open as it
+         * was — the body asked for two different things and neither is what it is.
          */
         Type typeOf(Ast.Binder target, Ast.Expr body, Scope env, Type answers) {
             this.pinned = null;
+            this.open = null;
+            this.openConflicted = false;
             this.openUse = null;
+            this.freshening.forParameter(target.id());
             // A recursive helper's call is left standing rather than expanded, so the neighbouring
             // expression a parameter takes its type from can be one — `x + count(t)` reads `count(t)`
             // to type `x`. Its signature goes in here, once, and every inner scope is derived from
             // this one (spec 13.1). What is bound wins over it, as it does everywhere else.
             visit(body, env.reaching(recursiveHelperFns), target.id(), answers);
-            return pinned;
+            if (pinned != null) {
+                return pinned;
+            }
+            return openConflicted ? null : open;
+        }
+
+        /**
+         * One answer that leaves what the value holds open. Where the walk already has one, the two
+         * are merged rather than the first winning: they are two readings of one parameter, so what
+         * one of them states and the other leaves open is stated. Where they disagree about what the
+         * value is, the parameter has no answer here — a merge is not a unification, and nothing is
+         * bound by trying one.
+         */
+        private void offer(Type t) {
+            if (openConflicted) {
+                return;
+            }
+            if (open == null) {
+                open = t;
+                return;
+            }
+            Type merged = CandidateMerge.of(open, t);
+            if (merged == null) {
+                openConflicted = true;
+            } else {
+                open = merged;
+            }
         }
 
         /** A use of the parameter that named no type, from the last {@link #typeOf} that found none. */
-        Ast.Var openUse() {
+        OpenUse openUse() {
             return openUse;
         }
 
@@ -314,8 +369,12 @@ final class HelperParams {
             switch (e) {
                 case Ast.Var v when refersTo(v, target) -> {
                     pin(expected);
-                    if (pinned == null && openUse == null) {
-                        openUse = v;   // a use of the parameter that no enclosing position typed
+                    if (pinned == null) {
+                        // The use to point at is the first one; whether the body only ever read a
+                        // field off the parameter is decided by all of them, because that is what
+                        // makes reading a field the reason rather than one of the things it did.
+                        openUse = openUse == null ? new OpenUse(v, readingAField)
+                                : new OpenUse(openUse.use(), openUse.readAField() && readingAField);
                     }
                 }
                 case Ast.LetIn li -> visitLet(li, env, target, expected);
@@ -354,7 +413,14 @@ final class HelperParams {
                 case Ast.Neg neg -> visit(neg.operand(), env, target, expected);
                 // A field is read off a value, and reading it says nothing about what that value is;
                 // an element is taken out of a tuple the same way. Neither asks its child anything.
-                case Ast.FieldAccess fa -> visit(fa.target(), env, target, null);
+                // Which of the two a use was reached by is remembered, because reading a field is a
+                // question a nominal model does not ask, and the report says so.
+                case Ast.FieldAccess fa -> {
+                    boolean outer = readingAField;
+                    readingAField = true;
+                    visit(fa.target(), env, target, null);
+                    readingAField = outer;
+                }
                 case Ast.TupleGet tg -> visit(tg.tuple(), env, target, null);
                 // Nothing inside to ask: a literal has no children, and `unreachable` carries a
                 // reason rather than an expression.
@@ -442,7 +508,12 @@ final class HelperParams {
             if (readings.stream().noneMatch(r -> mentions(r.expr(), target))) {
                 return;
             }
-            Type answers = settles(expected) ? expected : answered(readings, target);
+            // What the enclosing position states reaches every arm, whether or not it says what the
+            // value holds: an arm is where the parameter stands, and the question asked of it is the
+            // same one asked anywhere else. Reading `List.length(if b then xs else [])` otherwise
+            // answers differently from `List.length(xs)`, which is the walk's shape deciding what the
+            // rule reaches.
+            Type answers = determinesOuterType(expected) ? expected : answered(readings, target);
             for (Reading r : readings) {
                 if (mentions(r.expr(), target)) {
                     visit(r.expr(), r.scope(), target, answers);
@@ -472,16 +543,20 @@ final class HelperParams {
          * demands none, the constraint passes along the binding: {@code let y = x in y * 2} types
          * {@code x} through {@code y}, which is the shape a call to another body-typed helper inlines
          * to. A binding spelled like the parameter is another binding, and reads as one.
+         *
+         * <p>What the binding demands is a declaration like any other, so the variables it wrote are
+         * minted as this parameter's own before they are read ({@link Freshening}): the type on the
+         * binding a helper's expansion writes is the callee's, and two callees spell theirs the same.
          */
         private void visitLet(Ast.LetIn li, Scope env, BindingId target, Type expected) {
             Type demanded = li.declaredType() == null ? null
-                    : TypeOps.resolveParamType(li.declaredType(), symbols);
+                    : freshening.instantiate(TypeOps.resolveParamType(li.declaredType(), symbols));
             if (isParam(li.value(), target)) {
                 pin(demanded);
                 if (pinned != null) {
                     return;
                 }
-                Ast.Var use = openUse;
+                OpenUse use = openUse;
                 visit(li.body(), env, li.binder().id(), expected);   // the binding stands for the parameter
                 openUse = use;                      // its uses are the binding's, not the parameter's
                 if (pinned != null) {
@@ -619,7 +694,11 @@ final class HelperParams {
             return walked;
         }
 
-        /** {@code sig}'s parameter types with the variables this call site settles substituted in. */
+        /**
+         * {@code sig}'s parameter types with the variables this call site settles substituted in, and
+         * the ones it does not settle minted as this parameter's own ({@link Freshening}) — the
+         * declaration wrote them, so they are the declaration's rather than anything this body links.
+         */
         private List<Type> solved(Ast.Apply call, Type.FnOf sig, Scope env, BindingId target,
                                   Type expected) {
             if (!Type.mentions(sig, x -> x instanceof Type.Var)) {
@@ -627,9 +706,12 @@ final class HelperParams {
             }
             Map<String, Type> bind = new HashMap<>();
             try {
-                if (settles(expected)) {
+                if (determinesOuterType(expected)) {
                     // tolerantly: a result that does not fit leaves what the arguments settled
-                    // standing, as it does where a call is typed for real
+                    // standing, as it does where a call is typed for real. An expectation that
+                    // carries a variable this walk minted says as much as a stated one: the variable
+                    // is this parameter's, so solving the callee's against it is what links the two
+                    // positions the body read together.
                     BottomInfer.pinResultTypeVars(sig.result(), expected, bind, symbols, call.pos(),
                             "result of " + call.written());
                 }
@@ -657,9 +739,18 @@ final class HelperParams {
             } catch (CompileException _) {
                 return sig.params();   // the call does not fit its signature; the check reports it
             }
+            // What the call solved and what it left for this parameter to carry, substituted at once:
+            // a variable that arrived as one of the call's answers was minted somewhere already, and
+            // renaming after the substitution would mint it a second time.
+            Map<String, Type> minted = freshening.renaming(sig.params(), bind);
+            Map<String, Type> settled = bind;
+            if (!minted.isEmpty()) {
+                settled = new HashMap<>(bind);
+                settled.putAll(minted);
+            }
             List<Type> out = new ArrayList<>();
             for (Type param : sig.params()) {
-                out.add(TypeOps.substitute(param, bind));
+                out.add(TypeOps.substitute(param, settled));
             }
             return out;
         }
@@ -716,10 +807,17 @@ final class HelperParams {
             return refersTo(e, target);
         }
 
-        /** {@code t} taken as the parameter's type, unless {@link #settles} says it states none. */
+        /**
+         * {@code t} taken as the parameter's type. A type that states one outright is the answer and
+         * ends the walk. One whose outer constructor the body decided and whose inside it left open
+         * is kept aside: the walk goes on, because a position further down may state the whole type,
+         * and a concrete answer is always preferred to an open one.
+         */
         private void pin(Type t) {
             if (settles(t)) {
                 pinned = t;
+            } else if (determinesOuterType(t)) {
+                offer(t);
             }
         }
 
@@ -731,10 +829,37 @@ final class HelperParams {
          * an arm determines its sibling only where it answers a value (ADR-0066), and `Never` is
          * exactly the arm that answers none.
          */
-        private boolean settles(Type t) {
-            return t != null && !(t instanceof Type.FnOf)
-                    && !Type.mentions(t, x -> x instanceof Type.Var)
-                    && !Type.mentions(t, BottomInfer::answersNoValue);
+        private static boolean settles(Type t) {
+            return determinesOuterType(t) && !Type.mentions(t, x -> x instanceof Type.Var);
+        }
+
+        /**
+         * Whether {@code t} says what the value is, with only what it holds left open — its outermost
+         * layer denotes a type constructor, and nothing inside it answers no value.
+         *
+         * <p>This is the one question, and {@link #settles} is it with what a value holds required to
+         * be stated as well. Asking about the outermost layer is what tells the two apart: a variable
+         * inside {@code List<'a>} leaves the element open, and a variable standing alone leaves
+         * everything open. It is stated over what a type is rather than over a list of the
+         * constructors there are, so a constructor added later means what this already says of it.
+         *
+         * <p>A function type is refused wherever it stands: a function-typed parameter is written
+         * (spec 13.1). A type that answers no value is refused at any depth, which is the existing
+         * rule about the bottom an empty collection carries — that one says nothing about what it
+         * holds either, and this is not the place to revisit it. The cheap question is asked first,
+         * because a bare variable and a function type are the common answers here and neither needs
+         * the walk.
+         */
+        private static boolean determinesOuterType(Type t) {
+            if (t == null) {
+                return false;
+            }
+            boolean outer = switch (t) {
+                case Type.Var _, Type.FnOf _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> false;
+                case Type.Prim _, Type.Ref _, Type.Union _, Type.ListOf _, Type.SetOf _,
+                        Type.MapOf _, Type.OptionOf _, Type.TupleOf _ -> true;
+            };
+            return outer && !Type.mentions(t, BottomInfer::answersNoValue);
         }
 
         /** The type of a neighbouring expression, or null where this scope cannot type it. */

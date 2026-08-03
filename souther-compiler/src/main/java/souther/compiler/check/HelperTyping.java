@@ -128,8 +128,8 @@ public final class HelperTyping {
                             Diagnostic.of(null, "check.helper.return").title("check.helper.title")
                                     .at(h.pos()).args(h.name(), Type.show(declared), Type.show(bodyType))
                                     .build(),
-                            "helper `let " + h.name() + "` declares it returns " + declared
-                                    + " but its body is " + bodyType);
+                            "helper `let " + h.name() + "` declares it returns " + Type.show(declared)
+                                    + " but its body is " + Type.show(bodyType));
                 }
             }
         }
@@ -164,7 +164,7 @@ public final class HelperTyping {
                                 + " type (spec 13.1)");
             }
         }
-        Map<Integer, Ast.Var> openUses = new HashMap<>();
+        Map<Integer, HelperParams.OpenUse> openUses = new HashMap<>();
         HelperParams.determine(h, open, env, body, symbols, reqSigs, recursiveHelperFns, openUses);
         // What the body reaches for decides whether an annotation is what is missing. A helper does
         // not reach a behavior at all, and the type of an argument to a call that cannot be written is
@@ -179,13 +179,24 @@ public final class HelperTyping {
             if (env.holds(p.binder().id())) {
                 continue;
             }
-            Diagnostic.Builder d = Diagnostic.of(null, "check.helper.infer").title("check.helper.title")
+            // Two bodies leave a parameter with nothing, for two reasons, and an author who is told
+            // only to annotate it cannot tell which. A field read off a value nothing names will
+            // never determine one — reaching a type from a field is a question a nominal model does
+            // not ask — where a body that says nothing at all might have said something.
+            HelperParams.OpenUse left = openUses.get(idx);
+            boolean field = left != null && left.readAField();
+            String key = field ? "check.helper.infer.field" : "check.helper.infer";
+            Diagnostic.Builder d = Diagnostic.of(null, key).title("check.helper.title")
                     .at(p.pos(), p.name().length()).args(h.name(), p.name());
-            if (openUses.get(idx) instanceof Ast.Var use) {
-                d.secondary(Region.ofWidth(use.pos(), Elaborator.width(use)), "check.helper.infer.use");
+            if (left != null) {
+                d.secondary(Region.ofWidth(left.use().pos(), Elaborator.width(left.use())),
+                        field ? "check.helper.infer.field.use" : "check.helper.infer.use");
             }
-            throw CompileException.of(d.build(),
-                    "helper `let " + h.name() + "` parameter `" + p.name() + "` is not determined by"
+            throw CompileException.of(d.build(), field
+                    ? "helper `let " + h.name() + "` parameter `" + p.name() + "` is only read"
+                            + " through a field, which names no type; annotate it with its type"
+                            + " (spec 13.1)"
+                    : "helper `let " + h.name() + "` parameter `" + p.name() + "` is not determined by"
                             + " its body; annotate it with its type (spec 13.1)");
         }
     }
