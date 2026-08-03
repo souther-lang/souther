@@ -396,6 +396,109 @@ class CompileExampleGenerateTest {
     }
 
     /**
+     * Two positions, each needing a different one of the values it was offered.
+     *
+     * <p>What has to build is the whole input at once — the check is the model's own constructor — so
+     * what is being tried is the tuple, not a value. Here the two positions carry the same two rules
+     * written the other way round, so their values come out in opposite orders and the assignment that
+     * builds is the first value of one with the second of the other. Trying one index across every
+     * position walks the diagonal of the choices and never reaches it.
+     */
+    @Test
+    void candidatesAtDifferentPositionsAreNotWalkedInLockstep() {
+        String source = """
+                module example.lock
+
+                data Left = String
+                    invariant String.matches("[a-z]+", value)
+                    invariant String.matches("x+", value)
+
+                data Right = String
+                    invariant String.matches("x+", value)
+                    invariant String.matches("[a-z]+", value)
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Req = { left: Left, right: Right, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (request: Req) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = 0 }
+
+                example take
+                    | (Req { left = Left("x"), right = Right("x"), flag = Yes }) -> Ok { n = 0 }
+                """;
+
+        assertEquals(List.of("Req { left = Left(\"x\"), right = Right(\"x\"), flag = No }"),
+                inputs(generated(source).get("take").pairs()));
+        // And the same model with one of the two rewritten to declare its rules in the other order,
+        // which is the same model. Order decided this before the assignments were walked as tuples.
+        assertEquals(inputs(generated(source).get("take").pairs()),
+                inputs(generated(source.replace("module example.lock", "module example.lock2")
+                        .replace("""
+                                data Right = String
+                                    invariant String.matches("x+", value)
+                                    invariant String.matches("[a-z]+", value)""", """
+                                data Right = String
+                                    invariant String.matches("[a-z]+", value)
+                                    invariant String.matches("x+", value)""")).get("take").pairs()));
+    }
+
+    /**
+     * A search that stopped says so, rather than saying everything was refused.
+     *
+     * <p>The choices multiply, so a row is tried at a bounded number of assignments. Past that bound
+     * the ones not reached were not refused — nothing was written and nothing built — and calling them
+     * refused tells an author their model rules out a combination it does not.
+     */
+    @Test
+    void whatTheSearchDidNotReachIsNotReportedAsRefused() {
+        StringBuilder declarations = new StringBuilder();
+        StringBuilder fields = new StringBuilder();
+        for (char c = 'a'; c <= 'i'; c++) {
+            declarations.append("""
+                    data V%1$s = String
+                        invariant String.matches("[a-z]+", value)
+                        invariant String.matches("x+", value)
+
+                    """.formatted(Character.toUpperCase(c)));
+            fields.append(c).append(": V").append(Character.toUpperCase(c)).append(", ");
+        }
+        String source = """
+                module example.wide
+
+                %sdata Yes
+                data No
+                data Flag = Yes | No
+
+                data Req = { %sflag: Flag }
+                    invariant String.length(a.value) > 1000
+
+                data Ok = { n: Int }
+
+                behavior take : (request: Req) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = 0 }
+                """.formatted(declarations, fields);
+
+        List<Generator.UnresolvedCombination> left = generated(source).get("take").pairs()
+                .unresolved();
+
+        assertFalse(left.isEmpty(), "nothing builds, so something is left");
+        for (Generator.UnresolvedCombination each : left) {
+            assertEquals(Generator.UnresolvedCombination.Reason.SEARCH_LIMIT, each.reason(),
+                    each.toString());
+            assertTrue(each.subject().startsWith("request.flag="),
+                    "and it is still about the combination: " + each.subject());
+        }
+    }
+
+    /**
      * A newtype's rules are read wherever it is asked for a value.
      *
      * <p>A newtype is asked for one from two places — a field of a record, and a case of a sum — and
