@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -719,7 +720,7 @@ public final class InvariantChecker {
         switch (e) {
             case Ast.NewData nd when nd.spreads().isEmpty() -> {
                 if (symbols.get(nd.typeName().denotes()) instanceof Ast.Data type) {
-                    report(type, nd.pos(), attempted, verdictOf(nd, type, k, scope));
+                    report(nd, type, nd.pos(), attempted, verdictOf(nd, type, k, scope));
                 }
             }
             case Ast.Expr arith when asOperator(arith) instanceof Ast.Binary bin
@@ -729,7 +730,7 @@ public final class InvariantChecker {
                     LinearForm value = affineOf(bin, scope, k);
                     if (value != null) {
                         // an arithmetic result is a form, not a location, so it names no path
-                        report(type, bin.pos(), attempted, verdictOf(r.name(), type,
+                        report(bin, type, bin.pos(), attempted, verdictOf(r.name(), type,
                                 Bindings.ofPaths(name -> "value".equals(name) ? value : null, _ -> null,
                                         fieldsOf(type)), k, true));
                     }
@@ -887,14 +888,11 @@ public final class InvariantChecker {
      * warning; a discharged or non-expressible invariant says nothing. An {@code attempted}
      * construction raises no warning: what the warning reports is a possible abort, and an attempt
      * takes its else branch instead. */
-    private void report(Ast.Data type, SourcePos pos, boolean attempted, Verdict verdict) {
+    private void report(Ast.Expr at, Ast.Data type, SourcePos pos, boolean attempted,
+                        Verdict verdict) {
         if (capturing != null) {
-            // Which construction this is, rather than where it is written or what it says. A helper
-            // expanded twice puts two constructions at the helper body's one position, so the
-            // position alone reads them as one; and the readings are of the same body with a
-            // conditional replaced, so what a construction says differs between them by design.
-            // The nth construction written at a position is the same one in both readings.
-            capturing.put(pos, new Reported(type, pos, verdict, attempted));
+            capturing.found().put(new Occurrence(asWritten(at)),
+                    new Reported(type, pos, verdict, attempted));
             return;
         }
         switch (verdict) {
@@ -913,8 +911,38 @@ public final class InvariantChecker {
     /** What a construction came out as where it is being read on a branch rather than said. */
     private record Reported(Ast.Data type, SourcePos pos, Verdict verdict, boolean attempted) {}
 
-    /** Which construction a reading found: where it is written, and how many were found before it. */
-    private record Occurrence(SourcePos pos, int nth) {}
+    /**
+     * Which construction a reading found: the one in the body as it was written. A reading is that
+     * body with a conditional replaced, so the constructions along the way to the replacement are
+     * rebuilt — those are the same construction given a different value, and they answer together.
+     * One written inside the replacement is only in the reading that reached it, and one beside it
+     * is the very node, unchanged.
+     */
+    private record Occurrence(Ast.Expr of) {
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof Occurrence x && x.of == of;
+        }
+
+        @Override
+        public int hashCode() {
+            return System.identityHashCode(of);
+        }
+    }
+
+    /** What each node a rewrite built stands for, so a construction keeps its identity through one. */
+    private final Map<Ast.Expr, Ast.Expr> rebuilt = new IdentityHashMap<>();
+
+    /** The node {@code e} was built from, however many rewrites ago. */
+    private Ast.Expr asWritten(Ast.Expr e) {
+        Ast.Expr from = e;
+        Ast.Expr next;
+        while ((next = rebuilt.get(from)) != null) {
+            from = next;
+        }
+        return from;
+    }
 
     /**
      * Where a walk is reading one branch, what it finds is collected here rather than said. A body
@@ -928,16 +956,11 @@ public final class InvariantChecker {
      * building one walks the declaration's includes, so it is built once per declaration instead. */
     private final Map<Ast.Data, Map<String, Type>> fieldsOf = new HashMap<>();
 
-    /** What a reading has found so far, and how many it has found at each position. */
-    private record Capture(Map<Occurrence, Reported> found, Map<SourcePos, Integer> counted) {
+    /** What a reading has found so far. */
+    private record Capture(Map<Occurrence, Reported> found) {
 
         static Capture empty() {
-            return new Capture(new LinkedHashMap<>(), new HashMap<>());
-        }
-
-        void put(SourcePos pos, Reported what) {
-            int nth = counted.merge(pos, 1, Integer::sum) - 1;
-            found.put(new Occurrence(pos, nth), what);
+            return new Capture(new LinkedHashMap<>());
         }
     }
 
@@ -1008,7 +1031,12 @@ public final class InvariantChecker {
         if (e instanceof Ast.Block) {
             return e;
         }
-        return Ast.mapChildren(e, child -> without(child, was, key, becomes, scope), name -> name);
+        Ast.Expr made = Ast.mapChildren(e, child -> without(child, was, key, becomes, scope),
+                name -> name);
+        if (made != e) {
+            rebuilt.put(made, e);
+        }
+        return made;
     }
 
     /** Says of each construction the two readings reached what the two of them together decide. One
@@ -1023,10 +1051,11 @@ public final class InvariantChecker {
                 // Written inside one branch, so the other reading did not discharge it — it was not
                 // there to discharge. What the reading that reached it found is what it is.
                 Reported said = x != null ? x : y;
-                report(said.type(), said.pos(), said.attempted(), said.verdict());
+                report(one.of(), said.type(), said.pos(), said.attempted(), said.verdict());
                 continue;
             }
-            report(x.type(), x.pos(), x.attempted(), Verdict.of(x.verdict(), y.verdict()));
+            report(one.of(), x.type(), x.pos(), x.attempted(),
+                    Verdict.of(x.verdict(), y.verdict()));
         }
     }
 

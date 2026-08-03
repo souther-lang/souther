@@ -412,4 +412,22 @@ class CompileInvariantOneDenotationTest {
         assertEquals("E2010", assertThrows(CompileException.class, () -> Compiler.compile(m))
                 .diagnostic().code(), "1 is not 10 whichever branch is taken");
     }
+
+    @Test
+    void oneBranchCallingAHelperMoreOftenDoesNotPairOffTheOthers() {
+        // both `Count`s are the helper body's one position, and only one branch reaches the first —
+        // which construction a reading found is the construction, not how many came before it
+        String m = """
+                module demo
+                data Count = Int
+                    invariant value >= 0
+                data Wrap = { a: Int, b: Count }
+                let count (n: Int) = Count(n)
+                behavior mk : (x: Int) -> Wrap
+                    constructs Wrap, Count
+                let mk (x) = Wrap { a = if x < 0 then count(x).value else x, b = count(1) }
+                """;
+        assertEquals("E2010", assertThrows(CompileException.class, () -> Compiler.compile(m))
+                .diagnostic().code(), "the negative branch decides the one it reaches");
+    }
 }
