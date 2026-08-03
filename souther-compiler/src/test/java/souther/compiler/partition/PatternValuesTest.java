@@ -125,6 +125,49 @@ class PatternValuesTest {
         }
         assertEquals(Optional.of("あ"), PatternValues.shortestAccepted("[^\\x00-\\x7F]"),
                 "a rule excluding ASCII is asking for a character from somewhere else");
+        assertEquals(Optional.of("あ"), PatternValues.shortestAccepted("[^ -~]+"),
+                "and so is one excluding everything that prints in ASCII");
+    }
+
+    /**
+     * A shorthand excludes everything it stands for.
+     *
+     * <p>What a member of a class puts in is a set, and the two questions a class is asked want
+     * different amounts of it. One character is enough to be <em>in</em> the class. To be out of a
+     * negated one, every character the member stands for has to be excluded — a reader that took only
+     * the first of them excluded {@code a} and went on to offer {@code b}, which {@code [^\w]} refuses.
+     */
+    @Test
+    void aShorthandInANegatedClassExcludesAllOfWhatItMeans() {
+        for (String regex : List.of("[^\\w]+", "[^\\w\\s]", "[^\\d]", "[^\\s]", "[^0-9\\s]")) {
+            String value = PatternValues.shortestAccepted(regex)
+                    .orElseThrow(() -> new AssertionError("nothing written for " + regex));
+            assertTrue(Pattern.matches(regex, value), regex + " -> \"" + value + "\"");
+        }
+        assertEquals(Optional.of("a"), PatternValues.shortestAccepted("[\\w]"),
+                "and one character is still enough to be in the class");
+        assertEquals(Optional.of("000"), PatternValues.shortestAccepted("[\\d]{3}"));
+    }
+
+    /**
+     * A value a row could not carry is not a value.
+     *
+     * <p>What comes out is offered as text to paste into a model, as a string literal, on the line the
+     * row is on. A character the literal cannot spell would go in as itself; a long enough one would go
+     * in as a screenful. Both match the pattern and neither is something to hand anybody, so the answer
+     * is the one for a pattern nothing can be written for.
+     */
+    @Test
+    void aValueNoRowCanCarryIsNotOffered() {
+        assertEquals(Optional.empty(), PatternValues.shortestAccepted("[^\\x00-\\uFFFF]"),
+                "a rule leaving only characters a literal cannot spell");
+        assertEquals(Optional.empty(), PatternValues.shortestAccepted("[0-9]{2000000}"),
+                "a length nobody would read");
+        assertEquals(Optional.empty(), PatternValues.shortestAccepted("a{2147483648}"),
+                "a count past what a bound holds");
+
+        assertEquals(Optional.of("\n"), PatternValues.shortestAccepted("\\n"),
+                "and the ones a literal does spell are written");
     }
 
     /**

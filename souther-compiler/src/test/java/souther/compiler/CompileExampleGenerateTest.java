@@ -275,6 +275,59 @@ class CompileExampleGenerateTest {
                 inputs(generated(dated).get("take").pairs()));
     }
 
+    /**
+     * A value carrying a character a literal has to escape.
+     *
+     * <p>The row is text somebody pastes, so what it says has to read back as what it was made from.
+     * Written as itself, a tab is invisible in the row and a newline ends it — the rest of the row
+     * lands on a line that is not commented out, and what was pasted is not what was offered. So this
+     * asks the compiler rather than the text: the block goes back in, and the rows have to hold.
+     */
+    @Test
+    void aValueWithACharacterALiteralEscapesSurvivesBeingPasted() {
+        String tabbed = """
+                module example.tabbed
+
+                data Spaced = String
+                    invariant String.matches("a[\\\\t]b", value)
+
+                data Yes
+                data No
+                data Flag = Yes | No
+
+                data Note = { text: Spaced, flag: Flag }
+                data Ok = { n: Int }
+
+                behavior take : (note: Note) -> Ok
+                    constructs Ok
+
+                let take (note) = Ok { n = 0 }
+
+                example take
+                    | (Note { text = Spaced("a\\tb"), flag = Yes }) -> Ok { n = 0 }
+                """;
+
+        assertEquals(List.of("Note { text = Spaced(\"a\\tb\"), flag = No }"),
+                inputs(generated(tabbed).get("take").pairs()),
+                "the tab is written the way a literal spells one");
+
+        String block = GeneratedRows.of("example.tabbed", generated(tabbed), false);
+        String pasted = tabbed + block.lines()
+                .filter(line -> line.startsWith("//     ") || line.equals("// example take"))
+                .map(line -> line.substring("// ".length()).replace("<?>", "Ok { n = 0 }"))
+                .reduce("", (all, line) -> all + line + "\n");
+
+        Compilation compilation = Compilation.ofSource(pasted, "Main");
+        compilation.answerEverything();
+        List<souther.compiler.observe.RowOutcome> rows = outcomes(compilation);
+
+        assertEquals(2, rows.size(), "the row that was there, and the one generated");
+        for (souther.compiler.observe.RowOutcome row : rows) {
+            assertEquals(souther.compiler.observe.Disposition.HELD, row.disposition(),
+                    row.description() + " -> " + row.failurePhase());
+        }
+    }
+
     // --- the block, put back through the compiler ------------------------------------------------
 
     /** The rows of the block, with the placeholder answered the way an author answers it. */

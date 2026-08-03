@@ -29,12 +29,20 @@ final class PatternValues {
     private static final int BEYOND_MINIMUM = 0;
 
     /**
+     * How long a value this will write. Past this the pattern is asking for something no row wants:
+     * an observation reads a string back to a bounded length, so a longer one could not be compared
+     * against what it produced anyway.
+     */
+    private static final int LONGEST = 1024;
+
+    /**
      * Where a negated class takes its character from, in order.
      *
      * <p>A letter first, because a class that excludes something usually excludes punctuation, and a
      * value made of letters is the one a reader recognises. Then the rest of printable ASCII, and then
-     * a character from each of the alphabets a model here is written in — a rule that excludes ASCII
-     * entirely is asking for one of those, and had nothing to give before.
+     * a character from each of the alphabets a model here is written in — a rule excluding ASCII
+     * entirely is asking for one of those. A tab or a newline last: they read as nothing at all in a
+     * row, so they are what is left when a rule excludes every character that reads as something.
      */
     private static final String PREFERRED = build();
 
@@ -44,8 +52,21 @@ final class PatternValues {
         for (char c = 0x20; c <= 0x7e; c++) {
             out.append(c);
         }
-        out.append('\n').append('\t');
-        return out.append("あアー一　ｦ").toString();
+        out.append("あアー一　ｦ");
+        return out.append('\t').append('\n').toString();
+    }
+
+    /**
+     * Whether a row can be written carrying this.
+     *
+     * <p>A value is offered to be pasted into a model as a string literal, and the literal reads five
+     * escapes. A character outside them and outside the printable ones cannot be written at all: what
+     * would go in is the character itself, which is not a value anybody can read, and for some of them
+     * not something a file holds. There is no value here, which is what the caller already handles.
+     */
+    private static boolean writable(String value) {
+        return value.length() <= LONGEST && value.chars().allMatch(c ->
+                c == '\n' || c == '\t' || c == '\r' || (c >= 0x20 && c != 0x7f));
     }
 
     /**
@@ -53,7 +74,8 @@ final class PatternValues {
      *
      * <p>Empty for a construct it does not read — a backreference, a lookaround, a unicode property —
      * and empty for anything it built that the pattern then refused, which is the same answer and the
-     * reason the second check is here.
+     * reason the second check is here. Empty too for a string the pattern accepts and a row cannot
+     * carry: what is wanted is a value somebody can paste into a model, not one that matches.
      */
     static Optional<String> shortestAccepted(String regex) {
         PatternValues reader = new PatternValues(regex);
@@ -64,6 +86,9 @@ final class PatternValues {
                 return Optional.empty();   // stopped early — an unbalanced bracket, say
             }
         } catch (Unreadable | StackOverflowError _) {
+            return Optional.empty();
+        }
+        if (!writable(built)) {
             return Optional.empty();
         }
         try {
@@ -138,6 +163,9 @@ final class PatternValues {
             take();
         }
         int times = least + (most == least ? 0 : Math.min(BEYOND_MINIMUM, most - least));
+        if ((long) one.length() * times > LONGEST) {
+            throw new Unreadable();   // longer than a row will carry, so there is no row to write
+        }
         return one.repeat(times);
     }
 
@@ -196,12 +224,19 @@ final class PatternValues {
         boolean first = true;
         while (!done() && (peek() != ']' || first)) {
             first = false;
-            char low = classMember();
-            if (peek() == '-' && at + 1 < regex.length() && regex.charAt(at + 1) != ']') {
+            List<char[]> member = classMember();
+            if (member.size() == 1 && peek() == '-'
+                    && at + 1 < regex.length() && regex.charAt(at + 1) != ']') {
                 take();
-                ranges.add(new char[] {low, classMember()});
+                // The far end of a range is one character. A shorthand cannot be one: `[\d-z]` is
+                // not a range this can read the ends of.
+                List<char[]> upper = classMember();
+                if (upper.size() != 1 || upper.get(0)[0] != upper.get(0)[1]) {
+                    throw new Unreadable();
+                }
+                ranges.add(new char[] {member.get(0)[0], upper.get(0)[0]});
             } else {
-                ranges.add(new char[] {low, low});
+                ranges.addAll(member);
             }
         }
         expect(']');
@@ -219,28 +254,38 @@ final class PatternValues {
         throw new Unreadable();
     }
 
-    /** One character of a class, which may be written as an escape. A shorthand inside a class covers
-     * several characters at once; the first of what it stands for is enough to be in the class, and to
-     * be out of a negated one it has to be excluded as a whole — which is why the shorthand's whole
-     * range is added. */
-    private char classMember() {
+    /**
+     * What one member of a class stands for — the characters it puts in, as ranges.
+     *
+     * <p>Ranges rather than a character, because the two questions a class is asked want different
+     * things from the same member. To pick a character the class accepts, one of them is enough. To
+     * pick one a negated class accepts, all of them are needed: a member standing for the letters and
+     * the digits excludes the letters and the digits, and a reader that recorded only the first of
+     * them would go on to pick the second and produce a value the pattern refuses.
+     */
+    private List<char[]> classMember() {
         char c = take();
         if (c != '\\') {
-            return c;
+            return one(c);
         }
         char kind = take();
         return switch (kind) {
-            case 'd' -> '0';
-            case 'w' -> 'a';
-            case 's' -> ' ';
-            case 'n' -> '\n';
-            case 't' -> '\t';
-            case 'r' -> '\r';
-            case 'x' -> hex(2);
-            case 'u' -> hex(4);
+            case 'd' -> List.of(new char[] {'0', '9'});
+            case 'w' -> List.of(new char[] {'a', 'z'}, new char[] {'A', 'Z'},
+                    new char[] {'0', '9'}, new char[] {'_', '_'});
+            case 's' -> List.of(new char[] {' ', ' '}, new char[] {'\t', '\r'});
+            case 'n' -> one('\n');
+            case 't' -> one('\t');
+            case 'r' -> one('\r');
+            case 'x' -> one(hex(2));
+            case 'u' -> one(hex(4));
             case 'D', 'W', 'S', 'p', 'P', 'b', 'B', 'c' -> throw new Unreadable();
-            default -> kind;   // an escaped literal: `\-`, `\.`, `\\`, `\+`
+            default -> one(kind);   // an escaped literal: `\-`, `\.`, `\\`, `\+`
         };
+    }
+
+    private static List<char[]> one(char c) {
+        return List.of(new char[] {c, c});
     }
 
     /** An escape outside a class. */
@@ -287,7 +332,13 @@ final class PatternValues {
         if (start == at) {
             throw new Unreadable();
         }
-        return Integer.parseInt(regex.substring(start, at));
+        try {
+            return Integer.parseInt(regex.substring(start, at));
+        } catch (NumberFormatException _) {
+            // A count past what an int holds. Whether the pattern engine reads it at all is its own
+            // business; what it is here is a bound this cannot answer with a value.
+            throw new Unreadable();
+        }
     }
 
     private boolean done() {
