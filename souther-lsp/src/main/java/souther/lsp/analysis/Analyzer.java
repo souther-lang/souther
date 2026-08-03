@@ -2,6 +2,7 @@ package souther.lsp.analysis;
 
 import souther.compiler.Compiler;
 import souther.compiler.check.Resolve;
+import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
 import souther.compiler.query.Names;
 import souther.compiler.query.Shapes;
@@ -27,6 +28,7 @@ import souther.compiler.cst.SyntaxToken;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.frontend.CstFrontend;
 import souther.lsp.protocol.CodeAction;
+import souther.lsp.protocol.CodeLens;
 import souther.lsp.protocol.CompletionItem;
 import souther.lsp.protocol.DocumentSymbol;
 import souther.lsp.protocol.Hover;
@@ -64,6 +66,31 @@ public final class Analyzer {
     /** Which module path {@link #workspaceCompile} was built for. A different one is a different
      * set of modules to resolve an import against, so the compile is started again. */
     private souther.compiler.meta.ModulePath compiledAgainst;
+
+    /**
+     * How much of what the rows cover this editor was told to measure. Off by default.
+     *
+     * <p>Off because measuring costs what it costs and an editor recompiles on every keystroke:
+     * `witness` reads what the compile already ran, and `all` generates a second set of classes and
+     * runs every row again on every save. Whichever is asked for, it is decided before anything is
+     * asked of a compile — the answers are memoised, so a compile cannot be told halfway through.
+     */
+    private Adequacy.Asked measure = Adequacy.Asked.NOTHING;
+
+    /** Whether anything is being measured, which is what decides if an offer can exist where there
+     * is no diagnostic to fix. */
+    public boolean measuring() {
+        return measure.level().reports();
+    }
+
+    /** What this editor measures from now on. A change starts the workspace compile again, because
+     * what it already answered was answered under the old setting. */
+    public void measure(Adequacy.Asked asked) {
+        if (!this.measure.equals(asked)) {
+            this.measure = asked;
+            this.workspaceCompile = null;
+        }
+    }
 
     /** All diagnostics for a document: every syntax error, or — when there are none — the first
      * semantic error a compile turns up, or the warnings a clean compile found. */
@@ -190,6 +217,7 @@ public final class Analyzer {
                                   Map<String, String> sources, Set<String> broken) {
         if (workspaceCompile == null || !path.equals(compiledAgainst)) {
             workspaceCompile = Compilation.ofDocuments(sources, broken, path);
+            workspaceCompile.measure(measure);
             compiledAgainst = path;
         } else {
             workspaceCompile.update(sources, broken);
@@ -251,6 +279,121 @@ public final class Analyzer {
     }
 
     /**
+     * What each behavior in this document has been pinned down to, as a line above its declaration.
+     *
+     * <p>Where the author is working is where the numbers are worth reading. The same figures are in
+     * {@code souther examples}, and a report in another window is a report nobody opens while writing
+     * the behavior it is about.
+     *
+     * <p>Empty unless there is a workspace compile and this editor was asked to measure. One document
+     * is not enough to answer from: a behavior's rows are written across its module's own source and
+     * any number of attached files, and reading one file would report what another covers as
+     * uncovered — which is worse than saying nothing, being wrong rather than absent.
+     */
+    public List<CodeLens> codeLenses(String uri, ModuleGraph graph) {
+        if (!measure.level().reports()) {
+            return List.of();
+        }
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, uri);
+        if (module == null) {
+            return List.of();
+        }
+        Ast.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        if (written == null) {
+            return List.of();
+        }
+        Adequacy.Of adequacy = compilation.adequacy(module);
+        LineIndex lines = new LineIndex(graph.text(uri));
+        List<CodeLens> out = new ArrayList<>();
+        for (Ast.BehaviorDef behavior : written.behaviors()) {
+            String title = lensTitle(compilation, module, behavior.name(), adequacy);
+            if (title != null && behavior.pos() != null) {
+                out.add(new CodeLens(pointRange(lines, behavior.pos()), title));
+            }
+        }
+        return out;
+    }
+
+    /** Which module this document declares, or null where it declares none — a file held out for its
+     * syntax errors, or one the compile never reached. */
+    private static String moduleOf(Compilation compilation, String uri) {
+        for (String module : compilation.modules()) {
+            if (uri.equals(compilation.sourceIdOf(module))) {
+                return module;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * One behavior's line, or null where there is nothing to say about it.
+     *
+     * <p>A measure that could not be made is left out rather than printed as a zero. A behavior with
+     * no rows has no numbers at all, and a lens reading {@code out 0/2} over one nobody has exampled
+     * yet reports the model as failing something it was never asked.
+     */
+    private static String lensTitle(Compilation compilation, String module, String behavior,
+                                    Adequacy.Of adequacy) {
+        int rows = 0;
+        int pending = 0;
+        for (String sourceId : compilation.exampleSourcesOf(module)) {
+            souther.compiler.query.Output.Examples.Of observed = compilation.db()
+                    .ask(new Adequacy.ProbedExamples(module, sourceId)).value();
+            if (observed == null) {
+                continue;
+            }
+            for (souther.compiler.observe.RowOutcome row : observed.rows()) {
+                if (row.target().equals(behavior)) {
+                    rows++;
+                    pending += row.disposition() == souther.compiler.observe.Disposition.PENDING
+                            ? 1 : 0;
+                }
+            }
+        }
+        if (rows == 0) {
+            return null;
+        }
+        List<String> parts = new ArrayList<>();
+        parts.add(rows + (rows == 1 ? " row" : " rows"));
+        if (pending > 0) {
+            parts.add(pending + " pending");
+        }
+        Adequacy.SignatureEvidence signature =
+                adequacy.signatures() == null ? null : adequacy.signatures().get(behavior);
+        if (signature != null && !signature.output().declared().isEmpty()) {
+            parts.add("out " + signature.output().specified().size() + "/"
+                    + signature.output().declared().size());
+        }
+        souther.compiler.query.PartitionEvidence partition =
+                adequacy.partitions() == null ? null : adequacy.partitions().get(behavior);
+        if (partition != null) {
+            long measured = partition.boundaries().stream()
+                    .filter(b -> b.status() == souther.compiler.observe.MeasurementStatus.COMPLETE)
+                    .count();
+            long met = partition.boundaries().stream()
+                    .filter(b -> b.status() == souther.compiler.observe.MeasurementStatus.COMPLETE)
+                    .filter(souther.compiler.query.PartitionEvidence.BoundaryCoverage::hit).count();
+            if (measured > 0) {
+                parts.add("boundary " + met + "/" + measured);
+            }
+        }
+        Adequacy.BranchEvidence branch =
+                adequacy.branches() == null ? null : adequacy.branches().get(behavior);
+        if (branch != null
+                && branch.status() == souther.compiler.observe.MeasurementStatus.COMPLETE) {
+            parts.add("branch " + branch.covered().size() + "/" + branch.all().size());
+        }
+        return String.join(" · ", parts);
+    }
+
+    /** The caret at one position, as a range of no width. */
+    private static Range pointRange(LineIndex lines, SourcePos pos) {
+        Position at = new Position(pos.line() - 1, pos.column() - 1);
+        return new Range(at, at);
+    }
+
+    /**
      * Quick-fix code actions overlapping {@code requested}: currently, replacing a misspelled name
      * with the compiler's did-you-mean suggestion. The suggestion lives on the structured compiler
      * diagnostic — which the published {@link LspDiagnostic} drops — so this recomputes the first
@@ -258,9 +401,25 @@ public final class Analyzer {
      * fix is offered per compile.
      */
     public List<CodeAction> codeActions(String uri, String text, Range requested) {
+        return codeActions(uri, text, requested, null);
+    }
+
+    /**
+     * The same, with the workspace in reach: what a behavior's rows do not cover can be filled in
+     * from here.
+     *
+     * <p>{@code graph} may be null, and is where the request arrived without one. The generated rows
+     * need the whole workspace — the values a row writes are built through the module's derived
+     * decoders, and its imports are part of that — so with one document there is nothing to offer.
+     */
+    public List<CodeAction> codeActions(String uri, String text, Range requested,
+                                        ModuleGraph graph) {
         List<CodeAction> out = new ArrayList<>();
         if (!CstParser.parse(text).errors().isEmpty()) {
             return out;   // a semantic suggestion needs a clean parse
+        }
+        if (graph != null) {
+            out.addAll(rowsToWrite(uri, text, requested, graph));
         }
         Diagnostic d = firstSemanticDiagnostic(text);
         if (d == null || d.suggestion() == null || d.region() == null) {
@@ -271,6 +430,51 @@ public final class Analyzer {
             out.add(new CodeAction("Replace with '" + d.suggestion() + "'", uri, diagRange, d.suggestion()));
         }
         return out;
+    }
+
+    /**
+     * An offer to write the rows nothing covers, on the behavior the cursor is in.
+     *
+     * <p>The same block {@code souther examples --generate} prints, put where it goes rather than on
+     * a terminal for someone to copy. It arrives commented out, with each answer left as a hole that
+     * is not a term — the compiler does not know what the model owes, and a row it filled in would be
+     * an assertion nobody made.
+     *
+     * <p>Inserted at the end of the document. Where rows belong is the author's choice — this
+     * module's own source or an attached file — and moving a block is easier than finding out why one
+     * landed somewhere surprising.
+     */
+    private List<CodeAction> rowsToWrite(String uri, String text, Range requested,
+                                         ModuleGraph graph) {
+        if (!measure.level().reports()) {
+            return List.of();
+        }
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, uri);
+        if (module == null) {
+            return List.of();
+        }
+        Ast.Module written = compilation.db().ask(new Shapes.Prepared(module)).value();
+        if (written == null) {
+            return List.of();
+        }
+        LineIndex lines = new LineIndex(text);
+        for (Ast.BehaviorDef behavior : written.behaviors()) {
+            if (behavior.pos() == null
+                    || !overlaps(pointRange(lines, behavior.pos()), requested)) {
+                continue;
+            }
+            String block = souther.compiler.report.GeneratedRows.of(compilation, module,
+                    behavior.name(), true);
+            if (block.isBlank()) {
+                continue;
+            }
+            Position end = new Position((int) text.lines().count(), 0);
+            return List.of(new CodeAction(
+                    "Write the rows `" + behavior.name() + "` does not cover", uri,
+                    new Range(end, end), System.lineSeparator() + block));
+        }
+        return List.of();
     }
 
     /** The first semantic error a self-contained compile turns up, as the structured compiler

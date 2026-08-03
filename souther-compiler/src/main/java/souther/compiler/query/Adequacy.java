@@ -77,7 +77,14 @@ public final class Adequacy {
 
         /** Measured for a report to read, and not said again. */
         public static Asked reportOnly() {
-            return new Asked(Level.ALL, false);
+            return reportOnly(Level.ALL);
+        }
+
+        /** As much as {@code level} measures, for a report to read. An editor asks for this: what it
+         * draws beside a declaration is a report, and a warning saying the same thing again would be
+         * the same news twice on the same line. */
+        public static Asked reportOnly(Level level) {
+            return new Asked(level, false);
         }
     }
 
