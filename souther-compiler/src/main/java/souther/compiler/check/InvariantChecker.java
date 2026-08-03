@@ -775,7 +775,7 @@ public final class InvariantChecker {
         if (depth < BRANCHES_OPENED) {
             for (int i = 0; i < nd.inits().size(); i++) {
                 if (nd.inits().get(i).value() instanceof Ast.If iff) {
-                    return Verdict.worse(
+                    return Verdict.of(
                             verdictOf(withFieldValue(nd, i, iff.then()), type,
                                     assumeCond(iff.cond(), k, scope, true), scope, depth + 1),
                             verdictOf(withFieldValue(nd, i, iff.els()), type,
@@ -867,9 +867,13 @@ public final class InvariantChecker {
         /** A clause is proven to fail on a path that is reached. */
         REFUTED;
 
-        /** The worse of two answers, which is what holds of a value that is one of two. */
-        static Verdict worse(Verdict a, Verdict b) {
-            return a.compareTo(b) >= 0 ? a : b;
+        /**
+         * What holds of a value that is one of two. It is discharged where both are, and it is proven
+         * to fail only where both fail — a construction one branch satisfies does not definitely
+         * violate, whichever branch is taken. Everything else is possible and unproven.
+         */
+        static Verdict of(Verdict a, Verdict b) {
+            return a == b ? a : UNKNOWN;
         }
     }
 
@@ -1930,10 +1934,37 @@ public final class InvariantChecker {
         return term == null ? new Denotes.Nothing() : new Denotes.Term(term, namedByRule(e, scope));
     }
 
-    /** Whether {@code e} is a value written out rather than computed from anything. */
+    /**
+     * Whether {@code e} is a value written out rather than computed from anything: a literal, and a
+     * list or a construction whose every part is one. A table written into the source is this — every
+     * row of it is there to read — and there is no guard an author could add about it, which is what
+     * naming it at a construction site would ask for.
+     */
     private static boolean isWritten(Ast.Expr e) {
-        return e instanceof Ast.IntLit || e instanceof Ast.DecimalLit || e instanceof Ast.StringLit
-                || e instanceof Ast.BoolLit;
+        return isWritten(e, Set.of());
+    }
+
+    /** The same, where {@code written} names the bindings an expansion introduced for values that
+     * were themselves written. A helper called on written arguments is a written value: what it
+     * expands to binds each argument and reads it back, which is the source's own text moved. */
+    private static boolean isWritten(Ast.Expr e, Set<String> written) {
+        return switch (e) {
+            case Ast.IntLit _, Ast.DecimalLit _, Ast.StringLit _, Ast.BoolLit _ -> true;
+            case Ast.Var v -> written.contains(v.name());
+            case Ast.ListLit list -> list.elements().stream().allMatch(x -> isWritten(x, written));
+            case Ast.Tuple t -> t.elements().stream().allMatch(x -> isWritten(x, written));
+            case Ast.NewData nd -> nd.spreads().isEmpty()
+                    && nd.inits().stream().allMatch(fi -> isWritten(fi.value(), written));
+            case Ast.LetIn li -> {
+                if (!isWritten(li.value(), written)) {
+                    yield false;
+                }
+                Set<String> inner = new HashSet<>(written);
+                inner.add(li.name());
+                yield isWritten(li.body(), inner);
+            }
+            default -> false;
+        };
     }
 
     /** Whether {@code e} is a container built by an operation the preservation table covers, over an

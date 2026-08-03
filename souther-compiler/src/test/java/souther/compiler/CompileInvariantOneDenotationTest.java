@@ -6,6 +6,7 @@ import souther.compiler.diag.Severity;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -267,5 +268,39 @@ class CompileInvariantOneDenotationTest {
                                 Count(c)
                             } else Count(0)"""))),
                 "a name for a location is that location");
+    }
+
+    @Test
+    void aConstructionOneBranchSatisfiesIsNotRefuted() {
+        // the comprehension is one element or none, so the construction may violate and does not
+        // definitely violate — an error here would fail a build over a value that can be fine
+        String m = """
+                module demo
+                data Reasons = { why: List<Int> }
+                    invariant List.length(why) >= 1
+                behavior mk : (age: Int) -> Reasons
+                    constructs Reasons
+                let mk (age) = Reasons { why = [ 75 | age >= 75 ] }
+                """;
+        Compiler.Compiled c = Compiler.compileWithWarnings(m);
+        assertEquals(1, warnings(c), "possible, and not decided");
+        assertFalse(c.classes().isEmpty(), "a possible violation does not fail the build");
+    }
+
+    @Test
+    void aWrittenTableIsNotSomethingToGuard() {
+        // every row is there to read, and no guard an author could add says more about it
+        String m = """
+                module demo
+                data Row = { grade: Int }
+                data Table = List<Row>
+                    invariant List.allUniqueBy(.grade, value)
+                let row (n: Int) = Row { grade = n }
+                behavior mk : (x: Int) -> Table
+                    constructs Table, Row
+                let mk (x) = Table([ row(1), row(2), row(3) ])
+                """;
+        assertEquals(0, warnings(Compiler.compileWithWarnings(m)),
+                "a table written into the source carries no guard");
     }
 }
