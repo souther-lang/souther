@@ -320,9 +320,8 @@ final class HelperParams {
                 }
                 case Ast.LetIn li -> visitLet(li, env, target, expected);
                 case Ast.Binary bin -> {
-                    Type both = bin.op() == Ast.BinOp.AND || bin.op() == Ast.BinOp.OR
-                            ? Type.BOOL : null;
-                    visitShared(readings(List.of(bin.left(), bin.right()), env), target, both);
+                    visitOperand(bin.left(), bin.right(), bin.op(), false, env, target);
+                    visitOperand(bin.right(), bin.left(), bin.op(), true, env, target);
                 }
                 case Ast.If iff -> {
                     visit(iff.cond(), env, target, Type.BOOL);
@@ -399,6 +398,20 @@ final class HelperParams {
                 arms.add(new Reading(arm.body(), env));
             }
             visitShared(arms, target, expected);
+        }
+
+        /**
+         * One operand of an operator, asked for what the operator asks of it. The two operands are not
+         * always one type — scaling a numeric newtype asks the other side for the base it wraps — so
+         * what is asked is answered where that rule is stated rather than restated here.
+         */
+        private void visitOperand(Ast.Expr operand, Ast.Expr beside, Ast.BinOp op, boolean onTheRight,
+                                  Scope env, BindingId target) {
+            if (pinned != null || !mentions(operand, target)) {
+                return;
+            }
+            visit(operand, env, target, BinaryElaborator.operandBeside(
+                    op, typed(beside, env), onTheRight, symbols));
         }
 
         /** An expression and the scope it is read in — an arm carries what its own pattern binds. */

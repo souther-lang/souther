@@ -533,6 +533,55 @@ class CompileHelperBodyTypingTest {
                 "the third arm types `v` as Int");
     }
 
+    /** Compiles a module declaring a numeric newtype whose only helper is {@code helper}. */
+    private static boolean scales(String helper) {
+        String src = """
+                module demo
+                data N = Int
+                data X = Int
+                behavior f : (x: X) -> X
+                %s
+                let f (x) = x
+                """.formatted(helper);
+        return Compiler.compile(src).containsKey("demo.F");
+    }
+
+    @Test
+    void aNumericNewtypeAsksItsScalarForTheBaseType() {
+        // `N * Int` stays in `N` and `N * N` is a dimension change the model does not have, so what
+        // stands beside the newtype is the base it wraps — not the newtype.
+        assertTrue(scales("let scale (factor, n: N) = n * factor"),
+                "the scalar beside the newtype is an Int");
+    }
+
+    @Test
+    void aScalarOnTheLeftOfAMultiplicationTakesTheBaseType() {
+        assertTrue(scales("let scale (factor, n: N) = factor * n"),
+                "a scalar multiplies from either side");
+    }
+
+    @Test
+    void aDivisorOfANumericNewtypeTakesTheBaseType() {
+        assertTrue(scales("let split (factor, n: N) = n / factor"),
+                "dividing a newtype by a scalar stays in the newtype");
+    }
+
+    @Test
+    void aScalarDividedByANewtypeDeterminesNothing() {
+        // `s / N` is an inverse — a dimension change — so nothing the operator admits stands there and
+        // the parameter is annotated rather than settled at a type the body would then refuse.
+        String src = """
+                module demo
+                data N = Int
+                data X = Int
+                behavior f : (x: X) -> X
+                let invert (factor, n: N) = factor / n
+                let f (x) = x
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertEquals("check.helper.infer", e.diagnostic().messageKey(), e.getMessage());
+    }
+
     @Test
     void aRecursiveHelperStillAnnotatesItsParameters() {
         // A recursive helper is lowered to a method and typed on its declaration, so it writes its
