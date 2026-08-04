@@ -315,7 +315,7 @@ public final class Compilation {
             byId.put(id, new ArrayList<>());
         }
         for (Db.Found found : db.allReports()) {
-            String primary = primarySourceIdOf(found);
+            String primary = locatedSourceIdOf(found);
             for (String id : publishSourceIdsOf(found)) {
                 List<Located> on = byId.get(id);
                 if (on != null) {
@@ -356,17 +356,24 @@ public final class Compilation {
     }
 
     /**
-     * Which source a report's primary region is in, as this compilation names its sources: the one
-     * the report named, or the one its key did, or the one that declares the module it was about.
+     * Which of the sources this compilation holds a report's primary region is in: the one the report
+     * claims ({@link Db.Found#claimedSourceId()}), or — where it claims none, or claims one this
+     * compile was not handed — the one that declares the module it was about.
+     *
+     * <p>The second half of that is a guard, and it guards availability as much as attribution. A
+     * position may have been read from a source this compile does not have: the prelude, or a module
+     * read back off the module path. Filing a report under a name {@link #diagnostics()} has no entry
+     * for would drop it silently, and a report the author never sees is worse than one on the wrong
+     * file.
      *
      * <p>Always answered, whatever the compile tells a caller about its sources. What a source is
      * called here is how a report is filed and how its regions are quoted; what a caller is told is
      * {@link #sourceIdOf(Db.Found)}, and the two are not the same question.
      */
-    private String primarySourceIdOf(Db.Found found) {
-        String said = found.primarySourceId();
-        if (said != null) {
-            return said;
+    private String locatedSourceIdOf(Db.Found found) {
+        String claimed = found.claimedSourceId();
+        if (claimed != null && sourceIds().contains(claimed)) {
+            return claimed;
         }
         return found.module() == null ? null : sourceIdOf(found.module());
     }
@@ -376,7 +383,7 @@ public final class Compilation {
      * told — none, for a compile of one source, where that caller knows the file it handed over.
      */
     public String sourceIdOf(Db.Found found) {
-        return namesSources ? primarySourceIdOf(found) : null;
+        return namesSources ? locatedSourceIdOf(found) : null;
     }
 
     /**
@@ -388,7 +395,7 @@ public final class Compilation {
      * report has something to show.
      */
     public List<String> publishSourceIdsOf(Db.Found found) {
-        String primary = primarySourceIdOf(found);
+        String primary = locatedSourceIdOf(found);
         List<String> saidAt = new ArrayList<>();
         if (primary != null) {
             saidAt.add(primary);
@@ -407,7 +414,7 @@ public final class Compilation {
     /** Where a report sits in the order the sources were given, or -1 when it names none. Only for
      * ordering: which file a reader is sent to is {@link #sourceIdOf(Db.Found)}. */
     private int indexOf(Db.Found found) {
-        String id = primarySourceIdOf(found);
+        String id = locatedSourceIdOf(found);
         if (id == null) {
             return -1;
         }

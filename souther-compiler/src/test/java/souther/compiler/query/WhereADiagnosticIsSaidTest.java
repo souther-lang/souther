@@ -97,4 +97,76 @@ class WhereADiagnosticIsSaidTest {
         return found.report().diagnostic().secondary().stream()
                 .anyMatch(label -> id.equals(label.sourceIdOr(primary)));
     }
+
+    // --- one problem, one report; two problems, two ----------------------------------------------
+
+    /**
+     * A helper is checked on its own and again in each body it is expanded into, and both are looking
+     * at one line of one file. Neither is wrong to have found it and neither can see the other, so it
+     * is the reading of them that settles that it is one problem.
+     */
+    @Test
+    void theSameProblemFoundThroughTwoQuestionsIsOneReport() {
+        // `Bodies.ModuleCheck` finds this checking the helper on its own, and
+        // `Bodies.CheckedBehavior` finds it again in each body the helper is expanded into. Both
+        // report it; both name the same line of the same file, so the reading of them is one report.
+        Compilation c = Compilation.ofSources(List.of("""
+                module m
+                data N = { v: Int }
+                let joined (n: N) = n.v + "text"
+                behavior f : (n: N) -> Int
+                let f (n) = joined(n)
+                behavior g : (n: N) -> Int
+                let g (n) = joined(n)
+                """), souther.compiler.meta.ModulePath.EMPTY);
+
+        Map<String, List<Located>> found = c.diagnostics();
+
+        assertEquals(1, found.get("0").size(),
+                "the helper and the two bodies it is expanded into found one mistake: " + found);
+    }
+
+    /**
+     * Two checks of one expression against different expectations say the same thing at the same
+     * place with different arguments, and those are two problems. Nothing about filing a report by
+     * where it points may collapse them.
+     */
+    @Test
+    void twoDifferentProblemsAtOneCoordinateInOneFileAreTwoReports() {
+        Compilation c = Compilation.ofSources(List.of("""
+                module m
+                data N = { v: Int }
+                behavior f : (n: N) -> Int
+                let f (n) = bogusOne
+                behavior g : (n: N) -> Int
+                let g (n) = bogusTwo
+                """), souther.compiler.meta.ModulePath.EMPTY);
+
+        Map<String, List<Located>> found = c.diagnostics();
+
+        assertEquals(2, found.get("0").size(),
+                "two names denote nothing, so there are two things to say: " + found);
+    }
+
+    /**
+     * The same mistake written at the same line and column of two files is two mistakes. Before a
+     * position said which file it was read from, the coordinate was all there was to tell them apart
+     * by — so this is the reading that the earlier design could not have got right.
+     */
+    @Test
+    void oneCoordinateInTwoFilesIsTwoReports() {
+        String same = """
+                data N = { v: Int }
+                behavior f : (n: N) -> Int
+                let f (n) = bogus
+                """;
+        Compilation c = Compilation.ofSources(
+                List.of("module a\n" + same, "module b\n" + same),
+                souther.compiler.meta.ModulePath.EMPTY);
+
+        Map<String, List<Located>> found = c.diagnostics();
+
+        assertEquals(1, found.get("0").size(), "a's is said on a: " + found);
+        assertEquals(1, found.get("1").size(), "b's is said on b: " + found);
+    }
 }
