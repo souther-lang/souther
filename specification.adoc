@@ -2270,6 +2270,8 @@ fake findManager
 
 Each dependency of the target must have a fake — a `+with+` on the row or a `+fake+` table — or it is a compile error (<<e1908>>). A fake, like an example, is written inline or in an attached `+examples for+` file, and is local to its module. `+fake+` is a contextual keyword.
 
+A `+fake+` table is built because it is written. Each table that answers for a dependency — the first one written for it (<<example-pending>>) — is built once, where it is written, whether or not any row reads it: a module may write a table nothing depends on and no row records an answer for, and what is wrong with such a table is wrong wherever it is read from. A table with a row that will not build is an error at the fake (<<e1908>>), said once however many rows would have read it; a table that does not finish being built is a warning there (<<e1921>>). A row that would have stood in with a table that will not build does not run, and says nothing of its own about the table.
+
 A composition's dependencies are its stages' (<<composition-with-requirements>>), so a row exampling one supplies a fake for each of those. That holds whichever path the row takes: an input that departs the main line at the first stage never reaches the second, and the second stage's dependency is faked all the same. What a row has to supply is a property of the composition, not of the input this row happens to use. One dependency two stages share is one fake — the composition holds one of it (<<composition-with-requirements>>) — and the diagnostic names the stage that wants it (<<e1908>>).
 
 [#example-pending]
@@ -3600,6 +3602,8 @@ Hint: Add `with now = ...` on the row, or a `fake now` table.
 
 Emitted when an example targets a behavior whose `+depends on+` dependency has neither a `+with+` on the row nor a `+fake+` declaration (<<example-fakes>>). A dependency that *is* faked but whose fake cannot be built — a `+with+` value, or a row of its `+fake+` table — is reported under the same code and says that instead, naming the dependency once: the fake is supplied, and what failed is the fixture.
 
+The two are quoted where each is written. A `+with+` is written on a row, so the row it is written on is where its value not building is said; a `+fake+` table is written on its own, so that is where a row of it not building is said — once for the table, whether or not any row reads it (<<example-fakes>>).
+
 [#e1909]
 === A fake has no output for an input
 
@@ -3696,6 +3700,28 @@ Where a recorded row names a case and nothing under it (<<example-expected>>), t
 A row whose fixture does not finish is read within its own budget and states nothing; the rows beside it are unaffected, and what happened is said where that row is evaluated (<<e1910>>).
 
 A row whose arity is wrong, whose inputs or expectation will not build, or whose expectation is not a case the behavior answers with, states nothing to compare, and each is said as the error it is (<<e1903>>, <<e1904>>).
+
+[#e1920]
+=== A fake and the rows recorded for one behavior were not compared
+
+[,text]
+----
+Could not compare this fake with the rows recorded for `find` — building the table
+did not finish within 2000ms.
+----
+
+A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when reading a `+fake+` table against the rows recorded for that behavior (<<example-pending>>) does not finish within the budget the reading is held to, so what the two state was never compared. Being told nothing was found and being told nothing was compared are different answers, and an empty list of disagreements is what the first one looks like.
+
+[#e1921]
+=== A fake's table was not built in time
+
+[,text]
+----
+Building the `fake find` table did not finish within 2000ms, so nothing it states
+was checked.
+----
+
+A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when building the table where it is written (<<example-fakes>>) does not finish within the budget that build is held to. A warning rather than an error: waiting says the table was not read, not that it is wrong, and which of the two it is cannot be told from having waited.
 
 [#e2001]
 === A recursive helper is not proven total
