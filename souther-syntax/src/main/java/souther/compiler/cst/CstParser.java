@@ -35,12 +35,32 @@ public final class CstParser {
     private static final class Frame {
         final SyntaxKind kind;
         final List<Green> children = new ArrayList<>();
-        /** Close this frame by handing its children to the parent rather than making a node of
-         *  them, so what it read stays whole without costing the tree a level. */
-        boolean flatten = false;
 
         Frame(SyntaxKind kind) {
             this.kind = kind;
+        }
+    }
+
+    /**
+     * Raised where the source nests past {@link #MAX_DEPTH}, and caught by {@link #parseSourceFile}.
+     *
+     * <p>It is control flow, not a failure: it ends a descent that thirty-six productions are in the
+     * middle of, without each of them having to agree to end it. A limit every production has to
+     * remember is a limit the next production written will not, and the grammar closes its cycles in
+     * more places than one reading finds — an expression through a parenthesis, a lambda or an arm, a
+     * type through its arguments, a pattern through a tuple, and a unary minus straight back into
+     * itself, which is a cycle that never passes through {@code expr} at all.
+     *
+     * <p>What every one of them does pass through is {@link #start}: to nest, a production must open
+     * a node. Refusing there is the one refusal none of them can miss, and a production added later
+     * inherits it without knowing it is there.
+     *
+     * <p>It never leaves this class, so the parser's promise not to throw is kept. No stack trace is
+     * filled in: nothing reads it, and the depth this unwinds is the reason to not pay for one.
+     */
+    private static final class TooDeep extends RuntimeException {
+        TooDeep() {
+            super(null, null, false, false);
         }
     }
 
@@ -60,16 +80,18 @@ public final class CstParser {
      * level, and manages 91 levels on a 256 KB stack — less room than any thread the compiler runs
      * on, and the least any test here gives it. Sixty-four leaves that margin whole, and leaves an
      * expression far more nesting than one a reader can follow.
+     *
+     * <p>Published because it is what a caller inherits: {@link Green#depth()} of a tree from
+     * {@link #parse} never exceeds it. A walk that descends this tree by recursion — which is every
+     * walk there is — needs no limit of its own.
      */
-    private static final int MAX_DEPTH = 64;
+    public static final int MAX_DEPTH = 64;
 
     private final List<GreenToken> tokens;
     private final int[] offset;   // offset[i] = start offset of token i; offset[n] = source length
     private int pos = 0;          // index into tokens (may point at trivia)
     private final Deque<Frame> stack = new ArrayDeque<>();
     private final List<CstError> errors = new ArrayList<>();
-    /** Set once the source has been found to nest deeper than {@link #MAX_DEPTH}. */
-    private boolean tooDeep = false;
     /** The arm column of each match currently parsing its arms, innermost on top. A nested match
      * stops at a `|` that reaches back to one of these columns. */
     private final Deque<Integer> matchArmColumns = new ArrayDeque<>();
@@ -95,6 +117,40 @@ public final class CstParser {
     private GreenNode parseSourceFile() {
         Frame file = new Frame(SyntaxKind.SOURCE_FILE);
         stack.push(file);
+        try {
+            topLevelItems();
+        } catch (TooDeep _) {
+            closeOverTheRest(file);
+        }
+        stack.pop();
+        return Green.node(file.kind, file.children);
+    }
+
+    /**
+     * Ends a parse that reached {@link #MAX_DEPTH}: every frame still open hands its children to the
+     * one below rather than becoming a node, and the tokens the descent never reached are taken as
+     * they were written.
+     *
+     * <p>Nothing is dropped, so the tree still covers the whole source — an editor keeps showing the
+     * file it could not read — and nothing is added, so the depth the refusal was made at is the
+     * depth the tree comes back with.
+     */
+    private void closeOverTheRest(Frame file) {
+        while (stack.peek() != file) {
+            Frame f = stack.pop();
+            stack.peek().children.addAll(f.children);
+        }
+        List<Green> unread = new ArrayList<>();
+        while (pos < tokens.size()) {
+            unread.add(tokens.get(pos));
+            pos++;
+        }
+        if (!unread.isEmpty()) {
+            file.children.add(Green.node(SyntaxKind.ERROR_TOKEN, unread));
+        }
+    }
+
+    private void topLevelItems() {
         if (atContextual("examples")) {
             examplesFileHeader();
         } else if (at(SyntaxKind.MODULE_KW)) {
@@ -120,8 +176,6 @@ public final class CstParser {
             }
         }
         bumpEof();
-        stack.pop();
-        return Green.node(file.kind, file.children);
     }
 
     /** Wraps stray tokens (until the next top-level starter) in an ERROR node so the tree stays
@@ -901,22 +955,7 @@ public final class CstParser {
      * shape of a lambda's parameter list, and the enclosing form has the prior claim. */
     private boolean noLambda = false;
 
-    /**
-     * An expression, and the one place the descent into a nested one is bounded. Every way of
-     * writing an expression inside another — a parenthesis, an argument, a lambda body, an arm —
-     * reaches the inner one through here, so the open frames counted here are the levels the tree
-     * has, and stopping when they reach {@link #MAX_DEPTH} stops both this descent and the walks
-     * that will follow it.
-     *
-     * <p>What is left unread is not dropped: the levels above unwind through their own {@code
-     * expect}s and the top level gathers the rest into an {@code ERROR_TOKEN} node, so the tree
-     * still covers the whole source.
-     */
     private void expr() {
-        if (stack.size() >= MAX_DEPTH) {
-            reportTooDeep();
-            return;
-        }
         pipeExpr();
     }
 
@@ -1434,33 +1473,24 @@ public final class CstParser {
      * builder pattern): the moved children become the new node's first children, and the node is
      * appended back at the same position when {@link #finish()} closes it.
      *
-     * <p>This is the second way the tree gains depth, and the descent guard in {@link #expr()} does
-     * not see it: {@code 1+1+1+…} is read by a loop, so the frames never nest while the tree does.
-     * The level this would add is counted against the same limit, and past it the frame is opened to
-     * flatten — the chain then stays as wide as it was written and as deep as the walks allow.
+     * <p>The one way the tree gains depth that {@link #start} does not see: {@code 1+1+1+…} is read
+     * by a loop, so the frames never nest while the tree does. The level this adds sits on top of
+     * the ones already open, so that is what is counted, and the same refusal is made here.
      */
     private void wrap(int mark, SyntaxKind kind) {
         List<Green> top = stack.peek().children;
-        Frame f = new Frame(kind);
         List<Green> tail = top.subList(mark, top.size());
-        // Once the source is known to be too deep, every later chain is flattened without measuring
-        // it: the answer cannot change, and measuring a tail that now grows with the chain would
-        // cost the square of its length on exactly the input that is already pathological.
-        f.flatten = tooDeep || stack.size() + deepestOf(tail) >= MAX_DEPTH;
-        if (f.flatten) {
-            reportTooDeep();
+        int deepest = 0;
+        for (Green c : tail) {
+            deepest = Math.max(deepest, c.depth());
         }
+        if (stack.size() + deepest >= MAX_DEPTH) {
+            refuseAsTooDeep();
+        }
+        Frame f = new Frame(kind);
         f.children.addAll(tail);
         tail.clear();
         stack.push(f);
-    }
-
-    private static int deepestOf(List<Green> elements) {
-        int deepest = 0;
-        for (Green e : elements) {
-            deepest = Math.max(deepest, e.depth());
-        }
-        return deepest;
     }
 
     /** Replaces the open frame's kind (used to retag a PAREN_EXPR as a TUPLE_EXPR once a comma is
@@ -1468,37 +1498,33 @@ public final class CstParser {
     private void retagTop(SyntaxKind kind) {
         Frame old = stack.pop();
         Frame f = new Frame(kind);
-        f.flatten = old.flatten;   // retagging renames the frame; it does not re-decide its depth
         f.children.addAll(old.children);
         stack.push(f);
     }
 
     // --- builder / cursor primitives ---
 
+    /** Opens a node — and the boundary every production that nests has to pass to do it, which is
+     *  what lets one refusal here end a descent none of them checks for itself. */
     private void start(SyntaxKind kind) {
+        if (stack.size() >= MAX_DEPTH) {
+            refuseAsTooDeep();
+        }
         stack.push(new Frame(kind));
     }
 
     private void finish() {
         Frame f = stack.pop();
-        if (f.flatten) {
-            stack.peek().children.addAll(f.children);
-            return;
-        }
         stack.peek().children.add(Green.node(f.kind, f.children));
     }
 
-    /** Records, once, that the source nests deeper than this parser will build. The levels above the
-     *  one that tripped are the same fact seen from further out, and the recovery that follows
-     *  complains about the tokens the descent left unread; one complaint is what the author acts
-     *  on, so it is the only one kept (see {@link #error}). */
-    private void reportTooDeep() {
-        if (tooDeep) {
-            return;
-        }
+    /** Says where the source outgrew {@link #MAX_DEPTH} — at the token that reached it, which is the
+     *  position no walk finding the same limit in its own stack could have claimed — and ends the
+     *  descent. */
+    private void refuseAsTooDeep() {
         error("parse.toodeep", "an expression in this source nests too deeply to read;"
                 + " name its parts with `let` to flatten it");
-        tooDeep = true;
+        throw new TooDeep();
     }
 
     /** Flushes trivia preceding the next meaningful token, then emits that token. */
@@ -1661,9 +1687,6 @@ public final class CstParser {
     }
 
     private void error(String messageKey, String legacyMessage, Object... args) {
-        if (tooDeep) {
-            return;   // everything after the depth was reached is that same cause, read further out
-        }
         int i = mi(0);
         int width = Math.max(1, tokens.get(i).width());
         errors.add(new CstError(offset[i], width, messageKey, legacyMessage, args));

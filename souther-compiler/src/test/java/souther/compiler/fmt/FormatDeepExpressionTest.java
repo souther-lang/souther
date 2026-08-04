@@ -1,6 +1,8 @@
 package souther.compiler.fmt;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstParser;
 
@@ -12,11 +14,12 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * A source that nests deeper than the tree walks can descend must be answered, not thrown at, and
- * answered the same way every time.
+ * A source that nests deeper than a tree walk can descend must be answered, not thrown at, answered
+ * the same way every time, and answered whatever the source nests.
  *
  * <p>The compiler already refused such a source, by catching the {@code StackOverflowError} its own
  * walks raised. The formatter did not, so the same source that {@code compile} turned into a
@@ -26,9 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * the source. Measured before the limit existed, {@code souther fmt --check} on one unchanged file
  * came back clean seven times out of fourteen and crashed the other seven.
  *
- * <p>So the limit is written down, and the parse is what applies it. The cases here are the two
- * shapes that reach it from opposite sides: a nest the parser descends, and a chain the parser
- * builds by wrapping what it already read.
+ * <p>The cases below are the shapes that reach the limit by different routes, and they are here
+ * because the first attempt at this bounded two of them. A limit written into the productions that
+ * read expressions is not a limit on the tree: the grammar closes its cycles in more places than one
+ * reading finds — a unary minus recurses straight back into itself without passing through
+ * {@code expr} at all, and types and patterns have cycles of their own. Each shape is checked for
+ * the same four things, so a route that grows a tree past the bound fails here rather than in
+ * whichever walk descends it first.
  */
 class FormatDeepExpressionTest {
 
@@ -37,6 +44,14 @@ class FormatDeepExpressionTest {
     private static final int STACK_BYTES = 256 * 1024;
 
     private static final int RUNS = 8;
+
+    /** One way of writing something inside something else, written far past the bound. */
+    record Shape(String name, String source) {
+        @Override
+        public String toString() {
+            return name;
+        }
+    }
 
     private static String moduleWith(String expr) {
         return """
@@ -49,31 +64,72 @@ class FormatDeepExpressionTest {
                 """.formatted(expr);
     }
 
-    private static String deepNest() {
-        return moduleWith("(".repeat(5000) + "1" + ")".repeat(5000));
+    static List<Shape> shapes() {
+        return List.of(
+                // Read by descending: the enclosing production calls the inner one.
+                new Shape("parenthesis nest",
+                        moduleWith("(".repeat(5000) + "1" + ")".repeat(5000))),
+                // Read by a loop that wraps what it has already read, so the frames never nest
+                // while the tree does — invisible to any guard placed on the descent.
+                new Shape("operator chain", moduleWith("1 + ".repeat(20000) + "1")),
+                // A cycle that never passes through the expression entry point at all.
+                new Shape("unary chain", moduleWith("-".repeat(5000) + "1")),
+                // The type grammar's own cycle, through a type argument.
+                new Shape("generic type nest",
+                        "module m\n\ndata X = " + "List<".repeat(3000) + "Int" + ">".repeat(3000) + "\n"),
+                // And through a tuple type.
+                new Shape("tuple type nest",
+                        "module m\n\ndata X = " + "(".repeat(3000) + "Int, Int" + ")".repeat(3000) + "\n"),
+                // The pattern grammar's cycle, through a tuple pattern.
+                new Shape("tuple pattern nest",
+                        "module m\n\nbehavior f : (n: Int) -> Int\nlet f "
+                                + "(".repeat(3000) + "x" + ")".repeat(3000) + " = x\n"));
     }
 
-    private static String deepChain() {
-        return moduleWith("1 + ".repeat(20000) + "1");
+    /** The bound a walker inherits. Every walk over this tree descends it by recursion, so this is
+     *  what says a walk is affordable before it is made. */
+    @ParameterizedTest
+    @MethodSource("shapes")
+    void theTreeComesBackWithinTheBound(Shape shape) throws InterruptedException {
+        AtomicReference<Integer> depth = new AtomicReference<>();
+        Throwable thrown = onSmallStack(() -> depth.set(CstParser.parse(shape.source()).green().depth()));
+
+        assertNull(thrown, "parsing threw " + thrown);
+        assertTrue(depth.get() <= CstParser.MAX_DEPTH,
+                "the parse handed back a tree " + depth.get() + " deep, past the "
+                        + CstParser.MAX_DEPTH + " a walker is told to expect");
     }
 
-    @Test
-    void aNestTheParserDescendsIsReported() throws InterruptedException {
-        assertReportsDepth(deepNest());
+    @ParameterizedTest
+    @MethodSource("shapes")
+    void theDepthIsWhatIsReported(Shape shape) throws InterruptedException {
+        AtomicReference<List<CstError>> errors = new AtomicReference<>();
+        onSmallStack(() -> errors.set(CstParser.parse(shape.source()).errors()));
+
+        assertNotNull(errors.get(), "the parse did not come back with an answer");
+        assertTrue(errors.get().stream().anyMatch(e -> e.legacyMessage().contains("deep")),
+                "expected a depth diagnostic, got: " + errors.get().stream()
+                        .map(CstError::legacyMessage).toList());
     }
 
-    @Test
-    void aChainTheParserWrapsIsReported() throws InterruptedException {
-        assertReportsDepth(deepChain());
+    /** A refused source is still described in full: the tree covers every character it read, which
+     *  is what lets an editor keep showing the file it could not walk. */
+    @ParameterizedTest
+    @MethodSource("shapes")
+    void theTreeStillCoversTheWholeSource(Shape shape) throws InterruptedException {
+        AtomicReference<String> text = new AtomicReference<>();
+        onSmallStack(() -> text.set(CstParser.parse(shape.source()).root().text()));
+
+        assertEquals(shape.source(), text.get(), "the parse dropped part of the source it refused");
     }
 
-    @Test
-    void formattingSuchASourceDoesNotOverflow() throws InterruptedException {
-        for (String source : List.of(deepNest(), deepChain())) {
-            Throwable thrown = onSmallStack(() -> Formatter.format(source));
-            assertFalse(thrown instanceof StackOverflowError,
-                    "formatting a source the parser already refused reached the end of the stack");
-        }
+    @ParameterizedTest
+    @MethodSource("shapes")
+    void formattingSuchASourceDoesNotOverflow(Shape shape) throws InterruptedException {
+        Throwable thrown = onSmallStack(() -> Formatter.format(shape.source()));
+
+        assertFalse(thrown instanceof StackOverflowError,
+                "formatting a source the parser already refused reached the end of the stack");
     }
 
     /**
@@ -83,7 +139,7 @@ class FormatDeepExpressionTest {
      */
     @Test
     void theAnswerIsTheSameOnEveryRun() throws InterruptedException {
-        String source = deepChain();
+        String source = moduleWith("1 + ".repeat(20000) + "1");
         List<String> answers = new ArrayList<>();
         for (int i = 0; i < RUNS; i++) {
             AtomicReference<String> answer = new AtomicReference<>();
@@ -95,33 +151,25 @@ class FormatDeepExpressionTest {
         assertNotNull(answers.get(0), "the source was accepted, so the limit never applied");
     }
 
-    /** A refused source is still described in full: the tree the parser hands back covers every
-     *  character it read, which is what lets an editor keep showing the file it could not walk. */
-    @Test
-    void theTreeStillCoversTheWholeSource() throws InterruptedException {
-        for (String source : List.of(deepNest(), deepChain())) {
-            AtomicReference<String> text = new AtomicReference<>();
-            onSmallStack(() -> text.set(CstParser.parse(source).root().text()));
-            assertEquals(source, text.get(), "the parse dropped part of the source it refused");
-        }
-    }
-
     /** One cause is one complaint: the levels above the one that tripped are the same fact seen
      *  from further out, and an editor that listed them all would bury the one worth reading. */
     @Test
     void theDepthIsReportedOnce() throws InterruptedException {
         AtomicReference<List<CstError>> errors = new AtomicReference<>();
-        onSmallStack(() -> errors.set(CstParser.parse(deepNest()).errors()));
+        onSmallStack(() -> errors.set(
+                CstParser.parse(moduleWith("(".repeat(5000) + "1" + ")".repeat(5000))).errors()));
+
         assertEquals(1, errors.get().size(), "expected one error, got " + errors.get());
     }
 
-    private static void assertReportsDepth(String source) throws InterruptedException {
-        AtomicReference<String> message = new AtomicReference<>();
-        onSmallStack(() -> message.set(firstErrorOf(source)));
-        assertNotNull(message.get(),
-                "a source this deep should not parse cleanly; the test no longer reaches the limit");
-        assertTrue(message.get().contains("deep"),
-                "expected a depth diagnostic, got: " + message.get());
+    /** A source that stays within the bound is untouched by any of this. */
+    @Test
+    void anOrdinarySourceIsUnaffected() throws InterruptedException {
+        String source = moduleWith("((1 + 2) * (3 + n.value)) - 4");
+        AtomicReference<List<CstError>> errors = new AtomicReference<>();
+        onSmallStack(() -> errors.set(CstParser.parse(source).errors()));
+
+        assertEquals(List.of(), errors.get(), "an ordinary expression was refused");
     }
 
     /** The parse's first complaint, or null where it had none. */
