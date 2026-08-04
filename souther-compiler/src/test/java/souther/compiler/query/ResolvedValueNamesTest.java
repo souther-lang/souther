@@ -352,7 +352,7 @@ class ResolvedValueNamesTest {
      */
     @Test
     void aFieldAnInvariantReadsIsDeclaredWhereTheFieldIsWritten() {
-        assertEquals(new SourcePos(4, 7), declaredAt("""
+        assertEquals(new SourcePos(4, 7, "a.sou"), declaredAt("""
                 module m.a exposing ( Amount )
 
                 data Amount = {
@@ -366,7 +366,7 @@ class ResolvedValueNamesTest {
      * declared there and not where it was spread in. */
     @Test
     void aFieldAnIncludeBringsInIsDeclaredWhereItWasWritten() {
-        assertEquals(new SourcePos(4, 7), declaredAt("""
+        assertEquals(new SourcePos(4, 7, "a.sou"), declaredAt("""
                 module m.a exposing ( Priced )
 
                 data Money = {

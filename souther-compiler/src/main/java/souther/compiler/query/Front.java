@@ -91,7 +91,9 @@ public final class Front {
      */
     public record ExampleBudget() implements Input<Long> {}
 
-    /** One source, parsed, with the text of each declaration kept for publishing. */
+    /** One source, parsed, with the text of each declaration kept for publishing. Every position in
+     * what comes back names this source, so a writing that later joins another file's module still
+     * says where it was written. */
     public record Parsed(String id) implements Key<CstFrontend.Parsed> {
         @Override
         public String sourceId() {
@@ -106,7 +108,7 @@ public final class Front {
             }
             try {
                 return Answer.of(CstFrontend.parseWithSlices(
-                        text.value(), db.ask(new DefaultName()).value()));
+                        text.value(), db.ask(new DefaultName()).value(), id));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }

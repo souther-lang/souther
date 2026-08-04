@@ -13,15 +13,29 @@ import java.util.List;
  * <p>Lines and columns are 1-based for {@link SourcePos} (the compiler's convention); the LSP
  * accessors return 0-based positions. Columns count UTF-16 code units, which matches both Java
  * {@code char} offsets and the LSP's default position encoding.
+ *
+ * <p>An index made for a named source gives every {@link SourcePos} that source. This is the one
+ * place a position is made from a text, so it is the one place that has both halves to hand — which
+ * is why nothing downstream has to work the file out again from what it is looking at.
  */
 public final class LineIndex {
 
     private final String source;
+    /** Which source this is an index of, so that every position it makes says where it was read
+     * from. Null where the caller has no name for it — a document the compile does not hold, or a
+     * reader that only wants offsets converted. */
+    private final String sourceId;
     /** {@code lineStart[i]} is the offset at which line {@code i} (0-based) begins. */
     private final int[] lineStart;
 
+    /** An index of a source this caller has no name for. Its positions name no source. */
     public LineIndex(String source) {
+        this(source, null);
+    }
+
+    public LineIndex(String source, String sourceId) {
         this.source = source;
+        this.sourceId = sourceId;
         List<Integer> starts = new ArrayList<>();
         starts.add(0);
         for (int i = 0; i < source.length(); i++) {
@@ -48,7 +62,7 @@ public final class LineIndex {
     /** The compiler's 1-based line/column position for {@code offset}. */
     public SourcePos posOf(int offset) {
         int line = lineIndex(offset);
-        return new SourcePos(line + 1, offset - lineStart[line] + 1);
+        return new SourcePos(line + 1, offset - lineStart[line] + 1, sourceId);
     }
 
     /** The 0-based line of {@code offset} (LSP). */
