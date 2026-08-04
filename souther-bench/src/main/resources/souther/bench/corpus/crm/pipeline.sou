@@ -142,7 +142,7 @@ module example.pipeline exposing (
     closeAndSummarize : WinSummary | BelowFloor
 )
 import example.crm ( AccountId, ContactId, UserId, CompanyName, Amount, CurrencyCode
-                   , LeadConverted, OpportunityIntent, NoOpportunity, OpportunityRequested
+                   , LeadConverted, NoOpportunity, OpportunityRequested
                    , QualifiedLead, ConversionRequest, AccountBook, ContactBook
                    , ConversionBlocked, BlockReason, convertLead )
 

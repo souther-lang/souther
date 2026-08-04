@@ -184,7 +184,7 @@ public final class Compiler {
             }
         }
         for (String module : compilation.modules()) {
-            db.ask(new Adequacy.Warnings(module));
+            compilation.answerWarnings(module);
         }
         warningsOut.addAll(compilation.warnings(db.allReports()));
         return compilation;
@@ -321,7 +321,7 @@ public final class Compiler {
             db.ask(new Output.SaidDisagreements(module));
         }
         for (String module : compilation.modules()) {
-            db.ask(new Adequacy.Warnings(module));
+            compilation.answerWarnings(module);
         }
         warningsOut.addAll(compilation.warnings(db.allReports()));
         if (!exampleFailures.isEmpty()) {

@@ -179,9 +179,24 @@ public final class Compilation {
                 db.ask(new Output.Examples(module, id));
             }
             db.ask(new Output.SaidDisagreements(module));
-            // One ask, which answers nothing and costs nothing unless the build asked to be told.
-            db.ask(new Adequacy.Warnings(module));
+            answerWarnings(module);
         }
+    }
+
+    /**
+     * Asks every question whose whole answer is a warning, for one module.
+     *
+     * <p>Here rather than at each caller because there are three of them — this class and both of
+     * {@link souther.compiler.Compiler}'s entry points — and a warning added to one of them is a
+     * warning the other two do not report. What the editor shows and what the command line shows
+     * would then differ by which list a check was written into.
+     *
+     * <p>Each ask answers nothing on its own; what it is for is the reports it carries.
+     */
+    public void answerWarnings(String module) {
+        db.ask(new Names.UnusedImports(module));
+        // Costs nothing unless the build asked to be told.
+        db.ask(new Adequacy.Warnings(module));
     }
 
     /**

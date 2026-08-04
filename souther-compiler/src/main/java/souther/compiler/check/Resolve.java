@@ -373,7 +373,10 @@ public final class Resolve {
                                 .at(s.pos()).args(c.written(), s.name()).build(),
                         "unknown case `" + c.written() + "` in sum `" + s.name() + "`");
             }
-            out.add(c.denoting(denoted));
+            // Recorded like any other written name. A case is a name this module wrote and this pass
+            // answered, so leaving it out made it a use nothing could see — an editor asked about it
+            // had no answer, and a reader asking which imports are written found the name missing.
+            out.add(answered(c.denoting(denoted)));
         }
         return out;
     }
