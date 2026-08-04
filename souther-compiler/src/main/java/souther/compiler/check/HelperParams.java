@@ -159,8 +159,22 @@ final class HelperParams {
         } catch (CompileException _) {
             return null;   // a written type or a call that does not resolve; the check reports it
         }
-        Map<Integer, Type> found =
-                determine(h, open, env, body, symbols, reqSigs, recursiveHelperFns, new HashMap<>());
+        Map<Integer, Type> found;
+        try {
+            found = determine(h, open, env, body, symbols, reqSigs, recursiveHelperFns, new HashMap<>());
+        } catch (Unanswerable _) {
+            // A body resting on a name that denotes nothing gives no type, which is an answer this
+            // reading is allowed to have: settling reports nothing, and the name was reported where
+            // it was written. One helper, so the helpers beside it are still settled — the same
+            // granularity `PipelineSigs.signatures` keeps for one composition.
+            //
+            // Caught at the call rather than inside the reading, because the check reads this same
+            // body through `determine` and needs the signal to reach it. There, a parameter left
+            // open is `check.helper.infer` — annotate it — and a parameter this body never named
+            // because the name beside it denotes nothing is that one mistake seen from another
+            // angle, not a type the author has to supply.
+            return null;
+        }
         if (found.isEmpty()) {
             return null;
         }
