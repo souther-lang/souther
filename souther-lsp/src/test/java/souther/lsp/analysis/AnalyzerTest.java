@@ -288,7 +288,9 @@ class AnalyzerTest {
     @Test
     void diagnosticsAcrossModulesLandOnTheOwningFile() {
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";
-        String b = "module b\nimport a ( N )\ndata M = { n: Int }\n"
+        // `Held` writes the imported name, which is what makes b depend on a; an import nothing
+        // writes would be reported as unused, and that is not what this test is about.
+        String b = "module b\nimport a ( N )\ndata Held = { it: N }\ndata M = { n: Int }\n"
                 + "behavior f : (x: M) -> M\nlet f (x) = x\n"
                 + "example f\n  | (M { n = 1 }) -> M { n = 2 }\n";   // identity f, so the example fails
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
@@ -305,7 +307,7 @@ class AnalyzerTest {
         // the single-file path returns nothing on an import; the workspace path resolves it and finds
         // the importing module clean
         String a = "module a exposing ( N )\ndata N = { v: Int }\n";
-        String b = "module b\nimport a ( N )\ndata M = { n: Int }\n"
+        String b = "module b\nimport a ( N )\ndata Held = { it: N }\ndata M = { n: Int }\n"
                 + "behavior f : (x: M) -> M\nlet f (x) = x\n";
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
 
