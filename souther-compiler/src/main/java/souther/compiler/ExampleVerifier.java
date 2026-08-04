@@ -137,16 +137,16 @@ public final class ExampleVerifier {
      * itself dispatches with ({@link #standingIn}) — the same rule, not a second reading of it — and
      * the two answers are compared as the written values they are built into.
      */
-    public static List<Disagreement> disagreements(Ast.Module module, Symbols symbols,
-                                                   Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                                   Map<String, List<BehaviorRequirement>> requirements,
-                                                   ClassLoader parent, Map<String, Ast.FnDef> values,
-                                                   List<String> exampleOrigins,
-                                                   List<String> fakeOrigins) {
+    public static Readings disagreements(Ast.Module module, Symbols symbols,
+                                         Map<String, Sig> sigs, Map<String, byte[]> classes,
+                                         Map<String, List<BehaviorRequirement>> requirements,
+                                         ClassLoader parent, Map<String, Ast.FnDef> values,
+                                         List<String> exampleOrigins,
+                                         List<String> fakeOrigins) {
         if (module.examples().isEmpty()
                 || exampleOrigins.size() != module.examples().size()
                 || fakeOrigins.size() != module.fakes().size()) {
-            return List.of();
+            return Readings.NONE;
         }
         // Which behaviors have both a stand-in and rows of their own, read off the text. Two written
         // statements are what this is about, and where there are not two there is nothing to build:
@@ -155,7 +155,7 @@ public final class ExampleVerifier {
         // loaded or a worker is started.
         Set<String> contested = contested(module, sigs);
         if (contested.isEmpty()) {
-            return List.of();
+            return Readings.NONE;
         }
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
                 new MemoryClassLoader(classes, parent), values);
@@ -163,7 +163,39 @@ public final class ExampleVerifier {
     }
 
     /**
-     * One statement, read within its own share of the budget; empty where it did not finish.
+     * What one reading came to: the statement, or the reason there is no statement.
+     *
+     * <p>The reason is answered rather than dropped because the two reasons are held against
+     * different things. A statement that did not finish is about this module, and where nothing else
+     * builds what it was reading it is this reading's to say; a host with no runtime is about the
+     * host, and says the same thing about every fake and every row in every module compiled on it.
+     * A reader that got only "nothing was read" would have to pick one of those, and each caller
+     * would pick for itself.
+     */
+    private sealed interface Read<T> {
+
+        /** What the reading answered. Null where the statement is written in a form that states
+         * nothing — an input that will not build, an expectation that cannot be read. */
+        record Got<T>(T value) implements Read<T> {}
+
+        /** The reading ran out of its budget, and the budget it ran out of: what a report has to
+         * name is what the wait was actually held to, not what a second reader of the setting
+         * makes of it later. */
+        record TimedOut<T>(long budgetMs) implements Read<T> {}
+
+        /** This host has no runtime to build a value against. */
+        record RuntimeAbsent<T>() implements Read<T> {}
+
+        /** What was read, or null — for a caller that has nothing of its own to say about why
+         * there is nothing. Both reasons come out the same here on purpose: the reading that did
+         * not happen is reported by whoever else reads the same statement. */
+        default T orNull() {
+            return this instanceof Got(T value) ? value : null;
+        }
+    }
+
+    /**
+     * One statement, read within its own share of the budget.
      *
      * <p>Per statement rather than per module. Building a fixture runs the helpers it applies
      * (ADR-0077), and a `partial` one may not stop — so a budget covering the whole reading is one a
@@ -172,11 +204,12 @@ public final class ExampleVerifier {
      * to do with. It is what {@link #checkRow} already does for a row it evaluates, and this reads
      * strictly fewer statements than that evaluates rows.
      *
-     * <p>What did not finish states nothing, and nothing is what it is held against. The row it
-     * belongs to reports it (E1910).
+     * <p>What did not finish states nothing. Who says so is the caller's, and differs: a row and a
+     * {@code with} written on one are evaluated elsewhere and report it there (E1910), while a fake
+     * table is built here and, where no row depends on the behavior it stands in for, nowhere else.
      */
-    private <T> java.util.Optional<T> within(java.util.function.Function<ExampleVerifier, T> read,
-                                             String what) {
+    private <T> Read<T> within(java.util.function.Function<ExampleVerifier, T> read,
+                               String what) {
         // On its own reader. A worker that runs out of budget is asked to stop and cannot be made to
         // — a fixture reaches no interrupt point — so it may still be inside `expandedValue`, holding
         // a binding or a half-walked expansion. Nothing it can still write to is read by the
@@ -190,18 +223,18 @@ public final class ExampleVerifier {
         worker.setDaemon(true);
         worker.start();
         try {
-            return java.util.Optional.ofNullable(
+            return new Read.Got<>(
                     task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
         } catch (java.util.concurrent.TimeoutException _) {
             task.cancel(true);
-            return java.util.Optional.empty();
+            return new Read.TimedOut<>(EXAMPLE_TIMEOUT_MS);
         } catch (java.util.concurrent.ExecutionException ee) {
             task.cancel(true);
             Throwable cause = ee.getCause();
             // One thing ends a reading without the model or this code being at fault: a host with no
             // runtime to build a value against, since the runtime is `provided` (as it is for CTFE).
             if (runtimeAbsent(cause)) {
-                return java.util.Optional.empty();
+                return new Read.RuntimeAbsent<>();
             }
             // Anything else is this code being wrong. An empty reading says the statements agree, so
             // answering with one would leave a broken compiler reporting every model consistent, and
@@ -266,8 +299,8 @@ public final class ExampleVerifier {
      * ever shown. */
     private record RecordedRow(SourceRef at, Ast.Expr expected, Object[] arguments, Asserted answer) {}
 
-    private List<Disagreement> collectDisagreements(List<String> exampleOrigins,
-                                                    List<String> fakeOrigins, Set<String> contested) {
+    private Readings collectDisagreements(List<String> exampleOrigins,
+                                          List<String> fakeOrigins, Set<String> contested) {
         Map<String, List<RecordedRow>> recorded = new LinkedHashMap<>();
         for (int i = 0; i < module.examples().size(); i++) {
             Ast.Example ex = module.examples().get(i);
@@ -276,9 +309,10 @@ public final class ExampleVerifier {
             }
         }
         if (recorded.isEmpty()) {
-            return List.of();
+            return Readings.NONE;
         }
         List<Disagreement> found = new ArrayList<>();
+        List<TimedOutFake> timedOut = new ArrayList<>();
         // The first table for a dependency is the one that answers ({@link #resolveFake}); a second
         // one written for the same name never stands in for anything, so it states nothing to
         // disagree with. What that second table is, is its own question.
@@ -286,13 +320,13 @@ public final class ExampleVerifier {
         for (int j = 0; j < module.fakes().size(); j++) {
             Ast.Fake fk = module.fakes().get(j);
             if (answering.add(fk.target())) {
-                againstFake(fk, fakeOrigins.get(j), recorded, found);
+                againstFake(fk, fakeOrigins.get(j), recorded, found, timedOut);
             }
         }
         for (int i = 0; i < module.examples().size(); i++) {
             againstWiths(module.examples().get(i), exampleOrigins.get(i), recorded, found);
         }
-        return List.copyOf(found);
+        return new Readings(found, timedOut);
     }
 
     /**
@@ -314,7 +348,7 @@ public final class ExampleVerifier {
             if (row.inputs().size() != sig.ins().size()) {
                 continue;
             }
-            RecordedRow read = within(reader -> {
+            Read<RecordedRow> read = within(reader -> {
                 Object[] arguments = reader.builtOrNull(row.inputs(), sig.ins());
                 if (arguments == null) {
                     return null;
@@ -323,27 +357,57 @@ public final class ExampleVerifier {
                 return answer instanceof Asserted.Unreadable ? null
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
-            }, "a row of `" + ex.target() + "`").orElse(null);
-            if (read == null) {
+            }, "a row of `" + ex.target() + "`");
+            // A reading that did not finish is not said here, whichever reason ended it. The same row
+            // is evaluated where the example is checked, which builds these fixtures and then runs the
+            // behavior on top of them, so a fixture that overruns this overruns that too and is E1910
+            // there, at the row.
+            RecordedRow got = read.orNull();
+            if (got == null) {
                 continue;
             }
-            into.computeIfAbsent(ex.target(), _ -> new ArrayList<>()).add(read);
+            into.computeIfAbsent(ex.target(), _ -> new ArrayList<>()).add(got);
         }
     }
 
     /** One fake against the rows recorded for the behavior it stands in for. */
     private void againstFake(Ast.Fake fk, String origin, Map<String, List<RecordedRow>> recorded,
-                             List<Disagreement> found) {
+                             List<Disagreement> found, List<TimedOutFake> timedOut) {
         List<RecordedRow> rows = recorded.get(fk.target());
         Sig sig = sigs.get(fk.target());
         if (rows == null || sig == null) {
             return;
         }
-        // The whole table, built the one way the proxy builds it: a table with a row that will not
-        // build is one the fake cannot stand in with, and it answers nothing here either. What is
-        // wrong with it is reported where the fake is used.
-        Standins table = within(reader -> reader.standins(fk, sig.ins(), sig.out(), new ArrayList<>()),
-                "the `fake " + fk.target() + "` table").orElse(null);
+        // The whole table, built the one way the proxy builds it.
+        Read<Standins> read = within(
+                reader -> reader.standins(fk, sig.ins(), sig.out(), new ArrayList<>()),
+                "the `fake " + fk.target() + "` table");
+        // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
+        // it rather than falling in with one of these.
+        switch (read) {
+            // Said here, because here is where it can be. The other place a table is built is
+            // `resolveFake`, which runs while a row of a behavior that *depends on* this one is
+            // evaluated — and a fake nothing depends on has no such row, so an overrun that went
+            // unsaid here would leave "the two agree" as the answer to a comparison never made.
+            // The caret goes on the target, which is what `fk.pos()` is.
+            case Read.TimedOut(long budgetMs) -> {
+                timedOut.add(new TimedOutFake(fk.target(), new SourceRef(origin, fk.pos()),
+                        fk.target().length(), budgetMs));
+                return;
+            }
+            // Not about this fake. The runtime is `provided`, so a host without it builds no value at
+            // all, and every fake and every row in the module would say the same thing; what was not
+            // read for that reason is recorded once, where the rows are evaluated. Defensive: with no
+            // runtime no recorded row builds either, and a reading with no rows read never reaches a
+            // fake — so nothing arrives here today.
+            case Read.RuntimeAbsent() -> {
+                return;
+            }
+            case Read.Got(Standins _) -> { }
+        }
+        // The whole table or nothing: a table with a row that will not build answers nothing here,
+        // and what is wrong with it is reported where the fake is used.
+        Standins table = read.orNull();
         if (table == null) {
             return;
         }
@@ -397,10 +461,13 @@ public final class ExampleVerifier {
                 if (rows == null || depSig == null || !depSig.ins().isEmpty()) {
                     continue;
                 }
+                // As with a recorded row: a `with` is written on a row, and that row is evaluated
+                // where the example is checked, installing this same value. What did not finish here
+                // did not finish there, and there is where it is said (E1910).
                 Asserted constant = within(
                         reader -> reader.readStandIn(w.value(), depSig.out(), outCases(depSig.out())),
-                        "a `with " + w.dep() + "`").orElse(new Asserted.Unreadable());
-                if (constant instanceof Asserted.Unreadable) {
+                        "a `with " + w.dep() + "`").orNull();
+                if (constant == null || constant instanceof Asserted.Unreadable) {
                     continue;
                 }
                 for (RecordedRow recordedRow : rows) {
@@ -536,6 +603,37 @@ public final class ExampleVerifier {
      */
     public record Disagreement(String behavior, Statement recorded, Statement standIn,
                                boolean viaWith) {}
+
+    /**
+     * A fake whose table did not finish being built within the budget, so what it states and what the
+     * rows recorded for the behavior state were never compared.
+     *
+     * <p>Carries what it takes to report it. The position and its width are measured here, where the
+     * text is, the way a {@link Statement}'s are; the budget is the one the wait was actually held to,
+     * rather than a second reading of the setting taken later, which a budget that stops being one
+     * number for the whole compile would make wrong with nothing to say so.
+     *
+     * @param at where the fake names the behavior it stands in for, which is what the report marks
+     */
+    public record TimedOutFake(String target, SourceRef at, int width, long budgetMs) {}
+
+    /**
+     * What reading a module's written statements against each other came to.
+     *
+     * <p>Both lists, because a reading that did not finish and a reading that found nothing are
+     * different answers and an empty list of disagreements is what the second one looks like. Which
+     * of the two a compile got can otherwise turn on machine load, between a build and the next
+     * keystroke in the editor.
+     */
+    public record Readings(List<Disagreement> disagreements, List<TimedOutFake> timedOut) {
+
+        public static final Readings NONE = new Readings(List.of(), List.of());
+
+        public Readings {
+            disagreements = List.copyOf(disagreements);
+            timedOut = List.copyOf(timedOut);
+        }
+    }
 
     /** The one-line form for a set of failures gathered across modules: the count, then the first
      * one's reason, matching what a single module's aggregate says. */
@@ -2387,10 +2485,18 @@ public final class ExampleVerifier {
 
     // --- invoke the behavior ------------------------------------------------------------------
 
-    /** Wall-clock budget for evaluating one example row. A total behavior finishes in well under this;
-     * a `partial` recursion that does not terminate hits it, so the compiler is bounded, never hung.
-     * Overridable with the `souther.example.timeout.ms` system property for an unusually slow example. */
+    /** Wall-clock budget for one thing built and run on a worker of its own: an example row evaluated
+     * ({@link #checkRow}), or one written statement read to compare it against another ({@link
+     * #within}). A total behavior finishes in well under this; a `partial` recursion that does not
+     * terminate hits it, so the compiler is bounded, never hung. Overridable with the
+     * `souther.example.timeout.ms` system property for an unusually slow example. */
     private static final long EXAMPLE_TIMEOUT_MS = readTimeoutMs();
+
+    /** The budget, for a test that has to say what a reading was held to. A report reads it off the
+     * reading that ran out of it ({@link TimedOutFake}), not off here. */
+    static long exampleTimeoutMs() {
+        return EXAMPLE_TIMEOUT_MS;
+    }
 
     private static long readTimeoutMs() {
         String override = System.getProperty("souther.example.timeout.ms");
