@@ -1,6 +1,7 @@
 package souther.compiler;
 
 import java.time.Duration;
+import java.util.function.Predicate;
 
 /**
  * The budget a compile is given when the point of the model is a row that never finishes.
@@ -57,42 +58,38 @@ final class DoesNotComeBack {
 
     /** As {@link #compile(String)}, with the work this model does not get back from said rather
      *  than timed. {@code what} is named as {@link #overrunningOn} names it. */
-    static void compileOverrunning(String model, String... what) {
+    static void compileOverrunning(String model, Predicate<Deadline.Work> which) {
         Compiler.compiled(model, "Main", new java.util.ArrayList<>(),
-                souther.compiler.query.Adequacy.Asked.NOTHING, null, overrunningOn(what));
+                souther.compiler.query.Adequacy.Asked.NOTHING, null, overrunningOn(which));
     }
 
     /** As {@link #compileModules(java.util.List, java.util.List)}, said rather than timed. */
     static void compileModulesOverrunning(java.util.List<String> sources,
                                           java.util.List<souther.compiler.diag.Located> warningsOut,
-                                          String... what) {
+                                          Predicate<Deadline.Work> which) {
         Compiler.compiledModules(sources, souther.compiler.meta.ModulePath.EMPTY, warningsOut,
-                souther.compiler.query.Adequacy.Asked.NOTHING, null, overrunningOn(what));
+                souther.compiler.query.Adequacy.Asked.NOTHING, null, overrunningOn(which));
     }
 
     /**
-     * A deadline under which the work a test names does not come back, and everything else runs to
-     * completion.
+     * A deadline under which the work a test picks out does not come back, and everything else runs
+     * to completion.
      *
      * <p>What a test about an overrun is asking is what the compiler <em>says</em> about work that
      * did not finish, and a clock is a poor way to ask it: the model has to be written so that
      * something genuinely loops, and then the answer depends on whether the host was loaded enough
-     * to cut short the rows that were supposed to finish. Named work overruns here because the test
-     * said so, and the rest is run on the calling thread — no worker, no waiting, and no row that
+     * to cut short the rows that were supposed to finish. Work overruns here because the test picked
+     * it out, and the rest is run on the calling thread — no worker, no waiting, and no row that
      * finishes reported as one that did not.
      *
-     * <p>The names are the ones the two sites give their work, and each names the thing rather than
-     * the visit: {@code row 2 of `take`} for a row evaluated, {@code the fixtures of row 2 of
-     * `take`} for the statements it is read from, {@code the `fake find` table}, {@code a `with
-     * dep`}. Naming the thing is what makes this deterministic — one row is evaluated more than once
-     * over a compile, once to check it and again to measure what it covered, and anything counting
-     * visits would answer differently on the second pass.
+     * <p>Picked out by what the work is, never by how many times something has been asked. One row
+     * is worked on more than once over a compile — once to check it, again to measure what it
+     * covered — so anything counting visits answers differently on the second pass.
      *
-     * <p>Only the work named overruns, so whatever else the model does still has to finish: it is
-     * run inline, and a loop nobody named would not be cut short but would hang.
+     * <p>Only the work picked out overruns, so whatever else the model does still has to finish: it
+     * is run inline, and a loop nothing picked out would not be cut short but would hang.
      */
-    static Deadline overrunningOn(String... what) {
-        java.util.Set<String> named = java.util.Set.of(what);
+    static Deadline overrunningOn(Predicate<Deadline.Work> which) {
         return new Deadline() {
 
             @Override
@@ -101,17 +98,56 @@ final class DoesNotComeBack {
             }
 
             @Override
-            public <T> Outcome<T> given(String subject, java.util.concurrent.Callable<T> work) {
-                if (named.contains(subject)) {
+            public <T> Outcome<T> given(Work work, java.util.concurrent.Callable<T> body) {
+                if (which.test(work)) {
                     return new Outcome.Overran<>(() -> { });   // nothing was started to give up on
                 }
                 try {
-                    return new Outcome.Finished<>(work.call());
-                } catch (Exception e) {
-                    return new Outcome.Threw<>(e);
+                    return new Outcome.Finished<>(body.call());
+                } catch (Throwable cause) {
+                    // Everything the worker could have thrown, as the build's deadline hands it over:
+                    // `ExampleStatements` reads a `NoClassDefFoundError` as this host having no
+                    // runtime, and would never see one that came past this instead of through it.
+                    return new Outcome.Threw<>(cause);
                 }
             }
         };
+    }
+
+    /** Every row of {@code target}, evaluated — its fixtures built, the behavior applied. */
+    static Predicate<Deadline.Work> everyRowOf(String target) {
+        return w -> w instanceof Deadline.Work.Row row && row.target().equals(target);
+    }
+
+    /** The statements every row of {@code target} is read from, with nothing applied. */
+    static Predicate<Deadline.Work> theFixturesOfEveryRowOf(String target) {
+        return w -> w instanceof Deadline.Work.Fixtures f && f.target().equals(target);
+    }
+
+    /** Everything a row of {@code target} is worked on for: read, and evaluated. */
+    static Predicate<Deadline.Work> everythingAboutRowsOf(String target) {
+        return everyRowOf(target).or(theFixturesOfEveryRowOf(target));
+    }
+
+    /**
+     * The one row written with {@code description}, and the statements it is read from.
+     *
+     * <p>For a model with more than one row of a behavior, where only one of them is the one that
+     * does not come back. The description is written on the row, so it moves with it — a position
+     * would have to be counted out of a text block and re-counted whenever the model above it
+     * changed.
+     */
+    static Predicate<Deadline.Work> everythingAboutTheRowDescribed(String description) {
+        return w -> switch (w) {
+            case Deadline.Work.Row row -> description.equals(row.description());
+            case Deadline.Work.Fixtures f -> description.equals(f.description());
+            default -> false;
+        };
+    }
+
+    /** Every {@code fake} table of {@code target}, built. */
+    static Predicate<Deadline.Work> everyTableOf(String target) {
+        return w -> w instanceof Deadline.Work.Table t && t.target().equals(target);
     }
 
     private DoesNotComeBack() {

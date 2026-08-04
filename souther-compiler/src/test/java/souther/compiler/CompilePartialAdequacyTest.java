@@ -195,7 +195,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBranchMeasureOverAnUnfinishedRowIsUndecided() {
-        Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn("row 1 of `go`", "the fixtures of row 1 of `go`"));
+        Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value().get("go");
 
@@ -207,7 +207,7 @@ class CompilePartialAdequacyTest {
     /** And nothing is warned about from it. */
     @Test
     void anUndecidedBranchMeasureWarnsAboutNoArm() {
-        assertFalse(warningCodes(warned("loop", TIMES_OUT, DoesNotComeBack.overrunningOn("row 1 of `go`", "the fixtures of row 1 of `go`"))).contains("E1918"),
+        assertFalse(warningCodes(warned("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")))).contains("E1918"),
                 "an arm a row might have gone through is not an arm nothing reaches");
     }
 
@@ -265,12 +265,12 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void whatStoppedARowBeingSeenReachesTheMeasureThatReadsIt() {
-        Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn("row 1 of `go`", "the fixtures of row 1 of `go`"));
+        Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
         Adequacy.SignatureEvidence signature = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value().get("go");
 
         assertEquals(MeasurementStatus.PARTIAL, signature.status());
-        assertFalse(warningCodes(warned("loop", TIMES_OUT, DoesNotComeBack.overrunningOn("row 1 of `go`", "the fixtures of row 1 of `go`"))).contains("E1913"),
+        assertFalse(warningCodes(warned("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")))).contains("E1913"),
                 "a case the unfinished row might have produced is not a case nothing claims");
     }
 
@@ -307,7 +307,7 @@ class CompilePartialAdequacyTest {
 
                 example cancel
                     | (Draft { n = spin(1) }) -> Gone { why = "x" }
-                """, DoesNotComeBack.overrunningOn("the fixtures of row 1 of `cancel`", "row 1 of `cancel`"));
+                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("cancel")));
         AdequacyReport whole = AdequacyReport.of(compilation);
 
         assertEquals(MeasurementStatus.PARTIAL, whole.status(), "`cancel` did not finish");
@@ -469,7 +469,7 @@ class CompilePartialAdequacyTest {
     @Test
     void theJsonNamesNoUnreachedArmUnderPartial() throws Exception {
         JsonNode branch = JsonMapper.builder().build().readTree(
-                AdequacyReport.of(measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn("row 1 of `go`", "the fixtures of row 1 of `go`"))).json())
+                AdequacyReport.of(measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")))).json())
                 .get("modules").get(0).get("behaviors").get(0).get("branch");
 
         assertEquals("partial", branch.get("status").asString());
@@ -503,7 +503,7 @@ class CompilePartialAdequacyTest {
 
                 example pick
                     | (Yes, Yes) -> Ok { n = 0 }
-                """, DoesNotComeBack.overrunningOn("row 1 of `pick`"));
+                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("pick")));
         PartitionEvidence partition = compilation.db()
                 .ask(new Adequacy.Coverage("example.pair")).value().get("pick");
 
@@ -542,7 +542,7 @@ class CompilePartialAdequacyTest {
 
                 example pick
                     | (Yes, Yes) -> Ok { n = 0 }
-                """, DoesNotComeBack.overrunningOn("row 1 of `pick`"));
+                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("pick")));
         PartitionEvidence partition = compilation.db()
                 .ask(new Adequacy.Coverage("example.agree")).value().get("pick");
 
@@ -586,9 +586,10 @@ class CompilePartialAdequacyTest {
                 }
 
                 example take
-                    | (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
-                    | (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
-                """, DoesNotComeBack.overrunningOn("row 2 of `take`", "the fixtures of row 2 of `take`"), Adequacy.Asked.reportOnly())
+                    | "at the line" : (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
+                    | "over it"     : (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
+                """, DoesNotComeBack.overrunningOn(
+                        DoesNotComeBack.everythingAboutTheRowDescribed("over it")), Adequacy.Asked.reportOnly())
                 .db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
 
         PartitionEvidence.BoundaryCoverage line = partition.boundaries().stream()
@@ -600,6 +601,46 @@ class CompilePartialAdequacyTest {
                 .filter(b -> b.value().equals("101")).findFirst().orElseThrow();
         assertEquals(MeasurementStatus.PARTIAL, beyond.status(),
                 "and the one nothing was found at is undecided, not missed");
+    }
+
+    /**
+     * One row of two written under separate {@code example} blocks does not come back, and the other
+     * is evaluated as it would have been.
+     *
+     * <p>Here because a behavior can be exampled more than once — a second block beside the first, or
+     * an {@code examples for} file beside the model — and the first thing this was written with named
+     * a row by its number within its block. That made both first rows one name, so picking out either
+     * picked out both, and a model of this shape would have had its working rows reported as rows that
+     * did not come back.
+     */
+    @Test
+    void aRowIsPickedOutOfTheBlockItIsInAndNoOther() {
+        Compilation compilation = measured("""
+                module example.twice
+
+                data Draft = { n: Int }
+                data Ok = { n: Int }
+
+                behavior take : (request: Draft) -> Ok
+                    constructs Ok
+
+                let take (request) = Ok { n = request.n }
+
+                example take
+                    | "does not come back" : (Draft { n = 1 }) -> Ok { n = 1 }
+
+                example take
+                    | "comes back" : (Draft { n = 2 }) -> Ok { n = 2 }
+                """,
+                DoesNotComeBack.overrunningOn(
+                        DoesNotComeBack.everythingAboutTheRowDescribed("does not come back")));
+
+        List<String> codes = new ArrayList<>();
+        for (Db.Found found : compilation.db().allReports()) {
+            codes.add(String.valueOf(found.report().diagnostic().code()));
+        }
+        assertEquals(1, codes.stream().filter("E1910"::equals).count(),
+                "one row was picked out, so one row did not come back: " + codes);
     }
 
     // --- who a reason counts against ---------------------------------------------------------------
@@ -659,7 +700,7 @@ class CompilePartialAdequacyTest {
     /** The row that did not finish is still there to be counted, and still says it did not. */
     @Test
     void theUnfinishedRowIsStillReported() {
-        Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn("row 1 of `go`", "the fixtures of row 1 of `go`"));
+        Compilation compilation = measured("loop", TIMES_OUT, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("go")));
         String sourceId = compilation.exampleSourcesOf("example.loop").get(0);
 
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()

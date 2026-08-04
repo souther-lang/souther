@@ -73,7 +73,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
                 example take
                     | (Draft { flag = Yes, cost = Amount(500) }) -> Big { n = 0 }
-                """, DoesNotComeBack.overrunningOn("row 1 of `take`")),
+                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("take"))),
                 // a value past the observation's limits: the position is there and unreadable
                 new Unreadable(budgetSpent(), null));
     }

@@ -215,7 +215,7 @@ class CompileFakeTableWhereWrittenTest {
                 fake find
                     | (N(spin(1))) -> Found { n = N(1) }
                 """, "Main", warnings, souther.compiler.query.Adequacy.Asked.NOTHING,
-                null, DoesNotComeBack.overrunningOn("the `fake find` table")));
+                null, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyTableOf("find"))));
 
         List<Located> said = only("E1921", warnings);
         assertEquals(1, said.size(), warnings.toString());

@@ -272,7 +272,7 @@ class CompileFakeExampleDisagreementTest {
 
                         fake find
                             | (N(1)) -> Missing { why = "none" }
-                        """, "the fixtures of row 1 of `find`", "row 1 of `find`"));
+                        """, DoesNotComeBack.everythingAboutRowsOf("find")));
 
         List<String> codes = new ArrayList<>();
         for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
@@ -321,7 +321,7 @@ class CompileFakeExampleDisagreementTest {
                 fake find
                     | (N(spin(1))) -> Missing { why = "none" }
                     | (N(spin(2))) -> Missing { why = "none" }
-                """, DoesNotComeBack.overrunningOn("the `fake find` table")));
+                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everyTableOf("find"))));
 
         assertEquals(1, said.size(), said.toString());
         Diagnostic one = said.get(0).diagnostic();
@@ -385,7 +385,7 @@ class CompileFakeExampleDisagreementTest {
 
                         fake find
                             | (N(spin(1))) -> Missing { why = "none" }
-                        """), warnings, "the `fake find` table", "row 1 of `use`"));
+                        """), warnings, DoesNotComeBack.everyTableOf("find").or(DoesNotComeBack.everyRowOf("use"))));
 
         assertTrue(codesOf(e).contains("E1910"), codesOf(e).toString());
         assertEquals(1, only("E1920", warnings).size(), warnings.toString());
@@ -550,7 +550,7 @@ class CompileFakeExampleDisagreementTest {
 
                 fake other
                     | (N(1)) -> Missing { why = "none" }
-                """, DoesNotComeBack.overrunningOn("the fixtures of row 1 of `other`", "row 1 of `other`")));
+                """, DoesNotComeBack.overrunningOn(DoesNotComeBack.everythingAboutRowsOf("other"))));
     }
 
     /**

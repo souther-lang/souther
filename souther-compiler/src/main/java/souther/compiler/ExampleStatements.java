@@ -183,7 +183,7 @@ public final class ExampleStatements {
                 List<Diagnostic> wrong = new ArrayList<>();
                 standins(reader, fk, sig.ins(), sig.out(), wrong);
                 return wrong;
-            }, "the `fake " + fk.target() + "` table");
+            }, new Deadline.Work.Table(fk.target(), sourceId, fk.pos()));
             switch (read) {
                 case Read.Got(List<Diagnostic> wrong) -> said.addAll(wrong);
                 case Read.TimedOut(long ranOutOf) -> said.add(uncheckedFake(fk, ranOutOf));
@@ -243,7 +243,7 @@ public final class ExampleStatements {
      * table is built here and, where no row depends on the behavior it stands in for, nowhere else.
      */
     private <T> Read<T> within(java.util.function.Function<FixtureReader, T> read,
-                               String what) {
+                               Deadline.Work what) {
         // On a reader of its own, and that is all a reading needs to be given: a worker that runs out
         // of budget is asked to stop and cannot be made to — a fixture reaches no interrupt point — so
         // it may still be inside `expandedValue`, holding a binding or a half-walked expansion. What a
@@ -371,13 +371,10 @@ public final class ExampleStatements {
             return;
         }
         Set<TypeName> cases = outCases(sig.out());
-        int nth = 0;
         for (Ast.ExampleRow row : ex.rows()) {
-            nth++;
             if (row.inputs().size() != sig.ins().size()) {
                 continue;
             }
-            int written = nth;   // which row this is, counted as the source wrote them
             Read<RecordedRow> read = within(reader -> {
                 Object[] arguments = builtOrNull(reader, row.inputs(), sig.ins());
                 if (arguments == null) {
@@ -387,7 +384,8 @@ public final class ExampleStatements {
                 return answer instanceof Answered.Unreadable ? null
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
-            }, "the fixtures of row " + written + " of `" + ex.target() + "`");
+            }, new Deadline.Work.Fixtures(ex.target(), origin, row.pos(),
+                    row.description()));
             // A reading that did not finish is not said here, whichever reason ended it. The same row
             // is evaluated where the example is checked, which builds these fixtures and then runs the
             // behavior on top of them, so a fixture that overruns this overruns that too and is E1910
@@ -411,7 +409,7 @@ public final class ExampleStatements {
         // The whole table, built the one way the proxy builds it.
         Read<Standins> read = within(
                 reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
-                "the `fake " + fk.target() + "` table");
+                new Deadline.Work.Table(fk.target(), origin, fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
         switch (read) {
@@ -497,7 +495,7 @@ public final class ExampleStatements {
                 // did not finish there, and there is where it is said (E1910).
                 Answered constant = within(
                         reader -> readStandIn(reader, w.value(), depSig.out(), outCases(depSig.out())),
-                        "a `with " + w.dep() + "`").orNull();
+                        new Deadline.Work.With(w.dep(), origin, w.value().pos())).orNull();
                 if (constant == null || constant instanceof Answered.Unreadable) {
                     continue;
                 }

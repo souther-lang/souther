@@ -216,9 +216,8 @@ public final class ExampleVerifier {
             throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
         }
         Set<TypeName> outCases = outCases(sig.out());
-        int nth = 0;
         for (Ast.ExampleRow row : ex.rows()) {
-            checkRow(target, sig, outCases, row, ++nth, out, rows);
+            checkRow(target, sig, outCases, row, out, rows);
         }
     }
 
@@ -439,9 +438,11 @@ public final class ExampleVerifier {
      * {@link RowEvaluation} for why the row's own worker must not.
      */
     private void checkRow(ExampleTarget target, Sig sig, Set<TypeName> outCases, Ast.ExampleRow row,
-                          int nth, List<Diagnostic> out, List<RowOutcome> rows) {
+                          List<Diagnostic> out, List<RowOutcome> rows) {
         RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
-        switch (deadline.given("row " + nth + " of `" + target.name() + "`", evaluation)) {
+        switch (deadline.given(
+                new Deadline.Work.Row(target.name(), sourceId, row.pos(), row.description()),
+                evaluation)) {
             case Deadline.Outcome.Finished(List<Diagnostic> found) -> {
                 out.addAll(found);
                 rows.add(outcomeOf(target, row, evaluation.state));

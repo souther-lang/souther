@@ -142,7 +142,7 @@ class CompileExampleCoverageTest {
                     | (Draft { n = 1 }) -> Done { n = 1 }
                 """;
         Compilation compilation = Compilation.ofSource(spinning, "Main")
-                .withDeadline(DoesNotComeBack.overrunningOn("row 1 of `go`"));
+                .withDeadline(DoesNotComeBack.overrunningOn(DoesNotComeBack.everyRowOf("go")));
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         String module = compilation.modules().get(0);
