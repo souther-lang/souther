@@ -58,6 +58,15 @@ public final class Representations {
     private static final int ARRAY = 5;
     private static final int OBJECT = 6;
 
+    /**
+     * How long a number a boundary spells out, which is how long a one it can read back: Jackson
+     * refuses to read a number of more than a thousand characters
+     * ({@code StreamReadConstraints.DEFAULT_MAX_NUM_LEN}), so writing a longer one would be writing
+     * what this language cannot read. The limit is repeated here rather than asked of Jackson
+     * because this module does not depend on it.
+     */
+    private static final int READABLE_DIGITS = 1000;
+
     private Representations() {}
 
     /**
@@ -68,20 +77,38 @@ public final class Representations {
      * <p>{@code stripTrailingZeros} alone is not the form: it answers {@code 1E+2} for a hundred,
      * and a hundred is written {@code 100}. A negative scale is what an exponent is, so setting the
      * scale back to zero is what asks for the digits.
+     *
+     * <p>Which is bounded, because asking for the digits is what an exponent lets a caller not pay
+     * for: {@code 1E+1000000} is eleven characters and a million and one digits, so spelling every
+     * amount out would let a small input ask for an arbitrarily large one. The cut is
+     * {@link #READABLE_DIGITS}, and it falls on the amount rather than on the value that carried it
+     * — the two forms of one amount reach the same side of it, which is what keeps this a function
+     * of the amount.
      */
     public static BigDecimal canonicalNumber(BigDecimal amount) {
         BigDecimal stripped = amount.stripTrailingZeros();
-        return stripped.scale() < 0 ? stripped.setScale(0) : stripped;
+        if (stripped.scale() >= 0) {
+            return stripped;
+        }
+        return stripped.precision() - stripped.scale() <= READABLE_DIGITS
+                ? stripped.setScale(0)
+                : stripped;
     }
 
     /** The members of an encoded array, in ascending order of their own external representation. */
     public static Object sortedArray(Object encoded) {
-        return sortedMembers((List<?>) encoded);
+        if (!(encoded instanceof List<?> members)) {
+            throw notAnExternalForm(encoded);
+        }
+        return sortedMembers(members);
     }
 
     /** The members of an encoded object, in ascending order of their keys. */
     public static Object sortedObject(Object encoded) {
-        return byKey((Map<?, ?>) encoded);
+        if (!(encoded instanceof Map<?, ?> members)) {
+            throw notAnExternalForm(encoded);
+        }
+        return byKey(members);
     }
 
     /**
@@ -142,8 +169,7 @@ public final class Representations {
             case String _ -> STRING;
             case List<?> _ -> ARRAY;
             case Map<?, ?> _ -> OBJECT;
-            default -> throw new IllegalStateException(
-                    "not a Souther external representation: " + v.getClass());
+            default -> throw notAnExternalForm(v);
         };
     }
 
@@ -282,7 +308,15 @@ public final class Representations {
         if (key instanceof String s) {
             return s;
         }
-        throw new IllegalStateException("not a Souther external representation: "
-                + (key == null ? "a null key" : key.getClass()));
+        throw notAnExternalForm(key == null ? "a null key" : key);
+    }
+
+    /** One refusal, so a carrier the encoders do not emit is reported the same wherever it lands. */
+    private static IllegalStateException notAnExternalForm(Object v) {
+        return new IllegalStateException("not a Souther external representation: " + switch (v) {
+            case null -> "nothing at all";     // null is a form, but it is not an array or an object
+            case String said -> said;          // a phrase from the caller, not a value's own class
+            default -> v.getClass();
+        });
     }
 }

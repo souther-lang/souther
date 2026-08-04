@@ -503,7 +503,7 @@ data Amount = Decimal
 // read as 1.00 from a DB column, 1.0 from JSON. Treated as the same amount.
 ----
 
-Scale is not lost from the value: it is carried, and Java reading the value sees it (<<jvm-product>>). What an Encoder writes is the *amount* — `+1.50+` and `+1.5+` are written `+1.5+`, and `+100.00+` is written `+100+` — because scale records how a number was written and not how much it is, and a boundary that wrote it would write two equal values two ways (<<encode-law>>). The round trip (<<round-trip>>) is unaffected: identity ignores scale, so what is read back is the same value. If the number of rounding digits is a domain concern, write it as an invariant or a separate field, not as `+Decimal+` scale — a rounding call decides an amount, and the digits it rounded to are not what crossing the boundary shows.
+Scale is not lost from the value: it is carried, and Java reading the value sees it (<<jvm-product>>). What an Encoder writes is the *amount* — `+1.50+` and `+1.5+` are written `+1.5+`, and `+100.00+` is written `+100+` — because scale records how a number was written and not how much it is, and a boundary that wrote it would write two equal values two ways (<<encode-law>>). An amount is spelt out while it is at most a thousand characters long and keeps the exponent form beyond that (`+1E+1000000+` is written as it stands): a thousand is what a boundary reads, so past it a number would be written that this language cannot read back. Which side of that an amount falls is decided by the amount, so two writings of one amount are still one number. The round trip (<<round-trip>>) is unaffected: identity ignores scale, so what is read back is the same value. If the number of rounding digits is a domain concern, write it as an invariant or a separate field, not as `+Decimal+` scale — a rounding call decides an amount, and the digits it rounded to are not what crossing the boundary shows.
 
 The `+hashCode+` of a data containing `+Decimal+` is computed after dropping scale (`+stripTrailingZeros+`). If equality ignores scale, the hash MUST ignore it too, or using the value as a `+Map+` key breaks. Java sees the same value equality: a generated data class implements `+equals+` / `+hashCode+` from all fields and can be used as a `+Map+` key directly (<<jvm-product>>). This is distinct from Java's `+==+` (reference) and `+BigDecimal.equals+` (scale-sensitive).
 
@@ -1418,14 +1418,16 @@ decode(encode(value)) == value
 [#encode-law]
 === What equal values write
 
-A derived Encoder writes a value's *value* and nothing else about it:
+At a boundary position — a field, a behavior's input or output — the type is declared, and that declaration fixes one derived Encoder. Under that Encoder, a value's *value* is all that is written about it:
 
 [,text]
 ----
-a == b  ⟹  encode(a) == encode(b)
+a == b  ⟹  E.encode(a) == E.encode(b)      // E the Encoder the position's declared type derives
 ----
 
-Two values the language calls equal (<<equality>>) write the same JSON, byte for byte. This is what lets a response body be compared, diffed, cached under its own bytes, or written into a golden test. It holds because everything a value carries that its identity does not is settled on the way out: a `+Decimal+` is written as its amount and not with the scale it was read at (<<primitives>>), and a `+Set+` and a `+Map+` are written in the order their members' own representations give and not in the order they were built (<<collections>>).
+Two values the language calls equal (<<equality>>) are written the same JSON, byte for byte. This is what lets a response body be compared, diffed, cached under its own bytes, or written into a golden test. It holds because everything a value carries that its identity does not is settled on the way out: a `+Decimal+` is written as its amount and not with the scale it was read at (<<primitives>>), and a `+Set+` and a `+Map+` are written in the order their members' own representations give and not in the order they were built (<<collections>>).
+
+The position is part of the law and not a technicality about it. A case value *is* a value of its sum (case→sum is transparent, <<sum-data>>) and equals itself at either type, but the two positions do not write it alike: a case's own Encoder writes no discriminator and its sum's writes one (<<sum-discrimination>>). So `+Approved { id = 1 }+` is written `+{"id":1}+` where `+Approved+` is what is declared, and `+{"id":1,"type":"Approved"}+` where `+Approved | Rejected+` is. What is written is decided by the type the position declares, so the law is read one position at a time — it says that a position answers the same bytes for equal values, not that a value has one representation wherever it goes.
 
 A *custom* Encoder (<<custom-codec>>) is written by hand and is bound by nothing here. The law is about the Encoders derived from a data's shape (<<encoder-derivation>>).
 

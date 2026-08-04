@@ -29,13 +29,30 @@ reaches golden tests, response diffs, cache keys, ETags and content addressing.
 
 ## Decision
 
-**Equal values write the same JSON**, and two things are settled on the way out to make it so.
+**Equal values write the same JSON at a given boundary position**, and two things are settled on the
+way out to make it so.
+
+The position is part of it. A boundary position declares a type and that declaration fixes one
+derived Encoder; a case value equals itself at both its own type and at its sum's, and the two write
+it differently, because a case's Encoder writes no discriminator and its sum's writes one. So the law
+is about one declared type at a time — `E.encode(a) == E.encode(b)` for equal `a` and `b` — and not
+about a value having one representation wherever it appears. Both sides of that are already pinned by
+`RunnerTest`, which drives a behavior declaring a case and one declaring the sum.
 
 **A `Decimal` is written as its amount.** `1.50` goes out as `1.5`, `100.00` as `100`. Scale records
 how a number was written, which ADR-0009 already decided is no part of what it is; keeping it at the
 boundary meant two equal values wrote two ways, and no ordering could reach that — `1.0` and `1.00`
 are one member of a `Set` by the time an encoder sees it, and which of the two the set kept was
 decided by whichever arrived first.
+
+Spelling the amount out is bounded, and has to be. An exponent is what lets a caller name a large
+amount without paying for it: `1E+1000000` is eleven characters and a million and one digits, so a
+boundary that always spelt out would let a small input ask for an arbitrarily large one. An amount is
+therefore spelt out while it is at most a thousand characters and keeps its exponent beyond that — a
+thousand being what a boundary can *read* (`StreamReadConstraints.DEFAULT_MAX_NUM_LEN`), so the cut
+is the point past which writing more would be writing what this language cannot read back. The cut
+falls on the amount and not on the value that carried it, which is what keeps the form a function of
+the amount: `1E+1000000` and `10E+999999` reach the same side of it.
 
 **A collection's members are written in ascending order of their external representations.** A
 `Set`'s array is ordered by each member's own representation; a boundary `Map`'s object by its

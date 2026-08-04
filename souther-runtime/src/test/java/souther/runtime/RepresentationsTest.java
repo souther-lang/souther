@@ -25,8 +25,8 @@ class RepresentationsTest {
     /**
      * One value of every kind, plus the pairs that make the rule visible: a Long and a Decimal that
      * write the same, three Decimals that are one amount and three forms, a supplementary character
-     * against a BMP one above it in code point order, and two objects that differ only in the order
-     * their members were put.
+     * against a BMP one that is the larger code unit and the smaller code point, and two objects
+     * that differ only in the order their members were put.
      */
     private static final List<Object> CORPUS = Arrays.asList(
             null,
@@ -51,7 +51,7 @@ class RepresentationsTest {
             "Aa",
             "BB",
             "😀",                          // U+1F600, a surrogate pair
-            "",                                // a BMP character above it in code point order
+            "",                                // U+E000: the larger code unit, the smaller code point
             List.of(),
             List.of(1L),
             List.of(1L, 2L),
@@ -83,6 +83,35 @@ class RepresentationsTest {
         assertEquals("100", Representations.canonicalNumber(new BigDecimal("100")).toString());
         assertEquals("100", Representations.canonicalNumber(new BigDecimal("100.00")).toString());
         assertEquals("1000000", Representations.canonicalNumber(new BigDecimal("1.0E+6")).toString());
+    }
+
+    @Test
+    void anAmountTooLongToBeReadBackKeepsItsExponentRatherThanBeingSpeltOut() {
+        // 1E+1000000 is eleven characters and a million and one digits. Spelling it out would make a
+        // tiny input into a megabyte of JSON, and the boundary could not read the result back.
+        BigDecimal huge = new BigDecimal("1E+1000000");
+        BigDecimal written = Representations.canonicalNumber(huge);
+        assertEquals(0, huge.compareTo(written), "the same amount either way");
+        assertTrue(written.toString().length() <= 1000,
+                "written as " + written.toString().length() + " characters");
+    }
+
+    @Test
+    void theLongestAmountThatIsSpeltOutIsTheLongestOneThatCanBeReadBack() {
+        // The cut is what a boundary can read: a number of more than 1000 characters is refused on
+        // the way in, so writing one would be writing what this language cannot read.
+        assertEquals(1000, Representations.canonicalNumber(new BigDecimal("1E+999")).toString().length());
+        assertEquals("1E+1000", Representations.canonicalNumber(new BigDecimal("1E+1000")).toString());
+    }
+
+    @Test
+    void howLongAnAmountIsWrittenIsDecidedByTheAmountAndNotByHowItArrived() {
+        // Both are 10^1000000, written two ways. The cut has to fall on the amount, or the same
+        // value would cross the boundary as two numbers again.
+        assertEquals(Representations.canonicalNumber(new BigDecimal("1E+1000000")),
+                Representations.canonicalNumber(new BigDecimal("10E+999999")));
+        assertEquals(Representations.canonicalNumber(new BigDecimal("100.00")),
+                Representations.canonicalNumber(new BigDecimal("1E+2")));
     }
 
     @Test
@@ -148,14 +177,14 @@ class RepresentationsTest {
     }
 
     @Test
-    void anArraysOrderIsPartOfWhatItIs() {
+    void theOrderOfAnArrayIsPartOfWhatItIs() {
         assertTrue(Representations.compareExternalForms(List.of(1L, 2L), List.of(2L, 1L)) != 0);
     }
 
     // === objects ===
 
     @Test
-    void anObjectsMemberOrderIsNotPartOfWhatItIs() {
+    void theMemberOrderOfAnObjectIsNotPartOfWhatItIs() {
         assertEquals(0, Representations.compareExternalForms(
                 object("a", 1L, "b", 2L), object("b", 2L, "a", 1L)));
     }
@@ -308,6 +337,16 @@ class RepresentationsTest {
     void askingWhetherTwoAreWrittenTheSameRefusesAKeyNoBoundaryObjectCanHave() {
         assertThrows(IllegalStateException.class,
                 () -> Representations.representationEquals(Map.of(1L, "a"), Map.of(1L, "a")));
+    }
+
+    @Test
+    void sortingRefusesWhatIsNotTheCollectionItSorts() {
+        // The same refusal the comparison gives, rather than a ClassCastException from a cast that
+        // happened to be where the mistake landed.
+        assertThrows(IllegalStateException.class, () -> Representations.sortedArray(object("a", 1L)));
+        assertThrows(IllegalStateException.class, () -> Representations.sortedObject(List.of(1L)));
+        assertThrows(IllegalStateException.class, () -> Representations.sortedArray("not an array"));
+        assertThrows(IllegalStateException.class, () -> Representations.sortedObject(null));
     }
 
     @Test
