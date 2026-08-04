@@ -44,7 +44,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(A, B)));
 
-        assertEquals(1, e.sourceIndex(), "the error is in the second source");
+        assertEquals("1", e.sourceId(), "the error is in the second source");
     }
 
     @Test
@@ -58,7 +58,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(broken, B)));
 
-        assertEquals(0, e.sourceIndex());
+        assertEquals("0", e.sourceId());
     }
 
     @Test
@@ -71,7 +71,7 @@ class MultiFileDiagnosticOriginTest {
                 let f (s) = Out { v = s }
                 """));
 
-        assertEquals(-1, e.sourceIndex(), "there is only one source; the caller knows which");
+        assertNull(e.sourceId(), "there is only one source; the caller knows which");
     }
 
     @Test
@@ -92,7 +92,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(target, examples)));
 
-        assertEquals(0, e.sourceIndex(), "the type error is in the module's own body");
+        assertEquals("0", e.sourceId(), "the type error is in the module's own body");
     }
 
     @Test
@@ -118,7 +118,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(target, examples)));
 
-        assertEquals(0, e.sourceIndex(),
+        assertEquals("0", e.sourceId(),
                 "the rejected construction is written in the module, not in the example file");
     }
 
@@ -140,7 +140,7 @@ class MultiFileDiagnosticOriginTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(target, examples)));
 
-        assertEquals(1, e.sourceIndex(),
+        assertEquals("1", e.sourceId(),
                 "the row is written in the `examples for` file, so that is the file quoted");
     }
 

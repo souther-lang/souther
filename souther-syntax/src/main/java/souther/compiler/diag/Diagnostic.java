@@ -134,8 +134,17 @@ public record Diagnostic(Severity severity,
             return this;
         }
 
+        /** A second place to point at, in the same file as the primary region. */
         public Builder secondary(Region region, String labelKey, Object... labelArgs) {
-            this.secondary.add(new LabeledRegion(region, labelKey, labelArgs));
+            this.secondary.add(new LabeledRegion(region, null, labelKey, labelArgs));
+            return this;
+        }
+
+        /** A second place to point at, in {@code sourceId} — for a problem written in two files,
+         * where quoting the second against the first would draw a caret under the wrong text. */
+        public Builder secondaryIn(String sourceId, Region region, String labelKey,
+                                   Object... labelArgs) {
+            this.secondary.add(new LabeledRegion(region, sourceId, labelKey, labelArgs));
             return this;
         }
 

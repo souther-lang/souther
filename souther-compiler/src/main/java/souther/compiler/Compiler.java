@@ -154,10 +154,10 @@ public final class Compiler {
                 for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
                     failures.add(failure.diagnostic());
                 }
-                // Asked whether or not the rows ran: what two written statements say about each other
-                // is readable when nothing is.
-                db.ask(new Output.SaidDisagreements(module, id));
             }
+            // Asked whether or not the rows ran: what two written statements say about each other
+            // is readable when nothing is.
+            db.ask(new Output.SaidDisagreements(module));
             if (failures.size() == 1) {
                 throw CompileException.of(failures.get(0),
                         ExampleVerifier.legacySummary(failures));
@@ -267,7 +267,7 @@ public final class Compiler {
         // resolve a cross-module reference — including into a dependency, whose classes come off the
         // same path its declarations were read from.
         List<Diagnostic> exampleFailures = new ArrayList<>();
-        List<Integer> exampleSources = new ArrayList<>();
+        List<String> exampleSources = new ArrayList<>();
         for (String module : compilation.modules()) {
             if (!db.ask(new Output.ConstConstructions(module)).present()) {
                 CompileException bad = compilation.firstError(db.allReports());
@@ -280,10 +280,10 @@ public final class Compiler {
                 for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
                     exampleFailures.add(failure.diagnostic());
                     // a row from an `examples for` file is positioned in that file, not this one
-                    exampleSources.add(compilation.sourceIndexOfId(id));
+                    exampleSources.add(id);
                 }
-                db.ask(new Output.SaidDisagreements(module, id));
             }
+            db.ask(new Output.SaidDisagreements(module));
         }
         for (String module : compilation.modules()) {
             db.ask(new Adequacy.Warnings(module));
@@ -306,7 +306,7 @@ public final class Compiler {
      * examples land on that module's id, and an {@code examples for X} file's examples land on that
      * file's id — never on the target module. A source with no problem maps to an empty list.
      */
-    public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById) {
+    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById) {
         return diagnoseModules(sourcesById, Set.of());
     }
 
@@ -316,8 +316,8 @@ public final class Compiler {
      * errors). Their importers are skipped rather than told the module is unknown — the error belongs
      * to the broken file, which reports it separately, not to the importer.
      */
-    public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById,
-                                                                Set<String> brokenModuleNames) {
+    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                             Set<String> brokenModuleNames) {
         return diagnoseModules(sourcesById, brokenModuleNames, ModulePath.EMPTY);
     }
 
@@ -329,9 +329,9 @@ public final class Compiler {
      * <p>A path that is itself wrong — a module missing behind a module — is not reported here. The
      * editor's job is the source in front of the author, and a broken path is the build's to say.
      */
-    public static Map<String, List<Diagnostic>> diagnoseModules(Map<String, String> sourcesById,
-                                                                Set<String> brokenModuleNames,
-                                                                ModulePath path) {
+    public static Map<String, List<Located>> diagnoseModules(Map<String, String> sourcesById,
+                                                             Set<String> brokenModuleNames,
+                                                             ModulePath path) {
         return Compilation.ofDocuments(sourcesById, brokenModuleNames, path).diagnostics();
     }
     /** The module name from a source's {@code module <name>} header, for identifying a source that will

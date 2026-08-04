@@ -99,7 +99,7 @@ class WarningReportingTest {
                 List.of(), warnings);
 
         assertEquals(1, warnings.size(), warnings.toString());
-        assertEquals(Located.NO_SOURCE, warnings.get(0).sourceIndex(),
+        assertEquals(Located.NO_SOURCE, warnings.get(0).primarySourceId(),
                 "a single-source compile tags nothing, and the renderer has to fall back to the "
                         + "one file it was given");
         assertTrue(compile(file, "--lang", "en").contains("probe.sou:8:5"));

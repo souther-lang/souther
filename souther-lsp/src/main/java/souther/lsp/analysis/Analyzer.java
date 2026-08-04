@@ -18,7 +18,10 @@ import souther.compiler.cst.LineIndex;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.DiagnosticRenderer;
+import souther.compiler.diag.DiagnosticView;
+import souther.compiler.diag.Messages;
 import souther.compiler.diag.Located;
+import souther.compiler.diag.Spot;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.cst.SyntaxElement;
@@ -188,7 +191,7 @@ public final class Analyzer {
             }
         }
 
-        Map<String, List<Diagnostic>> byUri;
+        Map<String, List<Located>> byUri;
         try {
             byUri = compileOf(path, compileSet, brokenModules).diagnostics();
         } catch (RuntimeException | StackOverflowError e) {
@@ -199,14 +202,26 @@ public final class Analyzer {
             }
             return out;
         }
-        for (Map.Entry<String, List<Diagnostic>> e : byUri.entrySet()) {
+        Map<String, LineIndex> indexes = new LinkedHashMap<>();
+        java.util.function.Function<String, LineIndex> linesOf = uri -> {
+            if (uri == null) {
+                return null;
+            }
+            return indexes.computeIfAbsent(uri, at -> {
+                String text = graph.text(at);
+                return text == null ? null : new LineIndex(text);
+            });
+        };
+        for (Map.Entry<String, List<Located>> e : byUri.entrySet()) {
             List<LspDiagnostic> list = out.get(e.getKey());
             if (list == null) {
                 continue;
             }
-            LineIndex lines = new LineIndex(graph.text(e.getKey()));
-            for (Diagnostic d : e.getValue()) {
-                list.add(fromDiagnostic(lines, d));
+            for (Located loc : e.getValue()) {
+                // A workspace names its sources by document URI, so a source id is already the name
+                // the editor opens.
+                list.add(project(loc.diagnostic(), loc.primarySourceId(), e.getKey(),
+                        linesOf, uri -> graph.text(uri) == null ? null : uri));
             }
         }
         return out;
@@ -1503,11 +1518,34 @@ public final class Analyzer {
                 cleanMessage(e.getMessage())));
     }
 
-    /** An LSP diagnostic from a structured {@link Diagnostic}: its range from the region, its code
-     * from the stable identity, its message rendered from the catalog (or the compatibility literal).
-     * A found-vs-expected diff (a type mismatch, a failing example) is appended, since the catalog body
-     * alone omits the two values — the detail the editor needs to see what went wrong. */
+    /**
+     * An LSP diagnostic from a structured {@link Diagnostic} for a document read on its own:
+     * everything it points at is in that document, so it is its own published source.
+     *
+     * <p>No linked locations. A link is a URI, and a document compiled from its text alone has none
+     * to give — the workspace path is where a marker can point somewhere the editor can open.
+     */
     private LspDiagnostic fromDiagnostic(LineIndex lines, Diagnostic d) {
+        return project(d, null, null, id -> lines, id -> null);
+    }
+
+    /**
+     * One diagnostic as the file {@code publishedUri} reads it: the range is the place it points at
+     * in that file, and every other place it points at becomes a linked location.
+     *
+     * <p>Which region is the range depends on which file is asking. A problem written in two of them
+     * is published in both, and on the second the primary region is the one that is elsewhere — so
+     * the two change places rather than the second file getting a marker on a line that has nothing
+     * to do with it.
+     *
+     * @param primarySourceId the source the primary region is in, null when the compile named none
+     * @param publishedUri the file this marker is being put in, null for a single-document compile
+     * @param linesOf the line index of a source, for turning its positions into ranges
+     * @param uriOf the editor's name for a source, null when it has none to link to
+     */
+    private LspDiagnostic project(Diagnostic d, String primarySourceId, String publishedUri,
+                                  java.util.function.Function<String, LineIndex> linesOf,
+                                  java.util.function.Function<String, String> uriOf) {
         String message = DiagnosticRenderer.body(d, Locale.ENGLISH);
         if (d.diff() != null) {
             message = message + " (expected " + d.diff().expectedType()
@@ -1515,7 +1553,27 @@ public final class Analyzer {
         }
         int severity = d.severity() == souther.compiler.diag.Severity.WARNING
                 ? LspDiagnostic.WARNING : LspDiagnostic.ERROR;
-        return new LspDiagnostic(rangeOf(lines, d), severity, d.code(), message);
+        DiagnosticView view = DiagnosticView.of(d, primarySourceId, publishedUri);
+        List<LspDiagnostic.Related> related = new ArrayList<>();
+        for (Spot other : view.others()) {
+            String uri = other.sourceId() == null ? publishedUri : uriOf.apply(other.sourceId());
+            LineIndex lines = linesOf.apply(other.sourceId());
+            if (uri == null || lines == null || other.region() == null) {
+                continue;   // nothing the editor could open, so nothing to link to
+            }
+            related.add(new LspDiagnostic.Related(uri, rangeOfRegion(other.region()),
+                    other.labelled()
+                            ? Messages.get(other.labelKey(), Locale.ENGLISH, other.labelArgs())
+                            : message));
+        }
+        Range range = view.anchor().region() != null
+                ? rangeOfRegion(view.anchor().region())
+                : rangeOf(linesOf.apply(view.anchor().sourceId()), d);
+        return new LspDiagnostic(range, severity, d.code(), message, related);
+    }
+
+    private Range rangeOfRegion(Region r) {
+        return new Range(position(r.start()), position(r.end()));
     }
 
     private Range rangeOf(LineIndex lines, Diagnostic d) {

@@ -3,6 +3,7 @@ package souther.compiler;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 
@@ -12,6 +13,9 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -83,14 +87,15 @@ class CompileFakeExampleDisagreementTest {
                     | "m-1 cannot order" : (Order { by = MemberId("m-1") }) -> Refused { why = "unknown" }
                 """);
 
-        // One disagreement, said at the row and at the fake row: both are written statements, and
-        // which of them is right is not what this reports.
-        assertEquals(2, found.size(), found.toString());
-        List<Integer> lines = new ArrayList<>();
-        for (Located w : found) {
-            lines.add(w.diagnostic().pos().line());
-        }
-        assertEquals(List.of(22, 25), lines, "the row, then the fake row");
+        // One disagreement, one warning. It is anchored at the row and points at the fake row:
+        // both are written statements, and which of them is right is not what this reports.
+        assertEquals(1, found.size(), found.toString());
+        Diagnostic one = found.get(0).diagnostic();
+        assertEquals(22, one.pos().line(), "anchored at the recorded row");
+        assertEquals(1, one.secondary().size(), one.secondary().toString());
+        assertEquals(25, one.secondary().get(0).region().start().line(), "pointing at the fake row");
+        assertNull(one.secondary().get(0).sourceId(),
+                "both are in this source, so the second region names none of its own");
     }
 
     @Test
@@ -321,7 +326,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aRowThatWillNotFinishDoesNotTakeTheRestOfTheModuleWithIt() {
-        assertEquals(List.of("E1910", "E1919", "E1919"), allCodesOf("""
+        assertEquals(List.of("E1910", "E1919"), allCodesOf("""
                 module example.b2
 
                 data N = Int
@@ -354,7 +359,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aCaseAHelperAnsweredWithIsWhatTheFakeStates() {
-        assertEquals(List.of("E1919", "E1919"), allCodesOf("""
+        assertEquals(List.of("E1919"), allCodesOf("""
                 module example.m3b
 
                 data Found = { id: String }
@@ -379,7 +384,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aPrimitiveCaseOfAUnionIsACaseLikeAnyOther() {
-        assertEquals(List.of("E1919", "E1919"), allCodesOf("""
+        assertEquals(List.of("E1919"), allCodesOf("""
                 module example.prim
 
                 data Missing = { why: String }
@@ -554,9 +559,9 @@ class CompileFakeExampleDisagreementTest {
                         with findMember = Found { id = MemberId("m-1") } -> Placed { by = MemberId("m-1") }
                 """);
 
-        // The table disagrees, and is said at both of its ends. The `with` beside it is not compared
-        // and does not stop the table from being.
-        assertEquals(2, found.size(), found.toString());
+        // The table disagrees. The `with` beside it is not compared and does not stop the table
+        // from being.
+        assertEquals(1, found.size(), found.toString());
     }
 
     // --- across files ----------------------------------------------------------------------------
@@ -597,19 +602,22 @@ class CompileFakeExampleDisagreementTest {
                 "the attached file wrote only the fake, and still says its side");
     }
 
-    /** One disagreement across two sources: two diagnostics, one quoting each file. */
+    /** One disagreement across two sources: one warning that quotes both files. */
     private static void assertSaidInBothFiles(String module, String attached, String why) {
         List<Located> out = new ArrayList<>();
         assertDoesNotThrow(() -> Compiler.compiledModules(
                 List.of(module, attached), ModulePath.EMPTY, out));
         List<Located> found = onlyDisagreements(out);
 
-        assertEquals(2, found.size(), found.toString());
-        List<Integer> sources = new ArrayList<>();
-        for (Located w : found) {
-            sources.add(w.sourceIndex());
-        }
-        assertTrue(sources.contains(0) && sources.contains(1), why + ": " + sources);
+        assertEquals(1, found.size(), found.toString());
+        Diagnostic one = found.get(0).diagnostic();
+        assertEquals(1, one.secondary().size(), one.secondary().toString());
+        String primary = found.get(0).primarySourceId();
+        String other = one.secondary().get(0).sourceId();
+        assertNotNull(other, why + ": the second region names the file it is in");
+        assertNotEquals(primary, other, why + ": the two statements are in different sources");
+        assertEquals(java.util.Set.of("0", "1"), java.util.Set.of(primary, other),
+                why + ": " + primary + " and " + other);
     }
 
     // --- what is not said ------------------------------------------------------------------------
@@ -661,8 +669,8 @@ class CompileFakeExampleDisagreementTest {
                     | (MemberId("m-1")) -> Missing { why = "no such member" }
                 """;
 
-        assertEquals(2, measured(model, souther.compiler.query.Adequacy.Asked.NOTHING));
-        assertEquals(2, measured(model,
+        assertEquals(1, measured(model, souther.compiler.query.Adequacy.Asked.NOTHING));
+        assertEquals(1, measured(model,
                 souther.compiler.query.Adequacy.Asked.reportOnly(
                         souther.compiler.query.Adequacy.Level.ALL)));
     }

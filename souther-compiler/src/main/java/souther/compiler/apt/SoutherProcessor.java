@@ -6,7 +6,9 @@ import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
+import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.Compiler;
+import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -130,13 +132,30 @@ public final class SoutherProcessor extends AbstractProcessor {
     private List<String> render(List<Located> located, List<Source> sources) {
         Locale locale = Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
         return DiagnosticRenderer.renderAll(
-                located, index -> contextOf(sources, index), new HumanRenderer(false), locale);
+                located, sourcesOf(sources), new HumanRenderer(false), locale);
     }
 
-    /** The text a diagnostic tagged with {@code index} should quote, or null when it names no
-     *  source this compilation has (so no line is quoted). */
-    private static SourceContext contextOf(List<Source> sources, int index) {
-        Source origin = Located.in(sources, index);
+    /** What to quote for each source a diagnostic points into. The text is already in hand, so this
+     *  memoizes only to keep one answer per id. */
+    private static SourceContextResolver sourcesOf(List<Source> sources) {
+        return SourceContextResolver.memoized(id -> contextOf(sources, id));
+    }
+
+    /** The text a diagnostic tagged with {@code sourceId} should quote, or null when it names no
+     *  source this compilation has (so no line is quoted). A compile of one source names none, and
+     *  the one file it was given is the answer however the diagnostic is tagged. */
+    private static SourceContext contextOf(List<Source> sources, String sourceId) {
+        Source origin = null;
+        if (sources.size() == 1) {
+            origin = sources.get(0);
+        } else {
+            for (int i = 0; i < sources.size(); i++) {
+                if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
+                    origin = sources.get(i);
+                    break;
+                }
+            }
+        }
         return origin == null ? null
                 : new SourceContext(origin.path().getFileName().toString(), origin.text());
     }

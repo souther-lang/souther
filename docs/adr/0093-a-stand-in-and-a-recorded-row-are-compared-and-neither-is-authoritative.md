@@ -109,12 +109,13 @@ model's contract and the other is checked against it. Until such a policy exists
 here would demand a fix the compiler cannot name — in a migration, the fix it would force is deleting
 the harvested record ADR-0088 exists to keep.
 
-The count is one warning per pair of contradicting statements, doubled by being said at both ends. A
-fake whose default disagrees with many recorded rows produces one pair per row. If that proves too
-loud, the aggregation is a change to how disagreements are projected onto diagnostics and not to what
-counts as one — the comparison already yields a source-independent set that the reporting reads.
+The count is one warning per pair of contradicting statements. A fake whose default disagrees with
+many recorded rows produces one pair per row. If that proves too loud, the aggregation is a change to
+how disagreements are projected onto diagnostics and not to what counts as one — the comparison
+already yields a source-independent set that the reporting reads.
 
-Reporting at both ends is what the current diagnostic model allows: a secondary region carries a
-position and not a source, so a second caret cannot be placed in another file. If secondary regions
-gain source identity, the two projections collapse into one diagnostic with a cross-source secondary,
-and nothing about the comparison changes.
+Both statements are still pointed at. Issue #314 gave a secondary region a source of its own and let
+a report name more than one source, so the two projections this decision described became one warning
+quoted at the recorded row, carrying a second region at the stand-in in whatever file that is, and
+reported at both of them. Nothing about the comparison changed. Which of the two carries the caret is
+a reader's starting point and not a ranking: neither is held to the other, as above.

@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import org.junit.jupiter.api.Test;
@@ -205,7 +206,7 @@ class CompileImportCollisionTest {
      */
     @Test
     void aNameTheSourceDoesNotExposeIsNotAlsoACollision() {
-        Map<String, List<Diagnostic>> diagnostics = Compiler.diagnoseModules(Map.of(
+        Map<String, List<Diagnostic>> diagnostics = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of(
                 "up.sou", """
                         module up exposing ( other )
                         data Thing = { a: Int }
@@ -216,7 +217,7 @@ class CompileImportCollisionTest {
                         import up ( Thing )
                         let Thing (n: Int) = n
                         data Line = { a: Int }
-                        """));
+                        """)));
 
         assertEquals(List.of("check.import.notexposed"),
                 diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());
@@ -230,7 +231,7 @@ class CompileImportCollisionTest {
      */
     @Test
     void theCollisionIsReportedWithoutStoppingTheOtherFiles() {
-        Map<String, List<Diagnostic>> diagnostics = Compiler.diagnoseModules(Map.of(
+        Map<String, List<Diagnostic>> diagnostics = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of(
                 "c.sou", """
                         module probe.c
                         import List ( map )
@@ -239,7 +240,7 @@ class CompileImportCollisionTest {
                 "d.sou", """
                         module probe.d
                         data Broken = { a: NoSuchType }
-                        """));
+                        """)));
 
         assertEquals(List.of("check.import.conflict"),
                 diagnostics.get("c.sou").stream().map(Diagnostic::messageKey).toList());

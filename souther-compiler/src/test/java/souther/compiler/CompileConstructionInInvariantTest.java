@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 
@@ -118,7 +119,7 @@ class CompileConstructionInInvariantTest {
                         data Table = List<Int>
                             invariant ok = List.all(x -> atLeastZero(x), value)
                         """);
-        List<Diagnostic> down = Compiler.diagnoseModules(sources).get("down");
+        List<Diagnostic> down = Located.diagnosticsOf(Compiler.diagnoseModules(sources)).get("down");
         assertEquals(1, down.size(), () -> "expected one diagnostic, got " + down);
         assertEquals("check.invariant.construct.named", down.get(0).messageKey());
     }
@@ -221,14 +222,14 @@ class CompileConstructionInInvariantTest {
      *  answers about — so a declaration with two wrong clauses says so about both. */
     @Test
     void everyWrongClauseIsReported() {
-        Map<String, List<Diagnostic>> found = Compiler.diagnoseModules(Map.of("m", """
+        Map<String, List<Diagnostic>> found = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("m", """
                 module m
                 data Yen = Int invariant value >= 0
                 let atLeastZero (x: Int): Bool = Yen(0).value <= x
                 data Table = List<Int>
                     invariant low = List.all(x -> atLeastZero(x), value)
                     invariant high = List.all(x -> atLeastZero(x), value)
-                """));
+                """)));
         List<String> clauses = found.get("m").stream()
                 .filter(d -> "check.invariant.construct.named".equals(d.messageKey()))
                 .map(d -> String.valueOf(d.args()[2]))
@@ -240,12 +241,12 @@ class CompileConstructionInInvariantTest {
      *  author nothing the first does not. */
     @Test
     void oneConstructionIsReportedPerClause() {
-        List<Diagnostic> found = Compiler.diagnoseModules(Map.of("m", """
+        List<Diagnostic> found = Located.diagnosticsOf(Compiler.diagnoseModules(Map.of("m", """
                 module m
                 data Yen = Int invariant value >= 0
                 data Table = List<Int>
                     invariant ok = List.all(x -> Yen(0).value <= x, value) && Yen(1).value >= 0
-                """)).get("m");
+                """))).get("m");
         assertEquals(1, found.stream()
                 .filter(d -> d.messageKey().startsWith("check.invariant.construct")).count());
     }

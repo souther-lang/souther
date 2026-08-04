@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
 
@@ -42,7 +43,7 @@ class ImportOfAnUnusableModuleTest {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("evil.sou", RESERVED);
         byId.put("main.sou", IMPORTER);
-        Map<String, List<Diagnostic>> found = Compiler.diagnoseModules(byId, Set.of());
+        Map<String, List<Diagnostic>> found = Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
 
         assertEquals(1, found.get("evil.sou").size(),
                 "the module that took a reserved name is what is wrong: " + found.get("evil.sou"));

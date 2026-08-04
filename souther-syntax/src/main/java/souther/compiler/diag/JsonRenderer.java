@@ -8,35 +8,51 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Renders a diagnostic as a single JSON object for tools and agents. {@code code} and the type
  * strings are locale-independent (the stable identity); {@code message}, {@code hints}, and
  * secondary {@code label}s follow the selected locale.
+ *
+ * <p>A secondary in another file carries that file's {@code file}, which means what the top-level
+ * one does — the name a reader opens. The compiler's own id for a source is not written: it is a
+ * position in the list the caller handed over on the command line and a document URI in an editor,
+ * so it names nothing a tool could hold on to.
  */
 public final class JsonRenderer implements DiagnosticRenderer {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Override
-    public String render(Diagnostic d, SourceContext src, Locale locale) {
+    public String render(Located located, SourceContextResolver sources, Locale locale) {
+        Diagnostic d = located.diagnostic();
+        String own = located.primarySourceId();
+        DiagnosticView view = DiagnosticView.of(d, own, own);
+        SourceContext anchorSource = sources.sourceOf(view.anchor().sourceId());
         Map<String, Object> obj = new LinkedHashMap<>();
         obj.put("severity", d.severity().name().toLowerCase(Locale.ROOT));
         if (d.code() != null) {
             obj.put("code", d.code());
         }
-        if (src != null && src.fileName() != null) {
-            obj.put("file", src.fileName());
+        if (anchorSource != null && anchorSource.fileName() != null) {
+            obj.put("file", anchorSource.fileName());
         }
-        if (d.region() != null) {
-            obj.put("region", region(d.region()));
+        if (view.anchor().region() != null) {
+            obj.put("region", region(view.anchor().region()));
         }
-        if (!d.secondary().isEmpty()) {
+        if (!view.others().isEmpty()) {
             List<Object> secs = new ArrayList<>();
-            for (LabeledRegion sec : d.secondary()) {
+            for (Spot other : view.others()) {
                 Map<String, Object> s = new LinkedHashMap<>();
-                s.put("region", region(sec.region()));
-                s.put("label", Messages.get(sec.labelKey(), locale, sec.labelArgs()));
+                if (!Objects.equals(other.sourceId(), view.anchor().sourceId())) {
+                    SourceContext src = sources.sourceOf(other.sourceId());
+                    if (src != null && src.fileName() != null) {
+                        s.put("file", src.fileName());
+                    }
+                }
+                s.put("region", region(other.region()));
+                s.put("label", Messages.get(other.labelKey(), locale, other.labelArgs()));
                 secs.add(s);
             }
             obj.put("secondary", secs);

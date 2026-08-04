@@ -14,6 +14,7 @@ import souther.compiler.codegen.Backend;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Region;
 import souther.compiler.frontend.CstFrontend;
 import souther.compiler.meta.ModuleMetadata;
 import souther.compiler.meta.ModulePath;
@@ -476,18 +477,19 @@ public final class Output {
     }
 
     /**
-     * The module's disagreements ({@link Disagreements}), as one source says them.
+     * The module's disagreements ({@link Disagreements}), said.
      *
-     * <p>One disagreement is two written statements, and each is reported where it is written: a
-     * source says the ones whose recorded row is in it, and the ones whose stand-in is. Where both are
-     * in this source it says both, so what a reader is told does not depend on whether the author kept
-     * the rows in the module or beside it.
+     * <p>One disagreement is one warning. It is anchored at the recorded row and points at the
+     * stand-in, and it is said at both of the sources they are written in, so an author editing
+     * either file is told. Which of the two carries the caret is not a claim that the other is the
+     * one in the wrong; it is where a reader starts reading, and the message names both.
      *
      * <p>Its own key rather than a second thing {@link Examples} says. That key answers what a
      * source's rows turned out to be, and it goes absent for reasons that have nothing to do with
      * what two statements say about each other — a name the source declares twice, a dependency list
-     * that could not be read — and took these with it. The value is {@code true} and the reports are
-     * the answer, as {@code Adequacy.Warnings} is.
+     * that could not be read — and took these with it. Asked of the module and not of a source,
+     * because one disagreement is one thing to say and its two sides need not be in one file. The
+     * value is {@code true} and the reports are the answer, as {@code Adequacy.Warnings} is.
      *
      * <p>What is still needed is a module that checks and links: no behavior is applied, but building
      * a fixture runs the decoders its types derive and the helpers it applies, and those are classes
@@ -498,16 +500,11 @@ public final class Output {
      * from the text — that would be a claim about which side is derived from the other, and neither
      * is.
      */
-    public record SaidDisagreements(String name, String sourceId) implements Key<Boolean> {
+    public record SaidDisagreements(String name) implements Key<Boolean> {
 
         @Override
         public String module() {
             return name;
-        }
-
-        @Override
-        public String sourceId() {
-            return sourceId;
         }
 
         @Override
@@ -519,36 +516,34 @@ public final class Output {
             }
             List<Report> reports = new ArrayList<>();
             for (souther.compiler.ExampleVerifier.Disagreement d : found) {
-                String rowKey = d.viaWith() ? "check.example.disagreement.from.row.with"
-                        : "check.example.disagreement.from.row";
-                String rowHint = d.viaWith() ? "check.example.disagreement.from.row.with.hint"
-                        : "check.example.disagreement.from.row.hint";
-                String standInKey = d.viaWith() ? "check.example.disagreement.from.with"
-                        : "check.example.disagreement.from.fake";
-                String standInHint = d.viaWith() ? "check.example.disagreement.from.with.hint"
-                        : "check.example.disagreement.from.fake.hint";
-                if (d.recorded().at().sourceId().equals(sourceId)) {
-                    reports.add(Report.of(
-                            said(d, d.recorded(), d.standIn(), rowKey, rowHint)));
-                }
-                if (d.standIn().at().sourceId().equals(sourceId)) {
-                    reports.add(Report.of(
-                            said(d, d.standIn(), d.recorded(), standInKey, standInHint)));
-                }
+                reports.add(Report.saidAt(said(d),
+                        Report.Delivery.at(d.recorded().at().sourceId(),
+                                d.standIn().at().sourceId())));
             }
             return Answer.of(true, reports);
         }
 
-        /** One disagreement from the side of {@code here}: the caret on what this source wrote, and
-         * the other statement named by what it answers and where it is. */
-        private static Diagnostic said(souther.compiler.ExampleVerifier.Disagreement d,
-                                       souther.compiler.ExampleVerifier.Statement here,
-                                       souther.compiler.ExampleVerifier.Statement there,
-                                       String key, String hintKey) {
+        /** One disagreement: the caret on the recorded row, a second region on the stand-in in
+         * whichever file it was written in, and what each of them answers. */
+        private static Diagnostic said(souther.compiler.ExampleVerifier.Disagreement d) {
+            souther.compiler.ExampleVerifier.Statement recorded = d.recorded();
+            souther.compiler.ExampleVerifier.Statement standIn = d.standIn();
+            String key = d.viaWith() ? "check.example.disagreement.with"
+                    : "check.example.disagreement";
+            String hintKey = d.viaWith() ? "check.example.disagreement.with.hint"
+                    : "check.example.disagreement.hint";
+            String label = d.viaWith() ? "check.example.disagreement.with.here"
+                    : "check.example.disagreement.here";
+            // The second region names its source only when that is another file: within one file
+            // there is nothing to say, and the renderer would quote the same name twice.
+            String elsewhere = standIn.at().sourceId().equals(recorded.at().sourceId())
+                    ? null : standIn.at().sourceId();
             return Diagnostic.of("E1919", key).warning().title("check.example.title")
-                    .at(here.at().pos(), here.width())
-                    .args(d.behavior(), there.at().pos())
-                    .hint(hintKey, here.answer(), there.answer())
+                    .at(recorded.at().pos(), recorded.width())
+                    .args(d.behavior())
+                    .secondaryIn(elsewhere,
+                            Region.ofWidth(standIn.at().pos(), standIn.width()), label, d.behavior())
+                    .hint(hintKey, recorded.answer(), standIn.answer())
                     .build();
         }
     }

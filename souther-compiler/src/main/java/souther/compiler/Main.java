@@ -9,6 +9,7 @@ import souther.compiler.diag.JsonRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
+import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -377,7 +378,30 @@ public final class Main {
 
     /** The file the {@code i}-th diagnostic should quote. */
     static Path sourceOf(List<Path> sources, CompileException e, int i) {
-        return Located.in(sources, e.sourceIndexOf(i));
+        return pathOf(sources, e.sourceIdOf(i));
+    }
+
+    /**
+     * Which of the files handed over a source id names, or null when it names none of them.
+     *
+     * <p>A compile of one source names none, and the one file it was given is the answer however the
+     * diagnostic is tagged — which is why one item is not read as "the source called 0, or nothing".
+     */
+    private static Path pathOf(List<Path> sources, String sourceId) {
+        if (sources.size() == 1) {
+            return sources.get(0);
+        }
+        for (int i = 0; i < sources.size(); i++) {
+            if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
+                return sources.get(i);
+            }
+        }
+        return null;
+    }
+
+    /** What to quote for each source a diagnostic points into, read once per file. */
+    private static SourceContextResolver sourcesOf(List<Path> sources) {
+        return SourceContextResolver.memoized(id -> read(pathOf(sources, id)));
     }
 
     /** A file as a snippet source, or null when it cannot be read — a snippet-less rendering is the
@@ -411,7 +435,7 @@ public final class Main {
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
         for (String line : DiagnosticRenderer.renderAll(
-                located, index -> read(Located.in(sources, index)), renderer, locale)) {
+                located, sourcesOf(sources), renderer, locale)) {
             System.err.println(line);
         }
     }
