@@ -208,4 +208,36 @@ class EveryPositionOfADeclaredTypeIsReadTest {
                         "let relay (g: (Int) -> Bool) = emptyFrom(g)\n"
                                 + "let call (g: (Int) -> Bool) = taking(relay(g))", "", "", ""));
     }
+
+    /**
+     * A variable is shared exactly as far as the declaration that wrote it.
+     *
+     * <p>Two function parameters of one helper are written in one signature, so {@code (p: ('a) ->
+     * 'a, q: ('a) -> 'a)} says the two are the same function type, and handing them to a call
+     * wanting two different ones is refused. Two arrivals of a declaration written elsewhere are two
+     * readings of it, and each is instantiated on its own.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("shared")
+    void aVariableIsSharedAsFarAsTheDeclarationThatWroteIt(Row row) {
+        String source = """
+                module souther.gen
+                let identity (x: 'a): 'a = x
+                let use (f: (Int) -> Int, g: %%s) = true
+                %s
+                """.formatted(row.declares());
+        assertNull(failure(source.formatted(row.fits())), "the two agree");
+        assertEquals(true, failure(source.formatted(row.refused())) != null,
+                "and this one does not");
+    }
+
+    private static List<Row> shared() {
+        return List.of(
+                // `q` is `p`, so a call wanting two different function types is refused
+                new Row("two parameters of one signature", "let call (p: ('a) -> 'a, q: ('a) -> 'a) "
+                        + "= use(p, q)", "", "(Int) -> Int", "(String) -> String"),
+                // two readings of `identity`, each instantiated on its own
+                new Row("two readings of one declaration", "let call = use(identity, identity)", "",
+                        "(String) -> String", "(String) -> Int"));
+    }
 }

@@ -826,9 +826,18 @@ public final class Elaborator {
      *
      * <p>One per variable, not one per position: {@code ('a) -> 'a} is a function answering what it
      * was given, and instantiating each occurrence separately would say only that it takes something
-     * and answers something. It is instantiated here because the declaration is another's — the
-     * receiving side was instantiated when this call was expanded — and the two are read against
-     * each other once both stand at variables this application decides.
+     * and answers something.
+     *
+     * <p>And one per scope, which within one expansion is one. The declarations that arrive under a
+     * variable are the enclosing definition's — a helper handing its own function parameters on
+     * writes them in one signature, where one spelling is one variable — so two of them sharing a
+     * spelling share a variable, and instantiating each boundary separately would lose that. What
+     * arrives from anywhere else arrives already instantiated, carrying the variables of the call
+     * that supplied it, and has no spelling left to share.
+     *
+     * <p>It is instantiated here because the declaration is another's — the receiving side was
+     * instantiated when this call was expanded — and the two are read against each other once both
+     * stand at variables this application decides.
      */
     private static Type instantiated(Type declared, Ast.Expansion ex) {
         Map<String, Type> theirs = new HashMap<>();
