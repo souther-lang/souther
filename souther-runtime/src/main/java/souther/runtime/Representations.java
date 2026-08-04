@@ -87,7 +87,7 @@ public final class Representations {
      * <p>Which is bounded, because asking for the digits is what an exponent lets a caller not pay
      * for: {@code 1E+1000000} is eleven characters and a million and one digits, so spelling every
      * amount out would let a small input ask for an arbitrarily large one. The cut is
-     * {@link #READABLE_DIGITS}, and it falls on the amount rather than on the value that carried it
+     * {@link #MAX_SPELT_OUT_DIGITS}, and it falls on the amount rather than on the value that carried it
      * — the two forms of one amount reach the same side of it, which is what keeps this a function
      * of the amount.
      */
