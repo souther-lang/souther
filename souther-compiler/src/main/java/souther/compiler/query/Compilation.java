@@ -252,6 +252,21 @@ public final class Compilation {
         return this;
     }
 
+    /**
+     * What this compilation gives one row or one reading to finish within, said outright. Returns
+     * this compilation, so it can be said where the sources are.
+     *
+     * <p>For a test that is asking what the compiler says about work that did not come back. Written
+     * with a budget, that test has to write a model that does not terminate and then race a clock to
+     * see it reported — and a loaded host loses the race in the direction that matters, reporting
+     * work that finished as work that did not. A deadline that decides by what the work is says the
+     * same thing as a fact. A build has no reason to set one; see {@link #withExampleBudget}.
+     */
+    public Compilation withDeadline(souther.compiler.Deadline deadline) {
+        db.set(new Front.ExampleDeadline(), deadline);
+        return this;
+    }
+
     /** How well one module's rows cover it. {@link #answerEverything()} need not have run: the
      * measures ask for what they read. */
     public Adequacy.Of adequacy(String module) {

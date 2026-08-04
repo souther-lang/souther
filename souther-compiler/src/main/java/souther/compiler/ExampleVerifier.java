@@ -78,13 +78,13 @@ public final class ExampleVerifier {
                                      Map<String, byte[]> classes,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Ast.FnDef> values,
-                                     String sourceId, long budgetMs) {
+                                     String sourceId, Deadline deadline) {
         if (module.examples().isEmpty()) {
             return Observations.NONE;
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
-                budgetMs);
+                deadline);
         v.sourceId = sourceId;
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
@@ -172,22 +172,22 @@ public final class ExampleVerifier {
      * and from any number of attached {@code examples for} files, and a position alone stops saying
      * which once they are gathered under the module's name. */
     private String sourceId;
-    /** Wall-clock budget for one row evaluated on a worker of its own ({@link #checkRow}). Carried
-     * rather than looked up, so two compiles in one JVM need not agree on it. Reading a written
-     * statement is held to a budget of its own, which is {@link ExampleStatements}'. */
-    private final long budgetMs;
+    /** What one row gets to be evaluated within ({@link #checkRow}). Carried rather than looked up,
+     * so two compiles in one JVM need not agree on it. Reading a written statement is held to a
+     * deadline of its own, which is {@link ExampleStatements}'. */
+    private final Deadline deadline;
 
     private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Ast.FnDef> values,
-                            long budgetMs) {
+                            Deadline deadline) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
         this.requirements = requirements;
         this.loader = loader;
         this.values = values;
-        this.budgetMs = budgetMs;
+        this.deadline = deadline;
     }
 
     /**
@@ -216,8 +216,9 @@ public final class ExampleVerifier {
             throw new IllegalStateException("`" + target.name() + "` is evaluable but has no signature");
         }
         Set<TypeName> outCases = outCases(sig.out());
+        int nth = 0;
         for (Ast.ExampleRow row : ex.rows()) {
-            checkRow(target, sig, outCases, row, out, rows);
+            checkRow(target, sig, outCases, row, ++nth, out, rows);
         }
     }
 
@@ -438,52 +439,51 @@ public final class ExampleVerifier {
      * {@link RowEvaluation} for why the row's own worker must not.
      */
     private void checkRow(ExampleTarget target, Sig sig, Set<TypeName> outCases, Ast.ExampleRow row,
-                          List<Diagnostic> out, List<RowOutcome> rows) {
+                          int nth, List<Diagnostic> out, List<RowOutcome> rows) {
         RowEvaluation evaluation = new RowEvaluation(this, target, sig, outCases, row);
-        java.util.concurrent.FutureTask<List<Diagnostic>> task =
-                new java.util.concurrent.FutureTask<>(evaluation);
-        Thread worker = new Thread(task, "souther-example-eval");
-        worker.setDaemon(true);
-        worker.start();
-        try {
-            out.addAll(task.get(budgetMs, java.util.concurrent.TimeUnit.MILLISECONDS));
-            rows.add(outcomeOf(target, row, evaluation.state));
-        } catch (java.util.concurrent.TimeoutException _) {
-            // Read what the row was doing before cancelling: the interrupt may let the worker leave the
-            // helper it is in, and then the reason would depend on which thread got there first.
-            String helper = evaluation.helper();
-            // Only the stage, which the worker publishes: the rest of its state is still being written.
-            // How far it got is the difference between a fixture's helper that will not stop and a
-            // behavior that will not stop, which is what the author has to know.
-            Stage reached = evaluation.state.stage;
-            task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
-            out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
-                    .at(row.pos()).args("did not finish within " + budgetMs + "ms"
-                            + (helper == null ? "" : " while calling `" + helper + "`")).build());
-            rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
-                    row.description(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
-                    null, null, List.of(), List.of(), Set.of()));
-        } catch (java.util.concurrent.ExecutionException ee) {
-            Throwable cause = ee.getCause();
-            if (cause instanceof NonTerminationException nt) {
-                out.add(Diagnostic.of("E1910", "check.example.nonterminating")
-                        .title("check.example.title").at(row.pos()).args(nt.getMessage()).build());
-                evaluation.state.incomplete(FailurePhase.TIMEOUT);
+        switch (deadline.given("row " + nth + " of `" + target.name() + "`", evaluation)) {
+            case Deadline.Outcome.Finished(List<Diagnostic> found) -> {
+                out.addAll(found);
                 rows.add(outcomeOf(target, row, evaluation.state));
-                return;
             }
-            if (cause instanceof RuntimeException re) {
-                throw re;
+            case Deadline.Outcome.Overran(Runnable abandon) -> {
+                // Read what the row was doing before abandoning it: giving up interrupts the worker,
+                // which may let it leave the helper it is in, and then the reason would depend on
+                // which thread got there first.
+                String helper = evaluation.helper();
+                // Only the stage, which the worker publishes: the rest of its state is still being
+                // written. How far it got is the difference between a fixture's helper that will not
+                // stop and a behavior that will not stop, which is what the author has to know.
+                Stage reached = evaluation.state.stage;
+                abandon.run();
+                out.add(Diagnostic.of("E1910", "check.example.nonterminating")
+                        .title("check.example.title")
+                        .at(row.pos()).args("did not finish within " + deadline.budgetMs() + "ms"
+                                + (helper == null ? "" : " while calling `" + helper + "`")).build());
+                rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
+                        row.description(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
+                        null, null, List.of(), List.of(), Set.of()));
             }
-            throw new IllegalStateException(cause);
-        } catch (InterruptedException e) {
-            // Whoever is compiling asked to stop. Nothing is known about this row — no result was
-            // produced and no comparison was made — so this is not a failing example, and reporting it
-            // as one would put a diagnostic on a model that may be correct.
-            task.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new java.util.concurrent.CancellationException(
-                    "interrupted while evaluating an example of `" + target.name() + "`");
+            case Deadline.Outcome.Threw(Throwable cause) -> {
+                if (cause instanceof NonTerminationException nt) {
+                    out.add(Diagnostic.of("E1910", "check.example.nonterminating")
+                            .title("check.example.title").at(row.pos()).args(nt.getMessage()).build());
+                    evaluation.state.incomplete(FailurePhase.TIMEOUT);
+                    rows.add(outcomeOf(target, row, evaluation.state));
+                    return;
+                }
+                // Whoever is compiling asked to stop. Nothing is known about this row — no result was
+                // produced and no comparison was made — so this is not a failing example, and
+                // reporting it as one would put a diagnostic on a model that may be correct.
+                if (cause instanceof java.util.concurrent.CancellationException) {
+                    throw new java.util.concurrent.CancellationException(
+                            "interrupted while evaluating an example of `" + target.name() + "`");
+                }
+                if (cause instanceof RuntimeException re) {
+                    throw re;
+                }
+                throw new IllegalStateException(cause);
+            }
         }
     }
 

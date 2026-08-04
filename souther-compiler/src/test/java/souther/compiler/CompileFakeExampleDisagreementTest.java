@@ -256,7 +256,7 @@ class CompileFakeExampleDisagreementTest {
     @Test
     void aRowWhoseFixtureWillNotFinishIsHeldAgainstNothing() {
         CompileException e = org.junit.jupiter.api.Assertions.assertThrows(CompileException.class,
-                () -> DoesNotComeBack.compile("""
+                () -> DoesNotComeBack.compileOverrunning("""
                         module example.spin
 
                         data N = Int
@@ -272,7 +272,7 @@ class CompileFakeExampleDisagreementTest {
 
                         fake find
                             | (N(1)) -> Missing { why = "none" }
-                        """));
+                        """, "the fixtures of row 1 of `find`", "row 1 of `find`"));
 
         List<String> codes = new ArrayList<>();
         for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
@@ -321,7 +321,7 @@ class CompileFakeExampleDisagreementTest {
                 fake find
                     | (N(spin(1))) -> Missing { why = "none" }
                     | (N(spin(2))) -> Missing { why = "none" }
-                """, DoesNotComeBack.BUDGET));
+                """, DoesNotComeBack.overrunningOn("the `fake find` table")));
 
         assertEquals(1, said.size(), said.toString());
         Diagnostic one = said.get(0).diagnostic();
@@ -357,7 +357,7 @@ class CompileFakeExampleDisagreementTest {
     void aRowThatRunsTheTableAndTheReadingBothSayWhatTheyFound() {
         List<Located> warnings = new ArrayList<>();
         CompileException e = org.junit.jupiter.api.Assertions.assertThrows(CompileException.class,
-                () -> DoesNotComeBack.compileModules(List.of("""
+                () -> DoesNotComeBack.compileModulesOverrunning(List.of("""
                         module example.both
 
                         data N = Int
@@ -385,7 +385,7 @@ class CompileFakeExampleDisagreementTest {
 
                         fake find
                             | (N(spin(1))) -> Missing { why = "none" }
-                        """), warnings));
+                        """), warnings, "the `fake find` table", "row 1 of `use`"));
 
         assertTrue(codesOf(e).contains("E1910"), codesOf(e).toString());
         assertEquals(1, only("E1920", warnings).size(), warnings.toString());
@@ -448,7 +448,7 @@ class CompileFakeExampleDisagreementTest {
                 c.db().ask(new souther.compiler.query.Bodies.Helpers(name)).value(),
                 c.db().ask(new souther.compiler.query.Front.ExampleOrigins(name)).value(),
                 c.db().ask(new souther.compiler.query.Front.FakeOrigins(name)).value(),
-                ExampleVerifier.defaultBudgetMs());
+                Deadline.ofMillis(ExampleVerifier.defaultBudgetMs()));
     }
 
     /** The warnings of a single-source compile that holds. */
@@ -458,12 +458,12 @@ class CompileFakeExampleDisagreementTest {
         return out;
     }
 
-    /** As {@link #warningsOf(String)}, for a model whose table does not finish being built: the
-     * answer is the same at the default budget, reached after a wait that decides nothing. */
-    private static List<Located> warningsOf(String model, java.time.Duration budget) {
+    /** As {@link #warningsOf(String)}, for a model whose table does not finish being built —
+     * which is said here rather than waited for. */
+    private static List<Located> warningsOf(String model, Deadline overrun) {
         List<Located> out = new ArrayList<>();
         assertDoesNotThrow(() -> Compiler.compiled(model, "Main", out,
-                souther.compiler.query.Adequacy.Asked.NOTHING, budget));
+                souther.compiler.query.Adequacy.Asked.NOTHING, null, overrun));
         return out;
     }
 
@@ -550,7 +550,7 @@ class CompileFakeExampleDisagreementTest {
 
                 fake other
                     | (N(1)) -> Missing { why = "none" }
-                """, DoesNotComeBack.BUDGET));
+                """, DoesNotComeBack.overrunningOn("the fixtures of row 1 of `other`", "row 1 of `other`")));
     }
 
     /**
@@ -620,11 +620,11 @@ class CompileFakeExampleDisagreementTest {
     }
 
     /** As {@link #allCodesOf(String)}, for a model with a row that does not come back. */
-    private static List<String> allCodesOf(String model, java.time.Duration budget) {
+    private static List<String> allCodesOf(String model, Deadline overrun) {
         souther.compiler.query.Compilation compilation =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
-        if (budget != null) {
-            compilation.withExampleBudget(budget);
+        if (overrun != null) {
+            compilation.withDeadline(overrun);
         }
         compilation.answerEverything();
         List<String> codes = new ArrayList<>();

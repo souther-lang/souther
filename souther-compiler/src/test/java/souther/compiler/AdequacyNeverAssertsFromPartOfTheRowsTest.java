@@ -35,14 +35,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
     /**
-     * A model, with the budget the compile that reads it is given.
+     * A model, with the work the compile that reads it does not get back from.
      *
-     * <p>The two here want opposite budgets, which is why it is carried beside the source rather than
-     * set for the run: one is a row that never comes back, and waiting the default out reaches the
-     * same answer later, while the other walks four thousand nodes to spend the observation budget and
-     * would be reported as a row that does not terminate if it were held to the first one's.
+     * <p>Carried beside the source because the two here differ in it. One holds a row that never
+     * comes back, which is said here rather than timed; the other walks four thousand nodes to spend
+     * the observation budget and comes back from everything, so nothing about it overruns.
      */
-    private record Unreadable(String source, java.time.Duration budget) {}
+    private record Unreadable(String source, Deadline overrun) {}
 
     /** Models where something a measure would want to read was not read, each in a different way. */
     private static List<Unreadable> unreadableInSomeWay() {
@@ -74,7 +73,7 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
                 example take
                     | (Draft { flag = Yes, cost = Amount(500) }) -> Big { n = 0 }
-                """, DoesNotComeBack.BUDGET),
+                """, DoesNotComeBack.overrunningOn("row 1 of `take`")),
                 // a value past the observation's limits: the position is there and unreadable
                 new Unreadable(budgetSpent(), null));
     }
@@ -121,18 +120,18 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
     private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
 
     private static Compilation measured(Unreadable model) {
-        return COMPILED.computeIfAbsent(model.budget() + ":" + model.source(),
-                _ -> measured(model.source(), model.budget()));
+        return COMPILED.computeIfAbsent(model.source(),
+                _ -> measured(model.source(), model.overrun()));
     }
 
     private static Compilation measured(String source) {
         return measured(source, null);
     }
 
-    private static Compilation measured(String source, java.time.Duration budget) {
+    private static Compilation measured(String source, Deadline overrun) {
         Compilation compilation = Compilation.ofSource(source, "Main");
-        if (budget != null) {
-            compilation.withExampleBudget(budget);
+        if (overrun != null) {
+            compilation.withDeadline(overrun);
         }
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
