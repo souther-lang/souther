@@ -206,7 +206,7 @@ public final class ExampleVerifier {
             // built the table of a fake nothing reads, so this is the first thing that would run it.
             Read<List<Diagnostic>> read = v.within(reader -> {
                 List<Diagnostic> wrong = new ArrayList<>();
-                reader.standins(fk, sig.ins(), sig.out(), wrong);
+                standins(reader, fk, sig.ins(), sig.out(), wrong);
                 return wrong;
             }, "the `fake " + fk.target() + "` table");
             switch (read) {
@@ -267,15 +267,13 @@ public final class ExampleVerifier {
      * {@code with} written on one are evaluated elsewhere and report it there (E1910), while a fake
      * table is built here and, where no row depends on the behavior it stands in for, nowhere else.
      */
-    private <T> Read<T> within(java.util.function.Function<ExampleVerifier, T> read,
+    private <T> Read<T> within(java.util.function.Function<FixtureReader, T> read,
                                String what) {
-        // On its own reader. A worker that runs out of budget is asked to stop and cannot be made to
-        // — a fixture reaches no interrupt point — so it may still be inside `expandedValue`, holding
-        // a binding or a half-walked expansion. Nothing it can still write to is read by the
-        // statement after it, which is why {@link RowEvaluation} does the same for a row.
-        ExampleVerifier reader = new ExampleVerifier(module, symbols, sigs, requirements, loader,
-                values, budgetMs);
-        reader.sourceId = sourceId;
+        // On a reader of its own, and that is all a reading needs to be given: a worker that runs out
+        // of budget is asked to stop and cannot be made to — a fixture reaches no interrupt point — so
+        // it may still be inside `expandedValue`, holding a binding or a half-walked expansion. What a
+        // late worker can still write to is that reader, and the statement after it gets another.
+        FixtureReader reader = newFixtureReader();
         java.util.concurrent.FutureTask<T> task =
                 new java.util.concurrent.FutureTask<>(() -> read.apply(reader));
         Thread worker = new Thread(task, "souther-reading");
@@ -408,11 +406,11 @@ public final class ExampleVerifier {
                 continue;
             }
             Read<RecordedRow> read = within(reader -> {
-                Object[] arguments = reader.builtOrNull(row.inputs(), sig.ins());
+                Object[] arguments = builtOrNull(reader, row.inputs(), sig.ins());
                 if (arguments == null) {
                     return null;
                 }
-                Asserted answer = reader.readExpected(row.expected(), sig.out(), cases);
+                Asserted answer = readExpected(reader, row.expected(), sig.out(), cases);
                 return answer instanceof Asserted.Unreadable ? null
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
@@ -439,7 +437,7 @@ public final class ExampleVerifier {
         }
         // The whole table, built the one way the proxy builds it.
         Read<Standins> read = within(
-                reader -> reader.standins(fk, sig.ins(), sig.out(), new ArrayList<>()),
+                reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
                 "the `fake " + fk.target() + "` table");
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
@@ -524,7 +522,7 @@ public final class ExampleVerifier {
                 // where the example is checked, installing this same value. What did not finish here
                 // did not finish there, and there is where it is said (E1910).
                 Asserted constant = within(
-                        reader -> reader.readStandIn(w.value(), depSig.out(), outCases(depSig.out())),
+                        reader -> readStandIn(reader, w.value(), depSig.out(), outCases(depSig.out())),
                         "a `with " + w.dep() + "`").orNull();
                 if (constant == null || constant instanceof Asserted.Unreadable) {
                     continue;
@@ -560,7 +558,7 @@ public final class ExampleVerifier {
     private String shown(Asserted asserted) {
         return switch (asserted) {
             case Asserted.CaseOnly only -> only.name().name();
-            case Asserted.Whole whole -> describeActual(whole.fixture().value());
+            case Asserted.Whole whole -> rendering.describeActual(whole.fixture().value());
             case Asserted.Unreadable _ ->
                     throw new IllegalStateException("nothing was read, so nothing disagreed");
         };
@@ -569,11 +567,12 @@ public final class ExampleVerifier {
     /** The written inputs decoded against {@code types}, or null where one would not build — that is
      * <em>E1903</em>'s to say where the row is evaluated, and a row whose inputs are not values names
      * no input to hold a stand-in against. */
-    private Object[] builtOrNull(List<Ast.Expr> written, List<Type> types) {
+    private static Object[] builtOrNull(FixtureReader fixtures, List<Ast.Expr> written,
+                                        List<Type> types) {
         Object[] values = new Object[types.size()];
         for (int i = 0; i < types.size(); i++) {
             try {
-                values[i] = built(written.get(i), types.get(i));
+                values[i] = fixtures.built(written.get(i), types.get(i));
             } catch (FixtureException | NonTerminationException _) {
                 return null;
             }
@@ -602,11 +601,11 @@ public final class ExampleVerifier {
                                             Map<String, Sig> sigs, Map<String, byte[]> classes,
                                             Map<String, List<BehaviorRequirement>> requirements,
                                             ClassLoader parent, Map<String, Ast.FnDef> values) {
-        // No rows, so no worker is started and the budget is never read; the default stands in for a
-        // value this reader has no use for.
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
-                new MemoryClassLoader(classes, parent), values, DEFAULT_BUDGET_MS);
-        return v.fixtures::refuse;
+        // A reader is the whole of what this needs. There are no rows, so nothing is run on a worker
+        // and no budget is read; `sigs` and `requirements` say what a behavior takes and what stands
+        // in for what it depends on, and neither is a question about whether a value builds.
+        return new FixtureReader(module, symbols, values,
+                new MemoryClassLoader(classes, parent))::refuse;
     }
 
     /**
@@ -720,9 +719,11 @@ public final class ExampleVerifier {
     private final MemoryClassLoader loader;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Ast.FnDef> values;
-    /** Reads what a fixture states as the value it states. One evaluation's, because what it builds
-     * up while it reads — which values it is expanding, which helper it is in — is one row's. */
-    private final FixtureReader fixtures;
+    /** A reader kept for showing a value that was already built ({@link #shown}), which is the one
+     * thing a reader does that reads none of its own state: nothing is expanded, no binding is put in
+     * force and no helper is run, so there is no reading here to isolate. What it is for is the
+     * module's encoders and its loader. Every actual reading gets {@link #newFixtureReader()}. */
+    private final FixtureReader rendering;
     /** Which source the rows being evaluated are written in. A module's rows come from its own source
      * and from any number of attached {@code examples for} files, and a position alone stops saying
      * which once they are gathered under the module's name. */
@@ -744,49 +745,20 @@ public final class ExampleVerifier {
         this.loader = loader;
         this.values = values;
         this.budgetMs = budgetMs;
-        this.fixtures = new FixtureReader(module, symbols, values, loader);
+        this.rendering = new FixtureReader(module, symbols, values, loader);
     }
 
-    // --- what a fixture states, read by {@link FixtureReader} ----------------------------------
-    //
-    // One reader per evaluation, reached through the field above. Each of these is the call that
-    // was an instance method of this class before the reader was its own; the callers still read
-    // as they did, and which of them have to hold the *same* reader is the next question.
-
-    private Object built(Ast.Expr written, Type type) {
-        return fixtures.built(written, type);
-    }
-
-    private FixtureReader.BuiltFixture buildFixture(Ast.Expr written, Type outType) {
-        return fixtures.buildFixture(written, outType);
-    }
-
-    private Object builtExpected(Ast.Expr expected, Type outType) {
-        return fixtures.builtExpected(expected, outType);
-    }
-
-    private String caseOnly(Ast.Expr expected) {
-        return fixtures.caseOnly(expected);
-    }
-
-    private TypeName constructedCase(Ast.Expr e) {
-        return fixtures.constructedCase(e);
-    }
-
-    private String expectedArm(Ast.Expr expected) {
-        return fixtures.expectedArm(expected);
-    }
-
-    private String describeExpected(Ast.Expr expected, Type outType) {
-        return fixtures.describeExpected(expected, outType);
-    }
-
-    private String describeActual(Object result) {
-        return fixtures.describeActual(result);
-    }
-
-    private ObservedValue observed(Object decoded) {
-        return fixtures.observed(decoded);
+    /**
+     * A reader for one row or one written statement, held for as long as that reading lasts.
+     *
+     * <p>Never shared between two of them. What a reading builds up — the bindings in force, the
+     * values being expanded, the helper it is inside — is that reading's, and a worker that ran out
+     * of its budget goes on writing to it after the answer was given up on. So the isolation is the
+     * reader, and it is the reader alone: everything else this class holds is read-only once a row
+     * starts.
+     */
+    private FixtureReader newFixtureReader() {
+        return new FixtureReader(module, symbols, values, loader);
     }
 
     // --- one example (a target and its rows) --------------------------------------------------
@@ -914,14 +886,22 @@ public final class ExampleVerifier {
      *
      * <p>A row that does not finish leaves its worker running — a pure computation reaches no interrupt
      * point, so cancelling it is a request and not a stop. So nothing that worker can still write to is
-     * read by the rows after it: the evaluation has its own {@link ExampleVerifier}, so the state a
+     * read by the rows after it: the evaluation has its own {@link FixtureReader}, so the state a
      * fixture builds up (which values it is expanding, which helper it is in) belongs to this row, and
      * the diagnostics it produces are its own list, handed to the caller only when it finishes. A late
      * result is dropped rather than landing among another row's.
+     *
+     * <p>One reader for the whole row, and that is what makes the reader the right thing to isolate.
+     * The inputs, the expectation, each {@code with} and every fake table the row resolves are read
+     * through this one — so a row that does not finish inside a fake table's helper is still a row
+     * inside a helper, and the budget can name it ({@link #helper()}). Two readers would have put that
+     * answer where nothing reporting the timeout could see it.
      */
     private static final class RowEvaluation implements java.util.concurrent.Callable<List<Diagnostic>> {
 
-        private final ExampleVerifier evaluation;
+        private final ExampleVerifier verifier;
+        /** This row's, and only this row's. */
+        private final FixtureReader fixtures;
         private final ExampleTarget target;
         private final Sig sig;
         private final Set<TypeName> outCases;
@@ -930,9 +910,8 @@ public final class ExampleVerifier {
 
         RowEvaluation(ExampleVerifier of, ExampleTarget target, Sig sig,
                       Set<TypeName> outCases, Ast.ExampleRow row) {
-            this.evaluation = new ExampleVerifier(of.module, of.symbols, of.sigs, of.requirements,
-                    of.loader, of.values, of.budgetMs);
-            this.evaluation.sourceId = of.sourceId;
+            this.verifier = of;
+            this.fixtures = of.newFixtureReader();
             this.target = target;
             this.sig = sig;
             this.outCases = outCases;
@@ -952,7 +931,7 @@ public final class ExampleVerifier {
             List<Diagnostic> mine = new ArrayList<>();
             Probe.begin();
             try {
-                evaluation.checkRowNow(target, sig, outCases, row, mine, state);
+                verifier.checkRowNow(fixtures, target, sig, outCases, row, mine, state);
                 state.hits = Probe.taken();
             } finally {
                 Probe.end();
@@ -962,7 +941,7 @@ public final class ExampleVerifier {
 
         /** The helper this row is inside, for the budget to name when the row does not finish. */
         String helper() {
-            return evaluation.fixtures.runningHelper();
+            return fixtures.runningHelper();
         }
     }
 
@@ -1066,8 +1045,9 @@ public final class ExampleVerifier {
         }
     }
 
-    private void checkRowNow(ExampleTarget target, Sig sig, Set<TypeName> outCases,
-                             Ast.ExampleRow row, List<Diagnostic> out, RowState state) {
+    private void checkRowNow(FixtureReader fixtures, ExampleTarget target, Sig sig,
+                             Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out,
+                             RowState state) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of("E1903", "check.example.arity").title("check.example.title")
@@ -1078,25 +1058,25 @@ public final class ExampleVerifier {
         Object[] args = new Object[ins.size()];
         for (int i = 0; i < ins.size(); i++) {
             try {
-                args[i] = built(row.inputs().get(i), ins.get(i));
+                args[i] = fixtures.built(row.inputs().get(i), ins.get(i));
             } catch (FixtureException fe) {
                 out.add(Diagnostic.of("E1903", "check.example.input").title("check.example.title")
                         .at(row.pos()).args(target.name(), i + 1, fe.getMessage()).build());
                 state.failed(FailurePhase.INPUT_FIXTURE);
                 return;
             }
-            state.inputCases.add(caseWritten(row.inputs().get(i)));
-            state.inputs.add(observed(args[i]));
+            state.inputCases.add(caseWritten(fixtures, row.inputs().get(i)));
+            state.inputs.add(fixtures.observed(args[i]));
         }
         // validate the expected arm/value against the output cases before running. Which case the row
         // asserts is read through what it names, so a row may name a value where it may name a case.
         // Only where that answers is there an arm to hold against the target's: a helper answers with a
         // case nothing here can read off the text, and reporting that as an arm the target cannot produce
         // refused a row whose expectation was right (issue #214).
-        TypeName named = constructedCase(row.expected());
+        TypeName named = fixtures.constructedCase(row.expected());
         state.expectedArm = named;
         if (named != null && !outCases.isEmpty() && !outCases.contains(named)) {
-            String expectedArm = expectedArm(row.expected());
+            String expectedArm = fixtures.expectedArm(row.expected());
             List<String> names = new ArrayList<>();
             for (TypeName c : outCases) {
                 names.add(c.name());
@@ -1112,8 +1092,8 @@ public final class ExampleVerifier {
         // against an empty expected value — a wrong answer for a row that was right.
         Object expectedValue;
         try {
-            expectedValue = caseOnly(row.expected()) != null ? null
-                    : builtExpected(row.expected(), sig.out());
+            expectedValue = fixtures.caseOnly(row.expected()) != null ? null
+                    : fixtures.builtExpected(row.expected(), sig.out());
         } catch (FixtureException fe) {
             out.add(Diagnostic.of("E1903", "check.example.expected").title("check.example.title")
                     .at(row.pos()).args(target.name(), fe.getMessage()).build());
@@ -1130,7 +1110,7 @@ public final class ExampleVerifier {
             state.failurePhase = FailurePhase.NONE;
             return;
         }
-        Object[] fakes = resolveFakes(target, row, out);
+        Object[] fakes = resolveFakes(fixtures, target, row, out);
         if (fakes == null) {
             state.failed(FailurePhase.FAKE_RESOLUTION);
             return;   // a fake was missing/invalid; the diagnostic is already reported
@@ -1151,7 +1131,8 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (AbortException ae) {
-            out.add(mismatch(row, describeExpected(row.expected(), sig.out()), "aborted: " + ae.getMessage()));
+            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
+                    "aborted: " + ae.getMessage()));
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (NonTerminationException nt) {
@@ -1163,8 +1144,9 @@ public final class ExampleVerifier {
         result = projected(result, sig.out());
         state.resultArm = symbols.resolve(NeutralForm.simpleName(result));
         state.stage = Stage.COMPARED;
-        if (!matches(row.expected(), result, expectedValue)) {
-            out.add(mismatch(row, describeExpected(row.expected(), sig.out()), describeActual(result)));
+        if (!matches(fixtures, row.expected(), result, expectedValue)) {
+            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
+                    fixtures.describeActual(result)));
             state.failed(FailurePhase.COMPARISON);
             return;
         }
@@ -1174,9 +1156,9 @@ public final class ExampleVerifier {
 
     /** The case an input fixture constructs, or null where its text does not say. A form this cannot
      * read is not a reason to lose the row: the measure that reads it says it could not classify. */
-    private TypeName caseWritten(Ast.Expr fixture) {
+    private static TypeName caseWritten(FixtureReader fixtures, Ast.Expr fixture) {
         try {
-            return constructedCase(fixture);
+            return fixtures.constructedCase(fixture);
         } catch (RuntimeException _) {
             return null;
         }
@@ -1211,11 +1193,12 @@ public final class ExampleVerifier {
 
     /** Builds a {@code Behavior} proxy for each of the target's requirements, in the order its
      * constructor takes them; null (with a diagnostic reported) when one is missing or invalid. */
-    private Object[] resolveFakes(ExampleTarget target, Ast.ExampleRow row, List<Diagnostic> out) {
+    private Object[] resolveFakes(FixtureReader fixtures, ExampleTarget target, Ast.ExampleRow row,
+                                  List<Diagnostic> out) {
         List<BehaviorRequirement> reqs = target.requirements();
         Object[] proxies = new Object[reqs.size()];
         for (int i = 0; i < reqs.size(); i++) {
-            Object p = resolveFake(target.name(), reqs.get(i), row, out);
+            Object p = resolveFake(fixtures, target.name(), reqs.get(i), row, out);
             if (p == null) {
                 return null;
             }
@@ -1224,8 +1207,8 @@ public final class ExampleVerifier {
         return proxies;
     }
 
-    private Object resolveFake(String target, BehaviorRequirement req, Ast.ExampleRow row,
-                               List<Diagnostic> out) {
+    private Object resolveFake(FixtureReader fixtures, String target, BehaviorRequirement req,
+                               Ast.ExampleRow row, List<Diagnostic> out) {
         String depName = req.dependency();
         Ast.SpecBehavior dep = injectedSpec(depName);
         if (dep == null) {
@@ -1238,7 +1221,7 @@ public final class ExampleVerifier {
         for (Ast.With w : row.withs()) {
             if (w.dep().equals(depName)) {
                 try {
-                    Object value = buildFixture(w.value(), outType).value();
+                    Object value = fixtures.buildFixture(w.value(), outType).value();
                     return fakeInstance(dep, a -> value, out);   // constant: ignores its inputs
                 } catch (FixtureException fe) {
                     // The row does supply a fake. What failed is building its value, which is a
@@ -1252,7 +1235,7 @@ public final class ExampleVerifier {
         // a function fake given as a `fake dep | table` declaration
         for (Ast.Fake fk : module.fakes()) {
             if (fk.target().equals(depName)) {
-                return tableProxy(fk, dep, outType, out);
+                return tableProxy(fixtures, fk, dep, outType, out);
             }
         }
         out.add(fakeMissingDiag(target, req, row, "add `with " + depName
@@ -1285,7 +1268,8 @@ public final class ExampleVerifier {
      * returns a fake instance ({@link #fakeInstance}) matching an actual input tuple by value equality,
      * falling back to the {@code _} default or a miss. Works for any arity: a 0/1-input dep's tuple has
      * 0/1 elements, a 2+-input dep's has one per parameter (issue #57). */
-    private Object tableProxy(Ast.Fake fk, Ast.SpecBehavior dep, Type outType, List<Diagnostic> out) {
+    private Object tableProxy(FixtureReader fixtures, Ast.Fake fk, Ast.SpecBehavior dep, Type outType,
+                              List<Diagnostic> out) {
         List<Type> paramTypes = new ArrayList<>();
         for (Ast.Param p : dep.params()) {
             paramTypes.add(TypeOps.successType(p.type(), symbols));
@@ -1293,7 +1277,7 @@ public final class ExampleVerifier {
         // What is wrong with the table is said where the fake is written ({@link #fakeTables}), and
         // said once. Here it is a row that cannot run: this row and every other row reaching the same
         // fake would each repeat the one thing wrong with the one table they all read.
-        Standins table = standins(fk, paramTypes, outType, new ArrayList<>());
+        Standins table = standins(fixtures, fk, paramTypes, outType, new ArrayList<>());
         if (table == null) {
             return null;
         }
@@ -1336,7 +1320,8 @@ public final class ExampleVerifier {
      * so a table with an arity slip and a slow or non-terminating output reported the second problem
      * instead of the first, or ran out of time before reporting either.
      */
-    private Standins standins(Ast.Fake fk, List<Type> ins, Type outType, List<Diagnostic> out) {
+    private static Standins standins(FixtureReader fixtures, Ast.Fake fk, List<Type> ins,
+                                     Type outType, List<Diagnostic> out) {
         for (Ast.FakeRow r : fk.rows()) {
             if (!r.isDefault() && r.inputs().size() != ins.size()) {
                 out.add(unbuildableFake(r.pos(), fk.target(), "a row has " + r.inputs().size()
@@ -1350,14 +1335,14 @@ public final class ExampleVerifier {
             for (Ast.FakeRow r : fk.rows()) {
                 // A dependency that returns a sum has no single decoder; each row names one case,
                 // so decode the row's output against that case's type (as an expected value is).
-                FixtureReader.BuiltFixture answer = buildFixture(r.output(), outType);
+                FixtureReader.BuiltFixture answer = fixtures.buildFixture(r.output(), outType);
                 if (r.isDefault()) {
                     fallback = new Standin(null, r, answer);
                     continue;
                 }
                 Object[] arguments = new Object[ins.size()];
                 for (int i = 0; i < ins.size(); i++) {
-                    arguments[i] = built(r.inputs().get(i), ins.get(i));
+                    arguments[i] = fixtures.built(r.inputs().get(i), ins.get(i));
                 }
                 explicit.add(new Standin(arguments, r, answer));
             }
@@ -1591,12 +1576,13 @@ public final class ExampleVerifier {
      * What a stand-in stands in with: the whole value, always. Unreadable where it will not build,
      * which is where it stands in for nothing at all — that is reported where the fake is resolved.
      */
-    private Asserted readStandIn(Ast.Expr written, Type outType, Set<TypeName> cases) {
-        if (written == null || refusedCase(written, cases)) {
+    private static Asserted readStandIn(FixtureReader fixtures, Ast.Expr written, Type outType,
+                                        Set<TypeName> cases) {
+        if (written == null || refusedCase(fixtures, written, cases)) {
             return new Asserted.Unreadable();
         }
         try {
-            return new Asserted.Whole(buildFixture(written, outType));
+            return new Asserted.Whole(fixtures.buildFixture(written, outType));
         } catch (FixtureException | NonTerminationException _) {
             return new Asserted.Unreadable();
         }
@@ -1610,15 +1596,16 @@ public final class ExampleVerifier {
      * the row asserts: a value a helper answered with is that value, not that value read back into
      * the form a fixture is written in and decoded again (issue #214).
      */
-    private Asserted readExpected(Ast.Expr written, Type outType, Set<TypeName> cases) {
-        if (written == null || refusedCase(written, cases)) {
+    private static Asserted readExpected(FixtureReader fixtures, Ast.Expr written, Type outType,
+                                         Set<TypeName> cases) {
+        if (written == null || refusedCase(fixtures, written, cases)) {
             return new Asserted.Unreadable();
         }
-        if (caseOnly(written) != null) {
-            return new Asserted.CaseOnly(constructedCase(written));
+        if (fixtures.caseOnly(written) != null) {
+            return new Asserted.CaseOnly(fixtures.constructedCase(written));
         }
         try {
-            return new Asserted.Whole(buildFixture(written, outType));
+            return new Asserted.Whole(fixtures.buildFixture(written, outType));
         } catch (FixtureException | NonTerminationException _) {
             return new Asserted.Unreadable();
         }
@@ -1626,8 +1613,9 @@ public final class ExampleVerifier {
 
     /** Whether {@code written} names a case the position cannot hold — <em>E1904</em> where the row
      * is evaluated, and nothing about the behavior it was written for. */
-    private boolean refusedCase(Ast.Expr written, Set<TypeName> cases) {
-        TypeName named = constructedCase(written);
+    private static boolean refusedCase(FixtureReader fixtures, Ast.Expr written,
+                                       Set<TypeName> cases) {
+        TypeName named = fixtures.constructedCase(written);
         return named != null && !cases.isEmpty() && !cases.contains(named);
     }
 
@@ -1671,8 +1659,9 @@ public final class ExampleVerifier {
      * <p>Not {@link #differs}. That compares two things a person wrote, and reads each one's case off
      * the text; this compares what was written against what a run produced, and a result carries no
      * text — the class it arrived in is what says which case it is. */
-    private boolean matches(Ast.Expr expected, Object result, Object expectedValue) {
-        String arm = caseOnly(expected);
+    private static boolean matches(FixtureReader fixtures, Ast.Expr expected, Object result,
+                            Object expectedValue) {
+        String arm = fixtures.caseOnly(expected);
         if (arm != null) {
             return NeutralForm.simpleName(result).equals(arm);
         }
