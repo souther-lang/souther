@@ -168,19 +168,13 @@ public final class ExampleVerifier {
     private final MemoryClassLoader loader;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Ast.FnDef> values;
-    /** A reader kept for showing a value that was already built ({@link #shown}), which is the one
-     * thing a reader does that reads none of its own state: nothing is expanded, no binding is put in
-     * force and no helper is run, so there is no reading here to isolate. What it is for is the
-     * module's encoders and its loader. Every actual reading gets {@link #newFixtureReader()}. */
-    private final FixtureReader rendering;
     /** Which source the rows being evaluated are written in. A module's rows come from its own source
      * and from any number of attached {@code examples for} files, and a position alone stops saying
      * which once they are gathered under the module's name. */
     private String sourceId;
-    /** Wall-clock budget for one thing built and run on a worker of its own: an example row evaluated
-     * ({@link #checkRow}), or one written statement read to compare it against another ({@link
-     * #within}). Carried rather than looked up, so a reader started by another reader is held to the
-     * same budget its caller was, and two compiles in one JVM need not agree on it. */
+    /** Wall-clock budget for one row evaluated on a worker of its own ({@link #checkRow}). Carried
+     * rather than looked up, so two compiles in one JVM need not agree on it. Reading a written
+     * statement is held to a budget of its own, which is {@link ExampleStatements}'. */
     private final long budgetMs;
 
     private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
@@ -194,15 +188,14 @@ public final class ExampleVerifier {
         this.loader = loader;
         this.values = values;
         this.budgetMs = budgetMs;
-        this.rendering = new FixtureReader(module, symbols, values, loader);
     }
 
     /**
-     * A reader for one row or one written statement, held for as long as that reading lasts.
+     * A reader for one row, held for as long as evaluating that row lasts.
      *
      * <p>Never shared between two of them. What a reading builds up — the bindings in force, the
-     * values being expanded, the helper it is inside — is that reading's, and a worker that ran out
-     * of its budget goes on writing to it after the answer was given up on. So the isolation is the
+     * values being expanded, the helper it is inside — is that row's, and a worker that ran out of
+     * its budget goes on writing to it after the answer was given up on. So the isolation is the
      * reader, and it is the reader alone: everything else this class holds is read-only once a row
      * starts.
      */

@@ -55,8 +55,6 @@ public final class ExampleStatements {
      * force and no helper is run, so there is no reading here to isolate. What it is for is the
      * module's encoders and its loader. Every actual reading gets {@link #newFixtureReader()}. */
     private final FixtureReader rendering;
-    /** Which source the statements being read are written in, where that is one source. */
-    private String sourceId;
     /** Wall-clock budget for one written statement read on a worker of its own ({@link #within}).
      * Carried rather than looked up, so two compiles in one JVM need not agree on it. */
     private final long budgetMs;
@@ -164,7 +162,6 @@ public final class ExampleStatements {
         boolean placed = fakeOrigins.size() == module.fakes().size();
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
                 new MemoryClassLoader(classes, parent), values, budgetMs);
-        v.sourceId = sourceId;
         List<Diagnostic> said = new ArrayList<>();
         Set<String> answering = new LinkedHashSet<>();
         for (int i = 0; i < module.fakes().size(); i++) {
@@ -198,6 +195,7 @@ public final class ExampleStatements {
         }
         return List.copyOf(said);
     }
+
     /**
      * What one reading came to: the statement, or the reason there is no statement.
      *
@@ -558,6 +556,7 @@ public final class ExampleStatements {
         }
         return values;
     }
+
     /**
      * One written statement about what a behavior answers, and where it is written.
      *
@@ -614,6 +613,7 @@ public final class ExampleStatements {
             timedOut = List.copyOf(timedOut);
         }
     }
+
     /**
      * A fake's table, decoded — the one form both the proxy and the consistency check read.
      *
@@ -733,6 +733,7 @@ public final class ExampleStatements {
                 .args(fk.target(), Long.toString(budgetMs))
                 .hint("check.fake.unchecked.hint", fk.target()).build();
     }
+
     // --- comparison ---------------------------------------------------------------------------
 
     /**
