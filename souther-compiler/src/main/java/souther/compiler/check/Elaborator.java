@@ -772,12 +772,24 @@ public final class Elaborator {
                 continue;
             }
             List<Type> takes = reading(want, g, env, ctx);
-            if (takes == null) {
-                continue;   // nothing settled says what it takes, and its own body does not either
+            if (takes != null) {
+                Core function = elaborateFunctionValue(g.value(), takes, env, ctx);
+                decided.constrain(declared, function.type(), ctx.symbols(), g.value().pos(),
+                        argument(ex, "a function"));
+                continue;
             }
-            Core function = elaborateFunctionValue(g.value(), takes, env, ctx);
-            decided.constrain(declared, function.type(), ctx.symbols(), g.value().pos(),
-                    argument(ex, "a function"));
+            // Nothing settled says what it takes. What it answers may still be settled, and a hole
+            // at one position is not a licence to leave the others unread: `('a) -> String` says
+            // the function answers a String whatever it is given, and the argument answers that or
+            // it does not.
+            if (!settled(want.result())) {
+                continue;
+            }
+            Type answers = answering(g.value(), env, ctx);
+            if (answers != null) {
+                decided.constrain(want.result(), answers, ctx.symbols(), g.value().pos(),
+                        "what `" + shown(ex) + "` is given to answer");
+            }
         }
     }
 
@@ -831,6 +843,30 @@ public final class Elaborator {
         boolean[] all = {true};
         Ast.forEachChild(e, child -> all[0] &= reads(child, env));
         return all[0];
+    }
+
+    /**
+     * What a function argument answers, read without the signature saying what it takes: each
+     * parameter the declaration left open is read off the lambda's own body, and the body is typed
+     * with them in force. Null where a parameter is not read that way, which leaves the whole
+     * question to the application inside the callee.
+     *
+     * <p>What it decides is not written back. The parameters were read off the lambda alone and the
+     * application may settle them at something wider, so they answer this one question and no other.
+     */
+    private static Type answering(Ast.Expr function, Scope env, CheckContext ctx) {
+        if (!(function instanceof Ast.Block lambda)) {
+            return null;
+        }
+        Scope inner = env;
+        for (Ast.Binder p : lambda.params()) {
+            Type read = HelperParams.readFromBody(p, lambda.body(), env, ctx, null);
+            if (read == null || !settled(read)) {
+                return null;
+            }
+            inner = inner.with(p, read);
+        }
+        return typeOf(lambda.body(), inner, ctx);
     }
 
     /**

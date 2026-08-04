@@ -128,7 +128,10 @@ final class HelperParams {
         try {
             return new BodyTyping(ctx.symbols(), ctx.reqs(), Map.of())
                     .typeOf(param, body, env, answers);
-        } catch (RuntimeException _) {
+        } catch (CompileException | Unanswerable _) {
+            // The two ways a body has no type to give: it does not type, and it depends on a name
+            // that denotes nothing. Anything else thrown here is this compiler being wrong about
+            // itself, and reading it as "no answer" would leave a signature unchecked over it.
             return null;
         }
     }

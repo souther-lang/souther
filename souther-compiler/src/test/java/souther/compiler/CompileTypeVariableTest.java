@@ -297,4 +297,32 @@ class CompileTypeVariableTest {
                 let bad = ignores((x) -> x + 1)
                 """), "it answers an Int, whatever it takes");
     }
+
+    /**
+     * A hole at one position of a function type does not silence the others. {@code ('a) -> String}
+     * leaves what the function takes open and states that it answers a String, and the argument
+     * answers that or it does not — whether or not the callee applies it, and whether the argument
+     * is a lambda or a named function.
+     */
+    @Test
+    void whatAFunctionArgumentAnswersIsHeldEvenWhereWhatItTakesIsOpen() {
+        String use = """
+                module souther.gen
+                %s
+                let use (f: ('a) -> String) = {
+                    let said = f(1)
+                    true
+                }
+                let call = use(%s)
+                """;
+        assertDoesNotThrow(() -> compileCore(use.formatted("", "(x) -> \"s\"")),
+                "a lambda answering a String is what was declared");
+        assertThrows(CompileException.class, () -> compileCore(use.formatted("", "(x) -> x + 1")),
+                "one answering an Int is not, whatever it takes");
+        assertDoesNotThrow(() -> compileCore(use.formatted("let right (n: Int) = \"s\"", "right")),
+                "and a named function is read the same way");
+        assertThrows(CompileException.class,
+                () -> compileCore(use.formatted("let wrong (n: Int) = n", "wrong")),
+                "`wrong` answers an Int where a String was declared");
+    }
 }
