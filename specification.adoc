@@ -2681,7 +2681,7 @@ Only core in the reserved namespace may write a type variable; a user module wri
 
 Writing one and carrying one are different things. A user module's non-recursive helper may *carry* a variable its body left unsettled and is monomorphized the same way (<<fn-rules>>); what it may not do is write one. The variable is inferred, never spelled, and appears in no declaration a reader of the module sees.
 
-A single application of a function instantiates each variable its declared signature wrote once, and every occurrence of that variable — in its parameter types and in its return type — denotes that one instantiated type. Two applications of one function instantiate separately. This holds however the application is compiled: a call to a `+core+` primitive stands and a call to a Souther-bodied function is expanded, and neither decides anything the other does not. So `+let has (xs, y) = List.member(y, xs)+` types `+y+` as what `+xs+` holds, because `+List.member+` wrote one variable for its element and its list.
+A single application of a function instantiates each variable its declared signature wrote once, and every occurrence of that variable — in its parameter types and in its result — denotes that one instantiated type. Two applications of one function instantiate separately. This holds however the application is compiled: a call to a `+core+` primitive stands and a call to a Souther-bodied function is expanded, and neither decides anything the other does not. So `+let has (xs, y) = List.member(y, xs)+` types `+y+` as what `+xs+` holds, because `+List.member+` wrote one variable for its element and its list.
 
 [#intrinsics]
 ==== intrinsics
