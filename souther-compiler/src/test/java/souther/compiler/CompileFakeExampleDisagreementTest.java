@@ -419,7 +419,7 @@ class CompileFakeExampleDisagreementTest {
         assertEquals(1, readingOf(model, ExampleVerifier.class.getClassLoader()).disagreements().size(),
                 "with a runtime, the fake and the row are read and disagree");
 
-        ExampleVerifier.Readings withoutRuntime = readingOf(model, new ClassLoader(null) {
+        ExampleStatements.Readings withoutRuntime = readingOf(model, new ClassLoader(null) {
             @Override
             protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
                 if (name.startsWith("souther.runtime.")) {
@@ -434,12 +434,12 @@ class CompileFakeExampleDisagreementTest {
     }
 
     /** {@code disagreements} as the query asks it, but against a class loader the test chooses. */
-    private static ExampleVerifier.Readings readingOf(String model, ClassLoader parent) {
+    private static ExampleStatements.Readings readingOf(String model, ClassLoader parent) {
         souther.compiler.query.Compilation c =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
         c.db().ask(new souther.compiler.query.Output.All());
         String name = c.modules().get(0);
-        return ExampleVerifier.disagreements(
+        return ExampleStatements.disagreements(
                 c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value(),
                 c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
