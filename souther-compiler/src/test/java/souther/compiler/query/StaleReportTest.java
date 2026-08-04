@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 
 import org.junit.jupiter.api.Test;
@@ -56,22 +57,22 @@ class StaleReportTest {
     @Test
     void anExampleFailureGoesAwayWhenItsRowIsDeleted() {
         Compilation c = Compilation.ofDocuments(workspace(FAILING_ROWS), Set.of(), ModulePath.EMPTY);
-        Map<String, List<souther.compiler.diag.Diagnostic>> first = c.diagnostics();
+        Map<String, List<souther.compiler.diag.Diagnostic>> first = Located.diagnosticsOf(c.diagnostics());
         assertEquals(1, first.get("cart-examples.sou").size(),
                 "the failing row is reported on the file it is written in");
 
         c.update(workspace(NO_ROWS), Set.of());
 
-        assertEquals(List.of(), c.diagnostics().get("cart-examples.sou"),
+        assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get("cart-examples.sou"),
                 "the row is gone, so its failure is gone");
     }
 
     @Test
     void aWholeCompilationStaysCleanAfterTheProblemIsRemoved() {
         Compilation c = Compilation.ofDocuments(workspace(FAILING_ROWS), Set.of(), ModulePath.EMPTY);
-        c.diagnostics();
+        Located.diagnosticsOf(c.diagnostics());
         c.update(workspace(NO_ROWS), Set.of());
-        c.diagnostics();
+        Located.diagnosticsOf(c.diagnostics());
 
         assertFalse(c.db().allReports().stream().anyMatch(f -> f.report().isError()),
                 "nothing is wrong with this workspace any more");

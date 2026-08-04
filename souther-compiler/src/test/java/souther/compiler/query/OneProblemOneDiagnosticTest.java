@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
 
@@ -25,7 +26,7 @@ class OneProblemOneDiagnosticTest {
     private static Map<String, List<Diagnostic>> diagnose(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
-        return Compiler.diagnoseModules(byId, Set.of());
+        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
     }
 
     @Test
@@ -77,7 +78,7 @@ class OneProblemOneDiagnosticTest {
     private static Map<String, List<Diagnostic>> diagnoseAs(String id, String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put(id, source);
-        return Compiler.diagnoseModules(byId, Set.of());
+        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
     }
 
     @Test

@@ -3683,13 +3683,13 @@ A warning, needing the arms measured (<<example-branch-coverage>>). Quoted at th
 
 [,text]
 ----
-This row and the `fake findMember` row at 26:25 state different answers for the same input.
+This row and the `fake findMember` row state different answers for the same input.
 Hint: The row says Found { id = "m-1" }; the fake says Missing { why = "no such member" }.
 ----
 
 A warning, and not one the adequacy dial turns on (<<example-adequacy>>): nothing is counted and no behavior is applied, and what it costs is building the fixtures on both sides and comparing them. Emitted when a `+fake+` row, or a `+with+` for a dependency that takes no input, answers an input for which an `+example+` row records a different answer (<<example-pending>>). Which of the two the model is to be held to is not readable from the text, so neither is named as the right one.
 
-One disagreement is said twice: once at the recorded row and once at the stand-in, each in the file it is written in, because the two may be in different sources (<<example-placement>>) and a diagnostic quotes one. The other statement is named by what it answers and by the line and column it is at.
+One disagreement is one warning. It is quoted at the recorded row and carries a second region at the stand-in, which names its own file when the two are in different sources (<<example-placement>>). It is reported at both of those files, so an author reading either is told; where the caret sits is where a reader starts, and says nothing about which of the two the model is to be held to.
 
 Where a recorded row names a case and nothing under it (<<example-expected>>), the comparison is on the case, and the case of the other side is the one its value turned out to be — read from the value, resolved to the type this module knows it under. Which case a value is comes from the value and not from the text that produced it, so a fake row answering through a helper states the case that helper returned.
 

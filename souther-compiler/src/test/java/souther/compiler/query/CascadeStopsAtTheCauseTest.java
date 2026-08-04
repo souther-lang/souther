@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.meta.ModulePath;
@@ -26,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class CascadeStopsAtTheCauseTest {
 
     private static Map<String, List<Diagnostic>> diagnose(Map<String, String> byId) {
-        return Compiler.diagnoseModules(byId, Set.of());
+        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of()));
     }
 
     private static Map<String, String> one(String source) {
@@ -74,7 +75,7 @@ class CascadeStopsAtTheCauseTest {
                 data B = { a: A }
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
-        Map<String, List<Diagnostic>> found = c.diagnostics();
+        Map<String, List<Diagnostic>> found = Located.diagnosticsOf(c.diagnostics());
 
         assertEquals(1, found.get("dup.sou").size(), "the duplicate: " + found.get("dup.sou"));
         assertEquals(List.of(), found.get("a.sou"),
@@ -128,7 +129,7 @@ class CascadeStopsAtTheCauseTest {
                     Out { v = n }
                 }
                 """), Set.of("m.broken"), ModulePath.EMPTY);
-        c.diagnostics();
+        Located.diagnosticsOf(c.diagnostics());
 
         assertFalse(Boolean.TRUE.equals(c.db().ask(new Names.Sound("m.a")).value()),
                 "m.a is built on a name nothing brought in");

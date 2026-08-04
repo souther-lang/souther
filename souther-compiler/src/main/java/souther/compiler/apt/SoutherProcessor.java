@@ -6,7 +6,10 @@ import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
+import souther.compiler.diag.SourceContextResolver;
+import souther.compiler.diag.SourceNames;
 import souther.compiler.Compiler;
+import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -130,15 +133,33 @@ public final class SoutherProcessor extends AbstractProcessor {
     private List<String> render(List<Located> located, List<Source> sources) {
         Locale locale = Messages.resolveLocale(processingEnv.getOptions().get("souther.lang"));
         return DiagnosticRenderer.renderAll(
-                located, index -> contextOf(sources, index), new HumanRenderer(false), locale);
+                located, sourcesOf(sources), new HumanRenderer(false), locale);
     }
 
-    /** The text a diagnostic tagged with {@code index} should quote, or null when it names no
-     *  source this compilation has (so no line is quoted). */
-    private static SourceContext contextOf(List<Source> sources, int index) {
-        Source origin = Located.in(sources, index);
-        return origin == null ? null
-                : new SourceContext(origin.path().getFileName().toString(), origin.text());
+    /** What to quote for each source a diagnostic points into, under names no two of these files
+     *  share. The text is already in hand, so this memoizes only to keep one answer per id. */
+    private static SourceContextResolver sourcesOf(List<Source> sources) {
+        List<String> names = SourceNames.of(
+                sources.stream().map(source -> source.path().toString()).toList());
+        return SourceContextResolver.memoized(id -> {
+            int at = indexOf(sources, id);
+            return at < 0 ? null
+                    : new SourceContext(names.get(at), sources.get(at).text());
+        });
+    }
+
+    /** Which of the sources handed over an id names, or -1 when it names none of them. A compile of
+     *  one source names none, and the one file it was given is the answer however it is tagged. */
+    private static int indexOf(List<Source> sources, String sourceId) {
+        if (sources.size() == 1) {
+            return 0;
+        }
+        for (int i = 0; i < sources.size(); i++) {
+            if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     /**

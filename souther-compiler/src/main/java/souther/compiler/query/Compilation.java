@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 
@@ -28,6 +29,9 @@ public final class Compilation {
     private final Db db = new Db();
     /** Which source each id was, for a caller that names sources by index. */
     private final Map<String, Integer> indexOfId = new LinkedHashMap<>();
+    /** Whether a diagnostic of this compilation names the source it is in. A compile of one source
+     *  does not: the caller knows the file it handed over. */
+    private boolean namesSources = true;
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
     private final Set<String> held = new LinkedHashSet<>();
 
@@ -39,7 +43,7 @@ public final class Compilation {
         Compilation c = new Compilation();
         List<String> ids = new ArrayList<>();
         for (int i = 0; i < sources.size(); i++) {
-            String id = String.valueOf(i);
+            String id = idOfSourceIndex(i);
             ids.add(id);
             c.indexOfId.put(id, i);
             c.db.set(new Front.Text(id), sources.get(i));
@@ -49,6 +53,17 @@ public final class Compilation {
         return c;
     }
 
+    /**
+     * What a compile handed a plain list of sources calls the {@code i}-th of them.
+     *
+     * <p>A build names its sources by where they are in the list it passed, and a diagnostic carries
+     * that name back out. Both ends have to agree on it, so it is written once here rather than
+     * assumed at each of them.
+     */
+    public static String idOfSourceIndex(int i) {
+        return String.valueOf(i);
+    }
+
     /** A compile of one self-contained source. A source with no {@code module} header takes
      * {@code defaultModuleName}, which a set of linked sources cannot allow: a module reached by an
      * import has to be named. */
@@ -56,8 +71,9 @@ public final class Compilation {
         Compilation c = ofSources(List.of(source), ModulePath.EMPTY);
         c.db.set(new Front.DefaultName(), defaultModuleName);
         // There is only one source, so an error carries no origin: the caller knows which file it
-        // handed over, and a rendered index would be a file number nobody asked for.
+        // handed over, and a rendered id would be a file number nobody asked for.
         c.indexOfId.clear();
+        c.namesSources = false;
         return c;
     }
 
@@ -161,8 +177,8 @@ public final class Compilation {
             db.ask(new Output.ConstConstructions(module));
             for (String id : exampleSourcesOf(module)) {
                 db.ask(new Output.Examples(module, id));
-                db.ask(new Output.SaidDisagreements(module, id));
             }
+            db.ask(new Output.SaidDisagreements(module));
             // One ask, which answers nothing and costs nothing unless the build asked to be told.
             db.ask(new Adequacy.Warnings(module));
         }
@@ -217,22 +233,6 @@ public final class Compilation {
         return declared == null ? List.of() : declared;
     }
 
-    /** Which source declares {@code module}, as the index a diagnostic names, or -1 when this
-     * compilation names its sources some other way. */
-    public int sourceIndexOf(String module) {
-        Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-        String id = layout == null ? null : layout.idOfModule().get(module);
-        Integer index = id == null ? null : indexOfId.get(id);
-        return index == null ? -1 : index;
-    }
-
-    /** The index a diagnostic names for a source id, or -1 when this compilation names its sources
-     * some other way. */
-    public int sourceIndexOfId(String id) {
-        Integer index = indexOfId.get(id);
-        return index == null ? -1 : index;
-    }
-
     /** The id of the source that declares {@code module}, or null when nothing here does. */
     public String sourceIdOf(String module) {
         Front.Layout.Of layout = db.ask(new Front.Layout()).value();
@@ -279,21 +279,29 @@ public final class Compilation {
      * module lands on that module's document however far away it was asked for, and a failing
      * example row lands on the file the row was written in. A report about something the caller does
      * not have — a module read off the path — has nowhere to go and is left out.
+     *
+     * <p>This is the only place one report becomes several entries. A problem written in two files is
+     * said in both, so an author editing either is told, and each entry carries the source its
+     * primary region is in — which is not the file it is filed under, for the file that holds the
+     * other half. A reader turns that pair into what to quote and what to link to
+     * ({@link souther.compiler.diag.DiagnosticView}).
      */
-    public Map<String, List<Diagnostic>> diagnostics() {
+    public Map<String, List<Located>> diagnostics() {
         answerEverything();
-        Map<String, List<Diagnostic>> byId = new LinkedHashMap<>();
+        Map<String, List<Located>> byId = new LinkedHashMap<>();
         for (String id : sourceIds()) {
             byId.put(id, new ArrayList<>());
         }
         for (Db.Found found : db.allReports()) {
-            String id = found.sourceId() != null ? found.sourceId() : sourceIdOf(found.module());
-            List<Diagnostic> on = id == null ? null : byId.get(id);
-            if (on != null) {
-                on.add(found.report().diagnostic());
+            String primary = primarySourceIdOf(found);
+            for (String id : publishSourceIdsOf(found)) {
+                List<Located> on = byId.get(id);
+                if (on != null) {
+                    on.add(new Located(found.report().diagnostic(), primary));
+                }
             }
         }
-        Map<String, List<Diagnostic>> published = new LinkedHashMap<>();
+        Map<String, List<Located>> published = new LinkedHashMap<>();
         byId.forEach((id, found) -> published.put(id, List.copyOf(found)));
         return published;
     }
@@ -322,26 +330,82 @@ public final class Compilation {
                 at = order;
             }
         }
-        return first == null ? null : first.report().asException().inSource(indexOf(first));
+        return first == null ? null : first.report().asException().inSource(sourceIdOf(first));
     }
 
-    /** Which source a report belongs to: the one it named, or the one that declares the module it
-     * was about, or none. */
-    public int indexOf(Db.Found found) {
-        if (found.sourceId() != null) {
-            Integer index = indexOfId.get(found.sourceId());
-            return index == null ? -1 : index;
+    /**
+     * Which source a report's primary region is in, as this compilation names its sources: the one
+     * the report named, or the one its key did, or the one that declares the module it was about.
+     *
+     * <p>Always answered, whatever the compile tells a caller about its sources. What a source is
+     * called here is how a report is filed and how its regions are quoted; what a caller is told is
+     * {@link #sourceIdOf(Db.Found)}, and the two are not the same question.
+     */
+    private String primarySourceIdOf(Db.Found found) {
+        String said = found.primarySourceId();
+        if (said != null) {
+            return said;
         }
-        return found.module() == null ? -1 : sourceIndexOf(found.module());
+        return found.module() == null ? null : sourceIdOf(found.module());
     }
 
-    /** The warnings among {@code found}, in order, each tagged with the source it belongs to — the
-     *  same tag {@link #firstError} puts on an error, so a warning can be quoted where it is. */
+    /**
+     * Which source a report's primary region is in, as a caller holding its own list of files is
+     * told — none, for a compile of one source, where that caller knows the file it handed over.
+     */
+    public String sourceIdOf(Db.Found found) {
+        return namesSources ? primarySourceIdOf(found) : null;
+    }
+
+    /**
+     * Every source a report is said at, the one its primary region is in first. One entry for nearly
+     * everything; several for a problem that belongs to each of the places it points at and to none
+     * of them more.
+     *
+     * <p>Read off the regions rather than off a list of files, so every entry is somewhere the
+     * report has something to show.
+     */
+    public List<String> publishSourceIdsOf(Db.Found found) {
+        String primary = primarySourceIdOf(found);
+        List<String> saidAt = new ArrayList<>();
+        if (primary != null) {
+            saidAt.add(primary);
+        }
+        if (found.report().delivery().saidAtEveryRegion()) {
+            for (LabeledRegion label : found.report().diagnostic().secondary()) {
+                String where = label.sourceIdOr(primary);
+                if (where != null && !saidAt.contains(where)) {
+                    saidAt.add(where);
+                }
+            }
+        }
+        return List.copyOf(saidAt);
+    }
+
+    /** Where a report sits in the order the sources were given, or -1 when it names none. Only for
+     * ordering: which file a reader is sent to is {@link #sourceIdOf(Db.Found)}. */
+    private int indexOf(Db.Found found) {
+        String id = primarySourceIdOf(found);
+        if (id == null) {
+            return -1;
+        }
+        Integer index = indexOfId.get(id);
+        return index == null ? -1 : index;
+    }
+
+    /**
+     * The warnings among {@code found}, in order, each tagged with the source its primary region is
+     * in — the same tag {@link #firstError} puts on an error, so a warning can be quoted where it is.
+     *
+     * <p>One entry per warning, never one per file it is said at. A problem written in two files is
+     * one thing to be told about on a terminal; the second telling is what an editor needs, and that
+     * is {@link #diagnostics()}.
+     */
     public List<Located> warnings(List<Db.Found> found) {
         List<Located> warnings = new ArrayList<>();
         for (Db.Found f : found) {
             if (!f.report().isError()) {
-                warnings.add(new Located(f.report().diagnostic(), indexOf(f)));
+                warnings.add(new Located(f.report().diagnostic(), sourceIdOf(f)));
             }
         }
         return warnings;

@@ -9,6 +9,8 @@ import souther.compiler.diag.JsonRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
+import souther.compiler.diag.SourceContextResolver;
+import souther.compiler.diag.SourceNames;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -377,17 +379,51 @@ public final class Main {
 
     /** The file the {@code i}-th diagnostic should quote. */
     static Path sourceOf(List<Path> sources, CompileException e, int i) {
-        return Located.in(sources, e.sourceIndexOf(i));
+        return pathOf(sources, e.sourceIdOf(i));
     }
 
-    /** A file as a snippet source, or null when it cannot be read — a snippet-less rendering is the
-     *  honest fallback. */
-    private static SourceContext read(Path source) {
+    /**
+     * Which of the files handed over a source id names, or null when it names none of them.
+     *
+     * <p>A compile of one source names none, and the one file it was given is the answer however the
+     * diagnostic is tagged — which is why one item is not read as "the source called 0, or nothing".
+     */
+    private static Path pathOf(List<Path> sources, String sourceId) {
+        int at = indexOf(sources, sourceId);
+        return at < 0 ? null : sources.get(at);
+    }
+
+    /** What to quote for each source a diagnostic points into, read once per file, under names no
+     *  two of these files share. */
+    private static SourceContextResolver sourcesOf(List<Path> sources) {
+        List<String> names = SourceNames.of(sources.stream().map(Path::toString).toList());
+        return SourceContextResolver.memoized(id -> {
+            int at = indexOf(sources, id);
+            return at < 0 ? null : read(sources.get(at), names.get(at));
+        });
+    }
+
+    /** Which of the files handed over a source id names, or -1 when it names none of them. */
+    private static int indexOf(List<Path> sources, String sourceId) {
+        if (sources.size() == 1) {
+            return 0;
+        }
+        for (int i = 0; i < sources.size(); i++) {
+            if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** A file as a snippet source under the name a reader is shown it by, or null when it cannot be
+     *  read — a snippet-less rendering is the honest fallback. */
+    private static SourceContext read(Path source, String name) {
         if (source == null) {
             return null;
         }
         try {
-            return new SourceContext(source.getFileName().toString(), Files.readString(source));
+            return new SourceContext(name, Files.readString(source));
         } catch (IOException _) {
             return null;
         }
@@ -411,7 +447,7 @@ public final class Main {
         DiagnosticRenderer renderer = render.json()
                 ? new JsonRenderer() : new HumanRenderer(render.useColor());
         for (String line : DiagnosticRenderer.renderAll(
-                located, index -> read(Located.in(sources, index)), renderer, locale)) {
+                located, sourcesOf(sources), renderer, locale)) {
             System.err.println(line);
         }
     }

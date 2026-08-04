@@ -25,8 +25,52 @@ import java.util.Locale;
  *
  * @param diagnostic what was found
  * @param legacyMessage the text the pass raised it with, or null when it was not raised
+ * @param delivery where this is said, when the key that found it does not say
  */
-public record Report(Diagnostic diagnostic, String legacyMessage) {
+public record Report(Diagnostic diagnostic, String legacyMessage, Delivery delivery) {
+
+    /**
+     * Where a report is said, for the reports that cannot be left to their key.
+     *
+     * <p>A key names one source, and that is the answer for nearly everything: a problem is found
+     * while a file is being read and belongs to that file. Two cases are not like that. A comparison
+     * of two written statements is asked of the module, so its key names no source at all and the
+     * primary region's file has to be said here. And where neither of the two statements is the one
+     * in the wrong, the problem is said at both, so the author reading either file is told.
+     *
+     * <p>{@code primarySourceId} is null for "the source the key names", which is what a report
+     * built any other way carries.
+     *
+     * <p>{@code saidAtEveryRegion} says the second case, and says it as a property of the report
+     * rather than as a list of files. A list would let a report be delivered to a file it points at
+     * nothing in, and a marker in a file the problem has no region in lands on a line that has
+     * nothing to do with it — worse than not being shown. Read off the regions there is nowhere to
+     * deliver to that has nothing to show.
+     *
+     * <p>Not every second region wants a marker of its own. Pointing at a definition in another
+     * module to explain a mistake here does not make that module mistaken, so this is off unless a
+     * report says otherwise. What turns it on is the problem belonging to both places, which is a
+     * claim only the site that found it can make.
+     *
+     * <p>This is the declaration. What it resolves to against a particular key is
+     * {@link Db.Found#primarySourceId()} and {@link Compilation#publishSourceIdsOf(Db.Found)}.
+     */
+    public record Delivery(String primarySourceId, boolean saidAtEveryRegion) {
+
+        /** Said wherever the key that found it says: the ordinary report. */
+        public static final Delivery BY_KEY = new Delivery(null, false);
+
+        /** Anchored in {@code primarySourceId}, and said there. */
+        public static Delivery at(String primarySourceId) {
+            return new Delivery(primarySourceId, false);
+        }
+
+        /** Anchored in {@code primarySourceId}, and said in every file it points into — for a
+         * problem that belongs to each of the places it names and to none of them more. */
+        public static Delivery atEveryRegionOf(String primarySourceId) {
+            return new Delivery(primarySourceId, true);
+        }
+    }
 
     public boolean isError() {
         return diagnostic.severity() == Severity.ERROR;
@@ -34,7 +78,12 @@ public record Report(Diagnostic diagnostic, String legacyMessage) {
 
     /** A report with no raised text of its own. */
     public static Report of(Diagnostic diagnostic) {
-        return new Report(diagnostic, null);
+        return new Report(diagnostic, null, Delivery.BY_KEY);
+    }
+
+    /** A report that says where it is said, rather than leaving it to the key that found it. */
+    public static Report saidAt(Diagnostic diagnostic, Delivery delivery) {
+        return new Report(diagnostic, null, delivery);
     }
 
     /**
@@ -43,7 +92,8 @@ public record Report(Diagnostic diagnostic, String legacyMessage) {
      * moved.
      */
     public static Report raised(Diagnostic diagnostic, String body) {
-        return new Report(diagnostic, CompileException.of(diagnostic, body).getMessage());
+        return new Report(diagnostic, CompileException.of(diagnostic, body).getMessage(),
+                Delivery.BY_KEY);
     }
 
     /** A thrown error as reports, one per diagnostic it carries. The exception's message belongs to
@@ -51,10 +101,11 @@ public record Report(Diagnostic diagnostic, String legacyMessage) {
     public static List<Report> of(CompileException e) {
         List<Diagnostic> diagnostics = e.diagnostics();
         if (diagnostics.isEmpty()) {
-            return List.of(new Report(Diagnostic.literal(null, null, e.getMessage()), e.getMessage()));
+            return List.of(new Report(Diagnostic.literal(null, null, e.getMessage()), e.getMessage(),
+                    Delivery.BY_KEY));
         }
         List<Report> reports = new ArrayList<>();
-        reports.add(new Report(diagnostics.get(0), e.getMessage()));
+        reports.add(new Report(diagnostics.get(0), e.getMessage(), Delivery.BY_KEY));
         for (int i = 1; i < diagnostics.size(); i++) {
             reports.add(of(diagnostics.get(i)));
         }

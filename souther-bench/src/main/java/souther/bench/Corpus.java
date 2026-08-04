@@ -1,6 +1,7 @@
 package souther.bench;
 
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Compilation;
@@ -78,7 +79,8 @@ public record Corpus(String name, List<String> sources, int lines) {
      */
     public void check(Compilation compilation) {
         List<String> errors = new ArrayList<>();
-        for (Map.Entry<String, List<Diagnostic>> found : compilation.diagnostics().entrySet()) {
+        for (Map.Entry<String, List<Diagnostic>> found
+                : Located.diagnosticsOf(compilation.diagnostics()).entrySet()) {
             for (Diagnostic diagnostic : found.getValue()) {
                 if (diagnostic.severity() == Severity.ERROR) {
                     errors.add(name + " source " + found.getKey() + ": " + diagnostic.code()

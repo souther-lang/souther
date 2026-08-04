@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -68,7 +69,7 @@ class CyclicModulesTest {
     @Test
     void anEditorIsToldAboutACycleThroughImports() {
         Map<String, List<Diagnostic>> found =
-                Compiler.diagnoseModules(documents(A, B), Set.of());
+                Located.diagnosticsOf(Compiler.diagnoseModules(documents(A, B), Set.of()));
 
         assertTrue(found.values().stream().flatMap(List::stream)
                         .anyMatch(d -> "E1501".equals(d.code())),
@@ -80,7 +81,7 @@ class CyclicModulesTest {
         // Neither module writes an import line; each names the other's behavior as a stage. That is
         // the same cycle, and following only the import lines would not see it.
         Map<String, List<Diagnostic>> found =
-                Compiler.diagnoseModules(documents(X, Y), Set.of());
+                Located.diagnosticsOf(Compiler.diagnoseModules(documents(X, Y), Set.of()));
 
         assertTrue(found.values().stream().flatMap(List::stream)
                         .anyMatch(d -> "E1501".equals(d.code())),

@@ -71,11 +71,11 @@ class CompileMultiModuleExampleFailuresTest {
         CompileException e = assertThrows(CompileException.class,
                 () -> Compiler.compileModules(List.of(SHARED, ONE, TWO)));
 
-        Set<Integer> named = java.util.stream.IntStream.range(0, e.diagnostics().size())
-                .mapToObj(e::sourceIndexOf)
+        Set<String> named = java.util.stream.IntStream.range(0, e.diagnostics().size())
+                .mapToObj(e::sourceIdOf)
                 .collect(Collectors.toSet());
 
-        assertEquals(Set.of(0, 1, 2), named,
+        assertEquals(Set.of("0", "1", "2"), named,
                 "three modules, three sources — a renderer quotes each one's own file");
     }
 
@@ -91,7 +91,7 @@ class CompileMultiModuleExampleFailuresTest {
                         """)));
 
         assertEquals(1, e.diagnostics().size());
-        assertEquals(0, e.sourceIndex(), "the stale fixture is in the first source");
+        assertEquals("0", e.sourceId(), "the stale fixture is in the first source");
     }
 
     @Test

@@ -2,11 +2,15 @@ package souther.compiler.diag;
 
 
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Renders a diagnostic Elm-style: a title bar with the error name and location, the offending source
  * line with a caret underline, then the message, any found-vs-expected type blocks, and hints. Color
  * is applied only when {@code useColor} is set (the caller decides from TTY and {@code NO_COLOR}).
+ *
+ * <p>A region in another file is quoted from that file and says where it is, so a problem written
+ * in two of them reads as one block rather than as two diagnostics the reader has to pair up.
  */
 public final class HumanRenderer implements DiagnosticRenderer {
 
@@ -25,15 +29,27 @@ public final class HumanRenderer implements DiagnosticRenderer {
     }
 
     @Override
-    public String render(Diagnostic d, SourceContext src, Locale locale) {
+    public String render(Located located, SourceContextResolver sources, Locale locale) {
+        Diagnostic d = located.diagnostic();
+        String own = located.primarySourceId();
+        DiagnosticView view = DiagnosticView.of(d, own, own);
+        SourceContext anchorSource = sources.sourceOf(view.anchor().sourceId());
         StringBuilder out = new StringBuilder();
-        header(out, d, src, locale);
+        header(out, d, anchorSource, locale);
         out.append('\n');
-        snippet(out, d.region(), src, d.severity() == Severity.WARNING ? YELLOW : RED);
-        for (LabeledRegion sec : d.secondary()) {
+        snippet(out, view.anchor().region(), anchorSource,
+                d.severity() == Severity.WARNING ? YELLOW : RED);
+        for (Spot other : view.others()) {
             out.append('\n');
-            snippet(out, sec.region(), src, CYAN);
-            out.append(color(DIM, Messages.get(sec.labelKey(), locale, sec.labelArgs()))).append('\n');
+            SourceContext src = sources.sourceOf(other.sourceId());
+            if (!Objects.equals(other.sourceId(), view.anchor().sourceId())) {
+                out.append(color(DIM, location(startOf(other.region()), src))).append('\n');
+            }
+            snippet(out, other.region(), src, CYAN);
+            if (other.labelled()) {
+                out.append(color(DIM, Messages.get(other.labelKey(), locale, other.labelArgs())))
+                        .append('\n');
+            }
         }
         out.append('\n').append(DiagnosticRenderer.body(d, locale)).append('\n');
         if (d.diff() != null) {
@@ -91,6 +107,10 @@ public final class HumanRenderer implements DiagnosticRenderer {
         }
         String warning = Messages.get("diag.warning.title", locale);
         return about != null ? about + " (" + warning + ")" : warning;
+    }
+
+    private static SourcePos startOf(Region region) {
+        return region == null ? null : region.start();
     }
 
     private String location(SourcePos pos, SourceContext src) {

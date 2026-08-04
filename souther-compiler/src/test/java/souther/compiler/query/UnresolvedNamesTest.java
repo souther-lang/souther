@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.diag.Located;
 import souther.compiler.Compiler;
 import souther.compiler.diag.Diagnostic;
 
@@ -26,7 +27,7 @@ class UnresolvedNamesTest {
     private static List<Diagnostic> diagnose(String source) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
-        return Compiler.diagnoseModules(byId, Set.of()).get("a.sou");
+        return Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get("a.sou");
     }
 
     @Test
@@ -70,7 +71,7 @@ class UnresolvedNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
-        c.diagnostics();
+        Located.diagnosticsOf(c.diagnostics());
 
         assertEquals(Map.of(), c.classes(),
                 "there is no bytecode for a type nobody could name");
@@ -89,7 +90,7 @@ class UnresolvedNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
-        List<Diagnostic> found = c.diagnostics().get("a.sou");
+        List<Diagnostic> found = Located.diagnosticsOf(c.diagnostics()).get("a.sou");
 
         assertEquals(1, found.size(),
                 "the name that denotes nothing, and nothing about constructing it: " + found);
@@ -224,7 +225,7 @@ class UnresolvedNamesTest {
                 """);
         Compilation c = Compilation.ofDocuments(byId, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
-        c.diagnostics();
+        Located.diagnosticsOf(c.diagnostics());
 
         assertEquals(Map.of(), c.classes(),
                 "there is no bytecode for a composition nobody could resolve");
@@ -301,11 +302,11 @@ class UnresolvedNamesTest {
         Compilation c = Compilation.ofDocuments(byId, Set.of(),
                 souther.compiler.meta.ModulePath.EMPTY);
 
-        assertEquals(List.of(), c.diagnostics().get("a.sou"),
+        assertEquals(List.of(), Located.diagnosticsOf(c.diagnostics()).get("a.sou"),
                 "the reserved module name is x's mistake, not this one's");
-        assertTrue(c.diagnostics().get("x.sou").stream()
+        assertTrue(Located.diagnosticsOf(c.diagnostics()).get("x.sou").stream()
                         .anyMatch(d -> "check.module.reserved".equals(d.messageKey())),
-                "and it is reported there: " + c.diagnostics().get("x.sou"));
+                "and it is reported there: " + Located.diagnosticsOf(c.diagnostics()).get("x.sou"));
         assertEquals(Map.of(), c.classes(),
                 "a composition whose stage nobody can name is not emitted");
     }
@@ -327,7 +328,7 @@ class UnresolvedNamesTest {
                     depends on m.b.charge
                 let f (n, charge) = charge(n)
                 """);
-        List<Diagnostic> found = Compiler.diagnoseModules(byId, Set.of()).get("a.sou");
+        List<Diagnostic> found = Located.diagnosticsOf(Compiler.diagnoseModules(byId, Set.of())).get("a.sou");
 
         assertEquals(1, found.size(),
                 "the clause that names nothing, and nothing about the parameters it names: " + found);

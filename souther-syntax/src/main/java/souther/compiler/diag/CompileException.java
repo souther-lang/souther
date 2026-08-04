@@ -21,12 +21,13 @@ public class CompileException extends RuntimeException {
 
     /** A position is a line and a column, so a compile that was handed several sources also has to
      *  say which one — otherwise there is nothing to quote the line from. */
-    private static final int NO_SOURCE = Located.NO_SOURCE;
+    private static final String NO_SOURCE = Located.NO_SOURCE;
 
     private final transient List<Diagnostic> diagnostics;
     /** One entry per diagnostic: which source it came from, or {@link #NO_SOURCE}. A compile that
-     *  reports several modules at once has a diagnostic per module, and each quotes its own file. */
-    private final transient List<Integer> sources;
+     *  reports several modules at once has a diagnostic per module, and each quotes its own file.
+     *  Parallel to {@link #diagnostics}, so the order here is that list's order and nothing else. */
+    private final transient List<String> sources;
 
     public CompileException(SourcePos pos, String message) {
         this(pos, null, message);
@@ -41,14 +42,15 @@ public class CompileException extends RuntimeException {
         this(List.of(diagnostic), legacyMessage, NO_SOURCE);
     }
 
-    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, int sourceIndex) {
-        this(diagnostics, legacyMessage, java.util.Collections.nCopies(diagnostics.size(), sourceIndex));
+    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, String sourceId) {
+        this(diagnostics, legacyMessage, java.util.Collections.nCopies(diagnostics.size(), sourceId));
     }
 
-    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, List<Integer> sources) {
+    private CompileException(List<Diagnostic> diagnostics, String legacyMessage, List<String> sources) {
         super(legacyMessage);
         this.diagnostics = diagnostics;
-        this.sources = sources;
+        // Not List.copyOf: an entry is NO_SOURCE for a diagnostic that names none, and that is null.
+        this.sources = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(sources));
     }
 
     /**
@@ -80,9 +82,10 @@ public class CompileException extends RuntimeException {
     /**
      * Several errors found across several sources, each tagged with the source it came from —
      * a multi-module compile reporting every module's failing examples rather than the first
-     * module's. {@code sources} has one entry per diagnostic.
+     * module's. {@code sources} has one entry per diagnostic, {@link Located#NO_SOURCE} for one that
+     * names none.
      */
-    public static CompileException ofAllInSources(List<Diagnostic> diagnostics, List<Integer> sources,
+    public static CompileException ofAllInSources(List<Diagnostic> diagnostics, List<String> sources,
                                                   String legacyBody) {
         if (diagnostics == null || diagnostics.isEmpty()) {
             throw new IllegalArgumentException("a compile error carries at least one diagnostic");
@@ -92,7 +95,7 @@ public class CompileException extends RuntimeException {
         }
         Diagnostic first = diagnostics.get(0);
         return new CompileException(List.copyOf(diagnostics),
-                format(first.pos(), first.code(), legacyBody), List.copyOf(sources));
+                format(first.pos(), first.code(), legacyBody), sources);
     }
 
     public SourcePos pos() {
@@ -120,19 +123,19 @@ public class CompileException extends RuntimeException {
     }
 
     /**
-     * Which of the sources a multi-module compile was handed this error came from, or {@code -1} when
-     * it names none. Untagged covers a single-source compile — where the caller knows the file — and
-     * an error a linked compile cannot pin on one source, such as a failing example the compiler
-     * merged in from an {@code examples for} file. A caller reads {@code -1} as "quote no line",
-     * never as "the first source".
+     * Which of the sources a multi-module compile was handed this error came from, or null when it
+     * names none. Untagged covers a single-source compile — where the caller knows the file — and an
+     * error a linked compile cannot pin on one source, such as a failing example the compiler merged
+     * in from an {@code examples for} file. A caller reads null as "quote no line", never as "the
+     * first source".
      */
-    public int sourceIndex() {
+    public String sourceId() {
         return sources.isEmpty() ? NO_SOURCE : sources.get(0);
     }
 
-    /** Which source the {@code i}-th of {@link #diagnostics()} came from, or {@code -1} when it names
+    /** Which source the {@code i}-th of {@link #diagnostics()} came from, or null when it names
      *  none. A renderer walking the list quotes each diagnostic's own file. */
-    public int sourceIndexOf(int i) {
+    public String sourceIdOf(int i) {
         return sources == null || i >= sources.size() ? NO_SOURCE : sources.get(i);
     }
 
@@ -142,7 +145,7 @@ public class CompileException extends RuntimeException {
         List<Diagnostic> ds = diagnostics();
         List<Located> located = new java.util.ArrayList<>(ds.size());
         for (int i = 0; i < ds.size(); i++) {
-            located.add(new Located(ds.get(i), sourceIndexOf(i)));
+            located.add(new Located(ds.get(i), sourceIdOf(i)));
         }
         return List.copyOf(located);
     }
@@ -151,11 +154,11 @@ public class CompileException extends RuntimeException {
      * The same error, tagged with the source being compiled when it was thrown. The first tag wins:
      * an inner phase that already named its source keeps it, so a surrounding loop may tag freely.
      */
-    public CompileException inSource(int index) {
-        if (index < 0 || sources.stream().allMatch(src -> src != NO_SOURCE)) {
+    public CompileException inSource(String sourceId) {
+        if (sourceId == null || sources.stream().allMatch(src -> src != NO_SOURCE)) {
             return this;   // already named, or nothing to name it with
         }
-        List<Integer> filled = sources.stream().map(src -> src == NO_SOURCE ? index : src).toList();
+        List<String> filled = sources.stream().map(src -> src == NO_SOURCE ? sourceId : src).toList();
         CompileException tagged = new CompileException(diagnostics, getMessage(), filled);
         tagged.setStackTrace(getStackTrace());
         return tagged;

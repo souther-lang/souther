@@ -228,8 +228,9 @@ public final class Db {
                 // legitimately: a helper is checked on its own and again in each body it is expanded
                 // into, and both are looking at the same line. The first to say it is the one that
                 // says it, so the order is the order the work happened in.
-                found.putIfAbsent(new Told(key.module(), key.sourceId(), report.problem()),
-                        new Found(key.module(), key.sourceId(), report));
+                Found one = new Found(key.module(), key.sourceId(), report);
+                found.putIfAbsent(new Told(key.module(), one.primarySourceId(), report.problem()),
+                        one);
             }
         }
         return new ArrayList<>(found.values());
@@ -250,8 +251,29 @@ public final class Db {
         return memos.containsKey(key);
     }
 
-    /** A report, the module it is about, and the source it names — either of which may be null. */
-    public record Found(String module, String sourceId, Report report) {}
+    /**
+     * A report, the module it is about, and the source the key that found it names — either of which
+     * may be null.
+     *
+     * <p>Where the report is said is read off this rather than stored beside it, so there is one
+     * answer and not two that can come apart: the report says where it goes when it knows
+     * ({@link Report.Delivery}), and the key answers when it does not. A module named but no source
+     * is the last fallback, and only a caller holding the module layout can apply it —
+     * {@link Compilation#publishSourceIdsOf(Found)} is where the whole
+     * answer is worked out.
+     */
+    public record Found(String module, String sourceId, Report report) {
+
+        /**
+         * The source the primary region is in: the one the report names, else the one the key does.
+         * Null when neither says, which leaves the module's own source as the last word — a fallback
+         * only a caller that knows the module layout can apply.
+         */
+        public String primarySourceId() {
+            String said = report.delivery().primarySourceId();
+            return said != null ? said : sourceId;
+        }
+    }
 
     private void recordRead(Key<?> key) {
         Set<Key<?>> frame = frames.peek();

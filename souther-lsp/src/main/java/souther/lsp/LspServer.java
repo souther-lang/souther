@@ -468,6 +468,15 @@ public final class LspServer {
             }
             item.put("source", "souther");
             item.put("message", d.message());
+            if (!d.related().isEmpty()) {
+                List<Object> related = new ArrayList<>();
+                for (LspDiagnostic.Related r : d.related()) {
+                    related.add(Map.of("location",
+                            Map.of("uri", r.uri(), "range", rangeJson(r.range())),
+                            "message", r.message()));
+                }
+                item.put("relatedInformation", related);
+            }
             items.add(item);
         }
         notify("textDocument/publishDiagnostics", Map.of("uri", uri, "diagnostics", items));

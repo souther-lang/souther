@@ -3,31 +3,39 @@ package souther.compiler.diag;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.function.IntFunction;
 
 /** Turns a {@link Diagnostic} into text: {@link HumanRenderer} for people, {@link JsonRenderer} for
- * tools. The source snippet comes from {@code src}, which may be null when the source is unavailable
- * (e.g. a multi-file build); the renderer then omits the quoted line. */
+ * tools. The source snippets come from {@code sources}, which answers null for a source that is
+ * unavailable (e.g. a file that cannot be read); the renderer then omits the quoted line. */
 public interface DiagnosticRenderer {
 
-    String render(Diagnostic d, SourceContext src, Locale locale);
+    /**
+     * One diagnostic, quoted from the files its regions are in. {@code located} carries the source
+     * the primary region is in; a secondary that names one of its own is quoted from that.
+     */
+    String render(Located located, SourceContextResolver sources, Locale locale);
+
+    /**
+     * One diagnostic written wholly in one file, quoted from {@code src}. Everything it points at is
+     * in that file, so there is nothing to resolve and nothing to name.
+     */
+    default String render(Diagnostic d, SourceContext src, Locale locale) {
+        return render(new Located(d, Located.NO_SOURCE), id -> src, locale);
+    }
 
     /**
      * Renders each of {@code located}, one string per diagnostic — never one string for the list, so
      * a JSON caller prints one object per line rather than an array.
      *
-     * <p>Each diagnostic quotes its own file: a compile reporting several modules at once has one per
-     * module, and they do not share a source. {@code sourceAt} maps a
-     * {@link Located#sourceIndex()} to the text to quote, and is asked about
-     * {@link Located#NO_SOURCE} as well — what an unnamed source means is the caller's to say, since
-     * a single-source compile names none and yet has exactly one file to quote. Returning null there
-     * (or for a file that cannot be read) leaves the snippet out rather than quoting the wrong line.
+     * <p>One string per diagnostic and not per file: a problem written in two of them is one
+     * diagnostic here, quoted at both of the places it is written. What is said twice in an editor,
+     * which puts a marker in each file, is said once on a terminal, which is read top to bottom.
      */
-    static List<String> renderAll(List<Located> located, IntFunction<SourceContext> sourceAt,
+    static List<String> renderAll(List<Located> located, SourceContextResolver sources,
                                   DiagnosticRenderer renderer, Locale locale) {
         List<String> rendered = new ArrayList<>(located.size());
         for (Located one : located) {
-            rendered.add(renderer.render(one.diagnostic(), sourceAt.apply(one.sourceIndex()), locale));
+            rendered.add(renderer.render(one, sources, locale));
         }
         return List.copyOf(rendered);
     }

@@ -1,5 +1,6 @@
 package souther.compiler;
 
+import souther.compiler.diag.Located;
 import souther.compiler.diag.CompileException;
 
 import org.junit.jupiter.api.Test;
@@ -722,7 +723,8 @@ class CompileHelperBodyTypingTest {
                 let f (a) = X(describe(a))
                 """;
         assertEquals(List.of("check.rechelper.return"),
-                Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)).get("demo.sou").stream()
+                Located.diagnosticsOf(Compiler.diagnoseModules(java.util.Map.of("demo.sou", src)))
+                        .get("demo.sou").stream()
                         .map(souther.compiler.diag.Diagnostic::messageKey).toList(),
                 "the undeclared recursive helper is reported, and nothing else is");
     }

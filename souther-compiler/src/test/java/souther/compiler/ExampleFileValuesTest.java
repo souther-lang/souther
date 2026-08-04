@@ -138,7 +138,7 @@ class ExampleFileValuesTest {
 
         assertEquals("E1906", e.diagnostic().code());
         assertEquals("check.example.file.declared", e.diagnostic().messageKey());
-        assertEquals(1, e.sourceIndex(), "the declaration is in the attached file");
+        assertEquals("1", e.sourceId(), "the declaration is in the attached file");
         assertEquals(3, e.diagnostic().pos().line(), "and at its own line");
     }
 }
