@@ -126,7 +126,7 @@ public final class Compiler {
     /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut, Adequacy.Asked measure) {
-        return compiled(source, defaultModuleName, warningsOut, measure, null);
+        return compiled(source, defaultModuleName, warningsOut, measure, null, null);
     }
 
     /**
@@ -140,9 +140,20 @@ public final class Compiler {
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut, Adequacy.Asked measure,
                                 java.time.Duration exampleBudget) {
+        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, null);
+    }
+
+    /** As above, with what a row or a reading is given to finish within said outright — for a test
+     *  stating which work does not come back rather than timing it. */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, Adequacy.Asked measure,
+                                java.time.Duration exampleBudget, Deadline deadline) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
+        }
+        if (deadline != null) {
+            compilation.withDeadline(deadline);
         }
         compilation.measure(measure);
         Db db = compilation.db();
@@ -184,7 +195,7 @@ public final class Compiler {
             }
         }
         for (String module : compilation.modules()) {
-            db.ask(new Adequacy.Warnings(module));
+            compilation.answerWarnings(module);
         }
         warningsOut.addAll(compilation.warnings(db.allReports()));
         return compilation;
@@ -269,20 +280,36 @@ public final class Compiler {
     static Compilation compiledModules(List<String> sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure,
                                        java.time.Duration exampleBudget) {
-        return linked(sources, path, warningsOut, measure, exampleBudget);
+        return linked(sources, path, warningsOut, measure, exampleBudget, null);
+    }
+
+    /** As above, with what a row or a reading is given to finish within said outright. */
+    static Compilation compiledModules(List<String> sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       java.time.Duration exampleBudget, Deadline deadline) {
+        return linked(sources, path, warningsOut, measure, exampleBudget, deadline);
     }
 
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure) {
-        return linked(sources, path, warningsOut, measure, null);
+        return linked(sources, path, warningsOut, measure, null, null);
     }
 
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure,
                                       java.time.Duration exampleBudget) {
+        return linked(sources, path, warningsOut, measure, exampleBudget, null);
+    }
+
+    private static Compilation linked(List<String> sources, ModulePath path,
+                                      List<Located> warningsOut, Adequacy.Asked measure,
+                                      java.time.Duration exampleBudget, Deadline deadline) {
         Compilation compilation = Compilation.ofSources(sources, path);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
+        }
+        if (deadline != null) {
+            compilation.withDeadline(deadline);
         }
         compilation.measure(measure);
         Db db = compilation.db();
@@ -321,7 +348,7 @@ public final class Compiler {
             db.ask(new Output.SaidDisagreements(module));
         }
         for (String module : compilation.modules()) {
-            db.ask(new Adequacy.Warnings(module));
+            compilation.answerWarnings(module);
         }
         warningsOut.addAll(compilation.warnings(db.allReports()));
         if (!exampleFailures.isEmpty()) {

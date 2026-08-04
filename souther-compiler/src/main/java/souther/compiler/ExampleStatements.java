@@ -55,19 +55,19 @@ public final class ExampleStatements {
      * force and no helper is run, so there is no reading here to isolate. What it is for is the
      * module's encoders and its loader. Every actual reading gets {@link #newFixtureReader()}. */
     private final FixtureReader rendering;
-    /** Wall-clock budget for one written statement read on a worker of its own ({@link #within}).
-     * Carried rather than looked up, so two compiles in one JVM need not agree on it. */
-    private final long budgetMs;
+    /** What one written statement gets to be read within ({@link #within}). Carried rather than
+     * looked up, so two compiles in one JVM need not agree on it. */
+    private final Deadline deadline;
 
     private ExampleStatements(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Ast.FnDef> values,
-                              long budgetMs) {
+                              Deadline deadline) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
         this.loader = loader;
         this.values = values;
-        this.budgetMs = budgetMs;
+        this.deadline = deadline;
         this.rendering = new FixtureReader(module, symbols, values, loader);
     }
 
@@ -105,7 +105,7 @@ public final class ExampleStatements {
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Ast.FnDef> values,
                                          List<String> exampleOrigins,
-                                         List<String> fakeOrigins, long budgetMs) {
+                                         List<String> fakeOrigins, Deadline deadline) {
         if (module.examples().isEmpty()
                 || exampleOrigins.size() != module.examples().size()
                 || fakeOrigins.size() != module.fakes().size()) {
@@ -121,7 +121,7 @@ public final class ExampleStatements {
             return Readings.NONE;
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, budgetMs);
+                new MemoryClassLoader(classes, parent), values, deadline);
         return v.collectDisagreements(exampleOrigins, fakeOrigins, contested);
     }
 
@@ -155,13 +155,13 @@ public final class ExampleStatements {
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               ClassLoader parent, Map<String, Ast.FnDef> values,
                                               List<String> fakeOrigins, String sourceId,
-                                              long budgetMs) {
+                                              Deadline deadline) {
         if (module.fakes().isEmpty()) {
             return List.of();
         }
         boolean placed = fakeOrigins.size() == module.fakes().size();
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, budgetMs);
+                new MemoryClassLoader(classes, parent), values, deadline);
         List<Diagnostic> said = new ArrayList<>();
         Set<String> answering = new LinkedHashSet<>();
         for (int i = 0; i < module.fakes().size(); i++) {
@@ -183,7 +183,7 @@ public final class ExampleStatements {
                 List<Diagnostic> wrong = new ArrayList<>();
                 standins(reader, fk, sig.ins(), sig.out(), wrong);
                 return wrong;
-            }, "the `fake " + fk.target() + "` table");
+            }, new Deadline.Work.Table(fk.target(), sourceId, fk.pos()));
             switch (read) {
                 case Read.Got(List<Diagnostic> wrong) -> said.addAll(wrong);
                 case Read.TimedOut(long ranOutOf) -> said.add(uncheckedFake(fk, ranOutOf));
@@ -243,45 +243,39 @@ public final class ExampleStatements {
      * table is built here and, where no row depends on the behavior it stands in for, nowhere else.
      */
     private <T> Read<T> within(java.util.function.Function<FixtureReader, T> read,
-                               String what) {
+                               Deadline.Work what) {
         // On a reader of its own, and that is all a reading needs to be given: a worker that runs out
         // of budget is asked to stop and cannot be made to — a fixture reaches no interrupt point — so
         // it may still be inside `expandedValue`, holding a binding or a half-walked expansion. What a
         // late worker can still write to is that reader, and the statement after it gets another.
         FixtureReader reader = newFixtureReader();
-        java.util.concurrent.FutureTask<T> task =
-                new java.util.concurrent.FutureTask<>(() -> read.apply(reader));
-        Thread worker = new Thread(task, "souther-reading");
-        worker.setDaemon(true);
-        worker.start();
-        try {
-            return new Read.Got<>(
-                    task.get(budgetMs, java.util.concurrent.TimeUnit.MILLISECONDS));
-        } catch (java.util.concurrent.TimeoutException _) {
-            task.cancel(true);
-            return new Read.TimedOut<>(budgetMs);
-        } catch (java.util.concurrent.ExecutionException ee) {
-            task.cancel(true);
-            Throwable cause = ee.getCause();
-            // One thing ends a reading without the model or this code being at fault: a host with no
-            // runtime to build a value against, since the runtime is `provided` (as it is for CTFE).
-            if (runtimeAbsent(cause)) {
-                return new Read.RuntimeAbsent<>();
+        switch (deadline.given(what, () -> read.apply(reader))) {
+            case Deadline.Outcome.Finished(T value) -> {
+                return new Read.Got<>(value);
             }
-            // Anything else is this code being wrong. An empty reading says the statements agree, so
-            // answering with one would leave a broken compiler reporting every model consistent, and
-            // only a test that reached the broken shape would ever say otherwise.
-            if (cause instanceof RuntimeException runtime) {
-                throw runtime;
+            case Deadline.Outcome.Overran(Runnable abandon) -> {
+                // Nothing here was going to read how far it got, so it is given up on at once.
+                abandon.run();
+                return new Read.TimedOut<>(deadline.budgetMs());
             }
-            if (cause instanceof Error error) {
-                throw error;
+            case Deadline.Outcome.Threw(Throwable cause) -> {
+                // One thing ends a reading without the model or this code being at fault: a host with
+                // no runtime to build a value against, since the runtime is `provided` (as it is for
+                // CTFE).
+                if (runtimeAbsent(cause)) {
+                    return new Read.RuntimeAbsent<>();
+                }
+                // Anything else is this code being wrong. An empty reading says the statements agree,
+                // so answering with one would leave a broken compiler reporting every model
+                // consistent, and only a test that reached the broken shape would ever say otherwise.
+                if (cause instanceof RuntimeException runtime) {
+                    throw runtime;
+                }
+                if (cause instanceof Error error) {
+                    throw error;
+                }
+                throw new IllegalStateException(cause);
             }
-            throw new IllegalStateException(cause);
-        } catch (InterruptedException _) {
-            task.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new java.util.concurrent.CancellationException("interrupted while reading " + what);
         }
     }
 
@@ -390,7 +384,8 @@ public final class ExampleStatements {
                 return answer instanceof Answered.Unreadable ? null
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
-            }, "a row of `" + ex.target() + "`");
+            }, new Deadline.Work.Fixtures(ex.target(), origin, row.pos(),
+                    row.description()));
             // A reading that did not finish is not said here, whichever reason ended it. The same row
             // is evaluated where the example is checked, which builds these fixtures and then runs the
             // behavior on top of them, so a fixture that overruns this overruns that too and is E1910
@@ -414,7 +409,7 @@ public final class ExampleStatements {
         // The whole table, built the one way the proxy builds it.
         Read<Standins> read = within(
                 reader -> standins(reader, fk, sig.ins(), sig.out(), new ArrayList<>()),
-                "the `fake " + fk.target() + "` table");
+                new Deadline.Work.Table(fk.target(), origin, fk.pos()));
         // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
         // it rather than falling in with one of these.
         switch (read) {
@@ -500,7 +495,7 @@ public final class ExampleStatements {
                 // did not finish there, and there is where it is said (E1910).
                 Answered constant = within(
                         reader -> readStandIn(reader, w.value(), depSig.out(), outCases(depSig.out())),
-                        "a `with " + w.dep() + "`").orNull();
+                        new Deadline.Work.With(w.dep(), origin, w.value().pos())).orNull();
                 if (constant == null || constant instanceof Answered.Unreadable) {
                     continue;
                 }

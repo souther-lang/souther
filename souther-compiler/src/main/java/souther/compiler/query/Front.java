@@ -91,6 +91,19 @@ public final class Front {
      */
     public record ExampleBudget() implements Input<Long> {}
 
+    /**
+     * What one row or one reading is given to finish within, set outright rather than as a number of
+     * milliseconds.
+     *
+     * <p>Only a test sets one. A wall clock answers "did this finish in time", which is not the
+     * question nearly every test about an overrun is asking — those ask what the compiler says about
+     * work that did not finish, and had to write a model that does not terminate and then race the
+     * clock to observe it. On a loaded host the race is lost in the direction that matters: work
+     * that does finish is reported as work that did not. A deadline that decides by what the work is
+     * lets the test state the fact instead.
+     */
+    public record ExampleDeadline() implements Input<souther.compiler.Deadline> {}
+
     /** One source, parsed, with the text of each declaration kept for publishing. Every position in
      * what comes back names this source, so a writing that later joins another file's module still
      * says where it was written. */

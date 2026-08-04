@@ -229,10 +229,10 @@ public final class AstBuilder {
         String module = qualifiedNameText(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
         String alias = n.child(SyntaxKind.IMPORT_ALIAS)
                 .map(a -> identTokens(a).get(0).text()).orElse(null);
-        List<String> names = new ArrayList<>();
+        List<Ast.ImportedName> names = new ArrayList<>();
         n.child(SyntaxKind.NAME_LIST).ifPresent(list -> {
             for (SyntaxToken t : identTokens(list)) {
-                names.add(t.text());
+                names.add(new Ast.ImportedName(t.text(), posOf(t)));
             }
         });
         return new Ast.Import(module, alias, names, pos(n));

@@ -1572,7 +1572,13 @@ public final class Analyzer {
         Range range = view.anchor().region() != null
                 ? rangeOfRegion(view.anchor().region())
                 : rangeOf(linesOf.apply(view.anchor().sourceId()), d);
-        return new LspDiagnostic(range, severity, d.code(), message, related);
+        return new LspDiagnostic(range, severity, d.code(), message, tagsOf(d), related);
+    }
+
+    /** What an editor should do with a diagnostic's range beyond marking it. An unused import names
+     * text that is there and does nothing, so the name is faded rather than only listed. */
+    private static List<Integer> tagsOf(Diagnostic d) {
+        return "E1922".equals(d.code()) ? List.of(LspDiagnostic.UNNECESSARY) : List.of();
     }
 
     private Range rangeOfRegion(Region r) {

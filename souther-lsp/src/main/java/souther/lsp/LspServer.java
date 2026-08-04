@@ -468,6 +468,9 @@ public final class LspServer {
             }
             item.put("source", "souther");
             item.put("message", d.message());
+            if (!d.tags().isEmpty()) {
+                item.put("tags", d.tags());
+            }
             if (!d.related().isEmpty()) {
                 List<Object> related = new ArrayList<>();
                 for (LspDiagnostic.Related r : d.related()) {
