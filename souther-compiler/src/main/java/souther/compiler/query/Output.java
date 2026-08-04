@@ -607,9 +607,62 @@ public final class Output {
             return sourceId;
         }
 
+        /**
+         * The rows this source wrote, run — and the fakes it wrote, built.
+         *
+         * <p>The fakes here rather than in {@link #evaluate}, which a measurement runs a second time
+         * against instrumented classes ({@link Adequacy.ProbedExamples}). Whether a table can be built
+         * is not a question a measurement asks, and asking it twice would have one table answered for
+         * by two builds.
+         */
         @Override
         public Answer<Of> compute(Db db) {
-            return evaluate(db, name, sourceId, db.ask(new Linked(name)).value());
+            Answer<Of> ran = evaluate(db, name, sourceId, db.ask(new Linked(name)).value());
+            List<Diagnostic> wrong = fakeTables(db, name, sourceId);
+            if (wrong.isEmpty()) {
+                return ran;
+            }
+            List<Report> reports = new ArrayList<>(ran.reports());
+            for (Diagnostic d : wrong) {
+                reports.add(Report.of(d));
+            }
+            return new Answer<>(ran.value(), reports);
+        }
+
+        /**
+         * What building the fakes written in this source says about them.
+         *
+         * <p>Every fake it wrote, whether or not a row reaches one. A fake is a statement about the
+         * behavior it stands in for the way a row is, and the two other places a table is built each
+         * need something else to be there — a row of a behavior that depends on the faked one
+         * ({@code resolveFake}), or a row recorded for the faked one itself (the reading behind
+         * {@link Disagreements}) — so a module that writes neither had its table built nowhere.
+         *
+         * <p>Which source wrote which fake is passed rather than used here: which of two tables
+         * written for one dependency answers is a fact about the module, so the reading that knows
+         * that is the one that picks what this source's share of them is.
+         */
+        private static List<Diagnostic> fakeTables(Db db, String name, String sourceId) {
+            Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
+            Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
+            Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
+            if (!prepared.present() || !scope.present() || !sigs.present()) {
+                return List.of();
+            }
+            if (db.ask(new Bodies.Checked(name)).value() == null) {
+                return List.of();   // a module that did not check has nothing to build a value with
+            }
+            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
+            Map<String, List<BehaviorRequirement>> requirements =
+                    db.ask(new Bodies.Requirements(name)).value();
+            List<String> fakeOrigins = db.ask(new Front.FakeOrigins(name)).value();
+            if (classes == null || requirements == null || fakeOrigins == null) {
+                return List.of();
+            }
+            Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
+            return souther.compiler.ExampleVerifier.fakeTables(prepared.value(), scope.value(),
+                    sigs.value(), classes, requirements, loader(db, Map.of()),
+                    values == null ? Map.of() : values, fakeOrigins, sourceId);
         }
 
         /**

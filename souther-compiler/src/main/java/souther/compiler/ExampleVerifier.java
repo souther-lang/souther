@@ -163,6 +163,77 @@ public final class ExampleVerifier {
     }
 
     /**
+     * What building this module's fake tables says about the ones {@code sourceId} wrote, each built
+     * once.
+     *
+     * <p>Because they are written, not because something reads them. A table is built to stand in for
+     * a behavior ({@link #resolveFake}) and to be read against the rows recorded for it ({@link
+     * #againstFake}), and a module can write one that neither of those reaches: nothing in it depends
+     * on the faked behavior, and no row records what that behavior owes. The table still states what
+     * it states, and what is wrong with it is wrong wherever it is read from.
+     *
+     * <p>The one place it is said, so a build and a row cannot come to two answers about one table.
+     * A row that applies a fake it could not build says nothing about the table any more — it does not
+     * run, and the error at the fake is what the compile fails on — which also ends the same table
+     * being reported once per row that reaches it.
+     *
+     * <p>The tables that answer, which is what the other two readers build: the first one written for
+     * a dependency. A second written for the same name stands in for nothing and is read by nobody,
+     * so building it here would hold a table to something no reader of it would ever ask.
+     *
+     * <p>{@code fakeOrigins} says which source wrote each of {@code module.fakes()}, in that order —
+     * every fake, since which one answers for a dependency is a fact about the module and not about
+     * one of its files. Where it does not line up with them, every table that answers is built here:
+     * a report in the wrong file is a report, and the reason to know the file is to place it, while
+     * nothing else would say what is wrong with the table at all.
+     */
+    public static List<Diagnostic> fakeTables(Ast.Module module, Symbols symbols,
+                                              Map<String, Sig> sigs, Map<String, byte[]> classes,
+                                              Map<String, List<BehaviorRequirement>> requirements,
+                                              ClassLoader parent, Map<String, Ast.FnDef> values,
+                                              List<String> fakeOrigins, String sourceId) {
+        if (module.fakes().isEmpty()) {
+            return List.of();
+        }
+        boolean placed = fakeOrigins.size() == module.fakes().size();
+        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
+                new MemoryClassLoader(classes, parent), values);
+        v.sourceId = sourceId;
+        List<Diagnostic> said = new ArrayList<>();
+        Set<String> answering = new LinkedHashSet<>();
+        for (int i = 0; i < module.fakes().size(); i++) {
+            Ast.Fake fk = module.fakes().get(i);
+            if (!answering.add(fk.target())) {
+                continue;   // a second table for one dependency answers nothing, here as anywhere
+            }
+            if (placed && !fakeOrigins.get(i).equals(sourceId)) {
+                continue;   // written in another source, and built by that source's own reading
+            }
+            Sig sig = sigs.get(fk.target());
+            if (sig == null) {
+                continue;   // a fake for no behavior of this module; its target is its own question
+            }
+            // Within a budget of its own, for the reason a row and a reading each have one: a row of
+            // the table applies helpers, and a `partial` one may not stop. Nothing before this change
+            // built the table of a fake nothing reads, so this is the first thing that would run it.
+            Read<List<Diagnostic>> read = v.within(reader -> {
+                List<Diagnostic> wrong = new ArrayList<>();
+                reader.standins(fk, sig.ins(), sig.out(), wrong);
+                return wrong;
+            }, "the `fake " + fk.target() + "` table");
+            switch (read) {
+                case Read.Got(List<Diagnostic> wrong) -> said.addAll(wrong);
+                case Read.TimedOut(long budgetMs) -> said.add(uncheckedFake(fk, budgetMs));
+                // Not about this fake: the runtime is `provided`, so a host without it builds no value
+                // at all and every fake in every module would say the same thing. Where the rows are
+                // evaluated that is recorded once, as an incompleteness.
+                case Read.RuntimeAbsent() -> { }
+            }
+        }
+        return List.copyOf(said);
+    }
+
+    /**
      * What one reading came to: the statement, or the reason there is no statement.
      *
      * <p>The reason is answered rather than dropped because the two reasons are held against
@@ -406,7 +477,7 @@ public final class ExampleVerifier {
             case Read.Got(Standins _) -> { }
         }
         // The whole table or nothing: a table with a row that will not build answers nothing here,
-        // and what is wrong with it is reported where the fake is used.
+        // and what is wrong with it is reported where the fake is written ({@link #fakeTables}).
         Standins table = read.orNull();
         if (table == null) {
             return;
@@ -1203,7 +1274,10 @@ public final class ExampleVerifier {
         for (Ast.Param p : dep.params()) {
             paramTypes.add(TypeOps.successType(p.type(), symbols));
         }
-        Standins table = standins(fk, paramTypes, outType, out);
+        // What is wrong with the table is said where the fake is written ({@link #fakeTables}), and
+        // said once. Here it is a row that cannot run: this row and every other row reaching the same
+        // fake would each repeat the one thing wrong with the one table they all read.
+        Standins table = standins(fk, paramTypes, outType, new ArrayList<>());
         if (table == null) {
             return null;
         }
@@ -1360,6 +1434,21 @@ public final class ExampleVerifier {
     private static Diagnostic unbuildableFake(SourcePos pos, String dependency, String reason) {
         return Diagnostic.of("E1908", "check.fake.unbuildable").title("check.example.title")
                 .at(pos).args(dependency, reason).build();
+    }
+
+    /**
+     * A fake whose table did not finish being built, so nothing it states was checked.
+     *
+     * <p>A warning, where a table that will not build is an error: waiting says that this table was
+     * not read, not that it is wrong, and which of the two it is cannot be told from having waited.
+     * The budget is the one this wait was held to rather than the setting read back later, and it is
+     * written out rather than passed as a number, which a locale would group into a budget nobody set.
+     */
+    private static Diagnostic uncheckedFake(Ast.Fake fk, long budgetMs) {
+        return Diagnostic.of("E1921", "check.fake.unchecked").warning().title("check.example.title")
+                .at(fk.pos(), fk.target().length())
+                .args(fk.target(), Long.toString(budgetMs))
+                .hint("check.fake.unchecked.hint", fk.target()).build();
     }
 
     private byte[] fakeSubclassBytes(String fakeName, Class<?> base, java.lang.reflect.Method apply) {
