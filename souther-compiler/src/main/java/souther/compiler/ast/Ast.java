@@ -200,14 +200,36 @@ public interface Ast {
     record ExampleRow(String description, List<Expr> inputs, List<With> withs, Expr expected,
                       SourcePos pos) implements Ast {}
 
-    /** {@code import <module> ( name, ... )} — an explicit, non-wildcard import (spec 4). */
     /**
-     * {@code import a.b as B ( X, Y )}. {@code names} are the names this import brings into scope
-     * bare; {@code alias} is the qualifier the module is read under here, or null. Both parts are
-     * optional: a type is reachable qualified whether or not it was imported (spec 4), so an import
-     * with neither is just the dependency written down.
+     * {@code import a.b as B ( X, Y )} — an explicit, non-wildcard import (spec 4).
+     * {@code importedNames} are the names this import brings into scope bare; {@code alias} is the
+     * qualifier the module is read under here, or null. Both parts are optional: a type is reachable
+     * qualified whether or not it was imported (spec 4), so an import with neither is just the
+     * dependency written down.
      */
-    record Import(String module, String alias, List<String> names, SourcePos pos) implements Ast {}
+    record Import(String module, String alias, List<ImportedName> importedNames, SourcePos pos)
+            implements Ast {
+
+        public Import {
+            importedNames = List.copyOf(importedNames);
+        }
+
+        /** The same names as the text they were written with — what a reader asking only what this
+         * import brings in wants. Derived on each call rather than held: a record has its components
+         * and no other field, and an import list is a handful of names. */
+        public List<String> names() {
+            return importedNames.stream().map(ImportedName::text).toList();
+        }
+    }
+
+    /**
+     * One name on an import list, and where it was written.
+     *
+     * <p>The position belongs to the name rather than to the line, because the name is what a reader
+     * is told about. An import bringing in four names of which one is unused has something to say
+     * about that one, and the line the four share cannot say which.
+     */
+    record ImportedName(String text, SourcePos pos) implements Ast {}
 
     /**
      * A behavior definition — a specification, not an implementation (spec 12, 21.1). It is either

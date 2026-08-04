@@ -24,10 +24,12 @@ class DiagnoseModulesTest {
             """;
 
     // b imports a and carries a failing inline example (E1905): its declared output does not match
-    // what the identity `f` returns.
+    // what the identity `f` returns. `Held` is what makes the import a real one — the point of the
+    // test is that b depends on a, and an import nothing writes would be reported as unused.
     private static final String B_FAILING_EXAMPLE = """
             module b
             import a ( N )
+            data Held = { it: N }
             data M = { n: Int }
             behavior f : (x: M) -> M
             let f (x) = x
@@ -63,6 +65,7 @@ class DiagnoseModulesTest {
         String bClean = """
                 module b
                 import a ( N )
+                data Held = { it: N }
                 data M = { n: Int }
                 behavior f : (x: M) -> M
                 let f (x) = x

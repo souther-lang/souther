@@ -221,8 +221,14 @@ public final class Names {
             }
             List<Ast.Import> imports = new ArrayList<>(m.imports());
             for (Map.Entry<String, Set<String>> e : added.entrySet()) {
-                imports.add(new Ast.Import(e.getKey(), null, List.copyOf(e.getValue()),
-                        at.get(e.getKey())));
+                // No position on a synthesized name: nobody wrote it on an import list. The
+                // qualified reference that asked for it is where it came from, and that is already
+                // the position of the import as a whole.
+                List<Ast.ImportedName> names = new ArrayList<>();
+                for (String bare : e.getValue()) {
+                    names.add(new Ast.ImportedName(bare, null));
+                }
+                imports.add(new Ast.Import(e.getKey(), null, names, at.get(e.getKey())));
             }
             return imports;
         }
@@ -745,6 +751,145 @@ public final class Names {
             }
             return Answer.of(Boolean.FALSE);
         }
+    }
+
+    /**
+     * A name on an import list that the module never writes bare — reported at the name, as a
+     * warning.
+     *
+     * <p>The question is the reverse of {@link Imports}'. That one asks what each written name means
+     * and answers it against the exporting module; this asks, of the importing module's own body,
+     * whether anything said the name at all. Nothing else asks it, which is why an import list could
+     * claim a vocabulary the module does not speak and no one was told.
+     *
+     * <p>Being written bare is the whole test, and it is narrower than being mentioned. What another
+     * module declares is reachable qualified whether or not it is imported (spec 4), so
+     * {@code Stock.Sku} is a use of the declaration and not of the import: take {@code Sku} off the
+     * list and that line still compiles. An entry earns its place by being the spelling something
+     * below actually used, which is why a use is matched on what was written as well as on what it
+     * denotes.
+     */
+    public record UnusedImports(String name) implements Key<Boolean> {
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Boolean> compute(Db db) {
+            // Said only of a module whose names all came out. A name that denotes nothing may be the
+            // misspelt use of the very import in question, and "this import is unused" is the wrong
+            // thing to tell someone whose mistake is a typo four lines down. Sound is where that
+            // judgement already lives — it asks the imports, the resolution and the bound stages
+            // together, and it asks nothing about types, rows or coverage, so a failing example does
+            // not silence this.
+            if (!Boolean.TRUE.equals(db.ask(new Sound(name)).value())) {
+                return Answer.of(true);
+            }
+            List<Ast.Import> written = writtenImports(db, name);
+            if (written.isEmpty()) {
+                return Answer.of(true);
+            }
+            Set<Use> used = usesIn(db, name);
+            if (used == null) {
+                return Answer.of(true);
+            }
+            List<Report> reports = new ArrayList<>();
+            for (Ast.Import imp : written) {
+                for (Ast.ImportedName imported : imp.importedNames()) {
+                    // A name with no position was not written on any list — it was synthesized from
+                    // a qualified reference, and there is nothing for anyone to delete.
+                    if (imported.pos() == null
+                            || used.contains(new Use(imported.text(), imp.module(), imported.text()))) {
+                        continue;
+                    }
+                    reports.add(Report.of(Diagnostic.of("E1922", "check.import.unused").warning()
+                            .title("check.import.title")
+                            .at(imported.pos(), imported.text().length())
+                            .args(imported.text())
+                            .hint("check.import.unused.hint")
+                            .build()));
+                }
+            }
+            return Answer.of(true, reports);
+        }
+
+        /**
+         * The import lines as the source wrote them.
+         *
+         * <p>Read off the parsed source rather than off {@link Front.Available}, because the module
+         * that arrives from there has had its standard-library import lines taken out
+         * ({@link souther.compiler.check.Exposing#withoutLibraryImports}) — an unused
+         * {@code import List ( fold )} would be invisible to a check that read the module. An
+         * attached {@code examples for} file writes no imports, so the declaring source's lines are
+         * all of them.
+         */
+        private static List<Ast.Import> writtenImports(Db db, String module) {
+            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
+            String id = layout == null ? null : layout.idOfModule().get(module);
+            if (id == null) {
+                return List.of();
+            }
+            Answer<souther.compiler.frontend.CstFrontend.Parsed> parsed = db.ask(new Front.Parsed(id));
+            return parsed.present() ? parsed.value().module().imports() : List.of();
+        }
+    }
+
+    /**
+     * One name written in a module and the declaration it turned out to mean: the spelling, and the
+     * module and name that spelling resolved to.
+     *
+     * <p>The spelling is half of it because an import list entry is a claim about a spelling. Two
+     * uses of one declaration — {@code Sku} and {@code Stock.Sku} — are the same declaration and
+     * different claims, and only the first is what an import list entry buys.
+     */
+    private record Use(String written, String module, String name) {}
+
+    /** Every name {@code module} writes, paired with what it denotes, or null when the module could
+     * not be read. */
+    private static Set<Use> usesIn(Db db, String module) {
+        Answer<Resolve.Resolved> resolution = db.ask(new Resolution(module));
+        Ast.Module bound = db.ask(new Bound(module)).value();
+        if (!resolution.present() || bound == null) {
+            return null;
+        }
+        Set<Use> used = new HashSet<>();
+        for (Resolve.Denotation d : resolution.value().denotations()) {
+            if (!d.denotes().isUnresolved()) {
+                used.add(new Use(d.written(), d.denotes().module(), d.denotes().name()));
+            }
+        }
+        for (Resolve.ValueUse v : resolution.value().values()) {
+            switch (v.denotes()) {
+                case ValueName.Behavior b -> used.add(new Use(v.written(), b.module(), b.name()));
+                case ValueName.Helper h -> used.add(new Use(v.written(), h.module(), h.name()));
+                // `List.map` and a bare `map` an import brought in both denote the same library
+                // function, and the qualified name it is known by carries the module.
+                case ValueName.Stdlib s -> {
+                    int dot = s.qualified().lastIndexOf('.');
+                    if (dot > 0) {
+                        used.add(new Use(v.written(), s.qualified().substring(0, dot),
+                                s.qualified().substring(dot + 1)));
+                    }
+                }
+                default -> { }   // a local, a builtin, a type used as a value (recorded as a type)
+            }
+        }
+        // A `>->` stage and a `depends on` name a behavior, and Resolve passes both through
+        // untouched — Bound is where they were answered, so it is where they are read.
+        for (Ast.BehaviorDef b : bound.behaviors()) {
+            List<Ast.Var> refs = switch (b) {
+                case Ast.PipeBehavior pipe -> pipe.stages();
+                case Ast.SpecBehavior spec -> spec.dependsOn();
+            };
+            for (Ast.Var ref : refs) {
+                if (ref.denotes() instanceof ValueName.Behavior named) {
+                    used.add(new Use(ref.name(), named.module(), named.name()));
+                }
+            }
+        }
+        return used;
     }
 
     /** What a module's bodies can name without a binding: its own helpers, and every behavior it can
