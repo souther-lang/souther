@@ -118,6 +118,21 @@ final class HelperParams {
         return false;
     }
 
+    /**
+     * The type {@code body} gives {@code param}, or null where it gives none — the same reading that
+     * settles a helper's own parameter, for a lambda whose parameter type the signature it was given
+     * to left open. Reports nothing: it is asked where a type is wanted, not where one is required.
+     */
+    static Type readFromBody(Ast.Binder param, Ast.Expr body, Scope env, CheckContext ctx,
+                             Type answers) {
+        try {
+            return new BodyTyping(ctx.symbols(), ctx.reqs(), Map.of())
+                    .typeOf(param, body, env, answers);
+        } catch (RuntimeException _) {
+            return null;
+        }
+    }
+
     /** {@code h} with its determinable parameters typed, or null when none of them is. */
     private static Ast.FnDef settle(Ast.FnDef h, HelperInliner inliner, Symbols symbols,
                                     Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
@@ -718,8 +733,10 @@ final class HelperParams {
          * that has both the lambda and what the signature said about it (issue #320).
          *
          * <p>The lambda is read the way a helper's own parameters are: its body says what its
-         * parameters are, one step in. Nothing is reported — a disagreement here is the caller's
-         * error and the check reports it where it reports one today.
+         * parameters are, one step in. What it decides is recorded through the same
+         * {@link Substitution} the check uses, asked in its inference-only form — this walk works
+         * out what a type is and reports nothing, and a disagreement it meets is the caller's error,
+         * reported where the check reports one.
          */
         private Substitution fromGiven(Ast.Expansion ex, Scope env) {
             Substitution decided = new Substitution();
@@ -736,7 +753,7 @@ final class HelperParams {
                         Type t = new BodyTyping(symbols, reqSigs, recursiveHelperFns, freshening)
                                 .typeOf(lambda.params().get(i), lambda.body(), inner, step.result());
                         if (t != null) {   // a position the lambda's body leaves open says nothing
-                            decided.unify(step.params().get(i), t, symbols, ex.pos(), "closure");
+                            decided.decide(step.params().get(i), t, symbols, ex.pos(), "closure");
                         }
                     }
                     // What it answers is a position of the signature too. `(f: (Int) -> 'a, x: 'a)`
@@ -745,7 +762,7 @@ final class HelperParams {
                     Type answers = typed(lambda.body(), walking(env, lambda,
                             decided.zonk(step) instanceof Type.FnOf f ? f : step));
                     if (answers != null) {
-                        decided.unify(step.result(), answers, symbols, ex.pos(), "closure result");
+                        decided.decide(step.result(), answers, symbols, ex.pos(), "closure result");
                     }
                 } catch (CompileException _) {
                     return new Substitution();   // it does not agree; settle nothing from it

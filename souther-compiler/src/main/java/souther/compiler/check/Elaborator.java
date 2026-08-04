@@ -673,29 +673,10 @@ public final class Elaborator {
      * typing, not about what runs.
      */
     private static Core expansion(Ast.Expansion ex, Scope env, CheckContext ctx, Type expected) {
-        Substitution decided = new Substitution();
-        List<Core> values = new ArrayList<>();
-        Scope inner = env;
-        for (Ast.Bound b : ex.bound()) {
-            Core value = elaborate(b.value(), env, ctx);
-            Type bindType = value.type();
-            if (b.declaredType() != null) {
-                Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());
-                decided.unify(declared, value.type(), ctx.symbols(), b.value().pos(),
-                        argument(ex, b.binder().name()));
-                // A type still open says nothing to hold the value to, so the value says what the
-                // binding is. Settled, it is the callee's declaration, and the argument is held to it
-                // — a parameter the callee's body never reads is declared all the same.
-                Type required = decided.zonk(declared);
-                if (states(required)) {
-                    held(value, required, ctx, argument(ex, b.binder().name()));
-                    bindType = carriedType(required, value.type(), ctx.symbols());
-                }
-            }
-            values.add(value);
-            inner = inner.with(b.binder(), bindType);
-        }
-        givenFunctions(ex, decided, env, ctx);
+        Applied applied = arguments(ex, env, ctx);
+        Substitution decided = applied.decided();
+        List<Core> values = applied.values();
+        Scope inner = applied.inner();
         Type declaredResult = declaredResult(ex, ctx);
         // The declaration is what an empty collection inside the body has to go on: at a call site
         // that expects nothing concrete, nothing else says what it holds. Pushed in only once this
@@ -707,7 +688,7 @@ public final class Elaborator {
         if (declaredResult != null) {
             // What the body answers decides a variable the arguments left open — a result the
             // signature relates to a function parameter rather than to a value one.
-            decided.unify(declaredResult, body.type(), ctx.symbols(), ex.pos(),
+            decided.decide(declaredResult, body.type(), ctx.symbols(), ex.pos(),
                     "the result of `" + shown(ex) + "`");
             type = decided.settle(declaredResult);
             if (!TypeOps.assignable(body.type(), type, ctx.symbols())) {
@@ -729,6 +710,43 @@ public final class Elaborator {
         return out;
     }
 
+    /** What reading this application's arguments decided, and the scope its body is read in. */
+    private record Applied(Substitution decided, List<Core> values, Scope inner) {}
+
+    /**
+     * The arguments of one application, read against the signature it instantiated.
+     *
+     * <p>The one place an application's arguments are typed. What the callee answers — a value, or a
+     * function the caller binds and applies — decides what is done with the body afterwards and
+     * nothing about the arguments, so the two readers of an expansion come through here rather than
+     * each doing this again. That a helper answers a function is not a reason for its own parameters
+     * to go unchecked.
+     */
+    private static Applied arguments(Ast.Expansion ex, Scope env, CheckContext ctx) {
+        Substitution decided = new Substitution();
+        List<Core> values = new ArrayList<>();
+        Scope inner = env;
+        for (Ast.Bound b : ex.bound()) {
+            Core value = elaborate(b.value(), env, ctx);
+            Type bindType = value.type();
+            if (b.declaredType() != null) {
+                Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());
+                // The argument is held to everything the declaration states, whether or not the
+                // callee's body ever reads it, and however many variables stand inside it.
+                decided.constrain(declared, value.type(), ctx.symbols(), b.value().pos(),
+                        argument(ex, b.binder().name()));
+                Type required = decided.zonk(declared);
+                if (states(required)) {
+                    bindType = carriedType(required, value.type(), ctx.symbols());
+                }
+            }
+            values.add(value);
+            inner = inner.with(b.binder(), bindType);
+        }
+        givenFunctions(ex, decided, env, ctx);
+        return new Applied(decided, values, inner);
+    }
+
     /**
      * The functions this call was given, held to what the callee declared of them.
      *
@@ -746,21 +764,20 @@ public final class Elaborator {
     private static void givenFunctions(Ast.Expansion ex, Substitution decided, Scope env,
                                        CheckContext ctx) {
         for (Ast.Given g : ex.given()) {
-            if (g.applied() || g.declaredType() == null) {
+            if (g.declaredType() == null || !inSight(g.value(), env)) {
                 continue;
             }
             Type declared = TypeOps.resolveParamType(g.declaredType(), ctx.symbols());
-            if (!(decided.zonk(declared) instanceof Type.FnOf want)
-                    || !want.params().stream().allMatch(Elaborator::states)) {
-                continue;   // nothing said what it takes, so there is nothing to read it at
+            if (!(decided.zonk(declared) instanceof Type.FnOf want)) {
+                continue;
             }
-            Core function = elaborateFunctionValue(g.value(), want.params(), env, ctx);
-            decided.unify(declared, function.type(), ctx.symbols(), g.value().pos(),
+            List<Type> takes = reading(want, g, env, ctx);
+            if (takes == null) {
+                continue;   // nothing settled says what it takes, and its own body does not either
+            }
+            Core function = elaborateFunctionValue(g.value(), takes, env, ctx);
+            decided.constrain(declared, function.type(), ctx.symbols(), g.value().pos(),
                     argument(ex, "a function"));
-            Type answers = decided.zonk(want.result());
-            if (states(answers) && function.type() instanceof Type.FnOf is) {
-                held(is.result(), answers, g.value().pos(), ctx, argument(ex, "a function"));
-            }
         }
     }
 
@@ -774,20 +791,83 @@ public final class Elaborator {
         return !Type.mentions(t, x -> x instanceof Type.Open);
     }
 
-    /** Holds {@code value} to the type the callee declared for the position it stands in. */
-    private static void held(Core value, Type required, CheckContext ctx, String what) {
-        held(value.type(), required, value.pos(), ctx, what);
+    /**
+     * Whether a declared type says what a value at that position is <em>and</em> is done saying it.
+     * A type carrying the empty-collection bottom is an answer so far: it says what the value is
+     * made of and not what it holds, and a later reading widens it (ADR-0028). Reading a function
+     * argument at one would fix the function at what the seed happened to be rather than at what the
+     * application settles on.
+     */
+    private static boolean settled(Type t) {
+        return states(t) && !Type.mentions(t, x -> x instanceof Type.Nothing);
     }
 
-    private static void held(Type is, Type required, SourcePos pos, CheckContext ctx, String what) {
-        if (TypeOps.assignable(is, required, ctx.symbols())) {
-            return;
+    /**
+     * Whether a function argument is something this scope can type at all.
+     *
+     * <p>A name given to a function parameter is not always a value: where a helper hands its own
+     * function parameter on to another, the name stands for a block the inliner is holding and
+     * answers by substituting it into the body. Nothing binds it, so there is nothing here to read
+     * it as, and it is the body it is substituted into that types it.
+     */
+    private static boolean inSight(Ast.Expr function, Scope env) {
+        if (function instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local) {
+            return env.holds(local.id());
         }
-        throw CompileException.of(
-                Diagnostic.of(null, "check.expects").title("check.type.mismatch.title")
-                        .at(pos).args(what, Type.show(required, is), Type.show(is, required))
-                        .diff(Type.show(is, required), Type.show(required, is)).build(),
-                what + " expects " + Type.show(required) + ", but got " + Type.show(is));
+        return reads(function, env);
+    }
+
+    /**
+     * Whether every name inside {@code e} is one this scope can answer. A recursive helper is
+     * reached by its declaration rather than by a binding, and which declarations a scope reaches
+     * depends on where it was built — so a function argument whose body calls one may be readable
+     * where it is applied and not here. Where it is not, it is left to the body that applies it.
+     */
+    private static boolean reads(Ast.Expr e, Scope env) {
+        if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Helper
+                && env.of(call.denotes(), call.reaches()) == null) {
+            return false;
+        }
+        boolean[] all = {true};
+        Ast.forEachChild(e, child -> all[0] &= reads(child, env));
+        return all[0];
+    }
+
+    /**
+     * What to read a function argument at: what the signature states, with a position it left open
+     * read off the lambda's own body. A signature that says only what a function answers still says
+     * that — {@code (f: ('a) -> Bool)} is a function answering a Bool — and the argument is held to
+     * it once there is something to read the argument at.
+     *
+     * <p>Null where a position is open and nothing says what stands there. A named function would
+     * answer it from its own declaration, and does: it is not a lambda, so nothing here is open to
+     * begin with and what it is gets read straight off.
+     */
+    private static List<Type> reading(Type.FnOf want, Ast.Given g, Scope env, CheckContext ctx) {
+        List<Type> takes = new ArrayList<>();
+        for (int i = 0; i < want.params().size(); i++) {
+            Type stated = want.params().get(i);
+            if (settled(stated)) {
+                takes.add(stated);
+                continue;
+            }
+            // Nothing settled says what stands here. Where the callee applies the function, that
+            // application is what settles it — a fold's accumulator is seeded with an empty
+            // collection and grown by the step, so what it holds is decided by the two together and
+            // reading the step alone would fix it at what the seed happened to be. Where the callee
+            // never applies it there is no such reader, and the lambda's own body says it.
+            if (g.applied() || !(g.value() instanceof Ast.Block lambda)
+                    || i >= lambda.params().size()) {
+                return null;
+            }
+            Type read = HelperParams.readFromBody(lambda.params().get(i), lambda.body(), env, ctx,
+                    settled(want.result()) ? want.result() : null);
+            if (read == null || !settled(read)) {
+                return null;
+            }
+            takes.add(read);
+        }
+        return takes;
     }
 
     private static String argument(Ast.Expansion ex, String name) {
@@ -1035,16 +1115,10 @@ public final class Elaborator {
             // a helper that answers a function: `adder(5)` expands to the lambda under the bindings
             // its arguments became, and what those captured is what the lambda closes over
             case Ast.Expansion ex -> {
-                Scope inner = env;
-                List<Core> captured = new ArrayList<>();
-                for (Ast.Bound b : ex.bound()) {
-                    Core arg = elaborate(b.value(), env, ctx);
-                    captured.add(arg);
-                    inner = inner.with(b.binder(), arg.type());
-                }
-                Core out = elaborateFunctionValue(ex.body(), paramTypes, inner, ctx);
+                Applied applied = arguments(ex, env, ctx);
+                Core out = elaborateFunctionValue(ex.body(), paramTypes, applied.inner(), ctx);
                 for (int i = ex.bound().size() - 1; i >= 0; i--) {
-                    out = new Core.LetIn(ex.bound().get(i).binder(), captured.get(i), out,
+                    out = new Core.LetIn(ex.bound().get(i).binder(), applied.values().get(i), out,
                             out.type(), ex.pos());
                 }
                 yield out;

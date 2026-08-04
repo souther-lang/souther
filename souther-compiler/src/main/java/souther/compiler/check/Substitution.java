@@ -28,8 +28,13 @@ final class Substitution {
     private final Map<Type.MetaVar, Type> decided = new LinkedHashMap<>();
 
     /**
-     * Reads {@code actual} against {@code declared} and records what that says about the variables
-     * {@code declared} carries.
+     * Reads {@code actual} against {@code declared}: records what it says about the variables
+     * {@code declared} carries, and holds it to everything {@code declared} states.
+     *
+     * <p>A variable is a hole, not a licence. {@code List<'a>} says the value is a list and leaves
+     * what it holds open; {@code Map<String, 'a>} says it is a map with String keys. So an argument
+     * is held to the constructors, the arities and the ground positions of a declared type however
+     * many variables stand inside it — and only the positions a variable stands at are free.
      *
      * <p>A variable takes the first type it is read at, and every later reading must agree. The
      * empty-collection bottom is the one exception, in both directions: it settles nothing, so a
@@ -42,7 +47,73 @@ final class Substitution {
      * signature at once, so it is the only reader that can see two positions of one variable
      * disagree.
      */
-    void unify(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
+    void constrain(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
+        decide(declared, actual, symbols, pos, what);
+        if (!fits(actual, declared, symbols)) {
+            Type stated = settle(declared);
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.expects").title("check.type.mismatch.title")
+                            .at(pos).args(what, Type.show(stated, actual), Type.show(actual, stated))
+                            .diff(Type.show(actual, stated), Type.show(stated, actual)).build(),
+                    what + " expects " + Type.show(stated) + ", but got " + Type.show(actual));
+        }
+    }
+
+    /**
+     * Whether a value of {@code actual} may stand where {@code declared} was written, reading a
+     * variable this application has not decided as a position that states nothing. Everything around
+     * it still states what it states.
+     */
+    private boolean fits(Type actual, Type declared, Symbols symbols) {
+        Type want = zonk(declared);
+        if (want instanceof Type.MetaVar || actual instanceof Type.MetaVar) {
+            return true;   // the position states nothing, so nothing is refused at it
+        }
+        if (!Type.mentions(want, x -> x instanceof Type.MetaVar)) {
+            return TypeOps.assignable(actual, want, symbols);   // an ordinary question, asked as one
+        }
+        if (actual instanceof Type.Nothing || actual instanceof Type.Never
+                || actual instanceof Type.Erroneous) {
+            return true;   // nothing arrives from there, so nothing of the wrong shape can
+        }
+        return switch (want) {
+            case Type.ListOf l -> actual instanceof Type.ListOf a
+                    && fits(a.element(), l.element(), symbols);
+            case Type.SetOf s -> actual instanceof Type.SetOf a
+                    && fits(a.element(), s.element(), symbols);
+            case Type.OptionOf o -> actual instanceof Type.OptionOf a
+                    && fits(a.element(), o.element(), symbols);
+            case Type.MapOf m -> actual instanceof Type.MapOf a
+                    && fits(a.key(), m.key(), symbols) && fits(a.value(), m.value(), symbols);
+            case Type.TupleOf t -> actual instanceof Type.TupleOf a
+                    && t.elements().size() == a.elements().size()
+                    && allFit(a.elements(), t.elements(), symbols);
+            case Type.FnOf f -> actual instanceof Type.FnOf a
+                    && f.params().size() == a.params().size()
+                    && allFit(a.params(), f.params(), symbols)
+                    && fits(a.result(), f.result(), symbols);
+            // Not a shape with anything inside it to weigh position by position, so what is left is
+            // the ordinary question. It answers a variable the declaration wrote too, which is not
+            // this application's to decide and stands for whatever each use of it makes it.
+            default -> TypeOps.assignable(actual, want, symbols);
+        };
+    }
+
+    private boolean allFit(List<Type> actual, List<Type> declared, Symbols symbols) {
+        for (int i = 0; i < declared.size(); i++) {
+            if (!fits(actual.get(i), declared.get(i), symbols)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Records what {@code actual} says about the variables {@code declared} carries, and states
+     * nothing about whether the two agree — for a reader that is working out what it holds rather
+     * than checking a value against it.
+     */
+    void decide(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
         // Neither side is written through first. A variable already decided is still the variable
         // this reading is about, and writing what it stands for in its place would leave nothing for
         // a later, more definite reading to rebind — which is what a first reading carrying the
@@ -52,33 +123,33 @@ final class Substitution {
         switch (left) {
             case Type.MetaVar m -> bind(m, right, symbols, pos, what);
             case Type.ListOf l when right instanceof Type.ListOf a ->
-                    unify(l.element(), a.element(), symbols, pos, what);
+                    decide(l.element(), a.element(), symbols, pos, what);
             case Type.SetOf s when right instanceof Type.SetOf a ->
-                    unify(s.element(), a.element(), symbols, pos, what);
+                    decide(s.element(), a.element(), symbols, pos, what);
             case Type.OptionOf o when right instanceof Type.OptionOf a ->
-                    unify(o.element(), a.element(), symbols, pos, what);
+                    decide(o.element(), a.element(), symbols, pos, what);
             case Type.MapOf m when right instanceof Type.MapOf a -> {
-                unify(m.key(), a.key(), symbols, pos, what);
-                unify(m.value(), a.value(), symbols, pos, what);
+                decide(m.key(), a.key(), symbols, pos, what);
+                decide(m.value(), a.value(), symbols, pos, what);
             }
             case Type.TupleOf t when right instanceof Type.TupleOf a
                     && t.elements().size() == a.elements().size() -> {
                 for (int i = 0; i < t.elements().size(); i++) {
-                    unify(t.elements().get(i), a.elements().get(i), symbols, pos, what);
+                    decide(t.elements().get(i), a.elements().get(i), symbols, pos, what);
                 }
             }
             case Type.FnOf f when right instanceof Type.FnOf a
                     && f.params().size() == a.params().size() -> {
                 for (int i = 0; i < f.params().size(); i++) {
-                    unify(f.params().get(i), a.params().get(i), symbols, pos, what);
+                    decide(f.params().get(i), a.params().get(i), symbols, pos, what);
                 }
-                unify(f.result(), a.result(), symbols, pos, what);
+                decide(f.result(), a.result(), symbols, pos, what);
             }
             // The other side carries what this one left open: a declared `List<Int>` read against a
             // result still standing at a variable says what that variable is.
             case Type _ when right instanceof Type.MetaVar m -> bind(m, left, symbols, pos, what);
-            // Neither side is open. Whether they agree is an ordinary question about ground types,
-            // and the answer belongs to whoever asked for this reading.
+            // Neither side is open, or the shapes do not line up. Either way there is no variable
+            // here to decide; whether they agree is {@link #fits}'s question.
             default -> { }
         }
     }

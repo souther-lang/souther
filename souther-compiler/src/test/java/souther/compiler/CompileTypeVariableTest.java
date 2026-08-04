@@ -262,4 +262,39 @@ class CompileTypeVariableTest {
         CompileException e = assertThrows(CompileException.class, () -> compileCore(core));
         assertEquals("check.expects", e.diagnostic().messageKey(), e.getMessage());
     }
+
+    /**
+     * A declared type that names a variable still states everything around it. {@code List<'a>} says
+     * the value is a list and leaves what it holds open, so an argument is held to being a list.
+     */
+    @Test
+    void aTypeThatNamesAVariableStatesWhatIsAroundIt() {
+        assertDoesNotThrow(() -> compileCore("""
+                module souther.gen
+                let ignores (xs: List<'a>) = true
+                let fine = ignores([ 1 ])
+                """), "a list of anything is a list");
+        CompileException e = assertThrows(CompileException.class, () -> compileCore("""
+                module souther.gen
+                let ignores (xs: List<'a>) = true
+                let bad = ignores(1)
+                """));
+        assertEquals("check.expects", e.diagnostic().messageKey(), e.getMessage());
+    }
+
+    /** The same of a function type: {@code ('a) -> Bool} leaves what it takes open and states what
+     * it answers, and the argument is held to answering that. */
+    @Test
+    void aFunctionTypeThatNamesAVariableStillStatesWhatItAnswers() {
+        assertDoesNotThrow(() -> compileCore("""
+                module souther.gen
+                let ignores (f: ('a) -> Bool) = true
+                let fine = ignores((x) -> x > 1)
+                """), "it answers a Bool");
+        assertThrows(CompileException.class, () -> compileCore("""
+                module souther.gen
+                let ignores (f: ('a) -> Bool) = true
+                let bad = ignores((x) -> x + 1)
+                """), "it answers an Int, whatever it takes");
+    }
 }
