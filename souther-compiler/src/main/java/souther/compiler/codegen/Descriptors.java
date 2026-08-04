@@ -162,6 +162,7 @@ final class Descriptors {
     static final ClassDesc CD_Strings = ClassDesc.of("souther.runtime.Strings");
     static final ClassDesc CD_Maps = ClassDesc.of("souther.runtime.Maps");
     static final ClassDesc CD_Sets = ClassDesc.of("souther.runtime.Sets");
+    static final ClassDesc CD_Representations = ClassDesc.of("souther.runtime.Representations");
     static final ClassDesc CD_Temporals = ClassDesc.of("souther.runtime.Temporals");
     static final ClassDesc CD_Option = ClassDesc.of("souther.runtime.Option");
     static final ClassDesc CD_Options = ClassDesc.of("souther.runtime.Options");
@@ -304,7 +305,12 @@ final class Descriptors {
     /** {@code Encoder.contramap(Function)}: pre-processes the value an element encoder receives —
      * a nested Set is listed, a nested newtype-keyed Map has its keys rendered bare. */
     static final MethodTypeDesc MTD_Rencoder_contramap = MethodTypeDesc.of(CD_REncoder, CD_Function);
+    /** {@code Encoder.andThen(Encoder)}: post-processes what an element encoder produced — a Set's
+     * array and a Map's object are put in the order their own external representations give. */
+    static final MethodTypeDesc MTD_Rencoder_andThen = MethodTypeDesc.of(CD_REncoder, CD_REncoder);
     static final MethodTypeDesc MTD_Sets_toList = MethodTypeDesc.of(CD_List, CD_Set);
+    /** {@code Representations.sortedArray/sortedObject}: an encoded collection, put in order. */
+    static final MethodTypeDesc MTD_Representations_sorted = MethodTypeDesc.of(CD_Object, CD_Object);
     /** {@code Decoder.map(Function)}: turns a {@code Decoder<I, List<T>>} into a {@code Decoder<I, Set<T>>}. */
     static final MethodTypeDesc MTD_Rdecoder_map = MethodTypeDesc.of(CD_RDecoder, CD_Function);
     // A newtype's invariant as Raoh constraints on its leaf decoder (issue #83): the recognised

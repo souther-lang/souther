@@ -150,8 +150,10 @@ class PersistentHashMapTest {
 
     /**
      * The bulk builder fills its nodes in place, so what it produces has to be indistinguishable
-     * from the same entries added one at a time — same contents, same size, and the same
-     * deterministic iteration order, which is what the boundary encoding depends on.
+     * from the same entries added one at a time — same contents, same size, and the same iteration
+     * order. The order is asserted because two ways of building one map must give one trie, not
+     * because anything downstream may read it: the boundary settles its own order (see
+     * {@link Representations}), and the language specifies none.
      */
     @Test
     void builderProducesTheSameMapAsRepeatedAssoc() {

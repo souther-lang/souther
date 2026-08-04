@@ -1,8 +1,9 @@
 # ADR-0039: Set is a collection type; its external representation is a deduplicated array
 
-Status: Accepted (encode and `toList` have used the backing trie's own order since the runtime
-collections became persistent structures in `e45ad66d`; they were first-seen order when this was
-decided, and that clause below is the one that changed)
+Status: Accepted (the order clause below has changed twice. It was first-seen order when this was
+decided; it became the backing trie's own when the runtime collections became persistent structures
+in `e45ad66d`; and ADR-0094 has since given the *boundary* an order of its own — the members'
+external representations — leaving `Set.toList`'s unspecified, so the two are no longer one order)
 
 ## Context
 
@@ -27,11 +28,11 @@ Add `Set<T>` as a third collection type, alongside `List` and `Map`.
 - **External representation is a JSON array, deduplicated on decode.** The derived decoder reads the
   array with the existing list decoder and maps the result through a `List -> Set` deduplication;
   duplicates in the input are dropped, not rejected (Elm's `Set.fromList`, F#'s `Set.ofList`). The
-  encoder writes the set back as an array, in an order the language does not specify; `Set.toList`
-  uses that same order, a `Set` having no key to render the way a `Map` does. The input array's order
-  has no semantic significance and is not
-  guaranteed to be preserved. The resulting order is not part of the semantic value of a `Set` and
-  must not be depended on.
+  encoder writes the set back as an array whose members are in ascending order of their own external
+  representation (ADR-0094); `Set.toList`'s order is not specified and is not that one. The input
+  array's order has no semantic significance and is not guaranteed to be preserved. No order is part
+  of the semantic value of a `Set`: what the boundary writes is fixed so that a response body follows
+  from the members, not so that a program may read meaning into a position.
 - **Covariant and immutable**, like `List`/`Map`: a `Set<A>` is assignable to a `Set<S>` when `A` is a
   case of `S`, sound because a set cannot be mutated.
 - **Standard library** in the reserved `souther.set` namespace: `singleton`, `insert`, `remove`,

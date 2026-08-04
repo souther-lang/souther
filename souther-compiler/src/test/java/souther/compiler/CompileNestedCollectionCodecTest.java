@@ -66,9 +66,10 @@ class CompileNestedCollectionCodecTest {
                 "a newtype-keyed map inside a list still renders its keys bare");
         assertEquals(List.of(List.of(1L, 2L), List.of(3L)), m.get("grid"));
 
-        // A Set is written as an array; its order is a deterministic hash order, not insertion order.
+        // A Set is written as an array, its members in ascending order of their own external
+        // representation ([#collections]) — at this depth as at any other.
         Map<?, ?> tags = (Map<?, ?>) m.get("tags");
-        assertEquals(Set.of("urgent", "ui"), Set.copyOf((List<?>) tags.get("bug")),
+        assertEquals(List.of("ui", "urgent"), tags.get("bug"),
                 "a set under a map value is listed, then each element encoded");
     }
 }

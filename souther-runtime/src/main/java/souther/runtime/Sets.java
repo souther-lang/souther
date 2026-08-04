@@ -8,10 +8,11 @@ import java.util.Set;
  *  {@link PersistentHashSet} (CHAMP, structural sharing): every operation returns a fresh set that
  *  shares structure with its input in O(log n) and never mutates it. The language specifies no
  *  iteration order, and it is not first-seen order; two sets that are equal are not guaranteed to
- *  iterate in the same order, so neither a caller nor {@code toList} / encode may depend on a
- *  particular one ({@link PersistentHashSet}). A boundary encode goes through {@link #toList}
- *  unchanged, so the two agree — unlike a {@code Map}, whose keys may be rendered first
- *  ({@link Maps#mapKeys}). This class is Raoh-free; {@link #fromList}
+ *  iterate in the same order, so neither a caller nor {@code toList} may depend on a particular one
+ *  ({@link PersistentHashSet}). A boundary encode does not: it goes through {@link #toList} and is
+ *  then put in the order the members' own external representations give
+ *  ({@link Representations#sortedArray}), so the boundary's order is specified and this one is not.
+ *  This class is Raoh-free; {@link #fromList}
  *  is also the dedup a Set decoder maps a list through, and keeps its exact {@code (List) -> Set}
  *  signature because a Set decoder resolves it by method handle. */
 public final class Sets {

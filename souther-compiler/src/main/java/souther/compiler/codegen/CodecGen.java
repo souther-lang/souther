@@ -1410,6 +1410,7 @@ final class CodecGen {
                 gen.expr(se.source());                                          // the Set value
                 code.invokestatic(CD_Sets, "toList", MethodTypeDesc.of(CD_List, CD_Set));   // Set -> List
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);      // encode the array
+                code.invokestatic(CD_Representations, "sortedArray", MTD_Representations_sorted);
             }
             case Ast.MapEnc me -> {
                 pushElemEncoder(code, me.elem());
@@ -1421,6 +1422,7 @@ final class CodecGen {
                     code.invokestatic(CD_Maps, "mapKeys", MTD_mapKeys);         // Map<String,V>
                 }
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+                code.invokestatic(CD_Representations, "sortedObject", MTD_Representations_sorted);
             }
             case Ast.ObjectRaw o -> {
                 code.new_(CD_LinkedHashMap);
@@ -1490,6 +1492,8 @@ final class CodecGen {
                 code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
                 code.invokedynamic(setToListCallSite());                    // Function<Set, List>
                 code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
+                code.invokedynamic(orderingCallSite("sortedArray"));        // Encoder<Object, Object>
+                code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
             }
             case Ast.MapElemEnc m -> {
                 pushElemEncoder(code, m.value());
@@ -1499,8 +1503,31 @@ final class CodecGen {
                     code.invokedynamic(mapKeysCallSite());                  // Function<Map<K,V>, Map<String,V>>
                     code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
                 }
+                code.invokedynamic(orderingCallSite("sortedObject"));       // Encoder<Object, Object>
+                code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
             }
         }
+    }
+
+    /**
+     * {@code Representations::sortedArray} / {@code ::sortedObject} as an {@code Encoder}, so a
+     * nested collection is put in order after its members have been encoded.
+     *
+     * <p>The field-level arms above call the same method directly, on the value the encode left on
+     * the stack. Both are here rather than in one place after the fact because this is the last
+     * point at which the type is still known: once encoded, a Set and a List are both a
+     * {@code java.util.List}, and only one of the two may be reordered.
+     */
+    private static DynamicCallSiteDesc orderingCallSite(String ordering) {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Representations, ordering,
+                MTD_Representations_sorted);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "encode",
+                MethodTypeDesc.of(CD_REncoder),                          // no captures: () -> Encoder
+                MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
+                impl,
+                MTD_Representations_sorted);
     }
 
     /** {@code Sets::toList} as a {@code Function}, so a nested Set reaches the list encoder. */

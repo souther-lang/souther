@@ -55,7 +55,8 @@ class CompileSetLibTest {
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
         assertEquals(3L, m.get("n"), "the set {a, b, c} has three members");
         assertEquals(true, m.get("hasA"));
-        // Set iteration order is a deterministic hash order, not first-seen — compare membership.
+        // What the algebra answers is a membership question, so that is what these assert. The order
+        // the boundary writes them in is a separate contract, pinned in CompileEncodeOrderTest.
         assertEquals(Set.of("a", "b", "c", "d"), Set.copyOf((List<?>) m.get("unionList")));
         assertEquals(Set.of("b"), Set.copyOf((List<?>) m.get("interList")));
         assertEquals(Set.of("a", "c"), Set.copyOf((List<?>) m.get("diffList")));

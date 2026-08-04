@@ -40,8 +40,9 @@ import java.util.Set;
  * determinism is <em>for</em>: a particular trie, not the map value. Two maps that are equal are not
  * guaranteed to iterate in the same order, because keys sharing a full hash sit in a
  * {@code HashCollisionNode} that holds them in the order they were put — so the order can differ
- * with the construction history. Callers, and the boundary encoding, must depend on no particular
- * order.
+ * with the construction history. A caller must therefore depend on no particular order. The boundary
+ * encoding does not: it writes a map's members in ascending order of their rendered keys
+ * ({@link Representations}), which is exactly the order this traversal cannot promise.
  *
  * <p>Values are never null (a Souther collection models absence with {@code Option}), so
  * {@link #get} returning {@code null} unambiguously means "absent".
