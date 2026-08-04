@@ -1,6 +1,7 @@
 package souther.runtime;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -59,13 +60,18 @@ public final class Representations {
     private static final int OBJECT = 6;
 
     /**
-     * How long a number a boundary spells out, which is how long a one it can read back: Jackson
-     * refuses to read a number of more than a thousand characters
-     * ({@code StreamReadConstraints.DEFAULT_MAX_NUM_LEN}), so writing a longer one would be writing
-     * what this language cannot read. The limit is repeated here rather than asked of Jackson
-     * because this module does not depend on it.
+     * How many digits an exponent may be spelt out into. It bounds the <em>expansion</em> and not the
+     * output: a value that already carries a thousand significant digits is written with all of them,
+     * here as anywhere, and that is not this rule's business. What this stops is a compact input
+     * asking for an enormous output — {@code 1E+1000000} is eleven characters and a million and one
+     * digits.
+     *
+     * <p>A thousand is where a reader gives up as well ({@code jackson-core}'s
+     * {@code StreamReadConstraints.DEFAULT_MAX_NUM_LEN}), which is where the figure comes from. It is
+     * a reference point and not the definition: that limit is per-factory and configurable, and the
+     * form this class writes is part of the language.
      */
-    private static final int READABLE_DIGITS = 1000;
+    private static final int MAX_SPELT_OUT_DIGITS = 1000;
 
     private Representations() {}
 
@@ -86,13 +92,43 @@ public final class Representations {
      * of the amount.
      */
     public static BigDecimal canonicalNumber(BigDecimal amount) {
-        BigDecimal stripped = amount.stripTrailingZeros();
+        BigDecimal stripped = strippedAsFarAsTheScaleGoes(amount);
         if (stripped.scale() >= 0) {
             return stripped;
         }
-        return stripped.precision() - stripped.scale() <= READABLE_DIGITS
-                ? stripped.setScale(0)
-                : stripped;
+        // in long, because a scale at the floor asks for more digits than an int can count
+        long spelledOut = (long) stripped.precision() - stripped.scale();
+        return spelledOut <= MAX_SPELT_OUT_DIGITS ? stripped.setScale(0) : stripped;
+    }
+
+    /**
+     * The amount carried by as few digits as a {@code BigDecimal} can carry it.
+     *
+     * <p>{@code stripTrailingZeros} is that, until the scale it would need is one the type cannot
+     * say: a scale is an {@code int}, and taking the zero off {@code (10, MIN_VALUE)} asks for
+     * {@code MIN_VALUE - 1}, which it answers by throwing. Stopping at the floor instead still leaves
+     * one form per amount — {@code (10, MIN_VALUE)} and {@code (100, MIN_VALUE + 1)} are one amount
+     * and both stop at {@code (10, MIN_VALUE)} — because fixing the scale fixes the digits.
+     */
+    private static BigDecimal strippedAsFarAsTheScaleGoes(BigDecimal amount) {
+        if (amount.signum() == 0) {
+            return BigDecimal.ZERO;                  // every way of writing nothing is one amount
+        }
+        long room = (long) amount.scale() - Integer.MIN_VALUE;
+        if (room >= amount.precision()) {
+            return amount.stripTrailingZeros();      // fewer zeros than digits: it cannot fall out
+        }
+        BigInteger digits = amount.unscaledValue();
+        int scale = amount.scale();
+        for (long left = room; left > 0; left--) {
+            BigInteger[] divided = digits.divideAndRemainder(BigInteger.TEN);
+            if (divided[1].signum() != 0) {
+                break;
+            }
+            digits = divided[0];
+            scale--;
+        }
+        return new BigDecimal(digits, scale);
     }
 
     /** The members of an encoded array, in ascending order of their own external representation. */

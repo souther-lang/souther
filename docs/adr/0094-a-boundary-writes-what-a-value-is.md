@@ -47,12 +47,26 @@ decided by whichever arrived first.
 
 Spelling the amount out is bounded, and has to be. An exponent is what lets a caller name a large
 amount without paying for it: `1E+1000000` is eleven characters and a million and one digits, so a
-boundary that always spelt out would let a small input ask for an arbitrarily large one. An amount is
-therefore spelt out while it is at most a thousand characters and keeps its exponent beyond that — a
-thousand being what a boundary can *read* (`StreamReadConstraints.DEFAULT_MAX_NUM_LEN`), so the cut
-is the point past which writing more would be writing what this language cannot read back. The cut
-falls on the amount and not on the value that carried it, which is what keeps the form a function of
-the amount: `1E+1000000` and `10E+999999` reach the same side of it.
+boundary that always spelt out would let a small input ask for an arbitrarily large one. An exponent
+is therefore spelt out into at most a thousand digits and otherwise written as it stands.
+
+What that bounds is the *expansion*, not the output. A value that already carries a thousand
+significant digits is written with all of them — no rule here shortens what a value is — and a sign
+is not a digit, so `-1E+999` is spelt out as 1001 characters. A thousand is also where a reader gives
+up (`jackson-core`'s `StreamReadConstraints.DEFAULT_MAX_NUM_LEN`), which is where the figure came
+from, but that is a reference point rather than the definition: that limit is per-factory and
+configurable, and what a boundary writes is part of the language.
+
+The bound falls on the amount and not on the value that carried it, which is what keeps the form a
+function of the amount: `1E+1000000` and `10E+999999` reach the same side of it.
+
+`stripTrailingZeros` is not by itself the fewest digits an amount can be carried by, because a scale
+is an `int` with an end: taking the zero off `(10, MIN_VALUE)` asks for a scale the type cannot say
+and it throws. Stopping at the floor keeps one form per amount — `(10, MIN_VALUE)` and
+`(100, MIN_VALUE + 1)` are one amount and both stop at `(10, MIN_VALUE)` — because fixing the scale
+fixes the digits. An Encoder is total over the values it is given (`[#encoder]`), so this is not an
+edge case to be left throwing: a `Decimal` is whatever Java handed the model, and Java can hand it
+either end of the scale.
 
 **A collection's members are written in ascending order of their external representations.** A
 `Set`'s array is ordered by each member's own representation; a boundary `Map`'s object by its

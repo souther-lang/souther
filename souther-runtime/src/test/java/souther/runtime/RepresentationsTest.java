@@ -1,10 +1,12 @@
 package souther.runtime;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -86,9 +88,9 @@ class RepresentationsTest {
     }
 
     @Test
-    void anAmountTooLongToBeReadBackKeepsItsExponentRatherThanBeingSpeltOut() {
-        // 1E+1000000 is eleven characters and a million and one digits. Spelling it out would make a
-        // tiny input into a megabyte of JSON, and the boundary could not read the result back.
+    void anExponentTooLongToSpellOutKeepsIt() {
+        // 1E+1000000 is eleven characters and a million and one digits, so spelling every amount out
+        // would let a value that costs nothing to name ask for a megabyte of JSON.
         BigDecimal huge = new BigDecimal("1E+1000000");
         BigDecimal written = Representations.canonicalNumber(huge);
         assertEquals(0, huge.compareTo(written), "the same amount either way");
@@ -97,11 +99,12 @@ class RepresentationsTest {
     }
 
     @Test
-    void theLongestAmountThatIsSpeltOutIsTheLongestOneThatCanBeReadBack() {
-        // The cut is what a boundary can read: a number of more than 1000 characters is refused on
-        // the way in, so writing one would be writing what this language cannot read.
+    void theLongestExponentSpeltOutIsAThousandDigits() {
+        // The cut is on the expansion, not on the output: what a value already carries it keeps, and
+        // a sign is not a digit, so -1E+999 is written out as 1001 characters.
         assertEquals(1000, Representations.canonicalNumber(new BigDecimal("1E+999")).toString().length());
         assertEquals("1E+1000", Representations.canonicalNumber(new BigDecimal("1E+1000")).toString());
+        assertEquals(1001, Representations.canonicalNumber(new BigDecimal("-1E+999")).toString().length());
     }
 
     @Test
@@ -112,6 +115,56 @@ class RepresentationsTest {
                 Representations.canonicalNumber(new BigDecimal("10E+999999")));
         assertEquals(Representations.canonicalNumber(new BigDecimal("100.00")),
                 Representations.canonicalNumber(new BigDecimal("1E+2")));
+    }
+
+    /** The amounts that make the number rules visible, including both ends of what a scale may be. */
+    private static final List<BigDecimal> AMOUNTS = Arrays.asList(
+            new BigDecimal("0"), new BigDecimal("0.000"), new BigDecimal("1"), new BigDecimal("1.00"),
+            new BigDecimal("-3.000"), new BigDecimal("100"), new BigDecimal("1.0E+6"),
+            new BigDecimal("1E+999"), new BigDecimal("-1E+999"), new BigDecimal("1E+1000"),
+            new BigDecimal("1E+1000000"), new BigDecimal("10E+999999"),
+            new BigDecimal(BigInteger.ONE, Integer.MAX_VALUE),
+            new BigDecimal(BigInteger.ONE, Integer.MIN_VALUE),
+            new BigDecimal(BigInteger.TEN, Integer.MIN_VALUE),
+            new BigDecimal(BigInteger.valueOf(100), Integer.MIN_VALUE + 1),
+            new BigDecimal(BigInteger.ZERO, Integer.MIN_VALUE));
+
+    @Test
+    void everyAmountHasAFormIncludingTheOnesAtTheEndsOfTheScale() {
+        // The rule is a function on amounts, so there is no amount it declines to answer for. Both
+        // ends are reachable: stripping a trailing zero off a scale already at the floor asks for a
+        // scale the type cannot say, and counting the digits of one asks for more than an int holds.
+        for (BigDecimal amount : AMOUNTS) {
+            assertDoesNotThrow(() -> Representations.canonicalNumber(amount), amount::toString);
+        }
+    }
+
+    @Test
+    void aFormIsTheSameAmountAsWhatItWasMadeFrom() {
+        for (BigDecimal amount : AMOUNTS) {
+            assertEquals(0, Representations.canonicalNumber(amount).compareTo(amount),
+                    () -> "rewrote " + amount);
+        }
+    }
+
+    @Test
+    void makingAFormOfAFormChangesNothing() {
+        for (BigDecimal amount : AMOUNTS) {
+            BigDecimal once = Representations.canonicalNumber(amount);
+            assertEquals(once, Representations.canonicalNumber(once), () -> "unsettled at " + amount);
+        }
+    }
+
+    @Test
+    void amountsThatAreOneAmountHaveOneFormWhicheverEndOfTheScaleTheySitAt() {
+        for (BigDecimal a : AMOUNTS) {
+            for (BigDecimal b : AMOUNTS) {
+                if (a.compareTo(b) == 0) {
+                    assertEquals(Representations.canonicalNumber(a), Representations.canonicalNumber(b),
+                            () -> "one amount, two forms: " + a + " and " + b);
+                }
+            }
+        }
     }
 
     @Test
