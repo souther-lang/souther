@@ -101,11 +101,17 @@ public final class FixtureReader {
                                             Map<String, Ast.FnDef> values) {
         // A reader is the whole of it. There are no rows, so nothing runs on a worker and no budget is
         // read; what a behavior takes and what stands in for what it depends on are not questions about
-        // whether a value builds, so this no longer asks for the answers to them.
-        return new FixtureReader(module, symbols, values,
-                new MemoryClassLoader(classes, parent))::refuse;
+        // whether a value builds, so this does not ask for the answers to them.
+        //
+        // One reader per value asked about, because that is what a reading is here as anywhere: a
+        // caller holds one of these and asks it about every candidate of every behavior it is
+        // measuring, and a reader bound into it once would be a session spanning all of them. It is
+        // the loader that is shared, and has to be — it caches the classes it has defined and loaded,
+        // and a fake's subclass is generated once.
+        MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
+        return (type, fixture) -> new FixtureReader(module, symbols, values, loader)
+                .refuse(type, fixture);
     }
-
 
     /** The helper this reading is inside, for a budget to name when the reading does not finish. */
     String runningHelper() {
@@ -116,6 +122,7 @@ public final class FixtureReader {
     Object built(Ast.Expr written, Type type) {
         return decode(type, raw(written, type));
     }
+
     /**
      * A written fixture built into the whole value it states, and the case that value is.
      *
@@ -176,6 +183,7 @@ public final class FixtureReader {
                 ? carried != null && carried.equals(is)
                 : is.equals(candidate.qualified());
     }
+
     /**
      * The case a row asserts and nothing more: a bare name denoting a case — a unit case, or a case
      * written bare — where there is no value under it to compare. Null for anything else, including a
@@ -1013,6 +1021,7 @@ public final class FixtureReader {
             return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
         });
     }
+
     /** One decoded input, in the form the compiler owns. Never throws: a value that cannot be read is
      * an unreadable value, and a row that carries one still carries everything else. */
     ObservedValue observed(Object decoded) {
@@ -1022,6 +1031,7 @@ public final class FixtureReader {
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
+
     java.util.Optional<String> refuse(Type type, Ast.Expr fixture) {
         try {
             built(fixture, type);
