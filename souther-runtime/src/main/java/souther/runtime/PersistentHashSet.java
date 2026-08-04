@@ -27,12 +27,12 @@ import java.util.Set;
  * set Souther built. A {@link PersistentVector} keeps the {@code List} contract instead, because a
  * list compares positionally and has no index to be indexed by.
  *
- * <p>Iteration follows a deterministic, implementation-defined traversal of the backing trie. It is
- * not first-seen order and must not be read as one. What it is deterministic <em>for</em> is the
- * trie, not the set value: two sets that are equal are not guaranteed to iterate in the same order,
- * because elements sharing a full hash sit in one collision bucket held in the order they were added
- * (see {@link PersistentHashMap}). Callers, and the boundary encoding, must depend on no particular
- * order.
+ * <p>Iteration is a deterministic traversal of the backing trie, and the language specifies no order
+ * at all (spec §stdlib-set). It is not first-seen order and must not be read as one. What the
+ * determinism is <em>for</em> is a particular trie, not the set value: two sets that are equal are
+ * not guaranteed to iterate in the same order, because elements sharing a full hash sit in one
+ * collision bucket held in the order they were added (see {@link PersistentHashMap}). Callers, and
+ * the boundary encoding, must depend on no particular order.
  *
  * <p>A dedicated key-only CHAMP node (no value slots) would save memory; the sentinel-map form is
  * behaviorally identical and is the minimal first cut.

@@ -35,12 +35,13 @@ import java.util.Set;
  * pair. A {@link PersistentVector} keeps the {@code List} contract instead, because a list compares
  * positionally and has no index to be indexed by.
  *
- * <p>Iteration follows a deterministic, implementation-defined traversal of the trie. It is not
- * insertion order and must not be read as one. Note what it is deterministic <em>for</em>: the trie,
- * not the map value. Two maps that are equal are not guaranteed to iterate in the same order, because
- * keys sharing a full hash sit in a {@code HashCollisionNode} that holds them in the order they were
- * put — so the order can differ with the construction history. Callers, and the boundary encoding,
- * must depend on no particular order.
+ * <p>Iteration is a deterministic traversal of the trie, and the language specifies no order at all
+ * (spec §stdlib-map). It is not insertion order and must not be read as one. Note what the
+ * determinism is <em>for</em>: a particular trie, not the map value. Two maps that are equal are not
+ * guaranteed to iterate in the same order, because keys sharing a full hash sit in a
+ * {@code HashCollisionNode} that holds them in the order they were put — so the order can differ
+ * with the construction history. Callers, and the boundary encoding, must depend on no particular
+ * order.
  *
  * <p>Values are never null (a Souther collection models absence with {@code Option}), so
  * {@link #get} returning {@code null} unambiguously means "absent".
