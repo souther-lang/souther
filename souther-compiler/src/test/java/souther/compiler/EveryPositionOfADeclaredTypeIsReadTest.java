@@ -95,4 +95,36 @@ class EveryPositionOfADeclaredTypeIsReadTest {
         CompileException e = failure(module(row, row.refused()));
         assertEquals(true, e != null, "the declaration does not admit this argument");
     }
+
+    /**
+     * A function handed on to another function parameter is read at the boundary it arrives at.
+     *
+     * <p>Each boundary states its own type, and what one declares of what it takes is not what the
+     * function was declared as where it came in. Here the two disagree and only the second says so:
+     * {@code use} takes a function answering an Int and hands it to {@code inner}, which declares
+     * one answering a String.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("relayed")
+    void aFunctionHandedOnIsReadAtTheBoundaryItArrivesAt(Row row) {
+        String relaying = """
+                module souther.gen
+                let inner (g: (Int) -> String) = {
+                    %s
+                    true
+                }
+                let use (f: (Int) -> %%s) = inner(f)
+                let call = use(%%s)
+                """.formatted(row.uses());
+        assertNull(failure(relaying.formatted("String", row.fits())),
+                "both boundaries declare what this answers");
+        assertEquals(true, failure(relaying.formatted("Int", row.refused())) != null,
+                "the boundary it is handed on to declares something else");
+    }
+
+    private static List<Row> relayed() {
+        return List.of(
+                new Row("handed on, and applied", "", "let said = g(1)", "(x) -> \"s\"", "(x) -> x"),
+                new Row("handed on, never applied", "", "", "(x) -> \"s\"", "(x) -> x"));
+    }
 }

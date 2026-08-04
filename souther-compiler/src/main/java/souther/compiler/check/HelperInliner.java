@@ -1169,9 +1169,44 @@ public final class HelperInliner {
                         // to the lambda's body, so the expansion holds no reference either way.
                         given.add(new Ast.Given(instantiated(p.type(), applied), arg,
                                 references(helper.written(), p.binder().id())));
+                        Ast.FnType declares = declaredFn(p.type(), applied);
                         if (arg instanceof Ast.Var fnName) {
-                            subst.put(p.binder().id(), fnName.name());
-                            substDenotes.put(p.binder().id(), fnName.denotes());
+                            // A function handed on to another function parameter. It is registered
+                            // under what *this* callee declared of the parameter, applying what it
+                            // was given — so the boundary between the two declarations is a place
+                            // that holds both, rather than the name travelling on under the
+                            // declaration it arrived with and this one never being read.
+                            Ast.Binder f = ours.binder("$" + p.name(), arg.pos());
+                            List<Ast.Binder> handed = new ArrayList<>();
+                            List<Ast.Expr> reads = new ArrayList<>();
+                            for (int a = 0; declares != null && a < declares.params().size(); a++) {
+                                Ast.Binder h = ours.binder("$" + p.name() + a, arg.pos());
+                                handed.add(h);
+                                reads.add(Ast.Var.local(h, arg.pos()));
+                            }
+                            if (declares == null || expands(fnName.denotes(), fnName.reaches()) == null) {
+                                // Not a function this expansion will reduce — a binding holding one
+                                // chosen at run time, or a name with no declared type to hand on.
+                                // There is no boundary to make: what applies it is an application of
+                                // a value, and the value's own type is what that reads.
+                                subst.put(p.binder().id(), fnName.name());
+                                substDenotes.put(p.binder().id(), fnName.denotes());
+                                continue;
+                            }
+                            List<Ast.FnParam> hands = new ArrayList<>();
+                            for (int a = 0; a < handed.size(); a++) {
+                                hands.add(new Ast.FnParam(handed.get(a), declares.params().get(a)));
+                            }
+                            subst.put(p.binder().id(), f.name());
+                            substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
+                            scoped.add(f.id());
+                            scopedLambdas.put(f.id(),
+                                    new Ast.FnDef(f.name(), hands, declares.result(),
+                                            new Ast.FnBody.Written(new Ast.Apply(fnName, reads,
+                                                    souther.compiler.types.ConstructionOrigin.own(), arg.pos())),
+                                            arg.pos()));
+                            lambdaOrigins.put(f.id(),
+                                    new LambdaOrigin(p.name(), helper.name(), arg.pos()));
                         } else if (arg instanceof Ast.Block lambda) {
                             Ast.Binder f = ours.binder("$" + p.name(), lambda.pos());
                             subst.put(p.binder().id(), f.name());
@@ -1185,7 +1220,6 @@ public final class HelperInliner {
                             // what used to throw the signature away at the point it was reduced,
                             // leaving nothing between the caller's function and what was declared of
                             // it (issues #318, #320).
-                            Ast.FnType declares = declaredFn(p.type(), applied);
                             List<Ast.FnParam> lparams = new ArrayList<>();
                             for (int lp = 0; lp < lambda.params().size(); lp++) {
                                 lparams.add(new Ast.FnParam(lambda.params().get(lp),
