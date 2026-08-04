@@ -4,11 +4,8 @@ import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Symbols;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
-import souther.compiler.types.BindingId;
-import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
-import souther.compiler.check.CallElaborator;
 import souther.compiler.check.TypeOps;
 import souther.compiler.coverage.Probe;
 import souther.compiler.diag.Diagnostic;
@@ -18,25 +15,11 @@ import souther.compiler.diag.SourceRef;
 import souther.compiler.observe.Disposition;
 import souther.compiler.observe.FailurePhase;
 import souther.compiler.observe.Incompleteness;
-import souther.compiler.observe.Limits;
 import souther.compiler.observe.ObservedValue;
 import souther.compiler.observe.RowOutcome;
 import souther.compiler.observe.Stage;
-import souther.runtime.Sets;
 
-import net.unit8.raoh.Err;
-import net.unit8.raoh.Issues;
-import net.unit8.raoh.Ok;
-import net.unit8.raoh.Result;
-import net.unit8.raoh.decode.Decoder;
-import net.unit8.raoh.decode.ObjectDecoders;
-
-import java.math.BigDecimal;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,10 +43,18 @@ import java.util.Set;
  * values, and fake entries are fixtures — literals, newtype constructions, record constructions, and
  * helpers applied to those (ADR-0077).
  *
- * <p>Three things a row needs are not here, because they are not about what an example means:
- * {@link NeutralForm} says what a value looks like in the form a decoder reads, {@link HelperInvoker}
- * runs a helper as the method its module emits, and {@link RowEvaluation} owns the state one row builds
- * up while it is evaluated.
+ * <p>Two things a row needs are not here, because they are not about what an example means:
+ * {@link FixtureReader} reads what a fixture states as the value it states — through
+ * {@link NeutralForm} for the form a decoder reads and {@link HelperInvoker} for a helper run as the
+ * method its module emits — and {@link RowEvaluation} owns the state one row builds up while it is
+ * evaluated.
+ *
+ * <p>What a module <em>wrote</em> is not here either. {@link ExampleStatements} reads a module's
+ * written statements against each other and reports where two of them answer differently, which is a
+ * different question for a different key and reads none of this class's state. The one thing they
+ * share is a fake's table: it is built there ({@link ExampleStatements#standins}) and answers by its
+ * own rule ({@link ExampleStatements.Standins#answering}), and the proxy a row runs against asks the
+ * same one — a second reading of one table is what <em>E1919</em> exists to catch.
  */
 public final class ExampleVerifier {
 
@@ -123,517 +114,6 @@ public final class ExampleVerifier {
         return new Observations(failures, rows, incompleteness);
     }
 
-    // --- two statements about one behavior -----------------------------------------------------
-
-    /**
-     * Every input for which two of this module's written statements about one behavior answer
-     * differently.
-     *
-     * <p>{@code module} is the whole module — every row and every fake, whichever source wrote it. A
-     * fake and the rows it disagrees with need not be in one file, so neither side can be found from
-     * one source's share of them. {@code exampleOrigins} and {@code fakeOrigins} say which source each
-     * came from, in the order {@code module} holds them.
-     *
-     * <p>No behavior is applied. What a fake answers for an input is decided by the rule the fake
-     * itself dispatches with ({@link #standingIn}) — the same rule, not a second reading of it — and
-     * the two answers are compared as the written values they are built into.
-     */
-    public static Readings disagreements(Ast.Module module, Symbols symbols,
-                                         Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                         Map<String, List<BehaviorRequirement>> requirements,
-                                         ClassLoader parent, Map<String, Ast.FnDef> values,
-                                         List<String> exampleOrigins,
-                                         List<String> fakeOrigins, long budgetMs) {
-        if (module.examples().isEmpty()
-                || exampleOrigins.size() != module.examples().size()
-                || fakeOrigins.size() != module.fakes().size()) {
-            return Readings.NONE;
-        }
-        // Which behaviors have both a stand-in and rows of their own, read off the text. Two written
-        // statements are what this is about, and where there are not two there is nothing to build:
-        // a module whose faked behaviors are exampled nowhere — which is most of them, since a fake is
-        // written so that some *other* behavior's rows can run — is settled here, before a class is
-        // loaded or a worker is started.
-        Set<String> contested = contested(module, sigs);
-        if (contested.isEmpty()) {
-            return Readings.NONE;
-        }
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
-                new MemoryClassLoader(classes, parent), values, budgetMs);
-        return v.collectDisagreements(exampleOrigins, fakeOrigins, contested);
-    }
-
-    /**
-     * What building this module's fake tables says about the ones {@code sourceId} wrote, each built
-     * once.
-     *
-     * <p>Because they are written, not because something reads them. A table is built to stand in for
-     * a behavior ({@link #resolveFake}) and to be read against the rows recorded for it ({@link
-     * #againstFake}), and a module can write one that neither of those reaches: nothing in it depends
-     * on the faked behavior, and no row records what that behavior owes. The table still states what
-     * it states, and what is wrong with it is wrong wherever it is read from.
-     *
-     * <p>The one place it is said, so a build and a row cannot come to two answers about one table.
-     * A row that applies a fake it could not build says nothing about the table any more — it does not
-     * run, and the error at the fake is what the compile fails on — which also ends the same table
-     * being reported once per row that reaches it.
-     *
-     * <p>The tables that answer, which is what the other two readers build: the first one written for
-     * a dependency. A second written for the same name stands in for nothing and is read by nobody,
-     * so building it here would hold a table to something no reader of it would ever ask.
-     *
-     * <p>{@code fakeOrigins} says which source wrote each of {@code module.fakes()}, in that order —
-     * every fake, since which one answers for a dependency is a fact about the module and not about
-     * one of its files. Where it does not line up with them, every table that answers is built here:
-     * a report in the wrong file is a report, and the reason to know the file is to place it, while
-     * nothing else would say what is wrong with the table at all.
-     */
-    public static List<Diagnostic> fakeTables(Ast.Module module, Symbols symbols,
-                                              Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                              Map<String, List<BehaviorRequirement>> requirements,
-                                              ClassLoader parent, Map<String, Ast.FnDef> values,
-                                              List<String> fakeOrigins, String sourceId,
-                                              long budgetMs) {
-        if (module.fakes().isEmpty()) {
-            return List.of();
-        }
-        boolean placed = fakeOrigins.size() == module.fakes().size();
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
-                new MemoryClassLoader(classes, parent), values, budgetMs);
-        v.sourceId = sourceId;
-        List<Diagnostic> said = new ArrayList<>();
-        Set<String> answering = new LinkedHashSet<>();
-        for (int i = 0; i < module.fakes().size(); i++) {
-            Ast.Fake fk = module.fakes().get(i);
-            if (!answering.add(fk.target())) {
-                continue;   // a second table for one dependency answers nothing, here as anywhere
-            }
-            if (placed && !fakeOrigins.get(i).equals(sourceId)) {
-                continue;   // written in another source, and built by that source's own reading
-            }
-            Sig sig = sigs.get(fk.target());
-            if (sig == null) {
-                continue;   // a fake for no behavior of this module; its target is its own question
-            }
-            // Within a budget of its own, for the reason a row and a reading each have one: a row of
-            // the table applies helpers, and a `partial` one may not stop. Nothing before this change
-            // built the table of a fake nothing reads, so this is the first thing that would run it.
-            Read<List<Diagnostic>> read = v.within(reader -> {
-                List<Diagnostic> wrong = new ArrayList<>();
-                reader.standins(fk, sig.ins(), sig.out(), wrong);
-                return wrong;
-            }, "the `fake " + fk.target() + "` table");
-            switch (read) {
-                case Read.Got(List<Diagnostic> wrong) -> said.addAll(wrong);
-                case Read.TimedOut(long ranOutOf) -> said.add(uncheckedFake(fk, ranOutOf));
-                // Not about this fake: the runtime is `provided`, so a host without it builds no value
-                // at all and every fake in every module would say the same thing. Where the rows are
-                // evaluated that is recorded once, as an incompleteness.
-                case Read.RuntimeAbsent() -> { }
-            }
-        }
-        return List.copyOf(said);
-    }
-
-    /**
-     * What one reading came to: the statement, or the reason there is no statement.
-     *
-     * <p>The reason is answered rather than dropped because the two reasons are held against
-     * different things. A statement that did not finish is about this module, and where nothing else
-     * builds what it was reading it is this reading's to say; a host with no runtime is about the
-     * host, and says the same thing about every fake and every row in every module compiled on it.
-     * A reader that got only "nothing was read" would have to pick one of those, and each caller
-     * would pick for itself.
-     */
-    private sealed interface Read<T> {
-
-        /** What the reading answered. Null where the statement is written in a form that states
-         * nothing — an input that will not build, an expectation that cannot be read. */
-        record Got<T>(T value) implements Read<T> {}
-
-        /** The reading ran out of its budget, and the budget it ran out of: what a report has to
-         * name is what the wait was actually held to, not what a second reader of the setting
-         * makes of it later. */
-        record TimedOut<T>(long budgetMs) implements Read<T> {}
-
-        /** This host has no runtime to build a value against. */
-        record RuntimeAbsent<T>() implements Read<T> {}
-
-        /** What was read, or null — for a caller that has nothing of its own to say about why
-         * there is nothing. Both reasons come out the same here on purpose: the reading that did
-         * not happen is reported by whoever else reads the same statement. */
-        default T orNull() {
-            return this instanceof Got(T value) ? value : null;
-        }
-    }
-
-    /**
-     * One statement, read within its own share of the budget.
-     *
-     * <p>Per statement rather than per module. Building a fixture runs the helpers it applies
-     * (ADR-0077), and a `partial` one may not stop — so a budget covering the whole reading is one a
-     * single slow row can spend, and spending it would drop every other statement's reading with it:
-     * a plain contradiction elsewhere in the module would go unsaid because of a row it has nothing
-     * to do with. It is what {@link #checkRow} already does for a row it evaluates, and this reads
-     * strictly fewer statements than that evaluates rows.
-     *
-     * <p>What did not finish states nothing. Who says so is the caller's, and differs: a row and a
-     * {@code with} written on one are evaluated elsewhere and report it there (E1910), while a fake
-     * table is built here and, where no row depends on the behavior it stands in for, nowhere else.
-     */
-    private <T> Read<T> within(java.util.function.Function<ExampleVerifier, T> read,
-                               String what) {
-        // On its own reader. A worker that runs out of budget is asked to stop and cannot be made to
-        // — a fixture reaches no interrupt point — so it may still be inside `expandedValue`, holding
-        // a binding or a half-walked expansion. Nothing it can still write to is read by the
-        // statement after it, which is why {@link RowEvaluation} does the same for a row.
-        ExampleVerifier reader = new ExampleVerifier(module, symbols, sigs, requirements, loader,
-                values, budgetMs);
-        reader.sourceId = sourceId;
-        java.util.concurrent.FutureTask<T> task =
-                new java.util.concurrent.FutureTask<>(() -> read.apply(reader));
-        Thread worker = new Thread(task, "souther-reading");
-        worker.setDaemon(true);
-        worker.start();
-        try {
-            return new Read.Got<>(
-                    task.get(budgetMs, java.util.concurrent.TimeUnit.MILLISECONDS));
-        } catch (java.util.concurrent.TimeoutException _) {
-            task.cancel(true);
-            return new Read.TimedOut<>(budgetMs);
-        } catch (java.util.concurrent.ExecutionException ee) {
-            task.cancel(true);
-            Throwable cause = ee.getCause();
-            // One thing ends a reading without the model or this code being at fault: a host with no
-            // runtime to build a value against, since the runtime is `provided` (as it is for CTFE).
-            if (runtimeAbsent(cause)) {
-                return new Read.RuntimeAbsent<>();
-            }
-            // Anything else is this code being wrong. An empty reading says the statements agree, so
-            // answering with one would leave a broken compiler reporting every model consistent, and
-            // only a test that reached the broken shape would ever say otherwise.
-            if (cause instanceof RuntimeException runtime) {
-                throw runtime;
-            }
-            if (cause instanceof Error error) {
-                throw error;
-            }
-            throw new IllegalStateException(cause);
-        } catch (InterruptedException _) {
-            task.cancel(true);
-            Thread.currentThread().interrupt();
-            throw new java.util.concurrent.CancellationException("interrupted while reading " + what);
-        }
-    }
-
-    /**
-     * Whether {@code cause} is this host having no runtime rather than anything being wrong.
-     *
-     * <p>The runtime is {@code provided}, so a build that compiles Souther without it on the class
-     * path can generate the classes and not load them. That is the one {@link LinkageError} that says
-     * nothing about the model or about this code — the rest of the family says a class was generated
-     * or loaded wrong ({@code VerifyError}, {@code ClassFormatError}, {@code NoSuchMethodError}), and
-     * reading those as "no runtime" would let a broken back end report every model consistent.
-     */
-    private static boolean runtimeAbsent(Throwable cause) {
-        return cause instanceof NoClassDefFoundError missing
-                && missing.getMessage() != null
-                && missing.getMessage().replace('/', '.').startsWith("souther.runtime.");
-    }
-
-    /** The behaviors this module both stands in for — the target of a {@code fake}, the dependency a
-     * {@code with} that takes no input answers for ({@link #againstWiths}) — and records rows of. */
-    private static Set<String> contested(Ast.Module module, Map<String, Sig> sigs) {
-        Set<String> stoodIn = new LinkedHashSet<>();
-        for (Ast.Fake fk : module.fakes()) {
-            stoodIn.add(fk.target());
-        }
-        for (Ast.Example ex : module.examples()) {
-            for (Ast.ExampleRow row : ex.rows()) {
-                for (Ast.With w : row.withs()) {
-                    Sig depSig = sigs.get(w.dep());
-                    if (depSig != null && depSig.ins().isEmpty()) {
-                        stoodIn.add(w.dep());
-                    }
-                }
-            }
-        }
-        Set<String> both = new LinkedHashSet<>();
-        for (Ast.Example ex : module.examples()) {
-            if (stoodIn.contains(ex.target())) {
-                both.add(ex.target());
-            }
-        }
-        return both;
-    }
-
-    /** One recorded row, read as far as it can be without running it. What it says is left as written
-     * — rendering it builds the fixture a second time, and only a row that turns out to disagree is
-     * ever shown. */
-    private record RecordedRow(SourceRef at, Ast.Expr expected, Object[] arguments, Asserted answer) {}
-
-    private Readings collectDisagreements(List<String> exampleOrigins,
-                                          List<String> fakeOrigins, Set<String> contested) {
-        Map<String, List<RecordedRow>> recorded = new LinkedHashMap<>();
-        for (int i = 0; i < module.examples().size(); i++) {
-            Ast.Example ex = module.examples().get(i);
-            if (contested.contains(ex.target())) {
-                readRecorded(ex, exampleOrigins.get(i), recorded);
-            }
-        }
-        if (recorded.isEmpty()) {
-            return Readings.NONE;
-        }
-        List<Disagreement> found = new ArrayList<>();
-        List<TimedOutFake> timedOut = new ArrayList<>();
-        // The first table for a dependency is the one that answers ({@link #resolveFake}); a second
-        // one written for the same name never stands in for anything, so it states nothing to
-        // disagree with. What that second table is, is its own question.
-        Set<String> answering = new LinkedHashSet<>();
-        for (int j = 0; j < module.fakes().size(); j++) {
-            Ast.Fake fk = module.fakes().get(j);
-            if (answering.add(fk.target())) {
-                againstFake(fk, fakeOrigins.get(j), recorded, found, timedOut);
-            }
-        }
-        for (int i = 0; i < module.examples().size(); i++) {
-            againstWiths(module.examples().get(i), exampleOrigins.get(i), recorded, found);
-        }
-        return new Readings(found, timedOut);
-    }
-
-    /**
-     * The rows of one example, as much of each as is comparable.
-     *
-     * <p>A row is read here the way the evaluator reads it: its arity against the signature, its
-     * inputs built against their parameter types, and its expectation against the output's cases and
-     * then built. A row that fails any of those states nothing — each is reported as the arity, input,
-     * arm or fixture error it is where the row is evaluated — and a row read otherwise here than there
-     * would be held to a stand-in on an assertion the model itself refuses.
-     */
-    private void readRecorded(Ast.Example ex, String origin, Map<String, List<RecordedRow>> into) {
-        Sig sig = sigs.get(ex.target());
-        if (sig == null) {
-            return;
-        }
-        Set<TypeName> cases = outCases(sig.out());
-        for (Ast.ExampleRow row : ex.rows()) {
-            if (row.inputs().size() != sig.ins().size()) {
-                continue;
-            }
-            Read<RecordedRow> read = within(reader -> {
-                Object[] arguments = reader.builtOrNull(row.inputs(), sig.ins());
-                if (arguments == null) {
-                    return null;
-                }
-                Asserted answer = reader.readExpected(row.expected(), sig.out(), cases);
-                return answer instanceof Asserted.Unreadable ? null
-                        : new RecordedRow(new SourceRef(origin, row.expected().pos()),
-                                row.expected(), arguments, answer);
-            }, "a row of `" + ex.target() + "`");
-            // A reading that did not finish is not said here, whichever reason ended it. The same row
-            // is evaluated where the example is checked, which builds these fixtures and then runs the
-            // behavior on top of them, so a fixture that overruns this overruns that too and is E1910
-            // there, at the row.
-            RecordedRow got = read.orNull();
-            if (got == null) {
-                continue;
-            }
-            into.computeIfAbsent(ex.target(), _ -> new ArrayList<>()).add(got);
-        }
-    }
-
-    /** One fake against the rows recorded for the behavior it stands in for. */
-    private void againstFake(Ast.Fake fk, String origin, Map<String, List<RecordedRow>> recorded,
-                             List<Disagreement> found, List<TimedOutFake> timedOut) {
-        List<RecordedRow> rows = recorded.get(fk.target());
-        Sig sig = sigs.get(fk.target());
-        if (rows == null || sig == null) {
-            return;
-        }
-        // The whole table, built the one way the proxy builds it.
-        Read<Standins> read = within(
-                reader -> reader.standins(fk, sig.ins(), sig.out(), new ArrayList<>()),
-                "the `fake " + fk.target() + "` table");
-        // A switch, so that a fourth reason for a reading to end has to decide what a fake does about
-        // it rather than falling in with one of these.
-        switch (read) {
-            // Said here, because here is where it can be. The other place a table is built is
-            // `resolveFake`, which runs while a row of a behavior that *depends on* this one is
-            // evaluated — and a fake nothing depends on has no such row, so an overrun that went
-            // unsaid here would leave "the two agree" as the answer to a comparison never made.
-            // The caret goes on the target, which is what `fk.pos()` is.
-            case Read.TimedOut(long budgetMs) -> {
-                timedOut.add(new TimedOutFake(fk.target(), new SourceRef(origin, fk.pos()),
-                        fk.target().length(), budgetMs));
-                return;
-            }
-            // Not about this fake. The runtime is `provided`, so a host without it builds no value at
-            // all, and every fake and every row in the module would say the same thing; what was not
-            // read for that reason is recorded once, where the rows are evaluated. Defensive: with no
-            // runtime no recorded row builds either, and a reading with no rows read never reaches a
-            // fake — so nothing arrives here today.
-            case Read.RuntimeAbsent() -> {
-                return;
-            }
-            case Read.Got(Standins _) -> { }
-        }
-        // The whole table or nothing: a table with a row that will not build answers nothing here,
-        // and what is wrong with it is reported where the fake is written ({@link #fakeTables}).
-        Standins table = read.orNull();
-        if (table == null) {
-            return;
-        }
-        for (RecordedRow row : rows) {
-            Standin answering = standingIn(table, row.arguments());
-            if (answering == null) {
-                continue;   // the table answers nothing for this input; E1909's where it is used
-            }
-            Asserted stood = new Asserted.Whole(answering.answer());
-            if (differs(row.answer(), stood)) {
-                // The output, not the row: what disagrees is the answer, and the marker lands on it
-                // the way a row's does on its expected.
-                found.add(new Disagreement(fk.target(),
-                        said(row.at(), row.expected(), row.answer()),
-                        said(new SourceRef(origin, answering.row().output().pos()),
-                                answering.row().output(), stood),
-                        false));
-            }
-        }
-    }
-
-    /**
-     * The {@code with}s on the rows of one example, against the rows recorded for the dependency each
-     * stands in for — where the dependency takes no input, and there only.
-     *
-     * <p>A {@code with} is a fixture bound to the run of the row it is written on, not a statement
-     * about the dependency. It answers whatever it is asked, but that is a fact about the function it
-     * installs, not about which of the dependency's inputs it was written for: what reaches the
-     * dependency is whatever the parent behavior computes and passes — a normalised field, one of two
-     * branches, one of several calls — and none of that is readable from the {@code with}. Held
-     * against every recorded row, it would drop the parent row's own input and read a row-local
-     * assumption as a claim about all of them, so two rows faking two different answers for two
-     * different orders would be reported as contradicting each other while both are right.
-     *
-     * <p>A dependency that takes nothing has one input, {@code ()}, so a {@code with} for it and a row
-     * recorded for it are about the same call, and the comparison is the same one a {@code fake} row
-     * gets. A fake row states its own inputs, which is why it needs no such condition: the recorded
-     * input picks the row that answers it ({@link #standingIn}), with nothing evaluated in between.
-     *
-     * <p>A {@code with} takes precedence over a {@code fake} table while the row carrying it runs
-     * (see {@link #resolveFake}). That is dispatch, and it is not brought here: the table is still a
-     * statement about the same behavior, written for every other row and every other run, and a
-     * {@code with} beside it does not settle what it states.
-     */
-    private void againstWiths(Ast.Example ex, String origin, Map<String, List<RecordedRow>> recorded,
-                              List<Disagreement> found) {
-        for (Ast.ExampleRow row : ex.rows()) {
-            for (Ast.With w : row.withs()) {
-                List<RecordedRow> rows = recorded.get(w.dep());
-                Sig depSig = sigs.get(w.dep());
-                if (rows == null || depSig == null || !depSig.ins().isEmpty()) {
-                    continue;
-                }
-                // As with a recorded row: a `with` is written on a row, and that row is evaluated
-                // where the example is checked, installing this same value. What did not finish here
-                // did not finish there, and there is where it is said (E1910).
-                Asserted constant = within(
-                        reader -> reader.readStandIn(w.value(), depSig.out(), outCases(depSig.out())),
-                        "a `with " + w.dep() + "`").orNull();
-                if (constant == null || constant instanceof Asserted.Unreadable) {
-                    continue;
-                }
-                for (RecordedRow recordedRow : rows) {
-                    if (differs(recordedRow.answer(), constant)) {
-                        found.add(new Disagreement(w.dep(),
-                                said(recordedRow.at(), recordedRow.expected(), recordedRow.answer()),
-                                said(new SourceRef(origin, w.value().pos()), w.value(), constant),
-                                true));
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * One statement, with what it answers rendered — done here, where a disagreement is known, so a
-     * row that agrees never pays for a description nobody reads.
-     *
-     * <p>The marker is measured off the written expression and not off the rendering. The rendering is
-     * the value the encoder writes, which is a different length from the text it was written as — a
-     * date is its ISO form, a qualified case name is its short one — so a marker measured from it
-     * underlines the wrong columns and can run past the end of the line.
-     */
-    private Statement said(SourceRef at, Ast.Expr written, Asserted asserted) {
-        return new Statement(at, souther.compiler.check.Elaborator.width(written), shown(asserted));
-    }
-
-    /** What an assertion says, from what was already read. Rendering from the text again would build
-     * the fixture a second time — running whatever helpers it applies, outside the budget the first
-     * reading was held to — and could show a value other than the one that was compared. */
-    private String shown(Asserted asserted) {
-        return switch (asserted) {
-            case Asserted.CaseOnly only -> only.name().name();
-            case Asserted.Whole whole -> describeActual(whole.fixture().value());
-            case Asserted.Unreadable _ ->
-                    throw new IllegalStateException("nothing was read, so nothing disagreed");
-        };
-    }
-
-    /** The written inputs decoded against {@code types}, or null where one would not build — that is
-     * <em>E1903</em>'s to say where the row is evaluated, and a row whose inputs are not values names
-     * no input to hold a stand-in against. */
-    private Object[] builtOrNull(List<Ast.Expr> written, List<Type> types) {
-        Object[] values = new Object[types.size()];
-        for (int i = 0; i < types.size(); i++) {
-            try {
-                values[i] = built(written.get(i), types.get(i));
-            } catch (FixtureException | NonTerminationException _) {
-                return null;
-            }
-        }
-        return values;
-    }
-
-    /**
-     * Whether a value composed elsewhere can be built at this module's boundary.
-     *
-     * <p>The question a generator cannot answer for itself. Which values a type admits together is the
-     * derived decoder's business — an invariant relating two fields refuses a pair that each field
-     * would have accepted alone — so the only way to know is to put the value through the decoder that
-     * a row's own fixture goes through.
-     */
-    @FunctionalInterface
-    public interface Construction {
-
-        /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
-         * the runtime is absent, which is not a fact about the value. */
-        java.util.Optional<String> refuse(Type type, Ast.Expr fixture);
-    }
-
-    /** A way to build values against this module's generated classes, without any rows to run. */
-    public static Construction constructing(Ast.Module module, Symbols symbols,
-                                            Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                            Map<String, List<BehaviorRequirement>> requirements,
-                                            ClassLoader parent, Map<String, Ast.FnDef> values) {
-        // No rows, so no worker is started and the budget is never read; the default stands in for a
-        // value this reader has no use for.
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
-                new MemoryClassLoader(classes, parent), values, DEFAULT_BUDGET_MS);
-        return v::refuse;
-    }
-
-    private java.util.Optional<String> refuse(Type type, Ast.Expr fixture) {
-        try {
-            built(fixture, type);
-            return java.util.Optional.empty();
-        } catch (FixtureException e) {
-            return java.util.Optional.of(e.getMessage());
-        } catch (RuntimeException e) {
-            return java.util.Optional.of(String.valueOf(e.getMessage()));
-        }
-    }
-
     /**
      * What evaluating a source's rows turned up: the diagnostics it reports, the observation each row
      * left, and what stopped it from observing.
@@ -650,63 +130,6 @@ public final class ExampleVerifier {
             failures = List.copyOf(failures);
             rows = List.copyOf(rows);
             incompleteness = List.copyOf(incompleteness);
-        }
-    }
-
-    /**
-     * One written statement about what a behavior answers, and where it is written.
-     *
-     * <p>{@code answer} is rendered here rather than at the report, because reading it needs the
-     * decoders and the module's classes and the report has neither.
-     */
-    public record Statement(SourceRef at, int width, String answer) {}
-
-    /**
-     * One input for which two written statements about a behavior answer differently.
-     *
-     * <p>Neither side is derived from the other: the recorded row says what the behavior will owe, the
-     * stand-in says what it answers while some other behavior's row runs. Which is right is not
-     * readable here — a model being migrated onto may run against a stand-in while the real answer is
-     * still being harvested, and that is written the way a mistake is. So both are named and neither
-     * is ranked.
-     *
-     * <p>Independent of which source is being reported: one disagreement is projected onto both of the
-     * sources its two statements are written in.
-     *
-     * @param viaWith whether the stand-in is a {@code with} rather than a {@code fake} row — the
-     *                report names the form the author wrote, so it has to be told which one it is
-     */
-    public record Disagreement(String behavior, Statement recorded, Statement standIn,
-                               boolean viaWith) {}
-
-    /**
-     * A fake whose table did not finish being built within the budget, so what it states and what the
-     * rows recorded for the behavior state were never compared.
-     *
-     * <p>Carries what it takes to report it. The position and its width are measured here, where the
-     * text is, the way a {@link Statement}'s are; the budget is the one the wait was actually held to,
-     * rather than a second reading of the setting taken later, which a budget that stops being one
-     * number for the whole compile would make wrong with nothing to say so.
-     *
-     * @param at where the fake names the behavior it stands in for, which is what the report marks
-     */
-    public record TimedOutFake(String target, SourceRef at, int width, long budgetMs) {}
-
-    /**
-     * What reading a module's written statements against each other came to.
-     *
-     * <p>Both lists, because a reading that did not finish and a reading that found nothing are
-     * different answers and an empty list of disagreements is what the second one looks like. Which
-     * of the two a compile got can otherwise turn on machine load, between a build and the next
-     * keystroke in the editor.
-     */
-    public record Readings(List<Disagreement> disagreements, List<TimedOutFake> timedOut) {
-
-        public static final Readings NONE = new Readings(List.of(), List.of());
-
-        public Readings {
-            disagreements = List.copyOf(disagreements);
-            timedOut = List.copyOf(timedOut);
         }
     }
 
@@ -745,18 +168,13 @@ public final class ExampleVerifier {
     private final MemoryClassLoader loader;
     /** The values a row may name: this module's own, and the ones its imports bring in. */
     private final Map<String, Ast.FnDef> values;
-    /** Runs a helper a fixture applies. One evaluation's, because what it is running is one row's. */
-    private final HelperInvoker helpers;
-    /** What a value looks like in the form a decoder reads — the rules both directions of a row read. */
-    private final NeutralForm neutral;
     /** Which source the rows being evaluated are written in. A module's rows come from its own source
      * and from any number of attached {@code examples for} files, and a position alone stops saying
      * which once they are gathered under the module's name. */
     private String sourceId;
-    /** Wall-clock budget for one thing built and run on a worker of its own: an example row evaluated
-     * ({@link #checkRow}), or one written statement read to compare it against another ({@link
-     * #within}). Carried rather than looked up, so a reader started by another reader is held to the
-     * same budget its caller was, and two compiles in one JVM need not agree on it. */
+    /** Wall-clock budget for one row evaluated on a worker of its own ({@link #checkRow}). Carried
+     * rather than looked up, so two compiles in one JVM need not agree on it. Reading a written
+     * statement is held to a budget of its own, which is {@link ExampleStatements}'. */
     private final long budgetMs;
 
     private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
@@ -770,8 +188,19 @@ public final class ExampleVerifier {
         this.loader = loader;
         this.values = values;
         this.budgetMs = budgetMs;
-        this.helpers = new HelperInvoker(module.name(), loader);
-        this.neutral = new NeutralForm(symbols);
+    }
+
+    /**
+     * A reader for one row, held for as long as evaluating that row lasts.
+     *
+     * <p>Never shared between two of them. What a reading builds up — the bindings in force, the
+     * values being expanded, the helper it is inside — is that row's, and a worker that ran out of
+     * its budget goes on writing to it after the answer was given up on. So the isolation is the
+     * reader, and it is the reader alone: everything else this class holds is read-only once a row
+     * starts.
+     */
+    private FixtureReader newFixtureReader() {
+        return new FixtureReader(module, symbols, values, loader);
     }
 
     // --- one example (a target and its rows) --------------------------------------------------
@@ -899,14 +328,22 @@ public final class ExampleVerifier {
      *
      * <p>A row that does not finish leaves its worker running — a pure computation reaches no interrupt
      * point, so cancelling it is a request and not a stop. So nothing that worker can still write to is
-     * read by the rows after it: the evaluation has its own {@link ExampleVerifier}, so the state a
+     * read by the rows after it: the evaluation has its own {@link FixtureReader}, so the state a
      * fixture builds up (which values it is expanding, which helper it is in) belongs to this row, and
      * the diagnostics it produces are its own list, handed to the caller only when it finishes. A late
      * result is dropped rather than landing among another row's.
+     *
+     * <p>One reader for the whole row, and that is what makes the reader the right thing to isolate.
+     * The inputs, the expectation, each {@code with} and every fake table the row resolves are read
+     * through this one — so a row that does not finish inside a fake table's helper is still a row
+     * inside a helper, and the budget can name it ({@link #helper()}). Two readers would have put that
+     * answer where nothing reporting the timeout could see it.
      */
     private static final class RowEvaluation implements java.util.concurrent.Callable<List<Diagnostic>> {
 
-        private final ExampleVerifier evaluation;
+        private final ExampleVerifier verifier;
+        /** This row's, and only this row's. */
+        private final FixtureReader fixtures;
         private final ExampleTarget target;
         private final Sig sig;
         private final Set<TypeName> outCases;
@@ -915,9 +352,8 @@ public final class ExampleVerifier {
 
         RowEvaluation(ExampleVerifier of, ExampleTarget target, Sig sig,
                       Set<TypeName> outCases, Ast.ExampleRow row) {
-            this.evaluation = new ExampleVerifier(of.module, of.symbols, of.sigs, of.requirements,
-                    of.loader, of.values, of.budgetMs);
-            this.evaluation.sourceId = of.sourceId;
+            this.verifier = of;
+            this.fixtures = of.newFixtureReader();
             this.target = target;
             this.sig = sig;
             this.outCases = outCases;
@@ -937,7 +373,7 @@ public final class ExampleVerifier {
             List<Diagnostic> mine = new ArrayList<>();
             Probe.begin();
             try {
-                evaluation.checkRowNow(target, sig, outCases, row, mine, state);
+                verifier.checkRowNow(fixtures, target, sig, outCases, row, mine, state);
                 state.hits = Probe.taken();
             } finally {
                 Probe.end();
@@ -947,7 +383,7 @@ public final class ExampleVerifier {
 
         /** The helper this row is inside, for the budget to name when the row does not finish. */
         String helper() {
-            return evaluation.helpers.running();
+            return fixtures.runningHelper();
         }
     }
 
@@ -1051,8 +487,9 @@ public final class ExampleVerifier {
         }
     }
 
-    private void checkRowNow(ExampleTarget target, Sig sig, Set<TypeName> outCases,
-                             Ast.ExampleRow row, List<Diagnostic> out, RowState state) {
+    private void checkRowNow(FixtureReader fixtures, ExampleTarget target, Sig sig,
+                             Set<TypeName> outCases, Ast.ExampleRow row, List<Diagnostic> out,
+                             RowState state) {
         List<Type> ins = sig.ins();
         if (row.inputs().size() != ins.size()) {
             out.add(Diagnostic.of("E1903", "check.example.arity").title("check.example.title")
@@ -1063,25 +500,25 @@ public final class ExampleVerifier {
         Object[] args = new Object[ins.size()];
         for (int i = 0; i < ins.size(); i++) {
             try {
-                args[i] = built(row.inputs().get(i), ins.get(i));
+                args[i] = fixtures.built(row.inputs().get(i), ins.get(i));
             } catch (FixtureException fe) {
                 out.add(Diagnostic.of("E1903", "check.example.input").title("check.example.title")
                         .at(row.pos()).args(target.name(), i + 1, fe.getMessage()).build());
                 state.failed(FailurePhase.INPUT_FIXTURE);
                 return;
             }
-            state.inputCases.add(caseWritten(row.inputs().get(i)));
-            state.inputs.add(observed(args[i]));
+            state.inputCases.add(caseWritten(fixtures, row.inputs().get(i)));
+            state.inputs.add(fixtures.observed(args[i]));
         }
         // validate the expected arm/value against the output cases before running. Which case the row
         // asserts is read through what it names, so a row may name a value where it may name a case.
         // Only where that answers is there an arm to hold against the target's: a helper answers with a
         // case nothing here can read off the text, and reporting that as an arm the target cannot produce
         // refused a row whose expectation was right (issue #214).
-        TypeName named = constructedCase(row.expected());
+        TypeName named = fixtures.constructedCase(row.expected());
         state.expectedArm = named;
         if (named != null && !outCases.isEmpty() && !outCases.contains(named)) {
-            String expectedArm = expectedArm(row.expected());
+            String expectedArm = fixtures.expectedArm(row.expected());
             List<String> names = new ArrayList<>();
             for (TypeName c : outCases) {
                 names.add(c.name());
@@ -1097,8 +534,8 @@ public final class ExampleVerifier {
         // against an empty expected value — a wrong answer for a row that was right.
         Object expectedValue;
         try {
-            expectedValue = caseOnly(row.expected()) != null ? null
-                    : builtExpected(row.expected(), sig.out());
+            expectedValue = fixtures.caseOnly(row.expected()) != null ? null
+                    : fixtures.builtExpected(row.expected(), sig.out());
         } catch (FixtureException fe) {
             out.add(Diagnostic.of("E1903", "check.example.expected").title("check.example.title")
                     .at(row.pos()).args(target.name(), fe.getMessage()).build());
@@ -1115,7 +552,7 @@ public final class ExampleVerifier {
             state.failurePhase = FailurePhase.NONE;
             return;
         }
-        Object[] fakes = resolveFakes(target, row, out);
+        Object[] fakes = resolveFakes(fixtures, target, row, out);
         if (fakes == null) {
             state.failed(FailurePhase.FAKE_RESOLUTION);
             return;   // a fake was missing/invalid; the diagnostic is already reported
@@ -1136,7 +573,8 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (AbortException ae) {
-            out.add(mismatch(row, describeExpected(row.expected(), sig.out()), "aborted: " + ae.getMessage()));
+            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
+                    "aborted: " + ae.getMessage()));
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (NonTerminationException nt) {
@@ -1148,8 +586,9 @@ public final class ExampleVerifier {
         result = projected(result, sig.out());
         state.resultArm = symbols.resolve(NeutralForm.simpleName(result));
         state.stage = Stage.COMPARED;
-        if (!matches(row.expected(), result, expectedValue)) {
-            out.add(mismatch(row, describeExpected(row.expected(), sig.out()), describeActual(result)));
+        if (!matches(fixtures, row.expected(), result, expectedValue)) {
+            out.add(mismatch(row, fixtures.describeExpected(row.expected(), sig.out()),
+                    fixtures.describeActual(result)));
             state.failed(FailurePhase.COMPARISON);
             return;
         }
@@ -1159,21 +598,11 @@ public final class ExampleVerifier {
 
     /** The case an input fixture constructs, or null where its text does not say. A form this cannot
      * read is not a reason to lose the row: the measure that reads it says it could not classify. */
-    private TypeName caseWritten(Ast.Expr fixture) {
+    private static TypeName caseWritten(FixtureReader fixtures, Ast.Expr fixture) {
         try {
-            return constructedCase(fixture);
+            return fixtures.constructedCase(fixture);
         } catch (RuntimeException _) {
             return null;
-        }
-    }
-
-    /** One decoded input, in the form the compiler owns. Never throws: a value that cannot be read is
-     * an unreadable value, and a row that carries one still carries everything else. */
-    private ObservedValue observed(Object decoded) {
-        try {
-            return ObservedValues.of(decoded, symbols, neutral, Limits.DEFAULT);
-        } catch (RuntimeException | LinkageError e) {
-            return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
 
@@ -1206,11 +635,12 @@ public final class ExampleVerifier {
 
     /** Builds a {@code Behavior} proxy for each of the target's requirements, in the order its
      * constructor takes them; null (with a diagnostic reported) when one is missing or invalid. */
-    private Object[] resolveFakes(ExampleTarget target, Ast.ExampleRow row, List<Diagnostic> out) {
+    private Object[] resolveFakes(FixtureReader fixtures, ExampleTarget target, Ast.ExampleRow row,
+                                  List<Diagnostic> out) {
         List<BehaviorRequirement> reqs = target.requirements();
         Object[] proxies = new Object[reqs.size()];
         for (int i = 0; i < reqs.size(); i++) {
-            Object p = resolveFake(target.name(), reqs.get(i), row, out);
+            Object p = resolveFake(fixtures, target.name(), reqs.get(i), row, out);
             if (p == null) {
                 return null;
             }
@@ -1219,8 +649,8 @@ public final class ExampleVerifier {
         return proxies;
     }
 
-    private Object resolveFake(String target, BehaviorRequirement req, Ast.ExampleRow row,
-                               List<Diagnostic> out) {
+    private Object resolveFake(FixtureReader fixtures, String target, BehaviorRequirement req,
+                               Ast.ExampleRow row, List<Diagnostic> out) {
         String depName = req.dependency();
         Ast.SpecBehavior dep = injectedSpec(depName);
         if (dep == null) {
@@ -1233,7 +663,7 @@ public final class ExampleVerifier {
         for (Ast.With w : row.withs()) {
             if (w.dep().equals(depName)) {
                 try {
-                    Object value = buildFixture(w.value(), outType).value();
+                    Object value = fixtures.buildFixture(w.value(), outType).value();
                     return fakeInstance(dep, a -> value, out);   // constant: ignores its inputs
                 } catch (FixtureException fe) {
                     // The row does supply a fake. What failed is building its value, which is a
@@ -1247,7 +677,7 @@ public final class ExampleVerifier {
         // a function fake given as a `fake dep | table` declaration
         for (Ast.Fake fk : module.fakes()) {
             if (fk.target().equals(depName)) {
-                return tableProxy(fk, dep, outType, out);
+                return tableProxy(fixtures, fk, dep, outType, out);
             }
         }
         out.add(fakeMissingDiag(target, req, row, "add `with " + depName
@@ -1280,15 +710,18 @@ public final class ExampleVerifier {
      * returns a fake instance ({@link #fakeInstance}) matching an actual input tuple by value equality,
      * falling back to the {@code _} default or a miss. Works for any arity: a 0/1-input dep's tuple has
      * 0/1 elements, a 2+-input dep's has one per parameter (issue #57). */
-    private Object tableProxy(Ast.Fake fk, Ast.SpecBehavior dep, Type outType, List<Diagnostic> out) {
+    private Object tableProxy(FixtureReader fixtures, Ast.Fake fk, Ast.SpecBehavior dep, Type outType,
+                              List<Diagnostic> out) {
         List<Type> paramTypes = new ArrayList<>();
         for (Ast.Param p : dep.params()) {
             paramTypes.add(TypeOps.successType(p.type(), symbols));
         }
-        // What is wrong with the table is said where the fake is written ({@link #fakeTables}), and
-        // said once. Here it is a row that cannot run: this row and every other row reaching the same
-        // fake would each repeat the one thing wrong with the one table they all read.
-        Standins table = standins(fk, paramTypes, outType, new ArrayList<>());
+        // Built the one way a table is built ({@link ExampleStatements#standins}), on this row's own
+        // reader, so a row that does not finish inside a table's helper is still inside a helper. What
+        // is wrong with the table is said where the fake is written, and said once: this row and every
+        // other row reaching the same fake would each repeat the one thing wrong with the one table.
+        ExampleStatements.Standins table =
+                ExampleStatements.standins(fixtures, fk, paramTypes, outType, new ArrayList<>());
         if (table == null) {
             return null;
         }
@@ -1296,7 +729,9 @@ public final class ExampleVerifier {
         int arity = paramTypes.size();
         java.util.function.Function<Object[], Object> body = a -> {
             Object[] key = java.util.Arrays.copyOf(a, arity);
-            Standin answering = standingIn(table, key);
+            // The table's own rule, which is the rule the reading that holds it against the rows
+            // recorded for the behavior asks too. One answer to "which row answers this" (E1919).
+            ExampleStatements.Standin answering = table.answering(key);
             if (answering == null) {
                 throw new FakeMissException("`" + depName + "` has no output for "
                         + java.util.Arrays.toString(key));
@@ -1304,96 +739,6 @@ public final class ExampleVerifier {
             return answering.answer().value();
         };
         return fakeInstance(dep, body, out);
-    }
-
-    /**
-     * A fake's table, decoded — the one form both the proxy and the consistency check read.
-     *
-     * <p>The whole table, not the part a reader happens to need. The rule that picks a row is
-     * order-sensitive, so a check that re-derived it would be free to pick another; and a table is
-     * valid or it is not, so a check that built only the row it was asking about would report what a
-     * fake answers for a table the proxy refuses to build at all. What the report says a fake answers
-     * has to be what the fake answers.
-     */
-    private record Standins(List<Standin> explicit, Standin fallback) {}
-
-    /** One row of a fake's table: the arguments it states — none, for the {@code _} row — and the
-     * answer it was built into. */
-    private record Standin(Object[] arguments, Ast.FakeRow row, BuiltFixture answer) {}
-
-    /**
-     * {@code fk}'s table, decoded against {@code ins} and {@code outType}; null (with a diagnostic
-     * reported) where a row states the wrong number of inputs, or any part of any row will not
-     * build — one bad row is a table the fake cannot stand in with.
-     *
-     * <p>Shape first, then values. A row whose input count is wrong is wrong however its output
-     * builds, and building the output first would run whatever helpers it applies before saying so —
-     * so a table with an arity slip and a slow or non-terminating output reported the second problem
-     * instead of the first, or ran out of time before reporting either.
-     */
-    private Standins standins(Ast.Fake fk, List<Type> ins, Type outType, List<Diagnostic> out) {
-        for (Ast.FakeRow r : fk.rows()) {
-            if (!r.isDefault() && r.inputs().size() != ins.size()) {
-                out.add(unbuildableFake(r.pos(), fk.target(), "a row has " + r.inputs().size()
-                        + " input(s) where the dependency takes " + ins.size()));
-                return null;
-            }
-        }
-        List<Standin> explicit = new ArrayList<>();
-        Standin fallback = null;
-        try {
-            for (Ast.FakeRow r : fk.rows()) {
-                // A dependency that returns a sum has no single decoder; each row names one case,
-                // so decode the row's output against that case's type (as an expected value is).
-                BuiltFixture answer = buildFixture(r.output(), outType);
-                if (r.isDefault()) {
-                    fallback = new Standin(null, r, answer);
-                    continue;
-                }
-                Object[] arguments = new Object[ins.size()];
-                for (int i = 0; i < ins.size(); i++) {
-                    arguments[i] = built(r.inputs().get(i), ins.get(i));
-                }
-                explicit.add(new Standin(arguments, r, answer));
-            }
-        } catch (FixtureException fe) {
-            out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
-            return null;
-        } catch (NonTerminationException nt) {
-            out.add(unbuildableFake(fk.pos(), fk.target(), nt.getMessage()));
-            return null;
-        }
-        return new Standins(explicit, fallback);
-    }
-
-    /**
-     * Which row of {@code table} answers {@code arguments}: the first explicit row stating them, and
-     * otherwise the {@code _} row. Null where the table answers nothing, which is <em>E1909</em>'s to
-     * say where the fake is used.
-     */
-    private static Standin standingIn(Standins table, Object[] arguments) {
-        for (Standin s : table.explicit()) {
-            // by value equality (spec 22), which is the language's: a row written 1.0m is the
-            // row a call arriving with 1m wants. Arrays.equals would ask the arguments' own.
-            if (sameArguments(s.arguments(), arguments)) {
-                return s;
-            }
-        }
-        return table.fallback();
-    }
-
-    /** Whether a fake's row states the arguments a call arrived with, each by the language's
-     * equality. A multi-input dependency is matched as a tuple (spec 22), so this walks them. */
-    private static boolean sameArguments(Object[] row, Object[] key) {
-        if (row.length != key.length) {
-            return false;
-        }
-        for (int i = 0; i < row.length; i++) {
-            if (!souther.runtime.Values.equal(row[i], key[i])) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /** Wraps a fake's {@code Object[] -> Object} body as the injected instance: a unary {@code Behavior}
@@ -1431,35 +776,10 @@ public final class ExampleVerifier {
             Class<?> fakeClass = loader.define(fakeName, () -> fakeSubclassBytes(fakeName, base, applyM));
             return fakeClass.getConstructor(java.util.function.Function.class).newInstance(body);
         } catch (ReflectiveOperationException e) {
-            out.add(unbuildableFake(dep.pos(), dep.name(),
+            out.add(ExampleStatements.unbuildableFake(dep.pos(), dep.name(),
                     "its base subclass could not be built: " + e));
             return null;
         }
-    }
-
-    /**
-     * A fake that was supplied and could not be built. A dependency nothing stands in for is a different
-     * problem, and saying this as that named the dependency as its own requester and reported a fake as
-     * missing where one was written (issue #206).
-     */
-    private static Diagnostic unbuildableFake(SourcePos pos, String dependency, String reason) {
-        return Diagnostic.of("E1908", "check.fake.unbuildable").title("check.example.title")
-                .at(pos).args(dependency, reason).build();
-    }
-
-    /**
-     * A fake whose table did not finish being built, so nothing it states was checked.
-     *
-     * <p>A warning, where a table that will not build is an error: waiting says that this table was
-     * not read, not that it is wrong, and which of the two it is cannot be told from having waited.
-     * The budget is the one this wait was held to rather than the setting read back later, and it is
-     * written out rather than passed as a number, which a locale would group into a budget nobody set.
-     */
-    private static Diagnostic uncheckedFake(Ast.Fake fk, long budgetMs) {
-        return Diagnostic.of("E1921", "check.fake.unchecked").warning().title("check.example.title")
-                .at(fk.pos(), fk.target().length())
-                .args(fk.target(), Long.toString(budgetMs))
-                .hint("check.fake.unchecked.hint", fk.target()).build();
     }
 
     private byte[] fakeSubclassBytes(String fakeName, Class<?> base, java.lang.reflect.Method apply) {
@@ -1551,1036 +871,24 @@ public final class ExampleVerifier {
         return b.build();
     }
 
-    // --- comparison ---------------------------------------------------------------------------
-
-    /** One written fixture, decoded against the type of the position it is written in. */
-    private Object built(Ast.Expr written, Type type) {
-        return decode(type, raw(written, type));
-    }
-
-    /**
-     * A written answer, in the form two of them can be compared.
-     *
-     * <p>A row may assert the case and nothing under it, or the whole value, and the two sides of a
-     * comparison need not have been written the same way — so what is compared is read off each side
-     * once, here, rather than at every place two answers meet.
-     */
-    /**
-     * A written fixture built into the whole value it states, and the case that value is.
-     *
-     * <p>What a stand-in installs. A fake row and a {@code with} both have to produce one of these to
-     * stand in at all, so both are read this way and neither is read as an assertion.
-     */
-    private record BuiltFixture(TypeName caseName, Object value) {}
-
-    /**
-     * What someone wrote down as an answer, at the grain they wrote it.
-     *
-     * <p>Apart from {@link BuiltFixture} because the two are different things. A value is built or it
-     * is not; an assertion may deliberately say less than a value — a row naming a case and nothing
-     * under it says only that — and only a recorded row may. Reading a stand-in as an assertion let a
-     * {@code with} that cannot be built at all be compared as though it named a case.
-     */
-    sealed interface Asserted {
-
-        /** The case, and nothing under it: a bare name denoting one. */
-        record CaseOnly(TypeName name) implements Asserted {}
-
-        /** The whole value. */
-        record Whole(BuiltFixture fixture) implements Asserted {}
-
-        /** Nothing that can be read: a fixture that did not build or did not finish, or an
-         * expectation naming a case the behavior cannot answer with. What is wrong with it is
-         * reported where the row is evaluated; here it states nothing to be held against. */
-        record Unreadable() implements Asserted {}
-    }
-
-    /**
-     * The whole value {@code written} states. Throws where it does not build or does not finish —
-     * a fixture is one or the other, and what to make of that is the caller's.
-     */
-    private BuiltFixture buildFixture(Ast.Expr written, Type outType) {
-        // The one builder a written value goes through, whichever side wrote it: it knows a
-        // construction from a literal, a collection, and a value a helper answered with — which the
-        // decoder route does not, and a stand-in built the other way stated nothing for a fake whose
-        // row applies a helper (the shape of issue #214, on the other side).
-        Object value = builtExpected(written, outType);
-        TypeName was = caseOfValue(value, outType);
-        return new BuiltFixture(was != null ? was : constructedCase(written), value);
-    }
-
-    /**
-     * Which of the cases {@code outType} holds the built {@code value} is, or null where none of them
-     * is what it turned out to be.
-     *
-     * <p>Matched against the cases the position declares rather than looked up by the name of the
-     * class the value arrived in. A class name is not a case name — {@code Int} arrives as a
-     * {@code Long} and {@code Date} as a {@code LocalDate}, so a lookup finds nothing and a primitive
-     * case reads as no case at all — and resolving one in this module's scope would answer for a case
-     * this module happens to declare under the same spelling rather than for the one the value is.
-     */
-    private TypeName caseOfValue(Object value, Type outType) {
-        if (value == null) {
-            return null;
-        }
-        for (TypeName candidate : TypeOps.leafCases(outType, symbols)) {
-            if (represents(candidate, value)) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
-    /** Whether {@code value} is how {@code candidate} is represented at run time: the class a data
-     * case is generated as, and for a primitive case the class its values arrive in. */
-    private static boolean represents(TypeName candidate, Object value) {
-        String carried = switch (candidate.name()) {
-            case "Int" -> "java.lang.Long";
-            case "String" -> "java.lang.String";
-            case "Bool" -> "java.lang.Boolean";
-            case "Decimal" -> "java.math.BigDecimal";
-            case "Date" -> "java.time.LocalDate";
-            case "DateTime" -> "java.time.LocalDateTime";
-            default -> null;
-        };
-        String is = value.getClass().getName();
-        return TypeName.PRIMITIVE.equals(candidate.module())
-                ? carried != null && carried.equals(is)
-                : is.equals(candidate.qualified());
-    }
-
-    /**
-     * What a stand-in stands in with: the whole value, always. Unreadable where it will not build,
-     * which is where it stands in for nothing at all — that is reported where the fake is resolved.
-     */
-    private Asserted readStandIn(Ast.Expr written, Type outType, Set<TypeName> cases) {
-        if (written == null || refusedCase(written, cases)) {
-            return new Asserted.Unreadable();
-        }
-        try {
-            return new Asserted.Whole(buildFixture(written, outType));
-        } catch (FixtureException | NonTerminationException _) {
-            return new Asserted.Unreadable();
-        }
-    }
-
-    /**
-     * What a recorded row asserts: the case alone where it named one and nothing under it, and the
-     * whole value otherwise.
-     *
-     * <p>Built through the same builder a row's expectation goes through, so what is compared is what
-     * the row asserts: a value a helper answered with is that value, not that value read back into
-     * the form a fixture is written in and decoded again (issue #214).
-     */
-    private Asserted readExpected(Ast.Expr written, Type outType, Set<TypeName> cases) {
-        if (written == null || refusedCase(written, cases)) {
-            return new Asserted.Unreadable();
-        }
-        if (caseOnly(written) != null) {
-            return new Asserted.CaseOnly(constructedCase(written));
-        }
-        try {
-            return new Asserted.Whole(buildFixture(written, outType));
-        } catch (FixtureException | NonTerminationException _) {
-            return new Asserted.Unreadable();
-        }
-    }
-
-    /** Whether {@code written} names a case the position cannot hold — <em>E1904</em> where the row
-     * is evaluated, and nothing about the behavior it was written for. */
-    private boolean refusedCase(Ast.Expr written, Set<TypeName> cases) {
-        TypeName named = constructedCase(written);
-        return named != null && !cases.isEmpty() && !cases.contains(named);
-    }
-
-    /**
-     * Whether two written answers to one input state different things.
-     *
-     * <p>Where either names a case and nothing more, the comparison is on the case: there is no value
-     * under it to compare, and holding a full value against it would report a disagreement the row
-     * never stated. The case compared is the one the value turned out to be, resolved to the type
-     * this module knows it under — not the class it arrives in, which does not tell one module's
-     * {@code Missing} from another's.
-     *
-     * <p>Where either states nothing there is nothing to disagree with. Read against a written
-     * answer, silence is not a contradiction.
-     */
-    private static boolean differs(Asserted left, Asserted right) {
-        if (left instanceof Asserted.Unreadable || right instanceof Asserted.Unreadable) {
-            return false;
-        }
-        if (left instanceof Asserted.Whole l && right instanceof Asserted.Whole r) {
-            return !souther.runtime.Values.equal(l.fixture().value(), r.fixture().value());
-        }
-        TypeName one = caseOf(left);
-        TypeName other = caseOf(right);
-        return one != null && other != null && !one.equals(other);
-    }
-
-    /** The case an assertion is about, or null where nothing says. */
-    private static TypeName caseOf(Asserted a) {
-        return switch (a) {
-            case Asserted.CaseOnly c -> c.name();
-            case Asserted.Whole w -> w.fixture().caseName();
-            case Asserted.Unreadable _ -> null;
-        };
-    }
-
     /** Whether {@code result} matches the row's expected: a name denoting a case asserts only the
      * arm (the concrete case class); anything else asserts the whole value, {@code expectedValue}
      * (built before the behavior ran), by structural equality.
      *
-     * <p>Not {@link #differs}. That compares two things a person wrote, and reads each one's case off
-     * the text; this compares what was written against what a run produced, and a result carries no
-     * text — the class it arrived in is what says which case it is. */
-    private boolean matches(Ast.Expr expected, Object result, Object expectedValue) {
-        String arm = caseOnly(expected);
+     * <p>Not what {@link ExampleStatements} compares. That holds two things a person wrote against
+     * each other and reads each one's case off the text; this holds what was written against what a
+     * run produced, and a result carries no text — the class it arrived in says which case it is. */
+    private static boolean matches(FixtureReader fixtures, Ast.Expr expected, Object result,
+                            Object expectedValue) {
+        String arm = fixtures.caseOnly(expected);
         if (arm != null) {
             return NeutralForm.simpleName(result).equals(arm);
         }
         return expectedValue != null && souther.runtime.Values.equal(expectedValue, result);
     }
 
-    /**
-     * The case a row asserts and nothing more: a bare name denoting a case — a unit case, or a case
-     * written bare — where there is no value under it to compare. Null for anything else, including a
-     * name denoting a value, which stands for the value it was defined as.
-     *
-     * <p>The case's own name, not the spelling: what came out carries the name its type was declared
-     * under, so a row spelling that type qualified asserts the same case.
-     */
-    private String caseOnly(Ast.Expr expected) {
-        return expected instanceof Ast.Var v && v.denotes() instanceof ValueName.OfType named
-                ? named.type().name() : null;
-    }
-
-    /** The expected value built the same way as an input, so structural equality compares like with
-     * like: a fixture that names a case — written as a construction, or named through a value — decodes
-     * through that case's decoder; a literal is its raw value. Throws {@link FixtureException} when the
-     * row's expectation cannot be built — the caller reports that as the fixture error it is, rather
-     * than comparing against nothing. */
-    private Object builtExpected(Ast.Expr expected, Type outType) {
-        TypeName asserted = constructedCase(expected);
-        if (asserted != null) {
-            return built(expected, Type.ref(asserted));
-        }
-        Object answer = helperAnswer(expected, new LinkedHashSet<>());
-        if (answer != null) {
-            return answer;
-        }
-        // A collection output has no case name to decode against, so the behavior's declared
-        // output type is what says which of `List`/`Set`/`Map` the written list means and what
-        // its elements are — the same decision a collection argument's declared type makes.
-        if (isCollection(outType)) {
-            return built(expected, outType);
-        }
-        return raw(expected);   // a literal expected value
-    }
-
-    /**
-     * The value a helper answered with, where a helper answered the whole expectation — written as the
-     * application, or named through the values that stand for it. Null where none did.
-     *
-     * <p>The value itself, not that value read back into the neutral form a fixture is written in. The
-     * neutral form is for what encloses a fixture, and nothing encloses this one: reading it back only to
-     * decode it again asks a decoder to recover what the helper already built, and which case the answer
-     * is — the thing a written construction says and an application does not — is in the value rather
-     * than in the text. So a newtype, a record and a case of a union answered by a helper were all
-     * compared against their own neutral form, and a row that was right was reported as a mismatch
-     * (issue #214).
-     */
-    private Object helperAnswer(Ast.Expr e, Set<String> followed) {
-        return switch (e) {
-            case Ast.Apply c when appliedHelper(c) instanceof Ast.FnDef helper -> answered(c, helper);
-            case Ast.LetIn let -> helperAnswer(let.body(), followed);
-            // a binding holds what it was bound to; a value stands for the body it was defined as.
-            // A name that denotes a type is a case, and no helper answered it.
-            case Ast.Var v when v.denotes() instanceof ValueName.Local local -> {
-                Ast.Expr held = bindings.get(local.id());
-                yield held == null ? null : helperAnswer(held, followed);
-            }
-            case Ast.Var v when v.denotes() instanceof ValueName.Helper -> {
-                Ast.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
-                yield body == null ? null : helperAnswer(body, followed);
-            }
-            case null, default -> null;
-        };
-    }
-
-    /** As above, for the rendering of a failure, where a value that cannot be built is shown as
-     * written rather than reported a second time. */
-    private Object builtExpectedOrNull(Ast.Expr expected, Type outType) {
-        try {
-            return builtExpected(expected, outType);
-        } catch (FixtureException _) {
-            return null;
-        }
-    }
-
-    private static boolean isCollection(Type t) {
-        return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
-    }
-
-    /** The arm an expected names, as it was written — what a row that names no case of the target is
-     * told it wrote. Which case it stands for is {@link #constructedCase}. */
-    private String expectedArm(Ast.Expr expected) {
-        if (expected instanceof Ast.Var v) {
-            return v.name();
-        }
-        if (expected instanceof Ast.NewData nd) {
-            return nd.typeName().written();
-        }
-        if (expected instanceof Ast.Apply c && neutral.isNewtype(c.written())) {
-            return c.written();
-        }
-        return null;   // a literal expected (a primitive output)
-    }
-
-    /** The concrete type a fixture stands for — the case it constructs — or {@code declared} where
-     * nothing in it names one (a literal, a collection). A sum-returning dependency's fake row names one
-     * case, so its output decodes against that case, not the declared sum (which, written inline, has no
-     * decoder at all). */
-    private Type fixtureType(Ast.Expr e, Type declared) {
-        TypeName named = constructedCase(e);
-        // a fixture naming nothing this target can produce is reported by the arm check; decoding it
-        // against the declared type is what turns it into that diagnostic rather than a crash
-        return named != null ? Type.ref(named) : declared;
-    }
-
-    /**
-     * The case a fixture stands for: the one a construction names, and for a name, the one the value it
-     * denotes constructs.
-     *
-     * <p>Read through the value rather than off the spelling. A value's name is not a case name, and
-     * where the position is a union written inline there is no decoder to dispatch on a tag — so the
-     * value is the only thing that says which case it is, and reading the name found a type of that
-     * spelling or nothing (issue #206).
-     */
-    private TypeName constructedCase(Ast.Expr e) {
-        return constructedCase(e, new LinkedHashSet<>());
-    }
-
-    /**
-     * As above; {@code followed} are the names already followed, so a value defined in terms of itself
-     * stops here and is reported as the cycle it is where the fixture is built.
-     *
-     * <p>The binding a closed body carries is not read here, and does not need to be: a value is
-     * substituted where it is named, so the only name closing leaves standing in a fixture is the one a
-     * spread holds — a spread cannot hold an expression — and that name is read where the spread is
-     * copied. A closed body therefore ends in the construction, whether it was published itself or
-     * named by another value that was.
-     */
-    private TypeName constructedCase(Ast.Expr e, Set<String> followed) {
-        return switch (e) {
-            case Ast.NewData nd -> nd.typeName().denotes();
-            case Ast.Apply c when neutral.isNewtype(c.written()) -> symbols.resolveCase(c.written());
-            case Ast.LetIn let -> constructedCase(let.body(), followed);
-            case Ast.Var v -> namedCase(v, followed);
-            case null, default -> null;
-        };
-    }
-
-    /** The case a bare name stands for: the type it denotes where it denotes one — a unit case, or a
-     * case written bare — and otherwise the case the value or binding it names constructs. */
-    private TypeName namedCase(Ast.Var v, Set<String> followed) {
-        return switch (v.denotes()) {
-            case ValueName.OfType named -> named.type();
-            case ValueName.Local local -> {
-                Ast.Expr held = bindings.get(local.id());
-                yield held == null ? null : constructedCase(held, followed);
-            }
-            case ValueName.Helper _ -> {
-                Ast.Expr body = followed.add(v.name()) ? valueBody(v.name()) : null;
-                yield body == null ? null : constructedCase(body, followed);
-            }
-            case null, default -> null;
-        };
-    }
-
-    /** The expectation, rendered as the value it stands for: a bare case stays the case name, anything
-     * else is its neutral form under the case it constructs ({@code Out { n = 7 }}) — which is what a
-     * row naming a value asserts, so that is what the failure shows. */
-    private String describeExpected(Ast.Expr expected, Type outType) {
-        String only = caseOnly(expected);
-        if (only != null) {
-            return only;   // a bare case asserts only that, so there is no value to show
-        }
-        TypeName asserted = constructedCase(expected);
-        Object built = builtExpectedOrNull(expected, outType);
-        if (asserted == null) {
-            // Nothing here names a case: a literal, a collection, or a value a helper answered with.
-            // What was built is a value, so it is shown the way the result is — which is what puts the
-            // two sides of a mismatch in one notation.
-            return built == null ? showValue(rawOrNull(expected)) : showAny(built);
-        }
-        // Render it through the same encoder the actual goes through, so the two sides are written
-        // in one notation and can be read against each other; the fixture's own neutral form (which
-        // still holds e.g. a LocalDate where the encoder writes its ISO text) is the fallback.
-        Object neutral = built == null ? rawOrNull(expected) : encodedOrNull(built, asserted);
-        if (neutral == null) {
-            neutral = rawOrNull(expected);
-        }
-        return neutral == null ? asserted.name() : show(asserted.name(), neutral);
-    }
-
-    /** What actually came out, in the same notation: the case name plus the value the derived encoder
-     * writes, so the two sides of a mismatch can be read against each other. A value with no encoder
-     * (or one that fails to encode) falls back to its case name alone. */
-    private String describeActual(Object result) {
-        String name = NeutralForm.simpleName(result);
-        if (name.isEmpty()) {
-            return String.valueOf(result);
-        }
-        if (result instanceof Iterable<?> || result instanceof Map<?, ?>) {
-            return showAny(result);
-        }
-        Object encoded = encodedOrNull(result, name);
-        if (encoded != null) {
-            return show(name, encoded);
-        }
-        return NeutralForm.isScalar(result) ? showValue(result) : name;
-    }
-
-    /** A live value in the notation a fixture is written in, at any depth: a collection element by
-     * element, a data as its case name with fields, a scalar as written. Both sides of a collection
-     * mismatch go through this, so they can be read against each other — and neither shows the JDK
-     * class that happened to carry the collection. */
-    private String showAny(Object v) {
-        if (v == null || NeutralForm.isScalar(v)) {
-            return showValue(v);
-        }
-        if (v instanceof Map<?, ?> m) {
-            List<String> entries = new ArrayList<>();
-            for (Map.Entry<?, ?> e : m.entrySet()) {
-                entries.add("(" + showAny(e.getKey()) + ", " + showAny(e.getValue()) + ")");
-            }
-            return entries.isEmpty() ? "[]" : "[ " + String.join(", ", entries) + " ]";
-        }
-        if (v instanceof Iterable<?> it) {
-            List<String> elements = new ArrayList<>();
-            for (Object e : it) {
-                elements.add(showAny(e));
-            }
-            return elements.isEmpty() ? "[]" : "[ " + String.join(", ", elements) + " ]";
-        }
-        String name = NeutralForm.simpleName(v);
-        Object encoded = encodedOrNull(v, name);
-        return encoded != null ? show(name, encoded) : name;
-    }
-
-    /**
-     * The generated {@code decoder()} / {@code encoder()} of a type, reached whether or not the type
-     * is exposed. {@code exposing} decides what leaves the module, and an {@code example} does not
-     * leave it: the fixture is built and the result read back inside the module being compiled, so a
-     * module-local type has to be readable here. Its generated class is package-private, which
-     * {@link Class#getMethod} cannot reach from this classloader, so the declared method is taken and
-     * opened.
-     */
-    private static Object staticCodec(Class<?> c, String name) throws ReflectiveOperationException {
-        java.lang.reflect.Method m = c.getDeclaredMethod(name);
-        m.setAccessible(true);
-        return m.invoke(null);
-    }
-
-    /** {@code result} through its class's derived {@code encoder()}, or null when it has none. */
-    private Object encodedOrNull(Object result, String name) {
-        TypeName type = symbols.resolve(name);
-        return encoded(result, type != null ? type.qualified() : module.name() + "." + name);
-    }
-
-    /** As above, for a type already resolved — a fixture says which case it constructs, and that answer
-     * names the class whether or not the reader spells the type the way its module does. */
-    private Object encodedOrNull(Object result, TypeName type) {
-        return encoded(result, type.qualified());
-    }
-
-    private Object encoded(Object result, String className) {
-        try {
-            Class<?> c = loader.loadClass(className);
-            Object encoder = staticCodec(c, "encoder");
-            return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
-                    .invoke(encoder, result);
-        } catch (ReflectiveOperationException | RuntimeException _) {
-            return null;
-        }
-    }
-
-    /** A case name with its neutral value: a record's fields in braces, a newtype's value in parens,
-     * a unit case as the bare name. */
-    private String show(String name, Object neutral) {
-        if (neutral instanceof Map<?, ?> fields) {
-            if (fields.isEmpty()) {
-                return name;
-            }
-            StringBuilder sb = new StringBuilder(name).append(" { ");
-            boolean first = true;
-            for (Map.Entry<?, ?> e : fields.entrySet()) {
-                if (!first) {
-                    sb.append(", ");
-                }
-                first = false;
-                sb.append(e.getKey()).append(" = ").append(showValue(e.getValue()));
-            }
-            return sb.append(" }").toString();
-        }
-        return name + "(" + showValue(neutral) + ")";
-    }
-
-    /** A neutral value in the notation a fixture is written in: a quoted string, a list in brackets,
-     * a map as its list of pairs, a date as {@code Date("...")}. */
-    private String showValue(Object v) {
-        if (v == null) {
-            return "None";
-        }
-        if (v instanceof String s) {
-            return "\"" + s + "\"";
-        }
-        if (v instanceof java.time.LocalDate || v instanceof java.time.LocalDateTime) {
-            return (v instanceof java.time.LocalDate ? "Date(\"" : "DateTime(\"") + v + "\")";
-        }
-        if (v instanceof Map<?, ?> m) {
-            List<String> entries = new ArrayList<>();
-            for (Map.Entry<?, ?> e : m.entrySet()) {
-                entries.add("(" + showValue(e.getKey()) + ", " + showValue(e.getValue()) + ")");
-            }
-            return entries.isEmpty() ? "[]" : "[ " + String.join(", ", entries) + " ]";
-        }
-        if (v instanceof Iterable<?> it) {
-            List<String> elements = new ArrayList<>();
-            for (Object e : it) {
-                elements.add(showValue(e));
-            }
-            return elements.isEmpty() ? "[]" : "[ " + String.join(", ", elements) + " ]";
-        }
-        return String.valueOf(v);
-    }
-
-    private Object rawOrNull(Ast.Expr e) {
-        try {
-            return raw(e);
-        } catch (FixtureException _) {
-            return null;
-        }
-    }
-
     private Set<TypeName> outCases(Type out) {
         return TypeOps.outputCases(out, symbols);
-    }
-
-    // --- raw evaluation of a fixture expression -----------------------------------------------
-
-    /** Turns a fixture expression into its neutral (decoder-input) form: a literal to a boxed value,
-     * a newtype construction to its inner value, a record construction to a field map. */
-    private Object raw(Ast.Expr e) {
-        return raw(e, null);
-    }
-
-    /**
-     * The neutral form of a written fixture value. {@code expected} is the type of the position it is
-     * written in, where the caller knows it: a bare case name travels differently depending on the sum
-     * it is read as, and only the position says which sum that is. It may be null — a fixture whose
-     * position has no declared type — and then the case's own sums decide, which is right whenever
-     * they agree.
-     */
-    private Object raw(Ast.Expr e, Type expected) {
-        return switch (e) {
-            case Ast.IntLit i -> i.value();
-            case Ast.DecimalLit d -> d.value();
-            case Ast.StringLit s -> s.value();
-            case Ast.BoolLit b -> b.value();
-            case Ast.Neg n -> negate(raw(n.operand()));
-            case Ast.Binary bin -> fold(bin);
-            case Ast.Apply c -> collectionOrNewtype(c, expected);
-            case Ast.Var v -> named(v, expected);
-            case Ast.NewData nd -> record(nd);
-            case Ast.LetIn let -> bound(let, expected);
-            case Ast.ListLit l -> {
-                Type element = NeutralForm.elementOf(expected);
-                List<Object> out = new ArrayList<>();
-                for (Ast.Expr el : l.elements()) {
-                    out.add(raw(el, element));
-                }
-                yield out;
-            }
-            // a `(key, value)` pair: only a `Map` field's entries are written this way, and `shaped`
-            // collects them into the map the decoder reads (a tuple is not a data field type itself).
-            case Ast.Tuple t -> {
-                List<Type> parts = NeutralForm.entryTypes(expected, t.elements().size());
-                List<Object> out = new ArrayList<>();
-                for (int i = 0; i < t.elements().size(); i++) {
-                    out.add(raw(t.elements().get(i), parts == null ? null : parts.get(i)));
-                }
-                yield out;
-            }
-            default -> throw new FixtureException("an example fixture must be a literal or a construction");
-        };
-    }
-
-    /**
-     * A bare name in a fixture, read as what it denotes.
-     *
-     * <p>Which of the four it is was settled where the name was written, so it is not worked out
-     * again here: a binding in force is the value it holds, whatever else bears its spelling.
-     */
-    private Object named(Ast.Var v, Type expected) {
-        return switch (v.denotes()) {
-            // `None` maps to a null, which the optional decoder reads as the absent optional
-            // (spec 8, absent/null -> None), the same as omitting a `T?` field
-            case ValueName.Builtin b when b.name().equals("None") -> null;
-            case ValueName.OfType named
-                    when symbols.get(named.type()) instanceof Ast.UnitData ->
-                    unitInput(named.type(), expected);
-            case ValueName.Local local -> {
-                Ast.Expr held = bindings.get(local.id());
-                if (held == null) {
-                    throw new FixtureException("`" + v.name()
-                            + "` is bound to no value a fixture can name");
-                }
-                yield expandedValue(local, held, expected);
-            }
-            case ValueName.Helper helper -> {
-                Ast.Expr value = valueBody(v.name());
-                if (value == null) {
-                    throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
-                }
-                yield expandedValue(helper, value, expected);
-            }
-            // `Map.empty` / `Set.empty`: a library value, not a library call, so there is no method to
-            // run and its value is known from the name alone. It is the empty collection, which a row
-            // writes `[]` — admitted for the reason `fromList` is (see `collectionOrNewtype`), so a
-            // body and a row spell an empty map the one way.
-            case ValueName.Stdlib lib when Prelude.isEmptyCollectionValue(lib.qualified()) ->
-                    new ArrayList<>();
-            case null, default ->
-                    throw new FixtureException("`" + v.name() + "` is not a value a fixture can name");
-        };
-    }
-
-    /** A unit case as a fixture writes it: a unit's decoder ignores the input, so an empty map
-     * stands in. */
-    private Object unitInput(TypeName caseName, Type expected) {
-        {
-            String name = caseName.name();
-            // A fixture is built in the neutral form the boundary reads, so a case of an enumeration
-            // is written the way that sum travels: its name, bare (issue #161). The same unit data may
-            // be a case of an enumeration and of a sum that has a field-bearing case, and those travel
-            // differently — so the position's own type decides, and the case's sums answer only where
-            // the position does not say.
-            if (caseName != null && neutral.readsABareName(expected, caseName)) {
-                return caseName.name();
-            }
-            Map<String, Object> unit = new LinkedHashMap<>();
-            neutral.tagged(name, unit);   // a unit case of a sum still needs the tag its decoder reads
-            return unit;
-        }
-    }
-
-    /**
-     * A name bound while this fixture is being built, holding what it was bound to.
-     *
-     * <p>A spread holds a name rather than an expression, so a published body that spreads one of its
-     * module's values arrives with that value bound ahead of the construction — the shape a spread of a
-     * local already has. That binding is what the spread then names, so a fixture reads one the way it
-     * reads a value: the position says what type to read it as.
-     */
-    private final Map<BindingId, Ast.Expr> bindings = new LinkedHashMap<>();
-
-    /** A {@code let} inside a fixture: its name stands for what it was bound to while the body is
-     * built, and a binding of the same spelling that was already in force is put back afterwards. */
-    private Object bound(Ast.LetIn let, Type expected) {
-        BindingId binding = let.binder().id();
-        bindings.put(binding, let.value());
-        try {
-            return raw(let.body(), expected);
-        } finally {
-            // a binding of its own, so there is nothing of an outer one to put back
-            bindings.remove(binding);
-        }
-    }
-
-    /**
-     * What a name stands for: a binding in force, or the body a value — a {@code let} with no parameter
-     * list — was defined as. Null where the name is neither.
-     *
-     * <p>Whether a fixture may name it is not a property of this one body: a value stands for a
-     * fixture when it is a literal, a construction, a spread, a {@code fromList} over one, or a name
-     * of another such value. So the body is read the same way the row's own text is, and a chain of
-     * values holds.
-     */
-    private Ast.Expr valueBody(String name) {
-        for (Ast.FnDef fn : module.fns()) {
-            if (fn.name().equals(name) && fn.params().isEmpty()
-                    && fn.body() instanceof Ast.FnBody.Written w) {
-                return w.expr();
-            }
-        }
-        Ast.FnDef imported = values.get(name);
-        return imported != null && imported.params().isEmpty()
-                && imported.body() instanceof Ast.FnBody.Written w ? w.expr() : null;
-    }
-
-    /**
-     * What is being expanded, innermost last — a value that reaches itself has no fixture to be.
-     *
-     * <p>Held as what each one is rather than as what it is called: two bindings of one spelling are
-     * two values, and reading the second while the first is open is not a value reaching itself. The
-     * spelling is what the report shows, and decides nothing.
-     */
-    private final Deque<ValueName> expanding = new ArrayDeque<>();
-
-    private Object expandedValue(ValueName named, Ast.Expr body, Type expected) {
-        if (expanding.contains(named)) {
-            List<String> cycle = new ArrayList<>();
-            expanding.forEach(open -> cycle.add(open.name()));
-            cycle.add(named.name());
-            throw new FixtureException("`" + named.name() + "` is defined in terms of itself ("
-                    + String.join(" -> ", cycle) + ")");
-        }
-        expanding.addLast(named);
-        try {
-            return raw(body, expected);
-        } finally {
-            expanding.removeLast();
-        }
-    }
-
-    /**
-     * {@code Set.fromList([…])} and {@code Map.fromList([…])} are the forms a fixture's own notation
-     * stands for — a set is written as its elements and a map as its entry pairs — so the neutral
-     * value is the argument's. A value has to be ordinary code, where a list literal is a
-     * {@code List} whatever the position declares, so this is what lets one record serve as both a
-     * value and a fixture. Anything else applied here is a newtype or nothing.
-     *
-     * <p>The empty collection is admitted for the same reason, but it is named rather than applied
-     * ({@code Map.empty}), so it is read in {@link #named}.
-     */
-    private Object collectionOrNewtype(Ast.Apply c, Type expected) {
-        if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())) {
-            if (c.args().size() != 1) {
-                throw new FixtureException("`" + c.written() + "` takes one argument");
-            }
-            return raw(c.args().get(0), expected);
-        }
-        if (appliedHelper(c) instanceof Ast.FnDef helper) {
-            return applied(c, helper, expected);
-        }
-        return newtypeInner(c);
-    }
-
-    /** The helper an application applies, or null where the call is not one: a {@code fromList} is the
-     * fixture's own notation for a collection and a newtype application is a construction, so neither is
-     * a helper however it is spelled. Asked wherever an application has to be told from a construction,
-     * so the two readers of a call cannot come to different answers. */
-    private Ast.FnDef appliedHelper(Ast.Apply c) {
-        if ("Set.fromList".equals(c.reaches()) || "Map.fromList".equals(c.reaches())
-                || neutral.isNewtype(c.written())) {
-            return null;
-        }
-        return helperDef(c.written());
-    }
-
-    /**
-     * The helper a fixture may apply under {@code name}, or null where the name is not one: a
-     * definition written with a parameter list, read from the table that keys every helper this module
-     * reaches — its own, the ones its imports publish, and the prelude's — as the emitted method is
-     * keyed. The types come from there rather than from the written module because that table is
-     * settled (ADR-0066), and an argument is decoded against the parameter's settled type.
-     */
-    private Ast.FnDef helperDef(String name) {
-        Ast.FnDef helper = values.get(name);
-        return helper != null && !helper.params().isEmpty() ? helper : null;
-    }
-
-    /** Whether {@code name} is a function this example cannot run: nothing emitted a method for it.
-     * A helper that has one is applied; the ones that never do are the standard library's intrinsics
-     * and a helper whose body produces a function, and both read as this. */
-    private boolean noMethod(String name) {
-        if (Prelude.isLibraryFunction(name)) {
-            return true;   // a standard-library function: an intrinsic, or one nothing emitted here
-        }
-        for (Ast.FnDef fn : module.fns()) {
-            if (fn.name().equals(name) && !fn.params().isEmpty()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * A helper applied inside a fixture: it is run, and the value it returns is re-materialised into the
-     * neutral form a fixture is written in — so what encloses the call goes on being built the one way,
-     * a field of a record and an element of a list alike. An application that encloses nothing is
-     * {@link #helperAnswer}: there the value itself is what the row asserts.
-     */
-    private Object applied(Ast.Apply c, Ast.FnDef helper, Type expected) {
-        return neutral.of(answered(c, helper), expected, c.written());
-    }
-
-    /** The value a helper answers with, run as the method its module emits. Its arguments are fixtures
-     * built against its parameter types, so an argument breaking one of those types' invariants is
-     * reported as the fixture it is. */
-    private Object answered(Ast.Apply c, Ast.FnDef helper) {
-        if (c.args().size() != helper.params().size()) {
-            throw new FixtureException("`" + c.written() + "` takes " + helper.params().size()
-                    + " argument(s) but is called with " + c.args().size());
-        }
-        Object[] args = new Object[helper.params().size()];
-        for (int i = 0; i < args.length; i++) {
-            Ast.FnParam p = helper.params().get(i);
-            if (p.type() == null) {
-                throw new FixtureException("`" + c.written() + "` parameter `" + p.name()
-                        + "` has no type a fixture can be built against");
-            }
-            Type paramType = TypeOps.resolveParamType(p.type(), symbols);
-            // A parameter whose element each call decides has no one type here. A call settles it
-            // from the argument it is given; a fixture is built before there is a call to settle it,
-            // so the order is what refuses this rather than the type being unsupported.
-            if (Type.mentions(paramType, t -> t instanceof Type.Var)) {
-                throw new FixtureException("`" + c.written() + "` parameter `" + p.name() + "` is "
-                        + Type.show(paramType) + "; what it holds is decided by each call, and a"
-                        + " fixture is built before a call can decide it");
-            }
-            args[i] = built(c.args().get(i), paramType);
-        }
-        return helpers.invoke(c.written(), args);
-    }
-
-    private Object newtypeInner(Ast.Apply c) {
-        if ("Date".equals(c.reaches()) || "DateTime".equals(c.reaches())) {
-            // a written date: the decoders take the parsed temporal, not its text (a Date field's
-            // neutral form is a LocalDate), so the fixture hands over the same value the checker read
-            if (c.args().size() != 1 || !(c.args().get(0) instanceof Ast.StringLit lit)) {
-                throw new FixtureException("`" + c.written() + "` takes one written string");
-            }
-            return CallElaborator.parseTemporal(c.written(), lit.value(), c.pos());
-        }
-        if (!neutral.isNewtype(c.written())) {
-            if (noMethod(c.written())) {
-                // A function this module cannot run: an intrinsic implemented in Java, or a helper
-                // whose body produces a function. Said as that, so the rule that a fixture may apply a
-                // helper does not appear to have exceptions nothing explains (ADR-0077).
-                throw new FixtureException("`" + c.written() + "` cannot be called from an example fixture:"
-                        + " it has no executable helper method");
-            }
-            throw new FixtureException("`" + c.written() + "` is not a newtype; a fixture cannot call it");
-        }
-        if (c.args().size() != 1) {
-            throw new FixtureException("`" + c.written() + "` takes one argument");
-        }
-        // a newtype over a temporal (`data 貸出日 = Date`) wraps the parsed value, so its written
-        // string is read here as it would be for a bare `Date("...")`
-        String base = neutral.newtypeBase(c.written());
-        if (("Date".equals(base) || "DateTime".equals(base))
-                && c.args().get(0) instanceof Ast.StringLit lit) {
-            return CallElaborator.parseTemporal(base, lit.value(), c.pos());
-        }
-        // the argument is shaped against what the newtype wraps, the same way a record fixture
-        // shapes a field's value: a `Map` newtype's entry pairs become a map, a `Set` newtype's
-        // written list stays a list for its decoder to dedupe
-        return neutral.adjacentlyTagged(c.written(),
-                neutral.shaped(raw(c.args().get(0), neutral.shapeOf(neutral.newtypeBaseType(c.written()))),
-                        neutral.shapeOf(neutral.newtypeBaseType(c.written()))));
-    }
-
-    private Object record(Ast.NewData nd) {
-        // `金額(500)` is the record literal `金額 { value = 500 }` written in call form (ADR-0032), and
-        // a value's body reaches here already written the second way. Either spelling is the newtype's
-        // own neutral form — its inner value — not a field map.
-        TypeName built = nd.typeName().denotes();
-        if (neutral.isNewtype(built) && nd.spreads().isEmpty() && nd.inits().size() == 1
-                && nd.inits().get(0).name().equals("value")) {
-            return neutral.adjacentlyTagged(nd.typeName().written(),
-                    neutral.shaped(raw(nd.inits().get(0).value(), neutral.shapeOf(neutral.newtypeBaseType(built))),
-                            neutral.shapeOf(neutral.newtypeBaseType(built))));
-        }
-        Map<String, Ast.TypeRef> declared = neutral.fieldTypes(nd.typeName().denotes());
-        Map<String, Object> map = new LinkedHashMap<>();
-        // `...base` copies the fields of a value, and the fields written after it replace what it
-        // brought.
-        for (Ast.Var ref : nd.spreads()) {
-            // A spread names a value in force, so what it copies is what that name denotes: a binding
-            // holds what it was bound to, and a definition stands for its body. A definition is
-            // reached by the name this row spells it with — a definition of this module by its own
-            // name, one another module published by that module's name and its own. `bare()` is the
-            // name it was *declared* under, which is not that key for an imported value (issue #212).
-            String spread = ref.name();
-            Ast.Expr value = ref.denotes() instanceof ValueName.Local local
-                    ? bindings.get(local.id()) : valueBody(spread);
-            if (value == null) {
-                throw new FixtureException("`" + spread
-                        + "` is not a value a fixture can spread");
-            }
-            Object copied = expandedValue(ref.denotes(), value,
-                    Type.ref(nd.typeName().denotes()));
-            if (!(copied instanceof Map<?, ?> fields)) {
-                throw new FixtureException("`" + spread + "` is not a record, so it has no fields to"
-                        + " spread");
-            }
-            for (Map.Entry<?, ?> f : fields.entrySet()) {
-                String field = String.valueOf(f.getKey());
-                // A spread copies fields, and only the ones this construction has — which is what the
-                // language copies. The discriminator the spread source's own sum's decoder reads is not
-                // one of them: it says which case that value is, and this construction says which case
-                // it builds (below). Copying it left the source's case in place of it, and where the
-                // position is a union that is the case the behavior saw (issue #206).
-                if (declared.containsKey(field)) {
-                    map.put(field, f.getValue());
-                }
-            }
-        }
-        for (Ast.FieldInit fi : nd.inits()) {
-            Object v = neutral.shaped(raw(fi.value(), neutral.shapeOf(declared.get(fi.name()))),
-                    neutral.shapeOf(declared.get(fi.name())));
-            // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads
-            // it as absent (spec 8, absent -> None), the same neutral form as omitting the field.
-            if (v == null) {
-                continue;
-            }
-            map.put(fi.name(), v);
-        }
-        neutral.tagged(nd.typeName().denotes(), map);
-        return map;
-    }
-
-    private static Object negate(Object v) {
-        if (v instanceof Long l) {
-            return -l;
-        }
-        if (v instanceof BigDecimal d) {
-            return d.negate();
-        }
-        throw new FixtureException("only a number can be negated in a fixture");
-    }
-
-    private Object fold(Ast.Binary b) {
-        Object l = raw(b.left());
-        Object r = raw(b.right());
-        if (l instanceof Long x && r instanceof Long y) {
-            return switch (b.op()) {
-                case ADD -> x + y;
-                case SUB -> x - y;
-                case MUL -> x * y;
-                default -> throw new FixtureException("unsupported arithmetic in a fixture");
-            };
-        }
-        if (l instanceof BigDecimal x && r instanceof BigDecimal y) {
-            return switch (b.op()) {
-                case ADD -> x.add(y);
-                case SUB -> x.subtract(y);
-                case MUL -> x.multiply(y);
-                default -> throw new FixtureException("unsupported arithmetic in a fixture");
-            };
-        }
-        throw new FixtureException("a fixture can only combine numbers of the same kind");
-    }
-
-    // --- decode a raw value into the parameter/expected type ----------------------------------
-
-    private Object decode(Type type, Object rawValue) {
-        Object raw = neutral.shaped(rawValue, type);
-        Decoder<Object, ?> decoder = decoderFor(type);
-        Result<?> result;
-        try {
-            result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
-        } catch (RuntimeException _) {
-            // The decoder is generated for the declared type and casts on the way in, so a fixture of
-            // another shape — a string where the parameter is a product, a number where it is a
-            // string-backed newtype — fails inside it rather than returning an Err. That is the
-            // fixture's problem, and it reads as one (E1903) instead of aborting the compile.
-            throw new FixtureException("a " + shapeOf(raw) + " does not fit " + Type.show(type));
-        }
-        if (result instanceof Ok<?> ok) {
-            return ok.value();
-        }
-        // Name where each failure landed. A decoder reports at a path, and a fixture that breaks the
-        // same rule twice — two keys of a newtype-keyed map, two elements of a list — otherwise reads
-        // as one message repeated, with nothing to say which value it is about.
-        String detail = ((Err<?>) result).issues().asList().stream()
-                .map(issue -> {
-                    String at = String.join(".", issue.path().segments());
-                    return at.isEmpty() ? issue.message() : at + ": " + issue.message();
-                })
-                .collect(java.util.stream.Collectors.joining("; "));
-        throw new FixtureException(detail);
-    }
-
-    /** What a fixture value looks like from the decode boundary, for the message above: the raw kinds
-     *  a fixture can produce, named as the author wrote them rather than by their JVM class. */
-    private static String shapeOf(Object raw) {
-        return switch (raw) {
-            case null -> "missing value";
-            case String _ -> "string";
-            case Long _, Integer _ -> "number";
-            case java.math.BigDecimal _ -> "decimal";
-            case Boolean _ -> "boolean";
-            case java.util.Map<?, ?> _ -> "record";
-            case java.util.List<?> _ -> "list";
-            default -> raw.getClass().getSimpleName();
-        };
-    }
-
-    @SuppressWarnings("unchecked")
-    private Decoder<Object, ?> decoderFor(Type type) {
-        if (type instanceof Type.Prim prim) {
-            return switch (prim) {
-                case STRING -> ObjectDecoders.string();
-                case INT -> ObjectDecoders.long_();
-                case BOOL -> ObjectDecoders.bool();
-                case DECIMAL -> ObjectDecoders.decimal();
-                case DATE -> ObjectDecoders.date();
-                case DATETIME -> ObjectDecoders.dateTime();
-                case RAW -> throw new FixtureException("the Raw type cannot be an example input");
-            };
-        }
-        if (type instanceof Type.Ref ref) {
-            // An imported type's decoder lives in its declaring module's package, not this one's.
-            try {
-                Class<?> c = loader.loadClass(ref.name().qualified());
-                return (Decoder<Object, ?>) staticCodec(c, "decoder");
-            } catch (ReflectiveOperationException _) {
-                throw new FixtureException("no decoder for `" + ref.name().name() + "`");
-            }
-        }
-        // A collection is decoded the way a data's collection field is, built from the same pieces the
-        // derived decoder is (spec 10.2): a list over its element decoder, a set as a list
-        // deduplicated, a map over its value decoder with the keys remapped through the key type.
-        // Without this a collection could only reach an example inside a data, so a behavior taking
-        // one had to be given a wrapper that exists for no other reason (issue #97).
-        if (type instanceof Type.ListOf list) {
-            return ObjectDecoders.list(decoderFor(list.element()));
-        }
-        if (type instanceof Type.SetOf set) {
-            return ObjectDecoders.list(decoderFor(set.element()))
-                    .map(elements -> Sets.fromList(new ArrayList<Object>(elements)));
-        }
-        if (type instanceof Type.MapOf map) {
-            Decoder<Object, ?> values = ObjectDecoders.map(decoderFor(map.value()));
-            return map.key() instanceof Type.Ref key ? rekeyed(values, key) : values;
-        }
-        throw new FixtureException("`" + Type.show(type) + "` is not supported as an example value yet");
-    }
-
-    /**
-     * A map whose keys are a newtype ({@code Map<商品ID, Int>}, ADR-0040): the values decode first, as
-     * the derived decoder does, then each key is built through its own type — so the key's invariant
-     * runs and a fixture that breaks it is reported instead of reaching the behavior as a bare string.
-     * Every key is tried and its failures merged, as the derived decoder's rekey helper does, so a
-     * fixture with two bad keys names both rather than stopping at the first.
-     */
-    private Decoder<Object, ?> rekeyed(Decoder<Object, ?> values, Type.Ref key) {
-        Decoder<Object, ?> keyDecoder = decoderFor(key);
-        return values.flatMapWithPath((decoded, path) -> {
-            Map<Object, Object> out = new LinkedHashMap<>();
-            Issues issues = Issues.EMPTY;
-            for (Map.Entry<?, ?> entry : ((Map<?, ?>) decoded).entrySet()) {
-                Result<?> k = keyDecoder.decode(entry.getKey(), path.append(String.valueOf(entry.getKey())));
-                switch (k) {
-                    case Ok<?>(var decodedKey) -> out.put(decodedKey, entry.getValue());
-                    case Err<?>(var found) -> issues = issues.merge(found);
-                }
-            }
-            return issues.isEmpty() ? Result.ok(out) : Result.err(issues);
-        });
     }
 
     // --- invoke the behavior ------------------------------------------------------------------

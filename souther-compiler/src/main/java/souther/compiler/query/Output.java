@@ -454,7 +454,7 @@ public final class Output {
      * disagreements says that with the same empty list it says agreement with.
      */
     public record Disagreements(String name)
-            implements Key<souther.compiler.ExampleVerifier.Readings> {
+            implements Key<souther.compiler.ExampleStatements.Readings> {
 
         @Override
         public String module() {
@@ -462,7 +462,7 @@ public final class Output {
         }
 
         @Override
-        public Answer<souther.compiler.ExampleVerifier.Readings> compute(Db db) {
+        public Answer<souther.compiler.ExampleStatements.Readings> compute(Db db) {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -471,7 +471,7 @@ public final class Output {
             }
             if (db.ask(new Bodies.Checked(name)).value() == null) {
                 // a module that did not check states nothing yet
-                return Answer.of(souther.compiler.ExampleVerifier.Readings.NONE);
+                return Answer.of(souther.compiler.ExampleStatements.Readings.NONE);
             }
             Map<String, byte[]> classes = db.ask(new Linked(name)).value();
             Map<String, List<BehaviorRequirement>> requirements =
@@ -483,8 +483,11 @@ public final class Output {
                 return Answer.absent();
             }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
-            return Answer.of(souther.compiler.ExampleVerifier.disagreements(prepared.value(),
-                    scope.value(), sigs.value(), classes, requirements, loader(db, Map.of()),
+            // `requirements` is asked for above as a readiness condition — a module whose
+            // requirements are not settled is not one to read statements off yet — rather than
+            // because reading them needs it. Nothing here applies a behavior.
+            return Answer.of(souther.compiler.ExampleStatements.disagreements(prepared.value(),
+                    scope.value(), sigs.value(), classes, loader(db, Map.of()),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
                     exampleBudgetMs(db)));
         }
@@ -526,17 +529,17 @@ public final class Output {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            souther.compiler.ExampleVerifier.Readings read =
+            souther.compiler.ExampleStatements.Readings read =
                     db.ask(new Disagreements(name)).value();
             if (read == null) {
                 return Answer.of(true);
             }
             List<Report> reports = new ArrayList<>();
-            for (souther.compiler.ExampleVerifier.Disagreement d : read.disagreements()) {
+            for (souther.compiler.ExampleStatements.Disagreement d : read.disagreements()) {
                 reports.add(Report.saidAt(said(d),
                         Report.Delivery.atEveryRegionOf(d.recorded().at().sourceId())));
             }
-            for (souther.compiler.ExampleVerifier.TimedOutFake f : read.timedOut()) {
+            for (souther.compiler.ExampleStatements.TimedOutFake f : read.timedOut()) {
                 reports.add(Report.saidAt(unread(f),
                         Report.Delivery.atEveryRegionOf(f.at().sourceId())));
             }
@@ -544,7 +547,7 @@ public final class Output {
         }
 
         /** One fake that could not be read: the caret on the behavior it names, and what stopped. */
-        private static Diagnostic unread(souther.compiler.ExampleVerifier.TimedOutFake f) {
+        private static Diagnostic unread(souther.compiler.ExampleStatements.TimedOutFake f) {
             return Diagnostic.of("E1920", "check.example.disagreement.unread").warning()
                     .title("check.example.title")
                     .at(f.at().pos(), f.width())
@@ -557,9 +560,9 @@ public final class Output {
 
         /** One disagreement: the caret on the recorded row, a second region on the stand-in in
          * whichever file it was written in, and what each of them answers. */
-        private static Diagnostic said(souther.compiler.ExampleVerifier.Disagreement d) {
-            souther.compiler.ExampleVerifier.Statement recorded = d.recorded();
-            souther.compiler.ExampleVerifier.Statement standIn = d.standIn();
+        private static Diagnostic said(souther.compiler.ExampleStatements.Disagreement d) {
+            souther.compiler.ExampleStatements.Statement recorded = d.recorded();
+            souther.compiler.ExampleStatements.Statement standIn = d.standIn();
             String key = d.viaWith() ? "check.example.disagreement.with"
                     : "check.example.disagreement";
             String hintKey = d.viaWith() ? "check.example.disagreement.with.hint"
@@ -669,8 +672,9 @@ public final class Output {
                 return List.of();
             }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
-            return souther.compiler.ExampleVerifier.fakeTables(prepared.value(), scope.value(),
-                    sigs.value(), classes, requirements, loader(db, Map.of()),
+            // As above: `requirements` says this module is ready to be read, not what to read.
+            return souther.compiler.ExampleStatements.fakeTables(prepared.value(), scope.value(),
+                    sigs.value(), classes, loader(db, Map.of()),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
                     exampleBudgetMs(db));
         }
