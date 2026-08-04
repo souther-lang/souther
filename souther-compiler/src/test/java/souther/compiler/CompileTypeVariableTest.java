@@ -194,4 +194,72 @@ class CompileTypeVariableTest {
         assertEquals(true, e.getMessage().contains("`y`"),
                 "`y` is still undetermined, and the report says so: " + e.getMessage());
     }
+
+    /**
+     * A function argument the callee never applies is still held to what the callee declared of it.
+     *
+     * <p>The application decides {@code 'a} from the value argument, so the lambda must take that.
+     * Nothing in the expanded body says so — the parameter was declared and never used, so the
+     * lambda is not there to be checked by an application — and the call is where it is held.
+     */
+    @Test
+    void anUnappliedFunctionParameterStillHoldsTheLambdaToWhatItTakes() {
+        String core = """
+                module souther.gen
+                let witness (f: ('a) -> Bool, x: 'a) = true
+                let bad (s: String) = witness((z) -> z == 1, s)
+                """;
+        assertThrows(CompileException.class, () -> compileCore(core),
+                "the application decided `'a` is String, so the lambda may not compare an Int");
+    }
+
+    /** And what such a function answers is a position of the signature too, so a variable that
+     * appears only there reaches the caller. */
+    @Test
+    void aVariableInAFunctionArgumentsResultReachesTheCaller() {
+        assertDoesNotThrow(() -> compileCore("""
+                module souther.gen
+                let witness (f: (Int) -> 'a, x: 'a) = true
+                let use (x) = witness((n) -> "answer", x)
+                """), "the lambda answers a String, so `x` is a String");
+        CompileException e = assertThrows(CompileException.class, () -> compileCore("""
+                module souther.gen
+                let witness (f: (Int) -> 'a, x: 'a) = true
+                let bad (n: Int) = witness((z) -> "answer", n)
+                """));
+        assertEquals(true, e.getMessage().contains("String"),
+                "an Int argument and a String-answering lambda do not agree: " + e.getMessage());
+    }
+
+    /** A named function given to such a parameter says the same thing a lambda does. */
+    @Test
+    void aNamedFunctionGivenToAnUnappliedParameterSaysWhatItTakes() {
+        assertDoesNotThrow(() -> compileCore("""
+                module souther.gen
+                let positive (n: Int) = n > 0
+                let witness (f: ('a) -> Bool, x: 'a) = true
+                let use (x) = witness(positive, x)
+                """), "`positive` takes an Int, so `x` is an Int");
+        assertThrows(CompileException.class, () -> compileCore("""
+                module souther.gen
+                let positive (n: Int) = n > 0
+                let witness (f: ('a) -> Bool, x: 'a) = true
+                let bad (s: String) = witness(positive, s)
+                """), "and a String does not fit what `positive` takes");
+    }
+
+    /**
+     * A declared parameter type is held to whether or not the callee's body reads it. What the
+     * callee wrote about a value it never looks at is still what it wrote.
+     */
+    @Test
+    void aParameterTheCalleeNeverReadsIsStillDeclared() {
+        String core = """
+                module souther.gen
+                let ignores (x: Int) = true
+                let bad = ignores("not an Int")
+                """;
+        CompileException e = assertThrows(CompileException.class, () -> compileCore(core));
+        assertEquals("check.expects", e.diagnostic().messageKey(), e.getMessage());
+    }
 }

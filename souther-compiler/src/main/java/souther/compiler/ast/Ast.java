@@ -787,9 +787,17 @@ public interface Ast {
      * text, and the callee's declared type for it comes along. */
     record Bound(Binder binder, RetType declaredType, Expr value) {}
 
-    /** A function argument. The callee applies it where it wants it and it leaves no binding, so what
-     * the signature said about it reaches a reader only from here. */
-    record Given(RetType declaredType, Expr value) {}
+    /**
+     * A function argument. It leaves no binding, so what the signature said about it reaches a
+     * reader only from here.
+     *
+     * <p>{@code applied} is whether the callee's body still reaches it. Where it does, the body is
+     * where this argument is typed and what the signature said is checked by that application, as it
+     * is for a function written in place. Where it does not — the callee named a function parameter
+     * and never used it — the body says nothing about it at all, and this is the only place it can
+     * be held to the type the callee declared for it.
+     */
+    record Given(RetType declaredType, Expr value, boolean applied) {}
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type). */
     record ListLit(List<Expr> elements, SourcePos pos) implements Expr {}

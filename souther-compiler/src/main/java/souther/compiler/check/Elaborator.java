@@ -682,15 +682,20 @@ public final class Elaborator {
             if (b.declaredType() != null) {
                 Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());
                 decided.unify(declared, value.type(), ctx.symbols(), b.value().pos(),
-                        "argument `" + b.binder().name() + "` of `" + shown(ex) + "`");
+                        argument(ex, b.binder().name()));
                 // A type still open says nothing to hold the value to, so the value says what the
-                // binding is. Settled, it is the callee's declaration and carries what that said.
-                bindType = decided.open(declared) ? value.type()
-                        : carriedType(decided.zonk(declared), value.type(), ctx.symbols());
+                // binding is. Settled, it is the callee's declaration, and the argument is held to it
+                // — a parameter the callee's body never reads is declared all the same.
+                Type required = decided.zonk(declared);
+                if (states(required)) {
+                    held(value, required, ctx, argument(ex, b.binder().name()));
+                    bindType = carriedType(required, value.type(), ctx.symbols());
+                }
             }
             values.add(value);
             inner = inner.with(b.binder(), bindType);
         }
+        givenFunctions(ex, decided, env, ctx);
         Type declaredResult = declaredResult(ex, ctx);
         // The declaration is what an empty collection inside the body has to go on: at a call site
         // that expects nothing concrete, nothing else says what it holds. Pushed in only once this
@@ -722,6 +727,71 @@ public final class Elaborator {
             out = new Core.LetIn(ex.bound().get(i).binder(), values.get(i), out, type, ex.pos());
         }
         return out;
+    }
+
+    /**
+     * The functions this call was given, held to what the callee declared of them.
+     *
+     * <p>Only the ones the callee's body does not reach. Where it does, that body is where the
+     * function is typed and the application is what holds it to the signature — reading it here as
+     * well would type one lambda twice and report one mistake twice. Where it does not, nothing else
+     * reads the argument at all: the parameter was declared and never used, and this is the only
+     * place the signature and the argument are both in hand.
+     *
+     * <p>The whole function type is read, parameters and result together. A signature says something
+     * at each position — {@code (f: ('a) -> Bool, x: 'a)} relates the argument to what {@code f}
+     * takes, {@code (f: (Int) -> 'a, x: 'a)} to what it answers — and reading one position would
+     * carry one of them and drop the other.
+     */
+    private static void givenFunctions(Ast.Expansion ex, Substitution decided, Scope env,
+                                       CheckContext ctx) {
+        for (Ast.Given g : ex.given()) {
+            if (g.applied() || g.declaredType() == null) {
+                continue;
+            }
+            Type declared = TypeOps.resolveParamType(g.declaredType(), ctx.symbols());
+            if (!(decided.zonk(declared) instanceof Type.FnOf want)
+                    || !want.params().stream().allMatch(Elaborator::states)) {
+                continue;   // nothing said what it takes, so there is nothing to read it at
+            }
+            Core function = elaborateFunctionValue(g.value(), want.params(), env, ctx);
+            decided.unify(declared, function.type(), ctx.symbols(), g.value().pos(),
+                    argument(ex, "a function"));
+            Type answers = decided.zonk(want.result());
+            if (states(answers) && function.type() instanceof Type.FnOf is) {
+                held(is.result(), answers, g.value().pos(), ctx, argument(ex, "a function"));
+            }
+        }
+    }
+
+    /**
+     * Whether a declared type says what a value at that position is. A variable does not, whichever
+     * kind it is: one this application has not decided stands for what it settles on, and one the
+     * declaration wrote stands for whatever each use makes it. Holding a value to either would be
+     * comparing it against something that is not a type.
+     */
+    private static boolean states(Type t) {
+        return !Type.mentions(t, x -> x instanceof Type.Open);
+    }
+
+    /** Holds {@code value} to the type the callee declared for the position it stands in. */
+    private static void held(Core value, Type required, CheckContext ctx, String what) {
+        held(value.type(), required, value.pos(), ctx, what);
+    }
+
+    private static void held(Type is, Type required, SourcePos pos, CheckContext ctx, String what) {
+        if (TypeOps.assignable(is, required, ctx.symbols())) {
+            return;
+        }
+        throw CompileException.of(
+                Diagnostic.of(null, "check.expects").title("check.type.mismatch.title")
+                        .at(pos).args(what, Type.show(required, is), Type.show(is, required))
+                        .diff(Type.show(is, required), Type.show(required, is)).build(),
+                what + " expects " + Type.show(required) + ", but got " + Type.show(is));
+    }
+
+    private static String argument(Ast.Expansion ex, String name) {
+        return "`" + name + "` of `" + shown(ex) + "`";
     }
 
     /** The one type the callee's declaration gives its result, or null where it declared none or

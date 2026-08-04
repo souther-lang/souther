@@ -731,17 +731,24 @@ final class HelperParams {
                     continue;
                 }
                 Scope inner = walking(env, lambda, step);
-                for (int i = 0; i < lambda.params().size(); i++) {
-                    Type t = new BodyTyping(symbols, reqSigs, recursiveHelperFns, freshening)
-                            .typeOf(lambda.params().get(i), lambda.body(), inner, step.result());
-                    if (t == null) {
-                        continue;   // a position the lambda's body leaves open says nothing
+                try {
+                    for (int i = 0; i < lambda.params().size(); i++) {
+                        Type t = new BodyTyping(symbols, reqSigs, recursiveHelperFns, freshening)
+                                .typeOf(lambda.params().get(i), lambda.body(), inner, step.result());
+                        if (t != null) {   // a position the lambda's body leaves open says nothing
+                            decided.unify(step.params().get(i), t, symbols, ex.pos(), "closure");
+                        }
                     }
-                    try {
-                        decided.unify(step.params().get(i), t, symbols, ex.pos(), "closure");
-                    } catch (CompileException _) {
-                        return new Substitution();   // it does not agree; settle nothing from it
+                    // What it answers is a position of the signature too. `(f: (Int) -> 'a, x: 'a)`
+                    // relates the argument to what the function answers, and reading only what it
+                    // takes would carry one of those and drop the other.
+                    Type answers = typed(lambda.body(), walking(env, lambda,
+                            decided.zonk(step) instanceof Type.FnOf f ? f : step));
+                    if (answers != null) {
+                        decided.unify(step.result(), answers, symbols, ex.pos(), "closure result");
                     }
+                } catch (CompileException _) {
+                    return new Substitution();   // it does not agree; settle nothing from it
                 }
             }
             return decided;

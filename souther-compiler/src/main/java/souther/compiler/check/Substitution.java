@@ -43,8 +43,12 @@ final class Substitution {
      * disagree.
      */
     void unify(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
-        Type left = zonk(declared);
-        Type right = zonk(actual);
+        // Neither side is written through first. A variable already decided is still the variable
+        // this reading is about, and writing what it stands for in its place would leave nothing for
+        // a later, more definite reading to rebind — which is what a first reading carrying the
+        // bottom needs. What it was decided to is {@link #bind}'s to weigh.
+        Type left = declared;
+        Type right = actual;
         switch (left) {
             case Type.MetaVar m -> bind(m, right, symbols, pos, what);
             case Type.ListOf l when right instanceof Type.ListOf a ->
@@ -148,6 +152,15 @@ final class Substitution {
         }
         if (at instanceof Type.Nothing || open(at) || open(held)) {
             return;   // the bottom settles nothing, and neither does a reading still open
+        }
+        // A reading that carried the bottom said what the value was made of and not what it holds —
+        // `Option.withDefault([], xs)` reads the variable as a list of nothing first — so a later
+        // reading that says what it holds is what stands. The same rule as widening a bare bottom
+        // (ADR-0028), asked at whatever depth the bottom turned up.
+        if (Type.mentions(held, x -> x instanceof Type.Nothing)
+                && TypeOps.assignable(held, at, symbols)) {
+            decided.put(m, at);
+            return;
         }
         if (TypeOps.assignable(at, held, symbols) || TypeOps.assignable(held, at, symbols)) {
             return;

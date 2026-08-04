@@ -1143,7 +1143,11 @@ public final class HelperInliner {
                         // function is substituted directly (f(x) becomes inc(x)); a lambda is
                         // registered under a fresh name as a scoped helper, so each application of the
                         // parameter β-reduces to the lambda's body, as a let-bound lambda does (spec 12.5).
-                        given.add(new Ast.Given(instantiated(p.type(), applied), arg));
+                        // Asked of the callee as written, not of what it expanded to: applying a
+                        // function parameter is what removes it, because the application β-reduces
+                        // to the lambda's body, so the expansion holds no reference either way.
+                        given.add(new Ast.Given(instantiated(p.type(), applied), arg,
+                                references(helper.written(), p.binder().id())));
                         if (arg instanceof Ast.Var fnName) {
                             subst.put(p.binder().id(), fnName.name());
                             substDenotes.put(p.binder().id(), fnName.denotes());
@@ -1228,7 +1232,7 @@ public final class HelperInliner {
                 }
                 List<Ast.Given> given = new ArrayList<>();
                 for (Ast.Given g : ex.given()) {
-                    given.add(new Ast.Given(g.declaredType(), inline(g.value())));
+                    given.add(new Ast.Given(g.declaredType(), inline(g.value()), g.applied()));
                 }
                 yield new Ast.Expansion(ex.callee(), ex.application(), bound, given,
                         ex.declaredReturn(), inline(ex.body()), ex.pos());
@@ -1619,7 +1623,7 @@ public final class HelperInliner {
                 List<Ast.Given> given = new ArrayList<>();
                 for (Ast.Given g : ex.given()) {
                     given.add(new Ast.Given(g.declaredType(),
-                            rename(g.value(), subst, substDenotes, at, copy)));
+                            rename(g.value(), subst, substDenotes, at, copy), g.applied()));
                 }
                 yield new Ast.Expansion(ex.callee(), ex.application(), bound, given,
                         ex.declaredReturn(), rename(ex.body(), subst, substDenotes, at, copy),
