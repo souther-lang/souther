@@ -49,7 +49,8 @@ public class CompileException extends RuntimeException {
     private CompileException(List<Diagnostic> diagnostics, String legacyMessage, List<String> sources) {
         super(legacyMessage);
         this.diagnostics = diagnostics;
-        this.sources = sources;
+        // Not List.copyOf: an entry is NO_SOURCE for a diagnostic that names none, and that is null.
+        this.sources = java.util.Collections.unmodifiableList(new java.util.ArrayList<>(sources));
     }
 
     /**
@@ -81,7 +82,8 @@ public class CompileException extends RuntimeException {
     /**
      * Several errors found across several sources, each tagged with the source it came from —
      * a multi-module compile reporting every module's failing examples rather than the first
-     * module's. {@code sources} has one entry per diagnostic.
+     * module's. {@code sources} has one entry per diagnostic, {@link Located#NO_SOURCE} for one that
+     * names none.
      */
     public static CompileException ofAllInSources(List<Diagnostic> diagnostics, List<String> sources,
                                                   String legacyBody) {
@@ -93,7 +95,7 @@ public class CompileException extends RuntimeException {
         }
         Diagnostic first = diagnostics.get(0);
         return new CompileException(List.copyOf(diagnostics),
-                format(first.pos(), first.code(), legacyBody), List.copyOf(sources));
+                format(first.pos(), first.code(), legacyBody), sources);
     }
 
     public SourcePos pos() {

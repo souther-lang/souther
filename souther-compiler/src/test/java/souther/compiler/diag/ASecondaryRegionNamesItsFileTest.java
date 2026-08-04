@@ -9,6 +9,7 @@ import java.util.Locale;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -156,6 +157,16 @@ class ASecondaryRegionNamesItsFileTest {
         assertEquals(List.of("rows"), view.others().stream().map(Spot::sourceId).toList());
         assertNull(withSecondary(null).secondary().get(0).sourceId(),
                 "the region itself still names none");
+    }
+
+    @Test
+    void aFileNoRegionIsInIsRefusedRatherThanAnchoredSomewhereElse() {
+        Diagnostic d = withSecondary("fakes");
+
+        IllegalArgumentException refused = assertThrows(IllegalArgumentException.class,
+                () -> DiagnosticView.of(d, "rows", "elsewhere"));
+
+        assertTrue(refused.getMessage().contains("elsewhere"), refused.getMessage());
     }
 
     @Test

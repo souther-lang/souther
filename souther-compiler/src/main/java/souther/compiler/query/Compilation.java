@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.Sig;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.LabeledRegion;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 
@@ -292,7 +293,7 @@ public final class Compilation {
             byId.put(id, new ArrayList<>());
         }
         for (Db.Found found : db.allReports()) {
-            String primary = sourceIdOf(found);
+            String primary = primarySourceIdOf(found);
             for (String id : publishSourceIdsOf(found)) {
                 List<Located> on = byId.get(id);
                 if (on != null) {
@@ -332,12 +333,15 @@ public final class Compilation {
         return first == null ? null : first.report().asException().inSource(sourceIdOf(first));
     }
 
-    /** Which source a report's primary region is in: the one the report named, or the one its key
-     * did, or the one that declares the module it was about, or none. */
-    public String sourceIdOf(Db.Found found) {
-        if (!namesSources) {
-            return null;
-        }
+    /**
+     * Which source a report's primary region is in, as this compilation names its sources: the one
+     * the report named, or the one its key did, or the one that declares the module it was about.
+     *
+     * <p>Always answered, whatever the compile tells a caller about its sources. What a source is
+     * called here is how a report is filed and how its regions are quoted; what a caller is told is
+     * {@link #sourceIdOf(Db.Found)}, and the two are not the same question.
+     */
+    private String primarySourceIdOf(Db.Found found) {
         String said = found.primarySourceId();
         if (said != null) {
             return said;
@@ -346,19 +350,33 @@ public final class Compilation {
     }
 
     /**
+     * Which source a report's primary region is in, as a caller holding its own list of files is
+     * told — none, for a compile of one source, where that caller knows the file it handed over.
+     */
+    public String sourceIdOf(Db.Found found) {
+        return namesSources ? primarySourceIdOf(found) : null;
+    }
+
+    /**
      * Every source a report is said at, the one its primary region is in first. One entry for nearly
-     * everything; two for a problem written in two files and belonging to neither more than the
-     * other.
+     * everything; several for a problem that belongs to each of the places it points at and to none
+     * of them more.
+     *
+     * <p>Read off the regions rather than off a list of files, so every entry is somewhere the
+     * report has something to show.
      */
     public List<String> publishSourceIdsOf(Db.Found found) {
+        String primary = primarySourceIdOf(found);
         List<String> saidAt = new ArrayList<>();
-        String primary = sourceIdOf(found);
         if (primary != null) {
             saidAt.add(primary);
         }
-        for (String other : found.report().delivery().alsoSaidAt()) {
-            if (!saidAt.contains(other)) {
-                saidAt.add(other);
+        if (found.report().delivery().saidAtEveryRegion()) {
+            for (LabeledRegion label : found.report().diagnostic().secondary()) {
+                String where = label.sourceIdOr(primary);
+                if (where != null && !saidAt.contains(where)) {
+                    saidAt.add(where);
+                }
             }
         }
         return List.copyOf(saidAt);
@@ -367,7 +385,7 @@ public final class Compilation {
     /** Where a report sits in the order the sources were given, or -1 when it names none. Only for
      * ordering: which file a reader is sent to is {@link #sourceIdOf(Db.Found)}. */
     private int indexOf(Db.Found found) {
-        String id = sourceIdOf(found);
+        String id = primarySourceIdOf(found);
         if (id == null) {
             return -1;
         }

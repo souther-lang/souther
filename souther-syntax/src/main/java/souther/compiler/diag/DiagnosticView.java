@@ -30,8 +30,13 @@ public record DiagnosticView(Spot anchor, List<Spot> others) {
      * would let the line numbers a file happens to have decide which of two notes is the one the
      * editor puts its marker on.
      *
-     * <p>A published source none of the regions is in leaves the primary region as the anchor, so a
-     * caller that asks about the wrong source quotes the diagnostic's own file rather than nothing.
+     * <p>A source none of the regions is in is refused. There is nothing to anchor there, and the
+     * nearest thing to an answer — the primary region — is a line and a column from another file,
+     * which in that one points at whatever happens to sit at those numbers. Where a diagnostic is
+     * said is worked out from where it points, so a source that has nothing here is a caller asking
+     * about a file this was never going to be said in.
+     *
+     * @throws IllegalArgumentException when no region of {@code d} is in {@code publishedSourceId}
      */
     public static DiagnosticView of(Diagnostic d, String primarySourceId, String publishedSourceId) {
         List<Spot> spots = new ArrayList<>();
@@ -39,12 +44,17 @@ public record DiagnosticView(Spot anchor, List<Spot> others) {
         for (LabeledRegion label : d.secondary()) {
             spots.add(Spot.secondary(label, primarySourceId));
         }
-        int at = 0;
+        int at = -1;
         for (int i = 0; i < spots.size(); i++) {
             if (Objects.equals(spots.get(i).sourceId(), publishedSourceId)) {
                 at = i;
                 break;
             }
+        }
+        if (at < 0) {
+            throw new IllegalArgumentException(
+                    "no region of this diagnostic is in " + publishedSourceId
+                            + "; it points into " + spots.stream().map(Spot::sourceId).toList());
         }
         List<Spot> others = new ArrayList<>(spots.size() - 1);
         for (int i = 0; i < spots.size(); i++) {

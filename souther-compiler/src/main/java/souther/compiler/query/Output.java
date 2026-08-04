@@ -517,8 +517,7 @@ public final class Output {
             List<Report> reports = new ArrayList<>();
             for (souther.compiler.ExampleVerifier.Disagreement d : found) {
                 reports.add(Report.saidAt(said(d),
-                        Report.Delivery.at(d.recorded().at().sourceId(),
-                                d.standIn().at().sourceId())));
+                        Report.Delivery.atEveryRegionOf(d.recorded().at().sourceId())));
             }
             return Answer.of(true, reports);
         }

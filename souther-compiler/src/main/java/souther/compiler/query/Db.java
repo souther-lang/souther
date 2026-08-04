@@ -259,8 +259,8 @@ public final class Db {
      * answer and not two that can come apart: the report says where it goes when it knows
      * ({@link Report.Delivery}), and the key answers when it does not. A module named but no source
      * is the last fallback, and only a caller holding the module layout can apply it —
-     * {@link Compilation#sourceIdOf(Found)} and {@link Compilation#publishSourceIdsOf(Found)} are
-     * where the whole answer is worked out.
+     * {@link Compilation#publishSourceIdsOf(Found)} is where the whole
+     * answer is worked out.
      */
     public record Found(String module, String sourceId, Report report) {
 

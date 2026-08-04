@@ -10,6 +10,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
+import souther.compiler.diag.SourceNames;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -388,30 +389,41 @@ public final class Main {
      * diagnostic is tagged — which is why one item is not read as "the source called 0, or nothing".
      */
     private static Path pathOf(List<Path> sources, String sourceId) {
+        int at = indexOf(sources, sourceId);
+        return at < 0 ? null : sources.get(at);
+    }
+
+    /** What to quote for each source a diagnostic points into, read once per file, under names no
+     *  two of these files share. */
+    private static SourceContextResolver sourcesOf(List<Path> sources) {
+        List<String> names = SourceNames.of(sources.stream().map(Path::toString).toList());
+        return SourceContextResolver.memoized(id -> {
+            int at = indexOf(sources, id);
+            return at < 0 ? null : read(sources.get(at), names.get(at));
+        });
+    }
+
+    /** Which of the files handed over a source id names, or -1 when it names none of them. */
+    private static int indexOf(List<Path> sources, String sourceId) {
         if (sources.size() == 1) {
-            return sources.get(0);
+            return 0;
         }
         for (int i = 0; i < sources.size(); i++) {
             if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
-                return sources.get(i);
+                return i;
             }
         }
-        return null;
+        return -1;
     }
 
-    /** What to quote for each source a diagnostic points into, read once per file. */
-    private static SourceContextResolver sourcesOf(List<Path> sources) {
-        return SourceContextResolver.memoized(id -> read(pathOf(sources, id)));
-    }
-
-    /** A file as a snippet source, or null when it cannot be read — a snippet-less rendering is the
-     *  honest fallback. */
-    private static SourceContext read(Path source) {
+    /** A file as a snippet source under the name a reader is shown it by, or null when it cannot be
+     *  read — a snippet-less rendering is the honest fallback. */
+    private static SourceContext read(Path source, String name) {
         if (source == null) {
             return null;
         }
         try {
-            return new SourceContext(source.getFileName().toString(), Files.readString(source));
+            return new SourceContext(name, Files.readString(source));
         } catch (IOException _) {
             return null;
         }

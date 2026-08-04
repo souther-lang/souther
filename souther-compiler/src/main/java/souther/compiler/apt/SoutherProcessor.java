@@ -7,6 +7,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
+import souther.compiler.diag.SourceNames;
 import souther.compiler.Compiler;
 import souther.compiler.query.Compilation;
 import souther.compiler.meta.ModulePath;
@@ -135,29 +136,30 @@ public final class SoutherProcessor extends AbstractProcessor {
                 located, sourcesOf(sources), new HumanRenderer(false), locale);
     }
 
-    /** What to quote for each source a diagnostic points into. The text is already in hand, so this
-     *  memoizes only to keep one answer per id. */
+    /** What to quote for each source a diagnostic points into, under names no two of these files
+     *  share. The text is already in hand, so this memoizes only to keep one answer per id. */
     private static SourceContextResolver sourcesOf(List<Source> sources) {
-        return SourceContextResolver.memoized(id -> contextOf(sources, id));
+        List<String> names = SourceNames.of(
+                sources.stream().map(source -> source.path().toString()).toList());
+        return SourceContextResolver.memoized(id -> {
+            int at = indexOf(sources, id);
+            return at < 0 ? null
+                    : new SourceContext(names.get(at), sources.get(at).text());
+        });
     }
 
-    /** The text a diagnostic tagged with {@code sourceId} should quote, or null when it names no
-     *  source this compilation has (so no line is quoted). A compile of one source names none, and
-     *  the one file it was given is the answer however the diagnostic is tagged. */
-    private static SourceContext contextOf(List<Source> sources, String sourceId) {
-        Source origin = null;
+    /** Which of the sources handed over an id names, or -1 when it names none of them. A compile of
+     *  one source names none, and the one file it was given is the answer however it is tagged. */
+    private static int indexOf(List<Source> sources, String sourceId) {
         if (sources.size() == 1) {
-            origin = sources.get(0);
-        } else {
-            for (int i = 0; i < sources.size(); i++) {
-                if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
-                    origin = sources.get(i);
-                    break;
-                }
+            return 0;
+        }
+        for (int i = 0; i < sources.size(); i++) {
+            if (Compilation.idOfSourceIndex(i).equals(sourceId)) {
+                return i;
             }
         }
-        return origin == null ? null
-                : new SourceContext(origin.path().getFileName().toString(), origin.text());
+        return -1;
     }
 
     /**

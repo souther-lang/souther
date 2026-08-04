@@ -30,7 +30,7 @@ import java.util.Locale;
 public record Report(Diagnostic diagnostic, String legacyMessage, Delivery delivery) {
 
     /**
-     * Which sources a report is said at, for the reports that cannot be left to their key.
+     * Where a report is said, for the reports that cannot be left to their key.
      *
      * <p>A key names one source, and that is the answer for nearly everything: a problem is found
      * while a file is being read and belongs to that file. Two cases are not like that. A comparison
@@ -39,29 +39,36 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
      * in the wrong, the problem is said at both, so the author reading either file is told.
      *
      * <p>{@code primarySourceId} is null for "the source the key names", which is what a report
-     * built any other way carries. {@code alsoSaidAt} never repeats the primary.
+     * built any other way carries.
+     *
+     * <p>{@code saidAtEveryRegion} says the second case, and says it as a property of the report
+     * rather than as a list of files. A list would let a report be delivered to a file it points at
+     * nothing in, and a marker in a file the problem has no region in lands on a line that has
+     * nothing to do with it — worse than not being shown. Read off the regions there is nowhere to
+     * deliver to that has nothing to show.
+     *
+     * <p>Not every second region wants a marker of its own. Pointing at a definition in another
+     * module to explain a mistake here does not make that module mistaken, so this is off unless a
+     * report says otherwise. What turns it on is the problem belonging to both places, which is a
+     * claim only the site that found it can make.
      *
      * <p>This is the declaration. What it resolves to against a particular key is
-     * {@link Db.Found#primarySourceId()} and {@link Db.Found#publishSourceIds()}.
+     * {@link Db.Found#primarySourceId()} and {@link Compilation#publishSourceIdsOf(Db.Found)}.
      */
-    public record Delivery(String primarySourceId, List<String> alsoSaidAt) {
+    public record Delivery(String primarySourceId, boolean saidAtEveryRegion) {
 
         /** Said wherever the key that found it says: the ordinary report. */
-        public static final Delivery BY_KEY = new Delivery(null, List.of());
+        public static final Delivery BY_KEY = new Delivery(null, false);
 
-        public Delivery {
-            alsoSaidAt = List.copyOf(alsoSaidAt);
+        /** Anchored in {@code primarySourceId}, and said there. */
+        public static Delivery at(String primarySourceId) {
+            return new Delivery(primarySourceId, false);
         }
 
-        /** Anchored in {@code primarySourceId} and said there and at {@code alsoSaidAt}. */
-        public static Delivery at(String primarySourceId, String... alsoSaidAt) {
-            List<String> others = new ArrayList<>();
-            for (String other : alsoSaidAt) {
-                if (other != null && !other.equals(primarySourceId) && !others.contains(other)) {
-                    others.add(other);
-                }
-            }
-            return new Delivery(primarySourceId, others);
+        /** Anchored in {@code primarySourceId}, and said in every file it points into — for a
+         * problem that belongs to each of the places it names and to none of them more. */
+        public static Delivery atEveryRegionOf(String primarySourceId) {
+            return new Delivery(primarySourceId, true);
         }
     }
 
