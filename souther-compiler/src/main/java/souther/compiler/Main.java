@@ -305,14 +305,25 @@ public final class Main {
                 failed = true;
                 continue;
             }
-            CstParser.Result parsed = CstParser.parse(source);
-            if (!parsed.errors().isEmpty()) {
-                CstError first = parsed.errors().get(0);
-                System.err.println(file + ": syntax error: " + first.legacyMessage());
+            String formatted;
+            try {
+                CstParser.Result parsed = CstParser.parse(source);
+                if (!parsed.errors().isEmpty()) {
+                    CstError first = parsed.errors().get(0);
+                    System.err.println(file + ": syntax error: " + first.legacyMessage());
+                    failed = true;
+                    continue;   // the formatter assumes a clean parse; leave a broken file untouched
+                }
+                formatted = Formatter.format(parsed.root());
+            } catch (CompileException e) {
+                // One file this command cannot read must cost that file, not the run and not the
+                // author's screen. Reading is a walk down the source and a walk down the tree it
+                // made, and either can find a limit; a `fmt` that answered those with a stack trace
+                // told the author about the compiler rather than about their file.
+                System.err.println(file + ": " + e.getMessage());
                 failed = true;
-                continue;   // the formatter assumes a clean parse; leave a broken file untouched
+                continue;
             }
-            String formatted = Formatter.format(parsed.root());
             if (check) {
                 if (!formatted.equals(source)) {
                     unformatted.add(file);

@@ -521,11 +521,18 @@ public final class Analyzer {
     /** The document's canonical formatting (see {@link Formatter}), or empty when it has a syntax
      * error — the formatter re-derives layout from a clean parse, so a broken document is left as-is. */
     public Optional<String> format(String text) {
-        CstParser.Result parsed = CstParser.parse(text);
-        if (!parsed.errors().isEmpty()) {
+        try {
+            CstParser.Result parsed = CstParser.parse(text);
+            if (!parsed.errors().isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(Formatter.format(parsed.root()));
+        } catch (RuntimeException | StackOverflowError _) {
+            // The one entry point here that answered a document it could not walk with an error
+            // reply rather than by leaving the document alone. The reason it could not is already
+            // the author's to see, as a diagnostic; a failed format on top of it says nothing more.
             return Optional.empty();
         }
-        return Optional.of(Formatter.format(parsed.root()));
     }
 
     /**
