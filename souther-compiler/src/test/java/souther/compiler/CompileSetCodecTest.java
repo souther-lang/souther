@@ -44,7 +44,9 @@ class CompileSetCodecTest {
         Object out = Codecs.apply(behavior, in);
 
         Map<?, ?> m = (Map<?, ?>) Codecs.encode(loader, "demo.Out", out);
-        // decode dedupes; encode writes an array in a deterministic hash order (not first-seen).
+        // Decode dedupes. A Set's encoded array order is implementation-defined: assert membership,
+        // never positional order. Two equal sets are not guaranteed to encode to the same array, so
+        // even comparing two encodes of the same members is not a property this test may rely on.
         assertEquals(Set.of("a", "b", "c"), Set.copyOf((List<?>) m.get("tags")));
         assertEquals(3L, m.get("n"), "the deduped set has three members");
         assertEquals(false, m.get("hasX"));

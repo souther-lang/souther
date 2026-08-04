@@ -11,8 +11,11 @@ import java.util.Map;
  *  here. A {@code Map} value is a {@link PersistentHashMap} (CHAMP, structural sharing): the building
  *  operations return a fresh map that shares structure with the input in O(log n), never mutating it,
  *  so a {@code groupBy} that grows a map is O(n log n) rather than the O(n²) a whole-map copy costs.
- *  Iteration order is a deterministic, implementation-defined hash order (not insertion order), stable
- *  for the same key set so boundary encoding stays reproducible. Inputs may be any {@code java.util.Map}
+ *  The language specifies no iteration order, and it is not insertion order; two maps that are equal
+ *  are not guaranteed to iterate in the same order, so neither a caller nor the boundary encoding may
+ *  depend on a particular one ({@link PersistentHashMap}). Nor do the two agree: a boundary map whose
+ *  keys are rendered first is walked as the rebuilt map {@link #mapKeys} returns, not as this one.
+ *  Inputs may be any {@code java.util.Map}
  *  (a decoded map comes from Raoh as a {@code LinkedHashMap}), so builders normalize through
  *  {@link PersistentHashMap#from}. */
 public final class Maps {
@@ -146,7 +149,13 @@ public final class Maps {
 
     /** {@code m} with every key rewritten by {@code keyFn}, values unchanged.
      *  The encoder uses it to render a {@code Map<商品ID, V>}'s keys bare (each key's {@code value})
-     *  before the boundary map encoder writes a {@code String}-keyed object. */
+     *  before the boundary map encoder writes a {@code String}-keyed object.
+     *
+     *  <p>The result is a fresh trie indexed by the rendered keys, so it is not walked in the source
+     *  map's order — a newtype key hashes as the newtype and the string it renders to hashes as a
+     *  string, which are different indexes. That is why a boundary map's member order is not
+     *  {@code toList}'s wherever a key is rendered, and why the specification says so rather than
+     *  promising one order for both. */
     public static <K, V> Map<Object, V> mapKeys(Map<K, V> m, java.util.function.Function<K, ?> keyFn) {
         PersistentHashMap.Builder<Object, V> out = new PersistentHashMap.Builder<>();
         for (Map.Entry<K, V> e : m.entrySet()) {

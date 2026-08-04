@@ -1,6 +1,8 @@
 # ADR-0039: Set is a collection type; its external representation is a deduplicated array
 
-Status: Accepted
+Status: Accepted (encode and `toList` have used the backing trie's own order since the runtime
+collections became persistent structures in `e45ad66d`; they were first-seen order when this was
+decided, and that clause below is the one that changed)
 
 ## Context
 
@@ -25,8 +27,11 @@ Add `Set<T>` as a third collection type, alongside `List` and `Map`.
 - **External representation is a JSON array, deduplicated on decode.** The derived decoder reads the
   array with the existing list decoder and maps the result through a `List -> Set` deduplication;
   duplicates in the input are dropped, not rejected (Elm's `Set.fromList`, F#'s `Set.ofList`). The
-  encoder writes the set back as an array. Encode and `toList` use first-seen (insertion) order, so
-  the representation is deterministic even though the type is semantically unordered.
+  encoder writes the set back as an array, in an order the language does not specify; `Set.toList`
+  uses that same order, a `Set` having no key to render the way a `Map` does. The input array's order
+  has no semantic significance and is not
+  guaranteed to be preserved. The resulting order is not part of the semantic value of a `Set` and
+  must not be depended on.
 - **Covariant and immutable**, like `List`/`Map`: a `Set<A>` is assignable to a `Set<S>` when `A` is a
   case of `S`, sound because a set cannot be mutated.
 - **Standard library** in the reserved `souther.set` namespace: `singleton`, `insert`, `remove`,
@@ -59,5 +64,8 @@ reject duplicate input can still decode a `List` and check.
 - ADR-0004 (derived codecs, souther-runtime is Raoh-free — why the dedup map is bound via
   invokedynamic rather than a Raoh combinator)
 - ADR-0028 (the empty-collection bottom `[]`; `Set.empty` follows it)
+- ADR-0042 (records the persistent CHAMP backing as an existing baseline; the switch itself is
+  `e45ad66d`, which is where the iteration order this ADR originally specified as first-seen became
+  the trie's own)
 - Specification: `[#collections]`, `[#stdlib-set]`
 - Prior art: Elm `Set` (`Set.fromList` dedups); F# `Set` / `Set.ofList`

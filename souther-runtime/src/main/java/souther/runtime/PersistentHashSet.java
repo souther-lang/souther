@@ -11,8 +11,8 @@ import java.util.Set;
 
 /**
  * An immutable set backed by a {@link PersistentHashMap} whose values are a shared sentinel, so it
- * reuses the CHAMP trie, structural sharing, deterministic hash-order iteration, and value-equality
- * key handling. It implements {@link java.util.Set}, extending {@link AbstractSet} for the immutable,
+ * reuses the CHAMP trie, structural sharing, its iteration order, and value-equality key handling.
+ * It implements {@link java.util.Set}, extending {@link AbstractSet} for the immutable,
  * mutator-throwing defaults.
  *
  * <p>Membership here is the language's. Two amounts that differ only in scale are one element, and
@@ -27,8 +27,12 @@ import java.util.Set;
  * set Souther built. A {@link PersistentVector} keeps the {@code List} contract instead, because a
  * list compares positionally and has no index to be indexed by.
  *
- * <p>Iteration order is a deterministic, implementation-defined hash order (not first-seen order),
- * stable for the same element set so boundary encoding stays reproducible.
+ * <p>Iteration is a deterministic traversal of the backing trie, and the language specifies no order
+ * at all (spec §stdlib-set). It is not first-seen order and must not be read as one. What the
+ * determinism is <em>for</em> is a particular trie, not the set value: two sets that are equal are
+ * not guaranteed to iterate in the same order, because elements sharing a full hash sit in one
+ * collision bucket held in the order they were added (see {@link PersistentHashMap}). Callers, and
+ * the boundary encoding, must depend on no particular order.
  *
  * <p>A dedicated key-only CHAMP node (no value slots) would save memory; the sentinel-map form is
  * behaviorally identical and is the minimal first cut.
