@@ -440,9 +440,13 @@ public final class Output {
      * be in one file: a module's fakes are what its attached files' rows run against and the other way
      * round. Each source's key projects the ones written in it ({@link SaidDisagreements}), so one
      * disagreement is said at both of the places it is written and computed once.
+     *
+     * <p>The answer is what the check came to and not the disagreements alone: a statement that could
+     * not be read within its budget is a statement nothing was decided about, and a bare list of
+     * disagreements says that with the same empty list it says agreement with.
      */
     public record Disagreements(String name)
-            implements Key<List<souther.compiler.ExampleVerifier.Disagreement>> {
+            implements Key<souther.compiler.ExampleVerifier.Readings> {
 
         @Override
         public String module() {
@@ -450,7 +454,7 @@ public final class Output {
         }
 
         @Override
-        public Answer<List<souther.compiler.ExampleVerifier.Disagreement>> compute(Db db) {
+        public Answer<souther.compiler.ExampleVerifier.Readings> compute(Db db) {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -458,7 +462,8 @@ public final class Output {
                 return Answer.absent();
             }
             if (db.ask(new Bodies.Checked(name)).value() == null) {
-                return Answer.of(List.of());   // a module that did not check states nothing yet
+                // a module that did not check states nothing yet
+                return Answer.of(souther.compiler.ExampleVerifier.Readings.NONE);
             }
             Map<String, byte[]> classes = db.ask(new Linked(name)).value();
             Map<String, List<BehaviorRequirement>> requirements =
@@ -499,6 +504,9 @@ public final class Output {
      * <p>A warning. The two contradict, and which of them the model is to be held to is not readable
      * from the text — that would be a claim about which side is derived from the other, and neither
      * is.
+     *
+     * <p>A fake whose table could not be read in time is a warning of its own (E1920): what it and
+     * the rows state was not compared, which is not what saying nothing means here.
      */
     public record SaidDisagreements(String name) implements Key<Boolean> {
 
@@ -509,17 +517,33 @@ public final class Output {
 
         @Override
         public Answer<Boolean> compute(Db db) {
-            List<souther.compiler.ExampleVerifier.Disagreement> found =
+            souther.compiler.ExampleVerifier.Readings read =
                     db.ask(new Disagreements(name)).value();
-            if (found == null) {
+            if (read == null) {
                 return Answer.of(true);
             }
             List<Report> reports = new ArrayList<>();
-            for (souther.compiler.ExampleVerifier.Disagreement d : found) {
+            for (souther.compiler.ExampleVerifier.Disagreement d : read.disagreements()) {
                 reports.add(Report.saidAt(said(d),
                         Report.Delivery.atEveryRegionOf(d.recorded().at().sourceId())));
             }
+            for (souther.compiler.ExampleVerifier.TimedOutFake f : read.timedOut()) {
+                reports.add(Report.saidAt(unread(f),
+                        Report.Delivery.atEveryRegionOf(f.at().sourceId())));
+            }
             return Answer.of(true, reports);
+        }
+
+        /** One fake that could not be read: the caret on the behavior it names, and what stopped. */
+        private static Diagnostic unread(souther.compiler.ExampleVerifier.TimedOutFake f) {
+            return Diagnostic.of("E1920", "check.example.disagreement.unread").warning()
+                    .title("check.example.title")
+                    .at(f.at().pos(), f.width())
+                    // As written, not as a number the locale groups: `2,000ms` is not a budget
+                    // anyone set, and the property that sets it takes the ungrouped form.
+                    .args(f.target(), Long.toString(f.budgetMs()))
+                    .hint("check.example.disagreement.unread.hint", f.target())
+                    .build();
         }
 
         /** One disagreement: the caret on the recorded row, a second region on the stand-in in

@@ -4,11 +4,13 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.HumanRenderer;
 import souther.compiler.diag.Located;
 import souther.compiler.meta.ModulePath;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -52,19 +54,11 @@ class CompileFakeExampleDisagreementTest {
 
     /** The E1919s of a single-source compile, in the order they were said. */
     private static List<Located> disagreements(String model) {
-        List<Located> out = new ArrayList<>();
-        assertDoesNotThrow(() -> Compiler.compiled(model, "Main", out));
-        return onlyDisagreements(out);
+        return onlyDisagreements(warningsOf(model));
     }
 
     private static List<Located> onlyDisagreements(List<Located> warnings) {
-        List<Located> found = new ArrayList<>();
-        for (Located w : warnings) {
-            if ("E1919".equals(w.diagnostic().code())) {
-                found.add(w);
-            }
-        }
-        return found;
+        return only("E1919", warnings);
     }
 
     private static boolean anyDisagreement(String model) {
@@ -284,8 +278,207 @@ class CompileFakeExampleDisagreementTest {
         for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
             codes.add(d.code());
         }
-        assertTrue(codes.contains("E1910"), codes.toString());
-        assertFalse(codes.contains("E1919"), codes.toString());
+        assertTrue(codesOf(e).contains("E1910"), codesOf(e).toString());
+        assertFalse(codesOf(e).contains("E1919"), codesOf(e).toString());
+    }
+
+    // --- a table that did not finish ----------------------------------------------------------
+
+    private static final String UNUSED_FAKE = """
+            module example.table
+
+            data N = Int
+            data Found = { n: N }
+            data Missing = { why: String }
+
+            partial let spin (n: Int): Int = spin(n)
+
+            behavior find : (n: N) -> Found | Missing
+                constructs Found
+
+            let find (n) = Found { n = n }
+
+            example find
+                | "one" : (N(1)) -> Found { n = N(1) }
+            """;
+
+    /**
+     * A fake nobody depends on is built here and nowhere else, so here is where running out of budget
+     * has to be said.
+     *
+     * <p>The other place a table is built is {@code resolveFake}, which runs while a row of a behavior
+     * that depends on the faked one is evaluated. `find` has no such row — nothing depends on it — so
+     * the reading is the table's only reader, and a table that never finishes would otherwise leave
+     * "these two agree" as the answer to a question nobody got to ask.
+     *
+     * <p>Two rows that will not build, and one warning: the whole table is one reading held to one
+     * budget, so what is said is said about the fake and not about a row of it.
+     */
+    @Test
+    void aTableThatDidNotFinishIsSaidOnceAtTheFake() {
+        List<Located> said = only("E1920", warningsOf(UNUSED_FAKE + """
+
+                fake find
+                    | (N(spin(1))) -> Missing { why = "none" }
+                    | (N(spin(2))) -> Missing { why = "none" }
+                """));
+
+        assertEquals(1, said.size(), said.toString());
+        Diagnostic one = said.get(0).diagnostic();
+        assertEquals(17, one.pos().line(), "anchored where the fake names the behavior");
+        assertEquals(6, one.pos().column());
+        // What could not be done, then what stopped: the table is what did not finish, and the
+        // comparison is what that cost. The budget is read off the budget rather than written in —
+        // it is settable (`souther.example.timeout.ms`), and a literal here would fail every run that
+        // set it, which is the run a slow host most wants to make. It is still read as it is set and
+        // not as a locale would group it, which is what the number in this line is for.
+        assertTrue(rendered(one).contains("Could not compare this fake with the rows recorded for"
+                        + " `find` — building the table did not finish within "
+                        + ExampleVerifier.exampleTimeoutMs() + "ms."),
+                rendered(one));
+    }
+
+    /** And a table that finishes says nothing: the code is not one every fake gets. */
+    @Test
+    void aTableThatFinishesIsSaidNowhere() {
+        assertEquals(List.of(), only("E1920", warningsOf(UNUSED_FAKE + """
+
+                fake find
+                    | (N(1)) -> Found { n = N(1) }
+                """)));
+    }
+
+    /**
+     * A row that runs the table and the reading of the table are two attempts, and each says what it
+     * found: the row did not finish (E1910, at the row), and what the fake and the recorded rows state
+     * was never compared (E1920, at the fake). Neither stands for the other — a table can overrun the
+     * reading with no row that uses it, and a row can overrun for what its own behavior does.
+     */
+    @Test
+    void aRowThatRunsTheTableAndTheReadingBothSayWhatTheyFound() {
+        List<Located> warnings = new ArrayList<>();
+        CompileException e = org.junit.jupiter.api.Assertions.assertThrows(CompileException.class,
+                () -> Compiler.compiledModules(List.of("""
+                        module example.both
+
+                        data N = Int
+                        data Found = { n: N }
+                        data Missing = { why: String }
+                        data Ok = { n: N }
+
+                        partial let spin (n: Int): Int = spin(n)
+
+                        behavior find : (n: N) -> Found | Missing
+
+                        behavior use : (n: N) -> Ok | Missing
+                            depends on find
+                            constructs Ok, Missing
+
+                        let use (n, find) = match find(n) with
+                            | Found   -> Ok { n = n }
+                            | Missing -> Missing { why = "none" }
+
+                        example find
+                            | "one" : (N(1)) -> Found { n = N(1) }
+
+                        example use
+                            | "one" : (N(1)) -> Ok { n = N(1) }
+
+                        fake find
+                            | (N(spin(1))) -> Missing { why = "none" }
+                        """), ModulePath.EMPTY, warnings));
+
+        assertTrue(codesOf(e).contains("E1910"), codesOf(e).toString());
+        assertEquals(1, only("E1920", warnings).size(), warnings.toString());
+    }
+
+    /**
+     * A host with no runtime says nothing about any fake. That is a fact about the host — the runtime
+     * is `provided`, as it is for CTFE — so it is not turned into a warning per fake; where the rows
+     * are evaluated it is recorded once, as an {@code Incompleteness}, which is what a measure
+     * reading the rows needs.
+     *
+     * <p>The same model read with the runtime present says the two statements disagree, so what is
+     * being checked is a reading that reaches a value and not one that never started.
+     *
+     * <p>Where it stops is before a fake: with no runtime the recorded rows do not build either, and
+     * a reading with no rows read has nothing to hold a stand-in against. So this says what the
+     * module answers and not which arm answered it — {@code againstFake} is not reached, and its
+     * {@code RuntimeAbsent} arm is what a fake would meet if a row ever got past one.
+     */
+    @Test
+    void aHostWithNoRuntimeSaysNothingAboutAnyFake() {
+        String model = BASE + """
+
+                example findMember
+                    | "m-1 is a member" : (MemberId("m-1")) -> Found { id = MemberId("m-1") }
+
+                fake findMember
+                    | (MemberId("m-1")) -> Missing { why = "no such member" }
+                """;
+
+        assertEquals(1, readingOf(model, ExampleVerifier.class.getClassLoader()).disagreements().size(),
+                "with a runtime, the fake and the row are read and disagree");
+
+        ExampleVerifier.Readings withoutRuntime = readingOf(model, new ClassLoader(null) {
+            @Override
+            protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+                if (name.startsWith("souther.runtime.")) {
+                    throw new NoClassDefFoundError(name);
+                }
+                return ExampleVerifier.class.getClassLoader().loadClass(name);
+            }
+        });
+
+        assertEquals(List.of(), withoutRuntime.disagreements());
+        assertEquals(List.of(), withoutRuntime.timedOut());
+    }
+
+    /** {@code disagreements} as the query asks it, but against a class loader the test chooses. */
+    private static ExampleVerifier.Readings readingOf(String model, ClassLoader parent) {
+        souther.compiler.query.Compilation c =
+                souther.compiler.query.Compilation.ofSource(model, "Main");
+        c.db().ask(new souther.compiler.query.Output.All());
+        String name = c.modules().get(0);
+        return ExampleVerifier.disagreements(
+                c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value(),
+                c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
+                c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
+                c.db().ask(new souther.compiler.query.Output.Linked(name)).value(),
+                c.db().ask(new souther.compiler.query.Bodies.Requirements(name)).value(),
+                parent,
+                c.db().ask(new souther.compiler.query.Bodies.Helpers(name)).value(),
+                c.db().ask(new souther.compiler.query.Front.ExampleOrigins(name)).value(),
+                c.db().ask(new souther.compiler.query.Front.FakeOrigins(name)).value());
+    }
+
+    /** The warnings of a single-source compile that holds. */
+    private static List<Located> warningsOf(String model) {
+        List<Located> out = new ArrayList<>();
+        assertDoesNotThrow(() -> Compiler.compiled(model, "Main", out));
+        return out;
+    }
+
+    private static List<String> codesOf(CompileException e) {
+        List<String> codes = new ArrayList<>();
+        for (Diagnostic d : e.diagnostics()) {
+            codes.add(d.code());
+        }
+        return codes;
+    }
+
+    private static String rendered(Diagnostic d) {
+        return new HumanRenderer(false).render(d, null, Locale.ENGLISH);
+    }
+
+    private static List<Located> only(String code, List<Located> warnings) {
+        List<Located> found = new ArrayList<>();
+        for (Located w : warnings) {
+            if (code.equals(w.diagnostic().code())) {
+                found.add(w);
+            }
+        }
+        return found;
     }
 
     /**
