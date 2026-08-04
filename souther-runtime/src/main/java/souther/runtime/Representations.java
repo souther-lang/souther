@@ -95,14 +95,17 @@ public final class Representations {
     }
 
     /**
-     * Whether the two are written the same. Answered on its own terms rather than by asking
-     * {@link #compareExternalForms} for a zero, so that the two are a check on each other.
+     * Whether the two are written the same, answered on its own terms rather than by asking
+     * {@link #compareExternalForms} for a zero, so that the two are a check on each other. That is
+     * the whole of what it is for, so it is not public: what a boundary needs is the order.
+     *
+     * <p>It takes no shortcut for two references that are the same object. One would be right about
+     * the answer and wrong about the domain — a container may be a form this class writes while what
+     * it holds is not — and stopping at the outside would accept, at one entry point, what the other
+     * refuses.
      */
-    public static boolean representationEquals(Object a, Object b) {
-        int form = rank(a);                 // ranked before the identity shortcut, so that a carrier
-        if (a == b) {                       // no encoder writes is refused here as it is below
-            return true;
-        }
+    static boolean representationEquals(Object a, Object b) {
+        int form = rank(a);
         if (form != rank(b)) {
             return false;
         }

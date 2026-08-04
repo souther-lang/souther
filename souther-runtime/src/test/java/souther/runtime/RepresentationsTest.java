@@ -263,6 +263,20 @@ class RepresentationsTest {
     }
 
     @Test
+    void askingWhetherTwoAreWrittenTheSameLooksInsideEvenTheSameContainerTwice() {
+        // A container whose own carrier is fine and whose members are not: being handed the same
+        // instance on both sides is not a reason to stop looking, or the two entry points would
+        // answer over different domains.
+        Object foreign = new Object();
+        List<Object> array = List.of(foreign);
+        assertThrows(IllegalStateException.class,
+                () -> Representations.representationEquals(array, array));
+        Map<String, Object> object = Map.of("x", foreign);
+        assertThrows(IllegalStateException.class,
+                () -> Representations.representationEquals(object, object));
+    }
+
+    @Test
     void askingWhetherTwoAreWrittenTheSameRefusesAKeyNoBoundaryObjectCanHave() {
         assertThrows(IllegalStateException.class,
                 () -> Representations.representationEquals(Map.of(1L, "a"), Map.of(1L, "a")));
