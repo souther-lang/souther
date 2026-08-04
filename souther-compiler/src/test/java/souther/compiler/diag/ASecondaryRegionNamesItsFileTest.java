@@ -184,6 +184,39 @@ class ASecondaryRegionNamesItsFileTest {
         assertEquals(2, view.others().size());
     }
 
+    // --- a label and its region say one file, or one of them says nothing -----------------------
+
+    /**
+     * Two things here can say which file a secondary is in: what the label was given, and what its
+     * region's own position was read from. A reader takes the first, so if they can disagree the
+     * file a marker is put in and the file its line is quoted from come apart again — the shape of
+     * mistake this whole change is about. They are refused at construction instead.
+     */
+    @Test
+    void aLabelAndItsRegionCannotNameTwoFiles() {
+        assertThrows(IllegalArgumentException.class,
+                () -> new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "rows"), 4),
+                        "fakes", "diag.hint.label", null));
+    }
+
+    /** A region built from a hand-made position knows no file, and a label that names one is how it
+     *  is told — which is what every site that points across files does. */
+    @Test
+    void aLabelMayNameTheFileWhenItsRegionDoesNot() {
+        assertEquals("fakes", new LabeledRegion(Region.ofWidth(new SourcePos(3, 3), 4),
+                "fakes", "diag.hint.label", null).sourceId());
+    }
+
+    /** A label that names nothing means the diagnostic's own file, whatever its region was read
+     *  from — that is what {@link LabeledRegion#sourceIdOr(String)} is for. */
+    @Test
+    void aLabelMayNameNothingWhileItsRegionKnowsItsFile() {
+        LabeledRegion label = new LabeledRegion(Region.ofWidth(new SourcePos(3, 3, "rows"), 4),
+                null, "diag.hint.label", null);
+
+        assertEquals("rows", label.sourceIdOr("rows"));
+    }
+
     private static int count(String text, String part) {
         int found = 0;
         for (int at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + 1)) {

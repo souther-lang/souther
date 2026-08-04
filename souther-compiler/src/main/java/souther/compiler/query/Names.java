@@ -969,7 +969,7 @@ public final class Names {
      * came first. What was under the cursor and what the answer described were then two different
      * names.
      *
-     * <p>Where either position names no source — a caller with only a coordinate to give — the
+     * <p>Where the question names no source — a caller with only a coordinate to give — the
      * coordinates decide, which is what every such caller got before.
      */
     static boolean spans(SourcePos start, String written, SourcePos at) {
@@ -979,9 +979,17 @@ public final class Names {
                 && at.column() <= start.column() + written.length();
     }
 
+    /**
+     * Whether a name written at {@code start} is in the file the question at {@code at} is about.
+     *
+     * <p>The two absences are not the same absence, so this is not symmetric. A question that names
+     * no source is a caller with only a coordinate to give, and is answered by coordinate. A name
+     * that names none was read from no source of this compile, and is under nothing a reader has
+     * open — answering with it would be the thing this is here to stop, arrived at from the other
+     * side.
+     */
     private static boolean sameSource(SourcePos start, SourcePos at) {
-        return start.sourceId() == null || at.sourceId() == null
-                || start.sourceId().equals(at.sourceId());
+        return at.sourceId() == null || at.sourceId().equals(start.sourceId());
     }
     public record DeclaredAt(TypeName denoted) implements Key<SourcePos> {
         @Override

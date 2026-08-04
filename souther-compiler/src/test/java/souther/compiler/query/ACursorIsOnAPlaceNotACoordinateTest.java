@@ -11,7 +11,9 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What a module is made of is not all written in one file. An attached {@code examples for} file's
@@ -105,5 +107,30 @@ class ACursorIsOnAPlaceNotACoordinateTest {
                 .ask(new Names.ValueDenotedAt("m", new SourcePos(8, 14))).value();
 
         assertNotNull(use, "nothing was taken away from a caller that names no source");
+    }
+
+    // --- the two absences are not the same absence ------------------------------------------------
+
+    /** A question with only a coordinate to give is answered by coordinate. */
+    @Test
+    void aQuestionThatNamesNoFileIsAnsweredByCoordinate() {
+        assertTrue(Names.spans(new SourcePos(8, 14, MODEL_ID), "name", new SourcePos(8, 14)));
+    }
+
+    /**
+     * A name that names no source was read from no source of this compile — a synthesized node, or
+     * a module read off the module path. It is under nothing a reader has open, so a question about
+     * an open file is not answered with it. This is the same misreading as the one above, arrived at
+     * from the other side, which is why the two absences cannot be treated alike.
+     */
+    @Test
+    void aQuestionAboutAFileIsNotAnsweredWithANameFromNoFile() {
+        assertFalse(Names.spans(new SourcePos(8, 14), "name", new SourcePos(8, 14, MODEL_ID)));
+    }
+
+    @Test
+    void aNameInAnotherFileIsNotUnderTheCursorHoweverTheLinesLineUp() {
+        assertFalse(Names.spans(new SourcePos(8, 14, ATTACHED_ID), "name",
+                new SourcePos(8, 14, MODEL_ID)));
     }
 }
