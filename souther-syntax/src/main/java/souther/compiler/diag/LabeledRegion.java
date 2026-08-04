@@ -14,6 +14,21 @@ package souther.compiler.diag;
  */
 public record LabeledRegion(Region region, String sourceId, String labelKey, Object[] labelArgs) {
 
+    public LabeledRegion {
+        // Two things can say which file this is in — what the label was given, and what the region's
+        // own position was read from — and a reader takes the first. So they are allowed to differ
+        // only by one of them saying nothing: a region built from a hand-made position knows no
+        // file, and a label left null means the diagnostic's own. Saying two different files is a
+        // disagreement no reader can resolve, and is exactly the shape of mistake that put a
+        // diagnostic's coordinates and its file name in different files to begin with.
+        if (sourceId != null && region != null && region.start() != null
+                && region.start().sourceId() != null
+                && !sourceId.equals(region.start().sourceId())) {
+            throw new IllegalArgumentException("a label in " + sourceId
+                    + " points at a region read from " + region.start().sourceId());
+        }
+    }
+
     /** The source this region is in, inheriting {@code diagnosticSourceId} when it names none. */
     public String sourceIdOr(String diagnosticSourceId) {
         return sourceId == null ? diagnosticSourceId : sourceId;

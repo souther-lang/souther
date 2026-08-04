@@ -13,10 +13,12 @@ public record Region(SourcePos start, SourcePos end) {
         return new Region(p, p);
     }
 
-    /** A region beginning at {@code start} and spanning {@code width} columns on the same line. */
+    /** A region beginning at {@code start} and spanning {@code width} columns on the same line. The
+     * end is in the file the start is in: a region does not leave the source it began in. */
     public static Region ofWidth(SourcePos start, int width) {
         int w = Math.max(0, width);
-        return new Region(start, new SourcePos(start.line(), start.column() + w));
+        return new Region(start,
+                new SourcePos(start.line(), start.column() + w, start.sourceId()));
     }
 
     /** The number of caret characters to draw on the start line: at least one. */

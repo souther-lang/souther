@@ -32,13 +32,13 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
     /**
      * Where a report is said, for the reports that cannot be left to their key.
      *
-     * <p>A key names one source, and that is the answer for nearly everything: a problem is found
-     * while a file is being read and belongs to that file. Two cases are not like that. A comparison
-     * of two written statements is asked of the module, so its key names no source at all and the
-     * primary region's file has to be said here. And where neither of the two statements is the one
-     * in the wrong, the problem is said at both, so the author reading either file is told.
+     * <p>Nearly nothing needs this. A report's primary region was read from a file and says so, and
+     * that file is the one whose line is quoted under the caret — so leaving it alone is right
+     * whenever the problem is where it points. What this is for is the case where it is not: where
+     * neither of two written statements is the one in the wrong, the problem is said at both, so the
+     * author reading either file is told, and neither region can settle that on its own.
      *
-     * <p>{@code primarySourceId} is null for "the source the key names", which is what a report
+     * <p>{@code primarySourceId} is null for "wherever the report points", which is what a report
      * built any other way carries.
      *
      * <p>{@code saidAtEveryRegion} says the second case, and says it as a property of the report
@@ -53,7 +53,7 @@ public record Report(Diagnostic diagnostic, String legacyMessage, Delivery deliv
      * claim only the site that found it can make.
      *
      * <p>This is the declaration. What it resolves to against a particular key is
-     * {@link Db.Found#primarySourceId()} and {@link Compilation#publishSourceIdsOf(Db.Found)}.
+     * {@link Db.Found#claimedSourceId()} and {@link Compilation#publishSourceIdsOf(Db.Found)}.
      */
     public record Delivery(String primarySourceId, boolean saidAtEveryRegion) {
 

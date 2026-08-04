@@ -76,3 +76,25 @@ Two decisions bound the scope.
 - A multi-file build has no per-diagnostic file identity (SourcePos carries no file), so a snippet is
   quoted only for a single-file compile; a linked build renders the frame and message without the
   source line until a file handle is added to the position.
+
+## Amendment: the file handle is on the position (issue #309)
+
+The last consequence deferred a file handle on the position, and a compile worked out which file a
+report belonged to from the question that found it instead. That holds while each question is about
+one file and stops holding where it is not: a module's `example` rows, fake tables and values are
+written in the module's own source and in any number of attached `examples for` files, and once they
+are gathered under one name a question asked about the module can only answer with the module's own
+file. What the author was then shown was the right line number quoted out of the wrong file — an
+unrelated declaration with a caret in the middle of it.
+
+So `SourcePos` now carries the source it was read from. It is given once, where a position is made
+from a text (`LineIndex`), so no later pass has to reconstruct it, and it reaches every position a
+parse makes without an AST walker. A position read from no source of this compile — a synthesized
+node, the standard library, a module read back off the module path — names none, and a reader falls
+back as it did before.
+
+The source is part of what makes two positions the same position. Line 25 of two files is one
+coordinate and is not one place, and a value whose identity denied one of its components would leave
+"the same position" meaning something different in every container that held one — which is the
+original mistake, re-expressible. Where coordinates alone are wanted, they are compared as
+coordinates.

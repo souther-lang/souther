@@ -26,13 +26,20 @@ public final class CstFrontend {
     }
 
     /** Parses one compilation unit, naming a header-less source {@code defaultModuleName} (a
-     * {@code null} default makes the {@code module} header required). */
+     * {@code null} default makes the {@code module} header required).
+     *
+     * <p>The positions it makes name no source. A caller that has a name for the text it is handing
+     * over — a compile reading one of its own sources — parses through
+     * {@link #parseWithSlices(String, String, String)} instead, so that what it gets back says which
+     * file each position was read from. A caller here has no such name: the standard library and a
+     * module read back off the module path are in no source of the compile that is reading them. */
     public static Ast.Module parse(String source, String defaultModuleName) {
         CstParser.Result result = CstParser.parse(source);
         if (!result.errors().isEmpty()) {
-            throw firstError(source, result.errors().get(0));
+            throw firstError(source, null, result.errors().get(0));
         }
-        return ImplicitUnits.expand(AstBuilder.build(result.root(), source, defaultModuleName));
+        return ImplicitUnits.expand(
+                AstBuilder.build(result.root(), source, defaultModuleName, null));
     }
 
     /** As {@link #parse(String, String)} with the default module name {@code Main}. */
@@ -53,12 +60,27 @@ public final class CstFrontend {
      * neighbour's name.
      */
     public static Parsed parseWithSlices(String source, String defaultModuleName) {
+        return parseWithSlices(source, defaultModuleName, null);
+    }
+
+    /**
+     * As {@link #parseWithSlices(String, String)}, with every position it makes naming
+     * {@code sourceId}.
+     *
+     * <p>A compile that holds several sources has a name for each of them, and this is where that
+     * name reaches the positions. It has to be here: a module's writings do not all stay in the file
+     * they were written in — an attached {@code examples for} file's rows, tables and values join the
+     * module they are for — and after that a line and a column no longer say which file they were
+     * read from. Read at the one place a position is made from a text, the answer never has to be
+     * worked out again.
+     */
+    public static Parsed parseWithSlices(String source, String defaultModuleName, String sourceId) {
         CstParser.Result result = CstParser.parse(source);
         if (!result.errors().isEmpty()) {
-            throw firstError(source, result.errors().get(0));
+            throw firstError(source, sourceId, result.errors().get(0));
         }
         Ast.Module module = ImplicitUnits.expand(
-                AstBuilder.build(result.root(), source, defaultModuleName));
+                AstBuilder.build(result.root(), source, defaultModuleName, sourceId));
         String header = "module " + module.name();   // a source with no header is named for its file
         List<String> imports = new ArrayList<>();
         Map<String, String> defs = new LinkedHashMap<>();
@@ -94,8 +116,12 @@ public final class CstFrontend {
     public record Slices(String header, List<String> imports, Map<String, String> defs,
                          Map<String, String> behaviors, Map<String, String> fns) {}
 
-    private static CompileException firstError(String source, CstError e) {
-        LineIndex lines = new LineIndex(source);
+    /** The parser's first error, positioned in {@code sourceId}. The index is built here rather than
+     * taken off the builder — the build never ran — so this is the one position of a source that
+     * would otherwise not say which file it is in, and a syntax error would be the single kind of
+     * mistake still reported against whatever file the reader guessed at. */
+    private static CompileException firstError(String source, String sourceId, CstError e) {
+        LineIndex lines = new LineIndex(source, sourceId);
         Diagnostic diag = Diagnostic.of(null, e.messageKey()).title("parse.title")
                 .at(lines.posOf(e.offset()), e.width()).args(e.args()).build();
         return CompileException.of(diag, e.legacyMessage());

@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import java.util.ArrayDeque;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.SourcePos;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -229,7 +230,7 @@ public final class Db {
                 // into, and both are looking at the same line. The first to say it is the one that
                 // says it, so the order is the order the work happened in.
                 Found one = new Found(key.module(), key.sourceId(), report);
-                found.putIfAbsent(new Told(key.module(), one.primarySourceId(), report.problem()),
+                found.putIfAbsent(new Told(key.module(), one.claimedSourceId(), report.problem()),
                         one);
             }
         }
@@ -256,22 +257,36 @@ public final class Db {
      * may be null.
      *
      * <p>Where the report is said is read off this rather than stored beside it, so there is one
-     * answer and not two that can come apart: the report says where it goes when it knows
-     * ({@link Report.Delivery}), and the key answers when it does not. A module named but no source
-     * is the last fallback, and only a caller holding the module layout can apply it —
-     * {@link Compilation#publishSourceIdsOf(Found)} is where the whole
-     * answer is worked out.
+     * answer and not two that can come apart. A module named but no source is the last fallback, and
+     * only a caller holding the module layout can apply it —
+     * {@link Compilation#publishSourceIdsOf(Found)} is where the whole answer is worked out.
      */
     public record Found(String module, String sourceId, Report report) {
 
         /**
-         * The source the primary region is in: the one the report names, else the one the key does.
-         * Null when neither says, which leaves the module's own source as the last word — a fallback
-         * only a caller that knows the module layout can apply.
+         * The source this report claims, before a compile decides whether it has it: the one the
+         * report named, else the one its primary position was read from, else the one the key asked
+         * about. Null when none of the three says, which leaves the module's own source as the last
+         * word — a fallback only a caller that knows the module layout can apply.
+         *
+         * <p>The position comes before the key, and that ordering is the whole of what a reader
+         * needs. A key says which input was asked about; a position says where the caret sits, and
+         * the line under the caret is quoted out of the file this names. Where the two disagree,
+         * answering with the key's shows a reader a line they did not write — which is what a
+         * question asked about a module whose rows were written in an attached {@code examples for}
+         * file did (issue #309). A report that belongs somewhere other than where its caret sits says
+         * so itself, which is what {@link Report.Delivery} is for, and that is why it comes first.
          */
-        public String primarySourceId() {
+        public String claimedSourceId() {
             String said = report.delivery().primarySourceId();
-            return said != null ? said : sourceId;
+            if (said != null) {
+                return said;
+            }
+            SourcePos at = report.diagnostic().pos();
+            if (at != null && at.sourceId() != null) {
+                return at.sourceId();
+            }
+            return sourceId;
         }
     }
 

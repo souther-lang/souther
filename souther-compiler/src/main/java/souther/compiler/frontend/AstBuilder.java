@@ -39,21 +39,24 @@ public final class AstBuilder {
     private int patternCounter = 0;
     private int spreadCounter = 0;
 
-    private AstBuilder(String source) {
-        this.lines = new LineIndex(source);
+    private AstBuilder(String source, String sourceId) {
+        this.lines = new LineIndex(source, sourceId);
     }
 
     /**
      * Builds a module from a parsed source file. A header-less source is named
-     * {@code defaultModuleName}; a {@code null} default makes the header required.
+     * {@code defaultModuleName}; a {@code null} default makes the header required. Every position
+     * the module carries names {@code sourceId}, which is null for a source the caller has no name
+     * for — a module read off the module path, which is in no source of the compile reading it.
      *
      * <p>Requires a CST the parser accepted: every node it reads has the children the grammar gives
      * it, and a missing one is dereferenced rather than reported. {@link CstFrontend#parse} is the
      * one caller and raises the parser's first error before building — which is why this is
      * package-private, and what a second caller would have to guarantee.
      */
-    static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName) {
-        return new AstBuilder(source).module(sourceFile, defaultModuleName);
+    static Ast.Module build(SyntaxNode sourceFile, String source, String defaultModuleName,
+                            String sourceId) {
+        return new AstBuilder(source, sourceId).module(sourceFile, defaultModuleName);
     }
 
     // --- module ---
