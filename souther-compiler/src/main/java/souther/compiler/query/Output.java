@@ -334,6 +334,18 @@ public final class Output {
     }
 
     /**
+     * What this compilation gives one row or one reading to finish within.
+     *
+     * <p>A deadline set outright wins over a budget in milliseconds, and only a test sets one: what
+     * it is for is stating that a particular row does not come back, rather than writing a model
+     * that does not come back and racing a clock to observe it.
+     */
+    static souther.compiler.Deadline deadlineOf(Db db) {
+        souther.compiler.Deadline said = db.ask(new Front.ExampleDeadline()).value();
+        return said != null ? said : souther.compiler.Deadline.ofMillis(exampleBudgetMs(db));
+    }
+
+    /**
      * Whether each constant newtype construction in a module satisfies its invariant, by running the
      * same bytecode a run-time construction would. A check that cannot be loaded or run here is left
      * to the run-time check.
@@ -489,7 +501,7 @@ public final class Output {
             return Answer.of(souther.compiler.ExampleStatements.disagreements(prepared.value(),
                     scope.value(), sigs.value(), classes, loader(db, Map.of()),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
-                    exampleBudgetMs(db)));
+                    deadlineOf(db)));
         }
     }
 
@@ -676,7 +688,7 @@ public final class Output {
             return souther.compiler.ExampleStatements.fakeTables(prepared.value(), scope.value(),
                     sigs.value(), classes, loader(db, Map.of()),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
-                    exampleBudgetMs(db));
+                    deadlineOf(db));
         }
 
         /**
@@ -717,7 +729,7 @@ public final class Output {
             souther.compiler.ExampleVerifier.Observations observed =
                     souther.compiler.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
                             requirements, loader(db, Map.of()),
-                            values == null ? Map.of() : values, sourceId, exampleBudgetMs(db));
+                            values == null ? Map.of() : values, sourceId, deadlineOf(db));
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }
