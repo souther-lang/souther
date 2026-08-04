@@ -15,6 +15,7 @@ import souther.compiler.report.GeneratedRows;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -100,23 +101,39 @@ class CompilePartialAdequacyTest {
                 """.formatted(groups) + tail;
     }
 
-    /** Compiles are shared between the cases that read the same model. A row here is one that never
-     * comes back, so each of these costs the whole evaluation budget. */
+    /** Compiles are shared between the cases that read the same model, keyed by the budget as well as
+     * the source: the two are what a compile here is, and a model read under one of them says nothing
+     * about what it would say under the other. */
     private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
 
+    /** A model that comes back, on the default budget — including {@link #budgetSpent}, which walks
+     * four thousand nodes and is the reason a short budget cannot be set for the whole suite. */
     private static Compilation measured(String source) {
-        return COMPILED.computeIfAbsent("report:" + source, _ -> {
-            Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Asked.reportOnly());
-            compilation.answerEverything();
-            return compilation;
-        });
+        return measured(source, null);
+    }
+
+    /** As {@link #measured(String)}, for a model whose rows do not come back: waiting out the default
+     * budget reaches the same answer, later. */
+    private static Compilation measured(String source, Duration budget) {
+        return compiled("report:", source, budget, Adequacy.Asked.reportOnly());
     }
 
     private static Compilation warned(String source) {
-        return COMPILED.computeIfAbsent("warn:" + source, _ -> {
+        return warned(source, null);
+    }
+
+    private static Compilation warned(String source, Duration budget) {
+        return compiled("warn:", source, budget, Adequacy.Asked.warningsAt(Adequacy.Level.ALL));
+    }
+
+    private static Compilation compiled(String what, String source, Duration budget,
+                                        Adequacy.Asked asked) {
+        return COMPILED.computeIfAbsent(what + budget + ":" + source, _ -> {
             Compilation compilation = Compilation.ofSource(source, "Main");
-            compilation.measure(Adequacy.Level.ALL);
+            if (budget != null) {
+                compilation.withExampleBudget(budget);
+            }
+            compilation.measure(asked);
             compilation.answerEverything();
             return compilation;
         });
@@ -142,7 +159,7 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void aBranchMeasureOverAnUnfinishedRowIsUndecided() {
-        Compilation compilation = measured(TIMES_OUT);
+        Compilation compilation = measured(TIMES_OUT, DoesNotComeBack.BUDGET);
         Adequacy.BranchEvidence branch = compilation.db()
                 .ask(new Adequacy.BranchCoverage(compilation.modules().get(0))).value().get("go");
 
@@ -154,7 +171,7 @@ class CompilePartialAdequacyTest {
     /** And nothing is warned about from it. */
     @Test
     void anUndecidedBranchMeasureWarnsAboutNoArm() {
-        assertFalse(warningCodes(warned(TIMES_OUT)).contains("E1918"),
+        assertFalse(warningCodes(warned(TIMES_OUT, DoesNotComeBack.BUDGET)).contains("E1918"),
                 "an arm a row might have gone through is not an arm nothing reaches");
     }
 
@@ -212,12 +229,12 @@ class CompilePartialAdequacyTest {
      */
     @Test
     void whatStoppedARowBeingSeenReachesTheMeasureThatReadsIt() {
-        Compilation compilation = measured(TIMES_OUT);
+        Compilation compilation = measured(TIMES_OUT, DoesNotComeBack.BUDGET);
         Adequacy.SignatureEvidence signature = compilation.db()
                 .ask(new Adequacy.Witnesses(compilation.modules().get(0))).value().get("go");
 
         assertEquals(MeasurementStatus.PARTIAL, signature.status());
-        assertFalse(warningCodes(warned(TIMES_OUT)).contains("E1913"),
+        assertFalse(warningCodes(warned(TIMES_OUT, DoesNotComeBack.BUDGET)).contains("E1913"),
                 "a case the unfinished row might have produced is not a case nothing claims");
     }
 
@@ -254,7 +271,7 @@ class CompilePartialAdequacyTest {
 
                 example cancel
                     | (Draft { n = spin(1) }) -> Gone { why = "x" }
-                """);
+                """, DoesNotComeBack.BUDGET);
         AdequacyReport whole = AdequacyReport.of(compilation);
 
         assertEquals(MeasurementStatus.PARTIAL, whole.status(), "`cancel` did not finish");
@@ -416,7 +433,7 @@ class CompilePartialAdequacyTest {
     @Test
     void theJsonNamesNoUnreachedArmUnderPartial() throws Exception {
         JsonNode branch = JsonMapper.builder().build().readTree(
-                AdequacyReport.of(measured(TIMES_OUT)).json())
+                AdequacyReport.of(measured(TIMES_OUT, DoesNotComeBack.BUDGET)).json())
                 .get("modules").get(0).get("behaviors").get(0).get("branch");
 
         assertEquals("partial", branch.get("status").asString());
@@ -450,7 +467,7 @@ class CompilePartialAdequacyTest {
 
                 example pick
                     | (Yes, Yes) -> Ok { n = 0 }
-                """);
+                """, DoesNotComeBack.BUDGET);
         PartitionEvidence partition = compilation.db()
                 .ask(new Adequacy.Coverage("example.pair")).value().get("pick");
 
@@ -489,7 +506,7 @@ class CompilePartialAdequacyTest {
 
                 example pick
                     | (Yes, Yes) -> Ok { n = 0 }
-                """);
+                """, DoesNotComeBack.BUDGET);
         PartitionEvidence partition = compilation.db()
                 .ask(new Adequacy.Coverage("example.agree")).value().get("pick");
 
@@ -535,7 +552,7 @@ class CompilePartialAdequacyTest {
                 example take
                     | (Draft { kind = Overseas, cost = Amount(100) }) -> Ok { n = 100 }
                     | (Draft { kind = Domestic, cost = Amount(500) }) -> Big { n = 0 }
-                """).db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
+                """, DoesNotComeBack.BUDGET).db().ask(new Adequacy.Coverage("example.mix")).value().get("take");
 
         PartitionEvidence.BoundaryCoverage line = partition.boundaries().stream()
                 .filter(b -> b.value().equals("100")).findFirst().orElseThrow();
@@ -605,7 +622,7 @@ class CompilePartialAdequacyTest {
     /** The row that did not finish is still there to be counted, and still says it did not. */
     @Test
     void theUnfinishedRowIsStillReported() {
-        Compilation compilation = measured(TIMES_OUT);
+        Compilation compilation = measured(TIMES_OUT, DoesNotComeBack.BUDGET);
         String sourceId = compilation.exampleSourcesOf("example.loop").get(0);
 
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()

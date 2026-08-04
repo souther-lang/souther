@@ -75,6 +75,22 @@ public final class Front {
      */
     public record Core() implements Input<Boolean> {}
 
+    /**
+     * How long one thing built and run on a worker of its own is given, in milliseconds: an example
+     * row evaluated, or one written statement read to compare it against another.
+     *
+     * <p>An input rather than a constant because what the budget is for differs by who is asking. A
+     * build wants it long enough that no terminating row is ever cut short, and the default
+     * ({@link souther.compiler.ExampleVerifier#defaultBudgetMs()}) is that. A test that is about what
+     * is said when a row does not come back wants the opposite — the shortest budget that still
+     * decides — and setting it on the compilation is how it says so, rather than making every other
+     * compile in the same JVM wait on its behalf.
+     *
+     * <p>Absent means the default. Nothing but a caller with a reason to differ has to know this
+     * exists.
+     */
+    public record ExampleBudget() implements Input<Long> {}
+
     /** One source, parsed, with the text of each declaration kept for publishing. */
     public record Parsed(String id) implements Key<CstFrontend.Parsed> {
         @Override

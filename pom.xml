@@ -113,6 +113,23 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
                     <version>3.5.6</version>
+                    <configuration>
+                        <!-- One JVM per core, each running whole test classes to completion. Forks
+                             rather than threads: four classes capture `System.out` to read what the
+                             CLI printed, and a stream is one per JVM however many threads share it.
+                             A fork also settles the rest of it — a class loaded per fork, a static
+                             initialiser run per fork — so nothing here depends on what another test
+                             did first. Override with -DforkCount=N; 1 is the old behaviour. -->
+                        <forkCount>1C</forkCount>
+                        <reuseForks>true</reuseForks>
+                        <!-- C1 only, and a collector that runs no threads of its own. A test class
+                             is a few seconds of work, over well before C2 has finished compiling
+                             what it profiled, and with a JVM per core the compiler and collector
+                             threads of every fork are competing for the cores the tests are on.
+                             Measured on the compiler's suite, whole build, eight forks: 49s without
+                             these, 27s with them. -->
+                        <argLine>-XX:TieredStopAtLevel=1 -XX:+UseSerialGC</argLine>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>

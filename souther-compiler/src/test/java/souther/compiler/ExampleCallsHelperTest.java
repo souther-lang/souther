@@ -53,6 +53,12 @@ class ExampleCallsHelperTest {
         return assertThrows(CompileException.class, () -> Compiler.compile(model));
     }
 
+    /** As {@link #err(String)}, for a model whose row does not come back: the same E1910, decided
+     *  without waiting out a budget set for the rows that do. */
+    private static CompileException errBriefly(String model) {
+        return assertThrows(CompileException.class, () -> DoesNotComeBack.compile(model));
+    }
+
     @Test
     void aHelperStatesTheInput() {
         assertDoesNotThrow(() -> Compiler.compile(BASE + """
@@ -357,7 +363,7 @@ class ExampleCallsHelperTest {
         // The worker evaluating a non-terminating row is not stopped by cancelling it — a pure
         // computation reaches no interrupt point — so it must share nothing with the rows after it: the
         // diagnostics stay in row order, and each row's own reason is its own.
-        CompileException e = err("""
+        CompileException e = errBriefly("""
                 module demo
 
                 data Amount = Int
@@ -387,7 +393,7 @@ class ExampleCallsHelperTest {
 
     @Test
     void aHelperThatDoesNotTerminateIsReportedAsNonTermination() {
-        CompileException e = err("""
+        CompileException e = errBriefly("""
                 module demo
 
                 data Amount = Int

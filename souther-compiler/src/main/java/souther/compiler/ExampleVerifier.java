@@ -87,12 +87,13 @@ public final class ExampleVerifier {
                                      Map<String, byte[]> classes,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Ast.FnDef> values,
-                                     String sourceId) {
+                                     String sourceId, long budgetMs) {
         if (module.examples().isEmpty()) {
             return Observations.NONE;
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
-        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values);
+        ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
+                budgetMs);
         v.sourceId = sourceId;
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
@@ -142,7 +143,7 @@ public final class ExampleVerifier {
                                          Map<String, List<BehaviorRequirement>> requirements,
                                          ClassLoader parent, Map<String, Ast.FnDef> values,
                                          List<String> exampleOrigins,
-                                         List<String> fakeOrigins) {
+                                         List<String> fakeOrigins, long budgetMs) {
         if (module.examples().isEmpty()
                 || exampleOrigins.size() != module.examples().size()
                 || fakeOrigins.size() != module.fakes().size()) {
@@ -158,7 +159,7 @@ public final class ExampleVerifier {
             return Readings.NONE;
         }
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
-                new MemoryClassLoader(classes, parent), values);
+                new MemoryClassLoader(classes, parent), values, budgetMs);
         return v.collectDisagreements(exampleOrigins, fakeOrigins, contested);
     }
 
@@ -191,13 +192,14 @@ public final class ExampleVerifier {
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               Map<String, List<BehaviorRequirement>> requirements,
                                               ClassLoader parent, Map<String, Ast.FnDef> values,
-                                              List<String> fakeOrigins, String sourceId) {
+                                              List<String> fakeOrigins, String sourceId,
+                                              long budgetMs) {
         if (module.fakes().isEmpty()) {
             return List.of();
         }
         boolean placed = fakeOrigins.size() == module.fakes().size();
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
-                new MemoryClassLoader(classes, parent), values);
+                new MemoryClassLoader(classes, parent), values, budgetMs);
         v.sourceId = sourceId;
         List<Diagnostic> said = new ArrayList<>();
         Set<String> answering = new LinkedHashSet<>();
@@ -223,7 +225,7 @@ public final class ExampleVerifier {
             }, "the `fake " + fk.target() + "` table");
             switch (read) {
                 case Read.Got(List<Diagnostic> wrong) -> said.addAll(wrong);
-                case Read.TimedOut(long budgetMs) -> said.add(uncheckedFake(fk, budgetMs));
+                case Read.TimedOut(long ranOutOf) -> said.add(uncheckedFake(fk, ranOutOf));
                 // Not about this fake: the runtime is `provided`, so a host without it builds no value
                 // at all and every fake in every module would say the same thing. Where the rows are
                 // evaluated that is recorded once, as an incompleteness.
@@ -286,7 +288,7 @@ public final class ExampleVerifier {
         // a binding or a half-walked expansion. Nothing it can still write to is read by the
         // statement after it, which is why {@link RowEvaluation} does the same for a row.
         ExampleVerifier reader = new ExampleVerifier(module, symbols, sigs, requirements, loader,
-                values);
+                values, budgetMs);
         reader.sourceId = sourceId;
         java.util.concurrent.FutureTask<T> task =
                 new java.util.concurrent.FutureTask<>(() -> read.apply(reader));
@@ -295,10 +297,10 @@ public final class ExampleVerifier {
         worker.start();
         try {
             return new Read.Got<>(
-                    task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
+                    task.get(budgetMs, java.util.concurrent.TimeUnit.MILLISECONDS));
         } catch (java.util.concurrent.TimeoutException _) {
             task.cancel(true);
-            return new Read.TimedOut<>(EXAMPLE_TIMEOUT_MS);
+            return new Read.TimedOut<>(budgetMs);
         } catch (java.util.concurrent.ExecutionException ee) {
             task.cancel(true);
             Throwable cause = ee.getCause();
@@ -614,8 +616,10 @@ public final class ExampleVerifier {
                                             Map<String, Sig> sigs, Map<String, byte[]> classes,
                                             Map<String, List<BehaviorRequirement>> requirements,
                                             ClassLoader parent, Map<String, Ast.FnDef> values) {
+        // No rows, so no worker is started and the budget is never read; the default stands in for a
+        // value this reader has no use for.
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements,
-                new MemoryClassLoader(classes, parent), values);
+                new MemoryClassLoader(classes, parent), values, DEFAULT_BUDGET_MS);
         return v::refuse;
     }
 
@@ -749,16 +753,23 @@ public final class ExampleVerifier {
      * and from any number of attached {@code examples for} files, and a position alone stops saying
      * which once they are gathered under the module's name. */
     private String sourceId;
+    /** Wall-clock budget for one thing built and run on a worker of its own: an example row evaluated
+     * ({@link #checkRow}), or one written statement read to compare it against another ({@link
+     * #within}). Carried rather than looked up, so a reader started by another reader is held to the
+     * same budget its caller was, and two compiles in one JVM need not agree on it. */
+    private final long budgetMs;
 
     private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
-                            MemoryClassLoader loader, Map<String, Ast.FnDef> values) {
+                            MemoryClassLoader loader, Map<String, Ast.FnDef> values,
+                            long budgetMs) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
         this.requirements = requirements;
         this.loader = loader;
         this.values = values;
+        this.budgetMs = budgetMs;
         this.helpers = new HelperInvoker(module.name(), loader);
         this.neutral = new NeutralForm(symbols);
     }
@@ -905,7 +916,7 @@ public final class ExampleVerifier {
         RowEvaluation(ExampleVerifier of, ExampleTarget target, Sig sig,
                       Set<TypeName> outCases, Ast.ExampleRow row) {
             this.evaluation = new ExampleVerifier(of.module, of.symbols, of.sigs, of.requirements,
-                    of.loader, of.values);
+                    of.loader, of.values, of.budgetMs);
             this.evaluation.sourceId = of.sourceId;
             this.target = target;
             this.sig = sig;
@@ -999,7 +1010,7 @@ public final class ExampleVerifier {
         worker.setDaemon(true);
         worker.start();
         try {
-            out.addAll(task.get(EXAMPLE_TIMEOUT_MS, java.util.concurrent.TimeUnit.MILLISECONDS));
+            out.addAll(task.get(budgetMs, java.util.concurrent.TimeUnit.MILLISECONDS));
             rows.add(outcomeOf(target, row, evaluation.state));
         } catch (java.util.concurrent.TimeoutException _) {
             // Read what the row was doing before cancelling: the interrupt may let the worker leave the
@@ -1011,7 +1022,7 @@ public final class ExampleVerifier {
             Stage reached = evaluation.state.stage;
             task.cancel(true);   // best-effort: marks the task cancelled and interrupts the worker
             out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
-                    .at(row.pos()).args("did not finish within " + EXAMPLE_TIMEOUT_MS + "ms"
+                    .at(row.pos()).args("did not finish within " + budgetMs + "ms"
                             + (helper == null ? "" : " while calling `" + helper + "`")).build());
             rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
                     row.description(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
@@ -2574,17 +2585,17 @@ public final class ExampleVerifier {
 
     // --- invoke the behavior ------------------------------------------------------------------
 
-    /** Wall-clock budget for one thing built and run on a worker of its own: an example row evaluated
-     * ({@link #checkRow}), or one written statement read to compare it against another ({@link
-     * #within}). A total behavior finishes in well under this; a `partial` recursion that does not
-     * terminate hits it, so the compiler is bounded, never hung. Overridable with the
-     * `souther.example.timeout.ms` system property for an unusually slow example. */
-    private static final long EXAMPLE_TIMEOUT_MS = readTimeoutMs();
+    /** The budget a compile that says nothing about it is given. A total behavior finishes in well
+     * under this; a `partial` recursion that does not terminate hits it, so the compiler is bounded,
+     * never hung. Overridable with the `souther.example.timeout.ms` system property for an unusually
+     * slow example. A caller that wants a different one for one compile sets
+     * {@link souther.compiler.query.Front.ExampleBudget} instead, which is the only way two compiles
+     * in one JVM can be held to different budgets. */
+    private static final long DEFAULT_BUDGET_MS = readTimeoutMs();
 
-    /** The budget, for a test that has to say what a reading was held to. A report reads it off the
-     * reading that ran out of it ({@link TimedOutFake}), not off here. */
-    static long exampleTimeoutMs() {
-        return EXAMPLE_TIMEOUT_MS;
+    /** The budget a compile is given when it asks for none. */
+    public static long defaultBudgetMs() {
+        return DEFAULT_BUDGET_MS;
     }
 
     private static long readTimeoutMs() {

@@ -34,11 +34,21 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
+    /**
+     * A model, with the budget the compile that reads it is given.
+     *
+     * <p>The two here want opposite budgets, which is why it is carried beside the source rather than
+     * set for the run: one is a row that never comes back, and waiting the default out reaches the
+     * same answer later, while the other walks four thousand nodes to spend the observation budget and
+     * would be reported as a row that does not terminate if it were held to the first one's.
+     */
+    private record Unreadable(String source, java.time.Duration budget) {}
+
     /** Models where something a measure would want to read was not read, each in a different way. */
-    private static List<String> unreadableInSomeWay() {
+    private static List<Unreadable> unreadableInSomeWay() {
         return List.of(
                 // a row that never finishes: its state is dropped rather than read
-                """
+                new Unreadable("""
                 module example.a
 
                 data Yes
@@ -64,9 +74,9 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
 
                 example take
                     | (Draft { flag = Yes, cost = Amount(500) }) -> Big { n = 0 }
-                """,
+                """, DoesNotComeBack.BUDGET),
                 // a value past the observation's limits: the position is there and unreadable
-                budgetSpent());
+                new Unreadable(budgetSpent(), null));
     }
 
     private static String budgetSpent() {
@@ -106,8 +116,24 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
                 """.formatted(groups);
     }
 
+    /** Compiles are shared between the cases that read the same model: each of the three walks the
+     * same two, and a compilation answers the same questions however many times it is asked. */
+    private static final Map<String, Compilation> COMPILED = new java.util.LinkedHashMap<>();
+
+    private static Compilation measured(Unreadable model) {
+        return COMPILED.computeIfAbsent(model.budget() + ":" + model.source(),
+                _ -> measured(model.source(), model.budget()));
+    }
+
     private static Compilation measured(String source) {
+        return measured(source, null);
+    }
+
+    private static Compilation measured(String source, java.time.Duration budget) {
         Compilation compilation = Compilation.ofSource(source, "Main");
+        if (budget != null) {
+            compilation.withExampleBudget(budget);
+        }
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         return compilation;
@@ -122,8 +148,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
      */
     @Test
     void noMeasureNamesAGapWhileCallingItselfComplete() {
-        for (String source : unreadableInSomeWay()) {
-            Compilation compilation = measured(source);
+        for (Unreadable model : unreadableInSomeWay()) {
+            Compilation compilation = measured(model);
             String module = compilation.modules().get(0);
             List<String> wrong = new ArrayList<>();
 
@@ -167,8 +193,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
     /** And the status over them says so, so a reader who only looks at the top is not misled. */
     @Test
     void theReportSaysItCouldNotBeMadeCompletely() {
-        for (String source : unreadableInSomeWay()) {
-            AdequacyReport report = AdequacyReport.of(measured(source));
+        for (Unreadable model : unreadableInSomeWay()) {
+            AdequacyReport report = AdequacyReport.of(measured(model));
             assertEquals(MeasurementStatus.PARTIAL, report.status(),
                     report.modules().get(0).module());
             assertEquals(MeasurementStatus.PARTIAL,
@@ -184,8 +210,8 @@ class AdequacyNeverAssertsFromPartOfTheRowsTest {
      */
     @Test
     void nothingIsGeneratedFromRowsThatWereNotRead() {
-        for (String source : unreadableInSomeWay()) {
-            Compilation compilation = measured(source);
+        for (Unreadable model : unreadableInSomeWay()) {
+            Compilation compilation = measured(model);
             String module = compilation.modules().get(0);
             Map<String, Adequacy.Filling> generated =
                     compilation.db().ask(new Adequacy.Generated(module)).value();

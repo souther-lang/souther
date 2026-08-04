@@ -126,7 +126,24 @@ public final class Compiler {
     /** As above, telling the compile how much of the rows' coverage to measure and warn about. */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut, Adequacy.Asked measure) {
+        return compiled(source, defaultModuleName, warningsOut, measure, null);
+    }
+
+    /**
+     * As above, on a budget of its own for each row evaluated and each statement read.
+     *
+     * <p>{@code null} takes the default, which is what every caller outside this compiler's own tests
+     * wants: it is set so that no terminating row is cut short, and a build has no other requirement
+     * of it. What a shorter one is for is a model written so that a row does not come back — see
+     * {@link Compilation#withExampleBudget}.
+     */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, Adequacy.Asked measure,
+                                java.time.Duration exampleBudget) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName);
+        if (exampleBudget != null) {
+            compilation.withExampleBudget(exampleBudget);
+        }
         compilation.measure(measure);
         Db db = compilation.db();
 
@@ -246,9 +263,27 @@ public final class Compiler {
                 linked(sources, path, warningsOut, Adequacy.Asked.NOTHING).classes());
     }
 
+    /** As {@link #compiledModules(List, ModulePath, List, Adequacy.Asked)}, on a budget of its own
+     *  for each row evaluated — {@code null} takes the default. See
+     *  {@link #compiled(String, String, List, Adequacy.Asked, java.time.Duration)}. */
+    static Compilation compiledModules(List<String> sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       java.time.Duration exampleBudget) {
+        return linked(sources, path, warningsOut, measure, exampleBudget);
+    }
+
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure) {
+        return linked(sources, path, warningsOut, measure, null);
+    }
+
+    private static Compilation linked(List<String> sources, ModulePath path,
+                                      List<Located> warningsOut, Adequacy.Asked measure,
+                                      java.time.Duration exampleBudget) {
         Compilation compilation = Compilation.ofSources(sources, path);
+        if (exampleBudget != null) {
+            compilation.withExampleBudget(exampleBudget);
+        }
         compilation.measure(measure);
         Db db = compilation.db();
 

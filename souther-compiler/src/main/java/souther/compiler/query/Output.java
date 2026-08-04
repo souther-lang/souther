@@ -325,6 +325,14 @@ public final class Output {
         return new MemoryClassLoader(classes, parent);
     }
 
+    /** How long this compilation gives one row or one reading, in milliseconds. A compilation that
+     * says nothing is given the default, which is what a build wants; the input exists for a caller
+     * whose reason to differ is its own (see {@link Front.ExampleBudget}). */
+    static long exampleBudgetMs(Db db) {
+        Long asked = db.ask(new Front.ExampleBudget()).value();
+        return asked == null ? souther.compiler.ExampleVerifier.defaultBudgetMs() : asked;
+    }
+
     /**
      * Whether each constant newtype construction in a module satisfies its invariant, by running the
      * same bytecode a run-time construction would. A check that cannot be loaded or run here is left
@@ -477,7 +485,8 @@ public final class Output {
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
             return Answer.of(souther.compiler.ExampleVerifier.disagreements(prepared.value(),
                     scope.value(), sigs.value(), classes, requirements, loader(db, Map.of()),
-                    values == null ? Map.of() : values, exampleOrigins, fakeOrigins));
+                    values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
+                    exampleBudgetMs(db)));
         }
     }
 
@@ -662,7 +671,8 @@ public final class Output {
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
             return souther.compiler.ExampleVerifier.fakeTables(prepared.value(), scope.value(),
                     sigs.value(), classes, requirements, loader(db, Map.of()),
-                    values == null ? Map.of() : values, fakeOrigins, sourceId);
+                    values == null ? Map.of() : values, fakeOrigins, sourceId,
+                    exampleBudgetMs(db));
         }
 
         /**
@@ -703,7 +713,7 @@ public final class Output {
             souther.compiler.ExampleVerifier.Observations observed =
                     souther.compiler.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
                             requirements, loader(db, Map.of()),
-                            values == null ? Map.of() : values, sourceId);
+                            values == null ? Map.of() : values, sourceId, exampleBudgetMs(db));
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }

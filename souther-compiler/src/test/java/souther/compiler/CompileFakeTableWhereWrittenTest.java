@@ -214,7 +214,8 @@ class CompileFakeTableWhereWrittenTest {
 
                 fake find
                     | (N(spin(1))) -> Found { n = N(1) }
-                """, "Main", warnings));
+                """, "Main", warnings, souther.compiler.query.Adequacy.Asked.NOTHING,
+                DoesNotComeBack.BUDGET));
 
         List<Located> said = only("E1921", warnings);
         assertEquals(1, said.size(), warnings.toString());
@@ -223,10 +224,10 @@ class CompileFakeTableWhereWrittenTest {
         Diagnostic one = said.get(0).diagnostic();
         assertEquals(14, one.pos().line(), "at the fake");
         assertEquals(6, one.pos().column(), "on the behavior it names");
-        // The budget is read off the budget: it is settable (`souther.example.timeout.ms`), and a
-        // literal here would fail the run that set it. Ungrouped, which is how it is set.
+        // The number is read off the budget this compile was given rather than written in, so the
+        // line still holds if that budget changes. Ungrouped, which is how it is set.
         assertTrue(rendered(one).contains("Building the `fake find` table did not finish within "
-                        + ExampleVerifier.exampleTimeoutMs() + "ms"),
+                        + DoesNotComeBack.BUDGET.toMillis() + "ms"),
                 rendered(one));
         assertTrue(rendered(one).contains("whether the `fake find` table can be built at all"),
                 "the hint names the table it is about: " + rendered(one));

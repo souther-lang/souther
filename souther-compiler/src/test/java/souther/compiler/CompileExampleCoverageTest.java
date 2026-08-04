@@ -141,7 +141,8 @@ class CompileExampleCoverageTest {
                 example go
                     | (Draft { n = 1 }) -> Done { n = 1 }
                 """;
-        Compilation compilation = Compilation.ofSource(spinning, "Main");
+        Compilation compilation = Compilation.ofSource(spinning, "Main")
+                .withExampleBudget(DoesNotComeBack.BUDGET);
         compilation.measure(Adequacy.Asked.reportOnly());
         compilation.answerEverything();
         String module = compilation.modules().get(0);

@@ -256,7 +256,7 @@ class CompileFakeExampleDisagreementTest {
     @Test
     void aRowWhoseFixtureWillNotFinishIsHeldAgainstNothing() {
         CompileException e = org.junit.jupiter.api.Assertions.assertThrows(CompileException.class,
-                () -> Compiler.compile("""
+                () -> DoesNotComeBack.compile("""
                         module example.spin
 
                         data N = Int
@@ -321,20 +321,19 @@ class CompileFakeExampleDisagreementTest {
                 fake find
                     | (N(spin(1))) -> Missing { why = "none" }
                     | (N(spin(2))) -> Missing { why = "none" }
-                """));
+                """, DoesNotComeBack.BUDGET));
 
         assertEquals(1, said.size(), said.toString());
         Diagnostic one = said.get(0).diagnostic();
         assertEquals(17, one.pos().line(), "anchored where the fake names the behavior");
         assertEquals(6, one.pos().column());
         // What could not be done, then what stopped: the table is what did not finish, and the
-        // comparison is what that cost. The budget is read off the budget rather than written in —
-        // it is settable (`souther.example.timeout.ms`), and a literal here would fail every run that
-        // set it, which is the run a slow host most wants to make. It is still read as it is set and
-        // not as a locale would group it, which is what the number in this line is for.
+        // comparison is what that cost. The number is read off the budget this compile was given
+        // rather than written in, so the line still holds if that budget changes — and it is read as
+        // it is set and not as a locale would group it, which is what the number in this line is for.
         assertTrue(rendered(one).contains("Could not compare this fake with the rows recorded for"
                         + " `find` — building the table did not finish within "
-                        + ExampleVerifier.exampleTimeoutMs() + "ms."),
+                        + DoesNotComeBack.BUDGET.toMillis() + "ms."),
                 rendered(one));
     }
 
@@ -358,7 +357,7 @@ class CompileFakeExampleDisagreementTest {
     void aRowThatRunsTheTableAndTheReadingBothSayWhatTheyFound() {
         List<Located> warnings = new ArrayList<>();
         CompileException e = org.junit.jupiter.api.Assertions.assertThrows(CompileException.class,
-                () -> Compiler.compiledModules(List.of("""
+                () -> DoesNotComeBack.compileModules(List.of("""
                         module example.both
 
                         data N = Int
@@ -386,7 +385,7 @@ class CompileFakeExampleDisagreementTest {
 
                         fake find
                             | (N(spin(1))) -> Missing { why = "none" }
-                        """), ModulePath.EMPTY, warnings));
+                        """), warnings));
 
         assertTrue(codesOf(e).contains("E1910"), codesOf(e).toString());
         assertEquals(1, only("E1920", warnings).size(), warnings.toString());
@@ -449,13 +448,23 @@ class CompileFakeExampleDisagreementTest {
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.Helpers(name)).value(),
                 c.db().ask(new souther.compiler.query.Front.ExampleOrigins(name)).value(),
-                c.db().ask(new souther.compiler.query.Front.FakeOrigins(name)).value());
+                c.db().ask(new souther.compiler.query.Front.FakeOrigins(name)).value(),
+                ExampleVerifier.defaultBudgetMs());
     }
 
     /** The warnings of a single-source compile that holds. */
     private static List<Located> warningsOf(String model) {
         List<Located> out = new ArrayList<>();
         assertDoesNotThrow(() -> Compiler.compiled(model, "Main", out));
+        return out;
+    }
+
+    /** As {@link #warningsOf(String)}, for a model whose table does not finish being built: the
+     * answer is the same at the default budget, reached after a wait that decides nothing. */
+    private static List<Located> warningsOf(String model, java.time.Duration budget) {
+        List<Located> out = new ArrayList<>();
+        assertDoesNotThrow(() -> Compiler.compiled(model, "Main", out,
+                souther.compiler.query.Adequacy.Asked.NOTHING, budget));
         return out;
     }
 
@@ -542,7 +551,7 @@ class CompileFakeExampleDisagreementTest {
 
                 fake other
                     | (N(1)) -> Missing { why = "none" }
-                """));
+                """, DoesNotComeBack.BUDGET));
     }
 
     /**
@@ -608,8 +617,16 @@ class CompileFakeExampleDisagreementTest {
      * error a case is really about is visible beside the E1919s, and a test cannot pass by the whole
      * comparison having stopped working. */
     private static List<String> allCodesOf(String model) {
+        return allCodesOf(model, null);
+    }
+
+    /** As {@link #allCodesOf(String)}, for a model with a row that does not come back. */
+    private static List<String> allCodesOf(String model, java.time.Duration budget) {
         souther.compiler.query.Compilation compilation =
                 souther.compiler.query.Compilation.ofSource(model, "Main");
+        if (budget != null) {
+            compilation.withExampleBudget(budget);
+        }
         compilation.answerEverything();
         List<String> codes = new ArrayList<>();
         for (souther.compiler.query.Db.Found found : compilation.db().allReports()) {

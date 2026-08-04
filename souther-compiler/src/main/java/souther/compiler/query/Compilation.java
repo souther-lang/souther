@@ -215,6 +215,28 @@ public final class Compilation {
         measure(Adequacy.Asked.warningsAt(level));
     }
 
+    /**
+     * How long this compilation gives one row to be evaluated, or one written statement to be read
+     * against another. Returns this compilation, so it can be said where the sources are.
+     *
+     * <p>A build has no reason to say: the default is long enough that no terminating row is cut
+     * short, which is the only thing a build wants from it. What is said here is said about this
+     * compilation and no other, so a caller that wants a row to run out of budget — a test about what
+     * is reported when one does not come back — gets that without holding every other compile in the
+     * same JVM to the same wait.
+     *
+     * @throws IllegalArgumentException if {@code budget} is not positive; a row that is given no time
+     *     at all would report every behavior as one that does not terminate.
+     */
+    public Compilation withExampleBudget(java.time.Duration budget) {
+        long ms = budget.toMillis();
+        if (ms <= 0) {
+            throw new IllegalArgumentException("an example budget has to be positive: " + budget);
+        }
+        db.set(new Front.ExampleBudget(), ms);
+        return this;
+    }
+
     /** How well one module's rows cover it. {@link #answerEverything()} need not have run: the
      * measures ask for what they read. */
     public Adequacy.Of adequacy(String module) {
