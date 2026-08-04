@@ -33,6 +33,9 @@ final class Readings {
     private final Map<Type.Var, Type> settled = new HashMap<>();
     private Type shape;
     private boolean refused;
+    /** What was settled before this parameter began, for a parameter that turns out to settle
+     * nothing. */
+    private Map<Type.Var, Type> held = Map.of();
 
     /**
      * Starts on another parameter. What the readings have settled about a variable is kept: two
@@ -44,6 +47,7 @@ final class Readings {
     void forParameter() {
         shape = null;
         refused = false;
+        held = Map.copyOf(settled);
     }
 
     /** {@code t} with what the readings have settled written through it. */
@@ -57,7 +61,16 @@ final class Readings {
             return;
         }
         shape = shape == null ? reading : unify(shape, reading);
-        refused = shape == null;
+        if (shape == null) {
+            // Readings that cannot be one value settle nothing. A constructor is taken apart one
+            // position at a time, so what the positions before the disagreement settled is written
+            // while it is still open whether they are one value at all — and this parameter having
+            // no answer is not evidence for the next one. What was settled before this parameter
+            // began is what stands.
+            refused = true;
+            settled.clear();
+            settled.putAll(held);
+        }
     }
 
     /** Every reading given, as one type, or null where they cannot be one value. */

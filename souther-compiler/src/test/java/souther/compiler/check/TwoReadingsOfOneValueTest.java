@@ -115,6 +115,24 @@ class TwoReadingsOfOneValueTest {
         assertNull(Readings.of(listBAndB, aa));
     }
 
+    /**
+     * A parameter whose readings cannot be one value settles nothing for the parameters after it.
+     * A constructor is taken apart one position at a time, so what the positions before a
+     * disagreement settled is written while it is still open whether the readings agree at all.
+     */
+    @Test
+    void aParameterThatSettlesNothingLeavesNothingSettled() {
+        Type a = v("a");
+        Readings all = new Readings();
+        all.add(pair(a, Type.INT));
+        all.add(pair(Type.STRING, Type.BOOL));
+        assertNull(all.answer(), "an Int and a Bool are not one value");
+
+        all.forParameter();
+        all.add(a);
+        assertEquals(a, all.answer(), "`a` is what it was; the refused reading is not evidence");
+    }
+
     /** Neither reading is the one being checked, so which is given first decides nothing. */
     @Test
     void theAnswerIsTheSameWhicheverReadingIsGivenFirst() {

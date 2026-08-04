@@ -68,7 +68,11 @@ public final class HelperInliner {
      */
     private Map<String, Integer> callableBehaviors = Map.of();
     private final Set<String> recursive = new HashSet<>();   // own helpers on a call cycle (spec 13.1)
-    private final Map<String, LambdaOrigin> lambdaOrigins = new HashMap<>();   // $k_p -> where it was written
+    /** Where a lambda given to a function parameter was written, by the binding it was registered
+     * under. Asked by the binding and not by the spelling: two combinators nested one inside the
+     * other give their function parameters the same name as often as not, and a report that found
+     * the outer one's lambda would point at another author's line. */
+    private final Map<BindingId, LambdaOrigin> lambdaOrigins = new HashMap<>();
     private int counter = 0;
     /** The body being expanded, and the bindings this expansion introduces into it. An expansion
      * writes bindings no source wrote, so they belong to it rather than to the definition whose text
@@ -1137,7 +1141,8 @@ public final class HelperInliner {
                     yield inline(new Ast.Apply(valueOf(named), args, call.origin(), call.pos()));
                 }
                 if (args.size() != helper.params().size()) {
-                    LambdaOrigin origin = lambdaOrigins.get(helper.name());
+                    LambdaOrigin origin = call.denotes() instanceof ValueName.Local applied
+                            ? lambdaOrigins.get(applied.id()) : null;
                     if (origin != null) {
                         // the callee is a lambda the caller wrote, applied by the combinator it was
                         // given to: report the parameter count against the lambda, not the synthetic
@@ -1205,7 +1210,7 @@ public final class HelperInliner {
                             scopedLambdas.put(f.id(),
                                     new Ast.FnDef(f.name(), lparams, null,
                                             new Ast.FnBody.Written(lambda.body()), lambda.pos()));
-                            lambdaOrigins.put(f.name(), new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
+                            lambdaOrigins.put(f.id(), new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
                         } else {
                             // Neither a name nor a lambda: a value written where the function goes —
                             // the argument-order mistake made with a named helper rather than a
@@ -1247,6 +1252,7 @@ public final class HelperInliner {
                 Copy copy = new Copy(helper.written(), ours);
                 Ast.Expr body = inline(rename(helper.written(), subst, substDenotes, at, copy));   // expand nested helpers too
                 given.forEach(scopedLambdas::remove);
+                given.forEach(lambdaOrigins::remove);
                 body = keepDeclaredReturn(helper, body, call.pos(), ours);
                 // wrap innermost-first so the value parameters bind in declared order
                 for (int i = letBinders.size() - 1; i >= 0; i--) {
