@@ -311,8 +311,9 @@ final class HelperParams {
         private final Map<String, ReqSig> reqSigs;
         private final Map<String, Type> recursiveHelperFns;
         /** What each call in this body has decided for the variables its callee left open. One
-         * decision per call, read by every parameter that reaches it. */
-        private final Freshening freshening = new Freshening();
+         * decision per call, read by every parameter that reaches it — and by the walk one step
+         * inside a closure, which reads calls of the same body. */
+        private final Freshening freshening;
         private Type pinned;
         /** Whether the position now being read is a field read off its child. */
         private boolean readingAField;
@@ -327,6 +328,16 @@ final class HelperParams {
         private OpenUse openUse;
 
         BodyTyping(Symbols symbols, Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
+            this(symbols, reqSigs, recursiveHelperFns, new Freshening());
+        }
+
+        /** The walk one step inside a closure reads the calls of the same body, so what those calls
+         * decided is the same decision. Deciding again would name two applications alike — the count
+         * a name carries starts over with the reader — and unifying them would say the two hold one
+         * thing. */
+        BodyTyping(Symbols symbols, Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns,
+                   Freshening freshening) {
+            this.freshening = freshening;
             this.symbols = symbols;
             this.ctx = new CheckContext(symbols, null, reqSigs);
             this.reqSigs = reqSigs;
@@ -717,7 +728,7 @@ final class HelperParams {
             Type.FnOf known = TypeOps.substitute(step, bind) instanceof Type.FnOf f ? f : step;
             Scope inner = walking(env, lambda, known);
             for (int i = 0; i < lambda.params().size(); i++) {
-                Type t = new BodyTyping(symbols, reqSigs, recursiveHelperFns)
+                Type t = new BodyTyping(symbols, reqSigs, recursiveHelperFns, freshening)
                         .typeOf(lambda.params().get(i), lambda.body(), inner, known.result());
                 if (t != null) {
                     // only a position the closure's body settled: unifying an undetermined one
