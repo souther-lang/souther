@@ -147,4 +147,33 @@ class EveryPositionOfADeclaredTypeIsReadTest {
                 new Row("handed on, and applied", "", "let said = g(1)", "(x) -> \"s\"", "(x) -> x"),
                 new Row("handed on, never applied", "", "", "(x) -> \"s\"", "(x) -> x"));
     }
+
+    /**
+     * A variable written twice in one declaration is one variable, at the boundary as everywhere
+     * else. {@code ('a) -> 'a} is a function answering what it was given, and neither position says
+     * that on its own — so a boundary that read each position separately would admit a function
+     * taking an Int and answering a String, which is the one thing the declaration refuses.
+     *
+     * <p>Both declarations at the boundary are read this way, whichever of them wrote the variable.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("related")
+    void aVariableWrittenTwiceIsOneVariableAtABoundaryToo(Row row) {
+        String relaying = """
+                module souther.gen
+                let inner (g: %s) = true
+                let use (f: %%s) = inner(f)
+                """.formatted(row.declares());
+        assertNull(failure(relaying.formatted(row.fits())), "the two positions agree");
+        assertEquals(true, failure(relaying.formatted(row.refused())) != null,
+                "one variable read at two types");
+    }
+
+    private static List<Row> related() {
+        return List.of(
+                new Row("the receiving declaration writes it twice", "('a) -> 'a", "",
+                        "(Int) -> Int", "(Int) -> String"),
+                new Row("the arriving declaration writes it twice", "(Int) -> String", "",
+                        "('a) -> String", "('a) -> 'a"));
+    }
 }

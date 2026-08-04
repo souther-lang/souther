@@ -777,13 +777,21 @@ public final class Elaborator {
                             instanceof Type.FnOf declared)) {
                 continue;
             }
-            Type arrives = arrivesAs(g, env, ctx);
+            Type arrives = arrivesAs(g, ex, env, ctx);
             if (arrives != null) {
-                // Held, not decided: what the function is declared as is another declaration's, and
-                // its variables are that one's to settle. The two are read against each other, and
-                // neither decides the other's.
-                decided.hold(declared, arrives, ctx.symbols(), g.value().pos(),
-                        argument(ex, "a function"));
+                // Both sides are one statement each, so both are read as one. Each was instantiated
+                // once — the receiving declaration when this call was expanded, the arriving one
+                // here — and reading them against each other decides those variables together: a
+                // variable written at two positions is one variable, and the two readings of it must
+                // agree. `('a) -> 'a` given `(Int) -> String` is refused for that reason and no
+                // other, because at each position on its own there is nothing wrong.
+                // Read in a layer of its own: what the two declarations settle between them is
+                // this reading's, not this application's. A variable the receiving declaration wrote
+                // twice must be read at one type here, and that says nothing about what the call as
+                // a whole decides it to be.
+                new Substitution(ex.application(), decided)
+                        .constrain(declared, arrives, ctx.symbols(), g.value().pos(),
+                                argument(ex, "a function"));
                 continue;
             }
             if (g.applied() || !inSight(g.value(), env)) {
@@ -807,12 +815,32 @@ public final class Elaborator {
      * supplied — and reading that declaration is what a boundary does. Only a lambda written at the
      * call has no declaration of its own, and it is read at the application that decides it.
      */
-    private static Type arrivesAs(Ast.Given g, Scope env, CheckContext ctx) {
-        if (g.arrivesAs() != null) {
-            return TypeOps.resolveParamType(g.arrivesAs(), ctx.symbols());
-        }
-        return g.value() instanceof Ast.Var v && env.of(v.denotes(), v.reaches()) instanceof Type.FnOf is
-                ? is : null;
+    private static Type arrivesAs(Ast.Given g, Ast.Expansion ex, Scope env, CheckContext ctx) {
+        Type is = g.arrivesAs() != null ? TypeOps.resolveParamType(g.arrivesAs(), ctx.symbols())
+                : g.value() instanceof Ast.Var v
+                        && env.of(v.denotes(), v.reaches()) instanceof Type.FnOf fn ? fn : null;
+        return is == null ? null : instantiated(is, ex);
+    }
+
+    /**
+     * {@code declared} with the variables it left open standing at this boundary's own.
+     *
+     * <p>One per variable, not one per position: {@code ('a) -> 'a} is a function answering what it
+     * was given, and instantiating each occurrence separately would say only that it takes something
+     * and answers something. It is instantiated here because the declaration is another's — the
+     * receiving side was instantiated when this call was expanded — and the two are read against
+     * each other once both stand at variables this application decides.
+     */
+    private static Type instantiated(Type declared, Ast.Expansion ex) {
+        Map<String, Type> theirs = new HashMap<>();
+        Type.mentions(declared, t -> {
+            if (t instanceof Type.Var v) {
+                theirs.computeIfAbsent(v.name(),
+                        name -> new Type.MetaVar(ex.application(), "given " + name));
+            }
+            return false;   // a collector, not a test: every position is visited
+        });
+        return theirs.isEmpty() ? declared : TypeOps.substituteVars(declared, theirs);
     }
 
     /**

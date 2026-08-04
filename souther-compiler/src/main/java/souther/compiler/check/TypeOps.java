@@ -648,6 +648,12 @@ public final class TypeOps {
         };
     }
 
+    /** {@code t} with each variable a declaration wrote replaced by what {@code bindings} gives it,
+     * by the name the declaration wrote — so two occurrences of one variable stay one. */
+    public static Type substituteVars(Type t, Map<String, Type> bindings) {
+        return substitute(t, bindings);
+    }
+
     /** {@code t} with each variable of an application replaced by what {@code bindings} gives it. */
     public static Type substituteMetas(Type t, Map<Type.MetaVar, Type> bindings) {
         return switch (t) {

@@ -110,8 +110,9 @@ final class Substitution {
      * somewhere before descending into it, because that is the question this is: a hole is one
      * position, and asking about the type as a whole is what would let one silence the rest.
      */
-    private boolean fits(Type actual, Type declared, Symbols symbols) {
+    private boolean fits(Type is, Type declared, Symbols symbols) {
         Type want = zonk(declared);
+        Type actual = zonk(is);
         // A position states nothing where a variable stands at it — one this application has not
         // decided, or one a declaration wrote, which stands for whatever each use of it makes — and
         // where it stands at what an empty collection carries, which is a reading so far and is
@@ -255,7 +256,11 @@ final class Substitution {
         return Type.mentions(zonk(t), x -> x instanceof Type.MetaVar);
     }
 
-    private void bind(Type.MetaVar m, Type at, Symbols symbols, SourcePos pos, String what) {
+    private void bind(Type.MetaVar m, Type reading, Symbols symbols, SourcePos pos, String what) {
+        // What the reading stands for, not how it was written. A variable another application
+        // decided is that decision here, and comparing the variable itself would find every reading
+        // through one to disagree with every other.
+        Type at = zonk(reading);
         if (at == m || Type.mentions(at, m::equals)) {
             // A variable cannot stand for something it stands inside: a list of itself is a value
             // that would have to hold itself. It stays open, and the reading that said so settles
@@ -283,7 +288,8 @@ final class Substitution {
             owner.decided.put(m, at);
             return;
         }
-        if (TypeOps.assignable(at, held, symbols) || TypeOps.assignable(held, at, symbols)) {
+        Type stands = zonk(held);
+        if (TypeOps.assignable(at, stands, symbols) || TypeOps.assignable(stands, at, symbols)) {
             return;
         }
         throw CompileException.of(
