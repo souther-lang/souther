@@ -107,9 +107,12 @@ class CompileEncodeOrderTest {
     }
 
     @Test
-    void orderingTheMembersDoesNotRewriteThem() throws Exception {
-        // The scale a Decimal was read with is what it is written with ([#primitives]). Ordering
-        // reads the amount first, so 1.00 lands before 2.0 and is still written as it arrived.
+    void twoSetsThatAreOneValueAreWrittenTheOneWay() throws Exception {
+        // The last way the order could not reach. `1.0` and `1.00` are one amount, so a Set holds
+        // one of them and which one is whichever arrived first — no ordering can separate members
+        // that are one member. What closes it is that a boundary writes an amount as an amount
+        // ([#primitives]), which makes the two sets the same bytes rather than the same order.
+        //
         // Driven through the derived codecs rather than `souther run`, because the runner's JSON
         // parser reads a float as a double and the scale is gone before a decoder sees it.
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
@@ -120,12 +123,20 @@ class CompileEncodeOrderTest {
                 behavior echo : (i: In) -> Out constructs Out
                 let echo (i) = Out { amounts = i.amounts }
                 """), getClass().getClassLoader());
-
-        Object in = Codecs.decoded(loader, "demo.In",
-                Map.of("amounts", List.of(new BigDecimal("2.0"), new BigDecimal("1.00"))));
         Object behavior = loader.loadClass("demo.Echo" + "$Impl").getConstructor().newInstance();
-        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
 
-        assertEquals(List.of(new BigDecimal("1.00"), new BigDecimal("2.0")), out.get("amounts"));
+        assertEquals(written(loader, behavior, new BigDecimal("1.0"), new BigDecimal("1.00")),
+                written(loader, behavior, new BigDecimal("1.00"), new BigDecimal("1.0")),
+                "the set keeps one of the two and the boundary writes it as its amount");
+        assertEquals(List.of(new BigDecimal("1"), new BigDecimal("2.5")),
+                written(loader, behavior, new BigDecimal("2.50"), new BigDecimal("1.00")),
+                "and the amounts are what the members are ordered by");
+    }
+
+    private Object written(BytesClassLoader loader, Object behavior, BigDecimal... amounts)
+            throws Exception {
+        Object in = Codecs.decoded(loader, "demo.In", Map.of("amounts", List.of((Object[]) amounts)));
+        Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in));
+        return out.get("amounts");
     }
 }

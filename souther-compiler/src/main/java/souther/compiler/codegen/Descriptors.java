@@ -311,6 +311,8 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Sets_toList = MethodTypeDesc.of(CD_List, CD_Set);
     /** {@code Representations.sortedArray/sortedObject}: an encoded collection, put in order. */
     static final MethodTypeDesc MTD_Representations_sorted = MethodTypeDesc.of(CD_Object, CD_Object);
+    /** {@code Representations.canonicalNumber}: an amount, written the one way an amount is. */
+    static final MethodTypeDesc MTD_canonicalNumber = MethodTypeDesc.of(CD_BigDecimal, CD_BigDecimal);
     /** {@code Decoder.map(Function)}: turns a {@code Decoder<I, List<T>>} into a {@code Decoder<I, Set<T>>}. */
     static final MethodTypeDesc MTD_Rdecoder_map = MethodTypeDesc.of(CD_RDecoder, CD_Function);
     // A newtype's invariant as Raoh constraints on its leaf decoder (issue #83): the recognised

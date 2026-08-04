@@ -66,6 +66,34 @@ class RepresentationsTest {
             object("a", null, "b", 1L),              // written null, which is not the same object as
             object("b", 1L, "c", 2L));               // one whose member is absent
 
+    // === a number is written as its amount ===
+
+    @Test
+    void aNumberIsWrittenAsItsAmountAndNotAsTheScaleItArrivedWith() {
+        assertEquals("1", Representations.canonicalNumber(new BigDecimal("1.00")).toString());
+        assertEquals("1.5", Representations.canonicalNumber(new BigDecimal("1.50")).toString());
+        assertEquals("-3", Representations.canonicalNumber(new BigDecimal("-3.000")).toString());
+        assertEquals("0", Representations.canonicalNumber(new BigDecimal("0.000")).toString());
+    }
+
+    @Test
+    void aRoundAmountIsWrittenOutRatherThanInExponentForm() {
+        // stripTrailingZeros alone answers 1E+2 for a hundred, and Jackson writes a BigDecimal as
+        // its toString, so the exponent would reach the wire.
+        assertEquals("100", Representations.canonicalNumber(new BigDecimal("100")).toString());
+        assertEquals("100", Representations.canonicalNumber(new BigDecimal("100.00")).toString());
+        assertEquals("1000000", Representations.canonicalNumber(new BigDecimal("1.0E+6")).toString());
+    }
+
+    @Test
+    void twoAmountsThatAreOneAmountAreWrittenTheOneWay() {
+        assertEquals(Representations.canonicalNumber(new BigDecimal("1.0")),
+                Representations.canonicalNumber(new BigDecimal("1.00")));
+        assertEquals(0, Representations.compareExternalForms(
+                Representations.canonicalNumber(new BigDecimal("1.0")),
+                Representations.canonicalNumber(new BigDecimal("1.00"))));
+    }
+
     // === the kinds ===
 
     @Test

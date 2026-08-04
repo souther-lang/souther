@@ -39,7 +39,8 @@ class CompileListEncoderTest {
         assertTrue(r instanceof Ok, "the decoder already handled these element types");
 
         Map<?, ?> out = (Map<?, ?>) Codecs.encode(loader, "demo.Bag", ((Ok<?>) r).value());
-        assertEquals(List.of(new BigDecimal("1.50"), new BigDecimal("2.25")), out.get("prices"));
+        assertEquals(List.of(new BigDecimal("1.5"), new BigDecimal("2.25")), out.get("prices"),
+                "each element is written as its amount ([#primitives])");
         assertEquals(List.of(true, false), out.get("flags"));
         assertEquals(List.of("2026-07-17"), out.get("days"), "a Date element encodes to its ISO form");
     }

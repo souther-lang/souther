@@ -49,8 +49,10 @@ class CompileDecimalConversionTest {
     @Test
     void aRateAppliedToAnAmountRoundsTheWayTheCallSays() throws Exception {
         // 1080 * 0.08 = 86.40 — the three modes disagree, which is the point of writing one.
+        // A boundary writes the amount ([#primitives]), so what is read here is 86.4; the two
+        // rounding digits are in the value and are not what crossing the boundary shows.
         Map<?, ?> m = run(1080L, "0.08");
-        assertEquals(new BigDecimal("86.40"), m.get("税額"));
+        assertEquals(new BigDecimal("86.4"), m.get("税額"));
         assertEquals(86L, m.get("切捨"));
         assertEquals(86L, m.get("四捨五入"));
         assertEquals(87L, m.get("切上"));

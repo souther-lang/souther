@@ -1,4 +1,4 @@
-# ADR-0094: A boundary orders a collection by its members' representations, not by their values
+# ADR-0094: A boundary writes what a value is, not how it was built or written
 
 Status: Accepted
 
@@ -29,13 +29,21 @@ reaches golden tests, response diffs, cache keys, ETags and content addressing.
 
 ## Decision
 
-**A boundary writes a collection's members in ascending order of their external representations.** A
+**Equal values write the same JSON**, and two things are settled on the way out to make it so.
+
+**A `Decimal` is written as its amount.** `1.50` goes out as `1.5`, `100.00` as `100`. Scale records
+how a number was written, which ADR-0009 already decided is no part of what it is; keeping it at the
+boundary meant two equal values wrote two ways, and no ordering could reach that — `1.0` and `1.00`
+are one member of a `Set` by the time an encoder sees it, and which of the two the set kept was
+decided by whichever arrived first.
+
+**A collection's members are written in ascending order of their external representations.** A
 `Set`'s array is ordered by each member's own representation; a boundary `Map`'s object by its
 rendered keys. The order over representations is:
 
 ```
 null < false < true < number < string < array < object
-  number : by amount; two of one amount by the form each is written in, as a string
+  number : by amount — an amount is written one way, so two of one amount are one number
   string : by UTF-16 code unit
   array  : element by element, the shorter one first where one runs out
   object : its members read in ascending key order, each key before its value
@@ -52,9 +60,9 @@ can carry, and no total order over Souther values has to be invented.
 
 **Comparing answers zero exactly when two representations are the same.** This is what makes the
 order remove construction history rather than merely reduce it: any pair a comparison cannot separate
-would keep whatever order the trie gave. It is why numbers that are one amount are then separated by
-the form they are written in, and why `1`, `1.0` and `1.00` are three numbers here while being one
-`Decimal`.
+would keep whatever order the trie gave. The comparison keeps a tie-break on the written form of a
+number for that reason, though the encoders now hand it only amounts and so never reach it — it is
+what leaves the order total for any pair it is given rather than only for the ones it expects.
 
 **An object's member order does not count towards that sameness**, and the comparison reads members
 in key order. A comparison used to decide an order must not depend on the order it is given. Under
@@ -66,6 +74,9 @@ uses (`String.compareTo`), and the one RFC 8785 (JCS) settled on. Unicode code p
 for characters outside the BMP, so one of the two had to be written down.
 
 ## Consequences
+
+The law is now stated (`[#encode-law]`), which #327 asked for and #328 could not give. It is stated
+about the *derived* Encoders: a custom one is written by hand and is bound by nothing here.
 
 The order is applied where the type is still known — the four `Set`/`Map` arms of `CodecGen` and the
 two top-level arms of `Runner` — and not once over the finished tree. After encoding, a `Set` and a
@@ -93,24 +104,27 @@ are two now, which is the price of specifying the one that can be specified: onl
 a representation to be ordered by, and a `Set` inside a behavior body may hold a tuple, which has
 none (ADR-0036).
 
-**Two things this deliberately does not do.**
+**What writing the amount costs.** A rounding call's digits stop being visible on the wire: a rate
+rounded to two places is written `86.4`, not `86.40`. A money API that showed two decimal places by
+rounding to two decimal places must now say so in the model — which is what ADR-0009 advised from the
+start ("model it as an invariant or a separate field rather than leaning on incidental `Decimal`
+scale"), and is now the only thing that works. The scale is still on the value, so Java reading it
+sees it and a test may assert it there; it is the *boundary* that stops showing it.
 
-It does not add a law relating `==` to `encode`. `a == b` implying `encode(a) == encode(b)` is a
-statement about every value type the language will ever have, and what was implemented and verified
-here is two rules about two collections. That the wire stops depending on construction history is a
-consequence of those rules, not a general property to be promised.
+That price bought the law. Ordering alone could not: a `Set` holds one member per equality class and
+which of `1.0` and `1.00` it kept was decided by whichever was inserted first, so two `==` sets went
+out as two byte sequences however carefully the members were ordered. Leaving that as "unspecified"
+was the alternative, and it would have left #327's own sentence — equal `Set` values can encode
+differently — true at the end of the issue that reports it.
 
-It does not fix which member a `Set` keeps. Where two equal elements are written differently — today
-only `Decimal`s differing in scale — equality says they are one member and the set keeps one of them.
-No ordering can reach this: there is one member by the time the encoder sees it. The implementation
-currently keeps the first one inserted, and the specification says the choice is *unspecified*
-instead, because writing "first" down would give a `Set` an insertion-order semantics it does not
-otherwise have. Normalising the scale was the alternative and is worse: an Encoder emits the scale it
-read (ADR-0009), and a `1.50` that is written `1.5` is a regression for the money field that reads it.
+**Which member a `Set` keeps is still not specified**, and now nothing at the boundary depends on it:
+the two write the same. `Set.toList` hands back the one the set kept, so a program reading a scale off
+that is reading something the language does not decide. Writing "the first inserted" down would give a
+`Set` an insertion-order semantics it does not otherwise have.
 
 ## References
 
-- Specification: `[#collections]`, `[#stdlib-set]`, `[#stdlib-map]`
+- Specification: `[#encode-law]`, `[#primitives]`, `[#collections]`, `[#stdlib-set]`, `[#stdlib-map]`
 - ADR-0039 (a `Set`'s external representation), ADR-0040 (what a boundary map key may be),
   ADR-0009 (`Decimal` ignores scale), ADR-0036 (a tuple has no external representation)
 - Issues #299 (the order was unstated), #327 (equal collections encoded differently); RFC 8785 (JCS)

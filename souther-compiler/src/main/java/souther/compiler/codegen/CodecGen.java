@@ -1368,7 +1368,10 @@ final class CodecGen {
                 gen.expr(b.arg());
                 box(code, Type.BOOL);                                // boolean -> Boolean
             }
-            case Ast.DecimalRaw d -> gen.expr(d.arg());              // BigDecimal is neutral
+            case Ast.DecimalRaw d -> {
+                gen.expr(d.arg());                                   // BigDecimal is neutral
+                code.invokestatic(CD_Representations, "canonicalNumber", MTD_canonicalNumber);
+            }
             case Ast.IsoTextRaw t -> {
                 gen.expr(t.arg());
                 code.invokevirtual(CD_Object, "toString", MethodTypeDesc.of(CD_String));
@@ -1480,8 +1483,10 @@ final class CodecGen {
      * encoder with the value converted first, which {@code contramap} does. */
     private void pushElemEncoder(CodeBuilder code, Ast.EncElem elem) {
         switch (elem) {
-            case Ast.PrimEnc p -> code.invokestatic(CD_ObjectEncoders, leafEncoderName(p.kind()),
-                    MTD_Rencode_leaf);
+            case Ast.PrimEnc p -> {
+                code.invokestatic(CD_ObjectEncoders, leafEncoderName(p.kind()), MTD_Rencode_leaf);
+                canonicalizeAmount(code, p.kind());
+            }
             case Ast.DataEnc d -> invokeCodec(code, d.typeName(), "encoder", MTD_Rencoder);
             case Ast.ListElemEnc l -> {
                 pushElemEncoder(code, l.elem());
@@ -1507,6 +1512,32 @@ final class CodecGen {
                 code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
             }
         }
+    }
+
+    /**
+     * A leaf encoder for a {@code Decimal}, followed by the amount's own form. Raoh's {@code decimal}
+     * hands the {@code BigDecimal} through as it is, scale and all, and the scale is how a number was
+     * written rather than how much it is.
+     */
+    private static void canonicalizeAmount(CodeBuilder code, Ast.PrimKind kind) {
+        if (kind != Ast.PrimKind.DECIMAL) {
+            return;
+        }
+        code.invokedynamic(canonicalNumberCallSite());
+        code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
+    }
+
+    /** {@code Representations::canonicalNumber} as an {@code Encoder}. */
+    private static DynamicCallSiteDesc canonicalNumberCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Representations, "canonicalNumber",
+                MTD_canonicalNumber);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "encode",
+                MethodTypeDesc.of(CD_REncoder),                          // no captures: () -> Encoder
+                MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
+                impl,
+                MTD_canonicalNumber);                                    // (BigDecimal) -> BigDecimal
     }
 
     /**
@@ -1637,6 +1668,7 @@ final class CodecGen {
     private void pushMemberEncoder(CodeBuilder code, TypeName member) {
         if (member.isPrimitive()) {
             code.invokestatic(CD_ObjectEncoders, leafEncoderName(primKind(member)), MTD_Rencode_leaf);
+            canonicalizeAmount(code, primKind(member));
             return;
         }
         // a member is one of the union's effective members, every named sum already expanded to its

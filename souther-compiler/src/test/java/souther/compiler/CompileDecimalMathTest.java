@@ -92,17 +92,23 @@ class CompileDecimalMathTest {
                 """), getClass().getClassLoader());
 
         Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
-        java.util.Map<?, ?> neg = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out",
-                Codecs.apply(behavior, Codecs.decoded(loader, "demo.In",
-                        java.util.Map.of("n", -3L, "d", new BigDecimal("-2.50")))));
+        Object negOut = Codecs.apply(behavior, Codecs.decoded(loader, "demo.In",
+                java.util.Map.of("n", -3L, "d", new BigDecimal("-2.50"))));
+        java.util.Map<?, ?> neg = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out", negOut);
 
         assertEquals(3L, neg.get("distance"));
         assertEquals(-3L, neg.get("lower"));
         assertEquals(0L, neg.get("upper"));
         assertEquals(1L, neg.get("held"), "below the range, clamp answers the low bound");
-        assertEquals(new BigDecimal("2.50"), neg.get("decDistance"), "negating keeps the scale");
-        assertEquals(new BigDecimal("0.0"), neg.get("decUpper"));
-        assertEquals(new BigDecimal("0.0"), neg.get("decHeld"),
+        assertEquals(new BigDecimal("2.5"), neg.get("decDistance"));
+        assertEquals(new BigDecimal("0"), neg.get("decUpper"));
+        assertEquals(new BigDecimal("0"), neg.get("decHeld"));
+
+        // These two are about the value and not about what a boundary writes. A boundary writes the
+        // amount ([#primitives]) and shows no scale to read the claim off, so they are asked of the
+        // value itself, which is where the scale still is.
+        assertEquals(new BigDecimal("2.50"), read(negOut, "decDistance"), "negating keeps the scale");
+        assertEquals(new BigDecimal("0.0"), read(negOut, "decHeld"),
                 "clamp answers one of the three values written, never a re-scaled copy");
 
         java.util.Map<?, ?> big = (java.util.Map<?, ?>) Codecs.encode(loader, "demo.Out",
@@ -111,5 +117,10 @@ class CompileDecimalMathTest {
         assertEquals(42L, big.get("distance"));
         assertEquals(10L, big.get("held"), "above the range, clamp answers the high bound");
         assertEquals(new BigDecimal("0.25"), big.get("decHeld"), "inside the range the value passes through");
+    }
+
+    /** A field of a generated data, read off the value rather than off what a boundary writes. */
+    private static Object read(Object value, String field) throws Exception {
+        return value.getClass().getMethod(field).invoke(value);
     }
 }

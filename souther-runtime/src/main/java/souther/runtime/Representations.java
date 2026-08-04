@@ -19,10 +19,11 @@ import java.util.Map;
  * <p>The law the rest of it rests on: <strong>comparing two forms answers zero exactly when they are
  * the same JSON value.</strong> Same, there, treats an object's member order as insignificant and
  * everything else as significant — an array's order is part of what it is, and so is the form a
- * number is written in, since {@code 1}, {@code 1.0} and {@code 1.00} are one amount and three
- * numbers on the wire. Without that last part two members that no comparison separates would keep
+ * number is written in. Without that last part two members that no comparison separates would keep
  * whatever order the trie handed them, which is the construction history this class exists to
- * remove.
+ * remove. {@link #canonicalNumber} means the encoders never hand it two forms of one amount, so the
+ * tie-break there is what leaves the order total for any pair rather than only for the expected
+ * ones.
  *
  * <p>An object's member order is ignored so that the comparison does not depend on the thing it is
  * used to decide. Reading members in key order is what makes the answer independent of who produced
@@ -58,6 +59,20 @@ public final class Representations {
     private static final int OBJECT = 6;
 
     private Representations() {}
+
+    /**
+     * The amount, written the one way an amount is written. Scale records how a number was written
+     * and not how much it is — the language drops it from identity (spec {@code [#primitives]}) —
+     * so a boundary that kept it would write two equal values two ways.
+     *
+     * <p>{@code stripTrailingZeros} alone is not the form: it answers {@code 1E+2} for a hundred,
+     * and a hundred is written {@code 100}. A negative scale is what an exponent is, so setting the
+     * scale back to zero is what asks for the digits.
+     */
+    public static BigDecimal canonicalNumber(BigDecimal amount) {
+        BigDecimal stripped = amount.stripTrailingZeros();
+        return stripped.scale() < 0 ? stripped.setScale(0) : stripped;
+    }
 
     /** The members of an encoded array, in ascending order of their own external representation. */
     public static Object sortedArray(Object encoded) {

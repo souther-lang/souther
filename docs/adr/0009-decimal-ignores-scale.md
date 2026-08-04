@@ -1,6 +1,9 @@
 # ADR-0009: Decimal does not include scale in identity
 
-Status: Accepted
+Status: Accepted (the Consequences below said an Encoder emits the scale it read; ADR-0094 reversed
+that half — a boundary writes the amount — because keeping the scale meant two equal values wrote
+two ways. The decision itself, that scale is no part of identity, is unchanged and is what makes the
+reversal safe)
 
 ## Context
 
@@ -18,10 +21,13 @@ fields recursively, and the `Decimal` comparison at the leaves ignores scale. Th
 
 ## Consequences
 
-Scale is not lost from the value — the Encoder emits the scale it read, so the round-trip
-`decode(encode(v)) == v` (`[#round-trip]`) still holds. Only *identity* ignores scale. If rounding
-precision is a domain concern, model it as an invariant or a separate field rather than
-leaning on incidental `Decimal` scale.
+Scale is not lost from the value: it is carried, and Java reading the value sees it. What a boundary
+*writes* is the amount (ADR-0094) — `1.50` goes out as `1.5` — and the round-trip
+`decode(encode(v)) == v` (`[#round-trip]`) still holds, by the same argument that lets identity drop
+scale. Equal values therefore write the same JSON (`[#encode-law]`). If rounding precision is a
+domain concern, model it as an invariant or a separate field rather than leaning on incidental
+`Decimal` scale — advice that was here from the start and is now the only thing that works, since
+the digits a rounding call produced are not what crossing the boundary shows.
 
 Both sides must be fixed together. If only equality were made scale-insensitive and
 `hashCode` were left alone, `1.0` and `1.00` would land in different buckets and break the

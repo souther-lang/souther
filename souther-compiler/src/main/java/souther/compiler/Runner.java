@@ -524,7 +524,8 @@ public final class Runner {
             case STRING -> ObjectEncoders.string().encode((String) value);
             case INT -> ObjectEncoders.long_().encode((Long) value);
             case BOOL -> ObjectEncoders.bool().encode((Boolean) value);
-            case DECIMAL -> ObjectEncoders.decimal().encode((java.math.BigDecimal) value);
+            case DECIMAL -> ObjectEncoders.decimal()
+                    .encode(Representations.canonicalNumber((java.math.BigDecimal) value));
             case DATE -> ObjectEncoders.date().encode((java.time.LocalDate) value);
             case DATETIME -> ObjectEncoders.dateTime().encode((java.time.LocalDateTime) value);
             case RAW -> throw fail("run.encode.raw",
