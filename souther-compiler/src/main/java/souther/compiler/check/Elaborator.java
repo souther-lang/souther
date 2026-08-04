@@ -785,13 +785,12 @@ public final class Elaborator {
                 // variable written at two positions is one variable, and the two readings of it must
                 // agree. `('a) -> 'a` given `(Int) -> String` is refused for that reason and no
                 // other, because at each position on its own there is nothing wrong.
-                // Read in a layer of its own: what the two declarations settle between them is
-                // this reading's, not this application's. A variable the receiving declaration wrote
-                // twice must be read at one type here, and that says nothing about what the call as
-                // a whole decides it to be.
-                new Substitution(ex.application(), decided)
-                        .constrain(declared, arrives, ctx.symbols(), g.value().pos(),
-                                argument(ex, "a function"));
+                // What this reading settles is this application's, like every other. A signature
+                // relates a function parameter to the rest of what it wrote — `(f: ('a) -> Bool):
+                // List<'a>` answers a list of what the function takes — so what the function says
+                // about a variable is what that variable is at every other position of the call.
+                decided.constrain(declared, arrives, ctx.symbols(), g.value().pos(),
+                        argument(ex, "a function"));
                 continue;
             }
             if (g.applied() || !inSight(g.value(), env)) {

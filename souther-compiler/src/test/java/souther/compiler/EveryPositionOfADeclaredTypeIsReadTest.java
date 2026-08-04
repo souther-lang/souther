@@ -176,4 +176,36 @@ class EveryPositionOfADeclaredTypeIsReadTest {
                 new Row("the arriving declaration writes it twice", "(Int) -> String", "",
                         "('a) -> String", "('a) -> 'a"));
     }
+
+    /**
+     * What a function argument says about a variable is what that variable is everywhere else the
+     * signature wrote it.
+     *
+     * <p>{@code (f: ('a) -> Bool): List<'a>} answers a list of what the function takes, so the
+     * function is what decides the result — and a call site expecting a list of something else is
+     * refused for that, rather than the result quietly taking what the position wanted. A signature
+     * is one statement, and a boundary reading is a reading of it, not a question of its own.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("deciding")
+    void whatAFunctionArgumentSaysReachesTheRestOfTheSignature(Row row) {
+        String source = """
+                module souther.gen
+                let emptyFrom (f: ('a) -> Bool): List<'a> = []
+                let positive (n: Int) = n > 0
+                let taking (xs: List<%%s>) = true
+                %s
+                """.formatted(row.declares());
+        assertNull(failure(source.formatted("Int")), "the function says the list holds Ints");
+        assertEquals(true, failure(source.formatted("String")) != null,
+                "and the position wanting Strings does not make it so");
+    }
+
+    private static List<Row> deciding() {
+        return List.of(
+                new Row("a named function", "let call = taking(emptyFrom(positive))", "", "", ""),
+                new Row("a function handed on",
+                        "let relay (g: (Int) -> Bool) = emptyFrom(g)\n"
+                                + "let call (g: (Int) -> Bool) = taking(relay(g))", "", "", ""));
+    }
 }
