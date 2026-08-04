@@ -115,34 +115,6 @@ public final class ExampleVerifier {
     }
 
     /**
-     * Whether a value composed elsewhere can be built at this module's boundary.
-     *
-     * <p>The question a generator cannot answer for itself. Which values a type admits together is the
-     * derived decoder's business — an invariant relating two fields refuses a pair that each field
-     * would have accepted alone — so the only way to know is to put the value through the decoder that
-     * a row's own fixture goes through.
-     */
-    @FunctionalInterface
-    public interface Construction {
-
-        /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
-         * the runtime is absent, which is not a fact about the value. */
-        java.util.Optional<String> refuse(Type type, Ast.Expr fixture);
-    }
-
-    /** A way to build values against this module's generated classes, without any rows to run. */
-    public static Construction constructing(Ast.Module module, Symbols symbols,
-                                            Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                            Map<String, List<BehaviorRequirement>> requirements,
-                                            ClassLoader parent, Map<String, Ast.FnDef> values) {
-        // A reader is the whole of what this needs. There are no rows, so nothing is run on a worker
-        // and no budget is read; `sigs` and `requirements` say what a behavior takes and what stands
-        // in for what it depends on, and neither is a question about whether a value builds.
-        return new FixtureReader(module, symbols, values,
-                new MemoryClassLoader(classes, parent))::refuse;
-    }
-
-    /**
      * What evaluating a source's rows turned up: the diagnostics it reports, the observation each row
      * left, and what stopped it from observing.
      *

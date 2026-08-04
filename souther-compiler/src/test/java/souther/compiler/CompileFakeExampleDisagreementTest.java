@@ -444,7 +444,6 @@ class CompileFakeExampleDisagreementTest {
                 c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
                 c.db().ask(new souther.compiler.query.Output.Linked(name)).value(),
-                c.db().ask(new souther.compiler.query.Bodies.Requirements(name)).value(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.Helpers(name)).value(),
                 c.db().ask(new souther.compiler.query.Front.ExampleOrigins(name)).value(),

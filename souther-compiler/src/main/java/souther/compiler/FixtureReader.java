@@ -49,8 +49,15 @@ import java.util.Set;
  * <p>Showing a value is here too, though it is not reading one. It needs the generated encoders, the
  * loader and the built value, and both readers above need it — left in either, the other would grow
  * a second copy.
+ *
+ * <p>Public for one thing only: {@link Construction}, which the adequacy report asks to find out
+ * whether a value composed elsewhere builds at this module's boundary. That is this class's own
+ * question — putting a value through the decoder a row's fixture goes through is the whole of the
+ * answer — and it used to be asked of a row evaluator built with signatures, requirements and a
+ * budget it had no rows to spend. Everything else here is package-private, and the constructor is:
+ * a reading belongs to whichever of the two readers above started it.
  */
-final class FixtureReader {
+public final class FixtureReader {
 
     private final Ast.Module module;
     private final Symbols symbols;
@@ -71,6 +78,34 @@ final class FixtureReader {
         this.helpers = new HelperInvoker(module.name(), loader);
         this.neutral = new NeutralForm(symbols);
     }
+
+    /**
+     * Whether a value composed elsewhere can be built at this module's boundary.
+     *
+     * <p>The question a generator cannot answer for itself. Which values a type admits together is the
+     * derived decoder's business — an invariant relating two fields refuses a pair that each field
+     * would have accepted alone — so the only way to know is to put the value through the decoder that
+     * a row's own fixture goes through.
+     */
+    @FunctionalInterface
+    public interface Construction {
+
+        /** Empty where the value builds; why it did not, otherwise. Throws {@link LinkageError} where
+         * the runtime is absent, which is not a fact about the value. */
+        java.util.Optional<String> refuse(Type type, Ast.Expr fixture);
+    }
+
+    /** A way to build values against this module's generated classes, without any rows to run. */
+    public static Construction constructing(Ast.Module module, Symbols symbols,
+                                            Map<String, byte[]> classes, ClassLoader parent,
+                                            Map<String, Ast.FnDef> values) {
+        // A reader is the whole of it. There are no rows, so nothing runs on a worker and no budget is
+        // read; what a behavior takes and what stands in for what it depends on are not questions about
+        // whether a value builds, so this no longer asks for the answers to them.
+        return new FixtureReader(module, symbols, values,
+                new MemoryClassLoader(classes, parent))::refuse;
+    }
+
 
     /** The helper this reading is inside, for a budget to name when the reading does not finish. */
     String runningHelper() {

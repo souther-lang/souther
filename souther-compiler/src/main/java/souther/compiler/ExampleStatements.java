@@ -1,7 +1,6 @@
 package souther.compiler;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Sig;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
@@ -106,7 +105,6 @@ public final class ExampleStatements {
      */
     public static Readings disagreements(Ast.Module module, Symbols symbols,
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                         Map<String, List<BehaviorRequirement>> requirements,
                                          ClassLoader parent, Map<String, Ast.FnDef> values,
                                          List<String> exampleOrigins,
                                          List<String> fakeOrigins, long budgetMs) {
@@ -157,7 +155,6 @@ public final class ExampleStatements {
      */
     public static List<Diagnostic> fakeTables(Ast.Module module, Symbols symbols,
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
-                                              Map<String, List<BehaviorRequirement>> requirements,
                                               ClassLoader parent, Map<String, Ast.FnDef> values,
                                               List<String> fakeOrigins, String sourceId,
                                               long budgetMs) {
@@ -334,7 +331,7 @@ public final class ExampleStatements {
     /** One recorded row, read as far as it can be without running it. What it says is left as written
      * — rendering it builds the fixture a second time, and only a row that turns out to disagree is
      * ever shown. */
-    private record RecordedRow(SourceRef at, Ast.Expr expected, Object[] arguments, Asserted answer) {}
+    private record RecordedRow(SourceRef at, Ast.Expr expected, Object[] arguments, Answered answer) {}
 
     private Readings collectDisagreements(List<String> exampleOrigins,
                                           List<String> fakeOrigins, Set<String> contested) {
@@ -391,8 +388,8 @@ public final class ExampleStatements {
                 if (arguments == null) {
                     return null;
                 }
-                Asserted answer = readExpected(reader, row.expected(), sig.out(), cases);
-                return answer instanceof Asserted.Unreadable ? null
+                Answered answer = readExpected(reader, row.expected(), sig.out(), cases);
+                return answer instanceof Answered.Unreadable ? null
                         : new RecordedRow(new SourceRef(origin, row.expected().pos()),
                                 row.expected(), arguments, answer);
             }, "a row of `" + ex.target() + "`");
@@ -454,7 +451,7 @@ public final class ExampleStatements {
             if (answering == null) {
                 continue;   // the table answers nothing for this input; E1909's where it is used
             }
-            Asserted stood = new Asserted.Whole(answering.answer());
+            Answered stood = new Answered.Whole(answering.answer());
             if (differs(row.answer(), stood)) {
                 // The output, not the row: what disagrees is the answer, and the marker lands on it
                 // the way a row's does on its expected.
@@ -503,10 +500,10 @@ public final class ExampleStatements {
                 // As with a recorded row: a `with` is written on a row, and that row is evaluated
                 // where the example is checked, installing this same value. What did not finish here
                 // did not finish there, and there is where it is said (E1910).
-                Asserted constant = within(
+                Answered constant = within(
                         reader -> readStandIn(reader, w.value(), depSig.out(), outCases(depSig.out())),
                         "a `with " + w.dep() + "`").orNull();
-                if (constant == null || constant instanceof Asserted.Unreadable) {
+                if (constant == null || constant instanceof Answered.Unreadable) {
                     continue;
                 }
                 for (RecordedRow recordedRow : rows) {
@@ -530,18 +527,18 @@ public final class ExampleStatements {
      * date is its ISO form, a qualified case name is its short one — so a marker measured from it
      * underlines the wrong columns and can run past the end of the line.
      */
-    private Statement said(SourceRef at, Ast.Expr written, Asserted asserted) {
+    private Statement said(SourceRef at, Ast.Expr written, Answered asserted) {
         return new Statement(at, souther.compiler.check.Elaborator.width(written), shown(asserted));
     }
 
-    /** What an assertion says, from what was already read. Rendering from the text again would build
+    /** What an answer says, from what was already read. Rendering from the text again would build
      * the fixture a second time — running whatever helpers it applies, outside the budget the first
      * reading was held to — and could show a value other than the one that was compared. */
-    private String shown(Asserted asserted) {
+    private String shown(Answered asserted) {
         return switch (asserted) {
-            case Asserted.CaseOnly only -> only.name().name();
-            case Asserted.Whole whole -> rendering.describeActual(whole.fixture().value());
-            case Asserted.Unreadable _ ->
+            case Answered.CaseOnly only -> only.name().name();
+            case Answered.Whole whole -> rendering.describeActual(whole.fixture().value());
+            case Answered.Unreadable _ ->
                     throw new IllegalStateException("nothing was read, so nothing disagreed");
         };
     }
@@ -739,47 +736,44 @@ public final class ExampleStatements {
     // --- comparison ---------------------------------------------------------------------------
 
     /**
-     * A written answer, in the form two of them can be compared.
-     *
-     * <p>A row may assert the case and nothing under it, or the whole value, and the two sides of a
-     * comparison need not have been written the same way — so what is compared is read off each side
-     * once, here, rather than at every place two answers meet.
-     */
-    /**
      * What someone wrote down as an answer, at the grain they wrote it.
      *
-     * <p>Apart from {@link FixtureReader.BuiltFixture} because the two are different things. A value is built or it
-     * is not; an assertion may deliberately say less than a value — a row naming a case and nothing
-     * under it says only that — and only a recorded row may. Reading a stand-in as an assertion let a
-     * {@code with} that cannot be built at all be compared as though it named a case.
+     * <p>A row may state the case and nothing under it, or the whole value, and the two sides of a
+     * comparison need not have been written the same way — so what is compared is read off each side
+     * once, here, rather than at every place two answers meet.
+     *
+     * <p>Apart from {@link FixtureReader.BuiltFixture} because the two are different things. A value
+     * is built or it is not; an answer may deliberately say less than a value — a row naming a case
+     * and nothing under it says only that — and only a recorded row may. Reading a stand-in as an
+     * answer let a {@code with} that cannot be built at all be compared as though it named a case.
      */
-    sealed interface Asserted {
+    sealed interface Answered {
 
         /** The case, and nothing under it: a bare name denoting one. */
-        record CaseOnly(TypeName name) implements Asserted {}
+        record CaseOnly(TypeName name) implements Answered {}
 
         /** The whole value. */
-        record Whole(FixtureReader.BuiltFixture fixture) implements Asserted {}
+        record Whole(FixtureReader.BuiltFixture fixture) implements Answered {}
 
         /** Nothing that can be read: a fixture that did not build or did not finish, or an
          * expectation naming a case the behavior cannot answer with. What is wrong with it is
          * reported where the row is evaluated; here it states nothing to be held against. */
-        record Unreadable() implements Asserted {}
+        record Unreadable() implements Answered {}
     }
 
     /**
      * What a stand-in stands in with: the whole value, always. Unreadable where it will not build,
      * which is where it stands in for nothing at all — that is reported where the fake is resolved.
      */
-    private static Asserted readStandIn(FixtureReader fixtures, Ast.Expr written, Type outType,
+    private static Answered readStandIn(FixtureReader fixtures, Ast.Expr written, Type outType,
                                         Set<TypeName> cases) {
         if (written == null || refusedCase(fixtures, written, cases)) {
-            return new Asserted.Unreadable();
+            return new Answered.Unreadable();
         }
         try {
-            return new Asserted.Whole(fixtures.buildFixture(written, outType));
+            return new Answered.Whole(fixtures.buildFixture(written, outType));
         } catch (FixtureException | NonTerminationException _) {
-            return new Asserted.Unreadable();
+            return new Answered.Unreadable();
         }
     }
 
@@ -791,18 +785,18 @@ public final class ExampleStatements {
      * the row asserts: a value a helper answered with is that value, not that value read back into
      * the form a fixture is written in and decoded again (issue #214).
      */
-    private static Asserted readExpected(FixtureReader fixtures, Ast.Expr written, Type outType,
+    private static Answered readExpected(FixtureReader fixtures, Ast.Expr written, Type outType,
                                          Set<TypeName> cases) {
         if (written == null || refusedCase(fixtures, written, cases)) {
-            return new Asserted.Unreadable();
+            return new Answered.Unreadable();
         }
         if (fixtures.caseOnly(written) != null) {
-            return new Asserted.CaseOnly(fixtures.constructedCase(written));
+            return new Answered.CaseOnly(fixtures.constructedCase(written));
         }
         try {
-            return new Asserted.Whole(fixtures.buildFixture(written, outType));
+            return new Answered.Whole(fixtures.buildFixture(written, outType));
         } catch (FixtureException | NonTerminationException _) {
-            return new Asserted.Unreadable();
+            return new Answered.Unreadable();
         }
     }
 
@@ -826,11 +820,11 @@ public final class ExampleStatements {
      * <p>Where either states nothing there is nothing to disagree with. Read against a written
      * answer, silence is not a contradiction.
      */
-    private static boolean differs(Asserted left, Asserted right) {
-        if (left instanceof Asserted.Unreadable || right instanceof Asserted.Unreadable) {
+    private static boolean differs(Answered left, Answered right) {
+        if (left instanceof Answered.Unreadable || right instanceof Answered.Unreadable) {
             return false;
         }
-        if (left instanceof Asserted.Whole l && right instanceof Asserted.Whole r) {
+        if (left instanceof Answered.Whole l && right instanceof Answered.Whole r) {
             return !souther.runtime.Values.equal(l.fixture().value(), r.fixture().value());
         }
         TypeName one = caseOf(left);
@@ -839,11 +833,11 @@ public final class ExampleStatements {
     }
 
     /** The case an assertion is about, or null where nothing says. */
-    private static TypeName caseOf(Asserted a) {
+    private static TypeName caseOf(Answered a) {
         return switch (a) {
-            case Asserted.CaseOnly c -> c.name();
-            case Asserted.Whole w -> w.fixture().caseName();
-            case Asserted.Unreadable _ -> null;
+            case Answered.CaseOnly c -> c.name();
+            case Answered.Whole w -> w.fixture().caseName();
+            case Answered.Unreadable _ -> null;
         };
     }
 }

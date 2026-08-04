@@ -1,6 +1,6 @@
 package souther.compiler.query;
 
-import souther.compiler.ExampleVerifier;
+import souther.compiler.FixtureReader;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Sig;
@@ -553,7 +553,7 @@ public final class Adequacy {
             Symbols symbols = scope.value();
 
             Map<String, Filling> out = new LinkedHashMap<>();
-            ExampleVerifier.Construction building =
+            FixtureReader.Construction building =
                     constructing(db, name, prepared.value(), symbols, sigs.value());
             for (Ast.BehaviorDef behavior : prepared.value().behaviors()) {
                 if (!(behavior instanceof Ast.SpecBehavior spec)) {
@@ -584,7 +584,7 @@ public final class Adequacy {
 
         /** A way to build values against this module's own classes, or nothing where there are none to
          * build against. */
-        private static ExampleVerifier.Construction constructing(
+        private static FixtureReader.Construction constructing(
                 Db db, String module, Ast.Module written, Symbols symbols, Map<String, Sig> sigs) {
             Map<String, byte[]> classes = db.ask(new Output.Linked(module)).value();
             Map<String, List<BehaviorRequirement>> requirements =
@@ -593,14 +593,16 @@ public final class Adequacy {
                 return null;
             }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(module)).value();
-            return ExampleVerifier.constructing(written, symbols, sigs, classes, requirements,
+            // `requirements` is asked above as a readiness condition, not as an input: whether a
+            // value builds at this module's boundary is the decoder's answer, and nothing here runs.
+            return FixtureReader.constructing(written, symbols, classes,
                     Output.loader(db, Map.of()), values == null ? Map.of() : values);
         }
 
         private static Filling rowsFor(
                 Ast.SpecBehavior spec, Sig sig, Symbols symbols, souther.compiler.core.Core body,
                 souther.compiler.coverage.CoverageSites.Plan plan, Observed observed,
-                ExampleVerifier.Construction building, boolean armsMeasured) {
+                FixtureReader.Construction building, boolean armsMeasured) {
             if (observed.someRowsUnseen()) {
                 // Rows exist that nothing read. What they cover is unknown, so what is left uncovered
                 // is unknown too — and a generated row is a specific piece of work handed to a person,

@@ -483,8 +483,11 @@ public final class Output {
                 return Answer.absent();
             }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
+            // `requirements` is asked for above as a readiness condition — a module whose
+            // requirements are not settled is not one to read statements off yet — rather than
+            // because reading them needs it. Nothing here applies a behavior.
             return Answer.of(souther.compiler.ExampleStatements.disagreements(prepared.value(),
-                    scope.value(), sigs.value(), classes, requirements, loader(db, Map.of()),
+                    scope.value(), sigs.value(), classes, loader(db, Map.of()),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
                     exampleBudgetMs(db)));
         }
@@ -669,8 +672,9 @@ public final class Output {
                 return List.of();
             }
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
+            // As above: `requirements` says this module is ready to be read, not what to read.
             return souther.compiler.ExampleStatements.fakeTables(prepared.value(), scope.value(),
-                    sigs.value(), classes, requirements, loader(db, Map.of()),
+                    sigs.value(), classes, loader(db, Map.of()),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
                     exampleBudgetMs(db));
         }
