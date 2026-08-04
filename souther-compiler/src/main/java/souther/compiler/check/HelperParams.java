@@ -121,7 +121,8 @@ final class HelperParams {
     /**
      * The type {@code body} gives {@code param}, or null where it gives none — the same reading that
      * settles a helper's own parameter, for a lambda whose parameter type the signature it was given
-     * to left open. Reports nothing: it is asked where a type is wanted, not where one is required.
+     * to left open and no application will settle. Reports nothing: it is asked where a type is
+     * wanted, not where one is required.
      */
     static Type readFromBody(Ast.Binder param, Ast.Expr body, Scope env, CheckContext ctx,
                              Type answers) {

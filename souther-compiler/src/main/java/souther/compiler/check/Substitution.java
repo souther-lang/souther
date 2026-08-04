@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -26,6 +27,33 @@ import java.util.Map;
 final class Substitution {
 
     private final Map<Type.MetaVar, Type> decided = new LinkedHashMap<>();
+    private final BindingOwner mine;
+    private final Substitution enclosing;
+
+    /** The decisions of one application, and of the applications it stands inside. A variable
+     * belongs to the application that instantiated it, so a reading of one this expansion did not
+     * make is recorded where it belongs rather than shadowed here. */
+    Substitution(BindingOwner mine, Substitution enclosing) {
+        this.mine = mine;
+        this.enclosing = enclosing;
+    }
+
+    Substitution() {
+        this(null, null);
+    }
+
+    /** Where a reading of {@code m} belongs: here, or the enclosing application that instantiated it. */
+    private Substitution owning(Type.MetaVar m) {
+        if (mine == null || m.application().equals(mine) || enclosing == null) {
+            return this;
+        }
+        return enclosing.owning(m);
+    }
+
+    private Type at(Type.MetaVar m) {
+        Type here = decided.get(m);
+        return here != null || enclosing == null ? here : enclosing.at(m);
+    }
 
     /**
      * Reads {@code actual} against {@code declared}: records what it says about the variables
@@ -75,8 +103,12 @@ final class Substitution {
 
     /**
      * Whether a value of {@code actual} may stand where {@code declared} was written, reading a
-     * variable this application has not decided as a position that states nothing. Everything around
-     * it still states what it states.
+     * position this application has not decided as one that states nothing. Everything around it
+     * still states what it states.
+     *
+     * <p>Every position is asked on its own. There is no test for whether the type holds a hole
+     * somewhere before descending into it, because that is the question this is: a hole is one
+     * position, and asking about the type as a whole is what would let one silence the rest.
      */
     private boolean fits(Type actual, Type declared, Symbols symbols) {
         Type want = zonk(declared);
@@ -86,9 +118,6 @@ final class Substitution {
         if (want instanceof Type.MetaVar || want instanceof Type.Nothing
                 || actual instanceof Type.MetaVar) {
             return true;
-        }
-        if (!Type.mentions(want, x -> x instanceof Type.MetaVar)) {
-            return TypeOps.assignable(actual, want, symbols);   // an ordinary question, asked as one
         }
         if (actual instanceof Type.Nothing || actual instanceof Type.Never
                 || actual instanceof Type.Erroneous) {
@@ -177,7 +206,7 @@ final class Substitution {
     Type zonk(Type t) {
         return switch (t) {
             case Type.MetaVar m -> {
-                Type at = decided.get(m);
+                Type at = at(m);
                 yield at == null ? m : zonk(at);
             }
             case Type.ListOf l -> Type.list(zonk(l.element()));
@@ -232,10 +261,11 @@ final class Substitution {
             // gives the same question.
             return;
         }
-        Type held = decided.get(m);
+        Substitution owner = owning(m);
+        Type held = owner.at(m);
         if (held == null || held instanceof Type.Nothing) {
-            if (!(at instanceof Type.MetaVar other) || decided.get(other) == null) {
-                decided.put(m, at);
+            if (!(at instanceof Type.MetaVar other) || at(other) == null) {
+                owner.decided.put(m, at);
             }
             return;
         }
@@ -248,7 +278,7 @@ final class Substitution {
         // (ADR-0028), asked at whatever depth the bottom turned up.
         if (Type.mentions(held, x -> x instanceof Type.Nothing)
                 && TypeOps.assignable(held, at, symbols)) {
-            decided.put(m, at);
+            owner.decided.put(m, at);
             return;
         }
         if (TypeOps.assignable(at, held, symbols) || TypeOps.assignable(held, at, symbols)) {

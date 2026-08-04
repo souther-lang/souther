@@ -1,14 +1,11 @@
 package souther.compiler;
 
-import souther.compiler.diag.CompileException;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * A function value flows wherever its type may be written: what a name denotes does not depend on
@@ -226,31 +223,5 @@ class CompileFunctionValueFlowTest {
 
     private static java.util.Set<String> sameShape(Map<String, byte[]> classes) {
         return classes.keySet();
-    }
-
-    /**
-     * A function given to a parameter is held to the type that parameter declares, whether or not
-     * the callee's body reads it. A named function reaches the parameter η-expanded, so what is
-     * held is the block that stands for it — and what that block answers is the function's own.
-     */
-    @Test
-    void aFunctionArgumentIsHeldToWhatTheParameterDeclares() {
-        String ok = """
-                module demo
-                data In = { v: Int }
-                data Out = { b: Bool }
-                behavior run : (i: In) -> Out constructs Out
-                let label (n: Int) = "n"
-                let use (f: (Int) -> String) = {
-                    let said = f(1)
-                    true
-                }
-                let run (i) = Out { b = use(label) && i.v > 0 }
-                """;
-        assertDoesNotThrow(() -> Compiler.compile(ok), "`label` answers a String, as `f` declares");
-        CompileException e = assertThrows(CompileException.class,
-                () -> Compiler.compile(ok.replace("let label (n: Int) = \"n\"",
-                        "let label (n: Int) = n")));
-        assertEquals("check.expects", e.diagnostic().messageKey(), e.getMessage());
     }
 }

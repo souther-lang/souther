@@ -24,22 +24,40 @@ import java.util.Map;
  * <p>A spelling is still what an author reads, so a name is kept beside each binding for a
  * diagnostic to quote and for a did-you-mean to offer. Nothing is found by it.
  */
-public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> declared) {
+public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> declared,
+                    Substitution decisions) {
+
+    /** A scope with no application's decisions in force over it. */
+    public Scope(Map<BindingId, Binding> bindings, Map<String, Type> declared) {
+        this(bindings, declared, null);
+    }
+
+    /**
+     * This scope with what {@code decided} has settled in force over it.
+     *
+     * <p>An expansion's body is read under what that application decided, the way it is read under
+     * the bindings its arguments became. A call inside it — a function it was given, reduced where
+     * the callee applies it — carries the enclosing application's variables in what was declared of
+     * it, and reads them from here rather than deciding them again.
+     */
+    public Scope deciding(Substitution decided) {
+        return new Scope(bindings, declared, decided);
+    }
 
     /** One binding in force: what it is, and what it is called. */
     public record Binding(String name, Type type) {}
 
-    public static final Scope NONE = new Scope(Map.of(), Map.of());
+    public static final Scope NONE = new Scope(Map.of(), Map.of(), null);
 
     /** The bindings a body starts with — a helper's parameters, a declaration's fields. */
     public static Scope of(Map<BindingId, Binding> bindings) {
-        return new Scope(Map.copyOf(bindings), Map.of());
+        return new Scope(Map.copyOf(bindings), Map.of(), null);
     }
 
     /** The same, with the signatures of the declarations a name may reach without a binding: a
      * recursive helper, which is emitted as a method rather than expanded. */
     public Scope reaching(Map<String, Type> declarations) {
-        return new Scope(bindings, Map.copyOf(declarations));
+        return new Scope(bindings, Map.copyOf(declarations), decisions);
     }
 
     /**
@@ -76,14 +94,14 @@ public record Scope(Map<BindingId, Binding> bindings, Map<String, Type> declared
     public Scope with(BindingId binding, String name, Type type) {
         Map<BindingId, Binding> next = new LinkedHashMap<>(bindings);
         next.put(binding, new Binding(name, type));
-        return new Scope(next, declared);
+        return new Scope(next, declared, decisions);
     }
 
     /** The same, for several at once. */
     public Scope withAll(Map<BindingId, Binding> more) {
         Map<BindingId, Binding> next = new LinkedHashMap<>(bindings);
         next.putAll(more);
-        return new Scope(next, declared);
+        return new Scope(next, declared, decisions);
     }
 
     /** What the names in force are called — for a diagnostic that offers what the author might have

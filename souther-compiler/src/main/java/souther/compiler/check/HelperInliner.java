@@ -810,6 +810,27 @@ public final class HelperInliner {
         });
     }
 
+    /** What a function parameter's declared type says, with what this application decided written
+     * into it — or null where the parameter's type is not a lone function type. */
+    private static Ast.FnType declaredFn(Ast.RetType declared, Map<String, Type> applied) {
+        if (declared == null
+                || !(TypeOps.substitute(TypeOps.resolveParamType(declared, null), applied)
+                        instanceof Type.FnOf fn)) {
+            return null;
+        }
+        List<Ast.RetType> params = new ArrayList<>();
+        for (Type p : fn.params()) {
+            params.add(stating(p, declared.pos()));
+        }
+        return new Ast.FnType(params, stating(fn.result(), declared.pos()), declared.pos());
+    }
+
+    /** {@code t} as a written type with no surface text: what it denotes is decided, and no source
+     * stands for it. */
+    private static Ast.RetType stating(Type t, SourcePos pos) {
+        return new Ast.RetType(List.of(Ast.TypeRef.of(t, pos)), pos);
+    }
+
     /** {@code declared} with what this application decided written into it, or as it stands where it
      * left nothing open. The type is written as a reference with no surface text: what it denotes is
      * decided, and no source stands for it. */
@@ -1156,14 +1177,26 @@ public final class HelperInliner {
                             subst.put(p.binder().id(), f.name());
                             substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
                             scoped.add(f.id());
+                            // The lambda is registered under what the callee declared of the
+                            // parameter it was given to, this application's variables written in. So
+                            // where the callee applies it, that application expands like any other
+                            // call and is read against the signature there — in the one place the
+                            // types this application decided are in force. Registering it bare is
+                            // what used to throw the signature away at the point it was reduced,
+                            // leaving nothing between the caller's function and what was declared of
+                            // it (issues #318, #320).
+                            Ast.FnType declares = declaredFn(p.type(), applied);
                             List<Ast.FnParam> lparams = new ArrayList<>();
-                            for (Ast.Binder lp : lambda.params()) {
-                                lparams.add(new Ast.FnParam(lp, null));
+                            for (int lp = 0; lp < lambda.params().size(); lp++) {
+                                lparams.add(new Ast.FnParam(lambda.params().get(lp),
+                                        declares == null || lp >= declares.params().size() ? null
+                                                : declares.params().get(lp)));
                             }
                             // the lambda's body is caller code, so it is not renamed by this helper's
                             // substitution — only the enclosing helper body is.
                             scopedLambdas.put(f.id(),
-                                    new Ast.FnDef(f.name(), lparams, null,
+                                    new Ast.FnDef(f.name(), lparams,
+                                            declares == null ? null : declares.result(),
                                             new Ast.FnBody.Written(lambda.body()), lambda.pos()));
                             lambdaOrigins.put(f.id(), new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
                         } else {
