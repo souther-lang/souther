@@ -49,14 +49,28 @@ final class Substitution {
      */
     void constrain(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
         decide(declared, actual, symbols, pos, what);
-        if (!fits(actual, declared, symbols)) {
-            Type stated = settle(declared);
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.expects").title("check.type.mismatch.title")
-                            .at(pos).args(what, Type.show(stated, actual), Type.show(actual, stated))
-                            .diff(Type.show(actual, stated), Type.show(stated, actual)).build(),
-                    what + " expects " + Type.show(stated) + ", but got " + Type.show(actual));
+        hold(declared, actual, symbols, pos, what);
+    }
+
+    /**
+     * Holds {@code actual} to what {@code declared} states, and records nothing.
+     *
+     * <p>For evidence read off an argument on its own rather than at what the signature settled: what
+     * such a reading says is enough to refuse a value the declaration does not admit, and not enough
+     * to decide a variable by. A lambda's parameters read off its own body may be narrower than what
+     * the application settles them at, so what its body answers under them is not what this
+     * application decided.
+     */
+    void hold(Type declared, Type actual, Symbols symbols, SourcePos pos, String what) {
+        if (fits(actual, declared, symbols)) {
+            return;
         }
+        Type stated = settle(declared);
+        throw CompileException.of(
+                Diagnostic.of(null, "check.expects").title("check.type.mismatch.title")
+                        .at(pos).args(what, Type.show(stated, actual), Type.show(actual, stated))
+                        .diff(Type.show(actual, stated), Type.show(stated, actual)).build(),
+                what + " expects " + Type.show(stated) + ", but got " + Type.show(actual));
     }
 
     /**
@@ -66,8 +80,12 @@ final class Substitution {
      */
     private boolean fits(Type actual, Type declared, Symbols symbols) {
         Type want = zonk(declared);
-        if (want instanceof Type.MetaVar || actual instanceof Type.MetaVar) {
-            return true;   // the position states nothing, so nothing is refused at it
+        // A position states nothing where a variable stands at it, and where it stands at what an
+        // empty collection carries: that is a reading so far rather than an answer, and a later one
+        // widens it (ADR-0028). Nothing is refused at either, and everything around them is read.
+        if (want instanceof Type.MetaVar || want instanceof Type.Nothing
+                || actual instanceof Type.MetaVar) {
+            return true;
         }
         if (!Type.mentions(want, x -> x instanceof Type.MetaVar)) {
             return TypeOps.assignable(actual, want, symbols);   // an ordinary question, asked as one

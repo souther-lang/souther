@@ -325,4 +325,55 @@ class CompileTypeVariableTest {
                 () -> compileCore(use.formatted("let wrong (n: Int) = n", "wrong")),
                 "`wrong` answers an Int where a String was declared");
     }
+
+    /**
+     * Each position of a declared function type is read on its own. A parameter the lambda never
+     * looks at cannot decide what it answers, and a variable inside the result does not stop the
+     * result stating a constructor: {@code ('a) -> List<'b>} says the function answers a list
+     * whatever it is given and whatever the list holds.
+     */
+    @Test
+    void aHoleAtOnePositionOfAFunctionTypeDoesNotSilenceTheOthers() {
+        String answersAString = """
+                module souther.gen
+                let use (f: ('a) -> String) = {
+                    let said = f(1)
+                    true
+                }
+                let call = use((x) -> %s)
+                """;
+        assertDoesNotThrow(() -> compileCore(answersAString.formatted("\"s\"")),
+                "it answers a String without ever reading what it was given");
+        assertThrows(CompileException.class, () -> compileCore(answersAString.formatted("1")),
+                "an Int is not a String, and an unread parameter does not make it one");
+
+        String answersAList = """
+                module souther.gen
+                let use (f: ('a) -> List<'b>) = {
+                    let said = f(1)
+                    true
+                }
+                let call = use((x) -> %s)
+                """;
+        assertDoesNotThrow(() -> compileCore(answersAList.formatted("[ 1 ]")), "a list is a list");
+        assertThrows(CompileException.class, () -> compileCore(answersAList.formatted("1")),
+                "what the list holds is open; that it is a list is not");
+    }
+
+    /** And what a value argument decided reaches the function argument's result. */
+    @Test
+    void whatAValueArgumentDecidedIsHeldAgainstWhatTheFunctionAnswers() {
+        String witness = """
+                module souther.gen
+                let witness (f: ('a) -> 'b, x: 'b) = {
+                    let said = f(1)
+                    true
+                }
+                let call (n: Int) = witness((z) -> %s, n)
+                """;
+        assertDoesNotThrow(() -> compileCore(witness.formatted("1")),
+                "`n` decided `'b` is Int, and the lambda answers one");
+        assertThrows(CompileException.class, () -> compileCore(witness.formatted("\"answer\"")),
+                "the lambda answers a String where the argument decided Int");
+    }
 }

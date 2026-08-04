@@ -767,8 +767,11 @@ public final class Elaborator {
             if (g.declaredType() == null || !inSight(g.value(), env)) {
                 continue;
             }
-            Type declared = TypeOps.resolveParamType(g.declaredType(), ctx.symbols());
-            if (!(decided.zonk(declared) instanceof Type.FnOf want)) {
+            // The declaration as it stands is what constraints are written against: what a variable
+            // was decided to is the substitution's to say, and reading it through first would leave
+            // nothing to widen and no variable to decide.
+            if (!(TypeOps.resolveParamType(g.declaredType(), ctx.symbols()) instanceof Type.FnOf declared)
+                    || !(decided.zonk(declared) instanceof Type.FnOf want)) {
                 continue;
             }
             List<Type> takes = reading(want, g, env, ctx);
@@ -778,16 +781,13 @@ public final class Elaborator {
                         argument(ex, "a function"));
                 continue;
             }
-            // Nothing settled says what it takes. What it answers may still be settled, and a hole
-            // at one position is not a licence to leave the others unread: `('a) -> String` says
-            // the function answers a String whatever it is given, and the argument answers that or
-            // it does not.
-            if (!settled(want.result())) {
-                continue;
-            }
-            Type answers = answering(g.value(), env, ctx);
+            // Nothing settled says what it takes. What it answers is read on its own then, and held
+            // to what the declaration says of that position — which is not nothing merely because a
+            // variable stands somewhere inside it. `('a) -> List<'b>` says the function answers a
+            // list whatever it is given.
+            Type answers = answering(g.value(), want, env, ctx);
             if (answers != null) {
-                decided.constrain(want.result(), answers, ctx.symbols(), g.value().pos(),
+                decided.hold(declared.result(), answers, ctx.symbols(), g.value().pos(),
                         "what `" + shown(ex) + "` is given to answer");
             }
         }
@@ -854,19 +854,39 @@ public final class Elaborator {
      * <p>What it decides is not written back. The parameters were read off the lambda alone and the
      * application may settle them at something wider, so they answer this one question and no other.
      */
-    private static Type answering(Ast.Expr function, Scope env, CheckContext ctx) {
+    private static Type answering(Ast.Expr function, Type.FnOf want, Scope env, CheckContext ctx) {
         if (!(function instanceof Ast.Block lambda)) {
             return null;
         }
         Scope inner = env;
-        for (Ast.Binder p : lambda.params()) {
+        for (int i = 0; i < lambda.params().size(); i++) {
+            Ast.Binder p = lambda.params().get(i);
+            Type stated = i < want.params().size() ? want.params().get(i) : null;
+            if (stated != null && settled(stated)) {
+                inner = inner.with(p, stated);
+                continue;
+            }
+            if (!reads(lambda.body(), p.id())) {
+                continue;   // what it answers cannot turn on a parameter it never reads
+            }
             Type read = HelperParams.readFromBody(p, lambda.body(), env, ctx, null);
             if (read == null || !settled(read)) {
-                return null;
+                return null;   // the body turns on it and nothing says what it is
             }
             inner = inner.with(p, read);
         }
         return typeOf(lambda.body(), inner, ctx);
+    }
+
+    /** Whether {@code e} reads {@code binding} anywhere inside it. */
+    private static boolean reads(Ast.Expr e, BindingId binding) {
+        if ((e instanceof Ast.Var v ? v.denotes() : e instanceof Ast.Apply c ? c.denotes() : null)
+                instanceof ValueName.Local local && local.id().equals(binding)) {
+            return true;
+        }
+        boolean[] found = {false};
+        Ast.forEachChild(e, child -> found[0] |= reads(child, binding));
+        return found[0];
     }
 
     /**
