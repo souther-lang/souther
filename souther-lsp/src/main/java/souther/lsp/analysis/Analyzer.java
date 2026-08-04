@@ -280,7 +280,7 @@ public final class Analyzer {
         if (module == null) {
             return null;
         }
-        SourcePos at = new SourcePos(pos.line() + 1, pos.character() + 1);
+        SourcePos at = new SourcePos(pos.line() + 1, pos.character() + 1, uri);
         return compilation.db().ask(new Names.TypeAt(module, at)).value();
     }
 
@@ -671,7 +671,7 @@ public final class Analyzer {
         if (module == null) {
             return null;
         }
-        SourcePos at = new SourcePos(pos.line() + 1, pos.character() + 1);
+        SourcePos at = new SourcePos(pos.line() + 1, pos.character() + 1, uri);
         Resolve.ValueUse use = compilation.db().ask(new Names.ValueDenotedAt(module, at)).value();
         return use == null ? null : use.denotes();
     }
@@ -693,7 +693,10 @@ public final class Analyzer {
         if (at == null) {
             return Optional.empty();
         }
-        String targetUri = switch (target) {
+        // Where the declaration was written is what the declaration's position says. Reading it off
+        // the module instead is right only while a module is one file, and a value declared in an
+        // attached `examples for` file is one the module has and that file wrote.
+        String targetUri = at.sourceId() != null ? at.sourceId() : switch (target) {
             case ValueName.Local _ -> uri;   // bound in the body the cursor is in
             case ValueName.Helper h -> compilation.sourceIdOf(h.module());
             case ValueName.Behavior b -> compilation.sourceIdOf(b.module());

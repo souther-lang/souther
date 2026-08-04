@@ -957,12 +957,31 @@ public final class Names {
         }
     }
 
-    /** Whether the name {@code written} starting at {@code start} covers {@code at}. A name is one
-     * line's worth of text, so a position on another line is not on it. */
+    /**
+     * Whether the name {@code written} starting at {@code start} covers {@code at}. A name is one
+     * line's worth of text, so a position on another line is not on it — and a name in another file
+     * is not on it either, however the line numbers happen to line up.
+     *
+     * <p>The file matters here for the reason it matters anywhere: what a module is made of is not
+     * all written in one file. An attached {@code examples for} file's rows, tables and values join
+     * the module they are for, and a question asked of the module reads all of them, so line 8
+     * column 14 is two places and an editor asking about one of them was answered about whichever
+     * came first. What was under the cursor and what the answer described were then two different
+     * names.
+     *
+     * <p>Where either position names no source — a caller with only a coordinate to give — the
+     * coordinates decide, which is what every such caller got before.
+     */
     static boolean spans(SourcePos start, String written, SourcePos at) {
         return start != null && at != null && start.line() == at.line()
+                && sameSource(start, at)
                 && at.column() >= start.column()
                 && at.column() <= start.column() + written.length();
+    }
+
+    private static boolean sameSource(SourcePos start, SourcePos at) {
+        return start.sourceId() == null || at.sourceId() == null
+                || start.sourceId().equals(at.sourceId());
     }
     public record DeclaredAt(TypeName denoted) implements Key<SourcePos> {
         @Override
