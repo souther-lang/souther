@@ -791,13 +791,18 @@ public interface Ast {
      * A function argument. It leaves no binding, so what the signature said about it reaches a
      * reader only from here.
      *
+     * <p>{@code arrivesAs} is what the argument is declared as where it comes from, where this
+     * expansion can see that. The two declarations are what a boundary holds — what this callee
+     * wants of the position, and what the function handed to it is — and reading them against each
+     * other is what the boundary is for.
+     *
      * <p>{@code applied} is whether the callee's body still reaches it. Where it does, the body is
      * where this argument is typed and what the signature said is checked by that application, as it
      * is for a function written in place. Where it does not — the callee named a function parameter
      * and never used it — the body says nothing about it at all, and this is the only place it can
      * be held to the type the callee declared for it.
      */
-    record Given(RetType declaredType, Expr value, boolean applied) {}
+    record Given(RetType declaredType, Expr value, boolean applied, RetType arrivesAs) {}
 
     /** A list literal {@code [e1, e2, ...]} (one or more elements of the same type). */
     record ListLit(List<Expr> elements, SourcePos pos) implements Expr {}

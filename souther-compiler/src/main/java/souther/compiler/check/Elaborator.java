@@ -772,24 +772,47 @@ public final class Elaborator {
     private static void givenFunctions(Ast.Expansion ex, Substitution decided, Scope env,
                                        CheckContext ctx) {
         for (Ast.Given g : ex.given()) {
-            if (g.applied() || g.declaredType() == null || !inSight(g.value(), env)) {
-                continue;   // where the callee applies it, that application is where it is read
-            }
-            // The declaration as it stands is what constraints are written against: what a variable
-            // was decided to is the substitution's to say, and reading it through first would leave
-            // nothing to widen and no variable to decide.
-            if (!(TypeOps.resolveParamType(g.declaredType(), ctx.symbols()) instanceof Type.FnOf declared)
-                    || !(decided.zonk(declared) instanceof Type.FnOf want)) {
+            if (g.declaredType() == null
+                    || !(TypeOps.resolveParamType(g.declaredType(), ctx.symbols())
+                            instanceof Type.FnOf declared)) {
                 continue;
             }
-            List<Type> takes = takes(want, g.value(), env, ctx);
+            Type arrives = arrivesAs(g, env, ctx);
+            if (arrives != null) {
+                // Held, not decided: what the function is declared as is another declaration's, and
+                // its variables are that one's to settle. The two are read against each other, and
+                // neither decides the other's.
+                decided.hold(declared, arrives, ctx.symbols(), g.value().pos(),
+                        argument(ex, "a function"));
+                continue;
+            }
+            if (g.applied() || !inSight(g.value(), env)) {
+                continue;   // a lambda the callee applies is read at that application
+            }
+            List<Type> takes = takes(declared, decided, g.value(), env, ctx);
             if (takes == null) {
                 continue;   // nothing says what it takes, and its own body does not either
             }
-            Core function = elaborateFunctionValue(g.value(), takes, env, ctx);
-            decided.constrain(declared, function.type(), ctx.symbols(), g.value().pos(),
-                    argument(ex, "a function"));
+            decided.constrain(declared,
+                    elaborateFunctionValue(g.value(), takes, env, ctx).type(), ctx.symbols(),
+                    g.value().pos(), argument(ex, "a function"));
         }
+    }
+
+    /**
+     * What the function this call was given is declared as, or null where nothing declares it.
+     *
+     * <p>Asked rather than worked out. A function reaching a parameter under a name is declared
+     * where it is bound — a helper's own parameter, a binding, a function an enclosing call
+     * supplied — and reading that declaration is what a boundary does. Only a lambda written at the
+     * call has no declaration of its own, and it is read at the application that decides it.
+     */
+    private static Type arrivesAs(Ast.Given g, Scope env, CheckContext ctx) {
+        if (g.arrivesAs() != null) {
+            return TypeOps.resolveParamType(g.arrivesAs(), ctx.symbols());
+        }
+        return g.value() instanceof Ast.Var v && env.of(v.denotes(), v.reaches()) instanceof Type.FnOf is
+                ? is : null;
     }
 
     /**
@@ -805,43 +828,10 @@ public final class Elaborator {
     /**
      * Whether a declared type says what a value at that position is <em>and</em> is done saying it.
      * A type carrying the empty-collection bottom is an answer so far: it says what the value is
-     * made of and not what it holds, and a later reading widens it (ADR-0028). Reading a function
-     * argument at one would fix the function at what the seed happened to be rather than at what the
-     * application settles on.
+     * made of and not what it holds, and a later reading widens it (ADR-0028).
      */
     private static boolean settled(Type t) {
         return states(t) && !Type.mentions(t, x -> x instanceof Type.Nothing);
-    }
-
-    /**
-     * What to read a function this call was given at: what the signature settled, and for a position
-     * it left open, what the lambda's own body says.
-     *
-     * <p>Reading it off the body is right here and nowhere else. This is a function the callee never
-     * applies, so no application of it will ever settle what it takes — where one would, that
-     * application is the reader and this is not asked at all. Null where a position is open and the
-     * body does not say what stands there either, which is a function nothing in the program
-     * describes.
-     */
-    private static List<Type> takes(Type.FnOf want, Ast.Expr function, Scope env, CheckContext ctx) {
-        List<Type> takes = new ArrayList<>();
-        for (int i = 0; i < want.params().size(); i++) {
-            Type stated = want.params().get(i);
-            if (settled(stated)) {
-                takes.add(stated);
-                continue;
-            }
-            if (!(function instanceof Ast.Block lambda) || i >= lambda.params().size()) {
-                return null;
-            }
-            Type read = HelperParams.readFromBody(lambda.params().get(i), lambda.body(), env, ctx,
-                    settled(want.result()) ? want.result() : null);
-            if (read == null || !settled(read)) {
-                return null;
-            }
-            takes.add(read);
-        }
-        return takes;
     }
 
     /**
@@ -850,7 +840,7 @@ public final class Elaborator {
      * <p>A name given to a function parameter is not always a value: where a helper hands its own
      * function parameter on to another, the name stands for a block the inliner is holding and
      * answers by substituting it into the body. Nothing binds it, so there is nothing here to read
-     * it as, and it is the body it is substituted into that types it.
+     * it as, and what it is declared as is carried on the boundary instead.
      */
     private static boolean inSight(Ast.Expr function, Scope env) {
         if (function instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local) {
@@ -873,6 +863,39 @@ public final class Elaborator {
         boolean[] all = {true};
         Ast.forEachChild(e, child -> all[0] &= reads(child, env));
         return all[0];
+    }
+
+    /**
+     * What to read a function this call was given at: what the signature settled, and for a position
+     * it left open, what the lambda's own body says.
+     *
+     * <p>Reading it off the body is right here and nowhere else. This is a function the callee never
+     * applies, so no application of it will ever settle what it takes — where one would, that
+     * application is the reader and this is not asked at all. Null where a position is open and the
+     * body does not say what stands there either, which is a function nothing in the program
+     * describes.
+     */
+    private static List<Type> takes(Type.FnOf declared, Substitution decided, Ast.Expr function,
+                                    Scope env, CheckContext ctx) {
+        Type.FnOf want = decided.zonk(declared) instanceof Type.FnOf w ? w : declared;
+        List<Type> takes = new ArrayList<>();
+        for (int i = 0; i < want.params().size(); i++) {
+            Type stated = want.params().get(i);
+            if (settled(stated)) {
+                takes.add(stated);
+                continue;
+            }
+            if (!(function instanceof Ast.Block lambda) || i >= lambda.params().size()) {
+                return null;
+            }
+            Type read = HelperParams.readFromBody(lambda.params().get(i), lambda.body(), env, ctx,
+                    settled(want.result()) ? want.result() : null);
+            if (read == null || !settled(read)) {
+                return null;
+            }
+            takes.add(read);
+        }
+        return takes;
     }
 
     private static String argument(Ast.Expansion ex, String name) {

@@ -810,6 +810,34 @@ public final class HelperInliner {
         });
     }
 
+    /**
+     * What a function argument is declared as where it comes from, or null where nothing this
+     * expansion can see declares it.
+     *
+     * <p>A name standing for a function an enclosing call supplied is one this expansion is holding,
+     * and what that call declared of it is written on it. Every other name — a helper's own
+     * parameter, a binding holding a function — is declared where it is bound, and the scope the
+     * boundary is read in is what answers for it.
+     */
+    private Ast.RetType arrivesAs(Ast.Expr arg) {
+        if (!(arg instanceof Ast.Var v)) {
+            return null;
+        }
+        Ast.FnDef is = expands(v.denotes(), v.reaches());
+        if (is == null || is.declaredReturn() == null) {
+            return null;
+        }
+        List<Ast.RetType> params = new ArrayList<>();
+        for (Ast.FnParam p : is.params()) {
+            if (p.type() == null) {
+                return null;   // it does not say what it takes, so it says nothing whole
+            }
+            params.add(p.type());
+        }
+        return new Ast.RetType(
+                List.of(new Ast.FnType(params, is.declaredReturn(), is.pos())), is.pos());
+    }
+
     /** What a function parameter's declared type says, with what this application decided written
      * into it — or null where the parameter's type is not a lone function type. */
     private static Ast.FnType declaredFn(Ast.RetType declared, Map<String, Type> applied) {
@@ -1168,45 +1196,16 @@ public final class HelperInliner {
                         // function parameter is what removes it, because the application β-reduces
                         // to the lambda's body, so the expansion holds no reference either way.
                         given.add(new Ast.Given(instantiated(p.type(), applied), arg,
-                                references(helper.written(), p.binder().id())));
+                                references(helper.written(), p.binder().id()), arrivesAs(arg)));
                         Ast.FnType declares = declaredFn(p.type(), applied);
                         if (arg instanceof Ast.Var fnName) {
-                            // A function handed on to another function parameter. It is registered
-                            // under what *this* callee declared of the parameter, applying what it
-                            // was given — so the boundary between the two declarations is a place
-                            // that holds both, rather than the name travelling on under the
-                            // declaration it arrived with and this one never being read.
-                            Ast.Binder f = ours.binder("$" + p.name(), arg.pos());
-                            List<Ast.Binder> handed = new ArrayList<>();
-                            List<Ast.Expr> reads = new ArrayList<>();
-                            for (int a = 0; declares != null && a < declares.params().size(); a++) {
-                                Ast.Binder h = ours.binder("$" + p.name() + a, arg.pos());
-                                handed.add(h);
-                                reads.add(Ast.Var.local(h, arg.pos()));
-                            }
-                            if (declares == null || expands(fnName.denotes(), fnName.reaches()) == null) {
-                                // Not a function this expansion will reduce — a binding holding one
-                                // chosen at run time, or a name with no declared type to hand on.
-                                // There is no boundary to make: what applies it is an application of
-                                // a value, and the value's own type is what that reads.
-                                subst.put(p.binder().id(), fnName.name());
-                                substDenotes.put(p.binder().id(), fnName.denotes());
-                                continue;
-                            }
-                            List<Ast.FnParam> hands = new ArrayList<>();
-                            for (int a = 0; a < handed.size(); a++) {
-                                hands.add(new Ast.FnParam(handed.get(a), declares.params().get(a)));
-                            }
-                            subst.put(p.binder().id(), f.name());
-                            substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
-                            scoped.add(f.id());
-                            scopedLambdas.put(f.id(),
-                                    new Ast.FnDef(f.name(), hands, declares.result(),
-                                            new Ast.FnBody.Written(new Ast.Apply(fnName, reads,
-                                                    souther.compiler.types.ConstructionOrigin.own(), arg.pos())),
-                                            arg.pos()));
-                            lambdaOrigins.put(f.id(),
-                                    new LambdaOrigin(p.name(), helper.name(), arg.pos()));
+                            // A name handed to a function parameter is substituted through: what
+                            // applies it applies what it stands for. What it stands for is declared
+                            // somewhere — a helper's own parameter, a binding, a function an
+                            // enclosing call gave — and that declaration is carried on the boundary,
+                            // so the two are read against each other without either being re-typed.
+                            subst.put(p.binder().id(), fnName.name());
+                            substDenotes.put(p.binder().id(), fnName.denotes());
                         } else if (arg instanceof Ast.Block lambda) {
                             Ast.Binder f = ours.binder("$" + p.name(), lambda.pos());
                             subst.put(p.binder().id(), f.name());
@@ -1299,7 +1298,8 @@ public final class HelperInliner {
                 }
                 List<Ast.Given> given = new ArrayList<>();
                 for (Ast.Given g : ex.given()) {
-                    given.add(new Ast.Given(g.declaredType(), inline(g.value()), g.applied()));
+                    given.add(new Ast.Given(g.declaredType(), inline(g.value()), g.applied(),
+                            g.arrivesAs()));
                 }
                 yield new Ast.Expansion(ex.callee(), ex.application(), bound, given,
                         ex.declaredReturn(), inline(ex.body()), ex.pos());
@@ -1690,7 +1690,8 @@ public final class HelperInliner {
                 List<Ast.Given> given = new ArrayList<>();
                 for (Ast.Given g : ex.given()) {
                     given.add(new Ast.Given(g.declaredType(),
-                            rename(g.value(), subst, substDenotes, at, copy), g.applied()));
+                            rename(g.value(), subst, substDenotes, at, copy), g.applied(),
+                            g.arrivesAs()));
                 }
                 yield new Ast.Expansion(ex.callee(), ex.application(), bound, given,
                         ex.declaredReturn(), rename(ex.body(), subst, substDenotes, at, copy),

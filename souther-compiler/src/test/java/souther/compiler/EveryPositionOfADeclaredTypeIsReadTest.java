@@ -97,6 +97,26 @@ class EveryPositionOfADeclaredTypeIsReadTest {
     }
 
     /**
+     * The same again with no call at all: a helper handing its own function parameter on is read
+     * where it is written, not only where a lambda reaches it.
+     */
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("relayed")
+    void aFunctionHandedOnIsReadWhereTheHelperIsWritten(Row row) {
+        String relaying = """
+                module souther.gen
+                let inner (g: (Int) -> String) = {
+                    %s
+                    true
+                }
+                let use (f: (Int) -> %%s) = inner(f)
+                """.formatted(row.uses());
+        assertNull(failure(relaying.formatted("String")), "both boundaries declare the same thing");
+        assertEquals(true, failure(relaying.formatted("Int")) != null,
+                "the boundary it is handed on to declares something else");
+    }
+
+    /**
      * A function handed on to another function parameter is read at the boundary it arrives at.
      *
      * <p>Each boundary states its own type, and what one declares of what it takes is not what the

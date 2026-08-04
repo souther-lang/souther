@@ -112,11 +112,13 @@ final class Substitution {
      */
     private boolean fits(Type actual, Type declared, Symbols symbols) {
         Type want = zonk(declared);
-        // A position states nothing where a variable stands at it, and where it stands at what an
-        // empty collection carries: that is a reading so far rather than an answer, and a later one
-        // widens it (ADR-0028). Nothing is refused at either, and everything around them is read.
-        if (want instanceof Type.MetaVar || want instanceof Type.Nothing
-                || actual instanceof Type.MetaVar) {
+        // A position states nothing where a variable stands at it — one this application has not
+        // decided, or one a declaration wrote, which stands for whatever each use of it makes — and
+        // where it stands at what an empty collection carries, which is a reading so far and is
+        // widened by a later one (ADR-0028). Nothing is refused at any of them, and everything
+        // around them is read.
+        if (want instanceof Type.Open || want instanceof Type.Nothing
+                || actual instanceof Type.Open) {
             return true;
         }
         if (actual instanceof Type.Nothing || actual instanceof Type.Never
