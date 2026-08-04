@@ -105,6 +105,17 @@ public final class NewtypeDesugar {
             case Ast.LetIn li ->
                     new Ast.LetIn(li.binder(), go(li.value(), symbols), li.declaredType(), li.annotated(), li.opens(),
                             go(li.body(), symbols), li.pos());
+            // A construction written inside a helper is written `T(v)` there too, and reaches an
+            // invariant already expanded. What `given` holds is inside the body as well, and is
+            // rewritten there.
+            case Ast.Expansion ex -> {
+                List<Ast.Bound> bound = new ArrayList<>();
+                for (Ast.Bound b : ex.bound()) {
+                    bound.add(new Ast.Bound(b.binder(), b.declaredType(), go(b.value(), symbols)));
+                }
+                yield new Ast.Expansion(ex.callee(), ex.application(), bound, ex.given(),
+                        ex.declaredReturn(), go(ex.body(), symbols), ex.pos());
+            }
             case Ast.If iff ->
                     new Ast.If(go(iff.cond(), symbols), go(iff.then(), symbols), go(iff.els(), symbols), iff.pos());
             // the attempted construction is written `T(v)` too, so it is a Call until this rewrites it

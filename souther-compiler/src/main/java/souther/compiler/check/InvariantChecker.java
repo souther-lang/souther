@@ -408,12 +408,12 @@ public final class InvariantChecker {
                 name -> fields.containsKey(name) ? name : null, fields);
         List<Clause> owed;
         try {
-            owed = c.obligations(clause, binds, false);
+            owed = c.obligations(Ast.asBindings(clause), binds, false);
         } catch (RuntimeException _) {
             owed = null;   // fail-open, as the walk is
         }
         if (owed == null || owed.isEmpty()) {
-            return ClauseDischarge.runtimeOnly(at, c.whyUnreadable(clause, binds));
+            return ClauseDischarge.runtimeOnly(at, c.whyUnreadable(Ast.asBindings(clause), binds));
         }
         for (Clause owe : owed) {
             if (owe.numeric() != null) {
@@ -483,7 +483,9 @@ public final class InvariantChecker {
             for (Map.Entry<String, Type> p : params.entrySet()) {
                 k = c.seedParam(p.getKey(), p.getValue(), k);
             }
-            c.walk(source.body(), k, Scope.of(params), 0);
+            // read as the bindings an expansion writes: what may be discharged is a question about
+            // which value reached which position, and a call is the code it stands for
+            c.walk(Ast.asBindings(source.body()), k, Scope.of(params), 0);
         } catch (RuntimeException _) {
             // fail-open: the run-time invariant check remains the backstop
         }

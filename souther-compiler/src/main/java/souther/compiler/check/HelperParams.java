@@ -118,6 +118,25 @@ final class HelperParams {
         return false;
     }
 
+    /**
+     * The type {@code body} gives {@code param}, or null where it gives none — the same reading that
+     * settles a helper's own parameter, for a lambda whose parameter type the signature it was given
+     * to left open and no application will settle. Reports nothing: it is asked where a type is
+     * wanted, not where one is required.
+     */
+    static Type readFromBody(Ast.Binder param, Ast.Expr body, Scope env, CheckContext ctx,
+                             Type answers) {
+        try {
+            return new BodyTyping(ctx.symbols(), ctx.reqs(), Map.of())
+                    .typeOf(param, body, env, answers);
+        } catch (CompileException | Unanswerable _) {
+            // The two ways a body has no type to give: it does not type, and it depends on a name
+            // that denotes nothing. Anything else thrown here is this compiler being wrong about
+            // itself, and reading it as "no answer" would leave a signature unchecked over it.
+            return null;
+        }
+    }
+
     /** {@code h} with its determinable parameters typed, or null when none of them is. */
     private static Ast.FnDef settle(Ast.FnDef h, HelperInliner inliner, Symbols symbols,
                                     Map<String, ReqSig> reqSigs, Map<String, Type> recursiveHelperFns) {
@@ -145,17 +164,48 @@ final class HelperParams {
         if (found.isEmpty()) {
             return null;
         }
+        Map<Type.MetaVar, Type> generalized = new HashMap<>();
         List<Ast.FnParam> params = new ArrayList<>();
         for (int i = 0; i < h.params().size(); i++) {
             Ast.FnParam p = h.params().get(i);
             Type t = found.get(i);
             params.add(t == null ? p
                     : new Ast.FnParam(p.binder(),
-                            new Ast.RetType(List.of(Ast.TypeRef.of(t, p.pos())), p.pos()),
+                            new Ast.RetType(
+                                    List.of(Ast.TypeRef.of(generalize(t, generalized), p.pos())),
+                                    p.pos()),
                             p.typeFromPattern()));
         }
         return new Ast.FnDef(h.name(), params, h.declaredReturn(), h.body(),
                 h.partial(), h.pos());
+    }
+
+    /**
+     * {@code t} as this helper's own signature says it, with every variable an expansion inside the
+     * body left open written as a variable of the helper.
+     *
+     * <p>Reading the body is what settles a parameter, and what the body settles it to may be open:
+     * {@code let has (xs, y) = List.member(y, xs)} learns that {@code xs} holds whatever {@code y} is
+     * and no more. That is an answer — it says the two are one thing — but it is the helper's answer
+     * now, not the expansion's. A variable of one application decides once, when that application is
+     * typed; a variable of a declaration decides at each call of it, which is what {@code has} needs.
+     *
+     * <p>One map for the whole helper, so a variable two parameters share stays one variable and
+     * {@code has([ 1 ], "x")} is still refused. The spelling keeps the application it came from, so
+     * two expansions the body made contribute two variables rather than colliding on {@code 'a}.
+     */
+    private static Type generalize(Type t, Map<Type.MetaVar, Type> generalized) {
+        if (!Type.mentions(t, x -> x instanceof Type.MetaVar)) {
+            return t;
+        }
+        Type.mentions(t, x -> {
+            if (x instanceof Type.MetaVar m) {
+                generalized.computeIfAbsent(m,
+                        v -> Type.inferredVar(v.spelling() + "." + v.application()));
+            }
+            return false;   // a collector, not a test: every position is visited
+        });
+        return TypeOps.substituteMetas(t, generalized);
     }
 
     /**
@@ -419,6 +469,7 @@ final class HelperParams {
                     }
                 }
                 case Ast.LetIn li -> visitLet(li, env, target, expected);
+                case Ast.Expansion ex -> visitExpansion(ex, env, target, expected);
                 case Ast.Binary bin -> {
                     visitOperand(bin.left(), bin.right(), bin.op(), false, env, target);
                     visitOperand(bin.right(), bin.left(), bin.op(), true, env, target);
@@ -633,26 +684,138 @@ final class HelperParams {
         }
 
         /**
+         * An expansion demands of each argument what the callee declared for it. The declarations
+         * arrive already instantiated into that one application's variables, so a variable the
+         * signature wrote in two places is one variable here and a reading of either settles both —
+         * which is what makes {@code let has (xs, y) = List.member(y, xs)} say that {@code y} is an
+         * element of {@code xs}.
+         *
+         * <p>The body is read for what the expansion as a whole is read for. Not for the callee's
+         * declared result: this walk asks what a position demands of the parameter, and a result the
+         * callee declared demands nothing of it — it is what the callee promises its caller. Reading
+         * the body against it settles the parameter by a type the call site never asked for.
+         */
+        private void visitExpansion(Ast.Expansion ex, Scope env, BindingId target, Type expected) {
+            Substitution decided = fromGiven(ex, env);
+            List<Type> demands = new ArrayList<>();
+            for (Ast.Bound b : ex.bound()) {
+                demands.add(b.declaredType() == null ? null
+                        : decided.zonk(TypeOps.resolveParamType(b.declaredType(), symbols)));
+            }
+            Type answers = expected;
+            for (int i = 0; i < ex.bound().size(); i++) {
+                Ast.Bound b = ex.bound().get(i);
+                if (isParam(b.value(), target)) {
+                    pin(demands.get(i));
+                    if (pinned != null) {
+                        return;
+                    }
+                    OpenUse use = openUse;
+                    // the binding stands for the parameter, so it is what the body is read for — and
+                    // it is left out of the scope, or its uses would be answered by its own type
+                    visit(ex.body(), inForce(ex, demands, env, i), b.binder().id(), answers);
+                    openUse = use;   // its uses are the binding's, not the parameter's
+                    if (pinned != null) {
+                        return;
+                    }
+                }
+                visit(b.value(), env, target, demands.get(i));
+                if (pinned != null) {
+                    return;
+                }
+            }
+            visit(ex.body(), inForce(ex, demands, env, -1), target, answers);
+        }
+
+        /**
+         * What the functions this call was given decide about the callee's variables.
+         *
+         * <p>A signature relates a function parameter to a value parameter — {@code witness (f: ('a)
+         * -> Bool, x: 'a)} says {@code x} is what {@code f} takes — and a function argument leaves no
+         * binding for that to survive on. Where the callee applies it, the relation is reproduced by
+         * that application and this finds nothing new. Where it does not, this is the only reader
+         * that has both the lambda and what the signature said about it (issue #320).
+         *
+         * <p>The lambda is read the way a helper's own parameters are: its body says what its
+         * parameters are, one step in. What it decides is recorded through the same
+         * {@link Substitution} the check uses, asked in its inference-only form — this walk works
+         * out what a type is and reports nothing, and a disagreement it meets is the caller's error,
+         * reported where the check reports one.
+         */
+        private Substitution fromGiven(Ast.Expansion ex, Scope env) {
+            Substitution decided = new Substitution();
+            for (Ast.Given g : ex.given()) {
+                if (g.declaredType() == null
+                        || !(TypeOps.resolveParamType(g.declaredType(), symbols) instanceof Type.FnOf step)
+                        || !(g.value() instanceof Ast.Block lambda)
+                        || lambda.params().size() != step.params().size()) {
+                    continue;
+                }
+                Scope inner = walking(env, lambda, step);
+                try {
+                    for (int i = 0; i < lambda.params().size(); i++) {
+                        Type t = new BodyTyping(symbols, reqSigs, recursiveHelperFns, freshening)
+                                .typeOf(lambda.params().get(i), lambda.body(), inner, step.result());
+                        if (t != null) {   // a position the lambda's body leaves open says nothing
+                            decided.decide(step.params().get(i), t, symbols, ex.pos(), "closure");
+                        }
+                    }
+                    // What it answers is a position of the signature too. `(f: (Int) -> 'a, x: 'a)`
+                    // relates the argument to what the function answers, and reading only what it
+                    // takes would carry one of those and drop the other.
+                    Type answers = typed(lambda.body(), walking(env, lambda,
+                            decided.zonk(step) instanceof Type.FnOf f ? f : step));
+                    if (answers != null) {
+                        decided.decide(step.result(), answers, symbols, ex.pos(), "closure result");
+                    }
+                } catch (CompileException _) {
+                    return new Substitution();   // it does not agree; settle nothing from it
+                }
+            }
+            return decided;
+        }
+
+        /** {@code env} with every binding of the expansion in force but the one at {@code except}. */
+        private Scope inForce(Ast.Expansion ex, List<Type> demands, Scope env, int except) {
+            Scope inner = env;
+            for (int i = 0; i < ex.bound().size(); i++) {
+                if (i != except) {
+                    inner = bound(ex.bound().get(i), demands.get(i), inner);
+                }
+            }
+            return inner;
+        }
+
+        /**
          * {@code env} with what the binding is in force as. The written type says it, except where it
          * names a type variable: the binding a helper's expansion writes carries the callee's declared
          * type, so a combinator's {@code List<'a>} would stand in front of the {@code List<Int>} the
          * argument actually is. A variable names nothing (spec 13.1), so what the value is wins there.
          */
         private Scope bound(Ast.LetIn li, Type demanded, Scope env) {
+            return bound(li.binder(), li.declaredType(), li.value(), demanded, env);
+        }
+
+        private Scope bound(Ast.Bound b, Type demanded, Scope env) {
+            return bound(b.binder(), b.declaredType(), b.value(), demanded, env);
+        }
+
+        private Scope bound(Ast.Binder binder, Ast.RetType declared, Ast.Expr value, Type demanded,
+                            Scope env) {
             Type type = demanded;
-            if (type == null || Type.mentions(type, x -> x instanceof Type.Var)) {
-                Type value = carried(li, env);
-                if (value != null) {
-                    type = value;
+            if (type == null || Type.mentions(type, x -> x instanceof Type.Open)) {
+                Type carried = carried(declared, value, env);
+                if (carried != null) {
+                    type = carried;
                 }
             }
-            return type == null ? env : env.with(li.binder(), type);
+            return type == null ? env : env.with(binder, type);
         }
 
         /** The type a binding carries into its body, or null where this scope cannot type its value. */
-        private Type carried(Ast.LetIn li, Scope env) {
-            Type value = typed(li.value(), env);
-            return value == null ? null : Elaborator.carriedType(li, value, symbols);
+        private Type carried(Ast.RetType declared, Ast.Expr value, Scope env) {
+            Type is = typed(value, env);
+            return is == null ? null : Elaborator.carriedType(declared, is, symbols);
         }
 
         /**
@@ -763,7 +926,7 @@ final class HelperParams {
          */
         private List<Type> solved(Ast.Apply call, Type.FnOf sig, Scope env, BindingId target,
                                   Type expected) {
-            if (!Type.mentions(sig, x -> x instanceof Type.Var)) {
+            if (!Type.mentions(sig, x -> x instanceof Type.Open)) {
                 return sig.params();
             }
             Map<String, Type> bind = new HashMap<>();
@@ -892,7 +1055,7 @@ final class HelperParams {
          * exactly the arm that answers none.
          */
         private boolean settles(Type t) {
-            return determinesOuterType(t) && !Type.mentions(t, x -> x instanceof Type.Var);
+            return determinesOuterType(t) && !Type.mentions(t, x -> x instanceof Type.Open);
         }
 
         /**
@@ -918,7 +1081,7 @@ final class HelperParams {
                 return false;
             }
             boolean outer = switch (t) {
-                case Type.Var v -> saysWhatAnotherHolds(v);
+                case Type.Open v -> saysWhatAnotherHolds(v);
                 case Type.FnOf _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> false;
                 case Type.Prim _, Type.Ref _, Type.Union _, Type.ListOf _, Type.SetOf _,
                         Type.MapOf _, Type.OptionOf _, Type.TupleOf _ -> true;
@@ -940,7 +1103,7 @@ final class HelperParams {
          * <p>A variable the core wrote, and one standing only where this parameter is being worked
          * out, say nothing: {@code let id (v) = v} is open however the walk reached it.
          */
-        private boolean saysWhatAnotherHolds(Type.Var v) {
+        private boolean saysWhatAnotherHolds(Type.Open v) {
             Type is = readings.asSettled(v);
             for (Type other : otherParameters) {
                 if (Type.mentions(readings.asSettled(other), x -> x.equals(is))) {

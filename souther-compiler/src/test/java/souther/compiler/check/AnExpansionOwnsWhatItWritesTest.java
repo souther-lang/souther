@@ -20,8 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Every binding an expansion writes belongs to that expansion.
  *
  * <p>Expanding a call writes several bindings: one per argument, one for a lambda given to a function
- * parameter, one carrying the declared return, and one for every binding copied out of the callee's
- * body. They are one call's, and a reader that has to answer something about the call — which
+ * parameter, and one for every binding copied out of the callee's body. They are one call's, and a reader that has to answer something about the call — which
  * signature they came from, what one variable of it stands for — can only do that if it can tell
  * which of them are the same call's. Owning them is what says so; before this, only the copied body's
  * were owned by the expansion and the rest belonged to the pass.
@@ -43,6 +42,9 @@ class AnExpansionOwnsWhatItWritesTest {
     private static void collect(Ast.Expr e, List<Ast.Binder> out) {
         if (e instanceof Ast.LetIn li) {
             out.add(li.binder());
+        }
+        if (e instanceof Ast.Expansion ex) {
+            ex.bound().forEach(b -> out.add(b.binder()));
         }
         if (e instanceof Ast.Block b) {
             out.addAll(b.params());

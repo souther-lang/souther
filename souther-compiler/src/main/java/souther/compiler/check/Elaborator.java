@@ -189,6 +189,7 @@ public final class Elaborator {
                 Core body = elaborate(li.body(), inner, ctx, expected);
                 yield new Core.LetIn(li.binder(), value, body, body.type(), li.pos());
             }
+            case Ast.Expansion ex -> expansion(ex, env, ctx, expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
             // would need a runtime closure (spec 12.5)
@@ -562,6 +563,7 @@ public final class Elaborator {
             // a lambda returned under its capture bindings, e.g. inlining `adder(5)` leaves
             // `let $n = 5 in (x) -> x + $n` (spec §blocks)
             case Ast.LetIn li -> producesFunction(li.body());
+            case Ast.Expansion ex -> producesFunction(ex.body());
             default -> false;
         };
     }
@@ -633,13 +635,326 @@ public final class Elaborator {
      * the argument's own type, which monomorphisation and the call-site check already handle.
      */
     static Type carriedType(Ast.LetIn li, Type valueType, Symbols symbols) {
-        if (li.declaredType() instanceof Ast.RetType rt) {
-            Type declared = TypeOps.resolveParamType(rt, symbols);
-            if (TypeOps.isSumType(declared, symbols) && TypeOps.assignable(valueType, declared, symbols)) {
-                return declared;
-            }
+        return carriedType(li.declaredType(), valueType, symbols);
+    }
+
+    static Type carriedType(Ast.RetType declared, Type valueType, Symbols symbols) {
+        return declared == null ? valueType
+                : carriedType(TypeOps.resolveParamType(declared, symbols), valueType, symbols);
+    }
+
+    private static Type carriedType(Type declared, Type valueType, Symbols symbols) {
+        if (Type.mentions(declared, x -> x instanceof Type.MetaVar)) {
+            return valueType;   // it stands for what this application decides, and is not a sum
+        }
+        if (TypeOps.isSumType(declared, symbols) && TypeOps.assignable(valueType, declared, symbols)) {
+            return declared;
         }
         return valueType;
+    }
+
+    /**
+     * One application of a helper, typed as one thing.
+     *
+     * <p>The callee's signature arrives instantiated into this application's own variables
+     * ({@link Type.MetaVar}), over its parameters and its result together. Reading the arguments
+     * against the parameters decides them, and the result is read with what they decided already
+     * written in — which is how a declaration that says only that its result holds what its argument
+     * held ({@code (xs: List<'a>) : List<'a>}) reaches a body that says nothing about what it
+     * answers.
+     *
+     * <p>The order is not an accident. Once the arguments have been read, a variable still open
+     * cannot appear in any parameter that became a binding — if it did, that binding's value would
+     * have decided it — so nothing in scope holds a type this could still change, and the
+     * substitution stays inside this call. What remains open is in the result or in a function
+     * parameter, and neither is in scope as a value.
+     *
+     * <p>What it produces is the bindings it always produced. Grouping them is a statement about
+     * typing, not about what runs.
+     */
+    private static Core expansion(Ast.Expansion ex, Scope env, CheckContext ctx, Type expected) {
+        Applied applied = arguments(ex, env, ctx);
+        Substitution decided = applied.decided();
+        List<Core> values = applied.values();
+        Scope inner = applied.inner();
+        Type declaredResult = declaredResult(ex, ctx);
+        // The declaration is what an empty collection inside the body has to go on: at a call site
+        // that expects nothing concrete, nothing else says what it holds. Pushed in only once this
+        // application has settled it — before that it names variables, and a variable states no type.
+        Type want = declaredResult != null && !decided.open(declaredResult)
+                ? decided.zonk(declaredResult) : expected;
+        Core body = elaborate(ex.body(), inner.deciding(decided), ctx, want);
+        Type type = body.type();
+        if (declaredResult != null) {
+            // What the body answers decides a variable the arguments left open — a result the
+            // signature relates to a function parameter rather than to a value one.
+            decided.decide(declaredResult, body.type(), ctx.symbols(), ex.pos(),
+                    "the result of `" + shown(ex) + "`");
+            if (ex.callee() instanceof ValueName.Local) {
+                // A function the caller supplied, expanded where the callee applies it. What it was
+                // declared to answer is what the caller was held to when it handed the function
+                // over, so a body answering something else is the caller's error and is reported
+                // here — a helper's own declared return is its promise, and is reported against it.
+                decided.hold(declaredResult, body.type(), ctx.symbols(), ex.pos(),
+                        "what `" + shown(ex) + "` was given to answer");
+            }
+            type = decided.settle(declaredResult);
+            if (!TypeOps.assignable(body.type(), type, ctx.symbols())) {
+                type = body.type();   // the declaration is wrong, and is reported against the helper
+            }
+        }
+        if (Type.mentions(type, x -> x instanceof Type.MetaVar)) {
+            // The expansion is where its variables live and die. One leaving here would be a type
+            // nothing below can read: neither what may be assigned to what, nor what to emit for it,
+            // is a question about a variable one call left open.
+            throw new IllegalStateException(
+                    "an expansion answered with a type it had not decided: " + Type.show(type));
+        }
+        // wrapped innermost-first, so the value parameters bind in declared order
+        Core out = body;
+        for (int i = ex.bound().size() - 1; i >= 0; i--) {
+            out = new Core.LetIn(ex.bound().get(i).binder(), values.get(i), out, type, ex.pos());
+        }
+        return out;
+    }
+
+    /** What reading this application's arguments decided, and the scope its body is read in. */
+    private record Applied(Substitution decided, List<Core> values, Scope inner) {}
+
+    /**
+     * The arguments of one application, read against the signature it instantiated.
+     *
+     * <p>The one place an application's arguments are typed. What the callee answers — a value, or a
+     * function the caller binds and applies — decides what is done with the body afterwards and
+     * nothing about the arguments, so the two readers of an expansion come through here rather than
+     * each doing this again. That a helper answers a function is not a reason for its own parameters
+     * to go unchecked.
+     */
+    private static Applied arguments(Ast.Expansion ex, Scope env, CheckContext ctx) {
+        Substitution decided = new Substitution(ex.application(), env.decisions());
+        List<Core> values = new ArrayList<>();
+        Scope inner = env;
+        for (Ast.Bound b : ex.bound()) {
+            Core value = elaborate(b.value(), env, ctx);
+            Type bindType = value.type();
+            if (b.declaredType() != null) {
+                Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());
+                // The argument is held to everything the declaration states, whether or not the
+                // callee's body ever reads it, and however many variables stand inside it.
+                decided.constrain(declared, value.type(), ctx.symbols(), b.value().pos(),
+                        argument(ex, b.binder().name()));
+                Type required = decided.zonk(declared);
+                if (states(required)) {
+                    bindType = carriedType(required, value.type(), ctx.symbols());
+                }
+            }
+            values.add(value);
+            inner = inner.with(b.binder(), bindType);
+        }
+        givenFunctions(ex, decided, env, ctx);
+        return new Applied(decided, values, inner);
+    }
+
+    /**
+     * The functions this call was given, held to what the callee declared of them.
+     *
+     * <p>Only the ones the callee never applies. Where it applies one, that application is an
+     * expansion like any other and carries what the callee declared of the parameter, so the
+     * function is read there — in the one place the types this application decided are in force.
+     * Where it never does, there is no such place, and this is the only reader that holds the
+     * signature and the argument at once.
+     *
+     * <p>The whole function type is read, parameters and result together. A signature says something
+     * at each position — {@code (f: ('a) -> Bool, x: 'a)} relates the argument to what {@code f}
+     * takes, {@code (f: (Int) -> 'a, x: 'a)} to what it answers — and reading one position would
+     * carry one of them and drop the other.
+     */
+    private static void givenFunctions(Ast.Expansion ex, Substitution decided, Scope env,
+                                       CheckContext ctx) {
+        for (Ast.Given g : ex.given()) {
+            if (g.declaredType() == null
+                    || !(TypeOps.resolveParamType(g.declaredType(), ctx.symbols())
+                            instanceof Type.FnOf declared)) {
+                continue;
+            }
+            Type arrives = arrivesAs(g, ex, env, ctx);
+            if (arrives != null) {
+                // Both sides are one statement each, so both are read as one. Each was instantiated
+                // once — the receiving declaration when this call was expanded, the arriving one
+                // here — and reading them against each other decides those variables together: a
+                // variable written at two positions is one variable, and the two readings of it must
+                // agree. `('a) -> 'a` given `(Int) -> String` is refused for that reason and no
+                // other, because at each position on its own there is nothing wrong.
+                // What this reading settles is this application's, like every other. A signature
+                // relates a function parameter to the rest of what it wrote — `(f: ('a) -> Bool):
+                // List<'a>` answers a list of what the function takes — so what the function says
+                // about a variable is what that variable is at every other position of the call.
+                decided.constrain(declared, arrives, ctx.symbols(), g.value().pos(),
+                        argument(ex, "a function"));
+                continue;
+            }
+            if (g.applied() || !inSight(g.value(), env)) {
+                continue;   // a lambda the callee applies is read at that application
+            }
+            List<Type> takes = takes(declared, decided, g.value(), env, ctx);
+            if (takes == null) {
+                continue;   // nothing says what it takes, and its own body does not either
+            }
+            decided.constrain(declared,
+                    elaborateFunctionValue(g.value(), takes, env, ctx).type(), ctx.symbols(),
+                    g.value().pos(), argument(ex, "a function"));
+        }
+    }
+
+    /**
+     * What the function this call was given is declared as, or null where nothing declares it.
+     *
+     * <p>Asked rather than worked out. A function reaching a parameter under a name is declared
+     * where it is bound — a helper's own parameter, a binding, a function an enclosing call
+     * supplied — and reading that declaration is what a boundary does. Only a lambda written at the
+     * call has no declaration of its own, and it is read at the application that decides it.
+     */
+    private static Type arrivesAs(Ast.Given g, Ast.Expansion ex, Scope env, CheckContext ctx) {
+        Type is = g.arrivesAs() != null ? TypeOps.resolveParamType(g.arrivesAs(), ctx.symbols())
+                : g.value() instanceof Ast.Var v
+                        && env.of(v.denotes(), v.reaches()) instanceof Type.FnOf fn ? fn : null;
+        return is == null ? null : instantiated(is, ex);
+    }
+
+    /**
+     * {@code declared} with the variables it left open standing at this boundary's own.
+     *
+     * <p>One per variable, not one per position: {@code ('a) -> 'a} is a function answering what it
+     * was given, and instantiating each occurrence separately would say only that it takes something
+     * and answers something.
+     *
+     * <p>And one per scope, which within one expansion is one. The declarations that arrive under a
+     * variable are the enclosing definition's — a helper handing its own function parameters on
+     * writes them in one signature, where one spelling is one variable — so two of them sharing a
+     * spelling share a variable, and instantiating each boundary separately would lose that. What
+     * arrives from anywhere else arrives already instantiated, carrying the variables of the call
+     * that supplied it, and has no spelling left to share.
+     *
+     * <p>It is instantiated here because the declaration is another's — the receiving side was
+     * instantiated when this call was expanded — and the two are read against each other once both
+     * stand at variables this application decides.
+     */
+    private static Type instantiated(Type declared, Ast.Expansion ex) {
+        Map<String, Type> theirs = new HashMap<>();
+        Type.mentions(declared, t -> {
+            if (t instanceof Type.Var v) {
+                theirs.computeIfAbsent(v.name(),
+                        name -> new Type.MetaVar(ex.application(), "given " + name));
+            }
+            return false;   // a collector, not a test: every position is visited
+        });
+        return theirs.isEmpty() ? declared : TypeOps.substituteVars(declared, theirs);
+    }
+
+    /**
+     * Whether a declared type says what a value at that position is. A variable does not, whichever
+     * kind it is: one this application has not decided stands for what it settles on, and one the
+     * declaration wrote stands for whatever each use makes it. Holding a value to either would be
+     * comparing it against something that is not a type.
+     */
+    private static boolean states(Type t) {
+        return !Type.mentions(t, x -> x instanceof Type.Open);
+    }
+
+    /**
+     * Whether a declared type says what a value at that position is <em>and</em> is done saying it.
+     * A type carrying the empty-collection bottom is an answer so far: it says what the value is
+     * made of and not what it holds, and a later reading widens it (ADR-0028).
+     */
+    private static boolean settled(Type t) {
+        return states(t) && !Type.mentions(t, x -> x instanceof Type.Nothing);
+    }
+
+    /**
+     * Whether a function argument is something this scope can type at all.
+     *
+     * <p>A name given to a function parameter is not always a value: where a helper hands its own
+     * function parameter on to another, the name stands for a block the inliner is holding and
+     * answers by substituting it into the body. Nothing binds it, so there is nothing here to read
+     * it as, and what it is declared as is carried on the boundary instead.
+     */
+    private static boolean inSight(Ast.Expr function, Scope env) {
+        if (function instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local) {
+            return env.holds(local.id());
+        }
+        return reads(function, env);
+    }
+
+    /**
+     * Whether every name inside {@code e} is one this scope can answer. A recursive helper is
+     * reached by its declaration rather than by a binding, and which declarations a scope reaches
+     * depends on where it was built — so a function argument whose body calls one may be readable
+     * where it is applied and not here. Where it is not, it is left to the body that applies it.
+     */
+    private static boolean reads(Ast.Expr e, Scope env) {
+        if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Helper
+                && env.of(call.denotes(), call.reaches()) == null) {
+            return false;
+        }
+        boolean[] all = {true};
+        Ast.forEachChild(e, child -> all[0] &= reads(child, env));
+        return all[0];
+    }
+
+    /**
+     * What to read a function this call was given at: what the signature settled, and for a position
+     * it left open, what the lambda's own body says.
+     *
+     * <p>Reading it off the body is right here and nowhere else. This is a function the callee never
+     * applies, so no application of it will ever settle what it takes — where one would, that
+     * application is the reader and this is not asked at all. Null where a position is open and the
+     * body does not say what stands there either, which is a function nothing in the program
+     * describes.
+     */
+    private static List<Type> takes(Type.FnOf declared, Substitution decided, Ast.Expr function,
+                                    Scope env, CheckContext ctx) {
+        Type.FnOf want = decided.zonk(declared) instanceof Type.FnOf w ? w : declared;
+        List<Type> takes = new ArrayList<>();
+        for (int i = 0; i < want.params().size(); i++) {
+            Type stated = want.params().get(i);
+            if (settled(stated)) {
+                takes.add(stated);
+                continue;
+            }
+            if (!(function instanceof Ast.Block lambda) || i >= lambda.params().size()) {
+                return null;
+            }
+            Type read = HelperParams.readFromBody(lambda.params().get(i), lambda.body(), env, ctx,
+                    settled(want.result()) ? want.result() : null);
+            if (read == null || !settled(read)) {
+                return null;
+            }
+            takes.add(read);
+        }
+        return takes;
+    }
+
+    private static String argument(Ast.Expansion ex, String name) {
+        return "`" + name + "` of `" + shown(ex) + "`";
+    }
+
+    /** The one type the callee's declaration gives its result, or null where it declared none or
+     * declared a union — a union names one type where the body may answer several, so there is
+     * nothing single to hold the body to. */
+    private static Type declaredResult(Ast.Expansion ex, CheckContext ctx) {
+        return ex.declaredReturn() == null || ex.declaredReturn().cases().size() != 1 ? null
+                : TypeOps.resolveParamType(ex.declaredReturn(), ctx.symbols());
+    }
+
+    /** The callee as the caller wrote it, for a message about the call. A function the caller
+     * supplied is bound under the parameter it was given to, marked as the inliner's own; the mark
+     * says nothing to whoever wrote the call, so it is not shown. */
+    private static String shown(Ast.Expansion ex) {
+        if (ex.callee() == null) {
+            return "a helper";
+        }
+        String name = ex.callee().name();
+        return name.startsWith("$") ? name.substring(1) : name;
     }
 
     /** {@code let f: T = <function>} — a binding whose value is a function takes no annotation, because
@@ -866,6 +1181,17 @@ public final class Elaborator {
                             "the two branches produce different function types: " + Type.show(t) + " vs " + Type.show(f));
                 }
                 yield new Core.If(cond, then, els, t, iff.pos());
+            }
+            // a helper that answers a function: `adder(5)` expands to the lambda under the bindings
+            // its arguments became, and what those captured is what the lambda closes over
+            case Ast.Expansion ex -> {
+                Applied applied = arguments(ex, env, ctx);
+                Core out = elaborateFunctionValue(ex.body(), paramTypes, applied.inner(), ctx);
+                for (int i = ex.bound().size() - 1; i >= 0; i--) {
+                    out = new Core.LetIn(ex.bound().get(i).binder(), applied.values().get(i), out,
+                            out.type(), ex.pos());
+                }
+                yield out;
             }
             case Ast.LetIn li -> {
                 // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)
