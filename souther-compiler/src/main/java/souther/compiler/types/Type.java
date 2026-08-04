@@ -6,7 +6,16 @@ package souther.compiler.types;
  */
 public sealed interface Type
         permits Type.Prim, Type.Ref, Type.ListOf, Type.MapOf, Type.SetOf, Type.OptionOf, Type.Union,
-                Type.FnOf, Type.Var, Type.Nothing, Type.Never, Type.TupleOf, Type.Erroneous {
+                Type.FnOf, Type.Open, Type.Nothing, Type.Never, Type.TupleOf, Type.Erroneous {
+
+    /**
+     * A type that stands for another rather than being one. There are two, and they differ in who
+     * gets to say what it stands for: a {@link Var} is a declaration's, and every use of that
+     * declaration must hold for it; a {@link MetaVar} is one application's, and that application
+     * decides it. Wherever the question is only "does this stand for something else", both answer
+     * yes, and a reader asking it says so by naming this.
+     */
+    sealed interface Open extends Type permits Var, MetaVar {}
 
     enum Prim implements Type { INT, STRING, BOOL, DECIMAL, DATE, DATETIME, RAW }
 
@@ -61,7 +70,39 @@ public sealed interface Type
      * a use decides, and its spelling is an internal name that says nothing to anyone, so nothing
      * shows it.
      */
-    record Var(String name, boolean inferred) implements Type {}
+    record Var(String name, boolean inferred) implements Open {}
+
+    /**
+     * A variable one application of a signature left open, waiting to be decided by that
+     * application. It is not {@link Var}: that one stands for any type and may not be rewritten,
+     * because it is what a declaration wrote and every use of the declaration must hold for it.
+     * This one stands for the one type a single application settles on, and is rewritten as soon as
+     * something says what that is.
+     *
+     * <p>Identity is the pair, not the spelling. {@code application} is the expansion of one call,
+     * and {@code spelling} is the variable that call's callee wrote, which is unique within a
+     * signature. So two occurrences of {@code 'a} in one signature are one variable at one call, and
+     * two calls of that signature leave two — which is the rule this exists to state.
+     *
+     * <p>It lives no longer than the elaboration of the expansion that made it. Every one is either
+     * decided there or read as {@link Nothing} at its boundary (ADR-0028), so nothing below sees one
+     * and no answer the compiler stores holds one.
+     */
+    record MetaVar(BindingOwner application, String spelling) implements Open {
+
+        public MetaVar {
+            if (application == null || spelling == null) {
+                throw new IllegalArgumentException(
+                        "a meta variable needs an application and a spelling: " + application + " "
+                                + spelling);
+            }
+        }
+
+        @Override
+        public String toString() {
+            return spelling + "@" + application;
+        }
+    }
 
     /** A reference to a named data type (product or sum). */
     record Ref(TypeName name) implements Type {
@@ -214,7 +255,7 @@ public sealed interface Type
                 f.params().forEach(p -> collectNames(p, out));
                 collectNames(f.result(), out);
             }
-            case Prim _, Var _, Nothing _, Never _, Erroneous _ -> { }
+            case Prim _, Var _, MetaVar _, Nothing _, Never _, Erroneous _ -> { }
         }
     }
 
@@ -252,6 +293,10 @@ public sealed interface Type
             // the reader, while what is open about the type is what they need.
             case Var v -> v.inferred() ? "_"
                     : v.name().startsWith("'") ? v.name() : "'" + v.name();
+            // What an application has not decided yet. Shown as what is open about the type, like
+            // every other variable the author did not write: the call it belongs to says nothing to
+            // someone reading their own program.
+            case MetaVar _ -> "_";
             case Nothing _ -> "_";
             case Never _ -> "Never";
             // An error type should not reach a message: it absorbs, so nothing compares against it
@@ -290,7 +335,7 @@ public sealed interface Type
             case TupleOf tu -> tu.elements().stream().anyMatch(e -> mentions(e, p));
             case FnOf f -> f.params().stream().anyMatch(a -> mentions(a, p))
                     || mentions(f.result(), p);
-            case Prim _, Ref _, Var _, Nothing _, Never _, Erroneous _, Union _ -> false;
+            case Prim _, Ref _, Var _, MetaVar _, Nothing _, Never _, Erroneous _, Union _ -> false;
         };
     }
 }

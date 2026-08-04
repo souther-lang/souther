@@ -189,6 +189,7 @@ public final class Elaborator {
                 Core body = elaborate(li.body(), inner, ctx, expected);
                 yield new Core.LetIn(li.binder(), value, body, body.type(), li.pos());
             }
+            case Ast.Expansion ex -> expansion(ex, env, ctx, expected);
             // reached only where a block escapes: it may be passed as an argument, or bound to a
             // `let` and applied, but it is not a value that can be returned or stored, because that
             // would need a runtime closure (spec 12.5)
@@ -562,6 +563,7 @@ public final class Elaborator {
             // a lambda returned under its capture bindings, e.g. inlining `adder(5)` leaves
             // `let $n = 5 in (x) -> x + $n` (spec §blocks)
             case Ast.LetIn li -> producesFunction(li.body());
+            case Ast.Expansion ex -> producesFunction(ex.body());
             default -> false;
         };
     }
@@ -633,13 +635,106 @@ public final class Elaborator {
      * the argument's own type, which monomorphisation and the call-site check already handle.
      */
     static Type carriedType(Ast.LetIn li, Type valueType, Symbols symbols) {
-        if (li.declaredType() instanceof Ast.RetType rt) {
-            Type declared = TypeOps.resolveParamType(rt, symbols);
-            if (TypeOps.isSumType(declared, symbols) && TypeOps.assignable(valueType, declared, symbols)) {
-                return declared;
-            }
+        return carriedType(li.declaredType(), valueType, symbols);
+    }
+
+    static Type carriedType(Ast.RetType declared, Type valueType, Symbols symbols) {
+        return declared == null ? valueType
+                : carriedType(TypeOps.resolveParamType(declared, symbols), valueType, symbols);
+    }
+
+    private static Type carriedType(Type declared, Type valueType, Symbols symbols) {
+        if (Type.mentions(declared, x -> x instanceof Type.MetaVar)) {
+            return valueType;   // it stands for what this application decides, and is not a sum
+        }
+        if (TypeOps.isSumType(declared, symbols) && TypeOps.assignable(valueType, declared, symbols)) {
+            return declared;
         }
         return valueType;
+    }
+
+    /**
+     * One application of a helper, typed as one thing.
+     *
+     * <p>The callee's signature arrives instantiated into this application's own variables
+     * ({@link Type.MetaVar}), over its parameters and its result together. Reading the arguments
+     * against the parameters decides them, and the result is read with what they decided already
+     * written in — which is how a declaration that says only that its result holds what its argument
+     * held ({@code (xs: List<'a>) : List<'a>}) reaches a body that says nothing about what it
+     * answers.
+     *
+     * <p>The order is not an accident. Once the arguments have been read, a variable still open
+     * cannot appear in any parameter that became a binding — if it did, that binding's value would
+     * have decided it — so nothing in scope holds a type this could still change, and the
+     * substitution stays inside this call. What remains open is in the result or in a function
+     * parameter, and neither is in scope as a value.
+     *
+     * <p>What it produces is the bindings it always produced. Grouping them is a statement about
+     * typing, not about what runs.
+     */
+    private static Core expansion(Ast.Expansion ex, Scope env, CheckContext ctx, Type expected) {
+        Substitution decided = new Substitution();
+        List<Core> values = new ArrayList<>();
+        Scope inner = env;
+        for (Ast.Bound b : ex.bound()) {
+            Core value = elaborate(b.value(), env, ctx);
+            Type bindType = value.type();
+            if (b.declaredType() != null) {
+                Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());
+                decided.unify(declared, value.type(), ctx.symbols(), b.value().pos(),
+                        "argument `" + b.binder().name() + "` of `" + shown(ex) + "`");
+                // A type still open says nothing to hold the value to, so the value says what the
+                // binding is. Settled, it is the callee's declaration and carries what that said.
+                bindType = decided.open(declared) ? value.type()
+                        : carriedType(decided.zonk(declared), value.type(), ctx.symbols());
+            }
+            values.add(value);
+            inner = inner.with(b.binder(), bindType);
+        }
+        Type declaredResult = declaredResult(ex, ctx);
+        // The declaration is what an empty collection inside the body has to go on: at a call site
+        // that expects nothing concrete, nothing else says what it holds. Pushed in only once this
+        // application has settled it — before that it names variables, and a variable states no type.
+        Type want = declaredResult != null && !decided.open(declaredResult)
+                ? decided.zonk(declaredResult) : expected;
+        Core body = elaborate(ex.body(), inner, ctx, want);
+        Type type = body.type();
+        if (declaredResult != null) {
+            // What the body answers decides a variable the arguments left open — a result the
+            // signature relates to a function parameter rather than to a value one.
+            decided.unify(declaredResult, body.type(), ctx.symbols(), ex.pos(),
+                    "the result of `" + shown(ex) + "`");
+            type = decided.settle(declaredResult);
+            if (!TypeOps.assignable(body.type(), type, ctx.symbols())) {
+                type = body.type();   // the declaration is wrong, and is reported against the helper
+            }
+        }
+        if (Type.mentions(type, x -> x instanceof Type.MetaVar)) {
+            // The expansion is where its variables live and die. One leaving here would be a type
+            // nothing below can read: neither what may be assigned to what, nor what to emit for it,
+            // is a question about a variable one call left open.
+            throw new IllegalStateException(
+                    "an expansion answered with a type it had not decided: " + Type.show(type));
+        }
+        // wrapped innermost-first, so the value parameters bind in declared order
+        Core out = body;
+        for (int i = ex.bound().size() - 1; i >= 0; i--) {
+            out = new Core.LetIn(ex.bound().get(i).binder(), values.get(i), out, type, ex.pos());
+        }
+        return out;
+    }
+
+    /** The one type the callee's declaration gives its result, or null where it declared none or
+     * declared a union — a union names one type where the body may answer several, so there is
+     * nothing single to hold the body to. */
+    private static Type declaredResult(Ast.Expansion ex, CheckContext ctx) {
+        return ex.declaredReturn() == null || ex.declaredReturn().cases().size() != 1 ? null
+                : TypeOps.resolveParamType(ex.declaredReturn(), ctx.symbols());
+    }
+
+    /** The callee as the caller wrote it, for a message about the call. */
+    private static String shown(Ast.Expansion ex) {
+        return ex.callee() == null ? "a helper" : ex.callee().name();
     }
 
     /** {@code let f: T = <function>} — a binding whose value is a function takes no annotation, because
@@ -866,6 +961,23 @@ public final class Elaborator {
                             "the two branches produce different function types: " + Type.show(t) + " vs " + Type.show(f));
                 }
                 yield new Core.If(cond, then, els, t, iff.pos());
+            }
+            // a helper that answers a function: `adder(5)` expands to the lambda under the bindings
+            // its arguments became, and what those captured is what the lambda closes over
+            case Ast.Expansion ex -> {
+                Scope inner = env;
+                List<Core> captured = new ArrayList<>();
+                for (Ast.Bound b : ex.bound()) {
+                    Core arg = elaborate(b.value(), env, ctx);
+                    captured.add(arg);
+                    inner = inner.with(b.binder(), arg.type());
+                }
+                Core out = elaborateFunctionValue(ex.body(), paramTypes, inner, ctx);
+                for (int i = ex.bound().size() - 1; i >= 0; i--) {
+                    out = new Core.LetIn(ex.bound().get(i).binder(), captured.get(i), out,
+                            out.type(), ex.pos());
+                }
+                yield out;
             }
             case Ast.LetIn li -> {
                 // a capture binding around the function (e.g. `let $n = 5 in (x) -> x + $n`)

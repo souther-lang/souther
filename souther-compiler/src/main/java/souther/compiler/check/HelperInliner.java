@@ -778,29 +778,6 @@ public final class HelperInliner {
         }
     }
 
-    /** Keeps a helper's declared return type on the body spliced into the caller, as the annotation of
-     * a binding the body flows through ({@code let $r0: Map<String, Int> = <body> in $r0}). A declared
-     * return is a declaration into the body (spec §fn-declaration), and inlining is where it would
-     * otherwise be lost: at a call site that expects nothing concrete — a generic parameter such as
-     * {@code Map.toList}'s — the declaration is the only thing that can fix an empty-collection seed
-     * inside the body.
-     *
-     * <p>Only a collection-bearing return type is carried. A scalar return has nothing to fix, and
-     * leaving those bodies bare keeps a constant-foldable expression ({@code 金額(税込(100))}) a plain
-     * expression for the compile-time invariant check. A union return is left alone too: the binding
-     * would name one type where the body may produce several. */
-    private Ast.Expr keepDeclaredReturn(Ast.FnDef helper, Ast.Expr body, SourcePos pos,
-                                        Ast.Binders ours) {
-        Ast.RetType declared = helper.declaredReturn();
-        if (declared == null || declared.cases().size() != 1
-                || !carriesCollection(declared.cases().get(0))
-                || mentionsTypeVar(declared.cases().get(0))) {
-            return body;
-        }
-        Ast.Binder bound = ours.binder("$r", pos);
-        return new Ast.LetIn(bound, body, declared, true, null, Ast.Var.local(bound, pos), pos);
-    }
-
     /**
      * What this application decides for the variables {@code helper}'s signature left open — one
      * fresh variable per variable it wrote, over its parameters and its declared return together.
@@ -827,7 +804,7 @@ public final class HelperInliner {
         }
         Type.mentions(TypeOps.resolveParamType(declared, null), t -> {
             if (t instanceof Type.Var v) {
-                applied.computeIfAbsent(v.name(), name -> Type.inferredVar(name + "." + mine));
+                applied.computeIfAbsent(v.name(), name -> new Type.MetaVar(mine, name));
             }
             return false;   // a collector, not a test: every position is visited
         });
@@ -842,32 +819,6 @@ public final class HelperInliner {
         }
         Type at = TypeOps.substitute(TypeOps.resolveParamType(declared, null), applied);
         return new Ast.RetType(List.of(Ast.TypeRef.of(at, declared.pos())), declared.pos());
-    }
-
-    /** Whether a declared type has a collection anywhere inside it — the types whose element/value
-     * type an empty literal leaves open until something declares it. */
-    static boolean carriesCollection(Ast.TypeTerm term) {
-        if (!(term instanceof Ast.TypeRef ref)) {
-            return false;   // a function type carries no collection a literal could leave open
-        }
-        if (ref.denotes() != null) {
-            return Type.mentions(ref.denotes(), t -> t instanceof Type.ListOf
-                    || t instanceof Type.MapOf || t instanceof Type.SetOf);
-        }
-        if ("List".equals(ref.name()) || "Map".equals(ref.name()) || "Set".equals(ref.name())) {
-            return true;
-        }
-        if (carriesCollection(ref.arg())) {
-            return true;
-        }
-        if (ref.tupleElems() != null) {
-            for (Ast.TypeTerm e : ref.tupleElems()) {
-                if (carriesCollection(e)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /** Whether a declared type has a type variable inside it. A generic declared return ({@code
@@ -1181,10 +1132,9 @@ public final class HelperInliner {
                 // what each substituted callee resolved to at the call site, so the expansion carries
                 // the argument's own answer rather than deciding one for it
                 Map<BindingId, ValueName> substDenotes = new HashMap<>();
-                List<BindingId> given = new ArrayList<>();   // the lambdas given to fn params
-                List<Ast.Binder> letBinders = new ArrayList<>();
-                List<Ast.Expr> letValues = new ArrayList<>();
-                List<Ast.RetType> letTypes = new ArrayList<>();
+                List<BindingId> scoped = new ArrayList<>();   // the lambdas given to fn params
+                List<Ast.Bound> bound = new ArrayList<>();
+                List<Ast.Given> given = new ArrayList<>();
                 for (int i = 0; i < helper.params().size(); i++) {
                     Ast.FnParam p = helper.params().get(i);
                     Ast.Expr arg = args.get(i);
@@ -1193,6 +1143,7 @@ public final class HelperInliner {
                         // function is substituted directly (f(x) becomes inc(x)); a lambda is
                         // registered under a fresh name as a scoped helper, so each application of the
                         // parameter β-reduces to the lambda's body, as a let-bound lambda does (spec 12.5).
+                        given.add(new Ast.Given(instantiated(p.type(), applied), arg));
                         if (arg instanceof Ast.Var fnName) {
                             subst.put(p.binder().id(), fnName.name());
                             substDenotes.put(p.binder().id(), fnName.denotes());
@@ -1200,7 +1151,7 @@ public final class HelperInliner {
                             Ast.Binder f = ours.binder("$" + p.name(), lambda.pos());
                             subst.put(p.binder().id(), f.name());
                             substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
-                            given.add(f.id());
+                            scoped.add(f.id());
                             List<Ast.FnParam> lparams = new ArrayList<>();
                             for (Ast.Binder lp : lambda.params()) {
                                 lparams.add(new Ast.FnParam(lp, null));
@@ -1238,12 +1189,10 @@ public final class HelperInliner {
                         Ast.Binder f = ours.binder(p.name(), call.pos());
                         subst.put(p.binder().id(), f.name());
                         substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
-                        letBinders.add(f);
-                        letValues.add(arg);
                         // carry the parameter's declared type onto the binding, so a value known to
                         // be a sum (an annotated `s: S`) is not narrowed to the argument's specific
                         // case when the body is re-checked inline — a `match s` inside still sees S.
-                        letTypes.add(instantiated(p.type(), applied));
+                        bound.add(new Ast.Bound(f, instantiated(p.type(), applied), arg));
                     }
                 }
                 // a prelude helper's body is stamped with the call site, so errors inside it point at
@@ -1251,14 +1200,10 @@ public final class HelperInliner {
                 SourcePos at = keepsItsPositions(call) ? null : call.pos();
                 Copy copy = new Copy(helper.written(), ours);
                 Ast.Expr body = inline(rename(helper.written(), subst, substDenotes, at, copy));   // expand nested helpers too
-                given.forEach(scopedLambdas::remove);
-                given.forEach(lambdaOrigins::remove);
-                body = keepDeclaredReturn(helper, body, call.pos(), ours);
-                // wrap innermost-first so the value parameters bind in declared order
-                for (int i = letBinders.size() - 1; i >= 0; i--) {
-                    body = new Ast.LetIn(letBinders.get(i), letValues.get(i), letTypes.get(i), body, call.pos());
-                }
-                yield body;
+                scoped.forEach(scopedLambdas::remove);
+                scoped.forEach(lambdaOrigins::remove);
+                yield new Ast.Expansion(call.denotes(), mine, bound, given,
+                        instantiated(helper.declaredReturn(), applied), body, call.pos());
             }
             case Ast.FieldAccess fa -> new Ast.FieldAccess(inline(fa.target()), fa.field(), fa.pos());
             case Ast.Binary bin -> new Ast.Binary(bin.op(), inline(bin.left()), inline(bin.right()), bin.pos());
@@ -1274,6 +1219,20 @@ public final class HelperInliner {
             case Ast.If iff -> new Ast.If(inline(iff.cond()), inline(iff.then()), inline(iff.els()), iff.pos());
             case Ast.IfConstructed ic -> new Ast.IfConstructed(inline(ic.construct()), ic.binder(),
                     inline(ic.then()), Ast.mapArms(ic.els(), this::inline), ic.pos());
+            // Already expanded. Its body may still hold calls of its own — a helper whose callee was
+            // not in the table when this ran the first time — so it is walked like any other.
+            case Ast.Expansion ex -> {
+                List<Ast.Bound> bound = new ArrayList<>();
+                for (Ast.Bound b : ex.bound()) {
+                    bound.add(new Ast.Bound(b.binder(), b.declaredType(), inline(b.value())));
+                }
+                List<Ast.Given> given = new ArrayList<>();
+                for (Ast.Given g : ex.given()) {
+                    given.add(new Ast.Given(g.declaredType(), inline(g.value())));
+                }
+                yield new Ast.Expansion(ex.callee(), ex.application(), bound, given,
+                        ex.declaredReturn(), inline(ex.body()), ex.pos());
+            }
             case Ast.LetIn li -> {
                 // What the value turns out to be is what decides this, so it is worked out first: a
                 // lambda the author wrote and a named function read as a value are the same block by
@@ -1555,6 +1514,14 @@ public final class HelperInliner {
     private static void eachBinder(Ast.Expr e, java.util.function.Consumer<Ast.Binder> f) {
         switch (e) {
             case Ast.LetIn li -> f.accept(li.binder());
+            // What was given to a function parameter is walked here although it is not a slot: it is
+            // not code the expansion runs — the body holds it wherever the callee applies it — but a
+            // copy of this body has to move its binders along with the rest, or the copy would name
+            // a binding that stayed behind.
+            case Ast.Expansion ex -> {
+                ex.bound().forEach(b -> f.accept(b.binder()));
+                ex.given().forEach(g -> eachBinder(g.value(), f));
+            }
             case Ast.Block b -> b.params().forEach(f);
             case Ast.IfConstructed ic -> f.accept(ic.binder());
             case Ast.Match m -> {
@@ -1638,6 +1605,25 @@ public final class HelperInliner {
                 Ast.Expr body = rename(li.body(), subst, substDenotes, at, copy);
                 yield new Ast.LetIn(copy.of(li.binder()), value, li.declaredType(), li.annotated(),
                         li.opens(), body, at(at, li.pos()));
+            }
+            // A body already expanded once, being copied into another caller. The signature comes
+            // along as it stands: what its variables stand for is settled while each copy is typed,
+            // from that copy's own arguments, so two copies decide separately without the variables
+            // having to be minted again here.
+            case Ast.Expansion ex -> {
+                List<Ast.Bound> bound = new ArrayList<>();
+                for (Ast.Bound b : ex.bound()) {
+                    bound.add(new Ast.Bound(copy.of(b.binder()), b.declaredType(),
+                            rename(b.value(), subst, substDenotes, at, copy)));
+                }
+                List<Ast.Given> given = new ArrayList<>();
+                for (Ast.Given g : ex.given()) {
+                    given.add(new Ast.Given(g.declaredType(),
+                            rename(g.value(), subst, substDenotes, at, copy)));
+                }
+                yield new Ast.Expansion(ex.callee(), ex.application(), bound, given,
+                        ex.declaredReturn(), rename(ex.body(), subst, substDenotes, at, copy),
+                        at(at, ex.pos()));
             }
             case Ast.ListLit lit -> new Ast.ListLit(renameList(lit.elements(), subst, substDenotes, at, copy), at(at, lit.pos()));
             case Ast.Tuple tup -> new Ast.Tuple(renameList(tup.elements(), subst, substDenotes, at, copy), at(at, tup.pos()));

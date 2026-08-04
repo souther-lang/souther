@@ -164,6 +164,15 @@ public final class DataChecker {
                 collectConstructs(li.value(), out, symbols, recConstructs);
                 collectConstructs(li.body(), out, symbols, recConstructs);
             }
+            // An expansion builds what its arguments build and what the callee's body builds. What a
+            // function argument builds is counted from the body, where the callee applies it; counted
+            // here as well, one lambda's construction would be recorded twice.
+            case Ast.Expansion ex -> {
+                for (Ast.Bound b : ex.bound()) {
+                    collectConstructs(b.value(), out, symbols, recConstructs);
+                }
+                collectConstructs(ex.body(), out, symbols, recConstructs);
+            }
             case Ast.NewData nd -> {
                 // A construction this body was handed is not this body's. It is handed one two ways.
                 // A module's published value or helper carries its own: publishing the definition is

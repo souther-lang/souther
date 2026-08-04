@@ -30,12 +30,12 @@ import java.util.Set;
 final class Readings {
 
     /** What each variable is settled to. A variable nothing has settled is not in here. */
-    private final Map<Type.Var, Type> settled = new HashMap<>();
+    private final Map<Type.Open, Type> settled = new HashMap<>();
     private Type shape;
     private boolean refused;
     /** What was settled before this parameter began, for a parameter that turns out to settle
      * nothing. */
-    private Map<Type.Var, Type> held = Map.of();
+    private Map<Type.Open, Type> held = Map.of();
 
     /**
      * Starts on another parameter. What the readings have settled about a variable is kept: two
@@ -107,15 +107,15 @@ final class Readings {
         if (l.equals(r)) {
             return l;
         }
-        if (l instanceof Type.Var lv && r instanceof Type.Var rv) {
+        if (l instanceof Type.Open lv && r instanceof Type.Open rv) {
             // Either name denotes the value equally well, so one is settled to the other by name and
             // the answer is what the readings say rather than which of them was given first.
-            return lv.name().compareTo(rv.name()) <= 0 ? bind(rv, lv) : bind(lv, rv);
+            return lv.toString().compareTo(rv.toString()) <= 0 ? bind(rv, lv) : bind(lv, rv);
         }
-        if (l instanceof Type.Var lv) {
+        if (l instanceof Type.Open lv) {
             return bind(lv, r);
         }
-        if (r instanceof Type.Var rv) {
+        if (r instanceof Type.Open rv) {
             return bind(rv, l);
         }
         return switch (l) {
@@ -156,7 +156,7 @@ final class Readings {
      * only through another is found — {@code a} is a list of {@code b}, and {@code a} is {@code b},
      * settles {@code b} to a list of {@code b}, which is a value that would have to hold itself.
      */
-    private Type bind(Type.Var variable, Type type) {
+    private Type bind(Type.Open variable, Type type) {
         if (Type.mentions(type, variable::equals)) {
             return null;
         }
@@ -176,8 +176,8 @@ final class Readings {
         return settledSoFar(t, new HashSet<>());
     }
 
-    private Type settledSoFar(Type t, Set<Type.Var> following) {
-        if (t instanceof Type.Var v) {
+    private Type settledSoFar(Type t, Set<Type.Open> following) {
+        if (t instanceof Type.Open v) {
             Type next = settled.get(v);
             if (next == null || next.equals(v) || !following.add(v)) {
                 return v;

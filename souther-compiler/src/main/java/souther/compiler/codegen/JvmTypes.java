@@ -52,7 +52,7 @@ final class JvmTypes {
                 case RAW -> null;
             };
             case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
-                 Type.Union _, Type.FnOf _, Type.Var _, Type.Nothing _, Type.Never _,
+                 Type.Union _, Type.FnOf _, Type.Open _, Type.Nothing _, Type.Never _,
                  Type.TupleOf _, Type.Erroneous _ -> null;
         };
     }
@@ -210,6 +210,11 @@ final class JvmTypes {
             case Type.SetOf _ -> CD_Set;
             case Type.Union _ -> CD_Object;
             case Type.Var _ -> CD_Object;   // a type variable is erased to Object
+            // A variable an application left open has no erasure, because it is not a type: it is a
+            // question the elaborator answers and settles before anything is emitted. One reaching
+            // here is that having been skipped.
+            case Type.MetaVar m -> throw new IllegalStateException(
+                    "a type an application had not decided reached code generation: " + m);
             case Type.Nothing _ -> CD_Object;   // an empty collection's element bottom
             case Type.FnOf _ -> CD_Fn;
             // a pair is typed as the pair, so its elements are read as fields rather than through

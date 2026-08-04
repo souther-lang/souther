@@ -64,7 +64,7 @@ public final class TypeOps {
      * nothing about it. It is the one place a capability is claimed that the representation does not
      * guarantee.
      *
-     * <p>{@code Var}, {@code Nothing}, {@code Never} and {@code Erroneous} stand for a type rather
+     * <p>A variable, {@code Nothing}, {@code Never} and {@code Erroneous} stand for a type rather
      * than being one. They answer the way an unconstrained type does, so a generic core signature and
      * a module that already reported an error are not refused a second time for what they hold.
      */
@@ -112,7 +112,7 @@ public final class TypeOps {
                 case ORDERING, EXTERNAL_FORM -> false;
             };
             case Type.FnOf _ -> false;
-            case Type.Var _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> switch (required) {
+            case Type.Open _, Type.Nothing _, Type.Never _, Type.Erroneous _ -> switch (required) {
                 case EQUALITY, EXTERNAL_FORM -> true;
                 case ORDERING -> false;
             };
@@ -648,6 +648,33 @@ public final class TypeOps {
         };
     }
 
+    /** {@code t} with each variable of an application replaced by what {@code bindings} gives it. */
+    public static Type substituteMetas(Type t, Map<Type.MetaVar, Type> bindings) {
+        return switch (t) {
+            case Type.MetaVar m -> bindings.getOrDefault(m, m);
+            case Type.ListOf l -> Type.list(substituteMetas(l.element(), bindings));
+            case Type.MapOf m -> Type.map(substituteMetas(m.key(), bindings),
+                    substituteMetas(m.value(), bindings));
+            case Type.SetOf s -> Type.set(substituteMetas(s.element(), bindings));
+            case Type.OptionOf o -> Type.option(substituteMetas(o.element(), bindings));
+            case Type.FnOf f -> {
+                List<Type> params = new ArrayList<>();
+                for (Type p : f.params()) {
+                    params.add(substituteMetas(p, bindings));
+                }
+                yield Type.fn(params, substituteMetas(f.result(), bindings));
+            }
+            case Type.TupleOf tup -> {
+                List<Type> es = new ArrayList<>();
+                for (Type e : tup.elements()) {
+                    es.add(substituteMetas(e, bindings));
+                }
+                yield Type.tuple(es);
+            }
+            default -> t;
+        };
+    }
+
     public static Type substitute(Type t, Map<String, Type> bindings) {
         return switch (t) {
             case Type.Var v -> bindings.getOrDefault(v.name(), v);
@@ -1064,7 +1091,7 @@ public final class TypeOps {
                 case BOOL, RAW -> false;
             };
             case Type.Ref _, Type.ListOf _, Type.MapOf _, Type.SetOf _, Type.OptionOf _,
-                 Type.Union _, Type.FnOf _, Type.Var _, Type.Nothing _, Type.Never _,
+                 Type.Union _, Type.FnOf _, Type.Open _, Type.Nothing _, Type.Never _,
                  Type.TupleOf _, Type.Erroneous _ -> false;
         };
     }

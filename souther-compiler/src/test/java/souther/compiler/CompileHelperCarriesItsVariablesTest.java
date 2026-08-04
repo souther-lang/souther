@@ -249,11 +249,9 @@ class CompileHelperCarriesItsVariablesTest {
      * {@code Map.upsert} declares {@code Map<'k, 'a>} for its map and for what it answers, so what
      * the result holds is what the argument held.
      *
-     * <p>Not through the declaration: an expansion drops a declared return that carries a variable,
-     * and it is right to — the reason a declared return is carried at all is to fix an
-     * empty-collection seed the body cannot type, and a type that names a variable fixes nothing.
-     * The relation reaches the caller through what the body builds, which is built from the
-     * arguments.
+     * <p>Two ways at once here, and either would do: the body builds its result out of the arguments,
+     * and the declaration says the same thing. A helper whose body says nothing about what it answers
+     * has only the declaration, which is what {@code CompileTypeVariableTest} holds.
      */
     @Test
     void whatASignatureSaysBetweenItsArgumentsAndItsResultReachesTheCaller() throws Exception {
