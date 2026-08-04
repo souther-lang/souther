@@ -83,7 +83,7 @@ public final class HelperInliner {
 
     /** Where a lambda given to a function parameter was written: the parameter it fills, the helper
      * that declares that parameter, and the lambda's own position. The lambda is inlined under a
-     * synthetic {@code $k_p} name, which must never reach a diagnostic — an error about it is
+     * synthetic name, which is a spelling and must never reach a diagnostic — an error about it is
      * reported against these instead. */
     private record LambdaOrigin(String param, String owner, SourcePos pos) {}
 

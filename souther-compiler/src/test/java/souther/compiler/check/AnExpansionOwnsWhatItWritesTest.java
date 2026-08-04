@@ -109,6 +109,32 @@ class AnExpansionOwnsWhatItWritesTest {
         assertEquals(2, expansionsOf(binders(body)).size(), "the inner call is its own expansion");
     }
 
+    /**
+     * A report about a lambda given to a function parameter names the lambda it is about. The lambda
+     * is registered under a synthetic name, and two combinators nested one inside the other name
+     * their function parameters the same as often as not — so which one a report finds is asked by
+     * the binding it was registered under and not by that name.
+     */
+    @Test
+    void aReportAboutALambdaNamesTheLambdaItIsAbout() {
+        // `Map.map` takes a two-argument step and `List.map` a one-argument one, and both call the
+        // parameter `f`. The inner one is written with one, and the report is about the inner one.
+        souther.compiler.diag.CompileException e = org.junit.jupiter.api.Assertions.assertThrows(
+                souther.compiler.diag.CompileException.class,
+                () -> souther.compiler.Compiler.compile("""
+                        module demo
+                        data X = Int
+                        behavior go : (x: X) -> X
+                        let go (x) = x
+                        let counts (ms: List<Map<String, Int>>) =
+                            List.map((m) -> Map.size(Map.map((k) -> k, m)), ms)
+                        """));
+        assertTrue(e.getMessage().contains("takes 2 argument(s) but is written with 1"),
+                e.getMessage());
+        assertEquals(6, e.diagnostic().region().start().line(),
+                "the inner lambda's line, not the outer one's: " + e.getMessage());
+    }
+
     /** Two bindings of one expansion are two bindings: one minter, so the ordinals do not repeat. */
     @Test
     void noTwoBindingsOfOneExpansionAreTheSameBinding() {
