@@ -1368,7 +1368,10 @@ final class CodecGen {
                 gen.expr(b.arg());
                 box(code, Type.BOOL);                                // boolean -> Boolean
             }
-            case Ast.DecimalRaw d -> gen.expr(d.arg());              // BigDecimal is neutral
+            case Ast.DecimalRaw d -> {
+                gen.expr(d.arg());                                   // BigDecimal is neutral
+                code.invokestatic(CD_Representations, "canonicalNumber", MTD_canonicalNumber);
+            }
             case Ast.IsoTextRaw t -> {
                 gen.expr(t.arg());
                 code.invokevirtual(CD_Object, "toString", MethodTypeDesc.of(CD_String));
@@ -1410,6 +1413,7 @@ final class CodecGen {
                 gen.expr(se.source());                                          // the Set value
                 code.invokestatic(CD_Sets, "toList", MethodTypeDesc.of(CD_List, CD_Set));   // Set -> List
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);      // encode the array
+                code.invokestatic(CD_Representations, "sortedArray", MTD_Representations_sorted);
             }
             case Ast.MapEnc me -> {
                 pushElemEncoder(code, me.elem());
@@ -1421,6 +1425,7 @@ final class CodecGen {
                     code.invokestatic(CD_Maps, "mapKeys", MTD_mapKeys);         // Map<String,V>
                 }
                 code.invokeinterface(CD_REncoder, "encode", MTD_Rencode);
+                code.invokestatic(CD_Representations, "sortedObject", MTD_Representations_sorted);
             }
             case Ast.ObjectRaw o -> {
                 code.new_(CD_LinkedHashMap);
@@ -1478,8 +1483,10 @@ final class CodecGen {
      * encoder with the value converted first, which {@code contramap} does. */
     private void pushElemEncoder(CodeBuilder code, Ast.EncElem elem) {
         switch (elem) {
-            case Ast.PrimEnc p -> code.invokestatic(CD_ObjectEncoders, leafEncoderName(p.kind()),
-                    MTD_Rencode_leaf);
+            case Ast.PrimEnc p -> {
+                code.invokestatic(CD_ObjectEncoders, leafEncoderName(p.kind()), MTD_Rencode_leaf);
+                canonicalizeAmount(code, p.kind());
+            }
             case Ast.DataEnc d -> invokeCodec(code, d.typeName(), "encoder", MTD_Rencoder);
             case Ast.ListElemEnc l -> {
                 pushElemEncoder(code, l.elem());
@@ -1490,6 +1497,8 @@ final class CodecGen {
                 code.invokestatic(CD_MapEncoders, "list", MTD_Rencode_list);
                 code.invokedynamic(setToListCallSite());                    // Function<Set, List>
                 code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
+                code.invokedynamic(orderingCallSite("sortedArray"));        // Encoder<Object, Object>
+                code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
             }
             case Ast.MapElemEnc m -> {
                 pushElemEncoder(code, m.value());
@@ -1499,8 +1508,57 @@ final class CodecGen {
                     code.invokedynamic(mapKeysCallSite());                  // Function<Map<K,V>, Map<String,V>>
                     code.invokeinterface(CD_REncoder, "contramap", MTD_Rencoder_contramap);
                 }
+                code.invokedynamic(orderingCallSite("sortedObject"));       // Encoder<Object, Object>
+                code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
             }
         }
+    }
+
+    /**
+     * A leaf encoder for a {@code Decimal}, followed by the amount's own form. Raoh's {@code decimal}
+     * hands the {@code BigDecimal} through as it is, scale and all, and the scale is how a number was
+     * written rather than how much it is.
+     */
+    private static void canonicalizeAmount(CodeBuilder code, Ast.PrimKind kind) {
+        if (kind != Ast.PrimKind.DECIMAL) {
+            return;
+        }
+        code.invokedynamic(canonicalNumberCallSite());
+        code.invokeinterface(CD_REncoder, "andThen", MTD_Rencoder_andThen);
+    }
+
+    /** {@code Representations::canonicalNumber} as an {@code Encoder}. */
+    private static DynamicCallSiteDesc canonicalNumberCallSite() {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Representations, "canonicalNumber",
+                MTD_canonicalNumber);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "encode",
+                MethodTypeDesc.of(CD_REncoder),                          // no captures: () -> Encoder
+                MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
+                impl,
+                MTD_canonicalNumber);                                    // (BigDecimal) -> BigDecimal
+    }
+
+    /**
+     * {@code Representations::sortedArray} / {@code ::sortedObject} as an {@code Encoder}, so a
+     * nested collection is put in order after its members have been encoded.
+     *
+     * <p>The field-level arms above call the same method directly, on the value the encode left on
+     * the stack. Both are here rather than in one place after the fact because this is the last
+     * point at which the type is still known: once encoded, a Set and a List are both a
+     * {@code java.util.List}, and only one of the two may be reordered.
+     */
+    private static DynamicCallSiteDesc orderingCallSite(String ordering) {
+        DirectMethodHandleDesc impl = MethodHandleDesc.ofMethod(
+                DirectMethodHandleDesc.Kind.STATIC, CD_Representations, ordering,
+                MTD_Representations_sorted);
+        return DynamicCallSiteDesc.of(
+                BSM_METAFACTORY, "encode",
+                MethodTypeDesc.of(CD_REncoder),                          // no captures: () -> Encoder
+                MTD_Representations_sorted,                              // samMethodType: (Object) -> Object
+                impl,
+                MTD_Representations_sorted);
     }
 
     /** {@code Sets::toList} as a {@code Function}, so a nested Set reaches the list encoder. */
@@ -1610,6 +1668,7 @@ final class CodecGen {
     private void pushMemberEncoder(CodeBuilder code, TypeName member) {
         if (member.isPrimitive()) {
             code.invokestatic(CD_ObjectEncoders, leafEncoderName(primKind(member)), MTD_Rencode_leaf);
+            canonicalizeAmount(code, primKind(member));
             return;
         }
         // a member is one of the union's effective members, every named sum already expanded to its

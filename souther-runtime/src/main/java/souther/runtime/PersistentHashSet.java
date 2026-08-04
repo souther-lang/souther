@@ -31,8 +31,10 @@ import java.util.Set;
  * at all (spec §stdlib-set). It is not first-seen order and must not be read as one. What the
  * determinism is <em>for</em> is a particular trie, not the set value: two sets that are equal are
  * not guaranteed to iterate in the same order, because elements sharing a full hash sit in one
- * collision bucket held in the order they were added (see {@link PersistentHashMap}). Callers, and
- * the boundary encoding, must depend on no particular order.
+ * collision bucket held in the order they were added (see {@link PersistentHashMap}). A caller must
+ * therefore depend on no particular order. The boundary encoding does not: it puts the members in
+ * the order their own external representations give ({@link Representations}), which is exactly the
+ * order this traversal cannot promise.
  *
  * <p>A dedicated key-only CHAMP node (no value slots) would save memory; the sentinel-map form is
  * behaviorally identical and is the minimal first cut.

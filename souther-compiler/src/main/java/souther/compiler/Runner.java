@@ -18,6 +18,7 @@ import net.unit8.raoh.json.JsonDecoders;
 import net.unit8.raoh.encode.Encoder;
 import net.unit8.raoh.encode.ObjectEncoders;
 
+import souther.runtime.Representations;
 import souther.runtime.Sets;
 
 import tools.jackson.core.JsonGenerator;
@@ -468,14 +469,18 @@ public final class Runner {
         if (out instanceof Type.ListOf list) {
             return encodeElements(loader, pkg, behavior, list.element(), (java.util.Collection<?>) result);
         }
+        // A Set and a Map are put in the order their encoded members give ([#collections]), which is
+        // done here as well as in the generated codecs because this is where the type is still
+        // known: encoded, a Set and a List are both a java.util.List, and only one is reordered.
         if (out instanceof Type.SetOf set) {
-            return encodeElements(loader, pkg, behavior, set.element(), (java.util.Collection<?>) result);
+            return Representations.sortedArray(
+                    encodeElements(loader, pkg, behavior, set.element(), (java.util.Collection<?>) result));
         }
         if (out instanceof Type.MapOf map && map.key() == Type.STRING) {
             Map<String, Object> encoded = new java.util.LinkedHashMap<>();
             ((Map<?, ?>) result).forEach((k, v) ->
                     encoded.put((String) k, encode(loader, pkg, behavior, map.value(), v)));
-            return encoded;
+            return Representations.sortedObject(encoded);
         }
         if (out instanceof Type.Ref ref) {
             return encodeThrough(loader, ref.name().qualified(), ref.name().name(), result);
@@ -519,7 +524,8 @@ public final class Runner {
             case STRING -> ObjectEncoders.string().encode((String) value);
             case INT -> ObjectEncoders.long_().encode((Long) value);
             case BOOL -> ObjectEncoders.bool().encode((Boolean) value);
-            case DECIMAL -> ObjectEncoders.decimal().encode((java.math.BigDecimal) value);
+            case DECIMAL -> ObjectEncoders.decimal()
+                    .encode(Representations.canonicalNumber((java.math.BigDecimal) value));
             case DATE -> ObjectEncoders.date().encode((java.time.LocalDate) value);
             case DATETIME -> ObjectEncoders.dateTime().encode((java.time.LocalDateTime) value);
             case RAW -> throw fail("run.encode.raw",

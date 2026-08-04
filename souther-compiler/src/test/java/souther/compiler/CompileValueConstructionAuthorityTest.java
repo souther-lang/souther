@@ -313,7 +313,8 @@ class CompileValueConstructionAuthorityTest {
         Object behavior = loader.loadClass("m.Judge$Impl").getConstructor().newInstance();
 
         Object kept = Codecs.apply(behavior, Codecs.decoded(loader, "m.Hours", new java.math.BigDecimal("40.0")));
-        assertEquals(new java.math.BigDecimal("40.0"), Codecs.encode(loader, "m.Hours", kept));
+        assertEquals(new java.math.BigDecimal("40"), Codecs.encode(loader, "m.Hours", kept),
+                "written as the amount, the scale it arrived with being no part of it");
 
         Object rejected = Codecs.apply(behavior, Codecs.decoded(loader, "m.Hours", new java.math.BigDecimal("10.0")));
         assertEquals("TooShort", rejected.getClass().getSimpleName());
