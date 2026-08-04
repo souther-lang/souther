@@ -35,8 +35,12 @@ import java.util.Set;
  * pair. A {@link PersistentVector} keeps the {@code List} contract instead, because a list compares
  * positionally and has no index to be indexed by.
  *
- * <p>Iteration order is a deterministic, implementation-defined hash order (not insertion order):
- * the same set of keys always yields the same order, so boundary encoding stays reproducible.
+ * <p>Iteration follows a deterministic, implementation-defined traversal of the trie. It is not
+ * insertion order and must not be read as one. Note what it is deterministic <em>for</em>: the trie,
+ * not the map value. Two maps that are equal are not guaranteed to iterate in the same order, because
+ * keys sharing a full hash sit in a {@code HashCollisionNode} that holds them in the order they were
+ * put — so the order can differ with the construction history. Callers, and the boundary encoding,
+ * must depend on no particular order.
  *
  * <p>Values are never null (a Souther collection models absence with {@code Option}), so
  * {@link #get} returning {@code null} unambiguously means "absent".
@@ -44,7 +48,7 @@ import java.util.Set;
  * <p>{@code remove} keeps the trie canonical: an emptied sub-node is dropped and a sub-node that
  * collapses to a single entry is inlined back into its parent (bubbling up a level when the parent
  * would otherwise become a lone-entry inner node). So a key set reached by deletions has the same
- * shape — and the same deterministic iteration order — as one built directly.
+ * trie shape as one built directly, rather than carrying hollow nodes a direct build never had.
  */
 public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements ValueSemantics {
 

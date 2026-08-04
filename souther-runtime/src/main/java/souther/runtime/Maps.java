@@ -11,8 +11,9 @@ import java.util.Map;
  *  here. A {@code Map} value is a {@link PersistentHashMap} (CHAMP, structural sharing): the building
  *  operations return a fresh map that shares structure with the input in O(log n), never mutating it,
  *  so a {@code groupBy} that grows a map is O(n log n) rather than the O(n²) a whole-map copy costs.
- *  Iteration order is a deterministic, implementation-defined hash order (not insertion order), stable
- *  for the same key set so boundary encoding stays reproducible. Inputs may be any {@code java.util.Map}
+ *  Iteration order is implementation-defined and not insertion order; two maps that are equal are not
+ *  guaranteed to iterate in the same order, so neither a caller nor the boundary encoding may depend
+ *  on a particular one ({@link PersistentHashMap}). Inputs may be any {@code java.util.Map}
  *  (a decoded map comes from Raoh as a {@code LinkedHashMap}), so builders normalize through
  *  {@link PersistentHashMap#from}. */
 public final class Maps {
