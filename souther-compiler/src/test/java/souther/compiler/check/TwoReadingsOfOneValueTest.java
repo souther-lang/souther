@@ -1,9 +1,6 @@
 package souther.compiler.check;
 
-import souther.compiler.types.BindingId;
-import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
 
 import org.junit.jupiter.api.Test;
 
@@ -20,11 +17,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
  */
 class TwoReadingsOfOneValueTest {
 
-    private static final BindingId OWNER =
-            new BindingId(new BindingOwner.OfData(new TypeName("demo", "X")), 0);
-
     private static Type v(String name) {
-        return Type.mintedVar(name, OWNER);
+        return Type.inferredVar(name);
     }
 
     private static Type pair(Type a, Type b) {
@@ -119,6 +113,24 @@ class TwoReadingsOfOneValueTest {
         Type listBAndB = pair(Type.list(v("b")), v("b"));
         assertNull(Readings.of(aa, listBAndB));
         assertNull(Readings.of(listBAndB, aa));
+    }
+
+    /**
+     * A parameter whose readings cannot be one value settles nothing for the parameters after it.
+     * A constructor is taken apart one position at a time, so what the positions before a
+     * disagreement settled is written while it is still open whether the readings agree at all.
+     */
+    @Test
+    void aParameterThatSettlesNothingLeavesNothingSettled() {
+        Type a = v("a");
+        Readings all = new Readings();
+        all.add(pair(a, Type.INT));
+        all.add(pair(Type.STRING, Type.BOOL));
+        assertNull(all.answer(), "an Int and a Bool are not one value");
+
+        all.forParameter();
+        all.add(a);
+        assertEquals(a, all.answer(), "`a` is what it was; the refused reading is not evidence");
     }
 
     /** Neither reading is the one being checked, so which is given first decides nothing. */

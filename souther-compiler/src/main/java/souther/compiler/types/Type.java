@@ -56,14 +56,12 @@ public sealed interface Type
      * monomorphised by inline expansion, so the variable is resolved to the concrete argument type at
      * each call site.
      *
-     * <p>{@code mintedFor} is where the variable came from, which is not the same question as what it
-     * is spelled. A variable the shipped core wrote has none: it stands for anything and nothing has
-     * attached it to a value yet. One a helper's own settling minted names the parameter it was minted
-     * for, so a reader can ask whether a variable standing somewhere is one the body has already
-     * attached to another position — which is the difference between a value nothing says anything
-     * about and one the body said is whatever that other parameter holds.
+     * <p>{@code inferred} is whether the compiler made it. A variable the shipped core wrote is not:
+     * its spelling is what an author of core reads. One the compiler minted is: it stands for a value
+     * a use decides, and its spelling is an internal name that says nothing to anyone, so nothing
+     * shows it.
      */
-    record Var(String name, BindingId mintedFor) implements Type {}
+    record Var(String name, boolean inferred) implements Type {}
 
     /** A reference to a named data type (product or sum). */
     record Ref(TypeName name) implements Type {
@@ -160,14 +158,14 @@ public sealed interface Type
         return new TupleOf(elements);
     }
 
-    /** A variable as the core wrote it: it stands for anything, and nothing has attached it. */
+    /** A variable as the core wrote it. */
     static Type var(String name) {
-        return new Var(name, null);
+        return new Var(name, false);
     }
 
-    /** A variable minted while settling {@code mintedFor}, which is what it is attached to. */
-    static Type mintedVar(String name, BindingId mintedFor) {
-        return new Var(name, mintedFor);
+    /** A variable the compiler minted, standing for a value each use of the declaration decides. */
+    static Type inferredVar(String name) {
+        return new Var(name, true);
     }
 
     /** A user-facing rendering of {@code t} in surface syntax: {@code Int}, {@code List<Int>},
@@ -249,10 +247,10 @@ public sealed interface Type
             };
             case Ref r -> showName(r.name(), qualify);
             // A variable the core wrote is shown as the core wrote it; the name carries the `'`
-            // (`'a`), so it is not added twice. A minted one is shown as `_`: it names something an
-            // author never wrote and could not write, so its spelling says nothing to the reader,
-            // while what is open about the type is what they need.
-            case Var v -> v.mintedFor() != null ? "_"
+            // (`'a`), so it is not added twice. One the compiler minted is shown as `_`: its spelling
+            // is an internal name an author never wrote and could not write, so it says nothing to
+            // the reader, while what is open about the type is what they need.
+            case Var v -> v.inferred() ? "_"
                     : v.name().startsWith("'") ? v.name() : "'" + v.name();
             case Nothing _ -> "_";
             case Never _ -> "Never";

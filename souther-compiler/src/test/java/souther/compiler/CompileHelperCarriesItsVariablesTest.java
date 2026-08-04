@@ -122,28 +122,154 @@ class CompileHelperCarriesItsVariablesTest {
     }
 
     /**
-     * A relation one signature makes is not carried across the bindings its expansion becomes.
-     * {@code List.member} writes one variable for its element and for its list, but it is
-     * self-hosted, so the call expands to a binding per parameter and each binding's declared type is
-     * read on its own. {@code y} is the element of {@code xs}, and nothing left after the expansion
-     * says so; the annotation states it instead.
-     *
-     * <p>Pinned as what happens rather than as what should: which side of the intrinsic /
-     * self-hosted line the library put a function on is not something an author can see, and
-     * {@code Set.union} — an intrinsic of the same shape — does link its two. Tracked as issue #313.
-     * Before a helper could carry a variable at all both of these parameters were annotated, so this
-     * widens that to one of them rather than narrowing anything.
+     * A relation a signature makes across its own parameters survives the expansion of the call.
+     * {@code List.member} writes one variable for its element and for its list, so {@code y} is the
+     * element of {@code xs} — and it says so whether the callee is expanded or stands, which is what
+     * makes the answer the language's and not the library's implementation choice.
      */
     @Test
-    void aRelationInsideAnExpansionIsNotCarriedAcrossTheBindingsItBecomes() {
-        assertFalse(compiles("""
+    void aRelationASignatureMakesSurvivesTheExpansionOfTheCall() {
+        assertTrue(compiles("""
                 let has (xs, y) = List.member(y, xs)
                 let use (b: Bool) = has([ 1 ], 2) && b"""),
-                "`y` is the element of `xs`, and what the expansion leaves does not say so");
+                "`y` is the element of `xs`, and two Ints fit");
+        assertFalse(compiles("""
+                let has (xs, y) = List.member(y, xs)
+                let use (b: Bool) = has([ 1 ], "a") && b"""),
+                "a List of Ints and a String do not");
+    }
+
+    /** And it does not depend on which of the two the helper declares first. */
+    @Test
+    void whichParameterIsWrittenFirstDecidesNothing() {
         assertTrue(compiles("""
-                let has (xs: List<Int>, y) = List.member(y, xs)
-                let use (b: Bool) = has([ 1 ], 2) && b"""),
-                "writing what the list holds says it");
+                let has (y, xs) = List.member(y, xs)
+                let use (b: Bool) = has(2, [ 1 ]) && b"""),
+                "the same relation, read the other way round");
+        assertFalse(compiles("""
+                let has (y, xs) = List.member(y, xs)
+                let use (b: Bool) = has("a", [ 1 ]) && b"""),
+                "and refused the same way");
+    }
+
+    /**
+     * A bare variable says what this parameter holds only where another <em>parameter</em> is known
+     * to hold it. A binding the body made out of the parameter carries the same variable, and taking
+     * that for evidence would settle a parameter by what was built from it.
+     */
+    @Test
+    void whatWasBuiltFromTheParameterIsNotEvidenceAboutIt() {
+        assertFalse(compiles("""
+                let f (v) = {
+                    let xs = [ v ]
+                    List.member(v, xs)
+                }
+                let use (b: Bool) = f(1) && b"""),
+                "`xs` is made from `v`, so it says nothing about `v` that `v` did not say first");
+    }
+
+    @Test
+    void twoApplicationsOfOneHelperDecideSeparately() {
+        // Nothing here ties the two calls together, so one deciding Int does not make the other one.
+        assertTrue(compiles("""
+                let use (b: Bool) = List.member(1, [ 1 ]) && List.member("a", [ "a" ]) && b"""),
+                "two applications of `List.member`, at two element types");
+    }
+
+    @Test
+    void twoApplicationsTiedByOneParameterHoldOneThing() {
+        // The caller's own `y` is what ties them, and it is one value.
+        assertTrue(compiles("""
+                let bothContain (xs, ys, y) = List.member(y, xs) && List.member(y, ys)
+                let use (b: Bool) = bothContain([ 1 ], [ 2 ], 3) && b"""),
+                "three parameters, one element type");
+        assertFalse(compiles("""
+                let bothContain (xs, ys, y) = List.member(y, xs) && List.member(y, ys)
+                let use (b: Bool) = bothContain([ 1 ], [ "a" ], 3) && b"""),
+                "and the two lists hold the same thing");
+    }
+
+    @Test
+    void aSignatureVariableStandingInThreePositionsHoldsOneThing() {
+        // `Map.insert (key: 'k, value: 'a, m: Map<'k, 'a>)` writes `'k` twice and `'a` twice, so
+        // three of this helper's parameters are tied by one call.
+        assertTrue(compiles("""
+                let put (k, v, m) = Map.insert(k, v, m)
+                let use (n: Int) = Map.size(put("a", 1, Map.empty)) + n"""),
+                "the key, the value and what the map holds are one call's");
+        assertFalse(compiles("""
+                let put (k, v, m) = Map.insert(k, v, m)
+                let use (m: Map<String, Bool>, n: Int) = Map.size(put("a", 1, m)) + n"""),
+                "a map of Bools does not take an Int value");
+    }
+
+    @Test
+    void anExpansionInsideAnExpansionDecidesOnItsOwn() {
+        // `outer` expands into the body, and the `List.member` inside it expands again. The two are
+        // two applications, and the inner one's element is the outer one's — through the body, not
+        // through a name two signatures happen to share.
+        assertTrue(compiles("""
+                let outer (xs, y) = List.member(y, xs)
+                let go (zs, z) = outer(zs, z)
+                let use (b: Bool) = go([ 1 ], 2) && b"""),
+                "the relation reaches through two expansions");
+        assertFalse(compiles("""
+                let outer (xs, y) = List.member(y, xs)
+                let go (zs, z) = outer(zs, z)
+                let use (b: Bool) = go([ 1 ], "a") && b"""),
+                "and refuses through them");
+    }
+
+    /**
+     * A signature variable standing twice is one identity whether the callee is an intrinsic or is
+     * written in Souther. {@code Set.union} is an intrinsic and {@code List.member} is self-hosted;
+     * which side of that line a function is on is not something an author can read, so it decides
+     * nothing here.
+     */
+    @Test
+    void aRepeatedSignatureVariableIsOneIdentityWhicheverWayTheCalleeIsWritten() {
+        assertTrue(compiles("""
+                let viaIntrinsic (a, b) = Set.union(a, b)
+                let viaSouther (xs, y) = List.member(y, xs)
+                let use (p: Set<Int>, q: Set<Int>) = Set.size(viaIntrinsic(p, q))
+                    + (if viaSouther([ 1 ], 2) then 1 else 0)"""),
+                "both hold their repeated variable to one type");
+        assertFalse(compiles("""
+                let viaIntrinsic (a, b) = Set.union(a, b)
+                let use (p: Set<Int>, q: Set<String>) = Set.size(viaIntrinsic(p, q))"""),
+                "the intrinsic refuses two element types");
+        assertFalse(compiles("""
+                let viaSouther (xs, y) = List.member(y, xs)
+                let use (b: Bool) = viaSouther([ 1 ], "a") && b"""),
+                "and so does the self-hosted one");
+    }
+
+    /**
+     * What a signature says between its arguments and its result reaches the caller too.
+     * {@code Map.upsert} declares {@code Map<'k, 'a>} for its map and for what it answers, so what
+     * the result holds is what the argument held.
+     *
+     * <p>Not through the declaration: an expansion drops a declared return that carries a variable,
+     * and it is right to — the reason a declared return is carried at all is to fix an
+     * empty-collection seed the body cannot type, and a type that names a variable fixes nothing.
+     * The relation reaches the caller through what the body builds, which is built from the
+     * arguments.
+     */
+    @Test
+    void whatASignatureSaysBetweenItsArgumentsAndItsResultReachesTheCaller() throws Exception {
+        Map<?, ?> out = run("""
+                module demo
+                data In = { counts: Map<String, Int> }
+                data Out = { n: Int }
+                behavior go : (i: In) -> Out constructs Out
+                let bump (k, m) = Map.upsert(k, 0, (v) -> v + 1, m)
+                let go (i) = Out { n = List.sum(Map.values(bump("a", i.counts))) }
+                """, Map.of("counts", Map.of("a", 1L, "b", 5L)));
+        assertEquals(7L, out.get("n"), "the result holds Ints because the argument did");
+        assertFalse(compiles("""
+                let bump (k, m) = Map.upsert(k, 0, (v) -> v + 1, m)
+                let use (t: Map<String, Bool>, n: Int) = Map.size(bump("a", t)) + n"""),
+                "a map of Bools does not take the Int the call decided");
     }
 
     // --- what a position states reaches the arms, and what an arm states wins ---

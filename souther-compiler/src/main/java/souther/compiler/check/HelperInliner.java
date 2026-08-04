@@ -68,7 +68,11 @@ public final class HelperInliner {
      */
     private Map<String, Integer> callableBehaviors = Map.of();
     private final Set<String> recursive = new HashSet<>();   // own helpers on a call cycle (spec 13.1)
-    private final Map<String, LambdaOrigin> lambdaOrigins = new HashMap<>();   // $k_p -> where it was written
+    /** Where a lambda given to a function parameter was written, by the binding it was registered
+     * under. Asked by the binding and not by the spelling: two combinators nested one inside the
+     * other give their function parameters the same name as often as not, and a report that found
+     * the outer one's lambda would point at another author's line. */
+    private final Map<BindingId, LambdaOrigin> lambdaOrigins = new HashMap<>();
     private int counter = 0;
     /** The body being expanded, and the bindings this expansion introduces into it. An expansion
      * writes bindings no source wrote, so they belong to it rather than to the definition whose text
@@ -79,7 +83,7 @@ public final class HelperInliner {
 
     /** Where a lambda given to a function parameter was written: the parameter it fills, the helper
      * that declares that parameter, and the lambda's own position. The lambda is inlined under a
-     * synthetic {@code $k_p} name, which must never reach a diagnostic — an error about it is
+     * synthetic name, which is a spelling and must never reach a diagnostic — an error about it is
      * reported against these instead. */
     private record LambdaOrigin(String param, String owner, SourcePos pos) {}
 
@@ -785,15 +789,59 @@ public final class HelperInliner {
      * leaving those bodies bare keeps a constant-foldable expression ({@code 金額(税込(100))}) a plain
      * expression for the compile-time invariant check. A union return is left alone too: the binding
      * would name one type where the body may produce several. */
-    private Ast.Expr keepDeclaredReturn(Ast.FnDef helper, Ast.Expr body, SourcePos pos, int k) {
+    private Ast.Expr keepDeclaredReturn(Ast.FnDef helper, Ast.Expr body, SourcePos pos,
+                                        Ast.Binders ours) {
         Ast.RetType declared = helper.declaredReturn();
         if (declared == null || declared.cases().size() != 1
                 || !carriesCollection(declared.cases().get(0))
                 || mentionsTypeVar(declared.cases().get(0))) {
             return body;
         }
-        Ast.Binder bound = binders.binder("$r" + k, pos);
+        Ast.Binder bound = ours.binder("$r", pos);
         return new Ast.LetIn(bound, body, declared, true, null, Ast.Var.local(bound, pos), pos);
+    }
+
+    /**
+     * What this application decides for the variables {@code helper}'s signature left open — one
+     * fresh variable per variable it wrote, over its parameters and its declared return together.
+     * Empty where it wrote none, which is every call of a helper that names its types outright.
+     *
+     * <p>Every unsolved variable in a helper's declared types is that helper's own: a variable enters
+     * a type only where the core writes one in a signature or where a helper's own settling mints one
+     * for its parameters, and a reference to a declared type carries none. So renaming by name over
+     * the whole signature at once binds nothing it should not.
+     */
+    private static Map<String, Type> instantiation(Ast.FnDef helper, BindingOwner mine) {
+        Map<String, Type> applied = new LinkedHashMap<>();
+        for (Ast.FnParam p : helper.params()) {
+            collectVariables(p.type(), mine, applied);
+        }
+        collectVariables(helper.declaredReturn(), mine, applied);
+        return applied;
+    }
+
+    private static void collectVariables(Ast.RetType declared, BindingOwner mine,
+                                         Map<String, Type> applied) {
+        if (declared == null || !mentionsRetTypeVar(declared)) {
+            return;
+        }
+        Type.mentions(TypeOps.resolveParamType(declared, null), t -> {
+            if (t instanceof Type.Var v) {
+                applied.computeIfAbsent(v.name(), name -> Type.inferredVar(name + "." + mine));
+            }
+            return false;   // a collector, not a test: every position is visited
+        });
+    }
+
+    /** {@code declared} with what this application decided written into it, or as it stands where it
+     * left nothing open. The type is written as a reference with no surface text: what it denotes is
+     * decided, and no source stands for it. */
+    private static Ast.RetType instantiated(Ast.RetType declared, Map<String, Type> applied) {
+        if (declared == null || applied.isEmpty() || !mentionsRetTypeVar(declared)) {
+            return declared;
+        }
+        Type at = TypeOps.substitute(TypeOps.resolveParamType(declared, null), applied);
+        return new Ast.RetType(List.of(Ast.TypeRef.of(at, declared.pos())), declared.pos());
     }
 
     /** Whether a declared type has a collection anywhere inside it — the types whose element/value
@@ -1093,7 +1141,8 @@ public final class HelperInliner {
                     yield inline(new Ast.Apply(valueOf(named), args, call.origin(), call.pos()));
                 }
                 if (args.size() != helper.params().size()) {
-                    LambdaOrigin origin = lambdaOrigins.get(helper.name());
+                    LambdaOrigin origin = call.denotes() instanceof ValueName.Local applied
+                            ? lambdaOrigins.get(applied.id()) : null;
                     if (origin != null) {
                         // the callee is a lambda the caller wrote, applied by the combinator it was
                         // given to: report the parameter count against the lambda, not the synthetic
@@ -1114,7 +1163,20 @@ public final class HelperInliner {
                             "helper `let " + helper.name() + "` takes " + helper.params().size()
                                     + " argument(s) but is called with " + args.size());
                 }
-                int k = counter++;
+                // Everything this expansion writes belongs to it: the bindings its arguments become,
+                // the one a lambda given to a function parameter is registered under, the one its
+                // declared return is carried on, and every binding copied out of the callee's body.
+                // One minter, so no two of them are the same binding, and a reader can ask of any of
+                // them which call it came from.
+                BindingOwner mine = new BindingOwner.Expansion(into, call.denotes(), counter++);
+                Ast.Binders ours = new Ast.Binders(mine);
+                // What the callee's signature leaves open, this call decides. Its variables are
+                // instantiated once, here, over the whole signature at once — so a variable it wrote
+                // in two of its parameters is one variable in what this expansion writes, and two
+                // calls of it decide separately. Splitting the signature into a binding per parameter
+                // is what would otherwise lose that: each binding's type would be read on its own,
+                // and nothing left afterwards says the two came from one application.
+                Map<String, Type> applied = instantiation(helper, mine);
                 Map<BindingId, String> subst = new HashMap<>();
                 // what each substituted callee resolved to at the call site, so the expansion carries
                 // the argument's own answer rather than deciding one for it
@@ -1135,7 +1197,7 @@ public final class HelperInliner {
                             subst.put(p.binder().id(), fnName.name());
                             substDenotes.put(p.binder().id(), fnName.denotes());
                         } else if (arg instanceof Ast.Block lambda) {
-                            Ast.Binder f = binders.binder("$" + k + "_" + p.name(), lambda.pos());
+                            Ast.Binder f = ours.binder("$" + p.name(), lambda.pos());
                             subst.put(p.binder().id(), f.name());
                             substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
                             given.add(f.id());
@@ -1148,7 +1210,7 @@ public final class HelperInliner {
                             scopedLambdas.put(f.id(),
                                     new Ast.FnDef(f.name(), lparams, null,
                                             new Ast.FnBody.Written(lambda.body()), lambda.pos()));
-                            lambdaOrigins.put(f.name(), new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
+                            lambdaOrigins.put(f.id(), new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
                         } else {
                             // Neither a name nor a lambda: a value written where the function goes —
                             // the argument-order mistake made with a named helper rather than a
@@ -1173,7 +1235,7 @@ public final class HelperInliner {
                         // the binding the argument is bound to; the reads of the parameter inside the
                         // body are answered with it, so a read says which binding it is rather than
                         // where it happens to be written
-                        Ast.Binder f = binders.binder(p.name(), call.pos());
+                        Ast.Binder f = ours.binder(p.name(), call.pos());
                         subst.put(p.binder().id(), f.name());
                         substDenotes.put(p.binder().id(), new ValueName.Local(f.name(), f.id()));
                         letBinders.add(f);
@@ -1181,17 +1243,17 @@ public final class HelperInliner {
                         // carry the parameter's declared type onto the binding, so a value known to
                         // be a sum (an annotated `s: S`) is not narrowed to the argument's specific
                         // case when the body is re-checked inline — a `match s` inside still sees S.
-                        letTypes.add(p.type());
+                        letTypes.add(instantiated(p.type(), applied));
                     }
                 }
                 // a prelude helper's body is stamped with the call site, so errors inside it point at
                 // the user's call, not at the shipped source of souther.*
                 SourcePos at = keepsItsPositions(call) ? null : call.pos();
-                Copy copy = new Copy(helper.written(),
-                        new BindingOwner.Expansion(into, call.denotes(), k));
+                Copy copy = new Copy(helper.written(), ours);
                 Ast.Expr body = inline(rename(helper.written(), subst, substDenotes, at, copy));   // expand nested helpers too
                 given.forEach(scopedLambdas::remove);
-                body = keepDeclaredReturn(helper, body, call.pos(), k);
+                given.forEach(lambdaOrigins::remove);
+                body = keepDeclaredReturn(helper, body, call.pos(), ours);
                 // wrap innermost-first so the value parameters bind in declared order
                 for (int i = letBinders.size() - 1; i >= 0; i--) {
                     body = new Ast.LetIn(letBinders.get(i), letValues.get(i), letTypes.get(i), body, call.pos());
@@ -1462,8 +1524,7 @@ public final class HelperInliner {
          * whatever order the copy is written in: a read met before its binder would otherwise be
          * left on the original while the binder moved, and the two would no longer be one binding.
          */
-        private Copy(Ast.Expr body, BindingOwner owner) {
-            Ast.Binders binders = new Ast.Binders(owner);
+        private Copy(Ast.Expr body, Ast.Binders binders) {
             eachBinder(body, binder ->
                     mine.put(binder.id(), binders.binder(binder.name(), binder.pos()).id()));
         }
