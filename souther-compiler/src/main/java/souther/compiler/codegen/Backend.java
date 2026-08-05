@@ -134,6 +134,26 @@ public final class Backend {
                                                TypeChecker.Checked checked,
                                                Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
                                                CoverageSites.Plan plan) {
+        try {
+            return generating(module, symbols, typePackage, importedSigs, importedInjected, calleeSigs,
+                    requirements, checked, dischargeInvariants, plan);
+        } catch (IllegalArgumentException e) {
+            // Something the writer would not hold, from a member no definition here claimed — a
+            // synthesised class, a shared one. It belongs to the module, which is as near as anything
+            // gets to naming it.
+            throw asLimit(e, module.pos(), module.name());
+        }
+    }
+
+    private static Map<String, byte[]> generating(Ast.Module module, Symbols symbols,
+                                                  Map<String, String> typePackage,
+                                                  Map<String, Sig> importedSigs,
+                                                  Set<String> importedInjected,
+                                                  Map<String, ReqSig> calleeSigs,
+                                                  Map<String, List<BehaviorRequirement>> requirements,
+                                                  TypeChecker.Checked checked,
+                                                  Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
+                                                  CoverageSites.Plan plan) {
         Map<String, List<String>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
@@ -163,6 +183,10 @@ public final class Backend {
         ctx.setDischargeInvariants(dischargeInvariants);
         ctx.setCoveragePlan(plan);
         Backend b = new Backend(ctx, checked);
+        Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
+        // Before anything is written: a declaration wide enough that its generated method cannot hold
+        // its arguments produces a class the JVM refuses at load time, and nothing downstream notices.
+        JvmLimits.checkParameterSlots(module, ctx, recHelpers, sigs, requirements);
         // A behavior's class capitalizes its first letter (spec 19.5). Data names are already
         // capitalized, so `behavior quote` producing `data Quote` would generate two classes named
         // `Quote`. Reject the collision here rather than let one silently overwrite the other.
@@ -215,19 +239,30 @@ public final class Backend {
         b.rejectBridgeCaseCollisions(module, bridgeCases, behaviorResults, localTypes, behaviorClassOwner);
         Map<String, byte[]> out = new LinkedHashMap<>();
         behaviorResults.forEach((resultName, members) -> {
-            out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, members));
-            out.put(module.name() + "." + resultName + "$Enc",
-                    b.codec.generateResultUnionEncoder(resultName, members));
+            // the union and its encoder belong to the behavior whose output they are, not to the
+            // module, though the behavior did not write them
+            Ast.BehaviorDef owner = b.behaviorOf(module, resultName);
+            emitting(owner == null ? module.pos() : owner.pos(),
+                    owner == null ? module.name() : owner.name(), () -> {
+                        out.put(module.name() + "." + resultName,
+                                b.generateBehaviorResult(resultName, members));
+                        out.put(module.name() + "." + resultName + "$Enc",
+                                b.codec.generateResultUnionEncoder(resultName, members));
+                    });
         });
+        // A bridge case is shared by every union that reaches its member, so no one behavior owns it;
+        // it is left to the module, which the outermost boundary answers for.
         bridgeCases.forEach((member, unions) ->
                 out.put(module.name() + "." + CodegenContext.bridgeCaseName(member),
                         b.value.generateBridgeCase(member, unions, out)));
         for (Ast.Def def : module.defs()) {
-            switch (def) {
-                case Ast.Data data -> b.value.generateData(data, out);
-                case Ast.SumData sum -> b.value.generateSum(sum, out);
-                case Ast.UnitData unit -> b.value.generateUnit(unit, out);
-            }
+            emitting(def.pos(), def.name(), () -> {
+                switch (def) {
+                    case Ast.Data data -> b.value.generateData(data, out);
+                    case Ast.SumData sum -> b.value.generateSum(sum, out);
+                    case Ast.UnitData unit -> b.value.generateUnit(unit, out);
+                }
+            });
         }
         // Behavior fn bodies arrive with their helper calls already inlined (the Lower stage,
         // ADR-0021); the backend emits them as-is and never lowers a helper on its own.
@@ -274,9 +309,10 @@ public final class Backend {
                         }
                     }
                 }
-                out.put(module.name() + "." + behaviorClass(spec.name()),
-                        b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
-                                reqParams, b.successType(spec.ret())));
+                emitting(spec.pos(), spec.name(), () ->
+                        out.put(module.name() + "." + behaviorClass(spec.name()),
+                                b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
+                                        reqParams, b.successType(spec.ret()))));
             }
         }
         // An imported injected behavior (its base lives in the declaring module, so no base is built
@@ -333,7 +369,6 @@ public final class Backend {
         // A behavior that depends on nothing is called by being built where it is called, so it is not
         // in the injection maps above; what a call site needs is the signature it was typed against.
         b.ctx.setCalleeSignatures(calleeSigs);
-        Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
         // What each behavior takes injected, worked out once and read here and at an example
         // (Bodies.Requirements): the order is this constructor's parameter order.
         Map<String, List<String>> behaviorDeps = new LinkedHashMap<>();
@@ -342,36 +377,49 @@ public final class Backend {
         }
         Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef bd : module.behaviors()) {
-            switch (bd) {
-                case Ast.SpecBehavior spec -> {
-                    Ast.FnDef fn = fns.get(spec.name());
-                    if (fn != null) {
-                        // a fn-implemented behavior: the $Impl holds the logic, the public interface
-                        // (behaviorClass) is what Java code declares (spec 19.8).
-                        out.put(module.name() + "." + CodegenContext.behaviorImplClass(spec.name()),
-                                b.generateSpecFn(spec, fn, requiredNames, requiredSuccess, requiredParam));
-                        List<Type> pts = new ArrayList<>();
-                        for (Ast.Param p : spec.params()) {
-                            pts.add(b.successType(p.type()));
+            emitting(bd.pos(), bd.name(), () -> {
+                switch (bd) {
+                    case Ast.SpecBehavior spec -> {
+                        Ast.FnDef fn = fns.get(spec.name());
+                        if (fn != null) {
+                            // a fn-implemented behavior: the $Impl holds the logic, the public interface
+                            // (behaviorClass) is what Java code declares (spec 19.8).
+                            out.put(module.name() + "." + CodegenContext.behaviorImplClass(spec.name()),
+                                    b.generateSpecFn(spec, fn, requiredNames, requiredSuccess, requiredParam));
+                            List<Type> pts = new ArrayList<>();
+                            for (Ast.Param p : spec.params()) {
+                                pts.add(b.successType(p.type()));
+                            }
+                            out.put(module.name() + "." + behaviorClass(spec.name()),
+                                    b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
+                                            requiredBy(spec)));
                         }
-                        out.put(module.name() + "." + behaviorClass(spec.name()),
-                                b.generateBehaviorInterface(spec.name(), pts, b.successType(spec.ret()),
-                                        requiredBy(spec)));
+                        // else: injection target — its abstract base was generated above (spec 13.3)
                     }
-                    // else: injection target — its abstract base was generated above (spec 13.3)
+                    case Ast.PipeBehavior pipe -> {
+                        out.put(module.name() + "." + CodegenContext.behaviorImplClass(pipe.name()),
+                                b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
+                        Sig sig = declaredSig(pipe, sigs);
+                        out.put(module.name() + "." + behaviorClass(pipe.name()),
+                                b.generateBehaviorInterface(pipe.name(), sig.ins(), sig.out(),
+                                        behaviorDeps.getOrDefault(pipe.name(), List.of())));
+                    }
                 }
-                case Ast.PipeBehavior pipe -> {
-                    out.put(module.name() + "." + CodegenContext.behaviorImplClass(pipe.name()),
-                            b.generatePipe(pipe, requiredNames, sigs, behaviorDeps, pipeStages));
-                    Sig sig = declaredSig(pipe, sigs);
-                    out.put(module.name() + "." + behaviorClass(pipe.name()),
-                            b.generateBehaviorInterface(pipe.name(), sig.ins(), sig.out(),
-                                    behaviorDeps.getOrDefault(pipe.name(), List.of())));
-                }
-            }
+            });
         }
         if (!recHelpers.isEmpty()) {
-            out.put(module.name() + ".$Fns", b.generateRecursiveHelpers(recHelpers));
+            // The helpers share one class, so the writer names a method rather than a definition: a
+            // method it would not write is the helper whose name it is, and a pool it would not hold
+            // belongs to all of them and so to the module.
+            try {
+                out.put(module.name() + ".$Fns", b.generateRecursiveHelpers(recHelpers));
+            } catch (IllegalArgumentException e) {
+                JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
+                Ast.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
+                throw helper == null
+                        ? asLimit(e, module.pos(), module.name())
+                        : asLimit(e, helper.pos(), helper.name());
+            }
         }
         out.putAll(b.ctx.synthClasses());   // escaping lambdas compiled to Fn classes (spec §blocks)
         // Every arm the plan counted has to be in the bytecode, or the ones that are missing come back
@@ -385,6 +433,44 @@ public final class Backend {
                     + "; a body was walked without counting its arms");
         }
         return out;
+    }
+
+    /**
+     * Emits one definition, saying what the class file writer would not hold as that definition.
+     *
+     * <p>How long a method is and how many constants a class refers to are not known before it is
+     * written, so unlike an argument count they cannot be checked at the declaration. What the writer
+     * says names its own rule and the method it was writing, and the author has no way back from
+     * either to what they wrote — so it is said here, where the definition being emitted is in hand.
+     * A refusal that names no limit is not this compiler's to answer for and goes on unchanged.
+     */
+    private static void emitting(SourcePos pos, String name, Runnable emit) {
+        try {
+            emit.run();
+        } catch (IllegalArgumentException e) {
+            throw asLimit(e, pos, name);
+        }
+    }
+
+    /** The refusal as the diagnostic for {@code name}, or unchanged where it names no limit this
+     *  compiler answers for. */
+    private static RuntimeException asLimit(IllegalArgumentException e, SourcePos pos, String name) {
+        JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
+        return exceeded == null ? e : JvmLimits.tooLarge(exceeded, pos, name);
+    }
+
+    /** The helper emitted as {@code method} on {@code $Fns}, or null if the name is not one of
+     *  theirs. */
+    private static Ast.FnDef helperNamed(Map<String, Ast.FnDef> helpers, String method) {
+        if (method == null) {
+            return null;
+        }
+        for (Ast.FnDef helper : helpers.values()) {
+            if (CodegenContext.helperMethod(helper.name()).equals(method)) {
+                return helper;
+            }
+        }
+        return null;
     }
 
     /** The {@code $Fns} method a helper is emitted as, for a caller outside this package: an
