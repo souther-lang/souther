@@ -3,6 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
@@ -41,6 +42,26 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         Core.PreservedCall kept = assertInstanceOf(Core.PreservedCall.class, typed);
         assertEquals(new ValueName.Stdlib("List.length"), kept.operation());
         assertEquals(Type.INT, kept.type());
+    }
+
+    @Test
+    void whatAFunctionArgumentAnswersSettlesTheRest() {
+        // List.concatMap : (('a) -> List<'b>, List<'a>) -> List<'b>. The declared result of the
+        // function argument is `List<'b>` and not `'b`, so reading it as an accumulator to grow —
+        // which is one operation's meaning and not what applying a signature is — leaves `'b` a
+        // variable and refuses the call. Applying the signature settles it from what the function
+        // answered.
+        Ast.Binders binders = new Ast.Binders(new BindingOwner.OfValue("demo", "test"));
+        Ast.Block step = new Ast.Block(List.of(binders.binder("x", POS)),
+                new Ast.ListLit(List.of(new Ast.IntLit(1, POS)), POS), POS);
+        Ast.Expr call = new Ast.Apply("List.concatMap", new ValueName.Stdlib("List.concatMap"),
+                List.of(step, new Ast.ListLit(List.of(new Ast.IntLit(2, POS)), POS)),
+                ConstructionOrigin.own(), POS);
+
+        Core typed = Elaborator.elaborate(call, Scope.NONE,
+                CheckContext.of(Symbols.none()).preserving(KEPT));
+
+        assertEquals(Type.list(Type.INT), typed.type());
     }
 
     @Test

@@ -151,18 +151,46 @@ public final class CallElaborator {
      */
     private static Core preservedCall(Ast.Apply call, CompleteSignature kept, Scope env,
                                       CheckContext ctx) {
-        Type.FnOf signature = kept.asFunction();
+        List<Type> params = kept.params();
         CallArgs ca = new CallArgs(call.args(), env, ctx);
-        if (call.args().size() != signature.params().size()) {
+        if (call.args().size() != params.size()) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.arity").title("check.arity.title")
                             .at(call.pos(), call.written().length())
-                            .args(call.written(), signature.params().size(), call.args().size()).build(),
-                    "`" + call.written() + "` takes " + signature.params().size()
+                            .args(call.written(), params.size(), call.args().size()).build(),
+                    "`" + call.written() + "` takes " + params.size()
                             + " argument(s) but is applied to " + call.args().size());
         }
-        Type result = applySignature(call, signature, ca, null, env, ctx).result();
-        return new Core.PreservedCall(call.denotes(), ca.cores(), result, call.pos());
+        Map<String, Type> bind = new HashMap<>();
+        // The values first, so what they settle is in force when a function argument is read at the
+        // parameter types this call gives it — `List.map(f, xs)` decides `'a` from `xs` and hands `f`
+        // the element type rather than a variable.
+        for (int i = 0; i < params.size(); i++) {
+            if (!(params.get(i) instanceof Type.FnOf)) {
+                TypeOps.unify(params.get(i), ca.type(i), bind, ctx.symbols(),
+                        call.pos(), "argument " + (i + 1) + " of " + call.written());
+            }
+        }
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i) instanceof Type.FnOf declared) {
+                Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
+                Type answered = ca.block(i, call.written(), at.params());
+                // What the function answers settles the rest: this is an application of a declared
+                // signature and nothing more. The fold rule that reads a step's result as an
+                // accumulator to grow is one operation's meaning, and an operation kept standing is
+                // kept because its meaning belongs to whoever reads it, not to this.
+                TypeOps.unify(declared.result(), answered, bind, ctx.symbols(),
+                        call.pos(), "argument " + (i + 1) + " of " + call.written());
+            }
+        }
+        for (int i = 0; i < params.size(); i++) {
+            if (!(params.get(i) instanceof Type.FnOf)) {
+                ca.requireTyped(i, TypeOps.substitute(params.get(i), bind),
+                        "argument " + (i + 1) + " of " + call.written());
+            }
+        }
+        return new Core.PreservedCall(call.denotes(), ca.cores(),
+                TypeOps.substitute(kept.result(), bind), call.pos());
     }
 
     /**
