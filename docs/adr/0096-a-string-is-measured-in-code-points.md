@@ -114,7 +114,19 @@ has one place that does it:
   It is one function rather than a rule to remember at each door, which is what those two rounds
   bought. And it is applied as the tree is built rather than to the source text, because normalizing
   before lexing would shorten a line and move every position after it, so a diagnostic's caret would
-  point at the wrong column of the file the author is reading.
+  start at the wrong column of the file the author is reading.
+
+  Starting in the right place is only half of it, and the first version of this got the other half
+  wrong. Canonicalizing as the tree is built put the canonical name where the spelling had been, and
+  a name carries two answers that are not each other's: which name is this, and which characters
+  spell it here. A decomposed name is wider than the composed name it denotes, so everything measured
+  in the name came out short — a caret stopping mid-word, a rename leaving the combining marks behind,
+  a cursor on the last character answered about nothing — and an editor matching a declaration to a
+  reference by comparing the two spellings answered no for two spellings of one name. So a name in
+  the tree is an occurrence, `WrittenName`, holding the canonical name, the characters the source
+  spells it with, and where they are; the invariant that they are a name and a spelling of that name
+  is checked where one is made. Every question about identity reads the name and every question
+  about the file reads the spelling, and neither is recovered from the other.
 
   Two names that are one name are then one name to every check that was already there — a duplicate
   declaration, a case listed twice in a sum — so none of those needed a rule of its own.
@@ -166,3 +178,13 @@ premise, that the two forms really are different strings to the JVM, so the rest
 by accident. `CompileInvariantConstraintTest` covers the one that spans the two repositories: a
 two-code-point value under a bound of two decodes, and a three-code-point one fails with `actual` of
 three.
+
+The name half is covered from both ends, because either end alone passes while the other is wrong.
+`ANameIsCanonicalWhereverItEntersTest` drives each door — an identifier, a type variable, a
+header-less source's module name, a file stem, and the three an invocation names — rather than
+describing them, since a door is one line in an argument parser and a line is what gets deleted by
+someone who cannot see what it is for. `ANameKeepsTheSpellingItWasWrittenWithTest` and
+`AReportUnderlinesWhatTheAuthorTypedTest` cover the other end: a composed reference reaching a
+decomposed declaration, a rename that leaves no combining mark, a cursor on the last unit of a name
+three units wide, a report quoting what was typed, and a qualified name whose last segment is the
+only part a rename rewrites.
