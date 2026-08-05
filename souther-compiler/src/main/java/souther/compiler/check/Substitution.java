@@ -6,7 +6,6 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingOwner;
 import souther.compiler.types.Type;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -142,10 +141,10 @@ final class Substitution {
                     && f.params().size() == a.params().size()
                     && allFit(a.params(), f.params(), symbols)
                     && fits(a.result(), f.result(), symbols);
-            // Not a shape with anything inside it to weigh position by position, so what is left is
-            // the ordinary question. It answers a variable the declaration wrote too, which is not
-            // this application's to decide and stands for whatever each use of it makes it.
-            default -> TypeOps.assignable(actual, want, symbols);
+            // Nothing inside it to weigh position by position, so what is left is the ordinary
+            // question. It answers a variable the declaration wrote too, which is not this
+            // application's to decide and stands for whatever each use of it makes it.
+            case Type.Leaf _ -> TypeOps.assignable(actual, want, symbols);
         };
     }
 
@@ -170,68 +169,69 @@ final class Substitution {
         // bottom needs. What it was decided to is {@link #bind}'s to weigh.
         Type left = declared;
         Type right = actual;
+        if (left instanceof Type.MetaVar m) {
+            bind(m, right, symbols, pos, what);
+            return;
+        }
+        // The other side carries what this one left open: a declared `List<Int>` read against a
+        // result still standing at a variable says what that variable is.
+        if (right instanceof Type.MetaVar m) {
+            bind(m, left, symbols, pos, what);
+            return;
+        }
+        // Position by position where the two shapes line up. Where they do not there is no variable
+        // here to decide, and whether they agree is {@link #fits}'s question.
         switch (left) {
-            case Type.MetaVar m -> bind(m, right, symbols, pos, what);
-            case Type.ListOf l when right instanceof Type.ListOf a ->
+            case Type.ListOf l -> {
+                if (right instanceof Type.ListOf a) {
                     decide(l.element(), a.element(), symbols, pos, what);
-            case Type.SetOf s when right instanceof Type.SetOf a ->
+                }
+            }
+            case Type.SetOf s -> {
+                if (right instanceof Type.SetOf a) {
                     decide(s.element(), a.element(), symbols, pos, what);
-            case Type.OptionOf o when right instanceof Type.OptionOf a ->
+                }
+            }
+            case Type.OptionOf o -> {
+                if (right instanceof Type.OptionOf a) {
                     decide(o.element(), a.element(), symbols, pos, what);
-            case Type.MapOf m when right instanceof Type.MapOf a -> {
-                decide(m.key(), a.key(), symbols, pos, what);
-                decide(m.value(), a.value(), symbols, pos, what);
-            }
-            case Type.TupleOf t when right instanceof Type.TupleOf a
-                    && t.elements().size() == a.elements().size() -> {
-                for (int i = 0; i < t.elements().size(); i++) {
-                    decide(t.elements().get(i), a.elements().get(i), symbols, pos, what);
                 }
             }
-            case Type.FnOf f when right instanceof Type.FnOf a
-                    && f.params().size() == a.params().size() -> {
-                for (int i = 0; i < f.params().size(); i++) {
-                    decide(f.params().get(i), a.params().get(i), symbols, pos, what);
+            case Type.MapOf m -> {
+                if (right instanceof Type.MapOf a) {
+                    decide(m.key(), a.key(), symbols, pos, what);
+                    decide(m.value(), a.value(), symbols, pos, what);
                 }
-                decide(f.result(), a.result(), symbols, pos, what);
             }
-            // The other side carries what this one left open: a declared `List<Int>` read against a
-            // result still standing at a variable says what that variable is.
-            case Type _ when right instanceof Type.MetaVar m -> bind(m, left, symbols, pos, what);
-            // Neither side is open, or the shapes do not line up. Either way there is no variable
-            // here to decide; whether they agree is {@link #fits}'s question.
-            default -> { }
+            case Type.TupleOf t -> {
+                if (right instanceof Type.TupleOf a
+                        && t.elements().size() == a.elements().size()) {
+                    for (int i = 0; i < t.elements().size(); i++) {
+                        decide(t.elements().get(i), a.elements().get(i), symbols, pos, what);
+                    }
+                }
+            }
+            case Type.FnOf f -> {
+                if (right instanceof Type.FnOf a && f.params().size() == a.params().size()) {
+                    for (int i = 0; i < f.params().size(); i++) {
+                        decide(f.params().get(i), a.params().get(i), symbols, pos, what);
+                    }
+                    decide(f.result(), a.result(), symbols, pos, what);
+                }
+            }
+            // Nothing inside it to descend into, so nothing here decides a variable.
+            case Type.Leaf _ -> { }
         }
     }
 
     /** {@code t} with every variable this has decided written into it. One still open is left
      * standing: it is not yet wrong, only not yet answered. */
     Type zonk(Type t) {
-        return switch (t) {
-            case Type.MetaVar m -> {
-                Type at = at(m);
-                yield at == null ? m : zonk(at);
-            }
-            case Type.ListOf l -> Type.list(zonk(l.element()));
-            case Type.SetOf s -> Type.set(zonk(s.element()));
-            case Type.OptionOf o -> Type.option(zonk(o.element()));
-            case Type.MapOf m -> Type.map(zonk(m.key()), zonk(m.value()));
-            case Type.TupleOf tu -> {
-                List<Type> es = new ArrayList<>();
-                for (Type e : tu.elements()) {
-                    es.add(zonk(e));
-                }
-                yield Type.tuple(es);
-            }
-            case Type.FnOf f -> {
-                List<Type> ps = new ArrayList<>();
-                for (Type p : f.params()) {
-                    ps.add(zonk(p));
-                }
-                yield Type.fn(ps, zonk(f.result()));
-            }
-            default -> t;
-        };
+        if (t instanceof Type.MetaVar m) {
+            Type at = at(m);
+            return at == null ? m : zonk(at);
+        }
+        return Type.mapChildren(t, this::zonk);
     }
 
     /**
@@ -301,27 +301,6 @@ final class Substitution {
 
     /** Every variable still open read as the bottom, at every depth. */
     private Type toBottom(Type t) {
-        return switch (t) {
-            case Type.MetaVar _ -> Type.NOTHING;
-            case Type.ListOf l -> Type.list(toBottom(l.element()));
-            case Type.SetOf s -> Type.set(toBottom(s.element()));
-            case Type.OptionOf o -> Type.option(toBottom(o.element()));
-            case Type.MapOf m -> Type.map(toBottom(m.key()), toBottom(m.value()));
-            case Type.TupleOf tu -> {
-                List<Type> es = new ArrayList<>();
-                for (Type e : tu.elements()) {
-                    es.add(toBottom(e));
-                }
-                yield Type.tuple(es);
-            }
-            case Type.FnOf f -> {
-                List<Type> ps = new ArrayList<>();
-                for (Type p : f.params()) {
-                    ps.add(toBottom(p));
-                }
-                yield Type.fn(ps, toBottom(f.result()));
-            }
-            default -> t;
-        };
+        return t instanceof Type.MetaVar ? Type.NOTHING : Type.mapChildren(t, this::toBottom);
     }
 }
