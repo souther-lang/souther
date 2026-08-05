@@ -55,6 +55,11 @@ final class JvmLimits {
     private static final Pattern POOL_INDEX =
             Pattern.compile("(-?\\d+) is not a valid index\\..*", Pattern.DOTALL);
 
+    /** What it says when it will not write the pool out at all. The other way it reaches the same
+     *  limit: this one is measured after everything is pooled, rather than at a reference into it. */
+    private static final Pattern POOL_SIZE =
+            Pattern.compile("Constant pool is too large (\\d+)\\s*", Pattern.DOTALL);
+
     private JvmLimits() {}
 
     /**
@@ -131,8 +136,26 @@ final class JvmLimits {
         return Requirements.names(requirements.getOrDefault(bd.name(), List.of())).size();
     }
 
-    /** A structural limit of the class file format, as the writer refused to go past it. */
-    enum Limit { CODE_SIZE, CONSTANT_POOL }
+    /**
+     * A structural limit of the class file format, as the writer refused to go past it.
+     *
+     * <p>The pool is two of them because the writer reaches it two ways, and the number it hands back
+     * is not the same number: refusing to refer to an entry it cannot address says which entry was
+     * wanted, and refusing to write the pool out says how many entries there are.
+     */
+    enum Limit {
+        CODE_SIZE("E2102", "e2102.msg"),
+        CONSTANT_POOL_INDEX("E2103", "e2103.index"),
+        CONSTANT_POOL_SIZE("E2103", "e2103.size");
+
+        private final String code;
+        private final String messageKey;
+
+        Limit(String code, String messageKey) {
+            this.code = code;
+            this.messageKey = messageKey;
+        }
+    }
 
     /**
      * A refusal read as the limit it was: which one, the number that went past it, and the method
@@ -158,10 +181,15 @@ final class JvmLimits {
             long length = Long.parseLong(code.group(1));
             return length > CODE_BYTES ? new Exceeded(Limit.CODE_SIZE, length, code.group(2)) : null;
         }
-        Matcher pool = POOL_INDEX.matcher(said);
-        if (pool.matches()) {
-            long index = Long.parseLong(pool.group(1));
-            return index > POOL_ENTRIES ? new Exceeded(Limit.CONSTANT_POOL, index, null) : null;
+        Matcher index = POOL_INDEX.matcher(said);
+        if (index.matches()) {
+            long wanted = Long.parseLong(index.group(1));
+            return wanted > POOL_ENTRIES ? new Exceeded(Limit.CONSTANT_POOL_INDEX, wanted, null) : null;
+        }
+        Matcher size = POOL_SIZE.matcher(said);
+        if (size.matches()) {
+            long entries = Long.parseLong(size.group(1));
+            return entries > POOL_ENTRIES ? new Exceeded(Limit.CONSTANT_POOL_SIZE, entries, null) : null;
         }
         return null;
     }
@@ -174,22 +202,24 @@ final class JvmLimits {
      * naming the definition alone would leave the author looking for which part of it grew.
      */
     static CompileException tooLarge(Exceeded exceeded, SourcePos pos, String name) {
-        if (exceeded.limit() == Limit.CODE_SIZE) {
-            return CompileException.of(
-                    Diagnostic.of("E2102", "e2102.msg").at(pos, name.length())
-                            .args(name, exceeded.method(), String.valueOf(exceeded.measured()),
-                                    String.valueOf(CODE_BYTES))
+        Limit limit = exceeded.limit();
+        String measured = String.valueOf(exceeded.measured());
+        Diagnostic.Builder said = Diagnostic.of(limit.code, limit.messageKey).at(pos, name.length());
+        return switch (limit) {
+            case CODE_SIZE -> CompileException.of(
+                    said.args(name, exceeded.method(), measured, String.valueOf(CODE_BYTES))
                             .hint("e2102.hint").build(),
                     "the `" + exceeded.method() + "` method generated for `" + name + "` is "
-                            + exceeded.measured() + " bytes of code, but a JVM method holds at most "
-                            + CODE_BYTES);
-        }
-        return CompileException.of(
-                Diagnostic.of("E2103", "e2103.msg").at(pos, name.length())
-                        .args(name, String.valueOf(exceeded.measured()), String.valueOf(POOL_ENTRIES))
-                        .hint("e2103.hint").build(),
-                "the class generated for `" + name + "` needs constant-pool entry "
-                        + exceeded.measured() + ", and a class file holds at most " + POOL_ENTRIES);
+                            + measured + " bytes of code, but a JVM method holds at most " + CODE_BYTES);
+            case CONSTANT_POOL_INDEX -> CompileException.of(
+                    said.args(name, measured, String.valueOf(POOL_ENTRIES)).hint("e2103.hint").build(),
+                    "the class generated for `" + name + "` refers to constant-pool entry " + measured
+                            + ", and a class file addresses at most " + POOL_ENTRIES);
+            case CONSTANT_POOL_SIZE -> CompileException.of(
+                    said.args(name, measured, String.valueOf(POOL_ENTRIES)).hint("e2103.hint").build(),
+                    "the class generated for `" + name + "` needs " + measured
+                            + " constant-pool entries, and a class file holds at most " + POOL_ENTRIES);
+        };
     }
 
     private static CompileException tooWide(String key, SourcePos pos, String name, int needed,

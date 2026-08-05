@@ -3834,13 +3834,15 @@ How much code a definition becomes is not known until it is written, so unlike E
 
 [,text]
 ----
-The class generated for `f` needs constant-pool entry 80031, and a class file holds at
-most 65535. The pool holds every name, type and literal the class refers to.
+The class generated for `f` refers to constant-pool entry 80031, and a class file
+addresses at most 65535. The pool holds every name, type and literal the class refers to.
 Hint: Move the table out of the source, or split the work into another behavior, whose
 constants belong to a class of its own.
 ----
 
 As E2102, for the other thing a class file runs out of. The pool belongs to the class rather than to any one method of it, so this is reported as the definition the class was generated for and names no method.
+
+The pool is run out of two ways and the message says which: referring to an entry the class file cannot address, which names the entry that was wanted, and holding more entries than it can write out, which names how many there are. They are one code because the author's move is the same.
 
 [#example]
 == Example: the business-trip application model

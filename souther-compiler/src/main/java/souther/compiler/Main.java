@@ -61,6 +61,36 @@ public final class Main {
               --color auto|always|never  color the human output (default: auto)""";
 
     public static void main(String[] args) {
+        int code = guarded(() -> dispatch(args));
+        if (code != 0) {
+            System.exit(code);
+        }
+    }
+
+    /**
+     * Runs the command with the last boundary this compiler has around it, and answers with the exit
+     * code.
+     *
+     * <p>Around the whole command and not around the compile inside it: reading the arguments builds
+     * paths and options, and a failure there is as much this compiler's as one from the emitter. A
+     * {@link CompileException} is not one of these — it is an answer about the source and is rendered
+     * as one where it is caught — so it goes on rather than being reported as a fault of the compiler.
+     */
+    static int guarded(Runnable command) {
+        try {
+            command.run();
+            return 0;
+        } catch (RuntimeException e) {
+            String said = internalFailure(e);
+            if (said == null) {
+                throw e;
+            }
+            System.err.println(said);
+            return 1;
+        }
+    }
+
+    private static void dispatch(String[] args) {
         String command = args.length == 0 ? "" : args[0];
         String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);
         switch (command) {
@@ -95,7 +125,7 @@ public final class Main {
         }
         String said = e.getMessage();
         return "internal compiler error: " + e.getClass().getSimpleName()
-                + (said == null ? "" : ": " + said.replace('\n', ' '));
+                + (said == null ? "" : ": " + said.replaceAll("\\R", " "));
     }
 
     /** {@code souther compile <file.sou>... -d <outdir>}: writes the generated {@code .class} files. */
@@ -164,11 +194,6 @@ public final class Main {
             // command was writing the classes out, which says nothing about the source.
             report(warnings, sources, render);
             System.err.println("io error: " + e.getMessage());
-            System.exit(1);
-        } catch (RuntimeException e) {
-            // After the two above, which are subtypes of nothing here but are answers about the
-            // source and about the disk. What is left is this compiler failing.
-            System.err.println(internalFailure(e));
             System.exit(1);
         }
     }
@@ -269,9 +294,6 @@ public final class Main {
             System.exit(1);
         } catch (IOException e) {
             System.err.println("io error: " + e.getMessage());
-            System.exit(1);
-        } catch (RuntimeException e) {
-            System.err.println(internalFailure(e));
             System.exit(1);
         }
     }
@@ -404,9 +426,6 @@ public final class Main {
             System.exit(e.exitCode);
         } catch (CompileException e) {
             reportCompileError(e, sources, render);
-            System.exit(1);
-        } catch (RuntimeException e) {
-            System.err.println(internalFailure(e));
             System.exit(1);
         }
     }

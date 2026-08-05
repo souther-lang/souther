@@ -31,14 +31,25 @@ class AClassfileRefusalIsALimitOnlyWhenTheNumberSaysSoTest {
     }
 
     @Test
-    void anIndexPastWhatAConstantPoolHoldsIsTheConstantPoolLimit() {
+    void anIndexPastWhatAConstantPoolAddressesIsTheConstantPoolLimit() {
         JvmLimits.Exceeded e = JvmLimits.exceeded(new IllegalArgumentException(
                 "80031 is not a valid index. Entry: 11 java/util/List.copyOf-"
                         + "(Ljava/util/Collection;)Ljava/util/List;"));
 
-        assertEquals(JvmLimits.Limit.CONSTANT_POOL, e.limit());
+        assertEquals(JvmLimits.Limit.CONSTANT_POOL_INDEX, e.limit());
         assertEquals(80031, e.measured());
         assertNull(e.method(), "the writer does not say which method it was writing");
+    }
+
+    @Test
+    void aPoolWithMoreEntriesThanAClassFileHoldsIsTheConstantPoolLimitToo() {
+        // the other refusal, from writing the pool out rather than from referring into it: the
+        // number is how many entries there are, not which one was wanted
+        JvmLimits.Exceeded e = JvmLimits.exceeded(
+                new IllegalArgumentException("Constant pool is too large 70000"));
+
+        assertEquals(JvmLimits.Limit.CONSTANT_POOL_SIZE, e.limit());
+        assertEquals(70000, e.measured());
     }
 
     @Test
@@ -50,9 +61,24 @@ class AClassfileRefusalIsALimitOnlyWhenTheNumberSaysSoTest {
     }
 
     @Test
-    void theLastIndexAConstantPoolHoldsIsNotOverIt() {
+    void theLastIndexAConstantPoolAddressesIsNotOverIt() {
         assertNull(JvmLimits.exceeded(new IllegalArgumentException(
                 "65535 is not a valid index. Entry: 11 java/lang/Object")));
+    }
+
+    @Test
+    void aPoolWithExactlyWhatAClassFileHoldsIsNotOverIt() {
+        assertNull(JvmLimits.exceeded(
+                new IllegalArgumentException("Constant pool is too large 65535")));
+        assertEquals(JvmLimits.Limit.CONSTANT_POOL_SIZE, JvmLimits.exceeded(
+                new IllegalArgumentException("Constant pool is too large 65536")).limit());
+    }
+
+    @Test
+    void theFirstIndexPastWhatAClassFileAddressesIsOverIt() {
+        assertEquals(JvmLimits.Limit.CONSTANT_POOL_INDEX, JvmLimits.exceeded(
+                new IllegalArgumentException("65536 is not a valid index. Entry: 11 java/lang/Object"))
+                .limit());
     }
 
     @Test

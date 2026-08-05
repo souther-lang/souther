@@ -239,10 +239,19 @@ public final class Backend {
         b.rejectBridgeCaseCollisions(module, bridgeCases, behaviorResults, localTypes, behaviorClassOwner);
         Map<String, byte[]> out = new LinkedHashMap<>();
         behaviorResults.forEach((resultName, members) -> {
-            out.put(module.name() + "." + resultName, b.generateBehaviorResult(resultName, members));
-            out.put(module.name() + "." + resultName + "$Enc",
-                    b.codec.generateResultUnionEncoder(resultName, members));
+            // the union and its encoder belong to the behavior whose output they are, not to the
+            // module, though the behavior did not write them
+            Ast.BehaviorDef owner = b.behaviorOf(module, resultName);
+            emitting(owner == null ? module.pos() : owner.pos(),
+                    owner == null ? module.name() : owner.name(), () -> {
+                        out.put(module.name() + "." + resultName,
+                                b.generateBehaviorResult(resultName, members));
+                        out.put(module.name() + "." + resultName + "$Enc",
+                                b.codec.generateResultUnionEncoder(resultName, members));
+                    });
         });
+        // A bridge case is shared by every union that reaches its member, so no one behavior owns it;
+        // it is left to the module, which the outermost boundary answers for.
         bridgeCases.forEach((member, unions) ->
                 out.put(module.name() + "." + CodegenContext.bridgeCaseName(member),
                         b.value.generateBridgeCase(member, unions, out)));
@@ -300,9 +309,10 @@ public final class Backend {
                         }
                     }
                 }
-                out.put(module.name() + "." + behaviorClass(spec.name()),
-                        b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
-                                reqParams, b.successType(spec.ret())));
+                emitting(spec.pos(), spec.name(), () ->
+                        out.put(module.name() + "." + behaviorClass(spec.name()),
+                                b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
+                                        reqParams, b.successType(spec.ret()))));
             }
         }
         // An imported injected behavior (its base lives in the declaring module, so no base is built
