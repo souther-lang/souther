@@ -15,6 +15,16 @@ public sealed interface Green permits GreenNode, GreenToken {
     /** The width of this element in source characters (UTF-16 code units, i.e. Java {@code char}s). */
     int width();
 
+    /**
+     * The number of levels from here down to the deepest leaf, counting this one: 1 for a token, and
+     * one more than its deepest child for a node.
+     *
+     * <p>Folded once as the tree is built, the way {@link #width()} is, because every walk over a
+     * tree descends it by recursion and so costs stack in proportion to this. Measuring it after the
+     * fact would mean a walk of its own, which is the thing that cannot be afforded here.
+     */
+    int depth();
+
     /** Appends this element's source text (including trivia) to {@code sb}. */
     void appendText(StringBuilder sb);
 
@@ -29,10 +39,12 @@ public sealed interface Green permits GreenNode, GreenToken {
     /** A green internal node: a kind plus ordered children (nodes, tokens, and trivia). */
     static GreenNode node(SyntaxKind kind, List<Green> children) {
         int w = 0;
+        int d = 0;
         for (Green c : children) {
             w += c.width();
+            d = Math.max(d, c.depth());
         }
-        return new GreenNode(kind, w, List.copyOf(children));
+        return new GreenNode(kind, w, d + 1, List.copyOf(children));
     }
 
     /** A green leaf: a kind plus the exact source text it covers. */

@@ -5,6 +5,8 @@ import souther.compiler.cst.SyntaxElement;
 import souther.compiler.cst.SyntaxKind;
 import souther.compiler.cst.SyntaxNode;
 import souther.compiler.cst.SyntaxToken;
+import souther.compiler.diag.CompileException;
+import souther.compiler.diag.Diagnostic;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -51,14 +53,39 @@ public final class Formatter {
     /** Formats source text into its canonical form. Assumes the source parses without syntax errors;
      * a caller that cannot assume that should check {@link CstParser#parse} first. */
     public static String format(String source) {
-        return format(CstParser.parse(source).root());
+        try {
+            return format(CstParser.parse(source).root());
+        } catch (StackOverflowError _) {
+            throw tooDeep();   // the descent that found the end of the stack was the parse's own
+        }
     }
 
     /** Formats an already-parsed file into its canonical form — for a caller that has parsed the
      * source (e.g. to check for syntax errors) and need not parse it again. Assumes {@code file}
      * came from a clean parse. */
     public static String format(SyntaxNode file) {
-        return new Formatter().file(file).render(WIDTH);
+        try {
+            return new Formatter().file(file).render(WIDTH);
+        } catch (StackOverflowError _) {
+            throw tooDeep();
+        }
+    }
+
+    /**
+     * A tree that nests deeper than this walk can descend. {@link CstParser} bounds what it builds,
+     * so a tree from a parse this compiler ran does not reach here; what does is a thread with less
+     * stack than that bound was set for, and a {@code StackOverflowError} is not a
+     * {@link CompileException}, so left alone it passes through the recovery boundary and reaches
+     * the author as a stack trace.
+     *
+     * <p>No position is claimed: unlike the parser's limit, this one was not reached at a token —
+     * it was reached wherever the stack happened to end, which is not a fact about the source.
+     */
+    private static CompileException tooDeep() {
+        return CompileException.of(
+                Diagnostic.of(null, "parse.toodeep").title("parse.title").build(),
+                "this source nests too deeply to format;"
+                        + " break the nesting into named parts to flatten it");
     }
 
     // --- top level ---
