@@ -745,16 +745,18 @@ public final class HelperInliner {
     private static final Map<String, Integer> BLOCK_ARG = Map.of("List.foldFrom", 0);
 
     /** {@code List.fold(step, seed, xs)} is sugar for {@code List.foldFrom(step, seed, xs, 0)} — the
-     * walk from the head. Rewriting it here, before inlining, means the step reaches {@code foldFrom}
-     * (the one recursive helper) directly rather than through a wrapper that would pass the function on
-     * as a value. */
+     * walk from the head. Which call it becomes and how many of its arguments stand where they stood is
+     * the library's to say ({@link Prelude#rewriteOf}); the index the walk starts at is this rewrite's
+     * own. Rewriting here, before inlining, means the step reaches {@code foldFrom} (the one recursive
+     * helper) directly rather than through a wrapper that would pass the function on as a value. */
     private static Ast.Apply desugarFold(Ast.Apply call) {
-        if (!"List.fold".equals(call.reaches()) || call.args().size() != 3) {
+        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
+        if (rewrite == null || call.args().size() != rewrite.keptArgs()) {
             return call;
         }
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.add(new Ast.IntLit(0, call.pos()));
-        return new Ast.Apply("List.foldFrom", new ValueName.Stdlib("List.foldFrom"), args,
+        return new Ast.Apply(rewrite.target(), new ValueName.Stdlib(rewrite.target()), args,
                 ConstructionOrigin.own(),
                 call.pos());
     }
@@ -916,9 +918,10 @@ public final class HelperInliner {
      * Null when the name is not a helper (a builtin, an injected behavior, or unknown).
      */
     private List<Ast.FnParam> declaredParams(Ast.Apply call) {
-        if ("List.fold".equals(call.reaches()) && call.args().size() == 3) {
-            Ast.FnDef foldFrom = helpers.get("List.foldFrom");
-            return foldFrom == null ? null : foldFrom.params().subList(0, 3);
+        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
+        if (rewrite != null && call.args().size() == rewrite.keptArgs()) {
+            Ast.FnDef target = helpers.get(rewrite.target());
+            return target == null ? null : target.params().subList(0, rewrite.keptArgs());
         }
         Ast.FnDef helper = helpers.get(call.reaches());
         return helper == null ? null : helper.params();

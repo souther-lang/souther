@@ -4,6 +4,7 @@ import souther.compiler.Compiler;
 import souther.compiler.Prelude;
 import souther.compiler.diag.Located;
 import souther.compiler.diag.Severity;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,16 +18,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * The invariant check binds a combinator's closure parameter to the container's element type, from a
- * table keyed by the operation's name. A rule in that table can be plainly correct and never run —
+ * The invariant check binds a combinator's closure parameter to the container's element type, from
+ * the rules {@link Combinators} reads off the library. A rule can be plainly correct and never run —
  * that is what happened when the check was handed a tree where the operations had already become the
- * folds they are — so the table is held to being reachable here rather than measured later.
+ * folds they are — so the rules are held to being reachable here rather than measured later.
  *
- * <p>Two halves. A name must survive to where the check reads it: {@code List.fold} does not, being
- * rewritten to {@code List.foldFrom} first, so no rule may be keyed by it. And each name must have a
- * program that fires its rule — a construction inside the closure that discharges only because the
- * element carries its type's invariant, so removing the rule leaves the element unnamed and the
- * construction reported.
+ * <p>Two halves. A rule must be keyed by a name the check still sees: a sugared name is not, being
+ * rewritten before this tree is read, and what makes that so is that {@link Preserved} is built from
+ * declarations and a sugar has none. And each name the check does see must have a program that fires
+ * its rule — a construction inside the closure that discharges only because the element carries its
+ * type's invariant, so removing the rule leaves the element unnamed and the construction reported.
  */
 class InvariantCombinatorRulesTest {
 
@@ -141,6 +142,13 @@ class InvariantCombinatorRulesTest {
                         x.value
                     }, xs))
                     """),
+            new Fires("List.distinctBy", """
+                    behavior f : (xs: List<Money>) -> Int constructs Positive
+                    let f (xs) = List.length(List.distinctBy(x -> {
+                        let p = Positive(x.value)
+                        x.value
+                    }, xs))
+                    """),
             new Fires("List.allDistinctBy", """
                     behavior f : (xs: List<Money>) -> Bool constructs Positive
                     let f (xs) = List.allDistinctBy(x -> {
@@ -230,20 +238,35 @@ class InvariantCombinatorRulesTest {
                     }, b.one))
                     """));
 
+    /** The rules the discharge check can reach: what the tree it reads may hold. */
+    private static Set<String> reachable() {
+        return Combinators.names().stream()
+                .filter(fn -> !Prelude.sugared(fn))
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
     @Test
     void everyRuleIsKeyedByANameTheAnalysisStillSees() {
-        for (String fn : DischargeRules.combinatorNames()) {
+        for (String fn : Combinators.names()) {
             assertTrue(Prelude.isLibraryFunction(fn), fn + " is not a standard-library operation");
-            assertFalse(Prelude.sugared(fn),
-                    fn + " is rewritten to another call before this tree is read, so its rule cannot"
-                            + " fire — key the rule by what the rewrite leaves");
+        }
+        // A sugar is written by an author and gone by the time this check reads a tree. Its rule is
+        // the totality check's to read, and this one cannot look it up: what a representation keeps
+        // standing is built from the library's declarations, and a sugar has none.
+        for (String fn : Combinators.names()) {
+            if (!Prelude.sugared(fn)) {
+                continue;
+            }
+            assertFalse(Preserved.byTheLanguagesOwnOperations().operations()
+                            .containsKey(new ValueName.Stdlib(fn)),
+                    fn + " is sugar and is kept standing, so a tree this check reads could hold it");
         }
     }
 
     @Test
     void everyRuleHasAProgramThatFiresIt() {
         Set<String> covered = FIRES.stream().map(Fires::fn).collect(Collectors.toCollection(TreeSet::new));
-        assertEquals(new TreeSet<>(DischargeRules.combinatorNames()), covered,
+        assertEquals(reachable(), covered,
                 "a rule is registered with no program that fires it, or the other way round");
     }
 

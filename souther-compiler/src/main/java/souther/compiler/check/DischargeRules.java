@@ -4,7 +4,6 @@ import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
 import souther.compiler.types.ValueName;
 
-import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -12,65 +11,21 @@ import java.util.Set;
  * What the language's own operations do to the properties the invariant-discharge check tracks
  * (spec §invariant-discharge-preservation).
  *
- * <p>This is the table that decides how much of a model the language tracks rather than leaves to a
- * run-time check, and it is stated per operation because that is the level an author writes at. It is
- * data and lookups and nothing else: what a rule is <em>used for</em> — seeding a closure's element,
- * carrying a predicate to the container something was built from, naming a size — is the walk's, and
- * lives with the walk.
+ * <p>These are the tables that decide how much of a model the language tracks rather than leaves to a
+ * run-time check, and each is stated per operation because that is the level an author writes at. It
+ * is data and lookups and nothing else: what a rule is <em>used for</em> — carrying a predicate to
+ * the container something was built from, naming a size — is the walk's, and lives with the walk.
  *
  * <p>Every rule is keyed by the operation a call reaches, not by how it was written: a module that
  * imported an operation writes it bare and one that did not writes it qualified, and they are the
- * same operation. It is also keyed by the operation a call still reaches when this tree is read,
- * which is not every name an author can write — {@code List.fold} is rewritten to
- * {@code List.foldFrom} before any of this, so a rule under that name could not be looked up.
- * {@code InvariantCombinatorRulesTest} holds the table to both halves of that.
+ * same operation. What the operations do to the closure they are handed is not here but in
+ * {@link Combinators}, which the totality check reads as well and neither of the two states.
  */
 final class DischargeRules {
 
     /** The library operation written {@code qualified}, as what a name reaching it denotes. */
     private static ValueName op(String qualified) {
         return new ValueName.Stdlib(qualified);
-    }
-
-    /** A stdlib combinator whose closure (argument {@code closureArg}) is handed each element of its
-     * container argument ({@code listArg}) as closure parameter {@code elementParam} — mirrors
-     * {@link TotalityChecker}'s table, so a construction inside a {@code List.map} or
-     * {@code List.foldFrom} closure is analyzed with the element bound to the container's element
-     * type. */
-    record Combinator(int closureArg, int elementParam, int listArg) {}
-
-    private static final Map<ValueName, Combinator> COMBINATORS = Map.ofEntries(
-            Map.entry(op("List.foldFrom"), new Combinator(0, 1, 2)),
-            Map.entry(op("List.foldRight"), new Combinator(0, 0, 2)),
-            Map.entry(op("List.map"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.filter"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.all"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.any"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.find"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.partition"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.flatMap"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.filterMap"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.sortBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.groupBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.indexBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.allDistinctBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.mapIndexed"), new Combinator(0, 1, 1)),
-            Map.entry(op("Map.fold"), new Combinator(0, 2, 2)),
-            Map.entry(op("Map.mapValues"), new Combinator(0, 1, 1)),
-            Map.entry(op("Map.filterEntries"), new Combinator(0, 1, 1)),
-            Map.entry(op("Map.updateIfPresent"), new Combinator(1, 0, 2)),
-            Map.entry(op("Map.updateOrInsert"), new Combinator(2, 0, 3)),
-            Map.entry(op("Set.fold"), new Combinator(0, 1, 2)),
-            Map.entry(op("Set.map"), new Combinator(0, 0, 1)),
-            Map.entry(op("Set.filter"), new Combinator(0, 0, 1)),
-            Map.entry(op("Set.partition"), new Combinator(0, 0, 1)),
-            Map.entry(op("Option.map"), new Combinator(0, 0, 1)));
-
-    /** The operations the table has a rule for, for the test that holds it to being reachable. */
-    static Set<String> combinatorNames() {
-        Set<String> names = new LinkedHashSet<>();
-        COMBINATORS.keySet().forEach(operation -> names.add(operation.name()));
-        return names;
     }
 
     /** The pure, total stdlib calls whose result is a number the domain can name: the size of a
@@ -141,7 +96,7 @@ final class DischargeRules {
 
     /** The calls that state their predicate of <em>every</em> element, so what they say of a
      * container is what holds of each element a closure is handed. Which argument is the predicate
-     * and which the container is what {@link #combinator} already answers of any combinator, and how
+     * and which the container is what {@link Combinators} already answers of any combinator, and how
      * far the statement travels is what {@link #carried} already answers of any predicate — so a
      * quantifier is the name and nothing else. {@code List.all} is the only one the library has. */
     private static final Set<ValueName> QUANTIFIERS = Set.of(op("List.all"));
@@ -173,10 +128,6 @@ final class DischargeRules {
 
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool.not");
-
-    static Combinator combinator(ValueName operation) {
-        return COMBINATORS.get(operation);
-    }
 
     static Built builtFrom(ValueName operation) {
         return BUILT_FROM.get(operation);

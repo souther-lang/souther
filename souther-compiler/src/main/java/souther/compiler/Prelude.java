@@ -146,22 +146,39 @@ public final class Prelude {
         return QUALIFIERS;
     }
 
-    /** Names that are sugar for another standard-library call, recognised as library functions but
-     *  rewritten before inlining: {@code List.fold(step, seed, xs)} is {@code List.foldFrom(step, seed,
-     *  xs, 0)} (the walk from the head). */
-    private static final Set<String> SUGARED = Set.of("List.fold");
+    /** What a sugared name is sugar for: the call it becomes, and how many of the arguments it was
+     *  written with stand where they stood. The rest of what the rewrite supplies is the rewrite's
+     *  own business — {@code List.fold(step, seed, xs)} is {@code List.foldFrom(step, seed, xs, 0)},
+     *  so its three arguments are kept and the walk's starting index is added after them. Said here
+     *  because more than one reader has to know it: the rewrite performs it, and anything stated of
+     *  an operation is stated of the sugar by the arguments it keeps in place. */
+    public record Rewrite(String target, int keptArgs) {}
 
-    /** Whether {@code qualifiedName} is one of those — a name no tree holds after the rewrite, so a
-     *  rule keyed by it can never be looked up (see {@code InvariantChecker}'s combinator table). */
+    /** Names that are sugar for another standard-library call, recognised as library functions but
+     *  rewritten before inlining. */
+    private static final Map<String, Rewrite> SUGARED =
+            Map.of("List.fold", new Rewrite("List.foldFrom", 3));
+
+    /** Whether {@code qualifiedName} is one of those — a name no tree holds after the rewrite. */
     public static boolean sugared(String qualifiedName) {
-        return SUGARED.contains(qualifiedName);
+        return SUGARED.containsKey(qualifiedName);
+    }
+
+    /** What {@code qualifiedName} rewrites to, or null where it is not sugar. */
+    public static Rewrite rewriteOf(String qualifiedName) {
+        return SUGARED.get(qualifiedName);
+    }
+
+    /** Every sugared name, by what it rewrites to. */
+    public static Map<String, Rewrite> rewrites() {
+        return SUGARED;
     }
 
     /** Whether {@code qualifiedName} (e.g. {@code "List.map"}) is a standard-library function — a
      *  declared one, or a sugar for one. Sugar has no declaration of its own, so this is wider than
      *  {@link #entry(String)} answering: {@code List.fold} is a library function and has no entry. */
     public static boolean isLibraryFunction(String qualifiedName) {
-        return ENTRIES.containsKey(qualifiedName) || SUGARED.contains(qualifiedName);
+        return ENTRIES.containsKey(qualifiedName) || SUGARED.containsKey(qualifiedName);
     }
 
     /** The library's entry for {@code qualifiedName}, or null where the library declares no such
@@ -204,9 +221,7 @@ public final class Prelude {
             }
             names.add(qualified);
         }
-        for (String sugar : SUGARED) {
-            names.add(sugar);
-        }
+        names.addAll(SUGARED.keySet());
         Set<String> byModule = new LinkedHashSet<>();
         for (String qualifier : QUALIFIERS_IN_LOAD_ORDER) {
             for (String name : names) {
