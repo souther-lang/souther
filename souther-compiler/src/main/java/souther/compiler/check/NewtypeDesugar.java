@@ -54,7 +54,7 @@ public final class NewtypeDesugar {
             if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
                 defs.add(new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
                         Ast.mapClauses(d.invariants(), inv -> go(inv, symbols)),
-                        d.decoder(), d.encoder(), d.pos()));
+                        d.decoder(), d.encoder(), d.namePos(), d.pos()));
             } else {
                 defs.add(def);
             }

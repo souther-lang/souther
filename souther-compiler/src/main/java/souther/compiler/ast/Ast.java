@@ -42,9 +42,42 @@ public interface Ast {
          * after it; nothing decides identity by it. */
         String name();
 
-        /** A binder as the parser read it, before resolution has said which binding it is. */
-        static Binder written(String name, SourcePos pos) {
-            return new Written(name, pos);
+        /**
+         * Where the author wrote this name, or null where the author wrote no name at all.
+         *
+         * <p>Not the same as {@link #pos()}, which is the form the binding came from: a {@code let}
+         * statement starts at its keyword, a lambda's parameters share the lambda's start, and a
+         * name a desugaring invented — the parameter {@code .field} becomes, the value a
+         * {@code match} is held in — is written nowhere and only anchored somewhere.
+         *
+         * <p>A reader asking what is under a cursor has this and nothing else to compare against.
+         * Anchoring one of those invented names at a form the author did write would put it under a
+         * cursor on that form, and rename would then rewrite the source with a name no one can see.
+         */
+        SourcePos namePos();
+
+        /**
+         * A binder read off a name the author wrote, taken from the name itself so its spelling and
+         * its place cannot come from two different things.
+         *
+         * <p>There is no form here that takes the two apart. A caller holding a spelling and a
+         * position separately is a caller nothing can stop from pairing a name with somewhere it is
+         * not written, and this branch shipped that mistake three times: the parameter {@code .v}
+         * desugars to, anchored at the {@code .}; a lambda's parameters, all anchored at the
+         * lambda; a {@code match} arm's binding, anchored at the {@code |}. The parser reads a
+         * binder off its token; a pass that needs a name of its own says {@link #desugared}.
+         */
+        static Binder of(Name written) {
+            return new Written(written.written(), written.pos(), written.pos());
+        }
+
+        /**
+         * A binder for a name no one wrote: what a desugaring binds a value to so that the form it
+         * is rewriting keeps taking plain names. {@code anchor} is the form it came from, which is
+         * where a complaint about it belongs and is not where its name is.
+         */
+        static Binder desugared(String name, SourcePos anchor) {
+            return new Written(name, null, anchor);
         }
 
         /**
@@ -63,7 +96,7 @@ public interface Ast {
         }
 
         /** A binder as the parser read it. */
-        record Written(String name, SourcePos pos) implements Binder {
+        record Written(String name, SourcePos namePos, SourcePos pos) implements Binder {
 
             @Override
             public String toString() {
@@ -72,7 +105,8 @@ public interface Ast {
         }
 
         /** A binder resolution answered, and the binding it introduces. */
-        record Bound(String name, BindingId binding, SourcePos pos) implements Binder {
+        record Bound(String name, BindingId binding, SourcePos namePos,
+                     SourcePos pos) implements Binder {
 
             public Bound {
                 if (binding == null) {
@@ -104,9 +138,10 @@ public interface Ast {
             this.owner = owner;
         }
 
-        /** A binding nothing else has, under this pass's owner. */
+        /** A binding nothing else has, under this pass's owner. A pass writes its own names, so
+         * none of them is a name the author wrote. */
         public Binder binder(String name, SourcePos pos) {
-            return new Binder.Bound(name, new BindingId(owner, next++), pos);
+            return new Binder.Bound(name, new BindingId(owner, next++), null, pos);
         }
     }
 
@@ -333,11 +368,6 @@ public interface Ast {
             this(binder, type, false);
         }
 
-        /** A parameter as the parser read it. */
-        public FnParam(String name, RetType type, SourcePos pos) {
-            this(Binder.written(name, pos), type, false);
-        }
-
         public String name() {
             return binder.name();
         }
@@ -374,6 +404,15 @@ public interface Ast {
     sealed interface Def extends Ast permits Data, SumData, UnitData {
         String name();
 
+        /**
+         * Where the name is written, which is not where the declaration starts — {@code data} comes
+         * first. A reader asking what a cursor is on has only the name to compare against, and a
+         * declaration that answers from its keyword answers about the keyword.
+         *
+         * <p>Null for a declaration nobody wrote: a unit data a construction implied.
+         */
+        SourcePos namePos();
+
         SourcePos pos();
     }
 
@@ -393,6 +432,7 @@ public interface Ast {
                 List<InvariantClause> invariants,
                 Optional<DecoderDef> decoder,
                 Optional<EncoderDef> encoder,
+                SourcePos namePos,
                 SourcePos pos) implements Def {}
 
     /**
@@ -424,6 +464,7 @@ public interface Ast {
                    List<Name> cases,
                    Optional<Discriminate> decoder,
                    Optional<SumEncoder> encoder,
+                   SourcePos namePos,
                    SourcePos pos) implements Def {}
 
     /** {@code encoder discriminate on "key" { Case -> "tag" ... }} — the inverse of discriminate. */
@@ -432,7 +473,7 @@ public interface Ast {
     record EncVariant(Name caseType, String tag, SourcePos pos) implements Ast {}
 
     /** A unit data definition {@code data U} with no fields. */
-    record UnitData(String name, SourcePos pos) implements Def {}
+    record UnitData(String name, SourcePos namePos, SourcePos pos) implements Def {}
 
     /** {@code decoder from Object discriminate on "key" { "tag" -> Case.decoder ... }} */
     record Discriminate(String key, List<Variant> variants, SourcePos pos) implements Ast {}
@@ -679,11 +720,13 @@ public interface Ast {
      */
     record Block(List<Binder> params, Expr body, SourcePos pos) implements Expr {
 
-        /** A block as the parser read it. */
-        public static Block written(List<String> params, Expr body, SourcePos pos) {
+        /** A block whose parameters are names no one wrote — what a desugaring builds. A block the
+         * author wrote is built from binders of its own, because its parameters are written one by
+         * one and the block's own position is where the first of them starts at best. */
+        public static Block desugared(List<String> params, Expr body, SourcePos pos) {
             List<Binder> binders = new ArrayList<>();
             for (String p : params) {
-                binders.add(Binder.written(p, pos));
+                binders.add(Binder.desugared(p, pos));
             }
             return new Block(binders, body, pos);
         }
@@ -717,9 +760,11 @@ public interface Ast {
             this(binder, value, null, false, null, body, pos);
         }
 
-        /** The same, as the parser read it. */
+        /** A binding for a name no one wrote: what a desugaring holds a value in. A binding the
+         * source wrote is built from a binder of its own, because a {@code let} statement starts at
+         * its keyword and the name it binds is somewhere after it. */
         public LetIn(String name, Expr value, Expr body, SourcePos pos) {
-            this(Binder.written(name, pos), value, null, false, null, body, pos);
+            this(Binder.desugared(name, pos), value, null, false, null, body, pos);
         }
 
         /** A binding carrying an inlined helper parameter's declared type. */
@@ -728,8 +773,9 @@ public interface Ast {
         }
 
         /** {@code let x: T = value} — a binding the source annotated. */
-        public static LetIn annotated(String name, Expr value, RetType type, Expr body, SourcePos pos) {
-            return new LetIn(Binder.written(name, pos), value, type, true, null, body, pos);
+        public static LetIn annotated(Binder binder, Expr value, RetType type, Expr body,
+                                      SourcePos pos) {
+            return new LetIn(binder, value, type, true, null, body, pos);
         }
 
         public String name() {
@@ -743,7 +789,7 @@ public interface Ast {
          * behind it, so the name is carried here for the checker to hold against the value's type.
          */
         public static LetIn opening(String name, Expr value, Name opens, Expr body, SourcePos pos) {
-            return new LetIn(Binder.written(name, pos), value, null, false, opens, body, pos);
+            return new LetIn(Binder.desugared(name, pos), value, null, false, opens, body, pos);
         }
 
         /** The type the source wrote on this binding, or null when it wrote none. An annotation is an
@@ -872,9 +918,6 @@ public interface Ast {
         }
 
         /** The same, as the parser read it. */
-        public IfConstructed(Expr construct, String binder, Expr then, Expr els, SourcePos pos) {
-            this(construct, Binder.written(binder, pos), then, List.of(ElseArm.any(els)), pos);
-        }
 
         /** How the binding was written. */
         public String binderName() {
@@ -929,13 +972,6 @@ public interface Ast {
                 SourcePos pos) implements Ast {
         public Case(List<Name> caseTypes, Binder binding, Expr body, SourcePos pos) {
             this(caseTypes, binding, body, null, pos);
-        }
-
-        /** An arm as the parser read it; {@code binding} is null where the arm binds nothing. */
-        public static Case written(List<Name> caseTypes, String binding, Expr body,
-                                   List<Name> unwrapAsserts, SourcePos pos) {
-            return new Case(caseTypes, binding == null ? null : Binder.written(binding, pos), body,
-                    unwrapAsserts, pos);
         }
 
         /** How the binding was written, or null where the arm binds nothing. */

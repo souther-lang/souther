@@ -2,6 +2,7 @@ package souther.lsp.analysis;
 
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.TextEdit;
 
 import org.junit.jupiter.api.Test;
 
@@ -56,8 +57,8 @@ class NavigationSurvivesAMistakeTest {
 
     @Test
     void renamingIsStillAboutWhatNamesDenote() {
-        Map<String, List<Range>> edits =
-                new Analyzer().renameEdits("file:///here.sou", HERES_AMOUNT, graph());
+        Map<String, List<TextEdit>> edits = new Analyzer()
+                .renameEdits("file:///here.sou", HERES_AMOUNT, graph(), "Renamed");
 
         assertTrue(edits.getOrDefault("file:///up.sou", List.of()).isEmpty(),
                 "up declares an Amount of its own, which this rename is not about");

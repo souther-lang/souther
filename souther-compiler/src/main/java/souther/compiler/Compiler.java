@@ -396,9 +396,16 @@ public final class Compiler {
                                                              ModulePath path) {
         return Compilation.ofDocuments(sourcesById, brokenModuleNames, path).diagnostics();
     }
-    /** The module name from a source's {@code module <name>} header, for identifying a source that will
-     * not parse (so its importers can be skipped, and the LSP can map a broken file to its module).
-     * {@code null} if no header token is found. */
+    /**
+     * The module name from a source's {@code module <name>} header, for identifying a source that
+     * will not parse (so its importers can be skipped, and the LSP can map a broken file to its
+     * module). {@code null} if no header token is found.
+     *
+     * <p>Only for a source a compilation does not have. Which module a source is part of is
+     * {@link souther.compiler.query.Front.ModuleOf}'s to answer, and this cannot answer it: an
+     * {@code examples for} file writes no header and is part of a module all the same, so what
+     * comes back here is nothing rather than the module its rows are for.
+     */
     public static String moduleNameFromHeader(String source) {
         java.util.regex.Matcher mt = java.util.regex.Pattern
                 .compile("(?m)^\\s*module\\s+([\\p{L}\\p{N}_.]+)").matcher(source);

@@ -48,8 +48,8 @@ public final class Resolve {
     private final List<ValueUse> values0 = new ArrayList<>();
     /** Every name it could not answer, as the error it would once have thrown. */
     private final List<CompileException> unresolved = new ArrayList<>();
-    /** Where each binding this pass gave an identity to is written. */
-    private final Map<BindingId, SourcePos> binders = new LinkedHashMap<>();
+    /** What each binding this pass gave an identity to is called, and where that is written. */
+    private final Map<BindingId, BoundName> binders = new LinkedHashMap<>();
     /** How many bindings each definition has been given, so the next one gets the next number. */
     private final Map<BindingOwner, Integer> counts = new HashMap<>();
     /** The definition whose text is being read. Every binding met belongs to it. */
@@ -78,8 +78,14 @@ public final class Resolve {
     private Answered bind(Bindings bound, Ast.Binder binder) {
         int ordinal = counts.merge(owner, 1, Integer::sum) - 1;
         BindingId id = new BindingId(owner, ordinal);
-        binders.put(id, binder.pos());
-        return new Answered(new Ast.Binder.Bound(binder.name(), id, binder.pos()),
+        if (binder.namePos() != null) {
+            // Only a name the author wrote is a place a reader can be sent to or asked about. A
+            // desugaring's binding is anchored on the form it came from, which is a place holding
+            // something the author did write.
+            binders.put(id, new BoundName(binder.name(), binder.namePos()));
+        }
+        return new Answered(
+                new Ast.Binder.Bound(binder.name(), id, binder.namePos(), binder.pos()),
                 bound.and(binder.name(), new ValueName.Local(binder.name(), id)));
     }
 
@@ -162,12 +168,23 @@ public final class Resolve {
      * resolved as if the mistake were not there — so an author is told about every unknown name at
      * once instead of one per compile, and an editor can still say what the names around it mean.
      *
-     * <p>{@code binders} says where each binding was written. A binding is not its position — a pass
-     * that expands a helper stamps the call site over the positions in the copy — so the two are kept
-     * apart, and a reader asking about the source rather than about the program reads this.
+     * <p>{@code binders} says what each binding is called and where the author wrote that name. A
+     * binding is not its position — a pass that expands a helper stamps the call site over the
+     * positions in the copy — so the two are kept apart, and a reader asking about the source rather
+     * than about the program reads this. The spelling comes with it because a reader asking what a
+     * cursor is on has to know how far the name reaches, and a position alone does not say.
+     *
+     * <p>Only the bindings whose names the author wrote are in it. A desugaring binds a value to a
+     * name of its own — the parameter {@code .field} becomes, the value a {@code match} is held in —
+     * and anchors it on the form it was rewriting. That anchor is a place in the source holding
+     * something else, so a reader answered with one of these would be answered about a name that is
+     * not there, at a width that is not its.
      */
     public record Resolved(Ast.Module module, List<Denotation> denotations, List<ValueUse> values,
-                           List<CompileException> unresolved, Map<BindingId, SourcePos> binders) {}
+                           List<CompileException> unresolved, Map<BindingId, BoundName> binders) {}
+
+    /** What a binding is called, and where that name is written. */
+    public record BoundName(String written, SourcePos pos) {}
 
     /** {@code m} with every name it writes resolved against its own definitions — a module compiled
      * with nothing else in sight. */
@@ -350,10 +367,11 @@ public final class Resolve {
                 declareFields(d);
                 yield new Ast.Data(d.name(), d.newtype(), names(d.includes()), fields(d.fields()),
                         Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
-                        d.decoder().map(this::decoder), d.encoder().map(this::encoder), d.pos());
+                        d.decoder().map(this::decoder), d.encoder().map(this::encoder),
+                        d.namePos(), d.pos());
             }
             case Ast.SumData s -> new Ast.SumData(s.name(), sumCases(s), s.decoder().map(this::discriminate),
-                    s.encoder().map(this::sumEncoder), s.pos());
+                    s.encoder().map(this::sumEncoder), s.namePos(), s.pos());
         };
     }
 
@@ -399,7 +417,7 @@ public final class Resolve {
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
             if (binding != null) {
-                binders.put(binding, field.pos());
+                binders.put(binding, new BoundName(field.name(), field.pos()));   // OfFields
             }
         }
     }

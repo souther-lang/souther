@@ -292,6 +292,17 @@ public final class Compilation {
     }
 
     /**
+     * The module {@code sourceId} is part of — the one it declares, or the one its rows are for —
+     * or null when this compilation does not have the source.
+     *
+     * <p>The other direction of {@link #sourceIdOf}, and not its inverse: a module is declared in
+     * one source, and several sources may be part of it.
+     */
+    public String moduleOf(String sourceId) {
+        return db.ask(new Front.ModuleOf(sourceId)).value();
+    }
+
+    /**
      * The problems that stop this compilation before any module is looked at: a source that names a
      * module twice, one that shadows a module already on the path, and a cycle among them.
      *

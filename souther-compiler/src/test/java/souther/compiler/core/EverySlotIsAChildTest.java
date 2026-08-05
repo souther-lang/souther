@@ -83,7 +83,7 @@ class EverySlotIsAChildTest {
     @Test
     void anAttemptsConstructionIsAChild() {
         Core.IfConstructed attempt = new Core.IfConstructed(construction(),
-                Ast.Binder.written("p", POS), new Core.Int(0, Type.INT, POS),
+                Ast.Binder.desugared("p", POS), new Core.Int(0, Type.INT, POS),
                 List.of(new Core.ElseArm(Optional.empty(), new Core.Int(1, Type.INT, POS))),
                 Type.INT, POS);
 
@@ -94,7 +94,7 @@ class EverySlotIsAChildTest {
     @Test
     void eachSlotGoesThroughTheOperatorForItsKind() {
         Core.IfConstructed attempt = new Core.IfConstructed(construction(),
-                Ast.Binder.written("p", POS),
+                Ast.Binder.desugared("p", POS),
                 new Core.Apply(read("f", 1), List.of(), Type.INT, POS),
                 List.of(), Type.INT, POS);
 
