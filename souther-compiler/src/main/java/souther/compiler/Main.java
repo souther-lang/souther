@@ -80,6 +80,24 @@ public final class Main {
         }
     }
 
+    /**
+     * The one line the command line says when the compiler fails for a reason nobody listed, or
+     * {@code null} for a {@link CompileException}, which is an answer about the source and is
+     * rendered as one wherever it is caught.
+     *
+     * <p>A stack trace at this point asks the author to read this compiler's call stack for a problem
+     * that is not theirs. What is left — the exception's name and what it said — is what a report of
+     * it would be filed with, and is the only part of it they can pass on.
+     */
+    static String internalFailure(RuntimeException e) {
+        if (e instanceof CompileException) {
+            return null;
+        }
+        String said = e.getMessage();
+        return "internal compiler error: " + e.getClass().getSimpleName()
+                + (said == null ? "" : ": " + said.replace('\n', ' '));
+    }
+
     /** {@code souther compile <file.sou>... -d <outdir>}: writes the generated {@code .class} files. */
     private static void compileSubcommand(String[] rawArgs) {
         RenderOptions render = new RenderOptions();
@@ -146,6 +164,11 @@ public final class Main {
             // command was writing the classes out, which says nothing about the source.
             report(warnings, sources, render);
             System.err.println("io error: " + e.getMessage());
+            System.exit(1);
+        } catch (RuntimeException e) {
+            // After the two above, which are subtypes of nothing here but are answers about the
+            // source and about the disk. What is left is this compiler failing.
+            System.err.println(internalFailure(e));
             System.exit(1);
         }
     }
@@ -247,6 +270,9 @@ public final class Main {
         } catch (IOException e) {
             System.err.println("io error: " + e.getMessage());
             System.exit(1);
+        } catch (RuntimeException e) {
+            System.err.println(internalFailure(e));
+            System.exit(1);
         }
     }
 
@@ -323,6 +349,10 @@ public final class Main {
                 System.err.println(file + ": " + e.getMessage());
                 failed = true;
                 continue;
+            } catch (RuntimeException e) {
+                System.err.println(file + ": " + internalFailure(e));
+                failed = true;
+                continue;
             }
             if (check) {
                 if (!formatted.equals(source)) {
@@ -374,6 +404,9 @@ public final class Main {
             System.exit(e.exitCode);
         } catch (CompileException e) {
             reportCompileError(e, sources, render);
+            System.exit(1);
+        } catch (RuntimeException e) {
+            System.err.println(internalFailure(e));
             System.exit(1);
         }
     }
