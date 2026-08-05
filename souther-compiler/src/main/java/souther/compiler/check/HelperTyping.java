@@ -55,7 +55,7 @@ public final class HelperTyping {
                         // expands it — its parameter types cannot be inferred and must be declared.
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.helper.annotate").title("check.helper.title")
-                                        .at(p.pos(), p.name().length()).args(h.name(), p.name()).build(),
+                                        .at(p.written().region()).args(h.name(), p.name()).build(),
                                 "helper `let " + h.name() + "` must annotate parameter `" + p.name()
                                         + "` with its type (spec 13.1)");
                     }
@@ -65,7 +65,7 @@ public final class HelperTyping {
                 }
                 env = env.with(p.binder(), TypeOps.resolveParamType(p.type(), symbols));
             }
-            Elaborator.rejectBuiltinShadowing(h.written());
+            Elaborator.rejectBuiltinShadowing(h.writtenBody());
             // A helper the lowered module carries is one the backend emits — a recursive one, and one
             // an example row applies (ADR-0077) — so it is typed on the tree the backend emits from,
             // and the Core this check produces is what is emitted (issue #81). One that is only
@@ -74,7 +74,7 @@ public final class HelperTyping {
             // expansion runs (foldFrom's `step` is a parameter, not a same-named user helper).
             // Expanded once: the body an un-annotated parameter takes its type from is the same tree.
             Ast.Expr emitted = loweredBodies.get(h.name());
-            Ast.Expr body = emitted != null ? emitted : inliner.inline(h.written(), inliner.bodyOf(h.name()));
+            Ast.Expr body = emitted != null ? emitted : inliner.inline(h.writtenBody(), inliner.bodyOf(h.name()));
             if (recursive && body == null) {
                 // Lower keeps every recursive helper as a fn of the lowered module, and the backend
                 // emits from that same list, so a recursive helper without a lowered body would leave
@@ -100,7 +100,7 @@ public final class HelperTyping {
             // a helper that returns a function (e.g. `let adder (n) = (x) -> x + n`) has no application
             // here to infer the lambda's parameter types from; it is checked where it is inlined and
             // applied (spec §blocks).
-            checkFunctionArgs(h.written(), tenv, symbols, reqSigs, inliner);
+            checkFunctionArgs(h.writtenBody(), tenv, symbols, reqSigs, inliner);
             if (Elaborator.producesFunction(body)) {
                 continue;
             }
@@ -158,7 +158,7 @@ public final class HelperTyping {
             if (HelperParams.isApplied(body, p.binder())) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.helper.fnparam").title("check.helper.title")
-                                .at(p.pos(), p.name().length()).args(h.name(), p.name()).build(),
+                                .at(p.written().region()).args(h.name(), p.name()).build(),
                         "helper `let " + h.name() + "` parameter `" + p.name() + "` is used as a"
                                 + " function; a function-typed parameter must be annotated with its"
                                 + " type (spec 13.1)");
@@ -187,7 +187,7 @@ public final class HelperTyping {
             boolean field = left != null && left.readAField();
             String key = field ? "check.helper.infer.field" : "check.helper.infer";
             Diagnostic.Builder d = Diagnostic.of(null, key).title("check.helper.title")
-                    .at(p.pos(), p.name().length()).args(h.name(), p.name());
+                    .at(p.written().region()).args(h.name(), p.name());
             if (left != null) {
                 d.secondary(Region.ofWidth(left.use().pos(), Elaborator.width(left.use())),
                         field ? "check.helper.infer.field.use" : "check.helper.infer.use");
@@ -234,7 +234,7 @@ public final class HelperTyping {
                 if (p.type() == null) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.helper.annotate").title("check.helper.title")
-                                    .at(p.pos(), p.name().length()).args(name, p.name()).build(),
+                                    .at(p.written().region()).args(name, p.name()).build(),
                             "helper `let " + name + "` must annotate parameter `" + p.name()
                                     + "` with its type (spec 13.1)");
                 }
@@ -255,7 +255,7 @@ public final class HelperTyping {
         if (e instanceof Ast.Apply call && partial.contains(call.reaches())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.invariant.partial").title("check.invariant.invalid.title")
-                            .at(call.pos(), call.written().length()).args(data, call.written()).build(),
+                            .at(call.name().region()).args(data, call.written()).build(),
                     "the invariant of `" + data + "` calls the `partial` helper `" + call.written()
                             + "`, which may not terminate; an invariant is checked at construction time"
                             + " and must terminate, so only a total helper may appear in it");
@@ -329,7 +329,7 @@ public final class HelperTyping {
         if (e instanceof Ast.Apply call && injected.contains(call.reaches())) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.rechelper.pure").title("check.helper.title")
-                            .at(call.pos(), call.written().length()).args(helper, call.written()).build(),
+                            .at(call.name().region()).args(helper, call.written()).build(),
                     "recursive helper `let " + helper + "` is pure and cannot call the injected behavior `"
                             + call.written() + "` — put the effect in the behavior that calls this helper"
                             + " (spec 13.1)");

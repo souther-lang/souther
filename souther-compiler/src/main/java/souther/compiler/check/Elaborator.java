@@ -244,8 +244,9 @@ public final class Elaborator {
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.construct.no").title("check.construct.title")
-                                    .at(nd.pos(), built.written().length()).args(built.written()).build(),
-                            "cannot construct `" + built.written() + "`");
+                                    .at(built.name().region()).args(built.name().quoted())
+                                    .build(),
+                            "cannot construct `" + built.name().quoted() + "`");
                 }
                 // by here every spread names a binding in force: a value spread was bound ahead of
                 // the construction when it was inlined, so Core reads the binding it copies from
@@ -420,7 +421,7 @@ public final class Elaborator {
             }
             Diagnostic.Builder d = Diagnostic.of(null, "check.access.sum")
                     .title("check.type.mismatch.title")
-                    .at(fa.pos(), fa.field().length()).args(fa.field(), Type.show(target));
+                    .at(fa.name().region()).args(fa.field(), Type.show(target));
             if (!without.isEmpty()) {
                 d = d.hint("check.access.sum.missing", fa.field(), String.join(", ", without));
             } else if (target instanceof Type.Ref) {
@@ -435,7 +436,7 @@ public final class Elaborator {
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.access").title("check.type.mismatch.title")
-                        .at(fa.pos(), fa.field().length()).args(fa.field()).build(),
+                        .at(fa.name().region()).args(fa.field()).build(),
                 "cannot access field `" + fa.field() + "` on this value");
     }
 
@@ -1313,13 +1314,13 @@ public final class Elaborator {
         if (denotes != null) {
             return CompileException.of(
                     Diagnostic.of(null, "check.notavalue").title("check.unknown.title")
-                            .at(v.pos(), v.name().length()).args(v.name(), denotes).build(),
+                            .at(v.written().region()).args(v.name(), denotes).build(),
                     "`" + v.name() + "` is " + denotes + ", and cannot be held as a value here");
         }
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.name.msg")
                         .title("check.unknown.title")
-                        .at(v.pos(), v.name().length())
+                        .at(v.written().region())
                         .args(v.name())
                         .suggestion(Suggest.candidate(v.name(), env.spellings()))
                         .build(),

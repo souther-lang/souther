@@ -228,7 +228,7 @@ public final class CallElaborator {
             // one (spec [#calling-a-behavior])
             case ValueName.Behavior _ -> CompileException.of(
                     Diagnostic.of("E1401", "e1401.behavior")
-                            .title("e1401.title").at(call.pos(), call.written().length())
+                            .title("e1401.title").at(call.name().region())
                             .args(call.written()).hint("e1401.behavior.hint", call.written())
                             .build(),
                     "`" + call.written() + "` is a behavior, and it cannot be called from here: a helper"
@@ -240,7 +240,7 @@ public final class CallElaborator {
             case ValueName.OfType named -> CompileException.of(
                     Diagnostic.of(null, "check.construct.position")
                             .title("check.construct.position.title")
-                            .at(call.pos(), call.written().length()).args(named.name()).build(),
+                            .at(call.name().region()).args(named.name()).build(),
                     "`" + named.name() + "` is a type, so `" + named.name()
                             + "(...)` constructs one, and a construction cannot be written here");
             // A binding applied to arguments, whose type here is not a function. Either it is not one
@@ -251,7 +251,7 @@ public final class CallElaborator {
             case ValueName.Local _ -> CompileException.of(
                     Diagnostic.of(null, "check.apply.notfunction")
                             .title("check.apply.notfunction.title")
-                            .at(call.pos(), call.written().length()).args(call.written()).build(),
+                            .at(call.name().region()).args(call.written()).build(),
                     "`" + call.written() + "` is not a function here, so it cannot be applied to"
                             + " arguments");
             case ValueName.Helper _ -> unelaborated("a helper", call);
@@ -261,7 +261,7 @@ public final class CallElaborator {
             case ValueName.Builtin b -> CompileException.of(
                     Diagnostic.of(null, "check.builtin.notfunction")
                             .title("check.apply.notfunction.title")
-                            .at(call.pos(), call.written().length()).args(b.name()).build(),
+                            .at(call.name().region()).args(b.name()).build(),
                     "`" + b.name() + "` is a name the language gives, not a function, so it cannot"
                             + " be applied to arguments");
             // thrown out at the top of typeOfCall, before any of the work above
@@ -389,7 +389,7 @@ public final class CallElaborator {
             throw CompileException.of(
                     Diagnostic.of(null, "check.apply.notfunction")
                             .title("check.apply.notfunction.title")
-                            .at(call.pos(), call.written().length()).args(call.written())
+                            .at(call.name().region()).args(call.written())
                             .hint("check.stdlib.value.hint", call.written()).build(),
                     "`" + call.written() + "` is a value, not a function, so it takes no `()` — write `"
                             + call.written() + "` on its own");
@@ -403,7 +403,7 @@ public final class CallElaborator {
             if (args.size() != intrinsic.params().size()) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.arity").title("check.arity.title")
-                                .at(call.pos(), call.written().length())
+                                .at(call.name().region())
                                 .args(call.written(), intrinsic.params().size(), args.size()).build(),
                         call.written() + " takes " + intrinsic.params().size()
                                 + " argument(s) but is called with " + args.size());
@@ -444,7 +444,7 @@ public final class CallElaborator {
                     if (args.size() != fn.params().size()) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.arity").title("check.arity.title")
-                                        .at(call.pos(), call.written().length())
+                                        .at(call.name().region())
                                         .args(call.written(), fn.params().size(), args.size()).build(),
                                 "`" + call.written() + "` takes " + fn.params().size()
                                         + " argument(s) but is applied to " + args.size());
@@ -459,7 +459,7 @@ public final class CallElaborator {
                 if (library || call.reaches().indexOf('.') >= 0) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
-                                    .at(call.pos(), call.written().length()).args(call.written()).build(),
+                                    .at(call.name().region()).args(call.written()).build(),
                             "`" + call.written() + "` is not a standard-library function.");
                 }
                 // a required behavior called inline (spec 12.2, 13), or one that requires nothing and
@@ -475,7 +475,7 @@ public final class CallElaborator {
                     if (qualified != null) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.stdlib.qualified.msg")
-                                        .title("check.unknown.title").at(call.pos(), call.written().length())
+                                        .title("check.unknown.title").at(call.name().region())
                                         .args(call.written(), qualified).build(),
                                 "`" + call.written() + "` is a standard-library function and must be called"
                                         + " qualified, as `" + qualified + "` (spec §stdlib).");
@@ -574,7 +574,7 @@ public final class CallElaborator {
             if (position == null || BottomInfer.isBottom(position)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.numeric.empty").title("check.fold.seed.title")
-                                .at(call.pos(), call.written().length()).args(call.written())
+                                .at(call.name().region()).args(call.written())
                                 .hint("check.numeric.empty.hint").build(),
                         call.written() + " over the empty list answers with its seed, and whether that"
                                 + " seed is an Int or a Decimal follows from an element the empty"
@@ -583,7 +583,7 @@ public final class CallElaborator {
             }
             throw CompileException.of(
                     Diagnostic.of(null, "check.numeric.result").title("check.type.mismatch.title")
-                            .at(call.pos(), call.written().length())
+                            .at(call.name().region())
                             .args(call.written(), Type.show(position))
                             .hint("check.numeric.result.hint").build(),
                     call.written() + " answers with an Int or a Decimal, but this position needs "
@@ -593,7 +593,7 @@ public final class CallElaborator {
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.numeric").title("check.type.mismatch.title")
-                        .at(call.pos(), call.written().length())
+                        .at(call.name().region())
                         .args(call.written(), Localizable.of("kind.numeric.list"), Type.show(element))
                         .hint("check.numeric.hint").build(),
                 shortName(call.written()) + " needs a list of Int or Decimal, but the element is "
@@ -627,7 +627,7 @@ public final class CallElaborator {
         if (!(call.args().get(0) instanceof Ast.StringLit lit)) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.temporal.literal").title("check.type.mismatch.title")
-                            .at(call.pos(), call.written().length()).args(call.written()).build(),
+                            .at(call.name().region()).args(call.written()).build(),
                     "`" + call.written() + "(...)` takes a written string, e.g. "
                             + (isDate ? "Date(\"2026-07-01\")" : "DateTime(\"2026-07-01T09:00\")"));
         }
@@ -655,7 +655,7 @@ public final class CallElaborator {
         if (call.args().size() != n) {
             throw CompileException.of(
                     Diagnostic.of(null, "check.arity").title("check.arity.title")
-                            .at(call.pos(), call.written().length())
+                            .at(call.name().region())
                             .args(call.written(), n, call.args().size()).build(),
                     call.written() + " expects " + n + " argument(s), got " + call.args().size());
         }

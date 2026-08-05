@@ -1,6 +1,7 @@
 package souther.compiler.query;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Resolve;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -335,11 +336,18 @@ class ResolvedValueNamesTest {
 
     /** What a name in {@code source} denotes, and where the editor says it was declared. */
     private static SourcePos declaredAt(String source, String written) {
+        WrittenName at = declaredNameOf(source, written);
+        return at == null ? null : at.pos();
+    }
+
+    /** The occurrence an editor is sent to for the declaration of {@code written}. */
+    private static WrittenName declaredNameOf(String source, String written) {
         Map<String, String> byId = new LinkedHashMap<>();
         byId.put("a.sou", source);
         Compilation c = Compilation.ofDocuments(byId, Set.of(), ModulePath.EMPTY);
         for (Resolve.ValueUse use : c.db().ask(new Names.Resolution("m.a")).value().values()) {
-            if (use.written().equals(written) && use.denotes() instanceof ValueName.Local local) {
+            if (use.written().canonical().equals(written)
+                    && use.denotes() instanceof ValueName.Local local) {
                 return c.db().ask(new Names.ValueDeclaredAt(local)).value();
             }
         }
@@ -360,6 +368,33 @@ class ResolvedValueNamesTest {
                 }
                     invariant value >= 0
                 """, "value"), "the field on line 4");
+    }
+
+    /**
+     * A field written one way and read the other is one field, declared where it was written and
+     * as wide as the characters that wrote it.
+     *
+     * <p>An editor is not told what a field read is — a rename answered from one would rewrite the
+     * declaration and none of the reads the type settles — so this is where a field's occurrence is
+     * checked at all.
+     */
+    @Test
+    void aFieldReadComposedIsTheOneDeclaredDecomposedAndKeepsItsWidth() {
+        String decomposed = "\u304b\u3099f";
+        String composed = "\u304cf";
+        WrittenName declared = declaredNameOf("""
+                module m.a exposing ( Amount )
+
+                data Amount = {
+                      %s: Int
+                }
+                    invariant %s >= 0
+                """.formatted(decomposed, composed), composed);
+
+        assertEquals(new SourcePos(4, 7, "a.sou"), declared.pos(), "the field on line 4");
+        assertEquals(decomposed, declared.spelling(), "quoted as the declaration writes it");
+        assertEquals(decomposed.length(), declared.width(),
+                "an underline over the name would stop one character short");
     }
 
     /** A field an include brings in keeps the binding of the declaration that wrote it, so it is

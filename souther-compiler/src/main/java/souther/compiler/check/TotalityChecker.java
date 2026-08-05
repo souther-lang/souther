@@ -171,7 +171,7 @@ final class TotalityChecker {
                 idxOf.put(params.get(i).binder().id(), i);
             }
             List<RecCall> calls = new ArrayList<>();
-            walk(def.written(), group, paramNames, Map.of(), Map.of(), calls);
+            walk(def.writtenBody(), group, paramNames, Map.of(), Map.of(), calls);
             for (RecCall rc : calls) {
                 firstCall.putIfAbsent(f, rc.call());
                 int toArity = own.get(rc.callee()).params().size();
@@ -471,7 +471,7 @@ final class TotalityChecker {
         Map<String, Set<String>> edges = new HashMap<>();
         for (Ast.FnDef h : own.values()) {
             Set<String> called = new HashSet<>();
-            collectOwnCalls(h.written(), own.keySet(), called);
+            collectOwnCalls(h.writtenBody(), own.keySet(), called);
             edges.put(h.name(), called);
         }
         return edges;
@@ -526,7 +526,7 @@ final class TotalityChecker {
     private static CompileException error(Ast.Apply call, String name, String key, String message) {
         return CompileException.of(
                 Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(call.pos(), call.written().length()).args(name).build(),
+                        .at(call.name().region()).args(name).build(),
                 message);
     }
 

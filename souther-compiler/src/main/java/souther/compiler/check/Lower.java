@@ -70,8 +70,8 @@ public final class Lower {
                                  Set<String> dependencies) {
         Ast.Expr expanded = recursive
                 ? inliner.inlineRecursiveBody(fn)
-                : inliner.inline(fn.written(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
-        return new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(),
+                : inliner.inline(fn.writtenBody(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
+        return new Ast.FnDef(fn.written(), fn.params(), fn.declaredReturn(),
                 new Ast.FnBody.Written(desugar(expanded)), fn.modifiers(), fn.pos());
     }
 
@@ -94,9 +94,9 @@ public final class Lower {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                defs.add(new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
+                defs.add(new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
                         Ast.mapClauses(d.invariants(), Lower::desugar),
-                        d.decoder(), d.encoder(), d.namePos(), d.pos()));
+                        d.decoder(), d.encoder(), d.pos()));
             } else {
                 defs.add(def);
             }

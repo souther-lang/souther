@@ -35,7 +35,7 @@ public final class NewtypeDesugar {
                 case Ast.FnBody.Written w -> new Ast.FnBody.Written(go(w.expr(), symbols));
                 case Ast.FnBody.Intrinsic i -> i;
             };
-            fns.add(new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(), body, fn.modifiers(),
+            fns.add(new Ast.FnDef(fn.written(), fn.params(), fn.declaredReturn(), body, fn.modifiers(),
                     fn.pos()));
         }
         return new Ast.Module(m.name(), m.exposing(), m.exposedOutputs(), m.imports(),
@@ -52,9 +52,9 @@ public final class NewtypeDesugar {
         List<Ast.Def> defs = new ArrayList<>();
         for (Ast.Def def : m.defs()) {
             if (def instanceof Ast.Data d && !d.invariants().isEmpty()) {
-                defs.add(new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
+                defs.add(new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(),
                         Ast.mapClauses(d.invariants(), inv -> go(inv, symbols)),
-                        d.decoder(), d.encoder(), d.namePos(), d.pos()));
+                        d.decoder(), d.encoder(), d.pos()));
             } else {
                 defs.add(def);
             }
@@ -76,13 +76,13 @@ public final class NewtypeDesugar {
                     if (args.size() != 1) {
                         throw CompileException.of(
                                 Diagnostic.of(null, "check.newtype.arity").title("check.arity.title")
-                                        .at(call.pos(), call.written().length()).args(call.written(), args.size())
+                                        .at(call.name().region()).args(call.written(), args.size())
                                         .build(),
                                 "`" + call.written() + "` wraps one value, but is applied to " + args.size()
                                         + " argument(s)");
                     }
                     yield new Ast.NewData(
-                            new Ast.Name(call.written(), built, call.pos()),
+                            new Ast.Name(call.name(), built),
                             List.of(new Ast.FieldInit("value", args.get(0), call.pos())),
                             List.of(), ConstructionOrigin.own(), call.pos());
                 }

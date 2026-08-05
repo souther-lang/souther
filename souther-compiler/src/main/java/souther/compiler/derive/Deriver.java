@@ -76,8 +76,8 @@ public final class Deriver {
                 : Optional.of(deriveEncoder(d, fields, isCase,
                         new Ast.Binders(new BindingOwner.Synthesized(declared,
                                 BindingOwner.Pass.DERIVER, 1))));
-        return new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(), d.invariants(),
-                decoder, encoder, d.namePos(), d.pos());
+        return new Ast.Data(d.written(), d.newtype(), d.includes(), d.fields(), d.invariants(),
+                decoder, encoder, d.pos());
     }
 
     // --- decoder derivation ---
@@ -375,7 +375,7 @@ public final class Deriver {
         Optional<Ast.SumEncoder> encoder = s.encoder().isPresent()
                 ? s.encoder()
                 : Optional.of(new Ast.SumEncoder("type", encVariants(s, leaves), s.pos()));
-        return new Ast.SumData(s.name(), s.cases(), decoder, encoder, s.namePos(), s.pos());
+        return new Ast.SumData(s.written(), s.cases(), decoder, encoder, s.pos());
     }
 
     /**

@@ -624,7 +624,7 @@ public final class Bodies {
         HelperInliner inliner = HelperInliner.forHelpers(from.name(), table);
         Deque<String> work = new ArrayDeque<>(out.keySet());
         while (!work.isEmpty()) {
-            for (ValueName.Helper reached : HelperInliner.helpersReached(out.get(work.poll()).written())) {
+            for (ValueName.Helper reached : HelperInliner.helpersReached(out.get(work.poll()).writtenBody())) {
                 String qualified = HelperInliner.qualified(reached.module(), reached.name());
                 if (out.containsKey(qualified)) {
                     continue;
@@ -899,7 +899,7 @@ public final class Bodies {
                 if (!body.present()) {
                     return Answer.absent();
                 }
-                bodies.put(helper, body.value().written());
+                bodies.put(helper, body.value().writtenBody());
             }
             try {
                 return Answer.of(TypeChecker.recursiveHelperConstructs(sigs.value().keySet(), bodies,
@@ -992,12 +992,12 @@ public final class Bodies {
             // invariants (spec §invariant-discharge). Where it is not available the check is skipped
             // rather than run against the emitted tree, whose operations are no longer operations.
             InvariantChecker.Source dischargeSource = discharge.present()
-                    ? new InvariantChecker.Source(discharge.value().written(),
+                    ? new InvariantChecker.Source(discharge.value().writtenBody(),
                             dischargeInvariants.present() ? dischargeInvariants.value() : Map.of())
                     : null;
             List<Diagnostic> warnings = new ArrayList<>();
             try {
-                Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().written(),
+                Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().writtenBody(),
                         dischargeSource, scope.value(), calleeSigs.value(), reqSigs.value(),
                         HelperInliner.forHelpers(module, helpers.value()), sigs.value(), constructs.value(),
                         warnings);

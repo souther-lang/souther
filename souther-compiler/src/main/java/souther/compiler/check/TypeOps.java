@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
@@ -840,7 +841,7 @@ public final class TypeOps {
             if (!(symbols.get(included) instanceof Ast.Data id)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.spread.notproduct").title("check.construct.title")
-                                .at(inc.pos(), inc.written().length()).args(inc.written()).build(),
+                                .at(inc.name().region()).args(inc.written()).build(),
                         "cannot spread `..." + inc.written() + "` (not a product data)");
             }
             for (Map.Entry<String, Type> e : fieldTypes(id, symbols).entrySet()) {
@@ -1393,19 +1394,20 @@ public final class TypeOps {
      * such type, or it declares it and does not expose it.
      */
     private static CompileException unknownType(Ast.TypeRef ref, Symbols symbols) {
-        return unknownType(ref.name(), ref.pos(), symbols);
+        return unknownType(ref.written(), symbols);
     }
 
-    static CompileException unknownType(String written, SourcePos pos, Symbols symbols) {
-        int dot = written.lastIndexOf('.');
+    static CompileException unknownType(WrittenName written, Symbols symbols) {
+        String canonical = written.canonical();
+        int dot = canonical.lastIndexOf('.');
         if (dot >= 0) {
-            String qualifier = written.substring(0, dot);
-            String name = written.substring(dot + 1);
+            String qualifier = canonical.substring(0, dot);
+            String name = canonical.substring(dot + 1);
             String module = symbols.moduleOfQualifier(qualifier);
             if (module == null) {
                 return CompileException.of(
                         Diagnostic.of(null, "check.qualified.unknownmodule").title("check.module.title")
-                                .at(pos, written.length()).args(qualifier, name)
+                                .at(written.pos(), written.width()).args(qualifier, name)
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
                                 .build(),
                         "no module named `" + qualifier + "`");
@@ -1414,7 +1416,7 @@ public final class TypeOps {
                     ? "check.qualified.notexposed" : "check.qualified.notdefined";
             return CompileException.of(
                     Diagnostic.of(null, key).title("check.module.title")
-                            .at(pos, written.length()).args(name, module)
+                            .at(written.pos(), written.width()).args(name, module)
                             .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
                             .build(),
                     "`" + name + "` is not " + (key.endsWith("notexposed") ? "exposed by" : "defined in")
@@ -1424,10 +1426,10 @@ public final class TypeOps {
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.type.msg")
                         .title("check.unknown.title")
-                        .at(pos, written.length())
-                        .args(written)
-                        .suggestion(Suggest.candidate(written, known))
+                        .at(written.pos(), written.width())
+                        .args(written.quoted())
+                        .suggestion(Suggest.candidate(canonical, known))
                         .build(),
-                "unknown type `" + written + "`" + Suggest.hint(written, known));
+                "unknown type `" + written.quoted() + "`" + Suggest.hint(canonical, known));
     }
 }

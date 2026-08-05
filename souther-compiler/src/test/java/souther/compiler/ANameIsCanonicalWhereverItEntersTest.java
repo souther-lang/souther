@@ -7,7 +7,13 @@ import org.junit.jupiter.api.Test;
 
 import souther.compiler.ast.Ast;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -26,12 +32,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * went wrong twice — once with the wire tag canonicalized and the name it came from not, and once
  * with the identifier canonicalized and four other doors not.
  *
- * <p>What this covers: an identifier, a type variable, the module name a header-less source is given,
- * and the file stem the CLI derives one from. What it does not: the identifiers an invocation names
- * on the command line ({@code run --behavior}, {@code examples --module}, {@code examples
- * --behavior}). Those go through the same function and are one line each, but nothing here drives
- * them, so a door that stopped using it would not be caught. Said rather than implied, because a
- * comment claiming a door is walked is worse than no comment at all.
+ * <p>Every door is walked here: an identifier, a type variable, the module name a header-less source
+ * is given, the file stem the CLI derives one from, and the identifiers an invocation names on the
+ * command line ({@code run --behavior}, {@code examples --module}, {@code examples --behavior}).
+ * The last three are one line each in the argument parser, and a line is exactly what gets deleted
+ * by someone who cannot see what it is for — so each is driven rather than described.
  */
 class ANameIsCanonicalWhereverItEntersTest {
 
@@ -113,6 +118,62 @@ class ANameIsCanonicalWhereverItEntersTest {
 
                 let calc (v) = Out(v.n)
                 """.formatted(NFC, NFD));
+    }
+
+    /** The two spellings written the same way, for a fixture that has to be read as characters. */
+    private static final String CANONICAL_BEHAVIOR = """
+            module demo
+
+            behavior %s : (n: Int) -> Int
+
+            let %s (n) = n
+            """.formatted(NFC, NFC);
+
+    @Test
+    void aBehaviorAnInvocationNamesDecomposedIsTheOneTheModuleDeclares() throws Exception {
+        Path file = Files.createTempDirectory("souther-doors").resolve("demo.sou");
+        Files.writeString(file, CANONICAL_BEHAVIOR);
+
+        assertEquals("7", Runner.run(file, NFD, "7"),
+                "`run --behavior` is a name arriving from outside");
+    }
+
+    @Test
+    void aModuleAnInvocationNamesDecomposedIsTheOneTheSourceDeclares() throws Exception {
+        String reported = examplesOf("module " + NFC + """
+                \n
+                behavior only : (n: Int) -> Int
+
+                let only (n) = n
+                """, "--module", NFD);
+
+        assertTrue(reported.contains("only"),
+                "the report was filtered to a module the argument does not spell: " + reported);
+    }
+
+    @Test
+    void aBehaviorTheExamplesReportIsFilteredToMayBeNamedDecomposed() throws Exception {
+        String reported = examplesOf(CANONICAL_BEHAVIOR, "--behavior", NFD);
+
+        assertTrue(reported.contains(NFC),
+                "the report was filtered to a behavior the argument does not spell: " + reported);
+    }
+
+    /** What {@code souther examples} writes for {@code source}, run with {@code args}. */
+    private static String examplesOf(String source, String... args) throws Exception {
+        Path file = Files.createTempDirectory("souther-doors").resolve("demo.sou");
+        Files.writeString(file, source);
+        List<String> argv = new ArrayList<>(List.of("examples", file.toString()));
+        argv.addAll(List.of(args));
+        PrintStream originalOut = System.out;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(out, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(argv.toArray(String[]::new));
+        } finally {
+            System.setOut(originalOut);
+        }
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     @Test

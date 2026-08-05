@@ -36,6 +36,10 @@ public final class Reserved {
      *
      * <p>A string literal is canonicalized too, but separately and for its own reason: it is a value
      * that crosses a boundary, not a name (ADR-0096).
+     *
+     * <p>This answers which name it is and nothing else. Which characters spell it, and where they
+     * are, is the other half, and a report and an editor want that half — so a name in the tree is
+     * a {@link souther.compiler.ast.WrittenName}, which holds both and is where this is called from.
      */
     public static String name(String spelling) {
         return spelling == null ? null
