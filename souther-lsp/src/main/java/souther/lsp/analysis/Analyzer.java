@@ -625,12 +625,12 @@ public final class Analyzer {
         if (ident == null) {
             return Optional.empty();
         }
-        SyntaxNode local = declaringDef(root, ident.text());
+        SyntaxNode local = declaringDef(root, nameOf(ident));
         if (local != null) {
             SyntaxToken name = nameToken(local);
             return name == null ? Optional.empty() : Optional.of(new Location(uri, tokenRange(lines, name)));
         }
-        String targetModule = importedFrom(text, ident.text());
+        String targetModule = importedFrom(text, nameOf(ident));
         if (targetModule == null) {
             return Optional.empty();
         }
@@ -639,7 +639,7 @@ public final class Analyzer {
             return Optional.empty();
         }
         String targetText = graph.text(targetUri);
-        SyntaxNode def = declaringDef(CstParser.parse(targetText).root(), ident.text());
+        SyntaxNode def = declaringDef(CstParser.parse(targetText).root(), nameOf(ident));
         if (def == null) {
             return Optional.empty();
         }
@@ -684,7 +684,7 @@ public final class Analyzer {
         if (ident == null) {
             return List.of();
         }
-        String name = ident.text();
+        String name = nameOf(ident);
         String definingModule = declaringDef(root, name) != null
                 ? moduleOf(compilation, graph, uri) : importedFrom(text, name);
         if (definingModule == null) {
@@ -842,7 +842,7 @@ public final class Analyzer {
         SyntaxNode root = CstParser.parse(text).root();
         SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
         if (ident != null) {
-            String name = ident.text();
+            String name = nameOf(ident);
             String definingModule = declaringDef(root, name) != null
                     ? moduleOf(compilation, graph, uri) : importedFrom(text, name);
             if (definingModule != null) {
@@ -914,15 +914,25 @@ public final class Analyzer {
     }
 
     /**
-     * Whether an identifier token spells {@code name}.
+     * The name an identifier token spells.
      *
-     * <p>Canonically equivalent spellings are one name, and these are the paths that read the tree
-     * of characters rather than the compiler's answer — an import list entry, a file the compile
-     * could not read. Comparing the characters to a name would answer no for a declaration written
-     * decomposed and a reference written composed, which are the same name.
+     * <p>The one door from a token to a name in the paths that read the tree of characters rather
+     * than the compiler's answer — an import list entry, a file the compile could not read.
+     * Canonically equivalent spellings are one name, and a token is characters, so every one of
+     * those paths turns a token into a name exactly here.
+     *
+     * <p>Canonicalizing at the comparison instead — which is where it was — leaves whichever side
+     * came from a cursor raw, so a cursor on a decomposed spelling found no declaration and a
+     * cursor on a composed one found it. Which spelling the author's cursor happened to be on is
+     * not a thing an editor may answer differently.
      */
+    private static String nameOf(SyntaxToken token) {
+        return token == null ? null : Reserved.name(token.text());
+    }
+
+    /** Whether an identifier token spells {@code name}, which is canonical. */
     private static boolean spells(SyntaxToken token, String name) {
-        return token != null && Reserved.name(token.text()).equals(name);
+        return token != null && name.equals(nameOf(token));
     }
 
     /**
@@ -1107,7 +1117,7 @@ public final class Analyzer {
     private void addName(Map<String, CompletionItem> out, SyntaxNode def, int kind) {
         SyntaxToken name = nameToken(def);
         if (name != null) {
-            out.putIfAbsent(name.text(), new CompletionItem(name.text(), kind));
+            out.putIfAbsent(nameOf(name), new CompletionItem(nameOf(name), kind));
         }
     }
 
@@ -1130,8 +1140,8 @@ public final class Analyzer {
                 if (VALUE_BINDINGS.contains(child.kind())) {
                     SyntaxToken bound = firstIdent(child);
                     if (bound != null) {
-                        out.putIfAbsent(bound.text(),
-                                new CompletionItem(bound.text(), CompletionItem.VARIABLE));
+                        out.putIfAbsent(nameOf(bound),
+                                new CompletionItem(nameOf(bound), CompletionItem.VARIABLE));
                     }
                 }
                 collectLocalBindings(child, out);
@@ -1311,7 +1321,7 @@ public final class Analyzer {
         if (ident == null) {
             return Optional.empty();
         }
-        SyntaxNode def = declaringDef(root, ident.text());
+        SyntaxNode def = declaringDef(root, nameOf(ident));
         if (def == null) {
             return Optional.empty();
         }
@@ -1354,7 +1364,7 @@ public final class Analyzer {
         Map<TypeName, List<ClauseDischarge>> byType =
                 compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
         List<ClauseDischarge> clauses = byType == null
-                ? null : byType.get(new TypeName(module, name.text()));
+                ? null : byType.get(new TypeName(module, nameOf(name)));
         if (clauses == null || clauses.isEmpty()) {
             return Optional.empty();
         }
@@ -1423,7 +1433,7 @@ public final class Analyzer {
             // a declaration site: show the binding's own `name: Type`, read straight from the tree
             signature = signatureLine(text, parent);
         } else {
-            SyntaxNode def = declaringDef(root, ident.text());
+            SyntaxNode def = declaringDef(root, nameOf(ident));
             signature = def != null ? signatureLine(text, def) : ident.text();
         }
         String contents = "```souther\n" + signature + "\n```";

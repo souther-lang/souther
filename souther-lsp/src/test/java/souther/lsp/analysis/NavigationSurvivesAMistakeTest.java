@@ -38,6 +38,64 @@ class NavigationSurvivesAMistakeTest {
             data Box = { far: up.Amount, near: Amount, oops: Nowhere }
             """;
 
+    /** A hiragana ka followed by a combining voiced sound mark, and the same kana as one code point.
+     *  Written as code points because the two are one glyph and a fixture that says which it means
+     *  only in its glyphs means whatever last saved the file. */
+    private static final String NFD = new String(new int[] {0x304b, 0x3099}, 0, 2);
+    private static final String NFC = new String(new int[] {0x304c}, 0, 1);
+
+    /**
+     * A file the compiler could not read is answered about by matching what is written, and two
+     * spellings Unicode calls equivalent are one name there too.
+     *
+     * <p>This is the state an editor spends most of its time in, and it was the one where the
+     * equivalence stopped holding: the token being compared was canonicalized and the one under the
+     * cursor was not, so a cursor on the decomposed spelling found nothing while a cursor on the
+     * composed spelling found the declaration. Which of the two an author's cursor is on is not
+     * something an editor may answer differently.
+     */
+    @Test
+    void aBrokenFileStillAnswersAcrossTheTwoSpellings() {
+        String source = "module demo\n\ndata " + NFC + " = Int\n\ndata Box = { value: " + NFD
+                + " }\n\nlet unfinished (\n";
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("file:///demo.sou", source);
+        ModuleGraph graph = ModuleGraph.of(sources);
+        Position onTheDecomposedUse = new Position(4, "data Box = { value: ".length());
+
+        assertTrue(new Analyzer().definition("file:///demo.sou", onTheDecomposedUse, graph)
+                        .isPresent(),
+                "the use and the declaration are one name however each is spelled");
+        assertEquals(2, new Analyzer()
+                        .references("file:///demo.sou", onTheDecomposedUse, graph, true).size(),
+                "the declaration and the one use");
+        assertEquals("module demo\n\ndata R = Int\n\ndata Box = { value: R }\n\n"
+                        + "let unfinished (\n",
+                applied(source, new Analyzer().renameEdits("file:///demo.sou", onTheDecomposedUse,
+                        graph, "R").get("file:///demo.sou")));
+    }
+
+    /** {@code edits} written back, latest first so an earlier one does not move a later one. */
+    private static String applied(String text, List<TextEdit> edits) {
+        StringBuilder sb = new StringBuilder(text);
+        edits.stream()
+                .sorted((a, b) -> b.range().start().line() != a.range().start().line()
+                        ? Integer.compare(b.range().start().line(), a.range().start().line())
+                        : Integer.compare(b.range().start().character(),
+                                a.range().start().character()))
+                .forEach(edit -> sb.replace(offset(text, edit.range().start()),
+                        offset(text, edit.range().end()), edit.newText()));
+        return sb.toString();
+    }
+
+    private static int offset(String text, Position pos) {
+        int offset = 0;
+        for (int line = 0; line < pos.line(); line++) {
+            offset = text.indexOf('\n', offset) + 1;
+        }
+        return offset + pos.character();
+    }
+
     private static ModuleGraph graph() {
         Map<String, String> sources = new LinkedHashMap<>();
         sources.put("file:///up.sou", UP);

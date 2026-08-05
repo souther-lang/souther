@@ -278,6 +278,28 @@ class AnalyzerTest {
         assertTrue(hover.get().contents().contains("exact match"), hover.get().contents());
     }
 
+    /**
+     * A clause hover asks the compiler what it can discharge, keyed by the type the clause is on —
+     * so the name the syntax reads has to be the name the compiler filed it under.
+     *
+     * <p>A decomposed declaration is filed under its composed name, and reading the token's
+     * characters straight into the key missed it. What an author saw was a hover that showed the
+     * signature instead of the discharge, which reads as "this clause has nothing to say".
+     */
+    @Test
+    void hoverOnAClauseOfADecomposedlyNamedDataStillSaysHowItDischarges() {
+        String kana = new String(new int[] {0x304b, 0x3099}, 0, 2);
+        String source = "module demo exposing ( " + kana + " )\n\ndata " + kana + " = Int\n"
+                + "    invariant value >= 0\n";
+        ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///demo.sou", source));
+
+        Optional<Hover> hover = analyzer.hover("file:///demo.sou", source,
+                new Position(3, "    invariant ".length()), graph);
+
+        assertTrue(hover.isPresent());
+        assertTrue(hover.get().contents().contains("derivable"), hover.get().contents());
+    }
+
     @Test
     void hoverOutsideAnInvariantStillShowsTheSignature() {
         Optional<Hover> hover = clauseHover(1, 5);   // over `Money`

@@ -248,6 +248,37 @@ class ANameKeepsTheSpellingItWasWrittenWithTest {
         }
     }
 
+    /**
+     * A name is the characters that spell it, not the stretch of file they lie in.
+     *
+     * <p>A qualified name may be written with a comment and a line break between its parts, and a
+     * report underlines all of it because an underline with holes in it is not something to read.
+     * A cursor is a different question: it is on the name only where a token is. Answering the
+     * second with the first put go-to-definition, and with it rename, under a cursor in the middle
+     * of a comment — a rename of a type across the workspace, started from prose.
+     */
+    @Test
+    void aCursorIsOnAQualifiedNameOnlyWhereOneOfItsPartsIsWritten() {
+        String up = "module up exposing ( Amount )\n\ndata Amount = Int\n";
+        String here = "module here\n\ndata Box = { v: up // which module\n        . Amount }\n";
+        Map<String, String> sources = Map.of("file:///up.sou", up, "file:///here.sou", here);
+        ModuleGraph graph = graphOf(sources);
+
+        for (Position on : List.of(after(here, "up //", 0), after(here, "up //", 1),
+                after(here, "Amount }", 0), after(here, "Amount }", 5))) {
+            assertTrue(new Analyzer().definition("file:///here.sou", on, graph).isPresent(),
+                    "a part of the name is written at " + on);
+        }
+        for (Position off : List.of(after(here, "// which", 0), after(here, "which", 2),
+                after(here, "        . Amount", 0), after(here, "        . Amount", 4),
+                after(here, "        . Amount", 8), after(here, "        . Amount", 9))) {
+            assertTrue(new Analyzer().definition("file:///here.sou", off, graph).isEmpty(),
+                    "nothing of the name is written at " + off);
+            assertTrue(new Analyzer().renameEdits("file:///here.sou", off, graph, "R").isEmpty(),
+                    "a rename started where no name is written at " + off);
+        }
+    }
+
     /** The composed spelling of a decomposed name — what the same name looks like typed the other
      *  way. */
     private static String compose(String decomposed) {
