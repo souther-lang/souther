@@ -213,17 +213,24 @@ public final class CallElaborator {
             BottomInfer.pinResultTypeVars(result, expected, bind, ctx.symbols(),
                     call.pos(), "result of " + call.written());
         }
+        // Each value argument is asked once, here, in the order it is written. What the ordering
+        // below decides is which of them settles a variable first, and nothing about how many times
+        // an argument is read: typing one can decide a variable of the application it stands in, so a
+        // second reading is a second answer, and then the argument classified and the argument
+        // unified are not the same reading of it.
+        Type[] stated = new Type[params.size()];
         List<Integer> stating = new ArrayList<>();
         List<Integer> bottoms = new ArrayList<>();
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf) {
                 continue;
             }
-            (Type.mentions(argType.apply(i), BottomInfer::answersNoValue) ? bottoms : stating).add(i);
+            stated[i] = argType.apply(i);
+            (Type.mentions(stated[i], BottomInfer::answersNoValue) ? bottoms : stating).add(i);
         }
         stating.addAll(bottoms);
         for (int i : stating) {
-            TypeOps.unify(params.get(i), argType.apply(i), bind, ctx.symbols(),
+            TypeOps.unify(params.get(i), stated[i], bind, ctx.symbols(),
                     call.pos(), "argument " + (i + 1) + " of " + call.written());
         }
         return bind;
@@ -252,11 +259,24 @@ public final class CallElaborator {
             this.ctx = ctx.makingAnOptional(false);
         }
 
-        /** The type of argument {@code i}, elaborated with no expected type (bottom-up). */
+        /**
+         * The type of argument {@code i}, elaborated with no expected type (bottom-up) the first
+         * time it is asked and remembered.
+         *
+         * <p>Remembered because elaborating an argument is not a question with a stable answer:
+         * typing it can decide a variable of the application it stands in, and the decision is
+         * written into the enclosing substitution. A second elaboration would then read the state the
+         * first one left, so two readers of one argument would be reading two arguments — and the
+         * Core that reached the tree would be the later one while the type a rule reasoned about was
+         * the earlier. A rule may ask in whatever order it types in ({@link #requireTyped} already
+         * rests on this), so the guarantee belongs here rather than in each rule remembering to ask
+         * once.
+         */
         Type type(int i) {
-            Core c = Elaborator.elaborate(args.get(i), env, ctx);
-            cores[i] = c;
-            return c.type();
+            if (cores[i] == null) {
+                cores[i] = Elaborator.elaborate(args.get(i), env, ctx);
+            }
+            return cores[i].type();
         }
 
         /** Argument {@code i} checked against {@code expected}, as {@link #requireType} does. */

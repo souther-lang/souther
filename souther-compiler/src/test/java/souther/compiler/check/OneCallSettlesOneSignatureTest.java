@@ -16,6 +16,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * Applying a declared signature is one act, and a call settles it the same way wherever it is
@@ -82,6 +83,41 @@ class OneCallSettlesOneSignatureTest {
         Compiler.Compiled compiled = Compiler.compileWithWarnings(source);
 
         assertFalse(compiled.classes().isEmpty(), "the function's parameter type was read");
+    }
+
+    @Test
+    void everyValueArgumentIsReadOnceAndTheFunctionArgumentsNotAtAll() {
+        // Reading an argument decides variables of the application it stands in, so a second reading
+        // answers from the state the first one left. The settlement classifies and then unifies, and
+        // both are that one reading.
+        List<Type> params = List.of(
+                Type.fn(List.of(new Type.Var("a", false)), Type.BOOL),
+                Type.list(new Type.Var("a", false)));
+        int[] reads = new int[params.size()];
+        Ast.Apply call = (Ast.Apply) filterOverAnEmptyList();
+
+        CallElaborator.settledByValues(call, params, Type.list(new Type.Var("a", false)),
+                Type.list(Type.INT), i -> {
+                    reads[i]++;
+                    return Type.list(Type.INT);
+                }, CheckContext.of(Symbols.none()));
+
+        assertEquals(0, reads[0], "a function argument is typed after the values, not here");
+        assertEquals(1, reads[1], "and a value argument is read once, however it is ordered");
+    }
+
+    @Test
+    void anArgumentIsElaboratedOnceHoweverOftenARuleAsksItsType() {
+        // The same guarantee where the answers come from: what a rule reasoned about and what reached
+        // the tree are one elaboration of one argument.
+        CallElaborator.CallArgs args = new CallElaborator.CallArgs(
+                List.of(new Ast.IntLit(1, POS)), Scope.NONE, CheckContext.of(Symbols.none()));
+
+        args.type(0);
+        Core first = args.cores().get(0);
+        args.type(0);
+
+        assertSame(first, args.cores().get(0), "asked twice, elaborated once");
     }
 
     @Test
