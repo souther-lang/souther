@@ -141,14 +141,30 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
      *
      * <p>What {@link #covers} answers, for a caller that also has to say which token. Reading the
      * two off one walk is the point: a caller that worked out the part for itself would be a second
-     * place where the rule about the ends lives, and this is the third round of review on that rule
-     * being in two places.
+     * place where the rule about the ends lives, and that rule being in two places is what three
+     * rounds of review were about.
      */
     public int partAt(SourcePos at) {
+        int within = partWithin(at);
+        if (within >= 0) {
+            return within;
+        }
+        Region last = lastSegment();
+        return last != null && containsCharacterOrEnd(last, at) ? segments.size() - 1 : -1;
+    }
+
+    /**
+     * Which part of this name the character at {@code at} belongs to, or {@code -1} where it
+     * belongs to none — the end of every part included in "none", the last one's as well.
+     *
+     * <p>The question to ask of a name that is not finished being written. {@link #partAt} counts
+     * the end of the last part because that is where a caret rests when its author has just typed
+     * the name; a caret there means the name only if there is no more of it to come, and whether
+     * there is more to come is a fact about the file that a name has no way to hold.
+     */
+    public int partWithin(SourcePos at) {
         for (int i = 0; i < segments.size(); i++) {
-            Region segment = segments.get(i);
-            boolean lastPart = i == segments.size() - 1;
-            if (lastPart ? containsCharacterOrEnd(segment, at) : containsCharacter(segment, at)) {
+            if (containsCharacter(segments.get(i), at)) {
                 return i;
             }
         }

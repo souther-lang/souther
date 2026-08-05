@@ -123,6 +123,41 @@ class NavigationSurvivesAMistakeTest {
         }
     }
 
+    /**
+     * A dot with nothing after it yet is a name still being written, and its qualifier's last
+     * character is not the end of it.
+     *
+     * <p>This is the keystroke the fallback exists for: the compile cannot answer about a file that
+     * has just had a `.` typed into it, and what an author does next is ask what may follow. The
+     * qualifier is a name of its own until the dot lands, so the rule that a caret just past a name
+     * is on it made the dot answer about the qualifier — here, a jump to a local `up` and a rename
+     * of it across the workspace.
+     */
+    @Test
+    void aDotWithNoMemberYetIsNotTheEndOfTheQualifier() {
+        for (String started : List.of("up.", "up .", "up\n        .")) {
+            String broken = "module here\n\ndata up = Int\n\ndata Box = { value: " + started
+                    + " }\n\nlet unfinished (\n";
+            Map<String, String> sources = new LinkedHashMap<>();
+            sources.put("file:///here.sou", broken);
+            ModuleGraph graph = ModuleGraph.of(sources);
+            int start = broken.indexOf(started)
+                    - broken.lastIndexOf('\n', broken.indexOf(started)) - 1;
+            String shown = started.replace("\n", "\\n");
+
+            for (int past = "up".length(); past <= "up".length() + 1; past++) {
+                Position waiting = new Position(4, start + past);
+                assertTrue(new Analyzer().definition("file:///here.sou", waiting, graph).isEmpty(),
+                        "`" + shown + "`: nothing is named " + past + " past `up`");
+                assertTrue(new Analyzer().renameEdits("file:///here.sou", waiting, graph, "R")
+                        .isEmpty(), "`" + shown + "`: a rename started while the name is unwritten");
+            }
+            assertTrue(new Analyzer().definition("file:///here.sou",
+                            new Position(4, start + 1), graph).isPresent(),
+                    "`" + shown + "`: the characters of `up` are still `up`");
+        }
+    }
+
     /** {@code edits} written back, latest first so an earlier one does not move a later one. */
     private static String applied(String text, List<TextEdit> edits) {
         StringBuilder sb = new StringBuilder(text);

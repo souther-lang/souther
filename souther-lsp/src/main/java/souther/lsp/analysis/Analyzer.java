@@ -621,7 +621,7 @@ public final class Analyzer {
         }
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, lines, lines.offsetOf(pos.line(), pos.character()));
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return Optional.empty();
         }
@@ -681,7 +681,7 @@ public final class Analyzer {
         }
         SyntaxNode root = CstParser.parse(text).root();
         LineIndex lines = new LineIndex(text);
-        SyntaxToken ident = identAt(root, lines, lines.offsetOf(pos.line(), pos.character()));
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return List.of();
         }
@@ -732,8 +732,9 @@ public final class Analyzer {
             List<TextEdit> edits = new ArrayList<>();
             SyntaxNode root = CstParser.parse(graph.text(e.getKey())).root();
             LineIndex lines = new LineIndex(graph.text(e.getKey()));
+            List<SyntaxToken> tokens = meaningfulTokens(root);
             for (Range range : e.getValue()) {
-                String field = fieldTakenAsName(root, lines,
+                String field = fieldTakenAsName(tokens, lines,
                         lines.offsetOf(range.start().line(), range.start().character()));
                 edits.add(new TextEdit(range,
                         field == null ? newName : field + " = " + newName));
@@ -750,8 +751,8 @@ public final class Analyzer {
      * <p>Which characters are there is the syntax tree's question, being what knows about
      * characters, and this is the one place where what a rename writes is not the name it was given.
      */
-    private String fieldTakenAsName(SyntaxNode root, LineIndex lines, int offset) {
-        SyntaxToken token = identAt(root, lines, offset);
+    private String fieldTakenAsName(List<SyntaxToken> tokens, LineIndex lines, int offset) {
+        SyntaxToken token = identAt(tokens, lines, offset);
         SyntaxNode parent = token == null ? null : token.parent();
         if (parent == null || token.start() != offset) {
             return null;
@@ -842,7 +843,7 @@ public final class Analyzer {
         String text = graph.text(uri);
         SyntaxNode root = CstParser.parse(text).root();
         LineIndex lines = new LineIndex(text);
-        SyntaxToken ident = identAt(root, lines, lines.offsetOf(pos.line(), pos.character()));
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident != null) {
             String name = nameOf(ident);
             String definingModule = declaringDef(root, name) != null
@@ -1319,7 +1320,7 @@ public final class Analyzer {
     public Optional<Range> definition(String text, Position pos) {
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, lines, lines.offsetOf(pos.line(), pos.character()));
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return Optional.empty();
         }
@@ -1424,7 +1425,7 @@ public final class Analyzer {
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
         int offset = lines.offsetOf(pos.line(), pos.character());
-        SyntaxToken ident = identAt(root, lines, offset);
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, offset);
         if (ident == null) {
             return Optional.empty();
         }
@@ -1483,17 +1484,30 @@ public final class Analyzer {
      * one is a separator. Said rather than left to be found: this is an approximation the syntax
      * forces, not a second opinion about where a name ends.
      */
-    private SyntaxToken identAt(SyntaxNode root, LineIndex lines, int offset) {
-        List<SyntaxToken> run = dottedRun(root, offset);
-        if (run.isEmpty()) {
+    private SyntaxToken identAt(List<SyntaxToken> tokens, LineIndex lines, int offset) {
+        DottedRun run = dottedRun(tokens, offset);
+        if (run.parts().isEmpty()) {
             return null;
         }
-        WrittenName name = spelledBy(run.get(0), lines);
-        for (int i = 1; i < run.size(); i++) {
-            name = name.then(spelledBy(run.get(i), lines));
+        WrittenName name = spelledBy(run.parts().get(0), lines);
+        for (int i = 1; i < run.parts().size(); i++) {
+            name = name.then(spelledBy(run.parts().get(i), lines));
         }
-        int part = name.partAt(lines.posOf(offset));
-        return part < 0 ? null : run.get(part);
+        SourcePos at = lines.posOf(offset);
+        // A run a dot continues is a name the author is still writing, and the end of what is
+        // written of it is not the end of the name — the member is what comes next, and a caret
+        // waiting for it means neither the qualifier nor the name.
+        int part = run.unfinished() ? name.partWithin(at) : name.partAt(at);
+        return part < 0 ? null : run.parts().get(part);
+    }
+
+    /** The identifiers of one dotted name, and whether a dot carries it past the last of them —
+     *  which is what a name being typed looks like and what a written one never does. */
+    private record DottedRun(List<SyntaxToken> parts, boolean unfinished) {
+
+        static DottedRun none() {
+            return new DottedRun(List.of(), false);
+        }
     }
 
     /** One token's name, where it is written. */
@@ -1509,9 +1523,7 @@ public final class Analyzer {
      * and not this walk's. Two identifiers cannot touch — the grammar puts something between them —
      * so at most one answers.
      */
-    private List<SyntaxToken> dottedRun(SyntaxNode root, int offset) {
-        List<SyntaxToken> tokens = new ArrayList<>();
-        meaningfulTokens(root, tokens);
+    private DottedRun dottedRun(List<SyntaxToken> tokens, int offset) {
         int at = -1;
         for (int i = 0; i < tokens.size() && at < 0; i++) {
             SyntaxToken t = tokens.get(i);
@@ -1520,7 +1532,7 @@ public final class Analyzer {
             }
         }
         if (at < 0) {
-            return List.of();
+            return DottedRun.none();
         }
         int first = at;
         while (first >= 2 && tokens.get(first - 1).kind() == SyntaxKind.DOT
@@ -1532,14 +1544,23 @@ public final class Analyzer {
                 && tokens.get(last + 2).kind() == SyntaxKind.IDENT) {
             last += 2;
         }
-        List<SyntaxToken> run = new ArrayList<>();
+        List<SyntaxToken> parts = new ArrayList<>();
         for (int i = first; i <= last; i += 2) {
-            run.add(tokens.get(i));
+            parts.add(tokens.get(i));
         }
-        return run;
+        boolean unfinished = last + 1 < tokens.size()
+                && tokens.get(last + 1).kind() == SyntaxKind.DOT;
+        return new DottedRun(parts, unfinished);
     }
 
-    /** Every token of {@code node} that is not trivia, in the order they are written. */
+    /** Every token of {@code root} that is not trivia, in the order they are written — read once
+     *  per parse and asked many times, since a rename asks about every place it touches. */
+    private List<SyntaxToken> meaningfulTokens(SyntaxNode root) {
+        List<SyntaxToken> out = new ArrayList<>();
+        meaningfulTokens(root, out);
+        return out;
+    }
+
     private void meaningfulTokens(SyntaxNode node, List<SyntaxToken> out) {
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxNode child) {
