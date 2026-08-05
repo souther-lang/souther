@@ -48,6 +48,17 @@ final class Combinators {
         return operation == null ? null : Derived.RULES.get(operation);
     }
 
+    /**
+     * The operations that take a function and hand it nothing a container holds. The library has
+     * none: every function it takes is applied to what a container argument holds, which is why the
+     * rules can be read off the signatures at all.
+     *
+     * <p>A signature the derivation gets no rule out of is not a gap it left — it is an operation
+     * whose closure is handed something else, and saying so is what tells the next reader which of
+     * the two a missing rule is. {@link Question#COMBINATOR} holds this to that.
+     */
+    static final Set<ValueName> HANDS_ITS_CLOSURE_NOTHING = Set.of();
+
     /** The operations there is a rule for, for the tests that hold them to firing. */
     static Set<String> names() {
         Set<String> names = new LinkedHashSet<>();

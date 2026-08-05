@@ -39,12 +39,26 @@ more than one reading — two function arguments, two parameters that could each
 raises where it is read rather than answering half.
 
 *State the range and answer it where the declaration does not determine it.* What a construction
-keeps of the container it was built from, what a predicate over a container says and how far, whether
-a number is a size, which operator a call is the function form of: none of these follow from a type.
-Each is a question with a range — the operations it is asked of, settled by what they are declared to
-be — and an operation in range answers it either with a rule or by being named among the ones there
-is nothing to say of, with the reason. Adding an operation to the library fails the build until
-someone decides which, and the decision is written where the next reader finds it.
+keeps of the container it was built from, where a predicate reads its container and how far its
+statement travels, which size call an emptiness check means, whether a predicate is stated of every
+element, which argument a predicate is stated over, whether a number is a size, which operator a call
+is the function form of: none of these follow from a type. Each is a question with a range — the
+operations it is asked of, settled by what they are declared to be — and an operation in range
+answers it either with a rule or by being named among the ones there is nothing to say of, with the
+reason. Adding an operation to the library fails the build until someone decides which, and the
+decision is written where the next reader finds it.
+
+*One question per thing that can be missing.* Two rules about one operation are two questions: that
+`List.all` carries its statement to a sublist and that it states its predicate of every element are
+separate facts, and a range that accepted the first as an answer for both would let the second go
+missing in silence. So the questions are as fine as the rules are, and the range of each is read off
+the declaration alone — a predicate that applies a predicate to what a container holds is asked
+whether it holds of every element, whether or not anything else is known about it.
+
+*A derived answer is held to the same range.* Reading the combinator rules off the signatures answers
+for most of that question's range, and not for all of it: an operation that takes a function and
+hands it nothing a container holds derives no rule, which is a decision and not a gap. It is written
+down as one, in the same form as the rest.
 
 A rule is worth having only where something can travel through it. What the check states of a
 container it names by that container's kind — `List.length` and `List.all`, or `Set.size` and
@@ -58,9 +72,14 @@ statement spanning kinds is what would have to exist first.
 or keep their number — `Map.remove`, `Set.remove`, the two intersections and differences,
 `Map.updateIfPresent` — now carry a size where they carried nothing.
 
+Every rule about a construction now has a program that discharges only because of it, and the set of
+those programs is the table's own rather than a list written beside it. Holding them that way found
+that the two `collapses` rules had no such program anywhere: the whole suite passed with both
+removed.
+
 Adding an operation to the standard library is no longer a change to the library alone. It answers
-the combinator question by being declared, and it fails the compiler's tests until the questions its
-declared shape puts it in range of are answered.
+the combinator question by being declared where its signature says what it hands its closure, and it
+fails the compiler's tests until every question its declared shape puts it in range of is answered.
 
 The judgment stays where a reader can weigh it. Deriving what a signature determines does not turn
 the rest into a derivation: that a map hands its closure the value rather than the key, and that a

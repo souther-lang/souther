@@ -744,18 +744,20 @@ public final class HelperInliner {
      * directly. */
     private static final Map<String, Integer> BLOCK_ARG = Map.of("List.foldFrom", 0);
 
-    /** {@code List.fold(step, seed, xs)} is sugar for {@code List.foldFrom(step, seed, xs, 0)} — the
-     * walk from the head. Which call it becomes and how many of its arguments stand where they stood is
-     * the library's to say ({@link Prelude#rewriteOf}); the index the walk starts at is this rewrite's
-     * own. Rewriting here, before inlining, means the step reaches {@code foldFrom} (the one recursive
-     * helper) directly rather than through a wrapper that would pass the function on as a value. */
-    private static Ast.Apply desugarFold(Ast.Apply call) {
+    /** The call a sugared name becomes, written out: what it becomes and what it supplies are the
+     * library's to say ({@link Prelude#rewriteOf}), and this is where it is done. {@code List.fold(step,
+     * seed, xs)} is {@code List.foldFrom(step, seed, xs, 0)} — the walk from the head. Rewriting here,
+     * before inlining, means the step reaches {@code foldFrom} (the one recursive helper) directly
+     * rather than through a wrapper that would pass the function on as a value. */
+    private static Ast.Apply desugar(Ast.Apply call) {
         Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
         if (rewrite == null || call.args().size() != rewrite.keptArgs()) {
             return call;
         }
         List<Ast.Expr> args = new ArrayList<>(call.args());
-        args.add(new Ast.IntLit(0, call.pos()));
+        for (int supplied : rewrite.supplied()) {
+            args.add(new Ast.IntLit(supplied, call.pos()));
+        }
         return new Ast.Apply(rewrite.target(), new ValueName.Stdlib(rewrite.target()), args,
                 ConstructionOrigin.own(),
                 call.pos());
@@ -1121,7 +1123,7 @@ public final class HelperInliner {
             }
             case Ast.Apply rawCall -> {
                 checkFunctionArgumentPlacement(rawCall);
-                Ast.Apply call = desugarNamedBlock(desugarFold(rawCall));
+                Ast.Apply call = desugarNamedBlock(desugar(rawCall));
                 List<Ast.Expr> args = new ArrayList<>();
                 for (Ast.Expr a : call.args()) {
                     args.add(inline(a));

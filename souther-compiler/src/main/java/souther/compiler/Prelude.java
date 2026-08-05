@@ -146,18 +146,31 @@ public final class Prelude {
         return QUALIFIERS;
     }
 
-    /** What a sugared name is sugar for: the call it becomes, and how many of the arguments it was
-     *  written with stand where they stood. The rest of what the rewrite supplies is the rewrite's
-     *  own business — {@code List.fold(step, seed, xs)} is {@code List.foldFrom(step, seed, xs, 0)},
-     *  so its three arguments are kept and the walk's starting index is added after them. Said here
-     *  because more than one reader has to know it: the rewrite performs it, and anything stated of
-     *  an operation is stated of the sugar by the arguments it keeps in place. */
-    public record Rewrite(String target, int keptArgs) {}
+    /** What a sugared name is sugar for: the call it becomes, and the arguments the rewrite supplies
+     *  after the ones that were written. {@code List.fold(step, seed, xs)} is
+     *  {@code List.foldFrom(step, seed, xs, 0)} — three written, and the index the walk starts at
+     *  supplied. Said here whole because two readers need different halves of it: the rewrite
+     *  performs it, and anything stated of an operation is stated of the sugar by the arguments that
+     *  stand where they stood. A sugar supplies constants and nothing else, which is why they are
+     *  numbers here; one that had to supply anything else could not be written down as this and
+     *  would say so. */
+    public record Rewrite(String target, List<Integer> supplied) {
+        public Rewrite {
+            supplied = List.copyOf(supplied);
+        }
+
+        /** How many of the arguments the sugar is written with stand where they stood — the target's
+         *  own count, less what the rewrite adds. */
+        public int keptArgs() {
+            PreludeEntry entry = ENTRIES.get(target);
+            return entry == null ? 0 : entry.signature().params().size() - supplied.size();
+        }
+    }
 
     /** Names that are sugar for another standard-library call, recognised as library functions but
      *  rewritten before inlining. */
     private static final Map<String, Rewrite> SUGARED =
-            Map.of("List.fold", new Rewrite("List.foldFrom", 3));
+            Map.of("List.fold", new Rewrite("List.foldFrom", List.of(0)));
 
     /** Whether {@code qualifiedName} is one of those — a name no tree holds after the rewrite. */
     public static boolean sugared(String qualifiedName) {

@@ -1,13 +1,10 @@
 package souther.compiler.check;
 
-import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.core.Core;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -107,7 +104,7 @@ final class DischargeRules {
      * a statement about the other, and a rule between them would carry nothing. A statement that
      * spans kinds is what would have to exist first.
      */
-    private static final Set<ValueName> NOTHING_KEPT = Set.of(
+    static final Set<ValueName> NOTHING_KEPT = Set.of(
             op("Map.keys"), op("Map.toList"), op("Map.fromList"), op("List.groupBy"),
             op("List.concat"), op("List.zipShortest"), op("List.flatMap"),
             op("Map.insert"), op("Set.insert"), op("Map.union"), op("Set.union"),
@@ -150,13 +147,34 @@ final class DischargeRules {
             op("Map.isEmpty"), op("Map.size"),
             op("String.isEmpty"), op("String.length"));
 
-    /** The predicates over a string this says nothing of. Each states something of the characters a
-     * string holds in the order it holds them, and what a rule could carry such a statement through
-     * is a construction of a container from a container — which a string is not one of, its length
-     * being all this names of it. */
-    private static final Set<ValueName> NOTHING_SAID_OF_A_STRING = Set.of(
+    /** The predicates whose statement this carries nowhere. A predicate over a string states
+     * something of the characters it holds in the order it holds them, and what would carry such a
+     * statement is a construction of a container from a container — which a string is not one of,
+     * its length being all this names of it. An emptiness check states a size, which travels as a
+     * size does ({@link #EMPTINESS}) and not as a property of elements. */
+    static final Set<ValueName> NOTHING_CARRIED = Set.of(
             op("String.contains"), op("String.startsWith"), op("String.endsWith"),
-            op("String.matches"));
+            op("String.matches"),
+            op("List.isEmpty"), op("Set.isEmpty"), op("Map.isEmpty"), op("String.isEmpty"));
+
+    /** The predicates of a single container that are not emptiness checks. The library has none:
+     * every one-argument predicate it declares over a container or a string is one, and one that was
+     * not would be named here with what it says instead. */
+    static final Set<ValueName> NOT_AN_EMPTINESS_CHECK = Set.of();
+
+    /** The predicates that apply a predicate to what a container holds without stating it of every
+     * element. {@code List.any} states it of some, so what it says of the container says nothing
+     * about the element a closure is handed. */
+    static final Set<ValueName> NOT_A_QUANTIFIER = Set.of(op("List.any"));
+
+    /** The predicates that compute something other than a truth value from each element and are not
+     * stated over it. The library has none: {@code allDistinctBy} is the only such predicate and its
+     * projection is its closure's answer. */
+    static final Set<ValueName> NOT_STATED_OVER_A_PROJECTION = Set.of();
+
+    /** The numbers answered about a container that are not one of its sizes. The library has none:
+     * every {@code Int} it answers about a container is how many it holds. */
+    static final Set<ValueName> NOT_A_SIZE = Set.of();
 
     /**
      * The library's function forms of the arithmetic operators, and the operator each one is. They
@@ -175,110 +193,20 @@ final class DischargeRules {
     /** The operations over two numbers that are the function form of no operator: the language
      * writes no {@code min}, {@code max}, {@code floorMod} or {@code compare}, so there is no second
      * spelling for a term to be read as one of. */
-    private static final Set<ValueName> NOT_AN_OPERATOR = Set.of(
+    static final Set<ValueName> NOT_AN_OPERATOR = Set.of(
             op("Int.min"), op("Int.max"), op("Int.floorMod"), op("Int.compare"),
             op("Decimal.min"), op("Decimal.max"));
 
-    /**
-     * A question these rules ask of an operation, and what being in its range means.
-     *
-     * <p>A table with no row for an operation says two things at once: that nothing is true of it,
-     * and that nobody looked. Which of the two it is, is what a question's range settles — what an
-     * operation is declared to be puts it in range, and an operation in range answers, either with a
-     * rule or by being named among the ones there is nothing to say of. So the library gaining an
-     * operation is the library asking a question, and it is unanswered until someone answers it.
-     * {@code AnOperationTheLibraryGainsIsAnsweredForTest} holds each question to its range.
-     */
-    enum Question {
-        /** What a construction kept of the container it was built from ({@link #BUILT_FROM}). Asked
-         * of an operation that answers a container and is given one. A string is not in range: a
-         * shape says what became of a container's elements, and of a string this names only its
-         * length. */
-        BUILT("what it keeps of the container it is built from"),
-        /** What a predicate says of a container, and how far that statement travels
-         * ({@link #CARRIED}, {@link #EMPTINESS}, {@link #QUANTIFIERS}). */
-        PREDICATE("what it says of the container it reads"),
-        /** Whether the number it answers is a size the domain can name ({@link #SIZE_CALLS}). */
-        SIZE("whether the number it answers is a size"),
-        /** Which operator it is the function form of ({@link #OPERATOR_CALLS}). Asked of an operation
-         * over two numbers answering a number of the same kind. */
-        OPERATOR("which operator it computes");
-
-        private final String asked;
-
-        Question(String asked) {
-            this.asked = asked;
-        }
-
-        @Override
-        public String toString() {
-            return asked;
-        }
-    }
-
-    /** Whether a construction over {@code t} is one whose elements a shape can speak of. */
-    private static boolean holdsElements(Type t) {
-        return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
-    }
-
-    /** Whether {@code t} is something the check can name the size of — a container, or a string. */
-    private static boolean hasASize(Type t) {
-        return holdsElements(t) || t == Type.Prim.STRING;
-    }
-
-    /** The questions an operation declared with {@code signature} is in range of. */
-    static Set<Question> asked(Prelude.Signature signature) {
-        Type result = signature.result();
-        if (result == null) {
-            return Set.of();
-        }
-        Set<Question> asked = new LinkedHashSet<>();
-        List<Type> params = signature.params();
-        if (holdsElements(result) && params.stream().anyMatch(DischargeRules::holdsElements)) {
-            asked.add(Question.BUILT);
-        }
-        if (params.stream().anyMatch(DischargeRules::hasASize)) {
-            if (result == Type.Prim.BOOL) {
-                asked.add(Question.PREDICATE);
-            }
-            if (result == Type.Prim.INT) {
-                asked.add(Question.SIZE);
-            }
-        }
-        if ((result == Type.Prim.INT || result == Type.Prim.DECIMAL)
-                && params.size() == 2 && params.stream().allMatch(result::equals)) {
-            asked.add(Question.OPERATOR);
-        }
-        return asked;
-    }
-
-    /** Whether {@code operation} has a rule answering {@code question}. */
-    static boolean answers(ValueName operation, Question question) {
-        return switch (question) {
-            case BUILT -> BUILT_FROM.containsKey(operation);
-            case PREDICATE -> CARRIED.containsKey(operation) || EMPTINESS.containsKey(operation);
-            case SIZE -> SIZE_CALLS.contains(operation);
-            case OPERATOR -> OPERATOR_CALLS.containsKey(operation);
-        };
-    }
-
-    /** Whether {@code operation} is one of those {@code question} has nothing to say of. */
-    static boolean nothingToSay(ValueName operation, Question question) {
-        return nothingSaidOf(question).contains(operation);
-    }
-
-    /** The operations {@code question} is asked of and has nothing to say of. */
-    static Set<ValueName> nothingSaidOf(Question question) {
-        return NOTHING_TO_SAY.getOrDefault(question, Set.of());
-    }
-
-    private static final Map<Question, Set<ValueName>> NOTHING_TO_SAY = Map.of(
-            Question.BUILT, NOTHING_KEPT,
-            Question.PREDICATE, NOTHING_SAID_OF_A_STRING,
-            Question.OPERATOR, NOT_AN_OPERATOR);
-
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool.not");
+
+    /** The operations there is a building rule for, for the test that holds each to a construction
+     * it discharges. */
+    static Set<String> builtNames() {
+        Set<String> names = new LinkedHashSet<>();
+        BUILT_FROM.keySet().forEach(operation -> names.add(operation.name()));
+        return names;
+    }
 
     static Built builtFrom(ValueName operation) {
         return BUILT_FROM.get(operation);
