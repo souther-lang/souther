@@ -465,7 +465,12 @@ public final class AstBuilder {
     }
 
     private Ast.FnParam fnParam(SyntaxNode p, SyntaxNode pat) {
-        String name = pat == null ? firstIdentText(p) : "$p" + (patternCounter++);
+        // A parameter the author named binds that name where it is written. One that is a pattern
+        // takes a carrier the author never wrote; the pattern opens itself at the top of the body,
+        // and the names it binds are written there.
+        Ast.Binder bound = pat == null
+                ? binderOf(p)
+                : Ast.Binder.desugared("$p" + (patternCounter++), pos(p));
         Ast.RetType type = null;
         Optional<SyntaxNode> rt = p.child(SyntaxKind.RET_TYPE);
         if (rt.isPresent()) {
@@ -476,9 +481,9 @@ public final class AstBuilder {
             // only repeat what the pattern already named
             SourcePos at = pos(pat);
             type = new Ast.RetType(List.of(new Ast.TypeRef(qualifiedNameText(pat), null, at)), at);
-            return new Ast.FnParam(Ast.Binder.written(name, pos(p)), type, true);
+            return new Ast.FnParam(bound, type, true);
         }
-        return new Ast.FnParam(name, type, pos(p));
+        return new Ast.FnParam(bound, type, false);
     }
 
     private SyntaxNode optionalPatternChild(SyntaxNode n) {
@@ -760,12 +765,12 @@ public final class AstBuilder {
         List<Ast.ElseArm> arms = elseArms(n, binder);
         if (arms != null) {
             return new Ast.IfConstructed(expr(exprs.get(0)),
-                    Ast.Binder.written(binder, posOf(as)), expr(exprs.get(1)), arms, pos(n));
+                    binderOf(as), expr(exprs.get(1)), arms, pos(n));
         }
         return binder == null
                 ? new Ast.If(expr(exprs.get(0)), expr(exprs.get(1)), expr(exprs.get(2)), pos(n))
                 : new Ast.IfConstructed(expr(exprs.get(0)),
-                        Ast.Binder.written(binder, posOf(as)), expr(exprs.get(1)),
+                        binderOf(as), expr(exprs.get(1)),
                         List.of(Ast.ElseArm.any(expr(exprs.get(2)))), pos(n));
     }
 
@@ -982,7 +987,7 @@ public final class AstBuilder {
         // Option is the one case with a payload to reach, so every other case binds its value with
         // `as` and a bare identifier beside its name binds nothing.
         String someBinding = null;
-        SourcePos bindingPos = null;   // where the author wrote the name the arm binds, if they did
+        SyntaxToken bindingToken = null;   // the name the author wrote for the arm, if they did
         if (unwrapNames.isEmpty() && i < es.size() && isToken(es.get(i), SyntaxKind.IDENT)) {
             String ident = tokenText(es.get(i));
             // A qualified name is not a case this advice fits: `Some` is the one case with a payload
@@ -996,23 +1001,25 @@ public final class AstBuilder {
                         caseTypes.get(caseTypes.size() - 1).written(), ident);
             }
             someBinding = ident;
-            bindingPos = posOf((SyntaxToken) es.get(i));
+            bindingToken = (SyntaxToken) es.get(i);
             i++;
         }
         // field destructuring `{ field [= var], ... }`
         List<String> fieldNames = new ArrayList<>();
-        List<String> fieldVars = new ArrayList<>();
+        List<Ast.Binder> fieldVars = new ArrayList<>();
         if (i < es.size() && isToken(es.get(i), SyntaxKind.LBRACE)) {
             i++;   // {
             while (i < es.size() && !isToken(es.get(i), SyntaxKind.RBRACE)) {
-                String field = tokenText(es.get(i++));
-                String var = field;
+                SyntaxToken fieldToken = (SyntaxToken) es.get(i++);
+                // `{ v }` binds the field's own name; `{ v = x }` binds the name after the `=`.
+                // Either way the binding is written where its token is.
+                SyntaxToken varToken = fieldToken;
                 if (i < es.size() && isToken(es.get(i), SyntaxKind.ASSIGN)) {
                     i++;
-                    var = tokenText(es.get(i++));
+                    varToken = (SyntaxToken) es.get(i++);
                 }
-                fieldNames.add(field);
-                fieldVars.add(var);
+                fieldNames.add(fieldToken.text());
+                fieldVars.add(binderOf(varToken));
                 if (i < es.size() && isToken(es.get(i), SyntaxKind.COMMA)) {
                     i++;
                 }
@@ -1026,7 +1033,7 @@ public final class AstBuilder {
         if (i < es.size() && isToken(es.get(i), SyntaxKind.AS_KW)) {
             i++;
             asBinding = tokenText(es.get(i));
-            bindingPos = posOf((SyntaxToken) es.get(i++));
+            bindingToken = (SyntaxToken) es.get(i++);
         }
         if (isSome && asBinding != null) {
             throw error(casePos, "parse.option.positional",
@@ -1045,7 +1052,7 @@ public final class AstBuilder {
         if (!fieldNames.isEmpty()) {
             String whole = binding != null ? binding : "$m" + (matchWholeCounter++);
             if (binding == null) {
-                bindingPos = null;   // the arm binds a name nobody wrote
+                bindingToken = null;   // the arm holds the value in a name nobody wrote
             }
             for (int k = fieldNames.size() - 1; k >= 0; k--) {
                 body = new Ast.LetIn(fieldVars.get(k),
@@ -1056,7 +1063,7 @@ public final class AstBuilder {
         } else if (!unwrapNames.isEmpty()) {
             String whole = binding != null ? binding : "$m" + (matchWholeCounter++);
             if (binding == null) {
-                bindingPos = null;   // the arm binds a name nobody wrote
+                bindingToken = null;   // the arm holds the value in a name nobody wrote
             }
             // open the case's newtype (whole.value), then peel one layer per earlier name; the last
             // name binds the value reached — `アクティベート済み(メールアドレス(s))` binds s to whole.value.value.
@@ -1068,7 +1075,8 @@ public final class AstBuilder {
             for (int k = 0; k < unwrapNames.size() - 1; k++) {
                 target = new Ast.FieldAccess(target, "value", casePos);
             }
-            body = new Ast.LetIn(unwrapNames.get(unwrapNames.size() - 1).written(), target, body, casePos);
+            Ast.Name innermost = unwrapNames.get(unwrapNames.size() - 1);
+            body = new Ast.LetIn(Ast.Binder.of(innermost), target, body, casePos);
             binding = whole;
         }
         // null = no constructor destructure; otherwise the inner names (before the bound variable),
@@ -1076,8 +1084,10 @@ public final class AstBuilder {
         List<Ast.Name> unwrapAsserts = unwrapNames.isEmpty()
                 ? null
                 : new ArrayList<>(unwrapNames.subList(0, unwrapNames.size() - 1));
-        return new Ast.Case(caseTypes, binderFor(binding, bindingPos, casePos), body,
-                unwrapAsserts, casePos);
+        Ast.Binder bound = binding == null ? null
+                : bindingToken != null ? binderOf(bindingToken)
+                : Ast.Binder.desugared(binding, casePos);
+        return new Ast.Case(caseTypes, bound, body, unwrapAsserts, casePos);
     }
 
     /** A brace block: its {@code let}/{@code guard} statements folded into the result expression. */
@@ -1119,12 +1129,12 @@ public final class AstBuilder {
                 List<Ast.ElseArm> arms = elseArms(s, binder);
                 if (arms != null) {
                     yield new Ast.IfConstructed(expr(exprs.get(0)),
-                            Ast.Binder.written(binder, posOf(as)), rest, arms, pos);
+                            binderOf(as), rest, arms, pos);
                 }
                 yield binder == null
                         ? new Ast.If(expr(exprs.get(0)), rest, expr(exprs.get(1)), pos)
                         : new Ast.IfConstructed(expr(exprs.get(0)),
-                                Ast.Binder.written(binder, posOf(as)), rest,
+                                binderOf(as), rest,
                                 List.of(Ast.ElseArm.any(expr(exprs.get(1)))), pos);
             }
             case LET_DESTRUCTURE -> {
@@ -1172,8 +1182,8 @@ public final class AstBuilder {
                 for (int k = fields.size() - 1; k >= 0; k--) {
                     List<SyntaxToken> names = identTokens(fields.get(k));
                     String field = names.get(0).text();
-                    String var = names.size() > 1 ? names.get(1).text() : field;
-                    body = new Ast.LetIn(var,
+                    SyntaxToken var = names.size() > 1 ? names.get(1) : names.get(0);
+                    body = new Ast.LetIn(binderOf(var),
                             new Ast.FieldAccess(new Ast.Var(whole, pos), field, pos), body, pos);
                 }
                 yield new Ast.LetIn(whole, value, body, pos);
@@ -1399,19 +1409,16 @@ public final class AstBuilder {
 
     /** The name {@code n} binds, written where the source writes it. */
     private Ast.Binder binderOf(SyntaxNode n) {
-        SyntaxToken name = firstIdentToken(n);
-        return Ast.Binder.written(name.text(), posOf(name));
+        return binderOf(firstIdentToken(n));
     }
 
-    /** A binding of {@code name}, written at {@code namePos} where the author wrote it and anchored
-     * at {@code anchor} where the name is one a desugaring needed. Null where nothing is bound. */
-    private static Ast.Binder binderFor(String name, SourcePos namePos, SourcePos anchor) {
-        if (name == null) {
-            return null;
-        }
-        return namePos == null
-                ? Ast.Binder.desugared(name, anchor) : Ast.Binder.written(name, namePos);
+    /** The name {@code token} spells, bound where it is written. The one way this builder makes a
+     * binding out of something the author wrote: the token carries both halves, so they cannot be
+     * paired wrongly. */
+    private Ast.Binder binderOf(SyntaxToken token) {
+        return Ast.Binder.of(Ast.Name.written(token.text(), posOf(token)));
     }
+
 
     /** The whole `{ ... }` of a body, so an error about the body underlines both braces. */
     private Region bodyRegion(SyntaxNode body) {

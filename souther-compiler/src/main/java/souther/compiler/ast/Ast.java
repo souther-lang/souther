@@ -56,9 +56,19 @@ public interface Ast {
          */
         SourcePos namePos();
 
-        /** A binder as the parser read it from a name the author wrote at {@code pos}. */
-        static Binder written(String name, SourcePos pos) {
-            return new Written(name, pos, pos);
+        /**
+         * A binder read off a name the author wrote, taken from the name itself so its spelling and
+         * its place cannot come from two different things.
+         *
+         * <p>There is no form here that takes the two apart. A caller holding a spelling and a
+         * position separately is a caller nothing can stop from pairing a name with somewhere it is
+         * not written, and this branch shipped that mistake three times: the parameter {@code .v}
+         * desugars to, anchored at the {@code .}; a lambda's parameters, all anchored at the
+         * lambda; a {@code match} arm's binding, anchored at the {@code |}. The parser reads a
+         * binder off its token; a pass that needs a name of its own says {@link #desugared}.
+         */
+        static Binder of(Name written) {
+            return new Written(written.written(), written.pos(), written.pos());
         }
 
         /**
@@ -356,11 +366,6 @@ public interface Ast {
         /** A parameter whose type, if any, the author wrote (the common case). */
         public FnParam(Binder binder, RetType type) {
             this(binder, type, false);
-        }
-
-        /** A parameter as the parser read it. */
-        public FnParam(String name, RetType type, SourcePos pos) {
-            this(Binder.written(name, pos), type, false);
         }
 
         public String name() {

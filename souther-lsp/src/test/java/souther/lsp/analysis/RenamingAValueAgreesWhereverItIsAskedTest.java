@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.TreeSet;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * What renaming edits does not depend on where the cursor was when it was asked.
@@ -133,5 +135,84 @@ class RenamingAValueAgreesWhereverItIsAskedTest {
     void aFieldIsNotSomethingToRenameEither() {
         assertEquals(Map.of(), renameInGetter(new Position(2, 11)),
                 "renaming `v` here would rewrite the declaration and leave every read of it");
+    }
+
+    /**
+     * The three forms where a pattern is lowered away: a parameter destructured into fields, a
+     * {@code match} arm's fields, and a newtype opened by name. Each binds a name the author wrote
+     * and holds the value in one nobody did.
+     *
+     * <p>Line 6 binds `l` at column 20 and `right` at column 23, and reads them at 32 and 36. Line 9
+     * binds `f` at column 14 and reads it at 21. Line 16 binds `inner` at column 18 and reads it at
+     * 28.
+     */
+    private static final String PATTERNS = """
+            module c exposing ( Pair, Flat, Amount, pick, tag, held )
+
+            data Pair = { left: Int, right: Int }
+            data Flat = { f: Int }
+
+            behavior pick : (p: Pair) -> Int
+            let pick ({ left = l, right }) = l + right
+
+            behavior tag : (x: Flat) -> Int
+            let tag (x) = match x with
+                | Flat { f } -> f
+
+            data Amount = Int
+
+            behavior held : (a: Amount) -> Int
+            let held (Amount(inner)) = inner
+            """;
+
+    private static Set<String> renameInPatterns(Position pos) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("file:///c.sou", PATTERNS);
+        ModuleGraph graph = ModuleGraph.of(sources);
+        Analyzer analyzer = new Analyzer();
+        analyzer.diagnostics(graph);
+        return places(analyzer.renameEdits("file:///c.sou", pos, graph));
+    }
+
+    @Test
+    void aNameBoundByARecordPatternIsRenameableFromEitherEnd() {
+        assertEquals(Set.of("6:19", "6:33"), renameInPatterns(new Position(6, 19)),
+                "`{ left = l }` binds `l`, and the body reads it");
+        assertEquals(Set.of("6:19", "6:33"), renameInPatterns(new Position(6, 33)));
+    }
+
+    @Test
+    void andSoIsTheShorthandThatBindsTheFieldsOwnName() {
+        assertEquals(Set.of("6:22", "6:37"), renameInPatterns(new Position(6, 22)),
+                "`{ right }` binds `right` at the field's own token");
+        assertEquals(Set.of("6:22", "6:37"), renameInPatterns(new Position(6, 37)));
+    }
+
+    @Test
+    void aMatchArmsFieldDestructuringIsRenameableFromEitherEnd() {
+        assertEquals(Set.of("10:13", "10:20"), renameInPatterns(new Position(10, 13)),
+                "`| Flat { f } -> f`");
+        assertEquals(Set.of("10:13", "10:20"), renameInPatterns(new Position(10, 20)));
+    }
+
+    @Test
+    void soIsANameANewtypePatternOpens() {
+        assertEquals(Set.of("15:17", "15:27"), renameInPatterns(new Position(15, 17)),
+                "`let held (Amount(inner)) = inner`");
+        assertEquals(Set.of("15:17", "15:27"), renameInPatterns(new Position(15, 27)));
+    }
+
+    @Test
+    void andThePatternItselfCarriesNothingToRename() {
+        assertEquals(Set.of(), renameInPatterns(new Position(6, 10)),
+                "the `{` of the destructured parameter holds a name nobody wrote");
+    }
+
+    @Test
+    void thePatternsTypeNameIsThatTypeAndNotWhateverTheParameterIsCalled() {
+        Set<String> found = renameInPatterns(new Position(15, 10));
+
+        assertTrue(found.contains("12:5"), "`Amount(...)` names the type declared there: " + found);
+        assertFalse(found.contains("15:17"), "and not the name the pattern binds: " + found);
     }
 }
