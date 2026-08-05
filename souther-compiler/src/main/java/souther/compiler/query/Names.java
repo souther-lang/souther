@@ -12,6 +12,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
+import souther.compiler.types.BindingId;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 
@@ -1109,10 +1110,52 @@ public final class Names {
     }
 
     /**
-     * Where what {@code denoted} names is written: the {@code let} or {@code behavior} that declares
-     * it, or the binding that introduced a local.
+     * The value the cursor is on at {@code at}: the one a name there denotes, or — when the cursor
+     * is on a binding — the binding itself.
+     *
+     * <p>{@link TypeAt} for the value namespace, and for the same reason: a reader asking about a
+     * binding is asking from one end or the other, and the two ends are one question. Answering
+     * only where a name is read would put a local within reach from its uses and out of reach from
+     * the {@code let} that binds it.
      */
-    public record ValueDeclaredAt(ValueName denoted) implements Key<SourcePos> {
+    public record ValueAt(SourcePos at) implements Key<ValueName> {
+        @Override
+        public String sourceId() {
+            return at == null ? null : at.sourceId();
+        }
+
+        @Override
+        public Answer<ValueName> compute(Db db) {
+            String name = moduleAt(db, at);
+            if (name == null) {
+                return Answer.absent();
+            }
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.absent();
+            }
+            for (Map.Entry<BindingId, Resolve.BoundName> bound
+                    : resolution.value().binders().entrySet()) {
+                Resolve.BoundName written = bound.getValue();
+                if (spans(written.pos(), written.written(), at)) {
+                    ValueName local = new ValueName.Local(written.written(), bound.getKey());
+                    return Answer.of(local);
+                }
+            }
+            Resolve.ValueUse use = db.ask(new ValueDenotedAt(at)).value();
+            return use == null ? Answer.absent() : Answer.of(use.denotes());
+        }
+    }
+
+    /**
+     * Every place the name of what {@code denoted} names is written as a declaration.
+     *
+     * <p>More than one, because a behavior is declared twice: the {@code behavior} line says what it
+     * is and the {@code let} line says what it does, and both write the name. A reader sent to the
+     * declaration wants the first of them; a rename has to rewrite all of them, or the module goes
+     * on naming something that is no longer there.
+     */
+    public record ValueDeclarationsOf(ValueName denoted) implements Key<List<SourcePos>> {
         @Override
         public String module() {
             return switch (denoted) {
@@ -1125,16 +1168,17 @@ public final class Names {
         }
 
         @Override
-        public Answer<SourcePos> compute(Db db) {
+        public Answer<List<SourcePos>> compute(Db db) {
             // a binding is not a position, so where it was written is asked of the pass that
             // answered it rather than read off the name
             if (denoted instanceof ValueName.Local local) {
-                Answer<Resolve.Resolved> resolution = db.ask(new Resolution(local.id().owner().module()));
+                Answer<Resolve.Resolved> resolution =
+                        db.ask(new Resolution(local.id().owner().module()));
                 if (!resolution.present()) {
                     return Answer.absent();
                 }
-                SourcePos binder = resolution.value().binders().get(local.id());
-                return binder == null ? Answer.absent() : Answer.of(binder);
+                Resolve.BoundName binder = resolution.value().binders().get(local.id());
+                return binder == null ? Answer.absent() : Answer.of(List.of(binder.pos()));
             }
             String in = module();
             if (in == null) {
@@ -1144,17 +1188,38 @@ public final class Names {
             if (m == null) {
                 return Answer.absent();
             }
+            List<SourcePos> written = new ArrayList<>();
             for (Ast.BehaviorDef b : m.behaviors()) {
                 if (b.name().equals(denoted.name())) {
-                    return Answer.of(b.pos());
+                    written.add(b.pos());
                 }
             }
             for (Ast.FnDef fn : m.fns()) {
                 if (fn.name().equals(denoted.name())) {
-                    return Answer.of(fn.pos());
+                    written.add(fn.pos());
                 }
             }
-            return Answer.absent();
+            return written.isEmpty() ? Answer.absent() : Answer.of(List.copyOf(written));
+        }
+    }
+
+    /**
+     * Where what {@code denoted} names is written: the {@code behavior} that declares it, the
+     * {@code let} where it has no signature, or the binding that introduced a local.
+     *
+     * <p>The first of {@link ValueDeclarationsOf}, which is the one to send a reader to. A behavior
+     * has two, and its signature says more about it than its body does.
+     */
+    public record ValueDeclaredAt(ValueName denoted) implements Key<SourcePos> {
+        @Override
+        public String module() {
+            return new ValueDeclarationsOf(denoted).module();
+        }
+
+        @Override
+        public Answer<SourcePos> compute(Db db) {
+            Answer<List<SourcePos>> written = db.ask(new ValueDeclarationsOf(denoted));
+            return written.present() ? Answer.of(written.value().get(0)) : Answer.absent();
         }
     }
 

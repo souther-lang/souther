@@ -373,7 +373,7 @@ public final class LspServer {
 
     // --- rename ---
 
-    /** A {@code WorkspaceEdit} renaming the top-level symbol under the cursor everywhere it is used,
+    /** A {@code WorkspaceEdit} renaming the name under the cursor everywhere it is used,
      * or {@code null} when the new name is not a legal identifier or the cursor is not on a
      * renameable symbol — the client then reports the rename as unavailable. */
     private Object rename(JsonNode params) {

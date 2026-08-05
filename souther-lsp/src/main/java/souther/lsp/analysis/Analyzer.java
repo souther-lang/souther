@@ -637,11 +637,16 @@ public final class Analyzer {
     }
 
     /**
-     * Find-references across the workspace: every use of the top-level symbol the cursor names, in the
-     * defining module and in every module that imports it. Resolution respects namespaces — a type
-     * mention and a value of the same spelling are different symbols — and scope: a use inside a
-     * definition that binds the name locally (a param or a {@code let}) is that local, not the symbol,
-     * and is excluded. The declaration itself is included only when {@code includeDeclaration} is set.
+     * Find-references across the workspace: every use of the name the cursor is on, in the module
+     * that declares it and in every module that names it. Namespaces are respected — a type mention
+     * and a value of the same spelling are different names — and so is scope: a local is the binding
+     * it is, so the uses of one body's {@code x} are not another's. The declaration itself is
+     * included only when {@code includeDeclaration} is set, and a behavior has two of them.
+     *
+     * <p>A local is in reach, which it was not while this matched by spelling: a scan of top-level
+     * declarations cannot see a name bound inside one. Where resolution has nothing to say — a
+     * pipeline's stages and a behavior's own declaration lines are written outside any body, so it
+     * never read them — the spelling is still what answers.
      */
     public List<Location> references(String uri, Position pos, ModuleGraph graph, boolean includeDeclaration) {
         String text = graph.text(uri);
@@ -693,9 +698,11 @@ public final class Analyzer {
     }
 
     /**
-     * The edit ranges for renaming the top-level symbol under the cursor, grouped by document uri:
-     * every reference to it plus its declaration. Empty when the cursor is not on a renameable
-     * top-level symbol (a local param or {@code let} is out of scope, as it is for find-references).
+     * The edit ranges for renaming the name under the cursor, grouped by document uri: every
+     * reference to it plus every line that declares it. Empty when the cursor is not on a name.
+     *
+     * <p>A local is renameable, from its binding as much as from a use of it — the same reach
+     * find-references has, for the same reason.
      */
     public Map<String, List<Range>> renameEdits(String uri, Position pos, ModuleGraph graph) {
         Map<String, List<Range>> byUri = new LinkedHashMap<>();
@@ -703,7 +710,7 @@ public final class Analyzer {
             byUri.computeIfAbsent(loc.uri(), k -> new ArrayList<>()).add(loc.range());
         }
         if (byUri.isEmpty()) {
-            return byUri;   // not a renameable top-level symbol
+            return byUri;   // nothing under the cursor to rename
         }
         // references() treats a name in an `exposing`/`import` list as a binding site, not a use, and
         // skips it. Rename must still update those, or the module stops exposing (and importers stop
@@ -749,11 +756,9 @@ public final class Analyzer {
     }
 
     /** What the cursor is on in the value namespace, as the compiler answers it, or null when
-     * nothing there is a name used as a value. */
+     * nothing there is a name in it. */
     private ValueName valueUnderCursor(Compilation compilation, String uri, Position pos) {
-        Resolve.ValueUse use =
-                compilation.db().ask(new Names.ValueDenotedAt(cursor(uri, pos))).value();
-        return use == null ? null : use.denotes();
+        return compilation.db().ask(new Names.ValueAt(cursor(uri, pos))).value();
     }
 
     /**
@@ -775,13 +780,41 @@ public final class Analyzer {
     private Optional<Location> valueDeclarationOf(Compilation compilation, ValueName target,
                                                   String uri, ModuleGraph graph) {
         SourcePos at = compilation.db().ask(new Names.ValueDeclaredAt(target)).value();
-        return nameAt(at, target.name(), switch (target) {
+        return nameAt(at, target.name(), declaringFile(compilation, target, uri), graph);
+    }
+
+    /**
+     * Every place the value's own name is written as a declaration.
+     *
+     * <p>More than one where a behavior is what it names: the {@code behavior} line and the
+     * {@code let} line both write it. Renaming from a use has to reach both, or the module goes on
+     * naming something that is no longer there — and matching the spelling, which is what answered
+     * this before, saw both because it saw every line the name was on.
+     */
+    private List<Location> valueDeclarationsOf(Compilation compilation, ValueName target,
+                                               String uri, ModuleGraph graph) {
+        List<SourcePos> written =
+                compilation.db().ask(new Names.ValueDeclarationsOf(target)).value();
+        if (written == null) {
+            return List.of();
+        }
+        List<Location> out = new ArrayList<>();
+        for (SourcePos at : written) {
+            nameAt(at, target.name(), declaringFile(compilation, target, uri), graph)
+                    .ifPresent(out::add);
+        }
+        return out;
+    }
+
+    /** The file a value's declaration is in where its position does not name one. */
+    private String declaringFile(Compilation compilation, ValueName target, String uri) {
+        return switch (target) {
             case ValueName.Local _ -> uri;   // bound in the body the cursor is in
             case ValueName.Helper h -> compilation.sourceIdOf(h.module());
             case ValueName.Behavior b -> compilation.sourceIdOf(b.module());
             case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _,
                     ValueName.Unresolved _ -> null;
-        }, graph);
+        };
     }
 
     /** The first identifier spelled {@code name} at or after {@code offset} — the name token of the
@@ -874,7 +907,7 @@ public final class Analyzer {
         }
         List<Location> out = new ArrayList<>();
         if (includeDeclaration) {
-            valueDeclarationOf(compilation, target, uri, graph).ifPresent(out::add);
+            out.addAll(valueDeclarationsOf(compilation, target, uri, graph));
         }
         for (String module : compilation.modules()) {
             String moduleUri = compilation.sourceIdOf(module);

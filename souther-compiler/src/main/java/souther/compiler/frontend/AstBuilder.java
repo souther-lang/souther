@@ -1090,9 +1090,12 @@ public final class AstBuilder {
                 Ast.RetType annotation = s.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
                 Ast.Expr value = expr(onlyExpr(s));
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
+                // The statement starts at its keyword and the binding is written after it. A reader
+                // asking what a cursor is on has only the name to compare against.
+                Ast.Binder bound = binderOf(s);
                 yield annotation == null
-                        ? new Ast.LetIn(firstIdentText(s), value, rest, pos)
-                        : Ast.LetIn.annotated(firstIdentText(s), value, annotation, rest, pos);
+                        ? new Ast.LetIn(bound, value, rest, pos)
+                        : Ast.LetIn.annotated(bound, value, annotation, rest, pos);
             }
             case GUARD_STMT -> {
                 List<SyntaxNode> exprs = exprChildren(s);
@@ -1125,7 +1128,7 @@ public final class AstBuilder {
      */
     private Ast.Expr bindPattern(SyntaxNode pat, Ast.Expr value, Ast.Expr rest, SourcePos pos) {
         return switch (pat.kind()) {
-            case PATTERN_NAME -> new Ast.LetIn(firstIdentText(pat), value, rest, pos);
+            case PATTERN_NAME -> new Ast.LetIn(binderOf(pat), value, rest, pos);
             case PATTERN_TUPLE -> {
                 List<SyntaxNode> elems = patternChildren(pat);
                 if (elems.size() == 1) {
@@ -1376,6 +1379,12 @@ public final class AstBuilder {
 
     private SourcePos posOf(SyntaxToken t) {
         return lines.posOf(t.start());
+    }
+
+    /** The name {@code n} binds, written where the source writes it. */
+    private Ast.Binder binderOf(SyntaxNode n) {
+        SyntaxToken name = firstIdentToken(n);
+        return Ast.Binder.written(name.text(), posOf(name));
     }
 
     /** The whole `{ ... }` of a body, so an error about the body underlines both braces. */

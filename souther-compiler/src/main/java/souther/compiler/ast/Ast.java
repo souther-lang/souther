@@ -728,7 +728,10 @@ public interface Ast {
             this(binder, value, null, false, null, body, pos);
         }
 
-        /** The same, as the parser read it. */
+        /** The same, as the parser read it, where the name is written at {@code pos} too — a
+         * binding a pass minted rather than read off a source. A binding the source wrote is built
+         * from a binder of its own, because a {@code let} statement starts at its keyword and the
+         * name it binds is somewhere after it. */
         public LetIn(String name, Expr value, Expr body, SourcePos pos) {
             this(Binder.written(name, pos), value, null, false, null, body, pos);
         }
@@ -739,8 +742,9 @@ public interface Ast {
         }
 
         /** {@code let x: T = value} — a binding the source annotated. */
-        public static LetIn annotated(String name, Expr value, RetType type, Expr body, SourcePos pos) {
-            return new LetIn(Binder.written(name, pos), value, type, true, null, body, pos);
+        public static LetIn annotated(Binder binder, Expr value, RetType type, Expr body,
+                                      SourcePos pos) {
+            return new LetIn(binder, value, type, true, null, body, pos);
         }
 
         public String name() {
