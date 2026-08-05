@@ -567,11 +567,15 @@ public final class DataChecker {
         ctx.data().encoder().ifPresent(enc -> checkEncoder(enc, ctx));
     }
 
-    /** The bindings a declaration's own invariant reads: its fields, each as the binding it is. */
     private static Scope fieldScope(CheckContext ctx) {
-        Map<String, Type> types = TypeOps.fieldTypes(ctx.data(), ctx.symbols());
+        return fieldScope(ctx.data(), ctx.symbols());
+    }
+
+    /** The bindings a declaration's own invariant reads: its fields, each as the binding it is. */
+    static Scope fieldScope(Ast.Data data, Symbols symbols) {
+        Map<String, Type> types = TypeOps.fieldTypes(data, symbols);
         Map<BindingId, Scope.Binding> bindings = new LinkedHashMap<>();
-        TypeOps.fieldBindings(ctx.data(), ctx.symbols()).forEach((name, binding) ->
+        TypeOps.fieldBindings(data, symbols).forEach((name, binding) ->
                 bindings.put(binding, new Scope.Binding(name, types.get(name))));
         return Scope.of(bindings);
     }

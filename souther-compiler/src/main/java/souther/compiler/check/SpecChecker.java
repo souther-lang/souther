@@ -392,12 +392,15 @@ public final class SpecChecker {
         // guards prove must fail on a reachable path is an error (the path-sensitive generalization of
         // the constant `金額(-5)` check).
         // The discharge representation is typed by the checker like any other, keeping the language's
-        // own operations standing because that is what the analysis reading it has rules about.
+        // own operations standing because that is what the analysis reading it has rules about. A
+        // representation there is none of is not analyzed at all, rather than analyzed over the
+        // emitted tree, whose operations are no longer operations.
         Core dischargeBody = discharge == null ? null
                 : Elaborator.elaborate(discharge.body(), tenv,
                         new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
                                 .preserving(Preserved.byTheLanguagesOwnOperations()), output);
-        InvariantChecker.Findings inv = InvariantChecker.analyze(discharge, env.byName(), symbols);
+        InvariantChecker.Findings inv = InvariantChecker.analyze(dischargeBody,
+                discharge == null ? Map.of() : discharge.invariants(), env, symbols);
         warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {
             throw inv.errors().get(0);

@@ -51,12 +51,23 @@ public record Location(BindingId root, List<Step> path) {
      * ordinary data that happens to declare a field of that name keeps its two locations apart.
      */
     public Location then(Type readFrom, String field, Symbols symbols) {
-        if (field.equals("value") && TypeOps.isSingleValueNewtype(readFrom, symbols)) {
+        if (!isStep(readFrom, field, symbols)) {
             return this;
         }
         List<Step> longer = new ArrayList<>(path);
         longer.add(new Step(readFrom instanceof Type.Ref r ? r.name() : null, field));
         return new Location(root, longer);
+    }
+
+    /**
+     * Whether reading {@code field} from {@code readFrom} reaches somewhere else at all.
+     *
+     * <p>The rule above, asked on its own. A term this is read of is not a location — nothing binds
+     * it — and it is still the same value read the same two ways, so the rule is one and its two
+     * readers ask it here rather than each stating it.
+     */
+    public static boolean isStep(Type readFrom, String field, Symbols symbols) {
+        return !(field.equals("value") && TypeOps.isSingleValueNewtype(readFrom, symbols));
     }
 
     /**
@@ -67,10 +78,23 @@ public record Location(BindingId root, List<Step> path) {
      * fact can be about.
      */
     public static Location of(Core e, Symbols symbols) {
+        return of(e, symbols, Location::of);
+    }
+
+    /**
+     * The same, where {@code rooted} says where a binding is.
+     *
+     * <p>A binding is the location it is unless it was given another one — a helper's parameter is
+     * the argument it was handed, and a name given a field chain is that chain — so a reader that
+     * knows what its bindings were given answers with what they were given, and the rest of the walk
+     * is the same walk.
+     */
+    public static Location of(Core e, Symbols symbols,
+                              java.util.function.Function<BindingId, Location> rooted) {
         return switch (e) {
-            case Core.Read read -> of(read.binding());
+            case Core.Read read -> rooted.apply(read.binding());
             case Core.FieldAccess fa -> {
-                Location base = of(fa.target(), symbols);
+                Location base = of(fa.target(), symbols, rooted);
                 yield base == null ? null : base.then(fa.target().type(), fa.field(), symbols);
             }
             default -> null;

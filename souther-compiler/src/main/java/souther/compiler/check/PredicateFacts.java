@@ -2,7 +2,6 @@ package souther.compiler.check;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.function.Predicate;
 
 /**
  * The predicates the guards have settled on the current path, each keyed by a canonical rendering of
@@ -59,15 +58,4 @@ final class PredicateFacts {
         return !bottom && (positive ? fails : holds).contains(key);
     }
 
-    /** The facts with every matching key dropped — what a binding that rebinds a name leaves behind. */
-    PredicateFacts forgetIf(Predicate<String> drop) {
-        if (bottom || (holds.stream().noneMatch(drop) && fails.stream().noneMatch(drop))) {
-            return this;
-        }
-        Set<String> h = new HashSet<>(holds);
-        Set<String> f = new HashSet<>(fails);
-        h.removeIf(drop);
-        f.removeIf(drop);
-        return new PredicateFacts(false, Set.copyOf(h), Set.copyOf(f));
-    }
 }

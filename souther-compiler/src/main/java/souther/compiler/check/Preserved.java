@@ -42,8 +42,17 @@ public record Preserved(Map<ValueName, CompleteSignature> operations) {
      * listed here, so an operation the library gains is kept without this being edited — and one it
      * rewrites away before any of this ({@code List.fold} becomes {@code List.foldFrom}) has no
      * declaration to keep and is absent, as it must be.
+     *
+     * <p>Built once. The library is the same library for every tree that keeps it standing, and this
+     * is asked once per definition typed in such a representation.
      */
     public static Preserved byTheLanguagesOwnOperations() {
+        return THE_LANGUAGES_OWN;
+    }
+
+    private static final Preserved THE_LANGUAGES_OWN = readTheLibrary();
+
+    private static Preserved readTheLibrary() {
         Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();
         Prelude.entries().forEach((qualified, entry) -> {
             ValueName.Stdlib operation = new ValueName.Stdlib(qualified);

@@ -319,10 +319,9 @@ final class NumericDomain {
         return forgetIf(atom::equals);
     }
 
-    /** The domain with every fact about a matching atom dropped. A binding that rebinds a name
-     * invalidates each atom rooted at it — the name now denotes something else — and the caller,
-     * which owns the atom-key syntax, decides which those are. */
-    NumericDomain forgetIf(java.util.function.Predicate<String> drop) {
+    /** The domain with every fact about a matching atom dropped — what an assignment leaves behind of
+     * what it assigns to. */
+    private NumericDomain forgetIf(java.util.function.Predicate<String> drop) {
         if (bottom) {
             return this;
         }
