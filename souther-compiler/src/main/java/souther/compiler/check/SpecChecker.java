@@ -391,8 +391,12 @@ public final class SpecChecker {
         // A guard-discharged one is silent; an unproven one is a warning (a possible abort); one the
         // guards prove must fail on a reachable path is an error (the path-sensitive generalization of
         // the constant `金額(-5)` check).
-        // the invariant analysis reads its own atoms off the spellings a body writes, so it is
-        // handed the name view rather than the bindings
+        // The discharge representation is typed by the checker like any other, keeping the language's
+        // own operations standing because that is what the analysis reading it has rules about.
+        Core dischargeBody = discharge == null ? null
+                : Elaborator.elaborate(discharge.body(), tenv,
+                        new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
+                                .preserving(Preserved.byTheLanguagesOwnOperations()), output);
         InvariantChecker.Findings inv = InvariantChecker.analyze(discharge, env.byName(), symbols);
         warnings.addAll(inv.warnings());
         if (!inv.errors().isEmpty()) {

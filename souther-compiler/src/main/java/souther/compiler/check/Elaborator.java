@@ -1053,6 +1053,13 @@ public final class Elaborator {
     static void collectApplications(Ast.Binder binder, Ast.Expr e, Scope env,
                                             CheckContext ctx, List<List<Type>> out,
                                             Set<BindingId> inner) {
+        // Handed to something that declares what it takes. A call a representation keeps standing
+        // holds the application inside itself, so a function passed to one is applied nowhere this
+        // walk can see — but the declaration says the parameter types as plainly as an application
+        // would, and it says them at the position the function was given to.
+        if (e instanceof Ast.Apply call) {
+            handedOver(binder, call, env, ctx, out);
+        }
         if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Local applied
                 && applied.id().equals(binder.id())
                 && call.args().stream().noneMatch(a -> reaches(a, inner))) {
@@ -1068,6 +1075,13 @@ public final class Elaborator {
             case Ast.LetIn li -> {
                 collectApplications(binder, li.value(), env, ctx, out, inner);
                 collectApplications(binder, li.body(), env, ctx, out, with(inner, List.of(li.binder())));
+                // A name given to this function is this function: what the second name is used for is
+                // what the first one is used for. Followed rather than left to the applications alone,
+                // because an alias may be the only thing that is ever applied or handed over.
+                if (li.value() instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local
+                        && local.id().equals(binder.id())) {
+                    collectApplications(li.binder(), li.body(), env, ctx, out, inner);
+                }
             }
             case Ast.IfConstructed ic -> {
                 collectApplications(binder, ic.construct(), env, ctx, out, inner);
@@ -1086,6 +1100,47 @@ public final class Elaborator {
             }
             default -> TypeChecker.forEachChild(e,
                     sub -> collectApplications(binder, sub, env, ctx, out, inner));
+        }
+    }
+
+    /**
+     * What {@code call} says the parameter types are, where {@code binder} is the function it was
+     * given at a position declared to take one.
+     *
+     * <p>The declaration is polymorphic, so what it says depends on the call: {@code List.filter}
+     * takes {@code ('a) -> Bool} and the list beside it decides {@code 'a}. The other arguments are
+     * read first for that reason, and one that cannot be read yet leaves this call saying nothing —
+     * another use, or the author's annotation, answers instead.
+     */
+    private static void handedOver(Ast.Binder binder, Ast.Apply call, Scope env, CheckContext ctx,
+                                   List<List<Type>> out) {
+        CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
+        if (kept == null || kept.params().size() != call.args().size()) {
+            return;
+        }
+        for (int i = 0; i < call.args().size(); i++) {
+            if (!(call.args().get(i) instanceof Ast.Var v)
+                    || !(v.denotes() instanceof ValueName.Local local)
+                    || !local.id().equals(binder.id())
+                    || !(kept.params().get(i) instanceof Type.FnOf declared)) {
+                continue;
+            }
+            Map<String, Type> bind = new HashMap<>();
+            try {
+                for (int j = 0; j < call.args().size(); j++) {
+                    if (j != i && !(kept.params().get(j) instanceof Type.FnOf)) {
+                        TypeOps.unify(kept.params().get(j), typeOf(call.args().get(j), env, ctx),
+                                bind, ctx.symbols(), call.pos(),
+                                "argument " + (j + 1) + " of " + call.written());
+                    }
+                }
+            } catch (CompileException _) {
+                return;   // this call decides nothing here; what is wrong with it is reported there
+            }
+            Type.FnOf settled = (Type.FnOf) TypeOps.substitute(declared, bind);
+            if (settled.params().stream().noneMatch(p -> Type.mentions(p, t -> t instanceof Type.Var))) {
+                out.add(settled.params());
+            }
         }
     }
 
