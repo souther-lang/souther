@@ -84,8 +84,8 @@ public final class Formatter {
     private static CompileException tooDeep() {
         return CompileException.of(
                 Diagnostic.of(null, "parse.toodeep").title("parse.title").build(),
-                "an expression in this source nests too deeply to format;"
-                        + " name its parts with `let` to flatten it");
+                "this source nests too deeply to format;"
+                        + " break the nesting into named parts to flatten it");
     }
 
     // --- top level ---

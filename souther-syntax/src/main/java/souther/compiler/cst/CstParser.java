@@ -1507,7 +1507,10 @@ public final class CstParser {
     /** Opens a node — and the boundary every production that nests has to pass to do it, which is
      *  what lets one refusal here end a descent none of them checks for itself. */
     private void start(SyntaxKind kind) {
-        if (stack.size() >= MAX_DEPTH) {
+        // Two levels, not one: the frame about to open is a level, and whatever it ends up holding
+        // is a level under that — a node with nothing but a token in it is already two deep. What
+        // is counted here is the tree the frame would leave behind, which is what MAX_DEPTH bounds.
+        if (stack.size() + 2 > MAX_DEPTH) {
             refuseAsTooDeep();
         }
         stack.push(new Frame(kind));
@@ -1522,8 +1525,11 @@ public final class CstParser {
      *  position no walk finding the same limit in its own stack could have claimed — and ends the
      *  descent. */
     private void refuseAsTooDeep() {
-        error("parse.toodeep", "an expression in this source nests too deeply to read;"
-                + " name its parts with `let` to flatten it");
+        // Not "an expression": the bound is the tree's, and a type nested through its arguments or a
+        // pattern through a tuple reaches it the same way. Naming a part with `let` is the answer to
+        // one of those and not to the others, so what is asked for is the thing they share.
+        error("parse.toodeep", "this source nests too deeply to read;"
+                + " break the nesting into named parts to flatten it");
         throw new TooDeep();
     }
 

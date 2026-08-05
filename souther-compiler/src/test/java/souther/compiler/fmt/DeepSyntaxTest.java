@@ -9,6 +9,7 @@ import souther.compiler.cst.CstParser;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.function.IntFunction;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,11 +34,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * because the first attempt at this bounded two of them. A limit written into the productions that
  * read expressions is not a limit on the tree: the grammar closes its cycles in more places than one
  * reading finds — a unary minus recurses straight back into itself without passing through
- * {@code expr} at all, and types and patterns have cycles of their own. Each shape is checked for
- * the same four things, so a route that grows a tree past the bound fails here rather than in
- * whichever walk descends it first.
+ * {@code expr} at all, and types and patterns have cycles of their own. Every shape is put through
+ * the same questions — including at each depth either side of the bound, where a source comes back
+ * accepted and the bound is what a walker is relying on — so a route that grows a tree past it fails
+ * here rather than in whichever walk descends it first.
  */
-class FormatDeepExpressionTest {
+class DeepSyntaxTest {
 
     /** Small enough that the depths below are past it on any platform. A limit that only holds on a
      *  roomy stack is not a limit; these run where the old behaviour failed worst. */
@@ -45,8 +47,13 @@ class FormatDeepExpressionTest {
 
     private static final int RUNS = 8;
 
-    /** One way of writing something inside something else, written far past the bound. */
-    record Shape(String name, String source) {
+    /** One way of writing something inside something else, nested {@code n} levels deep. */
+    record Shape(String name, IntFunction<String> at) {
+        /** The shape written far past the bound, where the refusal is certain. */
+        String source() {
+            return at.apply(3000);
+        }
+
         @Override
         public String toString() {
             return name;
@@ -68,22 +75,22 @@ class FormatDeepExpressionTest {
         return List.of(
                 // Read by descending: the enclosing production calls the inner one.
                 new Shape("parenthesis nest",
-                        moduleWith("(".repeat(5000) + "1" + ")".repeat(5000))),
+                        n -> moduleWith("(".repeat(n) + "1" + ")".repeat(n))),
                 // Read by a loop that wraps what it has already read, so the frames never nest
                 // while the tree does — invisible to any guard placed on the descent.
-                new Shape("operator chain", moduleWith("1 + ".repeat(20000) + "1")),
+                new Shape("operator chain", n -> moduleWith("1 + ".repeat(n) + "1")),
                 // A cycle that never passes through the expression entry point at all.
-                new Shape("unary chain", moduleWith("-".repeat(5000) + "1")),
+                new Shape("unary chain", n -> moduleWith("-".repeat(n) + "1")),
                 // The type grammar's own cycle, through a type argument.
                 new Shape("generic type nest",
-                        "module m\n\ndata X = " + "List<".repeat(3000) + "Int" + ">".repeat(3000) + "\n"),
+                        n -> "module m\n\ndata X = " + "List<".repeat(n) + "Int" + ">".repeat(n) + "\n"),
                 // And through a tuple type.
                 new Shape("tuple type nest",
-                        "module m\n\ndata X = " + "(".repeat(3000) + "Int, Int" + ")".repeat(3000) + "\n"),
+                        n -> "module m\n\ndata X = " + "(".repeat(n) + "Int, Int" + ")".repeat(n) + "\n"),
                 // The pattern grammar's cycle, through a tuple pattern.
                 new Shape("tuple pattern nest",
-                        "module m\n\nbehavior f : (n: Int) -> Int\nlet f "
-                                + "(".repeat(3000) + "x" + ")".repeat(3000) + " = x\n"));
+                        n -> "module m\n\nbehavior f : (n: Int) -> Int\nlet f "
+                                + "(".repeat(n) + "x" + ")".repeat(n) + " = x\n"));
     }
 
     /** The bound a walker inherits. Every walk over this tree descends it by recursion, so this is
@@ -107,9 +114,35 @@ class FormatDeepExpressionTest {
         onSmallStack(() -> errors.set(CstParser.parse(shape.source()).errors()));
 
         assertNotNull(errors.get(), "the parse did not come back with an answer");
-        assertTrue(errors.get().stream().anyMatch(e -> e.legacyMessage().contains("deep")),
-                "expected a depth diagnostic, got: " + errors.get().stream()
-                        .map(CstError::legacyMessage).toList());
+        String said = errors.get().stream().map(CstError::legacyMessage)
+                .filter(m -> m.contains("deep")).findFirst().orElse(null);
+        assertNotNull(said, "expected a depth diagnostic, got: " + errors.get().stream()
+                .map(CstError::legacyMessage).toList());
+        // The bound is the tree's, so the diagnostic is too. `List<List<…<Int>…>>` reaches it
+        // without an expression in sight, and `let` is not what splits it up; a message that names
+        // either is telling the author to do something that does not apply to what they wrote.
+        assertFalse(said.contains("expression"),
+                "the depth diagnostic calls every shape an expression: " + said);
+        assertFalse(said.contains("let"),
+                "the depth diagnostic offers `let` to a type or a pattern: " + said);
+    }
+
+    /**
+     * The bound holds at the boundary, not only far past it. The shapes above are refused, and a
+     * refusal flattens what it had read — so they say nothing about a source that stops one level
+     * short and comes back accepted. That is where the bound is actually load-bearing, and where
+     * counting the frames rather than the tree they leave behind was wrong by one: 59 unary minuses
+     * were accepted with a tree 65 deep, against a bound of 64.
+     */
+    @ParameterizedTest
+    @MethodSource("shapes")
+    void theBoundHoldsEitherSideOfIt(Shape shape) {
+        for (int n = 0; n <= CstParser.MAX_DEPTH * 2; n++) {
+            int depth = CstParser.parse(shape.at().apply(n)).green().depth();
+            assertTrue(depth <= CstParser.MAX_DEPTH,
+                    shape.name() + " at n=" + n + " gave a tree " + depth
+                            + " deep, past the " + CstParser.MAX_DEPTH + " a walker is told to expect");
+        }
     }
 
     /** A refused source is still described in full: the tree covers every character it read, which
