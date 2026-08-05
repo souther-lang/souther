@@ -54,10 +54,10 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
 
     @Test
     void whatIsComputedIsNowhereAFactCanBeAbout() {
-        assertNull(Location.of(new Core.Int(1, Type.INT, POS), Symbols.none()));
-        assertNull(Location.of(new Core.Binary(Ast.BinOp.ADD,
+        assertNull(of(new Core.Int(1, Type.INT, POS)));
+        assertNull(of(new Core.Binary(Ast.BinOp.ADD,
                 new Core.Int(1, Type.INT, POS), new Core.Int(2, Type.INT, POS),
-                Type.INT, POS), Symbols.none()));
+                Type.INT, POS)));
     }
 
     private static Core read(BindingId binding, String spelledAs) {
@@ -65,6 +65,6 @@ class OneValueIsOneLocationHoweverItWasSpelledTest {
     }
 
     private static Location of(Core e) {
-        return Location.of(e, Symbols.none());
+        return Location.of(e, Symbols.none(), Location::of);
     }
 }

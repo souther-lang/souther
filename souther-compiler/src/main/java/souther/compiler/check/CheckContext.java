@@ -81,6 +81,18 @@ public record CheckContext(Symbols symbols, Ast.Data data, Map<String, ReqSig> r
     }
 
     /**
+     * The same context, typing the representation the invariant-discharge analysis reads: the
+     * language's own operations kept standing, because that is what the analysis has rules about.
+     *
+     * <p>Said once, though two trees are typed that way — a behavior's body and the invariants of the
+     * declarations it builds. They are two halves of one representation, and a line drawn in one of
+     * them and not the other is an analysis that quietly sees less.
+     */
+    public CheckContext forDischarge() {
+        return preserving(Preserved.byTheLanguagesOwnOperations());
+    }
+
+    /**
      * The same context, starting a tree that belongs to another representation.
      *
      * <p>What a representation keeps standing does not travel to a tree that is not it. A body

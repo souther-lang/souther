@@ -218,6 +218,13 @@ final class DischargeRules {
                 || NOT.equals(operation);
     }
 
+    /** The one container {@code e} asks the size of, or null where it is not a size call over one
+     * argument. Asked rather than tested, so no reader spells the shape of a size call itself. */
+    static Core sizeArgOf(Core e) {
+        return e instanceof Core.PreservedCall call && isSize(call.operation())
+                && call.args().size() == 1 ? call.args().get(0) : null;
+    }
+
     /** The container a size is really the size of: an operation that keeps the size of what it was
      * built from is peeled away, so {@code List.length(List.map(f, xs))} is the atom
      * {@code List.length(xs)}. How the elements are made has no bearing on how many there are, which

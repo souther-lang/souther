@@ -20,31 +20,31 @@ import java.util.Map;
  * spelling is a second binding, so a fact about the first stays true of the first and nothing
  * reads it under the second.
  */
-record Denotations(Map<BindingId, Denotes> what, Map<BindingId, Core> values) {
+record Denotations(Map<BindingId, Bound> bound) {
+
+    /** What a binding was given: the value it was bound to, and what that value denotes. */
+    record Bound(Core value, Denotes denotes) {}
 
     static Denotations none() {
-        return new Denotations(Map.of(), Map.of());
+        return new Denotations(Map.of());
     }
 
     /** What {@code binding} denotes, which is the location it is unless it was given something
      * else. */
     Denotes of(BindingId binding) {
-        Denotes given = what.get(binding);
-        return given != null ? given : new Denotes.At(Location.of(binding));
+        Bound given = bound.get(binding);
+        return given != null ? given.denotes() : new Denotes.At(Location.of(binding));
     }
 
     /** The value {@code binding} was given, or null where nothing recorded one. */
     Core valueOf(BindingId binding) {
-        return values.get(binding);
+        Bound given = bound.get(binding);
+        return given == null ? null : given.value();
     }
 
     Denotations binding(BindingId binding, Core value, Denotes denotes) {
-        Map<BindingId, Denotes> next = new HashMap<>(what);
-        next.put(binding, denotes);
-        Map<BindingId, Core> bound = new HashMap<>(values);
-        if (value != null) {
-            bound.put(binding, value);
-        }
-        return new Denotations(Map.copyOf(next), Map.copyOf(bound));
+        Map<BindingId, Bound> next = new HashMap<>(bound);
+        next.put(binding, new Bound(value, denotes));
+        return new Denotations(Map.copyOf(next));
     }
 }

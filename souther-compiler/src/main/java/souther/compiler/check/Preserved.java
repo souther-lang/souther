@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.Prelude;
-import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import java.util.LinkedHashMap;

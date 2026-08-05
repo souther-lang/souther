@@ -315,32 +315,28 @@ final class NumericDomain {
         return v == null ? null : v.negate();
     }
 
-    private NumericDomain forget(String atom) {
-        return forgetIf(atom::equals);
-    }
-
-    /** The domain with every fact about a matching atom dropped — what an assignment leaves behind of
+    /** The domain with every fact about {@code atom} dropped — what an assignment leaves behind of
      * what it assigns to. */
-    private NumericDomain forgetIf(java.util.function.Predicate<String> drop) {
+    private NumericDomain forget(String atom) {
         if (bottom) {
             return this;
         }
         Map<String, BigDecimal> nlo = new HashMap<>(lo);
         Map<String, BigDecimal> nhi = new HashMap<>(hi);
-        nlo.keySet().removeIf(drop);
-        nhi.keySet().removeIf(drop);
+        nlo.remove(atom);
+        nhi.remove(atom);
         Map<String, Map<String, BigDecimal>> nd = new HashMap<>();
         diff.forEach((a, row) -> {
-            if (!drop.test(a)) {
+            if (!a.equals(atom)) {
                 Map<String, BigDecimal> nr = new HashMap<>(row);
-                nr.keySet().removeIf(drop);
+                nr.remove(atom);
                 if (!nr.isEmpty()) {
                     nd.put(a, nr);
                 }
             }
         });
         List<Asserted> nk = new ArrayList<>(kept);
-        nk.removeIf(a -> a.f().coefs().keySet().stream().anyMatch(drop));
+        nk.removeIf(a -> a.f().coefs().containsKey(atom));
         return new NumericDomain(false, nlo, nhi, nd, List.copyOf(nk));
     }
 

@@ -15,6 +15,7 @@ import souther.compiler.types.ValueName;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -37,11 +38,36 @@ import java.util.Set;
 final class Predicates {
 
     private final Terms terms;
-    private final Clauses clauses;
 
-    Predicates(Terms terms, Clauses clauses) {
+    Predicates(Terms terms) {
         this.terms = terms;
-        this.clauses = clauses;
+    }
+
+    /** The relations known of every element of {@code container}: those stated of it as written, and
+     * those stated of a container it was built from that travel every construction in between. */
+    List<Quantified> elementRelations(Core container, Known k, Denotations at) {
+        List<Quantified> found = new ArrayList<>();
+        Set<Shape> crossed = EnumSet.noneOf(Shape.class);
+        Core source = container;
+        while (true) {
+            String key = terms.bodyKey(source, at);
+            if (key != null) {
+                for (Quantified q : k.quantified()) {
+                    if (key.equals(q.container()) && q.through().containsAll(crossed)) {
+                        found.add(q);
+                    }
+                }
+            }
+            if (!(source instanceof Core.PreservedCall call)) {
+                return found;
+            }
+            Built built = DischargeRules.builtFrom(call.operation());
+            if (built == null || built.from() >= call.args().size()) {
+                return found;
+            }
+            crossed.add(built.shape());
+            source = call.args().get(built.from());
+        }
     }
 
     /** What {@code q} says of the value at {@code element}, taken into {@code k}. The predicate is
@@ -157,7 +183,7 @@ final class Predicates {
      * elsewhere, and that check names the clause that failed rather than only saying one did, so it
      * is left to say it. */
     List<Clause> obligations(Core inv, Known k, Denotations at, boolean decidesFalse) {
-        return obligations(inv, k, at, Set.of(), decidesFalse);
+        return obligations(inv, k, at, Set.of(), true, decidesFalse);
     }
 
     /** The same, where {@code unnamed} holds the values the site hands over that no clause may be
@@ -212,7 +238,8 @@ final class Predicates {
         // A predicate over a value no guard could be written about is not a predicate a guard will
         // settle, so it is not owed as one — where the domain can say something of that value it has
         // already said it above, and where it cannot the run-time check stands for the clause.
-        List<String> keys = names(polar.expr(), unnamed) ? List.of() : factKeys(polar.expr(), at);
+        List<String> keys = !unnamed.isEmpty() && names(polar.expr(), unnamed)
+                ? List.of() : factKeys(polar.expr(), at);
         boolean stated = polar.positive();
         Fact fact = keys.isEmpty() ? null : new Fact(stated ? keys : firstOnly(keys), stated);
         if (numeric == null && fact == null) {
@@ -378,11 +405,12 @@ final class Predicates {
             Core.forEachChild(e, child -> sizeFacts(child, at, out));
             return;
         }
-        if (DischargeRules.isSize(call.operation()) && call.args().size() == 1) {
+        Core container = DischargeRules.sizeArgOf(call);
+        if (container != null) {
             String atom = Terms.sizeAtom(call, arg -> terms.bodyKey(arg, at));
             if (atom != null) {
                 out.add(new Constraint(LinearForm.atom(atom), Rel.GE));   // a size is never negative
-                bounds(call.operation(), DischargeRules.sizeSource(call.args().get(0)), at, out);
+                bounds(call.operation(), DischargeRules.sizeSource(container), at, out);
             }
         }
         for (Core arg : call.args()) {
@@ -407,8 +435,8 @@ final class Predicates {
             return;
         }
         out.add(new Constraint(
-                LinearForm.atom(sizeCall.name() + "(" + here + ")")
-                        .minus(LinearForm.atom(sizeCall.name() + "(" + there + ")")),
+                LinearForm.atom(Terms.sizeKey(sizeCall, here))
+                        .minus(LinearForm.atom(Terms.sizeKey(sizeCall, there))),
                 Rel.LE));
         bounds(sizeCall, source, at, out);
     }
@@ -533,7 +561,7 @@ final class Predicates {
         }
         Core on = Terms.read(element, Terms.elementType(step.type()), step.pos());
         for (String field : traced) {
-            on = new Core.FieldAccess(on, field, clauses.fieldType(on.type(), field), step.pos());
+            on = new Core.FieldAccess(on, field, terms.fieldType(on.type(), field), step.pos());
         }
         return new Core.Block(List.of(element), on, step.type(), step.pos());
     }

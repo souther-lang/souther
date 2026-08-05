@@ -44,8 +44,8 @@ class APreservedCallIsRefusedByWhatItIsNotByWhatItNamesTest {
     }
 
     private static void assertRefused(ValueName operation) {
-        IllegalStateException e = BodyGen.refuse(
-                new Core.PreservedCall(operation, List.of(), Type.INT, POS));
+        IllegalStateException e = new Core.PreservedCall(operation, List.of(), Type.INT, POS)
+                .unexpectedIn("the emitter");
 
         assertEquals(IllegalStateException.class, e.getClass());
         assertTrue(e.getMessage().contains(String.valueOf(operation)), e.getMessage());

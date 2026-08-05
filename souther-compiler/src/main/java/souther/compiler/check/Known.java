@@ -6,9 +6,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-/** What the guards have settled on the current path: numeric relations, predicates known to hold
- * or to fail, and relations known of every element of a container. Threaded functionally through
- * the walk, as the domain alone once was. */
+/** What the guards have settled on the current path: numeric relations, predicates known to hold or
+ * to fail, relations known of every element of a container, and the terms an assumption named — which
+ * is what makes a computed value one a clause may be read against. Threaded functionally through the
+ * walk, as the domain alone once was. */
 record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quantified,
                      Set<String> spoken) {
 

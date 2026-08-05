@@ -84,7 +84,19 @@ public sealed interface Core {
      * one.
      */
     record PreservedCall(ValueName operation, List<Core> args, Type type,
-                         SourcePos pos) implements Core {}
+                         SourcePos pos) implements Core {
+
+        /**
+         * What a reader that keeps no call standing says when one reaches it: this compiler failed to
+         * expand it. Said here so every such reader says it the same way, and says it about the node
+         * rather than about the operation — which of them a reader has bytecode for is not the
+         * question.
+         */
+        public IllegalStateException unexpectedIn(String reader) {
+            return new IllegalStateException(
+                    "a preserved call (" + operation + ") reached " + reader + ", at " + pos);
+        }
+    }
 
     /**
      * Applying a function value the body holds: a helper's function parameter, or a lambda a
@@ -359,6 +371,17 @@ public sealed interface Core {
                             java.util.function.UnaryOperator<Read> onNameSlot,
                             java.util.function.UnaryOperator<NewData> onConstructionSlot) {
         return atSlots(e, onExprSlot, onNameSlot, onConstructionSlot);
+    }
+
+    /**
+     * The same, recursing into a construction slot with the operators the other slots are given —
+     * what a pass that rewrites expressions wants, since a construction an attempt holds is as much
+     * an expression as anything else and no such pass has anything else to say about one.
+     */
+    static Core mapAll(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
+                       java.util.function.UnaryOperator<Read> onNameSlot) {
+        return atSlots(e, onExprSlot, onNameSlot,
+                nd -> atSlots(nd, onExprSlot, onNameSlot));
     }
 
     /**

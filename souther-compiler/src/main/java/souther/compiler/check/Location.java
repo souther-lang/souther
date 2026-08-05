@@ -3,7 +3,6 @@ package souther.compiler.check;
 import souther.compiler.core.Core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
-import souther.compiler.types.TypeName;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,18 +23,14 @@ import java.util.List;
  * dropping every fact that mentioned the name was the alternative, which drops facts that merely read
  * like they mention it.
  *
- * <p>A step carries the type it is read from, so a field is a field of something rather than a
- * spelling: two types may both declare {@code value}, and only one of them is the newtype whose
- * {@code value} is the newtype itself.
+ * <p>Which fields are steps is decided from what each is read from and not from how it is spelled
+ * ({@link #isStep}), so two types that both declare {@code value} keep their locations apart.
  */
-public record Location(BindingId root, List<Step> path) {
+public record Location(BindingId root, List<String> path) {
 
     public Location {
         path = List.copyOf(path);
     }
-
-    /** One field read, and the type it was read from. */
-    public record Step(TypeName owner, String field) {}
 
     public static Location of(BindingId root) {
         return new Location(root, List.of());
@@ -54,8 +49,8 @@ public record Location(BindingId root, List<Step> path) {
         if (!isStep(readFrom, field, symbols)) {
             return this;
         }
-        List<Step> longer = new ArrayList<>(path);
-        longer.add(new Step(readFrom instanceof Type.Ref r ? r.name() : null, field));
+        List<String> longer = new ArrayList<>(path);
+        longer.add(field);
         return new Location(root, longer);
     }
 
@@ -71,18 +66,12 @@ public record Location(BindingId root, List<Step> path) {
     }
 
     /**
-     * The location {@code e} names, or null where it names none.
+     * The location {@code e} names, or null where it names none, with {@code rooted} saying where a
+     * binding is.
      *
      * <p>A location is a binding and the fields read from it. Anything else — a call, an arithmetic
      * expression, a literal — is a value that was computed, and a computed value is not somewhere a
      * fact can be about.
-     */
-    public static Location of(Core e, Symbols symbols) {
-        return of(e, symbols, Location::of);
-    }
-
-    /**
-     * The same, where {@code rooted} says where a binding is.
      *
      * <p>A binding is the location it is unless it was given another one — a helper's parameter is
      * the argument it was handed, and a name given a field chain is that chain — so a reader that
@@ -104,8 +93,8 @@ public record Location(BindingId root, List<Step> path) {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder(String.valueOf(root));
-        for (Step s : path) {
-            sb.append('.').append(s.field());
+        for (String field : path) {
+            sb.append('.').append(field);
         }
         return sb.toString();
     }

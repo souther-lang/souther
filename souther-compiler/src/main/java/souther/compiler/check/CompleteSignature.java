@@ -42,8 +42,4 @@ public record CompleteSignature(List<Type> params, Type result) {
         return new CompleteSignature(params, result);
     }
 
-    /** This signature as the function type an application is settled against. */
-    public Type.FnOf asFunction() {
-        return (Type.FnOf) Type.fn(params, result);
-    }
 }

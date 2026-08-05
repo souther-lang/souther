@@ -53,19 +53,6 @@ final class BodyGen {
     private final String pkg;
     private final Symbols symbols;
 
-    /**
-     * What the emitter says about a call a representation kept standing.
-     *
-     * <p>Decided by the node and not by the operation: whether this emitter has bytecode for what the
-     * call names is beside the point, because the tree it emits from keeps no call standing at all.
-     * Answering by looking the operation up would make the refusal depend on a table, and a table is
-     * the thing that quietly grows an exception.
-     */
-    static IllegalStateException refuse(Core.PreservedCall call) {
-        return new IllegalStateException("a preserved call (" + call.operation()
-                + ") reached the emitter, at " + call.pos());
-    }
-
     private ClassDesc cd(TypeName typeName) {
         return ctx.cd(typeName);
     }
@@ -652,7 +639,7 @@ final class BodyGen {
                 // A call a representation kept standing for an analysis to read. Refused by what the
                 // node is, not by whether the operation is one this emitter knows: the tree this
                 // emits from keeps none, and one arriving means it was handed another tree.
-                case Core.PreservedCall p -> throw refuse(p);
+                case Core.PreservedCall p -> throw p.unexpectedIn("the emitter");
                 case Core.Int x -> code.loadConstant(x.value());
                 case Core.Decimal x -> {
                     code.new_(CD_BigDecimal);
@@ -1933,7 +1920,7 @@ final class BodyGen {
 
         private void collectFree(Core e, Set<BindingId> bound, Reaches free) {
             switch (e) {
-                case Core.PreservedCall p -> throw refuse(p);
+                case Core.PreservedCall p -> throw p.unexpectedIn("the emitter");
                 case Core.Read v -> reaches(v, bound, free);
                 case Core.Call c -> {
                     // an injected behavior the body calls is handed over too: the lambda is a class

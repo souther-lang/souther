@@ -398,7 +398,7 @@ public final class SpecChecker {
         Core dischargeBody = discharge == null ? null
                 : Elaborator.elaborate(discharge.body(), tenv,
                         new CheckContext(symbols, null, reqSigs).withCallees(calleeSigs)
-                                .preserving(Preserved.byTheLanguagesOwnOperations()), output);
+                                .forDischarge(), output);
         InvariantChecker.Findings inv = InvariantChecker.analyze(dischargeBody,
                 discharge == null ? Map.of() : discharge.invariants(), env, symbols);
         warnings.addAll(inv.warnings());

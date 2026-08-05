@@ -6,6 +6,7 @@ import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -35,6 +36,10 @@ final class Clauses {
     private final Map<Ast.Data, Map<String, Type>> fields = new HashMap<>();
     private final Map<Ast.Data, Map<String, BindingId>> bindings = new HashMap<>();
     private final Map<Ast.Expr, Optional<Core>> typed = new IdentityHashMap<>();
+    private final Map<TypeName, List<Ast.InvariantClause>> effective = new HashMap<>();
+    /** Which of a declaration's own fields each typed clause reads — what a construction has to have
+     * filled for the clause to be read at all. */
+    private final Map<Core, Set<BindingId>> readsFields = new IdentityHashMap<>();
 
     /**
      * @param inTheAnalysisRepresentation the clauses of the module being checked, in the
@@ -52,7 +57,8 @@ final class Clauses {
     /** Every invariant that applies to {@code named}, each in the analysis representation where this
      * module declares it. */
     List<Ast.InvariantClause> of(TypeName named, Ast.Data data) {
-        return TypeOps.effectiveInvariants(named, data, symbols, inTheAnalysisRepresentation::get);
+        return effective.computeIfAbsent(named, name ->
+                TypeOps.effectiveInvariants(name, data, symbols, inTheAnalysisRepresentation::get));
     }
 
     /** What {@code data}'s fields are. */
@@ -64,13 +70,6 @@ final class Clauses {
      * fills. */
     Map<String, BindingId> bindingsOf(Ast.Data data) {
         return bindings.computeIfAbsent(data, d -> TypeOps.fieldBindings(d, symbols));
-    }
-
-    /** The type of {@code field} read from {@code owner}, or null where that is not a field of a
-     * declaration this module can see. */
-    Type fieldType(Type owner, String field) {
-        return owner instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.Data data
-                ? fieldsOf(data).get(field) : null;
     }
 
     /**
@@ -87,8 +86,7 @@ final class Clauses {
             try {
                 return Optional.ofNullable(Elaborator.elaborate(written,
                         DataChecker.fieldScope(data, symbols),
-                        CheckContext.of(symbols).forData(data)
-                                .preserving(Preserved.byTheLanguagesOwnOperations()),
+                        CheckContext.of(symbols).forData(data).forDischarge(),
                         Type.BOOL));
             } catch (RuntimeException _) {
                 return Optional.empty();
@@ -109,14 +107,42 @@ final class Clauses {
         if (stated == null) {
             return null;
         }
-        Set<BindingId> declared = new HashSet<>(bindingsOf(data).values());
-        boolean[] whole = {true};
-        readsOf(stated, binding -> {
-            if (declared.contains(binding) && !given.containsKey(binding)) {
-                whole[0] = false;
+        return given.keySet().containsAll(fieldsRead(stated, data)) ? substituted(stated, given)
+                : null;
+    }
+
+    /**
+     * Every clause of {@code named}, each stated where its fields are given what {@code given} says,
+     * and the ones that state nothing this check can read left out.
+     *
+     * <p>Both directions ask this. What a clause guarantees where the value already exists and what
+     * it owes where one is being built are the same clauses read the same way, and they differ only
+     * in what the fields are given — a read of each field, or the value each is being handed.
+     */
+    List<Core> statedAt(TypeName named, Ast.Data data, Map<BindingId, Core> given) {
+        List<Core> stated = new ArrayList<>();
+        for (Ast.InvariantClause inv : of(named, data)) {
+            Core one = statedAt(inv.expr(), data, given);
+            if (one != null) {
+                stated.add(one);
             }
+        }
+        return stated;
+    }
+
+    /** Which of {@code data}'s own fields {@code clause} reads, remembered: a clause is read at every
+     * construction of its type, and what it reads does not change between them. */
+    private Set<BindingId> fieldsRead(Core clause, Ast.Data data) {
+        return readsFields.computeIfAbsent(clause, read -> {
+            Set<BindingId> declared = new HashSet<>(bindingsOf(data).values());
+            Set<BindingId> found = new HashSet<>();
+            readsOf(read, binding -> {
+                if (declared.contains(binding)) {
+                    found.add(binding);
+                }
+            });
+            return Set.copyOf(found);
         });
-        return whole[0] ? substituted(stated, given) : null;
     }
 
     /** {@code e} with each binding {@code given} names replaced by the value it was given. */
@@ -125,12 +151,10 @@ final class Clauses {
             Core value = given.get(r.binding());
             return value != null ? value : r;
         }
-        return Core.mapChildren(e, child -> substituted(child, given),
+        return Core.mapAll(e, child -> substituted(child, given),
                 // A name slot holds a binding and nothing else, so a value put there would be
                 // something the reader of that slot cannot load. Only another name may stand there.
-                name -> substituted(name, given) instanceof Core.Read r ? r : name,
-                nd -> (Core.NewData) Core.mapChildren(nd, child -> substituted(child, given),
-                        name -> substituted(name, given) instanceof Core.Read r ? r : name));
+                name -> substituted(name, given) instanceof Core.Read r ? r : name);
     }
 
     /** Every binding {@code e} reads, at any depth. */

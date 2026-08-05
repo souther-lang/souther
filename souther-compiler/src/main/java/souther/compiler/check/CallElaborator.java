@@ -177,11 +177,8 @@ public final class CallElaborator {
             }
             (Type.mentions(ca.type(i), BottomInfer::answersNoValue) ? bottoms : stating).add(i);
         }
+        stating.addAll(bottoms);
         for (int i : stating) {
-            TypeOps.unify(params.get(i), ca.type(i), bind, ctx.symbols(),
-                    call.pos(), "argument " + (i + 1) + " of " + call.written());
-        }
-        for (int i : bottoms) {
             TypeOps.unify(params.get(i), ca.type(i), bind, ctx.symbols(),
                     call.pos(), "argument " + (i + 1) + " of " + call.written());
         }

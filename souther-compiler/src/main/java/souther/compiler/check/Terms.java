@@ -8,6 +8,8 @@ import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.ConstructionOrigin;
 import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -36,6 +38,7 @@ import java.util.Set;
 final class Terms {
 
     private final Symbols symbols;
+    private final Map<TypeName, Boolean> numericNewtypes = new HashMap<>();
 
     Terms(Symbols symbols) {
         this.symbols = symbols;
@@ -55,8 +58,10 @@ final class Terms {
         return e;
     }
 
-    /** The shared affine walk: literals and {@code +}/{@code -} compose; every other node is handed to
-     * {@code leaf} (which decides whether it is an atom, a location, or opaque). */
+    /** The affine walk: literals and {@code +}/{@code -} compose; every other node is handed to
+     * {@code leaf} (which decides whether it is an atom, a location, or opaque). It takes the leaf
+     * rule rather than fixing one because a binding it reads through answers with what that binding
+     * was given. */
     LinearForm affine(Core raw, java.util.function.Function<Core, LinearForm> leaf) {
         Core e = asOperator(raw);
         if (e instanceof Core.PreservedCall) {
@@ -148,11 +153,11 @@ final class Terms {
     /** How many elements a size call over a value written out counts, or {@code null} where its
      * argument is not one. */
     BigDecimal writtenSize(Core e, Denotations at) {
-        if (!(e instanceof Core.PreservedCall call) || !DischargeRules.isSize(call.operation())
-                || call.args().size() != 1) {
+        Core container = DischargeRules.sizeArgOf(e);
+        if (container == null) {
             return null;
         }
-        Core written = writtenValue(call.args().get(0), at);
+        Core written = writtenValue(container, at);
         return written instanceof Core.ListLit list
                 ? BigDecimal.valueOf(list.elements().size()) : null;
     }
@@ -223,12 +228,19 @@ final class Terms {
     /** The atom key of {@code SIZE_CALL(container)} when {@code key} can name the container, else
      * {@code null}. */
     static String sizeAtom(Core e, java.util.function.Function<Core, String> key) {
-        if (!(e instanceof Core.PreservedCall call) || !DischargeRules.isSize(call.operation())
-                || call.args().size() != 1) {
+        Core container = DischargeRules.sizeArgOf(e);
+        if (container == null) {
             return null;
         }
-        String arg = key.apply(DischargeRules.sizeSource(call.args().get(0)));
-        return arg == null ? null : call.operation().name() + "(" + arg + ")";
+        String arg = key.apply(DischargeRules.sizeSource(container));
+        return arg == null ? null : sizeKey(((Core.PreservedCall) e).operation(), arg);
+    }
+
+    /** How a size over a named container is written as an atom. The same string a call keys as
+     * ({@link #termKey}), said here so a guard's term and a clause's atom cannot drift apart — they
+     * meet by this key and by nothing else. */
+    static String sizeKey(ValueName size, String container) {
+        return size.name() + "(" + container + ")";
     }
 
 
@@ -243,7 +255,7 @@ final class Terms {
      * still the value it is and so is part of the term. Anything outside this grammar keys as
      * {@code null}, and the clause reading it is left opaque.
      */
-    String termKey(Core raw, Denotations at, Map<BindingId, String> bound, int depth) {
+    private String termKey(Core raw, Denotations at, Map<BindingId, String> bound, int depth) {
         Core e = asOperator(raw);
         BindingId root = rootBinding(e);
         if (root != null) {
@@ -606,6 +618,14 @@ final class Terms {
     }
 
 
+    /** The type of {@code field} read from {@code owner}, or null where that is not a field of a
+     * declaration this module can see. Asked of the one field, since resolving the whole
+     * declaration's fields is a question about a declaration this reader may not own. */
+    Type fieldType(Type owner, String field) {
+        return owner instanceof Type.Ref r && symbols.get(r.name()) instanceof Ast.Data data
+                ? TypeOps.fieldType(data, field, symbols) : null;
+    }
+
     /** What a container hands its closure: a list's or set's element, a map's value (the key is the
      * other closure parameter and is not the one the table credits), an option's payload, and a
      * function's first parameter where what is held is the closure itself. */
@@ -628,8 +648,14 @@ final class Terms {
         return null;
     }
 
+    /** Whether {@code t} is a newtype over a number, remembered by the type it names. Asked at every
+     * leaf of every affine walk, and answering it walks the declaration's fields. */
     boolean numericNewtype(Type t) {
-        return TypeOps.directNumericNewtypeBase(t, symbols) != null;
+        if (!(t instanceof Type.Ref ref)) {
+            return TypeOps.directNumericNewtypeBase(t, symbols) != null;
+        }
+        return numericNewtypes.computeIfAbsent(ref.name(),
+                _ -> TypeOps.directNumericNewtypeBase(t, symbols) != null);
     }
 
     boolean isNumeric(Type t) {

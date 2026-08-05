@@ -127,8 +127,7 @@ public final class GuardThresholds {
             // A call kept standing names no location, and its presence says this walk was handed a
             // representation it does not read. Said rather than answered with "no path", which would
             // be the same answer a number gives.
-            case Core.PreservedCall p -> throw new IllegalStateException(
-                    "a preserved call (" + p.operation() + ") reached guard thresholds, at " + p.pos());
+            case Core.PreservedCall p -> throw p.unexpectedIn("guard thresholds");
             case null, default -> null;
         };
     }

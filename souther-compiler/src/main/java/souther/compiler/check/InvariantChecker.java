@@ -1,9 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.DischargeRules.Built;
 import souther.compiler.check.DischargeRules.Combinator;
-import souther.compiler.check.DischargeRules.Shape;
 import souther.compiler.check.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
@@ -16,7 +14,6 @@ import souther.compiler.types.TypeName;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -27,8 +24,7 @@ import java.util.Set;
 
 /**
  * The intraprocedural invariant-discharge check (spec §invariant-discharge). It walks a behavior's
- * body threading what the guards have settled — a {@link NumericDomain} of relations and a
- * {@link PredicateFacts} of everything that states no relation — seeded from the input types'
+ * body threading what the guards have settled ({@link Known}), seeded from the input types'
  * invariants and refined along each {@code guard}/{@code if} guard (a {@code guard} is already an
  * {@code if} here). At every construction whose invariant it can carry, it asks whether the guards
  * <em>discharge</em> it. A construction proven to violate its invariant on a reachable path is a
@@ -78,11 +74,10 @@ public final class InvariantChecker {
      * protecting against so much as what it declines to spend the time on. */
     private static final int BRANCHES_OPENED = 3;
 
-    /** The operations the combinator table has a rule for, for the test that holds it to being
-     * reachable. */
-    static Set<String> combinatorNames() {
-        return DischargeRules.combinatorNames();
-    }
+    /** How far into a value's fields the seeding reads. A type's own invariant is what its fields
+     * guarantee, and a field's type carries its own; past a couple of levels what a clause could be
+     * read against is a value the body would have had to name, and it names it by reading it. */
+    private static final int FIELDS_SEEDED = 2;
 
     private final Symbols symbols;
     /** The declarations' invariants, typed where they are declared and read where a value is built. */
@@ -99,7 +94,7 @@ public final class InvariantChecker {
         this.symbols = symbols;
         this.clauses = new Clauses(symbols, dischargeInvariants);
         this.terms = new Terms(symbols);
-        this.predicates = new Predicates(terms, clauses);
+        this.predicates = new Predicates(terms);
     }
 
     /**
@@ -160,7 +155,7 @@ public final class InvariantChecker {
         if (found[0] != null) {
             return found[0];
         }
-        return terms.termKey(e, Denotations.none(), Map.of(), 0) == null ? e : null;
+        return terms.bodyKey(e, Denotations.none()) == null ? e : null;
     }
 
     /**
@@ -197,10 +192,10 @@ public final class InvariantChecker {
             // and what the two readings find is said once. Every place a conditional can be given —
             // to a field, to a name, to a guard — is this one place.
             walk(value.cond(), k, at, depth);
-            String same = terms.bodyKey(value, at);
-            say(reading(without(e, value, same, value.then(), at),
+            Set<Core> alike = sameConditional(e, value, at);
+            say(reading(without(e, alike, value.then()),
                             predicates.assumeCond(value.cond(), k, at, true), at, depth),
-                    reading(without(e, value, same, value.els(), at),
+                    reading(without(e, alike, value.els()),
                             predicates.assumeCond(value.cond(), k, at, false), at, depth));
             return;
         }
@@ -277,7 +272,7 @@ public final class InvariantChecker {
                 Type elem = Terms.elementType(container.type());
                 // The container is read where the call is written, so what is known of its elements
                 // is looked up before the closure's parameter stands for anything.
-                List<Quantified> relations = elementRelations(container, k, at);
+                List<Quantified> relations = predicates.elementRelations(container, k, at);
                 Core element = Terms.read(step.params().get(combo.elementParam()), elem, step.pos());
                 // an element of a container is not a location the body can otherwise name
                 Known k2 = seedAt(element, k, at, 0);   // the element carries its type's invariant
@@ -288,33 +283,6 @@ public final class InvariantChecker {
             } else {
                 walk(arg, k, at, depth);
             }
-        }
-    }
-
-    /** The relations known of every element of {@code container}: those stated of it as written, and
-     * those stated of a container it was built from that travel every construction in between. */
-    private List<Quantified> elementRelations(Core container, Known k, Denotations at) {
-        List<Quantified> found = new ArrayList<>();
-        Set<Shape> crossed = EnumSet.noneOf(Shape.class);
-        Core source = container;
-        while (true) {
-            String key = terms.bodyKey(source, at);
-            if (key != null) {
-                for (Quantified q : k.quantified()) {
-                    if (key.equals(q.container()) && q.through().containsAll(crossed)) {
-                        found.add(q);
-                    }
-                }
-            }
-            if (!(source instanceof Core.PreservedCall call)) {
-                return found;
-            }
-            Built built = DischargeRules.builtFrom(call.operation());
-            if (built == null || built.from() >= call.args().size()) {
-                return found;
-            }
-            crossed.add(built.shape());
-            source = call.args().get(built.from());
         }
     }
 
@@ -403,22 +371,16 @@ public final class InvariantChecker {
      * {@code given}. */
     private Verdict verdictOf(TypeName named, Ast.Data type, Map<BindingId, Core> given, Known k,
                               Denotations at, boolean decidesFalse) {
-        List<Ast.InvariantClause> invs = clauses.of(named, type);
-        if (invs.isEmpty()) {
-            return Verdict.PROVED;
-        }
         // What the construction hands over that no clause may be read against. A clause naming one of
         // them is left to the run-time check, and one that is decided outright is still decided: what
         // cannot be guarded is not the same as what cannot be computed.
         Set<Core> unnamed = unnamed(given.values(), k, at);
         List<Predicates.Clause> owed = new ArrayList<>();
-        for (Ast.InvariantClause inv : invs) {
-            // A newtype construction from a value written out is the constant check's to report: it
-            // names the clause that failed. It reads the construction as written, so a name given the
-            // value is not one it sees, and this check says it instead.
-            Core stated = clauses.statedAt(inv.expr(), type, given);
-            List<Predicates.Clause> o = stated == null ? null
-                    : predicates.obligations(stated, k, at, unnamed, decidesFalse);
+        // A newtype construction from a value written out is the constant check's to report: it names
+        // the clause that failed. It reads the construction as written, so a name given the value is
+        // not one it sees, and this check says it instead — which is what `decidesFalse` carries.
+        for (Core stated : clauses.statedAt(named, type, given)) {
+            List<Predicates.Clause> o = predicates.obligations(stated, k, at, unnamed, decidesFalse);
             if (o != null) {
                 owed.addAll(o);
             }
@@ -587,21 +549,42 @@ public final class InvariantChecker {
      * once to guard on and once to build from — wrote one value, and reading the two as two would
      * make the guard say nothing about what is built.
      */
-    private Core without(Core e, Core.If was, String key, Core becomes, Denotations at) {
-        if (e == was || (key != null && e instanceof Core.If && key.equals(terms.bodyKey(e, at)))) {
+    private Core without(Core e, Set<Core> was, Core becomes) {
+        if (was.contains(e)) {
             return becomes;
         }
         if (e instanceof Core.Block) {
             return e;
         }
-        Core made = Core.mapChildren(e, child -> without(child, was, key, becomes, at),
-                name -> name,
-                nd -> (Core.NewData) Core.mapChildren(nd,
-                        child -> without(child, was, key, becomes, at), name -> name));
+        Core made = Core.mapAll(e, child -> without(child, was, becomes), name -> name);
         if (made != e) {
             rebuilt.put(made, e);
         }
         return made;
+    }
+
+    /** Every conditional in {@code e} that computes what {@code value} computes, {@code value}
+     * included. Asked once for the two readings, since which nodes those are does not depend on which
+     * branch is being read. */
+    private Set<Core> sameConditional(Core e, Core.If value, Denotations at) {
+        Set<Core> alike = Collections.newSetFromMap(new IdentityHashMap<>());
+        alike.add(value);
+        String key = terms.bodyKey(value, at);
+        if (key != null) {
+            collectAlike(e, key, at, alike);
+        }
+        return alike;
+    }
+
+    private void collectAlike(Core e, String key, Denotations at, Set<Core> alike) {
+        if (e instanceof Core.Block) {
+            return;
+        }
+        if (e instanceof Core.If && key.equals(terms.bodyKey(e, at))) {
+            alike.add(e);
+            return;
+        }
+        Core.forEachChild(e, child -> collectAlike(child, key, at, alike));
     }
 
     /** Says of each construction the two readings reached what the two of them together decide. One
@@ -631,8 +614,6 @@ public final class InvariantChecker {
                 "constructing `" + type.name() + "` here violates its invariant on a reachable path"));
     }
 
-    // --- invariant / condition -> constraints --------------------------------------------------
-
     // --- seeding -------------------------------------------------------------------------------
 
     /**
@@ -646,7 +627,7 @@ public final class InvariantChecker {
      * only in direction.
      */
     private Known seedAt(Core root, Known k, Denotations at, int depth) {
-        if (depth > 2 || !(root.type() instanceof Type.Ref ref)
+        if (depth > FIELDS_SEEDED || !(root.type() instanceof Type.Ref ref)
                 || !(symbols.get(ref.name()) instanceof Ast.Data data)) {
             return k;
         }
@@ -661,11 +642,7 @@ public final class InvariantChecker {
         });
         Known out = k;
         List<Quantified> quantified = new ArrayList<>();
-        for (Ast.InvariantClause inv : clauses.of(ref.name(), data)) {
-            Core stated = clauses.statedAt(inv.expr(), data, given);
-            if (stated == null) {
-                continue;
-            }
+        for (Core stated : clauses.statedAt(ref.name(), data, given)) {
             predicates.quantifiedBy(stated, at, true, quantified);
             out = predicates.assume(predicates.obligations(stated, out, at, false), out);
         }
