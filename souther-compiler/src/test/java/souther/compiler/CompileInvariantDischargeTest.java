@@ -514,10 +514,10 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Duplicate
                 data Lines = List<Int>
-                    invariant List.allUniqueBy(x -> x, value)
+                    invariant List.allDistinctBy(x -> x, value)
                 behavior build : (xs: List<Int>) -> Lines | Duplicate constructs Lines, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(x -> x, xs)
+                    guard List.allDistinctBy(x -> x, xs)
                         else Duplicate
                     Lines(xs)
                 }
@@ -531,7 +531,7 @@ class CompileInvariantDischargeTest {
         String m = """
                 module demo
                 data Lines = List<Int>
-                    invariant List.allUniqueBy(x -> x, value)
+                    invariant List.allDistinctBy(x -> x, value)
                 behavior build : (xs: List<Int>) -> Lines constructs Lines
                 let build (xs) = Lines(xs)
                 """;
@@ -547,10 +547,10 @@ class CompileInvariantDischargeTest {
                 data Duplicate
                 data Row = { a: Int, b: Int }
                 data Rows = List<Row>
-                    invariant List.allUniqueBy(r -> r.b, value)
+                    invariant List.allDistinctBy(r -> r.b, value)
                 behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(r -> r.a, xs)
+                    guard List.allDistinctBy(r -> r.a, xs)
                         else Duplicate
                     Rows(xs)
                 }
@@ -567,10 +567,10 @@ class CompileInvariantDischargeTest {
                 data Duplicate
                 data Row = { a: Int, b: Int }
                 data Rows = List<Row>
-                    invariant List.allUniqueBy(r -> r.a, value)
+                    invariant List.allDistinctBy(r -> r.a, value)
                 behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(row -> row.a, xs)
+                    guard List.allDistinctBy(row -> row.a, xs)
                         else Duplicate
                     Rows(xs)
                 }
@@ -586,10 +586,10 @@ class CompileInvariantDischargeTest {
                 data Duplicate
                 data Row = { a: Int, b: Int }
                 data Rows = List<Row>
-                    invariant List.allUniqueBy(.a, value)
+                    invariant List.allDistinctBy(.a, value)
                 behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(r -> r.a, xs)
+                    guard List.allDistinctBy(r -> r.a, xs)
                         else Duplicate
                     Rows(xs)
                 }
@@ -604,10 +604,10 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Unknown
                 data Known = String
-                    invariant List.member(value, ["a", "b"])
+                    invariant List.contains(value, ["a", "b"])
                 behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
                 let build (s) = {
-                    guard List.member(s, ["a", "b"])
+                    guard List.contains(s, ["a", "b"])
                         else Unknown
                     Known(s)
                 }
@@ -623,10 +623,10 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Unknown
                 data Known = String
-                    invariant List.member(value, ["a\\", \\"b"])
+                    invariant List.contains(value, ["a\\", \\"b"])
                 behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
                 let build (s) = {
-                    guard List.member(s, ["a", "b"])
+                    guard List.contains(s, ["a", "b"])
                         else Unknown
                     Known(s)
                 }
@@ -641,10 +641,10 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Unknown
                 data Known = String
-                    invariant List.member(value, ["a\\nb"])
+                    invariant List.contains(value, ["a\\nb"])
                 behavior build : (s: String) -> Known | Unknown constructs Known, Unknown
                 let build (s) = {
-                    guard List.member(s, ["a\\\\nb"])
+                    guard List.contains(s, ["a\\\\nb"])
                         else Unknown
                     Known(s)
                 }
@@ -695,10 +695,10 @@ class CompileInvariantDischargeTest {
         String m = """
                 module demo
                 data Lines = List<Int>
-                    invariant List.allUniqueBy(x -> x, value)
+                    invariant List.allDistinctBy(x -> x, value)
                 behavior build : (xs: List<Int>) -> Lines constructs Lines
                 let build (xs) =
-                    if List.allUniqueBy(x -> x, xs) then Lines(xs) else Lines(xs)
+                    if List.allDistinctBy(x -> x, xs) then Lines(xs) else Lines(xs)
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(m));
         assertEquals("E2010", e.diagnostic().code(),
@@ -712,10 +712,10 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Ok
                 data Lines = List<Int>
-                    invariant List.allUniqueBy(x -> x, value)
+                    invariant List.allDistinctBy(x -> x, value)
                 behavior build : (xs: List<Int>) -> Lines | Ok constructs Lines, Ok
                 let build (xs) = {
-                    guard Bool.not(List.allUniqueBy(x -> x, xs))
+                    guard Bool.not(List.allDistinctBy(x -> x, xs))
                         else Ok
                     Lines(xs)
                 }
@@ -731,9 +731,9 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Row = { a: Int }
                 data Rows = List<Row>
-                    invariant List.allUniqueBy(r -> r.a, value)
+                    invariant List.allDistinctBy(r -> r.a, value)
                 data Batch = List<Row>
-                    invariant List.allUniqueBy(r -> r.a, value)
+                    invariant List.allDistinctBy(r -> r.a, value)
                 behavior rewrap : (rs: Rows) -> Batch constructs Batch
                 let rewrap (rs) = Batch(rs.value)
                 """;
@@ -786,10 +786,10 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Duplicate
                 data Lines = List<Int>
-                    invariant List.allUniqueBy(x -> x, value)
+                    invariant List.allDistinctBy(x -> x, value)
                 behavior build : (xs: List<Int>) -> Lines | Duplicate constructs Lines, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(x -> x, xs)
+                    guard List.allDistinctBy(x -> x, xs)
                         else Duplicate
                     let xs = xs ++ [1]
                     Lines(xs)
@@ -883,10 +883,10 @@ class CompileInvariantDischargeTest {
                 data Duplicate
                 data Row = { a: Int }
                 data Rows = List<Row>
-                    invariant List.allUniqueBy(r -> r.a, value)
+                    invariant List.allDistinctBy(r -> r.a, value)
                 behavior build : (xs: List<Row>) -> Rows | Duplicate constructs Rows, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(r -> r.a, xs)
+                    guard List.allDistinctBy(r -> r.a, xs)
                         else Duplicate
                     Rows(List.sortBy(r -> r.a, xs))
                 }
@@ -920,10 +920,10 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Missing
                 data Rows = List<Int>
-                    invariant List.member(1, value)
+                    invariant List.contains(1, value)
                 behavior build : (xs: List<Int>) -> Rows | Missing constructs Rows, Missing
                 let build (xs) = {
-                    guard List.member(1, xs)
+                    guard List.contains(1, xs)
                         else Missing
                     Rows(List.filter(x -> x > 5, xs))
                 }
@@ -939,10 +939,10 @@ class CompileInvariantDischargeTest {
                 module demo
                 data Duplicate
                 data Rows = List<Int>
-                    invariant List.allUniqueBy(x -> x, value)
+                    invariant List.allDistinctBy(x -> x, value)
                 behavior build : (xs: List<Int>) -> Rows | Duplicate constructs Rows, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(x -> x, xs)
+                    guard List.allDistinctBy(x -> x, xs)
                         else Duplicate
                     Rows(List.map(x -> x * 0, xs))
                 }
@@ -962,12 +962,12 @@ class CompileInvariantDischargeTest {
                 data Row = { product: String, note: String }
                 data Line = { product: String, label: String }
                 data Lines = List<Line>
-                    invariant List.allUniqueBy(.product, value)
+                    invariant List.allDistinctBy(.product, value)
                 let toLine (r: Row): Line = Line { product = r.product, label = r.note }
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
                     constructs Lines, Line, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(.product, xs)
+                    guard List.allDistinctBy(.product, xs)
                         else Duplicate
                     Lines(List.map(r -> toLine(r), xs))
                 }
@@ -985,11 +985,11 @@ class CompileInvariantDischargeTest {
                 data Row = { sku: String }
                 data Line = { code: String }
                 data Lines = List<Line>
-                    invariant List.allUniqueBy(.code, value)
+                    invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
                     constructs Lines, Line, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(.sku, xs)
+                    guard List.allDistinctBy(.sku, xs)
                         else Duplicate
                     Lines(List.map(r -> {
                         let r = r
@@ -1011,11 +1011,11 @@ class CompileInvariantDischargeTest {
                 data Row = { sku: String }
                 data Line = { code: String }
                 data Lines = List<Line>
-                    invariant List.allUniqueBy(.code, value)
+                    invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>, spare: Row) -> Lines | Duplicate
                     constructs Lines, Line, Duplicate
                 let build (xs, spare) = {
-                    guard List.allUniqueBy(.sku, xs)
+                    guard List.allDistinctBy(.sku, xs)
                         else Duplicate
                     Lines(List.map(r -> {
                         let a = spare
@@ -1038,11 +1038,11 @@ class CompileInvariantDischargeTest {
                 data Row = { sku: String }
                 data Line = { code: String }
                 data Lines = List<Line>
-                    invariant List.allUniqueBy(.code, value)
+                    invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
                     constructs Lines, Line, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(.sku, xs)
+                    guard List.allDistinctBy(.sku, xs)
                         else Duplicate
                     Lines(List.map(r -> Line { code = r.sku }, xs))
                 }
@@ -1059,11 +1059,11 @@ class CompileInvariantDischargeTest {
                 data Row = { sku: String, name: String }
                 data Line = { code: String }
                 data Lines = List<Line>
-                    invariant List.allUniqueBy(.code, value)
+                    invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
                     constructs Lines, Line, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(.name, xs)
+                    guard List.allDistinctBy(.name, xs)
                         else Duplicate
                     Lines(List.map(r -> Line { code = r.sku }, xs))
                 }
@@ -1081,11 +1081,11 @@ class CompileInvariantDischargeTest {
                 data Row = { sku: String, name: String }
                 data Line = { code: String }
                 data Lines = List<Line>
-                    invariant List.allUniqueBy(.code, value)
+                    invariant List.allDistinctBy(.code, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
                     constructs Lines, Line, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(.sku, xs)
+                    guard List.allDistinctBy(.sku, xs)
                         else Duplicate
                     Lines(List.map(r -> Line { code = String.concat([r.sku, r.name]) }, xs))
                 }
@@ -1105,13 +1105,13 @@ class CompileInvariantDischargeTest {
                 data Row = { product: String }
                 data Line = { product: String }
                 data Lines = List<Line>
-                    invariant List.length(value) >= 1 && List.allUniqueBy(.product, value)
+                    invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate | NoLines
                     constructs Lines, Line, Duplicate, NoLines
                 let build (xs) = {
                     guard List.length(xs) >= 1
                         else NoLines
-                    guard List.allUniqueBy(.product, xs)
+                    guard List.allDistinctBy(.product, xs)
                         else Duplicate
                     Lines(List.map(r -> Line { product = r.product }, xs))
                 }
@@ -1128,11 +1128,11 @@ class CompileInvariantDischargeTest {
                 data Row = { product: String }
                 data Line = { product: String }
                 data Lines = List<Line>
-                    invariant List.length(value) >= 1 && List.allUniqueBy(.product, value)
+                    invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
                 behavior build : (xs: List<Row>) -> Lines | Duplicate
                     constructs Lines, Line, Duplicate
                 let build (xs) = {
-                    guard List.allUniqueBy(.product, xs)
+                    guard List.allDistinctBy(.product, xs)
                         else Duplicate
                     Lines(List.map(r -> Line { product = r.product }, xs))
                 }

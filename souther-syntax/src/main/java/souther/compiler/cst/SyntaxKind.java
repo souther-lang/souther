@@ -75,6 +75,7 @@ public enum SyntaxKind {
     FN_PARAM,
     INTRINSIC_BODY,
     PARTIAL_MODIFIER,      // `partial` before a helper `let` — opts out of the totality check
+    PRIVATE_MODIFIER,      // `private` before a `let` — keeps it out of the published surface
 
     // --- nodes: example ---
     EXAMPLE_DEF,            // example <target> | row | row ...

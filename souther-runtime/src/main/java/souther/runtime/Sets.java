@@ -55,7 +55,7 @@ public final class Sets {
         return PersistentHashSet.union(a, b);
     }
 
-    public static <T> Set<T> intersect(Set<T> a, Set<T> b) {
+    public static <T> Set<T> intersection(Set<T> a, Set<T> b) {
         return PersistentHashSet.intersect(a, b);
     }
 

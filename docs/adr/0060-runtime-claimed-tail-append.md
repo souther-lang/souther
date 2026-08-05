@@ -86,7 +86,7 @@ rule survives a variable capacity unchanged.
 
 A retained early version whose descendants grew keeps a 32-wide array alive, pinning up to 31
 elements that are not logically part of it — at most 128 bytes and 31 references per retained
-vector. This is the `String.substring` retention class of problem. Keeping the `Builder` at exact
+vector. This is the `String.slice` retention class of problem. Keeping the `Builder` at exact
 size keeps it out of the decode path, where it would be worst.
 
 `arrayFor` now returns an array that may be longer than the logical leaf. Every reader already bounds

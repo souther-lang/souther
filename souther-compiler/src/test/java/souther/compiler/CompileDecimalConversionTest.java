@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Int and Decimal meet only where the conversion is written. An arithmetic operator takes two
  * operands of one type (as F#'s does — `n * 0.1m` does not compile there either), so a rate applied
  * to an amount reads `Decimal.fromInt(amount) * rate`. The widening is exact and needs nothing
- * stated; the narrowing drops a fraction, so `Decimal.toInt(d, mode)` says which way it goes.
+ * stated; the narrowing drops a fraction, so `Decimal.toInt(mode, d)` says which way it goes.
  */
 class CompileDecimalConversionTest {
 
@@ -30,9 +30,9 @@ class CompileDecimalConversionTest {
             let 税額 (i: In): Decimal = Decimal.fromInt(i.税抜) * i.税率
 
             let run (i) = Out {
-                切捨 = Decimal.toInt(税額(i), FLOOR),
-                四捨五入 = Decimal.toInt(税額(i), HALF_UP),
-                切上 = Decimal.toInt(税額(i), CEILING),
+                切捨 = Decimal.toInt(FLOOR, 税額(i)),
+                四捨五入 = Decimal.toInt(HALF_UP, 税額(i)),
+                切上 = Decimal.toInt(CEILING, 税額(i)),
                 税額 = 税額(i)
             }
             """;

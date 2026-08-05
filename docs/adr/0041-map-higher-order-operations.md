@@ -28,7 +28,7 @@ Add `fold`, `map`, and `update` to `souther.map`, all self-hosted — no new int
   key and value passed separately — F#'s `Map.fold` folder is `state key value`, Elm's `Dict.foldl`
   is `k v acc`. The entry tuple `toList` yields is destructured inside the fold and handed on.
 - **`map(f, m)` keeps the keys and rewrites the values**, `f` being `(key, value) -> value` (Elm's
-  `Dict.map`, F#'s `Map.map`). It grows a fresh map through `Map.fold`, inserting `f(key, value)`
+  `Dict.map`, F#'s `Map.mapValues`). It grows a fresh map through `Map.fold`, inserting `f(key, value)`
   under each key.
 - **`update(key, f, m)` rewrites one present key's value with `f: ('a) -> 'a`; an absent key is a
   no-op.** This is *not* Elm's `Dict.update : comparable -> (Maybe v -> Maybe v) -> Dict -> Dict`.
@@ -64,4 +64,4 @@ the value-step form (a value step is the `Just v -> Just (f v)` case of it).
 - ADR-0037 (tuple types in signatures — `toList`'s `List<(K, V)>`, which `fold` destructures)
 - ADR-0040 (typed map keys — the key a step receives is `String` or a String-backed newtype)
 - Specification: `[#stdlib-map]`
-- Prior art: Elm `Dict.foldl` / `Dict.map` / `Dict.update`; F# `Map.fold` / `Map.map`
+- Prior art: Elm `Dict.foldl` / `Dict.map` / `Dict.update`; F# `Map.fold` / `Map.mapValues`

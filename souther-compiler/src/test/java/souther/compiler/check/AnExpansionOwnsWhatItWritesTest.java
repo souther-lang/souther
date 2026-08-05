@@ -119,7 +119,7 @@ class AnExpansionOwnsWhatItWritesTest {
      */
     @Test
     void aReportAboutALambdaNamesTheLambdaItIsAbout() {
-        // `Map.map` takes a two-argument step and `List.map` a one-argument one, and both call the
+        // `Map.mapValues` takes a two-argument step and `List.map` a one-argument one, and both call the
         // parameter `f`. The inner one is written with one, and the report is about the inner one.
         souther.compiler.diag.CompileException e = org.junit.jupiter.api.Assertions.assertThrows(
                 souther.compiler.diag.CompileException.class,
@@ -129,7 +129,7 @@ class AnExpansionOwnsWhatItWritesTest {
                         behavior go : (x: X) -> X
                         let go (x) = x
                         let counts (ms: List<Map<String, Int>>) =
-                            List.map((m) -> Map.size(Map.map((k) -> k, m)), ms)
+                            List.map((m) -> Map.size(Map.mapValues((k) -> k, m)), ms)
                         """));
         assertTrue(e.getMessage().contains("takes 2 argument(s) but is written with 1"),
                 e.getMessage());

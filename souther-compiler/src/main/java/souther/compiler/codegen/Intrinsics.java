@@ -269,17 +269,19 @@ final class Intrinsics {
         t.put("string.contains", jdk(CD_String, "contains", mtd(bool, CD_CharSequence), order(1, 0), Type.BOOL));
         t.put("string.startsWith", jdk(CD_String, "startsWith", mtd(bool, CD_String), order(1, 0), Type.BOOL));
         t.put("string.endsWith", jdk(CD_String, "endsWith", mtd(bool, CD_String), order(1, 0), Type.BOOL));
-        t.put("string.substring", new JdkVirtual(CD_String, "substring", mtd(CD_String, intCd, intCd),
-                order(2, 0, 1), Set.of(0, 1), Type.STRING));
         t.put("string.append", jdk(CD_String, "concat", mtd(CD_String, CD_String), order(0, 1), Type.STRING));
         // String — Strings runtime statics (descriptor derived).
+        // `slice` left the JDK's `substring` when the language settled on code points: the JDK method
+        // indexes UTF-16 units, so the conversion — and the abort for an index the string has not
+        // got — lives in the runtime rather than in a descriptor here.
+        t.put("string.slice", rt(CD_Strings, "slice", order(2, 0, 1), ts -> Type.STRING));
         t.put("string.split", rt(CD_Strings, "split", order(1, 0), ts -> Type.list(Type.STRING)));
         t.put("string.join", rt(CD_Strings, "join", order(1, 0), ts -> Type.STRING));
         t.put("string.replace", rt(CD_Strings, "replace", order(2, 0, 1), ts -> Type.STRING));
         t.put("string.words", rt(CD_Strings, "words", order(0), ts -> Type.list(Type.STRING)));
         t.put("string.matches", rt(CD_Strings, "matches", order(1, 0), ts -> Type.BOOL));
-        t.put("string.toChars", rt(CD_Strings, "toChars", order(0), ts -> Type.list(Type.STRING)));
-        t.put("string.toCode", rt(CD_Strings, "toCode", order(0), ts -> Type.INT));
+        t.put("string.characters", rt(CD_Strings, "characters", order(0), ts -> Type.list(Type.STRING)));
+        t.put("string.codePoints", rt(CD_Strings, "codePoints", order(0), ts -> Type.list(Type.INT)));
         t.put("string.fromInt", rt(CD_Strings, "fromInt", order(0), ts -> Type.STRING));
         t.put("string.concat", rt(CD_Strings, "concat", order(0), ts -> Type.STRING));
         t.put("string.reverse", rt(CD_Strings, "reverse", order(0), ts -> Type.STRING));
@@ -308,7 +310,7 @@ final class Intrinsics {
         t.put("list.get", rt(CD_Lists, "get", order(1, 0), ts -> Type.option(listOf(ts, 1).element())));
         t.put("list.sort", rt(CD_Lists, "sort", order(0), ts -> ts.get(0)));
         t.put("list.reverse", rt(CD_Lists, "reverse", order(0), ts -> ts.get(0)));
-        t.put("list.range", rt(CD_Lists, "range", order(0, 1), ts -> Type.list(Type.INT)));
+        t.put("list.rangeInclusive", rt(CD_Lists, "rangeInclusive", order(0, 1), ts -> Type.list(Type.INT)));
         t.put("list.sum", new NumericFold("sumInt", "sumDecimal"));
         t.put("list.product", new NumericFold("productInt", "productDecimal"));
 
@@ -339,7 +341,7 @@ final class Intrinsics {
         t.put("set.remove", rtErased(CD_Sets, "remove", order(0, 1), Set.of(0), ts -> ts.get(1)));
         t.put("set.contains", rtErased(CD_Sets, "contains", order(0, 1), Set.of(0), ts -> Type.BOOL));
         t.put("set.union", rt(CD_Sets, "union", order(0, 1), ts -> setUnionType(ts.get(0), ts.get(1))));
-        t.put("set.intersect", rt(CD_Sets, "intersect", order(0, 1), ts -> ts.get(0)));
+        t.put("set.intersection", rt(CD_Sets, "intersection", order(0, 1), ts -> ts.get(0)));
         t.put("set.difference", rt(CD_Sets, "difference", order(0, 1), ts -> ts.get(0)));
         t.put("set.isEmpty", rt(CD_Sets, "isEmpty", order(0), ts -> Type.BOOL));
         t.put("set.size", rt(CD_Sets, "size", order(0), ts -> Type.INT));
@@ -370,7 +372,7 @@ final class Intrinsics {
         t.put("int.subtract", rt(CD_IntMath, "subtractExact", order(0, 1), ts -> Type.INT));
         t.put("int.multiply", rt(CD_IntMath, "multiplyExact", order(0, 1), ts -> Type.INT));
         t.put("int.compare", rt(CD_IntMath, "compare", order(0, 1), ts -> Type.INT));
-        t.put("int.modBy", rt(CD_IntMath, "modBy", order(0, 1), ts -> Type.INT));
+        t.put("int.floorMod", rt(CD_IntMath, "floorMod", order(0, 1), ts -> Type.INT));
 
         // Decimal — add/subtract/multiply are BigDecimal instance methods (receiver is the first arg);
         // compare is a DecimalMath static returning -1/0/1.

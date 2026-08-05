@@ -140,7 +140,7 @@ class CompileAdequacyShapesTest {
                 data Line = { sku: Sku, quantity: Int }
 
                 data Stock = { rows: List<Line> }
-                    invariant List.allUniqueBy(.sku, rows)
+                    invariant List.allDistinctBy(.sku, rows)
 
                 data Ok = { n: Int }
                 data Empty = { n: Int }

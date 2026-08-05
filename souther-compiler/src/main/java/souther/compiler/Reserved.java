@@ -17,4 +17,12 @@ public final class Reserved {
      *  namespaces {@code Int}/{@code Decimal} (spec §stdlib). */
     public static final Set<String> QUALIFIERS =
             Set.of("List", "String", "Map", "Set", "Bool", "Int", "Decimal", "Date", "DateTime", "Option");
+
+    /** Whether {@code moduleName} is the reserved namespace or a module inside it. The core
+     *  privileges — declaring an {@code intrinsic}, declaring a {@code private let} — are the ones
+     *  this answers for. */
+    public static boolean isNamespace(String moduleName) {
+        return moduleName != null
+                && (moduleName.equals("souther") || moduleName.startsWith("souther."));
+    }
 }

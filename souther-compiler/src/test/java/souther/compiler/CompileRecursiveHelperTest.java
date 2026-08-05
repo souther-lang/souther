@@ -405,7 +405,7 @@ class CompileRecursiveHelperTest {
             data Out = { xs: List<Int> }
 
             let flatten (t: Node): List<Int> =
-                [t.n] ++ List.concatMap(k -> flatten(k), t.kids)
+                [t.n] ++ List.flatMap(k -> flatten(k), t.kids)
 
             behavior go : (t: Node) -> Out constructs Out
             let go (t) = Out { xs = flatten(t) }
@@ -435,7 +435,7 @@ class CompileRecursiveHelperTest {
         // not what it spells.
         String src = TREE.replace("let go (t) = Out { xs = flatten(t) }", """
                 let labelled (t: Node): List<Int> = flatten(t)
-                let roster (t: Node): List<Int> = List.concatMap(k -> labelled(k), t.kids)
+                let roster (t: Node): List<Int> = List.flatMap(k -> labelled(k), t.kids)
                 let go (t) = Out { xs = roster(t) }
                 """);
         assertDoesNotThrow(() -> Compiler.compile(src));
@@ -453,7 +453,7 @@ class CompileRecursiveHelperTest {
                 data Out = { xs: List<Int> }
                 partial let countDown (n: Int): List<Int> =
                     if n == 0 then [] else [n] ++ countDown(n - 1)
-                let all (b: Bag): List<Int> = List.concatMap(n -> countDown(n), b.ns)
+                let all (b: Bag): List<Int> = List.flatMap(n -> countDown(n), b.ns)
                 behavior go : (b: Bag) -> Out constructs Out
                 let go (b) = Out { xs = all(b) }
                 """;
@@ -467,13 +467,13 @@ class CompileRecursiveHelperTest {
         String lib = """
                 module lib exposing ( Node, flatten )
                 data Node = { n: Int, kids: List<Node> }
-                let flatten (t: Node): List<Int> = [t.n] ++ List.concatMap(k -> flatten(k), t.kids)
+                let flatten (t: Node): List<Int> = [t.n] ++ List.flatMap(k -> flatten(k), t.kids)
                 """;
         String app = """
                 module app
                 import lib ( Node, flatten )
                 data Out = { xs: List<Int> }
-                let roster (t: Node): List<Int> = List.concatMap(k -> flatten(k), t.kids)
+                let roster (t: Node): List<Int> = List.flatMap(k -> flatten(k), t.kids)
                 behavior go : (t: Node) -> Out constructs Out
                 let go (t) = Out { xs = roster(t) }
                 """;
@@ -525,7 +525,7 @@ class CompileRecursiveHelperTest {
 
                 let flatten (t: Node): List<Int> = {
                     let t = grow(t)
-                    [t.n] ++ List.concatMap(k -> flatten(k), t.kids)
+                    [t.n] ++ List.flatMap(k -> flatten(k), t.kids)
                 }
 
                 behavior go : (t: Node) -> Out constructs Out, Node

@@ -34,7 +34,7 @@ class EveryKernelIsDeclaredTest {
     void everyDeclaredKernelHasAnEmitterOrIsWrittenOutInTheBackend() {
         // The three partial divisions answer a case rather than a number when the divisor is zero,
         // so they emit a branch and are written out in BodyGen rather than held as a table row.
-        Set<String> writtenOut = Set.of("int.divide", "int.remainder", "decimal.divide");
+        Set<String> writtenOut = Set.of("int.divide", "int.truncatingRemainder", "decimal.divide");
 
         Set<String> declaredWithNoEmitter = new LinkedHashSet<>();
         for (String key : declaredKeys()) {

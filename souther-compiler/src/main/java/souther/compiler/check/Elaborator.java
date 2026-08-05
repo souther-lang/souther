@@ -1351,7 +1351,7 @@ public final class Elaborator {
                         : "`None` is the empty value of a `?` field, and nothing here is asking for"
                                 + " one. Where the model owns the absence, make it a case of its own"
                                 + " sum. Absence of that kind does not reach `List.filterMap`, whose"
-                                + " step has to answer an optional: use `List.concatMap` over a step"
+                                + " step has to answer an optional: use `List.flatMap` over a step"
                                 + " answering a list of nought or one.");
     }
 

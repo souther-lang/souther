@@ -261,10 +261,10 @@ data Contact =
 // and the id column is trustworthy because the list says so — allUniqueBy derives from fold, so it is
 // total and may stand in an invariant.
 data AccountBook = List<Account>
-    invariant List.allUniqueBy(.id, value)
+    invariant List.allDistinctBy(.id, value)
 
 data ContactBook = List<Contact>
-    invariant List.allUniqueBy(.id, value)
+    invariant List.allDistinctBy(.id, value)
 
 // === tierOf: the segment, read rather than stored ===
 // The thresholds are the ones an enterprise sales org actually runs on. Both sides of both are pinned
@@ -659,7 +659,7 @@ let domainOf (email: EmailAddress): List<DomainName> =
         | None   -> []
 
 let domainsOf (reach: ContactPoint): List<DomainName> =
-    List.concatMap(e -> domainOf(e), emailOf(reach))
+    List.flatMap(e -> domainOf(e), emailOf(reach))
 
 let accountHasDomain (domain: DomainName, a: Account): Bool =
     match a.domain with
@@ -670,7 +670,7 @@ let accountsOnDomain (domain: DomainName, AccountBook(rows)): List<Account> =
     List.filter(a -> accountHasDomain(domain, a), rows)
 
 let domainMatches (reach: ContactPoint, accounts: AccountBook): List<Account> =
-    List.concatMap(d -> accountsOnDomain(d, accounts), domainsOf(reach))
+    List.flatMap(d -> accountsOnDomain(d, accounts), domainsOf(reach))
 
 let reachHasEmail (email: EmailAddress, reach: ContactPoint): Bool =
     match reach with
@@ -682,7 +682,7 @@ let contactsOnEmail (email: EmailAddress, ContactBook(rows)): List<Contact> =
     List.filter(c -> reachHasEmail(email, c.reach), rows)
 
 let emailMatches (reach: ContactPoint, contacts: ContactBook): List<Contact> =
-    List.concatMap(e -> contactsOnEmail(e, contacts), emailOf(reach))
+    List.flatMap(e -> contactsOnEmail(e, contacts), emailOf(reach))
 
 data PossibleDuplicate =
     { accounts: List<AccountId>

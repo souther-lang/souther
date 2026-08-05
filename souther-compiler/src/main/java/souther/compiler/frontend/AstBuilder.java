@@ -418,6 +418,16 @@ public final class AstBuilder {
         });
         Ast.RetType declaredReturn = n.child(SyntaxKind.RET_TYPE).map(this::retType).orElse(null);
         boolean partial = n.child(SyntaxKind.PARTIAL_MODIFIER).isPresent();
+        Optional<SyntaxNode> privateModifier = n.child(SyntaxKind.PRIVATE_MODIFIER);
+        if (privateModifier.isPresent() && !isReservedNamespace(moduleName)) {
+            // Like `intrinsic`, and for the same reason: what the standard library keeps to itself
+            // is the library's own business, and a user module has no surface to hide anything from
+            // — everything it declares is published (ADR-0075).
+            throw error(pos(privateModifier.get()), "parse.private.core",
+                    "`private` is a core privilege: only a module in the reserved `souther`"
+                            + " namespace may declare one");
+        }
+        Ast.Modifiers modifiers = new Ast.Modifiers(partial, privateModifier.isPresent());
 
         Optional<SyntaxNode> intrinsic = n.child(SyntaxKind.INTRINSIC_BODY);
         if (intrinsic.isPresent()) {
@@ -428,7 +438,7 @@ public final class AstBuilder {
             }
             String key = stringValue(intrinsic.get().token(SyntaxKind.STRING_LIT).orElseThrow().text());
             return new Ast.FnDef(name, params, declaredReturn, new Ast.FnBody.Intrinsic(key),
-                    partial, pos);
+                    modifiers, pos);
         }
         SyntaxNode bodyNode = onlyExpr(n);
         Ast.Expr body = expr(bodyNode);
@@ -460,7 +470,7 @@ public final class AstBuilder {
                 body = bindPattern(pat, new Ast.Var(params.get(i).name(), at), body, at);
             }
         }
-        return new Ast.FnDef(name, params, declaredReturn, new Ast.FnBody.Written(body), partial,
+        return new Ast.FnDef(name, params, declaredReturn, new Ast.FnBody.Written(body), modifiers,
                 pos);
     }
 
@@ -566,7 +576,7 @@ public final class AstBuilder {
                             + " reserved `souther` namespace); a user model never names an optional"
                             + " elsewhere (ADR-0011). On the result of a helper, leave the type off and"
                             + " the optional is inferred; where the model owns the absence, answer a"
-                            + " list of nought or one and use `List.concatMap`");
+                            + " list of nought or one and use `List.flatMap`");
         }
         if (cases.size() > 1) {
             throw error(pos, "parse.optional.sum",
@@ -1434,8 +1444,26 @@ public final class AstBuilder {
         return raw.endsWith("m") ? raw.substring(0, raw.length() - 1) : raw;
     }
 
-    /** Decodes a raw string-literal slice (quotes and escapes included) to its value. */
+    /**
+     * Decodes a raw string-literal slice (quotes and escapes included) to its value, canonicalized
+     * to NFC.
+     *
+     * <p>A source file is bytes from an editor, which is the other place text arrives from outside —
+     * the first being a decoder, which canonicalizes for the same reason. Two forms that are
+     * canonically equivalent are the same text by Unicode's definition and different values to a
+     * comparison by code units, so a literal left as written would compare unequal to the same text
+     * that came in through a boundary, and a pattern written in one form would not match a value in
+     * the other. Which form an editor writes is not something the author chose.
+     *
+     * <p>NFC and not NFKC: compatibility folding turns ① into 1 and a half-width kana into a
+     * full-width one, which is a different claim about the text than "these are the same characters".
+     */
     private static String stringValue(String raw) {
+        return java.text.Normalizer.normalize(unescaped(raw), java.text.Normalizer.Form.NFC);
+    }
+
+    /** The literal's characters, with the quotes dropped and the escapes read. */
+    private static String unescaped(String raw) {
         int from = raw.startsWith("\"") ? 1 : 0;
         int to = raw.length() >= 2 && raw.endsWith("\"") ? raw.length() - 1 : raw.length();
         StringBuilder sb = new StringBuilder();
@@ -1474,8 +1502,8 @@ public final class AstBuilder {
     }
 
     /** Whether {@code name} sits in the compiler-shipped {@code souther} namespace (ADR-0028); only
-     * those modules may write type variables and {@code intrinsic} bodies. */
+     * those modules may write type variables, {@code intrinsic} bodies, and {@code private}. */
     private static boolean isReservedNamespace(String name) {
-        return name.equals("souther") || name.startsWith("souther.");
+        return souther.compiler.Reserved.isNamespace(name);
     }
 }

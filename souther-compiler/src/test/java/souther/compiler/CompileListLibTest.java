@@ -17,7 +17,7 @@ class CompileListLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import List ( reverse, sum, product, member, isEmpty )
+                import List ( reverse, sum, product, contains, isEmpty )
 
                 data In = { ns: List<Int> }
                 data Out = {
@@ -34,7 +34,7 @@ class CompileListLibTest {
                     reversed = reverse(i.ns),
                     total = sum(i.ns),
                     prod = product(i.ns),
-                    hasTwo = member(2, i.ns),
+                    hasTwo = contains(2, i.ns),
                     none = isEmpty(i.ns)
                 }
                 """), getClass().getClassLoader());
@@ -314,7 +314,7 @@ class CompileListLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import List ( indexedMap, sum )
+                import List ( mapIndexed, sum )
 
                 data In = { ns: List<Int> }
                 data Out = { weighted: List<Int>, checksum: Int }
@@ -322,7 +322,7 @@ class CompileListLibTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = {
-                    let ws = indexedMap((idx, n) -> (if Int.modBy(2, idx) == 0 then 1 else 3) * n, i.ns)
+                    let ws = mapIndexed((idx, n) -> (if Int.floorMod(idx, 2) == 0 then 1 else 3) * n, i.ns)
                     Out { weighted = ws, checksum = sum(ws) }
                 }
                 """), getClass().getClassLoader());
@@ -351,7 +351,7 @@ class CompileListLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import List ( allUniqueBy )
+                import List ( allDistinctBy )
 
                 data Row = { sku: String, qty: Int }
                 data In = { rows: List<Row> }
@@ -359,7 +359,7 @@ class CompileListLibTest {
 
                 behavior run : (i: In) -> Out constructs Out
 
-                let run (i) = Out { unique = allUniqueBy(r -> r.sku, i.rows) }
+                let run (i) = Out { unique = allDistinctBy(r -> r.sku, i.rows) }
                 """), getClass().getClassLoader());
 
         Object behavior = loader.loadClass("demo.Run" + "$Impl").getConstructor().newInstance();
@@ -433,13 +433,13 @@ class CompileListLibTest {
 
     /** {@code range} is the one list that is neither written out nor read from outside, so a walk
      *  over positions has something to walk. Both ends are included and a start above the end gives
-     *  the empty list (Elm's List.range). */
+     *  the empty list (Elm's List.rangeInclusive). */
     @Test
     void rangeCountsBetweenBothEndsInclusive() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import List ( range, map )
+                import List ( rangeInclusive, map )
 
                 data In = { ns: List<Int> }
                 data Out = { upTo: List<Int>, single: List<Int>, backwards: List<Int>, doubled: List<Int> }
@@ -447,10 +447,10 @@ class CompileListLibTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out {
-                    upTo = range(1, 4),
-                    single = range(7, 7),
-                    backwards = range(3, 1),
-                    doubled = map(n -> n * 2, range(0, 2))
+                    upTo = rangeInclusive(1, 4),
+                    single = rangeInclusive(7, 7),
+                    backwards = rangeInclusive(3, 1),
+                    doubled = map(n -> n * 2, rangeInclusive(0, 2))
                 }
                 """), getClass().getClassLoader());
 
@@ -470,14 +470,14 @@ class CompileListLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import List ( range, length )
+                import List ( rangeInclusive, length )
 
                 data In = { to: Int }
                 data Out = { n: Int }
 
                 behavior run : (i: In) -> Out constructs Out
 
-                let run (i) = Out { n = length(range(1, i.to)) }
+                let run (i) = Out { n = length(rangeInclusive(1, i.to)) }
                 """), getClass().getClassLoader());
 
         Object behavior = loader.loadClass("demo.Run$Impl").getConstructor().newInstance();
@@ -485,14 +485,18 @@ class CompileListLibTest {
         assertThrows(souther.runtime.ConstraintViolation.class, () -> Codecs.apply(behavior, tooWide));
     }
 
-    /** {@code concatMap} maps to a list and joins in one pass; {@code foldr} walks from the end.
-     *  Both are the shapes a caller otherwise hand-rolls as a fold with {@code ++} in the step. */
+    /** {@code flatMap} maps to a list and joins in one pass; {@code foldRight} walks from the end.
+     *  Both are the shapes a caller otherwise hand-rolls as a fold with {@code ++} in the step.
+     *
+     *  <p>{@code foldRight}'s step takes the element first and the accumulator second, the opposite
+     *  of {@code fold}'s. Writing the same combination through both is what shows the walk really
+     *  runs the other way: with a non-commutative step the two answers differ. */
     @Test
-    void concatMapAndFoldrWalkTheListWhole() throws Exception {
+    void flatMapAndFoldRightWalkTheListWhole() throws Exception {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import List ( concatMap, foldr, fold )
+                import List ( flatMap, foldRight, fold )
 
                 data In = { ns: List<Int> }
                 data Out = { spread: List<Int>, rightward: String, leftward: String }
@@ -500,8 +504,8 @@ class CompileListLibTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out {
-                    spread = concatMap(n -> [n, n * 10], i.ns),
-                    rightward = foldr((acc, n) -> acc ++ String.fromInt(n), "", i.ns),
+                    spread = flatMap(n -> [n, n * 10], i.ns),
+                    rightward = foldRight((n, acc) -> acc ++ String.fromInt(n), "", i.ns),
                     leftward = fold((acc, n) -> acc ++ String.fromInt(n), "", i.ns)
                 }
                 """), getClass().getClassLoader());
@@ -510,7 +514,7 @@ class CompileListLibTest {
         Map<?, ?> m = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of(1L, 2L, 3L))));
 
         assertEquals(List.of(1L, 10L, 2L, 20L, 3L, 30L), m.get("spread"));
-        assertEquals("321", m.get("rightward"), "foldr sees the elements from the end");
+        assertEquals("321", m.get("rightward"), "foldRight sees the elements from the end");
         assertEquals("123", m.get("leftward"), "the left fold sees them from the head");
 
         Map<?, ?> empty = encode(loader, Codecs.apply(behavior, decodeIn(loader, List.of())));
@@ -526,7 +530,7 @@ class CompileListLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import List ( zip, unzip, map )
+                import List ( zipShortest, unzip, map )
 
                 data In = { ns: List<Int>, ss: List<String> }
                 data Out = { labels: List<String>, lefts: List<Int>, rights: List<String> }
@@ -539,7 +543,7 @@ class CompileListLibTest {
                 }
 
                 let run (i) = {
-                    let pairs = zip(i.ns, i.ss)
+                    let pairs = zipShortest(i.ns, i.ss)
                     let (ls, rs) = unzip(pairs)
                     Out { labels = map(label, pairs), lefts = ls, rights = rs }
                 }

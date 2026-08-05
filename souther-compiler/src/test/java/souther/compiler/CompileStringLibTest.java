@@ -19,14 +19,14 @@ class CompileStringLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import String ( uppercase, substring )
+                import String ( uppercase, slice )
 
                 data Name = String
                 data Greeting = String
 
                 behavior greet : (n: Name) -> Greeting constructs Greeting
 
-                let greet (n) = Greeting { value = "hi " ++ uppercase(substring(0, 3, n.value)) ++ "!" }
+                let greet (n) = Greeting { value = "hi " ++ uppercase(slice(0, 3, n.value)) ++ "!" }
                 """), getClass().getClassLoader());
 
         Object name = Codecs.decoded(loader, "demo.Name", "robert");
@@ -340,8 +340,8 @@ class CompileStringLibTest {
 
                 let run (i) = Out {
                     shown = fromDecimal(i.amount),
-                    rounded = fromDecimal(Decimal.round(i.amount, 1, HALF_UP)),
-                    scaled = fromDecimal(Decimal.round(0.1m * 1000.0m, 0, HALF_UP)),
+                    rounded = fromDecimal(Decimal.round(1, HALF_UP, i.amount)),
+                    scaled = fromDecimal(Decimal.round(0, HALF_UP, 0.1m * 1000.0m)),
                     parsed = readBack(i.text)
                 }
                 """), getClass().getClassLoader());

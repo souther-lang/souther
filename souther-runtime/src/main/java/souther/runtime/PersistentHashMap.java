@@ -239,7 +239,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
 
     /**
      * Where a value is held, so that reading a key and then writing it descends the trie once rather
-     * than twice — what {@code Map.upsert} does on every element of a fold that counts. A
+     * than twice — what {@code Map.updateOrInsert} does on every element of a fold that counts. A
      * {@link Builder} owns one and hands it to {@link Node#probe}, so the sharing costs no allocation.
      *
      * <p>It is only ever read straight after the descent that filled it, and only by the builder that
@@ -723,7 +723,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
      * asks for is that no version before the last is read, and the compiler establishes exactly that
      * before it hands the walk a builder (the compiler's {@code GrowingFold}). It is a
      * {@link java.util.Map} of what it has been given so far, so a step that reads the accumulator it
-     * is growing — which is what {@code Map.upsert} does — reads it as any map.
+     * is growing — which is what {@code Map.updateOrInsert} does — reads it as any map.
      *
      * <p>Ownership needs no mark on the node. Starting from the shared {@link
      * BitmapIndexedNode#EMPTY} and only ever inserting, every node the builder can reach below the
@@ -753,7 +753,7 @@ public final class PersistentHashMap<K, V> extends AbstractMap<K, V> implements 
          * Sets {@code key} to {@code val}, saying nothing about what was there before — bulk
          * construction has no use for the old value and would pay a second lookup for it.
          *
-         * <p>A key just read is written where it was found: {@code Map.upsert} reads the key and then
+         * <p>A key just read is written where it was found: {@code Map.updateOrInsert} reads the key and then
          * writes it, and the descent the read made is still good for the write. Anything else gives up
          * the probe and descends, which is also what keeps the probe from ever naming a slot that has
          * moved — only this method moves one.

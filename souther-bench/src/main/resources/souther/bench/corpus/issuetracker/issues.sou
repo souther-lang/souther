@@ -7,11 +7,11 @@
 //   - Set<Label> as a data field (labels): the derived codec reads a JSON array and dedups it into a
 //     Set; Set.fromList / insert / remove / intersect / toList / size drive the label operations, and
 //     Set.map / Set.filter clean the raw label text without leaving the set for a list first.
-//   - Map<Label, Int> as a behavior output (countByLabel): Map.upsert counts each label across a
+//   - Map<Label, Int> as a behavior output (countByLabel): Map.updateOrInsert counts each label across a
 //     board of issues (a String-backed newtype key is allowed as a map key). The same counts are read
 //     two more ways: topLabels ranks them — Map.toList's (label, count) entries ordered with
 //     List.sortBy / reverse, cut with List.take, and split with List.unzip so only the labels leave —
-//     and busyLabels keeps the entries a threshold holds for with Map.filter. groupByAssignee buckets
+//     and busyLabels keeps the entries a threshold holds for with Map.filterEntries. groupByAssignee buckets
 //     the issues themselves rather than counting them, so its output nests: a Map<String,
 //     List<IssueId>>. Its key is the optional assignee, so List.filterMap turns the issues into the
 //     entries that have one first.
@@ -34,7 +34,7 @@
 module example.issuetracker
 import String ( split, trim, lowercase, isEmpty )
 import Bool ( not )
-import List ( map, fold, filterMap, concatMap, unzip )
+import List ( map, fold, filterMap, flatMap, unzip )
 
 data IssueId  = String
     invariant String.length(value) >= 1
@@ -179,7 +179,7 @@ data LabelSet = { labels: Set<Label> }
 
 behavior sharedLabels : (a: Issue, b: Issue) -> LabelSet
     constructs LabelSet
-let sharedLabels (a, b) = LabelSet { labels = Set.intersect(a.labels, b.labels) }
+let sharedLabels (a, b) = LabelSet { labels = Set.intersection(a.labels, b.labels) }
 
 example sharedLabels
     | "only the labels both issues carry" :
@@ -214,10 +214,10 @@ example assigneeOf
         (Issue { id = IssueId("i-1"), title = "a", labels = [ Label("bug") ], assignee = None })
         -> Unassigned
 
-// === countByLabel: how many issues carry each label (fold + Map.upsert) ===
+// === countByLabel: how many issues carry each label (fold + Map.updateOrInsert) ===
 // Collect every label occurrence across the board as plain strings (Set.toList each issue's labels,
 // unwrap to the text, concatenate), then fold them into a Map<String, Int>, counting each key with
-// Map.upsert — seed 1 on first sight, +1 on every repeat. The empty-map seed's value type comes from
+// Map.updateOrInsert — seed 1 on first sight, +1 on every repeat. The empty-map seed's value type comes from
 // the helper's declared return type `Map<String, Int>`: a written type is pushed into the body, so a
 // fold over an empty seed can stand on its own rather than being inlined into the field it feeds. The
 // key is the label text (Label.value); a Map key is a String or a String-backed newtype.
@@ -227,16 +227,16 @@ behavior countByLabel : (board: Board) -> LabelCounts
     constructs LabelCounts
 
 // Every label occurrence on the board, as plain strings, with repeats. One issue contributes the
-// labels it carries, and `concatMap` joins those lists as it goes — the fold with `++` in its step
+// labels it carries, and `flatMap` joins those lists as it goes — the fold with `++` in its step
 // that this used to spell out by hand.
 let labelKeys (issues: List<Issue>): List<String> =
-    concatMap(issue -> map(l -> l.value, Set.toList(issue.labels)), issues)
+    flatMap(issue -> map(l -> l.value, Set.toList(issue.labels)), issues)
 
 // The counts themselves, shared with the ranking below. The helper's declared return type is pushed
 // into its body wherever it expands, so the empty-map seed takes its value type from
 // `Map<String, Int>` — including under `Map.toList`, whose parameter says nothing concrete.
 let labelCounts (issues: List<Issue>): Map<String, Int> =
-    fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, labelKeys(issues))
+    fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty, labelKeys(issues))
 
 let countByLabel (board) = LabelCounts { counts = labelCounts(board.issues) }
 
@@ -295,10 +295,10 @@ example topLabels
                 assignee = None } ] }, 9)
         -> LabelRanking { labels = [ "bug", "ui" ] }
 
-// === busyLabels: the labels the board leans on (Map.filter) ===
+// === busyLabels: the labels the board leans on (Map.filterEntries) ===
 // The same counts read a third way. Not the whole table (countByLabel) and not a ranking of fixed
 // length (topLabels), but "every label at least this many issues carry" — the shape a board asks for
-// when it wants the vocabulary that is actually in use. `Map.filter` keeps those entries in the map,
+// when it wants the vocabulary that is actually in use. `Map.filterEntries` keeps those entries in the map,
 // so the answer still carries the counts and the boundary does not have to look them up again.
 data LabelUsage = { counts: Map<String, Int> }
 
@@ -306,7 +306,7 @@ behavior busyLabels : (board: Board, atLeast: Int) -> LabelUsage
     constructs LabelUsage
 
 let busyLabels (board, atLeast) =
-    LabelUsage { counts = Map.filter((_, count) -> count >= atLeast, labelCounts(board.issues)) }
+    LabelUsage { counts = Map.filterEntries((_, count) -> count >= atLeast, labelCounts(board.issues)) }
 
 example busyLabels
     | "only the labels carried by at least two issues" :
@@ -328,7 +328,7 @@ example busyLabels
 // entries first: `Option.map` rewrites the assignee that is there into an entry and leaves None
 // alone, and `List.filterMap` keeps the entries that exist — the unassigned issue drops out with no
 // stand-in value written for it. `List.groupBy` then buckets the entries by their key, each bucket in
-// board order, and `Map.map` rewrites the buckets to the ids the boundary shows.
+// board order, and `Map.mapValues` rewrites the buckets to the ids the boundary shows.
 data Workload = { byAssignee: Map<String, List<IssueId>> }
 
 behavior groupByAssignee : (board: Board) -> Workload
@@ -355,7 +355,7 @@ let groupByAssignee (board) =
         board.issues
             |> filterMap(assigneeEntry)
             |> List.groupBy(entryKey)
-            |> Map.map((_, entries) -> map(entryId, entries))
+            |> Map.mapValues((_, entries) -> map(entryId, entries))
     }
 
 example groupByAssignee

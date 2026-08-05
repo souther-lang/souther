@@ -179,7 +179,7 @@ public final class GrowingFold {
      * step does anything else with the accumulator.
      *
      * <p>Reading the accumulator is allowed here, where growing a list allows nothing but the append:
-     * {@code Map.upsert} is an insert whose value comes from looking the key up first, and a builder
+     * {@code Map.updateOrInsert} is an insert whose value comes from looking the key up first, and a builder
      * answers a lookup with what it holds. What is refused is the accumulator reaching anywhere it
      * could be kept — stored as a value, handed to a function, answered with as something other than
      * the map being grown — because a builder is only the map it is becoming for as long as nobody
@@ -209,7 +209,7 @@ public final class GrowingFold {
      * The names that stand for the accumulator inside a step: the step's own parameter, and every
      * name a {@code let} binds to one of them.
      *
-     * <p>Expanding a helper is what makes this necessary. {@code Map.upsert(k, d, f, acc)} becomes its
+     * <p>Expanding a helper is what makes this necessary. {@code Map.updateOrInsert(k, d, f, acc)} becomes its
      * body with each argument bound by a {@code let}, so the map the inserts name is not {@code acc}
      * but the {@code let} that was given it — one name for one value, which is what the walk needs to
      * see through. A binding of a binding is followed the same way, so the set is closed rather than

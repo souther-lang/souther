@@ -7,7 +7,7 @@ import java.util.function.Predicate;
 /**
  * The predicates the guards have settled on the current path, each keyed by a canonical rendering of
  * the call that states it (see {@link InvariantChecker}). A predicate that is not a comparison —
- * {@code List.allUniqueBy}, {@code List.member}, {@code String.matches} — holds no numeric relation
+ * {@code List.allDistinctBy}, {@code List.contains}, {@code String.matches} — holds no numeric relation
  * and so has nowhere to live in {@link NumericDomain}; this is where it lives instead.
  *
  * <p>Nothing here reasons: two predicates relate only by being the same key. What that buys is the

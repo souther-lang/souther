@@ -345,7 +345,7 @@ public final class HelperInliner {
             }
             Ast.FnDef def = helpers.get(name);
             out.put(name, new Ast.FnDef(name, def.params(), def.declaredReturn(),
-                    def.body(), def.partial(), def.pos()));
+                    def.body(), def.modifiers(), def.pos()));
         }
         return out;
     }
@@ -373,7 +373,7 @@ public final class HelperInliner {
         for (String qualified : referencedPreludeRecursive) {
             Ast.FnDef def = helpers.get(qualified);
             out.put(qualified, new Ast.FnDef(qualified, def.params(), def.declaredReturn(),
-                    def.body(), def.partial(), def.pos()));
+                    def.body(), def.modifiers(), def.pos()));
         }
         return out;
     }
@@ -404,7 +404,7 @@ public final class HelperInliner {
                 ? inlineRecursiveBody(fn) : inline(fn.written(), bodyOf(fn.name()));
         return new Ast.FnDef(qualified(module, fn.name()), fn.params(), fn.declaredReturn(),
                 new Ast.FnBody.Written(publishedBy(qualifyHelpersOf(closed, module), module)),
-                fn.partial(), fn.pos());
+                fn.modifiers(), fn.pos());
     }
 
     /**
@@ -486,7 +486,7 @@ public final class HelperInliner {
             fns.add(fn.body() instanceof Ast.FnBody.Written w
                     ? new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(),
                             new Ast.FnBody.Written(qualifyForeign(w.expr(), m.name())),
-                            fn.partial(), fn.pos())
+                            fn.modifiers(), fn.pos())
                     : fn);
         }
         List<Ast.Def> defs = qualifiedInvariants(m);
@@ -871,7 +871,7 @@ public final class HelperInliner {
     }
 
     /** Whether a declared type has a type variable inside it. A generic declared return ({@code
-     * Map.upsert}'s {@code Map<'k, 'a>}) says nothing concrete at a call site, so it is not carried —
+     * Map.updateOrInsert}'s {@code Map<'k, 'a>}) says nothing concrete at a call site, so it is not carried —
      * the caller's own arguments are what fix those variables. */
     private static boolean mentionsRetTypeVar(Ast.RetType ret) {
         return ret != null && ret.cases().stream().anyMatch(HelperInliner::mentionsTypeVar);

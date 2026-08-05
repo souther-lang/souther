@@ -44,16 +44,19 @@ class InvariantCombinatorRulesTest {
             """;
 
     private static final List<Fires> FIRES = List.of(
+            // `foldFrom` is private, so no program can name it. `List.fold` is the sugar that becomes
+            // it before this check reads the tree, which is the only way the rule is ever reached —
+            // and therefore the only way to fire it from a program.
             new Fires("List.foldFrom", """
                     behavior f : (xs: List<Money>) -> Int constructs Positive
-                    let f (xs) = List.foldFrom((acc, x) -> {
+                    let f (xs) = List.fold((acc, x) -> {
                         let p = Positive(x.value)
                         acc
-                    }, 0, xs, 0)
+                    }, 0, xs)
                     """),
-            new Fires("List.foldr", """
+            new Fires("List.foldRight", """
                     behavior f : (xs: List<Money>) -> Int constructs Positive
-                    let f (xs) = List.foldr((acc, x) -> {
+                    let f (xs) = List.foldRight((x, acc) -> {
                         let p = Positive(x.value)
                         acc
                     }, 0, xs)
@@ -103,9 +106,9 @@ class InvariantCombinatorRulesTest {
                         List.length(yes)
                     }
                     """),
-            new Fires("List.concatMap", """
+            new Fires("List.flatMap", """
                     behavior f : (xs: List<Money>) -> List<Int> constructs Positive
-                    let f (xs) = List.concatMap(x -> {
+                    let f (xs) = List.flatMap(x -> {
                         let p = Positive(x.value)
                         [0]
                     }, xs)
@@ -138,16 +141,16 @@ class InvariantCombinatorRulesTest {
                         x.value
                     }, xs))
                     """),
-            new Fires("List.allUniqueBy", """
+            new Fires("List.allDistinctBy", """
                     behavior f : (xs: List<Money>) -> Bool constructs Positive
-                    let f (xs) = List.allUniqueBy(x -> {
+                    let f (xs) = List.allDistinctBy(x -> {
                         let p = Positive(x.value)
                         x.value
                     }, xs)
                     """),
-            new Fires("List.indexedMap", """
+            new Fires("List.mapIndexed", """
                     behavior f : (xs: List<Money>) -> List<Int> constructs Positive
-                    let f (xs) = List.indexedMap((i, x) -> {
+                    let f (xs) = List.mapIndexed((i, x) -> {
                         let p = Positive(x.value)
                         i
                     }, xs)
@@ -159,30 +162,30 @@ class InvariantCombinatorRulesTest {
                         acc
                     }, 0, m)
                     """),
-            new Fires("Map.map", """
+            new Fires("Map.mapValues", """
                     behavior f : (m: Map<String, Money>) -> Int constructs Positive
-                    let f (m) = Map.size(Map.map((k, v) -> {
+                    let f (m) = Map.size(Map.mapValues((k, v) -> {
                         let p = Positive(v.value)
                         0
                     }, m))
                     """),
-            new Fires("Map.filter", """
+            new Fires("Map.filterEntries", """
                     behavior f : (m: Map<String, Money>) -> Int constructs Positive
-                    let f (m) = Map.size(Map.filter((k, v) -> {
+                    let f (m) = Map.size(Map.filterEntries((k, v) -> {
                         let p = Positive(v.value)
                         true
                     }, m))
                     """),
-            new Fires("Map.update", """
+            new Fires("Map.updateIfPresent", """
                     behavior f : (m: Map<String, Money>) -> Int constructs Positive
-                    let f (m) = Map.size(Map.update("a", v -> {
+                    let f (m) = Map.size(Map.updateIfPresent("a", v -> {
                         let p = Positive(v.value)
                         v
                     }, m))
                     """),
-            new Fires("Map.upsert", """
+            new Fires("Map.updateOrInsert", """
                     behavior f : (m: Map<String, Money>, d: Money) -> Int constructs Positive
-                    let f (m, d) = Map.size(Map.upsert("a", d, v -> {
+                    let f (m, d) = Map.size(Map.updateOrInsert("a", d, v -> {
                         let p = Positive(v.value)
                         v
                     }, m))

@@ -15,7 +15,7 @@ let sumAll (xs) = List.fold((acc, x) -> acc + x, 0, xs)
 // Building: two traversals, each producing a list. Against `sumAll` over the same input, the
 // difference is what a list costs to build.
 behavior evensDoubled : (xs: List<Int>) -> List<Int>
-let evensDoubled (xs) = List.map(x -> x * 2, List.filter(x -> Int.modBy(2, x) == 0, xs))
+let evensDoubled (xs) = List.map(x -> x * 2, List.filter(x -> Int.floorMod(x, 2) == 0, xs))
 
 // Accumulating into a map: a fold whose accumulator is a Map, read and written once per element.
 // The key is an Int, so it is boxed on the way into the map on every element.
@@ -30,7 +30,7 @@ let evensDoubled (xs) = List.map(x -> x * 2, List.filter(x -> Int.modBy(2, x) ==
 // drops the map, leaving the walk and the arithmetic.
 behavior tally : (xs: List<Int>) -> Int
 let counted (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> c + 1, acc), Map.empty, xs)
+    List.fold((acc, x) -> Map.updateOrInsert(Int.floorMod(x, 16), 0, c -> c + 1, acc), Map.empty, xs)
 let tally (xs) = Map.size(counted(xs))
 
 // `flipped` writes a different number every element, as `tally` does, but one the JVM keeps a boxed
@@ -40,26 +40,26 @@ let tally (xs) = Map.size(counted(xs))
 // about what a write costs.
 behavior flipped : (xs: List<Int>) -> Int
 let flipping (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> 127 - c, acc), Map.empty, xs)
+    List.fold((acc, x) -> Map.updateOrInsert(Int.floorMod(x, 16), 0, c -> 127 - c, acc), Map.empty, xs)
 let flipped (xs) = Map.size(flipping(xs))
 
 behavior kept : (xs: List<Int>) -> Int
 let keeping (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> c, acc), Map.empty, xs)
+    List.fold((acc, x) -> Map.updateOrInsert(Int.floorMod(x, 16), 0, c -> c, acc), Map.empty, xs)
 let kept (xs) = Map.size(keeping(xs))
 
 behavior held : (xs: List<Int>) -> Int
 let holding (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.upsert(Int.modBy(16, x), 0, c -> 1, acc), Map.empty, xs)
+    List.fold((acc, x) -> Map.updateOrInsert(Int.floorMod(x, 16), 0, c -> 1, acc), Map.empty, xs)
 let held (xs) = Map.size(holding(xs))
 
 behavior keyed : (xs: List<Int>) -> Int
 let keying (xs: List<Int>) : Map<Int, Int> =
-    List.fold((acc, x) -> Map.insert(Int.modBy(16, x), 1, acc), Map.empty, xs)
+    List.fold((acc, x) -> Map.insert(Int.floorMod(x, 16), 1, acc), Map.empty, xs)
 let keyed (xs) = Map.size(keying(xs))
 
 behavior modded : (xs: List<Int>) -> Int
-let modded (xs) = List.fold((acc, x) -> acc + Int.modBy(16, x), 0, xs)
+let modded (xs) = List.fold((acc, x) -> acc + Int.floorMod(x, 16), 0, xs)
 
 // Accumulating into a tuple: `partition` carries a pair of lists and writes one of them per element,
 // which is the shape `take`, `drop`, `indexedMap` and `distinct` all fold. A tuple is a value, so
@@ -67,7 +67,7 @@ let modded (xs) = List.fold((acc, x) -> acc + Int.modBy(16, x), 0, xs)
 // reason `tally` does — what is measured is the walk, not the encoding.
 behavior parted : (xs: List<Int>) -> Int
 let parting (xs: List<Int>) : (List<Int>, List<Int>) =
-    List.partition(x -> Int.modBy(2, x) == 0, xs)
+    List.partition(x -> Int.floorMod(x, 2) == 0, xs)
 let parted (xs) = {
     let (evens, _) = parting(xs)
     List.length(evens)

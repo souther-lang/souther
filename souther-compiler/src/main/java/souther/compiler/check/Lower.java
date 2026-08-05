@@ -72,7 +72,7 @@ public final class Lower {
                 ? inliner.inlineRecursiveBody(fn)
                 : inliner.inline(fn.written(), dependencies(fn, dependencies), inliner.bodyOf(fn.name()));
         return new Ast.FnDef(fn.name(), fn.params(), fn.declaredReturn(),
-                new Ast.FnBody.Written(desugar(expanded)), fn.partial(), fn.pos());
+                new Ast.FnBody.Written(desugar(expanded)), fn.modifiers(), fn.pos());
     }
 
     /** Which bindings the {@code depends on} names are: the trailing parameters that carry them. A

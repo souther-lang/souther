@@ -61,7 +61,7 @@ class CompileRoundingModeValueTest {
 
                 behavior go : (i: In) -> Out constructs Out
 
-                let go (i) = Out { r = Decimal.round(i.d, 1, if i.up then CEILING else FLOOR) }
+                let go (i) = Out { r = Decimal.round(1, if i.up then CEILING else FLOOR, i.d) }
                 """;
         assertEquals(new BigDecimal("86.5"),
                 run(src, Map.of("d", new BigDecimal("86.41"), "up", true)).get("r"));
@@ -82,7 +82,7 @@ class CompileRoundingModeValueTest {
 
                 let go (i) = {
                     let convert = Decimal.toInt
-                    Out { n = convert(i.d, HALF_UP) }
+                    Out { n = convert(HALF_UP, i.d) }
                 }
                 """;
         assertEquals(87L, run(src, Map.of("d", new BigDecimal("86.5"))).get("n"));
@@ -101,7 +101,7 @@ class CompileRoundingModeValueTest {
 
                 let go (i) = {
                     let mode: RoundingMode = FLOOR
-                    Out { n = Decimal.toInt(i.d, mode) }
+                    Out { n = Decimal.toInt(mode, i.d) }
                 }
                 """;
         assertEquals(86L, run(src, Map.of("d", new BigDecimal("86.9"))).get("n"));
@@ -120,7 +120,7 @@ class CompileRoundingModeValueTest {
 
                 let pick (up: Bool): RoundingMode = if up then CEILING else FLOOR
 
-                let go (i) = Out { n = Decimal.toInt(i.d, pick(i.up)) }
+                let go (i) = Out { n = Decimal.toInt(pick(i.up), i.d) }
                 """;
         assertEquals(87L, run(src, Map.of("d", new BigDecimal("86.1"), "up", true)).get("n"));
         assertEquals(86L, run(src, Map.of("d", new BigDecimal("86.9"), "up", false)).get("n"));

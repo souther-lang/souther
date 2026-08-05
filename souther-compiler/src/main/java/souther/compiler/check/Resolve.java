@@ -11,6 +11,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.Prelude;
+import souther.compiler.Reserved;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -278,7 +279,7 @@ public final class Resolve {
             case Ast.FnBody.Written w -> new Ast.FnBody.Written(expr(w.expr(), bound));
             case Ast.FnBody.Intrinsic i -> i;
         };
-        return new Ast.FnDef(f.name(), params, retType(f.declaredReturn()), body, f.partial(),
+        return new Ast.FnDef(f.name(), params, retType(f.declaredReturn()), body, f.modifiers(),
                 f.pos());
     }
 
@@ -696,9 +697,16 @@ public final class Resolve {
         // whole name, included. Whether the library has a member of that name is the check's to say:
         // asking here would tie the answer to how much of the library has been loaded, and the
         // library resolves its own sources while it loads.
+        //
+        // A `private` declaration is the exception, and asking about it here is safe for the same
+        // reason: the only modules that may name one are the library's own, and they are told yes
+        // without the entry being looked up at all.
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
-            return new ValueName.Stdlib(written);
+            if (Reserved.isNamespace(values.module()) || !Prelude.isPrivateMember(written)) {
+                return new ValueName.Stdlib(written);
+            }
+            return null;
         }
         TypeName type = symbols.resolve(written);
         if (type != null && !type.isUnresolved()) {
@@ -867,10 +875,31 @@ public final class Resolve {
         return names;
     }
 
+    /**
+     * The report for a spelling under a library qualifier that the library has no member for, or
+     * null where the spelling is not one. A {@code private} declaration lands here: from outside the
+     * reserved namespace the library has no such member, which is what a caller is told — the same
+     * answer a misspelling gets, because from where the caller stands they are the same thing.
+     */
+    private CompileException notALibraryMember(String written, SourcePos pos) {
+        int dot = written.lastIndexOf('.');
+        if (dot < 0 || !Prelude.isQualifier(written.substring(0, dot))) {
+            return null;
+        }
+        return CompileException.of(
+                Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
+                        .at(pos, written.length()).args(written).build(),
+                "`" + written + "` is not a standard-library function.");
+    }
+
     private CompileException unknownIdentifier(String written, SourcePos pos, Bindings bound) {
         if (written.equals("null")) {
             return new CompileException(pos, "E1301",
                     "`null` is not part of the language. Use an optional field with `?`.");
+        }
+        CompileException notALibraryMember = notALibraryMember(written, pos);
+        if (notALibraryMember != null) {
+            return notALibraryMember;
         }
         List<String> candidates = reachable(bound);
         return CompileException.of(
@@ -885,6 +914,10 @@ public final class Resolve {
      * function written bare is told apart: it exists, and is reached qualified (spec §stdlib).
      */
     private CompileException notCallable(String written, SourcePos pos, Bindings bound) {
+        CompileException notALibraryMember = notALibraryMember(written, pos);
+        if (notALibraryMember != null) {
+            return notALibraryMember;
+        }
         String qualified = Prelude.qualifiedFor(written);
         if (qualified != null) {
             return CompileException.of(

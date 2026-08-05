@@ -333,16 +333,24 @@ public interface Ast {
      * body and no {@code declaredReturn}. A core intrinsic (spec §primitives) instead declares its
      * return type and names a primitive: {@code let trim (s: String): String = intrinsic
      * "string.trim"} — its body is {@link FnBody.Intrinsic}, written only in the {@code souther}
-     * namespace. {@code partial} marks a helper that opts out of the totality check (spec
-     * §fn-declaration): a recursive helper is checked for structural recursion unless it is
-     * {@code partial}.
+     * namespace. What the modifiers say is in {@link Modifiers}.
      */
     record FnDef(String name, List<FnParam> params, RetType declaredReturn, FnBody body,
-                 boolean partial, SourcePos pos) implements Ast {
-        /** A fn with no {@code partial} marker (the common case; totality-checked if recursive). */
+                 Modifiers modifiers, SourcePos pos) implements Ast {
+        /** A fn with no modifier (the common case; totality-checked if recursive, published). */
         public FnDef(String name, List<FnParam> params, RetType declaredReturn, FnBody body,
                      SourcePos pos) {
-            this(name, params, declaredReturn, body, false, pos);
+            this(name, params, declaredReturn, body, Modifiers.NONE, pos);
+        }
+
+        /** Whether the definition opts out of the totality check. */
+        public boolean partial() {
+            return modifiers.partial();
+        }
+
+        /** Whether the definition is kept out of the module's published surface. */
+        public boolean isPrivate() {
+            return modifiers.isPrivate();
         }
 
         /** The expression the author wrote. Asked from positions an intrinsic cannot reach — a
@@ -355,6 +363,20 @@ public interface Ast {
                         "`" + name + "` is an intrinsic and has no written body");
             };
         }
+    }
+
+    /**
+     * The words written before a {@code let}. {@code partial} opts a recursive helper out of the
+     * totality check (spec §fn-declaration). {@code isPrivate} keeps the definition out of the
+     * module's published surface: it is a core privilege, written only in the reserved
+     * {@code souther} namespace, so the standard library can carry an implementation helper that
+     * no caller can name.
+     *
+     * <p>They travel together because they are both answers to "how was this {@code let} written",
+     * and because two adjacent booleans in a constructor call read as neither.
+     */
+    record Modifiers(boolean partial, boolean isPrivate) {
+        public static final Modifiers NONE = new Modifiers(false, false);
     }
 
     /** A {@code fn} parameter: a name, and a type only when the {@code fn} is a helper (spec 13.1).

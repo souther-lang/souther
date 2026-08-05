@@ -113,15 +113,15 @@ data QuoteLine =
     // a fraction of", and every candidate lies about something; the multiplication needs none, because the
     // case it would have covered makes both sides zero. Every ratio rule in this file is written that way.
     invariant Decimal.compare(net.value,
-                  Decimal.round(Decimal.fromInt(quantity.value) * listPrice.value
-                                * (1.0m - discount.value), 2, HALF_UP)) == 0
+                  Decimal.round(2, HALF_UP, Decimal.fromInt(quantity.value) * listPrice.value
+                                * (1.0m - discount.value))) == 0
 
 // One line per product, and at least one line. Both are properties of the list, so the list is named and
 // carries them; at the boundary it stays a bare JSON array. They are named because a caller departs by a
 // different case for each, and the attempt in `buildQuote` chooses that case by the name.
 data QuoteLines = List<QuoteLine>
     invariant nonEmpty = List.length(value) >= 1
-    invariant uniqueProducts = List.allUniqueBy(.product, value)
+    invariant uniqueProducts = List.allDistinctBy(.product, value)
 
 // What a caller hands over: the raw figures, before any of them has been checked or the net worked out.
 data LineRequest =
@@ -191,10 +191,10 @@ data DiscountExposure =
 // stated as multiplications for the same reason the line invariant is.
 
 let lineNet (r: LineRequest): Decimal =
-    Decimal.round(Decimal.fromInt(r.quantity) * r.listPrice * (1.0m - r.discount), 2, HALF_UP)
+    Decimal.round(2, HALF_UP, Decimal.fromInt(r.quantity) * r.listPrice * (1.0m - r.discount))
 
 let lineList (r: LineRequest): Decimal =
-    Decimal.round(Decimal.fromInt(r.quantity) * r.listPrice, 2, HALF_UP)
+    Decimal.round(2, HALF_UP, Decimal.fromInt(r.quantity) * r.listPrice)
 
 let sumOf (xs: List<Decimal>): Decimal =
     List.fold((acc, x) -> Decimal.add(acc, x), 0.0m, xs)
@@ -480,7 +480,7 @@ let roleTotalsOf (quotes: List<Quote>): Map<ApproverRole, Amount> =
 
 let addQuoteToRole (acc: Map<ApproverRole, Amount>, quote: Quote): Map<ApproverRole, Amount> =
     List.fold((inner, role) ->
-                  Map.upsert(role, quote.total,
+                  Map.updateOrInsert(role, quote.total,
                              sofar -> Amount(Decimal.add(sofar.value, quote.total.value)), inner),
               acc, pendingRoleOf(quote))
 

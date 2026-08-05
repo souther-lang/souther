@@ -99,7 +99,7 @@ class CompileGrowingFoldTest {
 
     @Test
     void aStepAddingAListIsEmittedAsAGrowAll() {
-        assertEquals(1, callsTo(module("List.concatMap(x -> [x, x], xs)"), "growAll"));
+        assertEquals(1, callsTo(module("List.flatMap(x -> [x, x], xs)"), "growAll"));
     }
 
     @Test
@@ -125,7 +125,7 @@ class CompileGrowingFoldTest {
     void aWalkOverOneAddingAListStaysTwoWalks() {
         // The inner step adds a list where the outer step takes an element, so there is nothing to
         // put the outer step into and both walks stand.
-        assertEquals(2, callsTo(module("List.map(x -> x * 2, List.concatMap(x -> [x, x], xs))"),
+        assertEquals(2, callsTo(module("List.map(x -> x * 2, List.flatMap(x -> [x, x], xs))"),
                 "builder"));
     }
 
@@ -167,7 +167,7 @@ class CompileGrowingFoldTest {
     @Test
     void aStepThatAppendsSeveralElementsBuilds() throws Exception {
         assertEquals(List.of(1L, 1L, 2L, 2L),
-                ints("List.concatMap(x -> [x, x], b.xs)", List.of(1L, 2L)));
+                ints("List.flatMap(x -> [x, x], b.xs)", List.of(1L, 2L)));
     }
 
     @Test

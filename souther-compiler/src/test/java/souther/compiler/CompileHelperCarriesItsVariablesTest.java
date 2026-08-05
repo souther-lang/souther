@@ -99,10 +99,10 @@ class CompileHelperCarriesItsVariablesTest {
 
     @Test
     void oneParameterReadTwiceHoldsOneThing() {
-        // Both arguments of `List.zip` are the same parameter, so whatever minting happens at that
+        // Both arguments of `List.zipShortest` are the same parameter, so whatever minting happens at that
         // call has to give the two positions one variable rather than two.
         assertTrue(compiles("""
-                let paired (xs) = List.zip(xs, xs)
+                let paired (xs) = List.zipShortest(xs, xs)
                 let use (n: Int) = List.length(paired([ 1, 2 ])) + n"""),
                 "`xs` holds one thing, read at two positions of one call");
     }
@@ -123,18 +123,18 @@ class CompileHelperCarriesItsVariablesTest {
 
     /**
      * A relation a signature makes across its own parameters survives the expansion of the call.
-     * {@code List.member} writes one variable for its element and for its list, so {@code y} is the
+     * {@code List.contains} writes one variable for its element and for its list, so {@code y} is the
      * element of {@code xs} — and it says so whether the callee is expanded or stands, which is what
      * makes the answer the language's and not the library's implementation choice.
      */
     @Test
     void aRelationASignatureMakesSurvivesTheExpansionOfTheCall() {
         assertTrue(compiles("""
-                let has (xs, y) = List.member(y, xs)
+                let has (xs, y) = List.contains(y, xs)
                 let use (b: Bool) = has([ 1 ], 2) && b"""),
                 "`y` is the element of `xs`, and two Ints fit");
         assertFalse(compiles("""
-                let has (xs, y) = List.member(y, xs)
+                let has (xs, y) = List.contains(y, xs)
                 let use (b: Bool) = has([ 1 ], "a") && b"""),
                 "a List of Ints and a String do not");
     }
@@ -143,11 +143,11 @@ class CompileHelperCarriesItsVariablesTest {
     @Test
     void whichParameterIsWrittenFirstDecidesNothing() {
         assertTrue(compiles("""
-                let has (y, xs) = List.member(y, xs)
+                let has (y, xs) = List.contains(y, xs)
                 let use (b: Bool) = has(2, [ 1 ]) && b"""),
                 "the same relation, read the other way round");
         assertFalse(compiles("""
-                let has (y, xs) = List.member(y, xs)
+                let has (y, xs) = List.contains(y, xs)
                 let use (b: Bool) = has("a", [ 1 ]) && b"""),
                 "and refused the same way");
     }
@@ -162,7 +162,7 @@ class CompileHelperCarriesItsVariablesTest {
         assertFalse(compiles("""
                 let f (v) = {
                     let xs = [ v ]
-                    List.member(v, xs)
+                    List.contains(v, xs)
                 }
                 let use (b: Bool) = f(1) && b"""),
                 "`xs` is made from `v`, so it says nothing about `v` that `v` did not say first");
@@ -172,19 +172,19 @@ class CompileHelperCarriesItsVariablesTest {
     void twoApplicationsOfOneHelperDecideSeparately() {
         // Nothing here ties the two calls together, so one deciding Int does not make the other one.
         assertTrue(compiles("""
-                let use (b: Bool) = List.member(1, [ 1 ]) && List.member("a", [ "a" ]) && b"""),
-                "two applications of `List.member`, at two element types");
+                let use (b: Bool) = List.contains(1, [ 1 ]) && List.contains("a", [ "a" ]) && b"""),
+                "two applications of `List.contains`, at two element types");
     }
 
     @Test
     void twoApplicationsTiedByOneParameterHoldOneThing() {
         // The caller's own `y` is what ties them, and it is one value.
         assertTrue(compiles("""
-                let bothContain (xs, ys, y) = List.member(y, xs) && List.member(y, ys)
+                let bothContain (xs, ys, y) = List.contains(y, xs) && List.contains(y, ys)
                 let use (b: Bool) = bothContain([ 1 ], [ 2 ], 3) && b"""),
                 "three parameters, one element type");
         assertFalse(compiles("""
-                let bothContain (xs, ys, y) = List.member(y, xs) && List.member(y, ys)
+                let bothContain (xs, ys, y) = List.contains(y, xs) && List.contains(y, ys)
                 let use (b: Bool) = bothContain([ 1 ], [ "a" ], 3) && b"""),
                 "and the two lists hold the same thing");
     }
@@ -205,16 +205,16 @@ class CompileHelperCarriesItsVariablesTest {
 
     @Test
     void anExpansionInsideAnExpansionDecidesOnItsOwn() {
-        // `outer` expands into the body, and the `List.member` inside it expands again. The two are
+        // `outer` expands into the body, and the `List.contains` inside it expands again. The two are
         // two applications, and the inner one's element is the outer one's — through the body, not
         // through a name two signatures happen to share.
         assertTrue(compiles("""
-                let outer (xs, y) = List.member(y, xs)
+                let outer (xs, y) = List.contains(y, xs)
                 let go (zs, z) = outer(zs, z)
                 let use (b: Bool) = go([ 1 ], 2) && b"""),
                 "the relation reaches through two expansions");
         assertFalse(compiles("""
-                let outer (xs, y) = List.member(y, xs)
+                let outer (xs, y) = List.contains(y, xs)
                 let go (zs, z) = outer(zs, z)
                 let use (b: Bool) = go([ 1 ], "a") && b"""),
                 "and refuses through them");
@@ -222,7 +222,7 @@ class CompileHelperCarriesItsVariablesTest {
 
     /**
      * A signature variable standing twice is one identity whether the callee is an intrinsic or is
-     * written in Souther. {@code Set.union} is an intrinsic and {@code List.member} is self-hosted;
+     * written in Souther. {@code Set.union} is an intrinsic and {@code List.contains} is self-hosted;
      * which side of that line a function is on is not something an author can read, so it decides
      * nothing here.
      */
@@ -230,7 +230,7 @@ class CompileHelperCarriesItsVariablesTest {
     void aRepeatedSignatureVariableIsOneIdentityWhicheverWayTheCalleeIsWritten() {
         assertTrue(compiles("""
                 let viaIntrinsic (a, b) = Set.union(a, b)
-                let viaSouther (xs, y) = List.member(y, xs)
+                let viaSouther (xs, y) = List.contains(y, xs)
                 let use (p: Set<Int>, q: Set<Int>) = Set.size(viaIntrinsic(p, q))
                     + (if viaSouther([ 1 ], 2) then 1 else 0)"""),
                 "both hold their repeated variable to one type");
@@ -239,14 +239,14 @@ class CompileHelperCarriesItsVariablesTest {
                 let use (p: Set<Int>, q: Set<String>) = Set.size(viaIntrinsic(p, q))"""),
                 "the intrinsic refuses two element types");
         assertFalse(compiles("""
-                let viaSouther (xs, y) = List.member(y, xs)
+                let viaSouther (xs, y) = List.contains(y, xs)
                 let use (b: Bool) = viaSouther([ 1 ], "a") && b"""),
                 "and so does the self-hosted one");
     }
 
     /**
      * What a signature says between its arguments and its result reaches the caller too.
-     * {@code Map.upsert} declares {@code Map<'k, 'a>} for its map and for what it answers, so what
+     * {@code Map.updateOrInsert} declares {@code Map<'k, 'a>} for its map and for what it answers, so what
      * the result holds is what the argument held.
      *
      * <p>Two ways at once here, and either would do: the body builds its result out of the arguments,
@@ -260,12 +260,12 @@ class CompileHelperCarriesItsVariablesTest {
                 data In = { counts: Map<String, Int> }
                 data Out = { n: Int }
                 behavior go : (i: In) -> Out constructs Out
-                let bump (k, m) = Map.upsert(k, 0, (v) -> v + 1, m)
+                let bump (k, m) = Map.updateOrInsert(k, 0, (v) -> v + 1, m)
                 let go (i) = Out { n = List.sum(Map.values(bump("a", i.counts))) }
                 """, Map.of("counts", Map.of("a", 1L, "b", 5L)));
         assertEquals(7L, out.get("n"), "the result holds Ints because the argument did");
         assertFalse(compiles("""
-                let bump (k, m) = Map.upsert(k, 0, (v) -> v + 1, m)
+                let bump (k, m) = Map.updateOrInsert(k, 0, (v) -> v + 1, m)
                 let use (t: Map<String, Bool>, n: Int) = Map.size(bump("a", t)) + n"""),
                 "a map of Bools does not take the Int the call decided");
     }

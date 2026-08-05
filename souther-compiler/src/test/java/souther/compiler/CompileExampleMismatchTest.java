@@ -65,7 +65,7 @@ class CompileExampleMismatchTest {
                 behavior run : (i: In) -> Out constructs Out, Sku
                 let run (i) = Out {
                     first = Sku("apple"),
-                    counts = List.fold((acc, s) -> Map.upsert(s.value, 1, c -> c + 1, acc),
+                    counts = List.fold((acc, s) -> Map.updateOrInsert(s.value, 1, c -> c + 1, acc),
                         Map.empty, i.skus),
                     tags = Set.fromList([ "x" ])
                 }

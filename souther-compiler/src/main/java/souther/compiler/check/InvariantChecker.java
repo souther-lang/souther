@@ -69,25 +69,25 @@ public final class InvariantChecker {
 
     private static final Map<String, Combinator> COMBINATORS = Map.ofEntries(
             Map.entry("List.foldFrom", new Combinator(0, 1, 2)),
-            Map.entry("List.foldr", new Combinator(0, 1, 2)),
+            Map.entry("List.foldRight", new Combinator(0, 0, 2)),
             Map.entry("List.map", new Combinator(0, 0, 1)),
             Map.entry("List.filter", new Combinator(0, 0, 1)),
             Map.entry("List.all", new Combinator(0, 0, 1)),
             Map.entry("List.any", new Combinator(0, 0, 1)),
             Map.entry("List.find", new Combinator(0, 0, 1)),
             Map.entry("List.partition", new Combinator(0, 0, 1)),
-            Map.entry("List.concatMap", new Combinator(0, 0, 1)),
+            Map.entry("List.flatMap", new Combinator(0, 0, 1)),
             Map.entry("List.filterMap", new Combinator(0, 0, 1)),
             Map.entry("List.sortBy", new Combinator(0, 0, 1)),
             Map.entry("List.groupBy", new Combinator(0, 0, 1)),
             Map.entry("List.indexBy", new Combinator(0, 0, 1)),
-            Map.entry("List.allUniqueBy", new Combinator(0, 0, 1)),
-            Map.entry("List.indexedMap", new Combinator(0, 1, 1)),
+            Map.entry("List.allDistinctBy", new Combinator(0, 0, 1)),
+            Map.entry("List.mapIndexed", new Combinator(0, 1, 1)),
             Map.entry("Map.fold", new Combinator(0, 2, 2)),
-            Map.entry("Map.map", new Combinator(0, 1, 1)),
-            Map.entry("Map.filter", new Combinator(0, 1, 1)),
-            Map.entry("Map.update", new Combinator(1, 0, 2)),
-            Map.entry("Map.upsert", new Combinator(2, 0, 3)),
+            Map.entry("Map.mapValues", new Combinator(0, 1, 1)),
+            Map.entry("Map.filterEntries", new Combinator(0, 1, 1)),
+            Map.entry("Map.updateIfPresent", new Combinator(1, 0, 2)),
+            Map.entry("Map.updateOrInsert", new Combinator(2, 0, 3)),
             Map.entry("Set.fold", new Combinator(0, 1, 2)),
             Map.entry("Set.map", new Combinator(0, 0, 1)),
             Map.entry("Set.filter", new Combinator(0, 0, 1)),
@@ -139,32 +139,32 @@ public final class InvariantChecker {
             Map.entry("List.sort", new Built(0, Shape.PERMUTES)),
             Map.entry("List.sortBy", new Built(1, Shape.PERMUTES)),
             Map.entry("List.map", new Built(1, Shape.MAPS)),
-            Map.entry("List.indexedMap", new Built(1, Shape.MAPS)),
-            Map.entry("Map.map", new Built(1, Shape.MAPS)),
+            Map.entry("List.mapIndexed", new Built(1, Shape.MAPS)),
+            Map.entry("Map.mapValues", new Built(1, Shape.MAPS)),
             Map.entry("List.filter", new Built(1, Shape.SUBSET)),
             Map.entry("List.distinct", new Built(0, Shape.SUBSET)),
             Map.entry("List.take", new Built(1, Shape.SUBSET)),
             Map.entry("List.drop", new Built(1, Shape.SUBSET)),
             Map.entry("Set.filter", new Built(1, Shape.SUBSET)),
-            Map.entry("Map.filter", new Built(1, Shape.SUBSET)),
+            Map.entry("Map.filterEntries", new Built(1, Shape.SUBSET)),
             Map.entry("List.filterMap", new Built(1, Shape.COLLAPSES)),
             Map.entry("Set.map", new Built(1, Shape.COLLAPSES)));
 
     /** Where a predicate reads its container, and which shapes of construction carry it there.
-     * {@code List.all} holds of any sublist of a list it holds of; {@code List.member} does not, and
+     * {@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does not, and
      * neither survives a mapping — what a mapped element is, is #226's question. */
     private record Carried(int container, Set<Shape> through) {}
 
     /** Where a predicate reads the projection it is stated over. A mapping keeps a projection when
      * the closure copies that field from the element unchanged, so the predicate holds of the mapped
      * list exactly when it holds of what was mapped, over the field it came from. */
-    private static final Map<String, Integer> PROJECTION_OF = Map.of("List.allUniqueBy", 0);
+    private static final Map<String, Integer> PROJECTION_OF = Map.of("List.allDistinctBy", 0);
 
     private static final Map<String, Carried> CARRIED = Map.of(
             "List.all", new Carried(1, Set.of(Shape.PERMUTES, Shape.SUBSET)),
-            "List.allUniqueBy", new Carried(1, Set.of(Shape.PERMUTES, Shape.SUBSET)),
+            "List.allDistinctBy", new Carried(1, Set.of(Shape.PERMUTES, Shape.SUBSET)),
             "List.any", new Carried(1, Set.of(Shape.PERMUTES)),
-            "List.member", new Carried(1, Set.of(Shape.PERMUTES)),
+            "List.contains", new Carried(1, Set.of(Shape.PERMUTES)),
             "Set.contains", new Carried(1, Set.of(Shape.PERMUTES)),
             "Map.containsKey", new Carried(1, Set.of(Shape.PERMUTES)));
 

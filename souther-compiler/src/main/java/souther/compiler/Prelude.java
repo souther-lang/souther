@@ -78,8 +78,20 @@ public final class Prelude {
     public record PreludeEntry(Ast.FnDef declaration, Signature signature) {
     }
 
-    /** Every declaration the library ships, keyed by qualified name ({@code "List.map"}). */
+    /** Every declaration the library ships, keyed by qualified name ({@code "List.map"}) — the
+     *  {@linkplain #isPrivateMember(String) private} ones included, because the checker and the
+     *  backend still have to type and emit what they are behind. */
     private static final Map<String, PreludeEntry> ENTRIES = new LinkedHashMap<>();
+
+    /** The qualified names of the declarations written {@code private}: implementation helpers the
+     *  library reaches and no caller can name. Kept apart from {@link #ENTRIES} so that "does this
+     *  name exist" and "may this name be written" are two questions with two answers. */
+    private static final Set<String> PRIVATE = new LinkedHashSet<>();
+
+    /** The qualifiers in the order {@link #RESOURCES} loads them, filled while loading — so it is
+     *  declared above the {@code static} block that loads, or it would still be null when written
+     *  to. What it is for is {@link #published()}, which reads one module at a time. */
+    private static final List<String> QUALIFIERS_IN_LOAD_ORDER = new ArrayList<>();
 
     /**
      * The data declarations whose JVM implementation souther-runtime provides by hand rather than
@@ -168,9 +180,43 @@ public final class Prelude {
         return entry != null && entry.declaration().params().isEmpty();
     }
 
-    /** Every entry, keyed by qualified name, in declaration order. */
+    /** Every entry, keyed by qualified name, in declaration order — private ones included. */
     public static Map<String, PreludeEntry> entries() {
         return Collections.unmodifiableMap(ENTRIES);
+    }
+
+    /** Whether {@code qualifiedName} names a declaration the library keeps to itself. Such a name
+     *  may be written inside the reserved namespace and nowhere else, so everything outside it is
+     *  told the library has no such member. */
+    public static boolean isPrivateMember(String qualifiedName) {
+        return PRIVATE.contains(qualifiedName);
+    }
+
+    /** The library's published surface: every qualified name a module outside the reserved
+     *  namespace may write, in declaration order. A sugar has no declaration to be ordered by, so it
+     *  is placed at the end of the module it belongs to — a reader of this list is reading one
+     *  module's vocabulary at a time, and a name that reads as {@code List}'s belongs among them. */
+    public static Set<String> published() {
+        Set<String> names = new LinkedHashSet<>();
+        for (String qualified : ENTRIES.keySet()) {
+            if (PRIVATE.contains(qualified)) {
+                continue;
+            }
+            names.add(qualified);
+        }
+        for (String sugar : SUGARED) {
+            names.add(sugar);
+        }
+        Set<String> byModule = new LinkedHashSet<>();
+        for (String qualifier : QUALIFIERS_IN_LOAD_ORDER) {
+            for (String name : names) {
+                if (name.startsWith(qualifier + ".")) {
+                    byModule.add(name);
+                }
+            }
+        }
+        byModule.addAll(names);   // anything under a qualifier not in the load order
+        return Collections.unmodifiableSet(byModule);
     }
 
     /** The Souther-bodied declarations (inlined at call sites), keyed by qualified name, in
@@ -200,6 +246,7 @@ public final class Prelude {
                 throw new IllegalStateException("prelude resource " + resource
                         + " declares unknown module " + module.name());
             }
+            QUALIFIERS_IN_LOAD_ORDER.add(alias);
             for (Ast.Def def : module.defs()) {
                 if (RUNTIME_DEFS.containsKey(def.name())) {
                     throw new IllegalStateException(
@@ -222,6 +269,12 @@ public final class Prelude {
                 if (fn.body() instanceof Ast.FnBody.Intrinsic intrinsic) {
                     KERNELS.put(intrinsic.key(), signature);
                 }
+                if (fn.isPrivate()) {
+                    PRIVATE.add(qualified);
+                    // A name no caller can write needs no "did you mean" hint, and offering one
+                    // would name the very declaration the modifier hides.
+                    continue;
+                }
                 BARE_TO_QUALIFIED.putIfAbsent(fn.name(), qualified);
             }
         }
@@ -236,21 +289,21 @@ public final class Prelude {
         BARE_TO_QUALIFIED.put("fromDecimal", "String.fromDecimal");
         BARE_TO_QUALIFIED.put("round", "Decimal.round");
         BARE_TO_QUALIFIED.put("get", "List.get` or `Map.get");
-        BARE_TO_QUALIFIED.put("map", "List.map`, `Map.map`, `Set.map`, or `Option.map");
-        BARE_TO_QUALIFIED.put("filter", "List.filter`, `Map.filter`, or `Set.filter");
+        BARE_TO_QUALIFIED.put("map", "List.map`, `Set.map`, or `Option.map");
+        BARE_TO_QUALIFIED.put("filter", "List.filter` or `Set.filter");
         BARE_TO_QUALIFIED.put("partition", "List.partition` or `Set.partition");
         BARE_TO_QUALIFIED.put("empty", "Map.empty` or `Set.empty");
         BARE_TO_QUALIFIED.put("fold", "List.fold`, `Map.fold`, or `Set.fold");
         BARE_TO_QUALIFIED.put("isEmpty", "List.isEmpty`, `String.isEmpty`, `Map.isEmpty`, or `Set.isEmpty");
         BARE_TO_QUALIFIED.put("size", "Map.size` or `Set.size");
-        BARE_TO_QUALIFIED.put("contains", "String.contains` or `Set.contains");
+        BARE_TO_QUALIFIED.put("contains", "List.contains`, `String.contains`, or `Set.contains");
         BARE_TO_QUALIFIED.put("reverse", "List.reverse` or `String.reverse");
         BARE_TO_QUALIFIED.put("concat", "List.concat` or `String.concat");
         BARE_TO_QUALIFIED.put("toList", "Map.toList` or `Set.toList");
         BARE_TO_QUALIFIED.put("fromList", "Map.fromList` or `Set.fromList");
         BARE_TO_QUALIFIED.put("singleton", "Map.singleton` or `Set.singleton");
         BARE_TO_QUALIFIED.put("union", "Map.union` or `Set.union");
-        BARE_TO_QUALIFIED.put("intersect", "Map.intersect` or `Set.intersect");
+        BARE_TO_QUALIFIED.put("intersection", "Map.intersection` or `Set.intersection");
         BARE_TO_QUALIFIED.put("difference", "Map.difference` or `Set.difference");
         BARE_TO_QUALIFIED.put("max", "List.max`, `Int.max`, or `Decimal.max");
         BARE_TO_QUALIFIED.put("min", "List.min`, `Int.min`, or `Decimal.min");
@@ -259,7 +312,7 @@ public final class Prelude {
         BARE_TO_QUALIFIED.put("find", "List.find");
         BARE_TO_QUALIFIED.put("sortBy", "List.sortBy");
         BARE_TO_QUALIFIED.put("compare", "Int.compare` or `Decimal.compare");
-        BARE_TO_QUALIFIED.put("remainder", "Int.remainder");
+        BARE_TO_QUALIFIED.put("truncatingRemainder", "Int.truncatingRemainder");
         BARE_TO_QUALIFIED.put("add", "Int.add` or `Decimal.add");
         BARE_TO_QUALIFIED.put("subtract", "Int.subtract` or `Decimal.subtract");
         BARE_TO_QUALIFIED.put("multiply", "Int.multiply` or `Decimal.multiply");

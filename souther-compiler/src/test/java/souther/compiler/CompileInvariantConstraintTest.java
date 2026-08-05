@@ -146,7 +146,7 @@ class CompileInvariantConstraintTest {
         // invariant it is, under the shared code, with the type that rejected the value.
         Issue issue = soleIssue("""
                 data V = String
-                    invariant List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                    invariant List.all(c -> c <= 57, String.codePoints(value))
                 """, "1a2");
         assertEquals("invariant_violation", issue.code());
         assertEquals("V", issue.meta().get("type"));
@@ -163,7 +163,7 @@ class CompileInvariantConstraintTest {
         Issue issue = soleIssue("""
                 data V = String
                     invariant String.length(value) > 0
-                        && List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                        && List.all(c -> c <= 57, String.codePoints(value))
                 """, "");
         assertEquals("too_short", issue.code());
     }
@@ -257,7 +257,7 @@ class CompileInvariantConstraintTest {
     void aRepeatedElementIsADuplicate() throws Exception {
         Issue issue = soleIssue("""
                 data V = List<Int>
-                    invariant List.allUniqueBy(x -> x, value)
+                    invariant List.allDistinctBy(x -> x, value)
                 """, List.of(1L, 2L, 1L));
         assertEquals("duplicate_element", issue.code());
         assertEquals(List.of(1L), issue.meta().get("duplicates"));
@@ -270,7 +270,7 @@ class CompileInvariantConstraintTest {
         Issue issue = soleIssue("""
                 data Line = { product: String, qty: Int }
                 data V = List<Line>
-                    invariant uniqueProducts = List.allUniqueBy(.product, value)
+                    invariant uniqueProducts = List.allDistinctBy(.product, value)
                 """, List.of(Map.of("product", "a", "qty", 1L), Map.of("product", "a", "qty", 2L)));
         assertEquals("invariant_violation", issue.code());
         assertEquals("V", issue.meta().get("type"));
@@ -296,7 +296,7 @@ class CompileInvariantConstraintTest {
     void aNamedClauseNamesItselfInTheMetadata() throws Exception {
         Issue issue = soleIssue("""
                 data V = String
-                    invariant digitsOnly = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                    invariant digitsOnly = List.all(c -> c <= 57, String.codePoints(value))
                 """, "1a2");
         assertEquals("invariant_violation", issue.code());
         assertEquals("V", issue.meta().get("type"));
@@ -309,7 +309,7 @@ class CompileInvariantConstraintTest {
     void anUnnamedClauseCarriesOnlyTheType() throws Exception {
         Issue issue = soleIssue("""
                 data V = String
-                    invariant List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                    invariant List.all(c -> c <= 57, String.codePoints(value))
                 """, "1a2");
         assertEquals("V", issue.meta().get("type"));
         assertNull(issue.meta().get("clause"), "there is no name to report");
@@ -324,11 +324,11 @@ class CompileInvariantConstraintTest {
         ClassLoader loader = new BytesClassLoader(Compiler.compileModules(List.of("""
                 module sales exposing ( Id )
                 data Id = String
-                    invariant shaped = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                    invariant shaped = List.all(c -> c <= 57, String.codePoints(value))
                 """, """
                 module customer exposing ( Id )
                 data Id = String
-                    invariant shaped = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                    invariant shaped = List.all(c -> c <= 57, String.codePoints(value))
                 """)), getClass().getClassLoader());
 
         Issue sales = sole(Codecs.decoder(loader, "sales.Id").decode("x", Path.ROOT));
@@ -358,7 +358,7 @@ class CompileInvariantConstraintTest {
     void anEarlierClauseIsReportedThoughALaterOneMapsOntoAConstraint() throws Exception {
         Issue issue = soleIssue("""
                 data V = String
-                    invariant digitsOnly = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                    invariant digitsOnly = List.all(c -> c <= 57, String.codePoints(value))
                     invariant long = String.length(value) >= 5
                 """, "1a2");
         assertEquals("invariant_violation", issue.code(), "the first failing clause is the refined one");
@@ -370,7 +370,7 @@ class CompileInvariantConstraintTest {
         Issue issue = soleIssue("""
                 data V = String
                     invariant long = String.length(value) >= 5
-                    invariant digitsOnly = List.all(c -> String.toCode(c) <= 57, String.toChars(value))
+                    invariant digitsOnly = List.all(c -> c <= 57, String.codePoints(value))
                 """, "1a2");
         assertEquals("too_short", issue.code());
     }
@@ -394,5 +394,31 @@ class CompileInvariantConstraintTest {
         assertEquals("Span", issue.meta().get("type"), "which type rejected the value");
         assertEquals("ordered", issue.meta().get("clause"));
         assertFalse(issue.customMessage());
+    }
+
+    /**
+     * The boundary and the domain count a length the same way. {@code String.length} counts Unicode
+     * code points, and the derived decoder hands the bound to Raoh, which counts them too — so a
+     * name written with a supplementary-plane kanji gets one answer, not two. Counting UTF-16 units
+     * at the boundary would reject a value the model accepts, and the caller would see the boundary's
+     * answer.
+     */
+    @Test
+    void aLengthBoundMeansTheSameAtTheBoundaryAsInTheModel() throws Exception {
+        String data = """
+                data V = String
+                    invariant String.length(value) <= 2
+                """;
+        ClassLoader loader = new BytesClassLoader(Compiler.compile("module demo\n\n" + data),
+                getClass().getClassLoader());
+        Decoder<Object, ?> dec = Codecs.decoder(loader, "demo.V");
+
+        // 𠮷田: two characters, four UTF-16 units. The model admits it, so the decoder must too.
+        assertTrue(dec.decode("𠮷田", Path.ROOT) instanceof Ok,
+                "a two-code-point value inside a bound of 2 must decode");
+
+        Issue issue = soleIssue(data, "𠮷田山");   // 𠮷田山: three characters
+        assertEquals("too_long", issue.code());
+        assertEquals(3, issue.meta().get("actual"), "the reported length is in code points");
     }
 }

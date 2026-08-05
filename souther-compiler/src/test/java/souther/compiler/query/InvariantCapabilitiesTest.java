@@ -81,7 +81,7 @@ class InvariantCapabilitiesTest {
                 module m.a
                 data Row = { product: String }
                 data Lines = List<Row>
-                    invariant List.length(value) >= 1 && List.allUniqueBy(.product, value)
+                    invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
                 """, "Lines");
         assertEquals(2, clauses.size(), "one answer per clause");
         assertEquals(ClauseDischarge.Kind.DERIVABLE, clauses.get(0).kind());
@@ -94,7 +94,7 @@ class InvariantCapabilitiesTest {
                 module m.a
                 data Row = { product: String }
                 data Lines = List<Row>
-                    invariant List.length(value) >= 1 && List.allUniqueBy(.product, value)
+                    invariant List.length(value) >= 1 && List.allDistinctBy(.product, value)
                 """, "Lines");
         assertEquals(4, clauses.get(0).clause().line(), "both clauses are on the invariant's line");
         assertEquals(4, clauses.get(1).clause().line());

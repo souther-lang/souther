@@ -255,6 +255,10 @@ final class CodecGen {
                 code.loadConstant(disc.key());
                 code.invokestatic(srcLeafOwner(src), "string", MTD_leafString);
                 code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
+                // `field` answers a CombinePart, and `discriminate` takes a Decoder — the conversion
+                // is written rather than implicit, which is what keeps a part's field declaration
+                // from being erased by a wrapper.
+                code.invokeinterface(CD_CombinePart, "asDecoder", MTD_asDecoder);
                 pushInt(code, disc.variants().size());
                 code.anewarray(CD_RVariant);
                 int i = 0;
@@ -676,7 +680,7 @@ final class CodecGen {
      * ({@link souther.compiler.check.InliningPolicy#DISCHARGE}).
      *
      * <p>The mapping is written against the operations an author wrote — {@code List.length},
-     * {@code List.allUniqueBy} — and by the time the backend emits, a prelude helper has become the
+     * {@code List.allDistinctBy} — and by the time the backend emits, a prelude helper has become the
      * fold it is derived from. Reading the settled form instead would leave every collection rule
      * unrecognised. A type another module declares has no such form here; nothing asks, because a type's
      * decoder is generated where the type is declared.
@@ -833,7 +837,16 @@ final class CodecGen {
     private void emitLeafDecoder(CodeBuilder code, Ast.PrimKind kind, Src src) {
         ClassDesc owner = srcLeafOwner(src);
         switch (kind) {
-            case STRING -> code.invokestatic(owner, "string", MTD_leafString);
+            // A string that came from outside is canonicalized to NFC before anything reads it.
+            // Canonically equivalent forms are the same text by Unicode's own definition, and
+            // Souther compares strings by their code units, so without this the same name typed on
+            // two machines is two values: two Map keys, two Set members, and `==` false. It sits at
+            // the leaf so every constraint chained after it — a length bound, a pattern — sees the
+            // canonical form rather than whatever the sender's keyboard produced.
+            case STRING -> {
+                code.invokestatic(owner, "string", MTD_leafString);
+                code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+            }
             case INT -> code.invokestatic(owner, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(owner, "bool", MTD_leafBool);
             case DECIMAL -> code.invokestatic(owner, "decimal", MTD_leafDecimal);
@@ -859,7 +872,13 @@ final class CodecGen {
         Type inputType = TypeOps.primType(prim.from());
         ClassDesc leaf = srcLeafOwner(src);
         switch (prim.from()) {
-            case TEXT -> code.invokestatic(leaf, "string", MTD_leafString);
+            // Canonicalized before the constraints below read it, as a field's string is — a newtype
+            // over Text is the other place text enters, and the two must agree or the same value
+            // would be one length in a field and another on its own.
+            case TEXT -> {
+                code.invokestatic(leaf, "string", MTD_leafString);
+                code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+            }
             case INT -> code.invokestatic(leaf, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(leaf, "bool", MTD_leafBool);
             case DECIMAL -> code.invokestatic(leaf, "decimal", MTD_leafDecimal);
@@ -948,7 +967,9 @@ final class CodecGen {
             }
             code.aload(1);   // in (Map)
             code.aload(2);   // path
-            code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);
+            // A part decodes on its own and appends its own name to the path, so a field read here
+            // reports where it would inside a combine.
+            code.invokeinterface(CD_CombinePart, "decode", MTD_partDecode);
             int rSlot = gen.slot(Type.STRING);
             code.astore(rSlot);
             resultSlots[i] = rSlot;

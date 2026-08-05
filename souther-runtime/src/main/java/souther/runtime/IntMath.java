@@ -60,15 +60,20 @@ public final class IntMath {
     }
 
     /**
-     * {@code Int.modBy(divisor, n)}: Elm-style floored modulo (spec 18.2). The result takes the sign
-     * of the divisor, unlike {@code Int.remainder}, which truncates toward zero. A zero divisor is a
-     * model bug — like the {@code /} operator it aborts with {@link ConstraintViolation} rather than
-     * returning a case, so the result is a plain {@code Int} that reads cleanly in an invariant.
+     * {@code Int.floorMod(dividend, divisor)} (spec 18.2): the remainder of a floored division, so
+     * the result takes the sign of the divisor — {@code floorMod(-7, 3)} is {@code 2}, where
+     * {@code Int.truncatingRemainder(-7, 3)} is {@code -1}.
+     *
+     * <p>A zero divisor is a model bug — like the {@code /} operator it aborts with
+     * {@link ConstraintViolation} rather than returning a case, so the result is a plain {@code Int}
+     * that reads in an invariant. That makes this the one standard-library function whose failure is
+     * not in its type; {@code Int.truncatingRemainder} is the one to reach for where a zero divisor
+     * has to be a business case.
      */
-    public static long modBy(long divisor, long n) {
+    public static long floorMod(long dividend, long divisor) {
         if (divisor == 0) {
-            throw new ConstraintViolation("modulo by zero: modBy 0");
+            throw new ConstraintViolation("modulo by zero: floorMod(" + dividend + ", 0)");
         }
-        return Math.floorMod(n, divisor);
+        return Math.floorMod(dividend, divisor);
     }
 }
