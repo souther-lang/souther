@@ -41,25 +41,25 @@ final class DischargeRules {
 
     private static final Map<ValueName, Combinator> COMBINATORS = Map.ofEntries(
             Map.entry(op("List.foldFrom"), new Combinator(0, 1, 2)),
-            Map.entry(op("List.foldr"), new Combinator(0, 1, 2)),
+            Map.entry(op("List.foldRight"), new Combinator(0, 0, 2)),
             Map.entry(op("List.map"), new Combinator(0, 0, 1)),
             Map.entry(op("List.filter"), new Combinator(0, 0, 1)),
             Map.entry(op("List.all"), new Combinator(0, 0, 1)),
             Map.entry(op("List.any"), new Combinator(0, 0, 1)),
             Map.entry(op("List.find"), new Combinator(0, 0, 1)),
             Map.entry(op("List.partition"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.concatMap"), new Combinator(0, 0, 1)),
+            Map.entry(op("List.flatMap"), new Combinator(0, 0, 1)),
             Map.entry(op("List.filterMap"), new Combinator(0, 0, 1)),
             Map.entry(op("List.sortBy"), new Combinator(0, 0, 1)),
             Map.entry(op("List.groupBy"), new Combinator(0, 0, 1)),
             Map.entry(op("List.indexBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.allUniqueBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.indexedMap"), new Combinator(0, 1, 1)),
+            Map.entry(op("List.allDistinctBy"), new Combinator(0, 0, 1)),
+            Map.entry(op("List.mapIndexed"), new Combinator(0, 1, 1)),
             Map.entry(op("Map.fold"), new Combinator(0, 2, 2)),
-            Map.entry(op("Map.map"), new Combinator(0, 1, 1)),
-            Map.entry(op("Map.filter"), new Combinator(0, 1, 1)),
-            Map.entry(op("Map.update"), new Combinator(1, 0, 2)),
-            Map.entry(op("Map.upsert"), new Combinator(2, 0, 3)),
+            Map.entry(op("Map.mapValues"), new Combinator(0, 1, 1)),
+            Map.entry(op("Map.filterEntries"), new Combinator(0, 1, 1)),
+            Map.entry(op("Map.updateIfPresent"), new Combinator(1, 0, 2)),
+            Map.entry(op("Map.updateOrInsert"), new Combinator(2, 0, 3)),
             Map.entry(op("Set.fold"), new Combinator(0, 1, 2)),
             Map.entry(op("Set.map"), new Combinator(0, 0, 1)),
             Map.entry(op("Set.filter"), new Combinator(0, 0, 1)),
@@ -110,34 +110,34 @@ final class DischargeRules {
             Map.entry(op("List.sort"), new Built(0, Shape.PERMUTES)),
             Map.entry(op("List.sortBy"), new Built(1, Shape.PERMUTES)),
             Map.entry(op("List.map"), new Built(1, Shape.MAPS)),
-            Map.entry(op("List.indexedMap"), new Built(1, Shape.MAPS)),
-            Map.entry(op("Map.map"), new Built(1, Shape.MAPS)),
+            Map.entry(op("List.mapIndexed"), new Built(1, Shape.MAPS)),
+            Map.entry(op("Map.mapValues"), new Built(1, Shape.MAPS)),
             Map.entry(op("List.filter"), new Built(1, Shape.SUBSET)),
             Map.entry(op("List.distinct"), new Built(0, Shape.SUBSET)),
             Map.entry(op("List.take"), new Built(1, Shape.SUBSET)),
             Map.entry(op("List.drop"), new Built(1, Shape.SUBSET)),
             Map.entry(op("Set.filter"), new Built(1, Shape.SUBSET)),
-            Map.entry(op("Map.filter"), new Built(1, Shape.SUBSET)),
+            Map.entry(op("Map.filterEntries"), new Built(1, Shape.SUBSET)),
             Map.entry(op("List.filterMap"), new Built(1, Shape.COLLAPSES)),
             Map.entry(op("Set.map"), new Built(1, Shape.COLLAPSES)));
 
     /** Where a predicate reads its container, and which shapes of construction carry it there.
-     * {@code List.all} holds of any sublist of a list it holds of; {@code List.member} does not, and
+     * {@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does not, and
      * neither survives a mapping — what a mapped element is, the mapping alone does not say. */
     record Carried(int container, Set<Shape> through) {}
 
     private static final Map<ValueName, Carried> CARRIED = Map.of(
             op("List.all"), new Carried(1, Set.of(Shape.PERMUTES, Shape.SUBSET)),
-            op("List.allUniqueBy"), new Carried(1, Set.of(Shape.PERMUTES, Shape.SUBSET)),
+            op("List.allDistinctBy"), new Carried(1, Set.of(Shape.PERMUTES, Shape.SUBSET)),
             op("List.any"), new Carried(1, Set.of(Shape.PERMUTES)),
-            op("List.member"), new Carried(1, Set.of(Shape.PERMUTES)),
+            op("List.contains"), new Carried(1, Set.of(Shape.PERMUTES)),
             op("Set.contains"), new Carried(1, Set.of(Shape.PERMUTES)),
             op("Map.containsKey"), new Carried(1, Set.of(Shape.PERMUTES)));
 
     /** Where a predicate reads the projection it is stated over. A mapping keeps a projection when
      * the closure copies that field from the element unchanged, so the predicate holds of the mapped
      * list exactly when it holds of what was mapped, over the field it came from. */
-    private static final Map<ValueName, Integer> PROJECTION_OF = Map.of(op("List.allUniqueBy"), 0);
+    private static final Map<ValueName, Integer> PROJECTION_OF = Map.of(op("List.allDistinctBy"), 0);
 
     /** The calls that state their predicate of <em>every</em> element, so what they say of a
      * container is what holds of each element a closure is handed. Which argument is the predicate

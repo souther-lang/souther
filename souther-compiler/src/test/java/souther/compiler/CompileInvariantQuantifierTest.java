@@ -73,7 +73,7 @@ class CompileInvariantQuantifierTest {
         // member
         Compiler.compile("""
                 module demo
-                data カゴ = { skus: List<String> } invariant List.member("x", skus)
+                data カゴ = { skus: List<String> } invariant List.contains("x", skus)
                 """);
         // distinct — no duplicate SKUs
         Compiler.compile("""

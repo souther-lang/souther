@@ -6,8 +6,10 @@ module souther.set
 // — like `[]`, its element type is fixed by context, since it has no argument to learn `'a` from.
 //
 // Argument order follows F#/Elm ([#pipe]): the set operated on comes last, so `s |> Set.insert(x)`
-// reads left to right. `contains(x, s)` tests membership; `union` / `intersect` / `difference(a, b)`
-// are the set algebra (`difference` is `a` minus `b`).
+// reads left to right. `contains(x, s)` tests membership — the same word `List.contains` and
+// `String.contains` use, since it is the same question. `union` / `intersection` / `difference(a, b)`
+// are the set algebra (`difference` is `a` minus `b`); being binary operations they keep their
+// operands in the written order rather than taking a subject last.
 let empty : Set<'a> = intrinsic "set.empty"
 
 let singleton (value: 'a) : Set<'a> = intrinsic "set.singleton"
@@ -15,7 +17,7 @@ let insert (value: 'a, s: Set<'a>) : Set<'a> = intrinsic "set.insert"
 let remove (value: 'a, s: Set<'a>) : Set<'a> = intrinsic "set.remove"
 let contains (value: 'a, s: Set<'a>) : Bool = intrinsic "set.contains"
 let union (a: Set<'a>, b: Set<'a>) : Set<'a> = intrinsic "set.union"
-let intersect (a: Set<'a>, b: Set<'a>) : Set<'a> = intrinsic "set.intersect"
+let intersection (a: Set<'a>, b: Set<'a>) : Set<'a> = intrinsic "set.intersection"
 let difference (a: Set<'a>, b: Set<'a>) : Set<'a> = intrinsic "set.difference"
 let isEmpty (s: Set<'a>) : Bool = intrinsic "set.isEmpty"
 let size (s: Set<'a>) : Int = intrinsic "set.size"

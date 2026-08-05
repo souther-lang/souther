@@ -55,7 +55,7 @@ class CompileLetAnnotationTest {
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = {
                     let counted: Map<String, Int> =
-                        fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
+                        fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
                     Out { m = counted }
                 }
                 """;
@@ -159,7 +159,7 @@ class CompileLetAnnotationTest {
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = {
                     let counted: Map<String, Int> =
-                        fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
+                        fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), Map.empty, i.keys)
                     Out { n = entries(counted) }
                 }
                 """;

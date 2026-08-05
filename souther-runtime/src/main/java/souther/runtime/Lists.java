@@ -103,7 +103,7 @@ public final class Lists {
     }
 
     /** {@code acc ++ elements} inside a {@link #build}, for a step that adds a list rather than one
-     *  element ({@code List.concatMap}, a fold joining what each element gives). */
+     *  element ({@code List.flatMap}, a fold joining what each element gives). */
     public static <T> List<T> growAll(List<T> acc, List<? extends T> elements) {
         PersistentVector.Builder<T> builder = (PersistentVector.Builder<T>) acc;
         for (int i = 0, n = elements.size(); i < n; i++) {
@@ -127,20 +127,20 @@ public final class Lists {
     }
 
     /** The consecutive integers from {@code from} to {@code to}, both ends included (Elm
-     *  {@code List.range}); {@code from} above {@code to} gives the empty list. A primitive rather
+     *  {@code List.rangeInclusive}); {@code from} above {@code to} gives the empty list. A primitive rather
      *  than a fold, because a fold needs a list to walk and this is what produces one.
      *
      *  <p>A span longer than a list can hold aborts up front rather than filling memory until it
      *  dies — an out-of-range bound is a model bug, not a business result, so it gets the treatment
      *  {@link IntMath} gives an overflow. The width is computed before the walk because
      *  {@code to - from} itself can overflow. */
-    public static List<Long> range(long from, long to) {
+    public static List<Long> rangeInclusive(long from, long to) {
         if (from > to) {
             return PersistentVector.empty();
         }
         long width = to - from + 1;
         if (width <= 0 || width > Integer.MAX_VALUE) {
-            throw new ConstraintViolation("List.range is out of range: " + from + " to " + to);
+            throw new ConstraintViolation("List.rangeInclusive is out of range: " + from + " to " + to);
         }
         PersistentVector<Long> out = PersistentVector.empty();
         for (long i = from; ; i++) {

@@ -59,7 +59,7 @@ public final class SpecChecker {
                     }
                     Ast.FnDef fn = fns.get(spec.name());
                     if (fn != null) {
-                        for (String called : requiredCalls(fn.written(), names)) {
+                        for (String called : requiredCalls(fn.writtenBody(), names)) {
                             if (!out.contains(called)) {
                                 out.add(called);
                             }
@@ -144,7 +144,7 @@ public final class SpecChecker {
                         : "e1607.unknown";
                 throw CompileException.of(
                         Diagnostic.of("E1607", key).title("e1607.title")
-                                .at(required.pos(), required.name().length())
+                                .at(required.written().region())
                                 .args(spec.name(), req)
                                 .hint(key + ".hint", spec.name(), req)
                                 .build(),
@@ -290,7 +290,7 @@ public final class SpecChecker {
         for (Ast.FnParam p : fn.params()) {
             Elaborator.rejectBuiltinShadow(p.name(), p.pos());
         }
-        Elaborator.rejectBuiltinShadowing(fn.written());
+        Elaborator.rejectBuiltinShadowing(fn.writtenBody());
         for (int i = 0; i < nBusiness; i++) {
             env = env.with(fn.params().get(i).binder(),
                     TypeOps.successType(spec.params().get(i).type(), symbols));
@@ -304,7 +304,7 @@ public final class SpecChecker {
         // Check functions passed to helper parameters (e.g. a combinator's predicate) against their
         // declared types first, so a mismatch names the parameter, not the derivation it expands to.
         // A nested fold reaches `List.foldFrom` inside a block, so its signature must be in scope here.
-        HelperTyping.checkFunctionArgs(fn.written(), tenv, symbols, reqSigs, inliner);
+        HelperTyping.checkFunctionArgs(fn.writtenBody(), tenv, symbols, reqSigs, inliner);
         // The body arrives with helper calls already expanded (the Lower stage, ADR-0021): it is
         // checked as one expression, so a helper's constructions and injected calls count toward this
         // behavior's permission and dependencies — exactly as if the code had been written inline (12.5).
@@ -428,7 +428,7 @@ public final class SpecChecker {
                         .collect(java.util.stream.Collectors.joining(" | "));
                 throw CompileException.of(
                         Diagnostic.of(null, "check.param.union").title("check.boundary.title")
-                                .at(p.pos(), p.name().length()).args(p.name(), union).build(),
+                                .at(p.written().region()).args(p.name(), union).build(),
                         "parameter `" + p.name() + "` has an anonymous union type `" + union
                                 + "`; a parameter type must be a single named type — declare `data ... = "
                                 + union + "` and take that name (spec 8.6, 12.2)");
@@ -445,7 +445,7 @@ public final class SpecChecker {
                 if (carriesTuple(c, symbols)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.param.tuple").title("check.boundary.title")
-                                    .at(p.pos(), p.name().length()).args(p.name()).build(),
+                                    .at(p.written().region()).args(p.name()).build(),
                             "parameter `" + p.name() + "` is a tuple; a tuple has no external"
                                     + " representation and cannot cross the boundary, so a behavior's"
                                     + " input must be a named data (ADR-0036)");
@@ -533,7 +533,7 @@ public final class SpecChecker {
             if (!TypeOps.hasExternalForm(t, symbols)) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.param.function").title("check.boundary.title")
-                                .at(p.pos(), p.name().length()).args(p.name(), Type.show(t)).build(),
+                                .at(p.written().region()).args(p.name(), Type.show(t)).build(),
                         "parameter `" + p.name() + "` carries a function (" + Type.show(t)
                                 + "); a function has no external representation, so it cannot cross"
                                 + " the boundary into a behavior");
@@ -585,7 +585,7 @@ public final class SpecChecker {
             if (bad != null) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.map.key.param").title("check.boundary.title")
-                                .at(p.pos(), p.name().length()).args(p.name(), Type.show(bad))
+                                .at(p.written().region()).args(p.name(), Type.show(bad))
                                 .hint("check.map.key.param.hint").build(),
                         "parameter `" + p.name() + "` carries a Map keyed by " + Type.show(bad)
                                 + "; a Map crossing the boundary must be keyed by String, a"
@@ -613,9 +613,11 @@ public final class SpecChecker {
                 instanceof Type.TupleOf;
     }
 
-    /** How a written term reads in a diagnostic that quotes the source. */
+    /** How a written term reads in a diagnostic that quotes the source — the characters the author
+     *  typed, which a name canonically equivalent to them is not. */
     private static String termName(Ast.TypeTerm term) {
-        return term instanceof Ast.TypeRef ref ? ref.name() : "a function";
+        return term instanceof Ast.TypeRef ref && ref.written() != null
+                ? ref.written().quoted() : "a function";
     }
 
     static void checkInjectionConstructs(Ast.SpecBehavior spec, Symbols symbols,

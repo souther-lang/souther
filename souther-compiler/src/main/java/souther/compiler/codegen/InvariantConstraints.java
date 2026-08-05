@@ -209,11 +209,11 @@ public final class InvariantConstraints {
                 && isValue(call.args().get(1))) {
             return ConstEval.evalString(call.args().get(0)).map(Pattern::new);
         }
-        // `List.allUniqueBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
+        // `List.allDistinctBy(x -> x, value)` says of the elements what Raoh's `unique()` says of them:
         // no two are equal, by the same value equality (spec §collections, ADR-0009). A projection that
         // is not the identity says it of something else — the elements' products, their ids — and Raoh
         // has no constraint for that, so the clause keeps its own check.
-        if (base instanceof Type.ListOf && "List.allUniqueBy".equals(call.reaches())
+        if (base instanceof Type.ListOf && "List.allDistinctBy".equals(call.reaches())
                 && call.args().size() == 2 && isValue(call.args().get(1))
                 && isIdentity(call.args().get(0))) {
             return Optional.of(new Unique());

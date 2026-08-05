@@ -40,7 +40,7 @@ subtype has one predicate, one `Predicate_Failure`, and no classification.
 ```
 data QuoteLines = List<QuoteLine>
     invariant nonEmpty = List.length(value) >= 1
-    invariant uniqueProducts = List.allUniqueBy(.product, value)
+    invariant uniqueProducts = List.allDistinctBy(.product, value)
 
 guard QuoteLines(List.map(r -> toLine(r), lines)) as ls else
     | nonEmpty       -> NoLines
@@ -99,14 +99,14 @@ build, and `too_small` with `{min, actual}` is worth more to a client than the a
 
 The clause set is the natural unit for the constraint mapping too, so the mapping was extended to the
 collections Raoh already states: `List.length(value)` bounds become `nonempty` / `minSize` / `maxSize` /
-`fixedSize`, `List.allUniqueBy(x -> x, value)` becomes `unique`, and `Map.size(value)` bounds become the
+`fixedSize`, `List.allDistinctBy(x -> x, value)` becomes `unique`, and `Map.size(value)` bounds become the
 record decoder's. A `Set` is not among them: Souther decodes one as a list and drops the duplicates while
 mapping it, so a constraint before that mapping would count the duplicates and after it there is no
 typed decoder left to chain onto. A uniqueness under a projection other than the identity is not among
 them either — Raoh has no `uniqueBy` — and that is exactly the clause `QuoteLines` needs a name for.
 
 Recognition reads the DISCHARGE representation of the invariant, not the one the backend emits from.
-`List.allUniqueBy` is a self-hosted prelude helper, so by emission it has become the fold it is derived
+`List.allDistinctBy` is a self-hosted prelude helper, so by emission it has become the fold it is derived
 from; #83 never met this because `String.length` is a builtin and `String.matches` an intrinsic, and
 neither is expanded. This is the same distinction ADR-0067's expansion policy draws, applied to a second
 reader.

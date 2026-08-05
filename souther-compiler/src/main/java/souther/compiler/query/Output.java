@@ -761,7 +761,7 @@ public final class Output {
                     boolean fresh = taken.add(value.name());
                     if (!fresh && id.equals(sourceId)) {
                         reports.add(Report.of(Diagnostic.of("E1906", "check.example.file.declared")
-                                .title("check.example.title").at(value.pos(), value.name().length())
+                                .title("check.example.title").at(value.written().region())
                                 .args(value.name(), name).build()));
                     }
                 }

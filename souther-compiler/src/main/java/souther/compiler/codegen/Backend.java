@@ -5,6 +5,7 @@ import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.PipelineSigs;
 import souther.compiler.check.ReqSig;
@@ -141,7 +142,7 @@ public final class Backend {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
             // gets to naming it.
-            throw asLimit(e, module.pos(), module.name());
+            throw asLimit(e, WrittenName.synthetic(module.name(), module.pos()));
         }
     }
 
@@ -242,8 +243,11 @@ public final class Backend {
             // the union and its encoder belong to the behavior whose output they are, not to the
             // module, though the behavior did not write them
             Ast.BehaviorDef owner = b.behaviorOf(module, resultName);
-            emitting(owner == null ? module.pos() : owner.pos(),
-                    owner == null ? module.name() : owner.name(), () -> {
+            // A module's own name is the one name the tree does not carry an occurrence for, so
+            // where a result belongs to no behavior the report is anchored at the module and is as
+            // wide as its name rather than as the characters that spell it.
+            emitting(owner == null
+                    ? WrittenName.synthetic(module.name(), module.pos()) : owner.written(), () -> {
                         out.put(module.name() + "." + resultName,
                                 b.generateBehaviorResult(resultName, members));
                         out.put(module.name() + "." + resultName + "$Enc",
@@ -256,7 +260,7 @@ public final class Backend {
                 out.put(module.name() + "." + CodegenContext.bridgeCaseName(member),
                         b.value.generateBridgeCase(member, unions, out)));
         for (Ast.Def def : module.defs()) {
-            emitting(def.pos(), def.name(), () -> {
+            emitting(def.written(), () -> {
                 switch (def) {
                     case Ast.Data data -> b.value.generateData(data, out);
                     case Ast.SumData sum -> b.value.generateSum(sum, out);
@@ -309,7 +313,7 @@ public final class Backend {
                         }
                     }
                 }
-                emitting(spec.pos(), spec.name(), () ->
+                emitting(spec.written(), () ->
                         out.put(module.name() + "." + behaviorClass(spec.name()),
                                 b.generateRequiredBase(spec.name(), unitCases, dataConstructs,
                                         reqParams, b.successType(spec.ret()))));
@@ -377,7 +381,7 @@ public final class Backend {
         }
         Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
         for (Ast.BehaviorDef bd : module.behaviors()) {
-            emitting(bd.pos(), bd.name(), () -> {
+            emitting(bd.written(), () -> {
                 switch (bd) {
                     case Ast.SpecBehavior spec -> {
                         Ast.FnDef fn = fns.get(spec.name());
@@ -417,8 +421,8 @@ public final class Backend {
                 JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
                 Ast.FnDef helper = exceeded == null ? null : helperNamed(recHelpers, exceeded.method());
                 throw helper == null
-                        ? asLimit(e, module.pos(), module.name())
-                        : asLimit(e, helper.pos(), helper.name());
+                        ? asLimit(e, WrittenName.synthetic(module.name(), module.pos()))
+                        : asLimit(e, helper.written());
             }
         }
         out.putAll(b.ctx.synthClasses());   // escaping lambdas compiled to Fn classes (spec §blocks)
@@ -444,19 +448,19 @@ public final class Backend {
      * either to what they wrote — so it is said here, where the definition being emitted is in hand.
      * A refusal that names no limit is not this compiler's to answer for and goes on unchanged.
      */
-    private static void emitting(SourcePos pos, String name, Runnable emit) {
+    private static void emitting(WrittenName written, Runnable emit) {
         try {
             emit.run();
         } catch (IllegalArgumentException e) {
-            throw asLimit(e, pos, name);
+            throw asLimit(e, written);
         }
     }
 
     /** The refusal as the diagnostic for {@code name}, or unchanged where it names no limit this
      *  compiler answers for. */
-    private static RuntimeException asLimit(IllegalArgumentException e, SourcePos pos, String name) {
+    private static RuntimeException asLimit(IllegalArgumentException e, WrittenName written) {
         JvmLimits.Exceeded exceeded = JvmLimits.exceeded(e);
-        return exceeded == null ? e : JvmLimits.tooLarge(exceeded, pos, name);
+        return exceeded == null ? e : JvmLimits.tooLarge(exceeded, written);
     }
 
     /** The helper emitted as {@code method} on {@code $Fns}, or null if the name is not one of

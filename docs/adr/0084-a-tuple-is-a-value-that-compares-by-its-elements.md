@@ -17,7 +17,7 @@ tuple is what a modeller reaches for:
 
 ```
 data Machine = { transitions: List<Transition> }
-    invariant deterministic = List.allUniqueBy(t -> (t.from, t.event), transitions)
+    invariant deterministic = List.allDistinctBy(t -> (t.from, t.event), transitions)
 ```
 
 This compiled and then never rejected anything. An invariant is the one place a model states a rule

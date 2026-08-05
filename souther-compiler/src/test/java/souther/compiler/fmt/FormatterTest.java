@@ -209,7 +209,7 @@ class FormatterTest {
                 + "data NoItems\ndata Duplicate\ndata Accepted={ items:Items }\n"
                 + "data Items=List<Int>\n"
                 + "  invariant nonEmpty=List.length(value)>=1\n"
-                + "  invariant unique=List.allUniqueBy(x->x,value)\n"
+                + "  invariant unique=List.allDistinctBy(x->x,value)\n"
                 + "behavior build:(xs:List<Int>)->Accepted|NoItems|Duplicate\n"
                 + "  constructs Accepted,Items,NoItems,Duplicate\n"
                 + "let build (xs)={\n"
@@ -228,7 +228,7 @@ class FormatterTest {
 
                 data Items = List<Int>
                     invariant nonEmpty = List.length(value) >= 1
-                    invariant unique = List.allUniqueBy(x -> x, value)
+                    invariant unique = List.allDistinctBy(x -> x, value)
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | Duplicate
                     constructs Accepted, Items, NoItems, Duplicate

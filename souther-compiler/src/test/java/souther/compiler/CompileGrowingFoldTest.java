@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * A fold that only grows a list builds it instead of rebuilding it: the accumulator is a builder for
  * the length of the walk and is sealed at the end. What these tests hold is that the rewrite gives
  * the same list the immutable append gave — over the combinators derived from fold ({@code map},
- * {@code filter}, {@code concatMap}, {@code filterMap}), over a fold an author wrote in that shape,
+ * {@code filter}, {@code flatMap}, {@code filterMap}), over a fold an author wrote in that shape,
  * and over the folds that must be left alone because their accumulator is read as a list.
  */
 class CompileGrowingFoldTest {
@@ -99,7 +99,7 @@ class CompileGrowingFoldTest {
 
     @Test
     void aStepAddingAListIsEmittedAsAGrowAll() {
-        assertEquals(1, callsTo(module("List.concatMap(x -> [x, x], xs)"), "growAll"));
+        assertEquals(1, callsTo(module("List.flatMap(x -> [x, x], xs)"), "growAll"));
     }
 
     @Test
@@ -125,7 +125,7 @@ class CompileGrowingFoldTest {
     void aWalkOverOneAddingAListStaysTwoWalks() {
         // The inner step adds a list where the outer step takes an element, so there is nothing to
         // put the outer step into and both walks stand.
-        assertEquals(2, callsTo(module("List.map(x -> x * 2, List.concatMap(x -> [x, x], xs))"),
+        assertEquals(2, callsTo(module("List.map(x -> x * 2, List.flatMap(x -> [x, x], xs))"),
                 "builder"));
     }
 
@@ -167,7 +167,7 @@ class CompileGrowingFoldTest {
     @Test
     void aStepThatAppendsSeveralElementsBuilds() throws Exception {
         assertEquals(List.of(1L, 1L, 2L, 2L),
-                ints("List.concatMap(x -> [x, x], b.xs)", List.of(1L, 2L)));
+                ints("List.flatMap(x -> [x, x], b.xs)", List.of(1L, 2L)));
     }
 
     @Test

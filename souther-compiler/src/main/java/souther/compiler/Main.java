@@ -240,7 +240,7 @@ public final class Main {
                         System.exit(2);
                         return;
                     }
-                    module = args[i];
+                    module = Reserved.name(args[i]);   // a name from outside
                 }
                 case "--behavior" -> {
                     if (++i >= args.length) {
@@ -248,7 +248,7 @@ public final class Main {
                         System.exit(2);
                         return;
                     }
-                    behavior = args[i];
+                    behavior = Reserved.name(args[i]);   // a name from outside
                 }
                 case "--generate" -> generate = true;
                 case "--boundaries" -> boundaries = true;

@@ -108,7 +108,7 @@ class CompileBottomJoinTest {
                 let work (i) = {
                     let (positives, _) = fold((acc, x) -> {
                         let (ps, ns) = acc
-                        match Int.remainder(x, 2) with
+                        match Int.truncatingRemainder(x, 2) with
                             | Int as r -> (ps ++ [r], ns)
                             | DivisionByZero -> (ps, ns ++ [x])
                     }, ([], []), i.xs)
@@ -141,7 +141,7 @@ class CompileBottomJoinTest {
     }
 
     /** A written type on the seed reaches the step's closure, not just the step's own result: the
-     * updater of {@code Map.upsert} reads the map's value type, which only the annotation supplies
+     * updater of {@code Map.updateOrInsert} reads the map's value type, which only the annotation supplies
      * when the surrounding context expects something else (here an {@code Int} field). */
     @Test
     void annotatedMapSeedReachesTheStepClosure() throws Exception {
@@ -156,7 +156,7 @@ class CompileBottomJoinTest {
                 behavior work : (i: In) -> Out constructs Out
                 let work (i) = {
                     let seed: Map<String, Int> = Map.empty
-                    let counts = fold((acc, k) -> Map.upsert(k, 1, n -> n + 1, acc), seed, i.ks)
+                    let counts = fold((acc, k) -> Map.updateOrInsert(k, 1, n -> n + 1, acc), seed, i.ks)
                     Out { n = Map.size(counts) }
                 }
                 """);
@@ -164,7 +164,7 @@ class CompileBottomJoinTest {
     }
 
     /** The same through a tuple: the written component types reach the empty collections the tuple
-     * seeds, so the {@code Map.upsert} updater inside the step reads a concrete value type. */
+     * seeds, so the {@code Map.updateOrInsert} updater inside the step reads a concrete value type. */
     @Test
     void annotatedTupleSeedReachesTheStepClosure() throws Exception {
         BytesClassLoader loader = loader("""
@@ -180,7 +180,7 @@ class CompileBottomJoinTest {
                     let seed: (Map<String, Int>, List<String>) = (Map.empty, [])
                     let (counts, _) = fold((acc, k) -> {
                         let (m, order) = acc
-                        let grown = Map.upsert(k, 1, n -> n + 1, m)
+                        let grown = Map.updateOrInsert(k, 1, n -> n + 1, m)
                         (grown, order ++ [k])
                     }, seed, i.ks)
                     Out { n = Map.size(counts) }

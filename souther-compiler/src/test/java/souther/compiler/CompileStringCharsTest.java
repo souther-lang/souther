@@ -13,12 +13,15 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Character access without a {@code Char} type (Issue #52): a character is a length-1 {@code String}.
- * {@code String.toChars} lists them (Elm {@code String.toList}), {@code String.toCode} is the code
- * point (Elm {@code Char.toCode}), and {@code String.toInt : Int | NotANumber} parses (Elm
- * {@code String.toInt}'s {@code Maybe} as a named case). Together with {@code String.matches} (#51)
- * and {@code Int.modBy} (#50) these turn a checksum into a plain fold in a behavior — no digit table,
- * no {@code partial} index recursion.
+ * Character access without a {@code Char} type: a character is a one-code-point {@code String}.
+ * {@code String.characters} lists them, {@code String.codePoints} lists the same split as integers,
+ * and {@code String.toInt : Int | NotANumber} parses (Elm {@code String.toInt}'s {@code Maybe} as a
+ * named case). Together with {@code String.matches} and {@code Int.floorMod} these turn a checksum
+ * into a plain fold in a behavior — no digit table, no {@code partial} index recursion.
+ *
+ * <p>Both splits are total, so the empty string gives the empty list and a fold over it answers its
+ * seed. Nothing here answers "the first code point": a caller wanting one takes it out of
+ * {@code codePoints} with {@code List.get}, which is where every other absence comes from.
  */
 class CompileStringCharsTest {
 
@@ -31,32 +34,47 @@ class CompileStringCharsTest {
     }
 
     @Test
-    void toCharsListsCharactersAndToCodeReadsTheCodePoint() throws Exception {
-        // 桁和: sum of digit values via a fold over the characters. digit = toCode(ch) - toCode("0").
+    void codePointsReadTheDigitsOfAString() throws Exception {
+        // 桁和: sum of digit values via a fold over the code points. A digit's value is its code
+        // point less that of "0" — the零 helper reads that from the string itself rather than
+        // writing 48, so the arithmetic says where the number comes from.
         String src = """
                 module demo
                 import List ( fold )
                 data In = { s: String }
                 data Out = Int
                 behavior calc : (i: In) -> Out constructs Out
-                let 桁 (ch: String) = String.toCode(ch) - String.toCode("0")
-                let calc (i) = Out(fold((acc, ch) -> acc + 桁(ch), 0, String.toChars(i.s)))
+                let 零 = List.get(0, String.codePoints("0")) |> Option.withDefault(0)
+                let calc (i) = Out(fold((acc, c) -> acc + (c - 零), 0, String.codePoints(i.s)))
                 """;
         assertEquals(12L, runInt(src, "calc", Map.of("s", "129")));   // 1+2+9
-        assertEquals(0L, runInt(src, "calc", Map.of("s", "")));       // no characters
+        assertEquals(0L, runInt(src, "calc", Map.of("s", "")));       // no code points
     }
 
     @Test
-    void toCharsHandlesMultiByteCodePoints() throws Exception {
+    void bothSplitsCountCodePointsNotUtf16Units() throws Exception {
         String src = """
                 module demo
                 data In = { s: String }
                 data Out = Int
                 behavior calc : (i: In) -> Out constructs Out
-                let calc (i) = Out(List.length(String.toChars(i.s)))
+                let calc (i) = Out(List.length(String.characters(i.s)))
+                """;
+        String codes = """
+                module demo
+                data In = { s: String }
+                data Out = Int
+                behavior calc : (i: In) -> Out constructs Out
+                let calc (i) = Out(List.length(String.codePoints(i.s)))
                 """;
         assertEquals(3L, runInt(src, "calc", Map.of("s", "a1z")));
         assertEquals(2L, runInt(src, "calc", Map.of("s", "🍎x")));   // one code point + one
+        assertEquals(2L, runInt(src, "calc", Map.of("s", "𠮷田")));  // a supplementary-plane kanji
+
+        // The two splits are the same split, so they always answer the same length — and it is the
+        // length `String.length` answers, not the UTF-16 unit count the JVM stores.
+        assertEquals(2L, runInt(codes, "calc", Map.of("s", "🍎x")));
+        assertEquals(2L, runInt(codes, "calc", Map.of("s", "𠮷田")));
     }
 
     @Test
@@ -98,15 +116,17 @@ class CompileStringCharsTest {
     }
 
     @Test
-    void toCodeOfTheEmptyStringIsMinusOne() throws Exception {
+    void theFirstCodePointComesOutThroughListGet() throws Exception {
+        // There is no `firstCodePoint`. The absence an empty string has is the absence `List.get`
+        // already answers with, so the caller decides what it means rather than reading a sentinel.
         String src = """
                 module demo
                 data In = { s: String }
                 data Out = Int
                 behavior calc : (i: In) -> Out constructs Out
-                let calc (i) = Out(String.toCode(i.s))
+                let calc (i) = Out(List.get(0, String.codePoints(i.s)) |> Option.withDefault(-1))
                 """;
-        assertEquals(-1L, runInt(src, "calc", Map.of("s", "")));    // no first character
+        assertEquals(-1L, runInt(src, "calc", Map.of("s", "")));    // nothing there: the default
         assertEquals(48L, runInt(src, "calc", Map.of("s", "0")));   // '0' is code point 48
     }
 
@@ -119,9 +139,10 @@ class CompileStringCharsTest {
             data 妥当
             data 不正
             behavior 検証 : (s: 符号) -> 妥当 | 不正 constructs 妥当, 不正
-            let 桁和 (s: String) = fold((acc, ch) -> acc + (String.toCode(ch) - String.toCode("0")), 0, String.toChars(s))
+            let 零 = List.get(0, String.codePoints("0")) |> Option.withDefault(0)
+            let 桁和 (s: String) = fold((acc, c) -> acc + (c - 零), 0, String.codePoints(s))
             let 検証 (s) = {
-                guard Int.modBy(10, 桁和(s.value)) == 0 else 不正
+                guard Int.floorMod(桁和(s.value), 10) == 0 else 不正
                 妥当
             }
             """;
@@ -138,14 +159,14 @@ class CompileStringCharsTest {
     }
 
     @Test
-    void toCharsFoldWorksWithoutImportViaQualifiedList() throws Exception {
+    void aCodePointFoldWorksWithoutImportViaQualifiedList() throws Exception {
         // Same fold, calling List.fold qualified (no import) — the seam works either way.
         String src = """
                 module demo
                 data In = { s: String }
                 data Out = Int
                 behavior calc : (i: In) -> Out constructs Out
-                let calc (i) = Out(List.fold((acc, ch) -> acc + String.toCode(ch), 0, String.toChars(i.s)))
+                let calc (i) = Out(List.fold((acc, c) -> acc + c, 0, String.codePoints(i.s)))
                 """;
         assertEquals(49L + 50L, runInt(src, "calc", Map.of("s", "12")));   // '1'=49, '2'=50
     }

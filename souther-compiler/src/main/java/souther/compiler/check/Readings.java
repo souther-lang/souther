@@ -40,7 +40,7 @@ final class Readings {
     /**
      * Starts on another parameter. What the readings have settled about a variable is kept: two
      * parameters of one helper are read in one body, and a variable one of them settled to another is
-     * settled for both — {@code let has (xs, y) = List.member(y, xs)} learns while reading {@code xs}
+     * settled for both — {@code let has (xs, y) = List.contains(y, xs)} learns while reading {@code xs}
      * that what the expansion left open and what the call inside it left open are one thing, and
      * {@code y} is the parameter that needs to know.
      */

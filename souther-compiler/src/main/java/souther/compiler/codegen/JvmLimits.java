@@ -1,6 +1,7 @@
 package souther.compiler.codegen;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.Requirements;
 import souther.compiler.check.Sig;
@@ -83,7 +84,7 @@ final class JvmLimits {
                 }
                 // the record constructor takes them all, and it is an instance method
                 if (slots > INSTANCE_SLOTS) {
-                    throw tooWide("e2101.data", data.pos(), data.name(), slots, INSTANCE_SLOTS,
+                    throw tooWide("e2101.data", data.written(), slots, INSTANCE_SLOTS,
                             "data `" + data.name() + "` needs " + slots + " JVM parameter slots, but the"
                                     + " constructor generated for it takes at most " + INSTANCE_SLOTS);
                 }
@@ -97,7 +98,7 @@ final class JvmLimits {
             Sig sig = sigs.get(bd.name());
             // a composition whose stage names nothing has no signature, and nothing is emitted for it
             if (sig != null && sig.ins().size() > INSTANCE_SLOTS) {
-                throw tooWide("e2101.behavior.parameters", bd.pos(), bd.name(), sig.ins().size(),
+                throw tooWide("e2101.behavior.parameters", bd.written(), sig.ins().size(),
                         INSTANCE_SLOTS, "behavior `" + bd.name() + "` takes " + sig.ins().size()
                                 + " parameters, but the `apply` generated for it takes at most "
                                 + INSTANCE_SLOTS);
@@ -105,7 +106,7 @@ final class JvmLimits {
             int dependencies = dependencyCount(bd, implemented, requirements);
             // the $Impl constructor holds one field per dependency, and it is an instance method
             if (dependencies > INSTANCE_SLOTS) {
-                throw tooWide("e2101.behavior.dependencies", bd.pos(), bd.name(), dependencies,
+                throw tooWide("e2101.behavior.dependencies", bd.written(), dependencies,
                         INSTANCE_SLOTS, "behavior `" + bd.name() + "` is built with " + dependencies
                                 + " dependencies, but the constructor generated for it takes at most "
                                 + INSTANCE_SLOTS);
@@ -114,7 +115,7 @@ final class JvmLimits {
         for (Ast.FnDef helper : recursiveHelpers.values()) {
             // a recursive helper is a static method on $Fns, so nothing is spent on `this`
             if (helper.params().size() > SLOTS) {
-                throw tooWide("e2101.helper", helper.pos(), helper.name(), helper.params().size(),
+                throw tooWide("e2101.helper", helper.written(), helper.params().size(),
                         SLOTS, "let `" + helper.name() + "` takes " + helper.params().size()
                                 + " parameters, but the method generated for it takes at most " + SLOTS);
             }
@@ -201,10 +202,12 @@ final class JvmLimits {
      * value class, a decoder and an encoder, and a behavior as an implementation and an interface, so
      * naming the definition alone would leave the author looking for which part of it grew.
      */
-    static CompileException tooLarge(Exceeded exceeded, SourcePos pos, String name) {
+    static CompileException tooLarge(Exceeded exceeded, WrittenName written) {
         Limit limit = exceeded.limit();
+        String name = written.canonical();
         String measured = String.valueOf(exceeded.measured());
-        Diagnostic.Builder said = Diagnostic.of(limit.code, limit.messageKey).at(pos, name.length());
+        Diagnostic.Builder said =
+                Diagnostic.of(limit.code, limit.messageKey).at(written.region());
         return switch (limit) {
             case CODE_SIZE -> CompileException.of(
                     said.args(name, exceeded.method(), measured, String.valueOf(CODE_BYTES))
@@ -222,10 +225,11 @@ final class JvmLimits {
         };
     }
 
-    private static CompileException tooWide(String key, SourcePos pos, String name, int needed,
+    private static CompileException tooWide(String key, WrittenName written, int needed,
                                             int limit, String message) {
+        String name = written.canonical();
         return CompileException.of(
-                Diagnostic.of("E2101", key).at(pos, name.length())
+                Diagnostic.of("E2101", key).at(written.region())
                         .args(name, String.valueOf(needed), String.valueOf(limit))
                         .hint(key + ".hint").build(),
                 message);

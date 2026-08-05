@@ -20,7 +20,7 @@ class CompileSetLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import Set ( singleton, insert, contains, union, intersect, difference, size, isEmpty, toList, fromList )
+                import Set ( singleton, insert, contains, union, intersection, difference, size, isEmpty, toList, fromList )
 
                 data In = { xs: List<String> }
                 data Out = {
@@ -41,7 +41,7 @@ class CompileSetLibTest {
                         n = size(s),
                         hasA = contains("a", s),
                         unionList = toList(union(s, t)),
-                        interList = toList(intersect(s, t)),
+                        interList = toList(intersection(s, t)),
                         diffList = toList(difference(s, t)),
                         emptyFlag = isEmpty(Set.empty)
                     }
@@ -94,7 +94,7 @@ class CompileSetLibTest {
                         joined = fold((acc, x) -> acc ++ x, "", Set.map(x -> "-", s)),
                         yes = toList(a),
                         no = toList(b),
-                        collapsed = size(Set.map(x -> String.substring(0, 1, x), s))
+                        collapsed = size(Set.map(x -> String.slice(0, 1, x), s))
                     }
                 }
                 """), getClass().getClassLoader());

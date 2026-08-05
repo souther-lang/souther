@@ -73,7 +73,7 @@ class CompileMapLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import Map ( fold, map, update )
+                import Map ( fold, mapValues, updateIfPresent )
 
                 data In = { stock: Map<String, Int> }
                 data Out = {
@@ -89,10 +89,10 @@ class CompileMapLibTest {
                 let run (i) = {
                     Out {
                         total = fold((acc, k, v) -> acc + v, 0, i.stock),
-                        doubled = map((k, v) -> v * 2, i.stock),
-                        flagged = map((k, v) -> v > 15, i.stock),
-                        afterIssue = update("a", (v) -> v - 1, i.stock),
-                        afterAbsent = update("z", (v) -> v - 1, i.stock)
+                        doubled = mapValues((k, v) -> v * 2, i.stock),
+                        flagged = mapValues((k, v) -> v > 15, i.stock),
+                        afterIssue = updateIfPresent("a", (v) -> v - 1, i.stock),
+                        afterAbsent = updateIfPresent("z", (v) -> v - 1, i.stock)
                     }
                 }
                 """), getClass().getClassLoader());
@@ -119,7 +119,7 @@ class CompileMapLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import Map ( filter, union, intersect, difference )
+                import Map ( filterEntries, union, intersection, difference )
 
                 data In = { left: Map<String, Int>, right: Map<String, Int> }
                 data Out = {
@@ -132,9 +132,9 @@ class CompileMapLibTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out {
-                    big = filter((k, v) -> v >= 20, i.left),
+                    big = filterEntries((k, v) -> v >= 20, i.left),
                     joined = union(i.left, i.right),
-                    shared = intersect(i.left, i.right),
+                    shared = intersection(i.left, i.right),
                     only = difference(i.left, i.right)
                 }
                 """), getClass().getClassLoader());
@@ -160,7 +160,7 @@ class CompileMapLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import Map ( fold, map, update )
+                import Map ( fold, mapValues, updateIfPresent )
 
                 data In = { stock: Map<String, Int> }
                 data Out = {
@@ -174,8 +174,8 @@ class CompileMapLibTest {
                 let run (i) = {
                     Out {
                         total = fold((acc, k, v) -> acc + v, 0, i.stock),
-                        doubled = map((k, v) -> v * 2, i.stock),
-                        updated = update("a", (v) -> v - 1, i.stock)
+                        doubled = mapValues((k, v) -> v * 2, i.stock),
+                        updated = updateIfPresent("a", (v) -> v - 1, i.stock)
                     }
                 }
                 """), getClass().getClassLoader());
@@ -248,7 +248,7 @@ class CompileMapLibTest {
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo
 
-                import Map ( upsert )
+                import Map ( updateOrInsert )
 
                 data In = { counts: Map<String, Int> }
                 data Out = {
@@ -260,8 +260,8 @@ class CompileMapLibTest {
 
                 let run (i) = {
                     Out {
-                        bumpedPresent = upsert("a", 1, (n) -> n + 1, i.counts),
-                        bumpedAbsent = upsert("z", 1, (n) -> n + 1, i.counts)
+                        bumpedPresent = updateOrInsert("a", 1, (n) -> n + 1, i.counts),
+                        bumpedAbsent = updateOrInsert("z", 1, (n) -> n + 1, i.counts)
                     }
                 }
                 """), getClass().getClassLoader());

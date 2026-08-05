@@ -155,7 +155,7 @@ final class HelperParams {
             if (open.isEmpty()) {
                 return null;
             }
-            body = inliner.inline(h.written(), inliner.bodyOf(h.name()));
+            body = inliner.inline(h.writtenBody(), inliner.bodyOf(h.name()));
         } catch (CompileException _) {
             return null;   // a written type or a call that does not resolve; the check reports it
         }
@@ -190,8 +190,8 @@ final class HelperParams {
                                     p.pos()),
                             p.typeFromPattern()));
         }
-        return new Ast.FnDef(h.name(), params, h.declaredReturn(), h.body(),
-                h.partial(), h.pos());
+        return new Ast.FnDef(h.written(), params, h.declaredReturn(), h.body(),
+                h.modifiers(), h.pos());
     }
 
     /**
@@ -199,7 +199,7 @@ final class HelperParams {
      * body left open written as a variable of the helper.
      *
      * <p>Reading the body is what settles a parameter, and what the body settles it to may be open:
-     * {@code let has (xs, y) = List.member(y, xs)} learns that {@code xs} holds whatever {@code y} is
+     * {@code let has (xs, y) = List.contains(y, xs)} learns that {@code xs} holds whatever {@code y} is
      * and no more. That is an answer — it says the two are one thing — but it is the helper's answer
      * now, not the expansion's. A variable of one application decides once, when that application is
      * typed; a variable of a declaration decides at each call of it, which is what {@code has} needs.
@@ -701,7 +701,7 @@ final class HelperParams {
          * An expansion demands of each argument what the callee declared for it. The declarations
          * arrive already instantiated into that one application's variables, so a variable the
          * signature wrote in two places is one variable here and a reading of either settles both —
-         * which is what makes {@code let has (xs, y) = List.member(y, xs)} say that {@code y} is an
+         * which is what makes {@code let has (xs, y) = List.contains(y, xs)} say that {@code y} is an
          * element of {@code xs}.
          *
          * <p>The body is read for what the expansion as a whole is read for. Not for the callee's
@@ -1111,7 +1111,7 @@ final class HelperParams {
          *
          * <p>Where the variable stands is not enough on its own. A binding the body made from this
          * parameter carries it too, and taking that for evidence would let a parameter be settled by
-         * what was built out of it: {@code let f (v) = let xs = [v] in List.member(v, xs)} says
+         * what was built out of it: {@code let f (v) = let xs = [v] in List.contains(v, xs)} says
          * nothing about {@code v} that {@code v} did not say first. Only the other parameters count.
          *
          * <p>A variable the core wrote, and one standing only where this parameter is being worked

@@ -112,7 +112,7 @@ class CompileHigherOrderIntrinsicTest {
                 behavior run : (i: In) -> Out constructs Out
 
                 let run (i) = Out {
-                    counts = List.fold((acc, x) -> Map.upsert(String.fromInt(x), 1, (n) -> n + 1, acc),
+                    counts = List.fold((acc, x) -> Map.updateOrInsert(String.fromInt(x), 1, (n) -> n + 1, acc),
                         Map.empty, i.xs)
                 }
                 """, "demo.Out", Map.of("xs", List.of(1L, 1L, 2L)));

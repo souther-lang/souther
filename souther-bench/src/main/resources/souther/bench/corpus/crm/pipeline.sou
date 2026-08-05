@@ -20,7 +20,7 @@
 //     ConversionRefused — because an output union is built from the cases the module declares (E1606).
 //     A context that declines states its own declining, and the aggregate rule holds: an account, a
 //     contact and an opportunity are made together or none of them is.
-//   - Aggregation with `Map.upsert`: the pipeline by stage, counted and totalled in two folds, keyed by a
+//   - Aggregation with `Map.updateOrInsert`: the pipeline by stage, counted and totalled in two folds, keyed by a
 //     String-backed StageName rather than by the stage sum — a stage carries fields, so it is not the
 //     enumeration a boundary map keys by, which is what is left of finding F3 and the reason the ten stage
 //     names exist twice in this file.
@@ -863,7 +863,7 @@ example closeAndSummarize
         -> BelowFloor { floor = Amount(4200000.00m), offered = Amount(3000000.00m) }
 
 // === pipelineByStage: the aggregation ===
-// Two folds with Map.upsert, over one list. The absent branch inserts this deal's own figure and the
+// Two folds with Map.updateOrInsert, over one list. The absent branch inserts this deal's own figure and the
 // present branch adds to it — writing a zero into the absent branch and adding afterwards would lose the
 // first deal of every stage, which is the mistake this shape exists to prevent.
 //
@@ -872,13 +872,13 @@ example closeAndSummarize
 // exhaustive match. What is left of finding F3.
 
 let countByStage (opps: List<Opportunity>): Map<StageName, Int> =
-    List.fold((acc, opp) -> Map.upsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty, opps)
+    List.fold((acc, opp) -> Map.updateOrInsert(stageNameOf(opp), 1, n -> n + 1, acc), Map.empty, opps)
 
 // A call's result is reached into, so the amount arrives as `amountOf(opp).value` and neither the helper
 // that opened the newtype nor the one that chained the two calls is here any more.
 let totalByStage (opps: List<Opportunity>): Map<StageName, Amount> =
     List.fold((acc, opp) ->
-                  Map.upsert(stageNameOf(opp),
+                  Map.updateOrInsert(stageNameOf(opp),
                              amountOf(opp),
                              running -> Amount(Decimal.add(running.value, amountOf(opp).value)),
                              acc),

@@ -116,10 +116,10 @@ class CompileInvariantOneDenotationTest {
     void namingACallDoesNotChangeWhatIsKnownOfIt() {
         // the call is the same call either way, so the construction from it answers the same
         assertEquals(warnings(Compiler.compileWithWarnings(
-                        EACHES.formatted("Eaches(Int.modBy(pack.value, eaches.value))"))),
+                        EACHES.formatted("Eaches(Int.floorMod(eaches.value, pack.value))"))),
                 warnings(Compiler.compileWithWarnings(EACHES.formatted("""
                         {
-                                let n = Int.modBy(pack.value, eaches.value)
+                                let n = Int.floorMod(eaches.value, pack.value)
                                 Eaches(n)
                             }"""))),
                 "inline and named answer alike");
@@ -128,7 +128,7 @@ class CompileInvariantOneDenotationTest {
     @Test
     void aCallNothingHasSpokenAboutIsSilent() {
         assertEquals(0, warnings(Compiler.compileWithWarnings(
-                        EACHES.formatted("Eaches(Int.modBy(pack.value, eaches.value))"))),
+                        EACHES.formatted("Eaches(Int.floorMod(eaches.value, pack.value))"))),
                 "nothing is known of the call, so its construction is left to the run-time check");
     }
 
@@ -153,12 +153,12 @@ class CompileInvariantOneDenotationTest {
     @Test
     void aGuardOnACallDischargesWhatItEstablishes() {
         String named = guarded("Eaches", 0, """
-                let n = Int.modBy(pack.value, n)
+                let n = Int.floorMod(n, pack.value)
                     guard n >= 0 else Odd { why = n }
                     Eaches(n)""");
         String inline = guarded("Eaches", 0, """
-                guard Int.modBy(pack.value, n) >= 0 else Odd { why = 0 }
-                    Eaches(Int.modBy(pack.value, n))""");
+                guard Int.floorMod(n, pack.value) >= 0 else Odd { why = 0 }
+                    Eaches(Int.floorMod(n, pack.value))""");
         assertEquals(0, warnings(Compiler.compileWithWarnings(named)), "the guard establishes it");
         assertEquals(0, warnings(Compiler.compileWithWarnings(inline)),
                 "and establishes it written inline too");
@@ -168,12 +168,12 @@ class CompileInvariantOneDenotationTest {
     void aGuardOnACallLeavesWhatItDoesNotEstablishReported() {
         // `>= 0` is stated and `>= 1` is owed — expressible, and unproven, in both spellings
         String named = guarded("AtLeastOne", 1, """
-                let n = Int.modBy(pack.value, n)
+                let n = Int.floorMod(n, pack.value)
                     guard n >= 0 else Odd { why = n }
                     AtLeastOne(n)""");
         String inline = guarded("AtLeastOne", 1, """
-                guard Int.modBy(pack.value, n) >= 0 else Odd { why = 0 }
-                    AtLeastOne(Int.modBy(pack.value, n))""");
+                guard Int.floorMod(n, pack.value) >= 0 else Odd { why = 0 }
+                    AtLeastOne(Int.floorMod(n, pack.value))""");
         assertEquals(1, warnings(Compiler.compileWithWarnings(named)), "stated, and still unproven");
         assertEquals(1, warnings(Compiler.compileWithWarnings(inline)), "the same written inline");
     }
@@ -294,7 +294,7 @@ class CompileInvariantOneDenotationTest {
                 module demo
                 data Row = { grade: Int }
                 data Table = List<Row>
-                    invariant List.allUniqueBy(.grade, value)
+                    invariant List.allDistinctBy(.grade, value)
                 let row (n: Int) = Row { grade = n }
                 behavior mk : (x: Int) -> Table
                     constructs Table, Row

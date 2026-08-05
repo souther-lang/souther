@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
@@ -11,6 +12,7 @@ import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 import souther.compiler.Prelude;
+import souther.compiler.Reserved;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -82,10 +84,10 @@ public final class Resolve {
             // Only a name the author wrote is a place a reader can be sent to or asked about. A
             // desugaring's binding is anchored on the form it came from, which is a place holding
             // something the author did write.
-            binders.put(id, new BoundName(binder.name(), binder.namePos()));
+            binders.put(id, new BoundName(binder.written()));
         }
         return new Answered(
-                new Ast.Binder.Bound(binder.name(), id, binder.namePos(), binder.pos()),
+                new Ast.Binder.Bound(binder.written(), id, binder.pos()),
                 bound.and(binder.name(), new ValueName.Local(binder.name(), id)));
     }
 
@@ -147,18 +149,30 @@ public final class Resolve {
      * from walking the tree again with a rule of its own — which, before this, is how renaming a
      * type could rewrite the tail of a qualified reference to a different module's type.
      *
-     * @param written the name as the source wrote it, bare or qualified
+     * @param written the occurrence the name was read from — the name, the characters that spell
+     *                it there, and where they are
      * @param denotes what it names
-     * @param pos where the written name starts
      */
-    public record Denotation(String written, TypeName denotes, SourcePos pos) {}
+    public record Denotation(WrittenName written, TypeName denotes) {
+
+        /** Where the name is written. */
+        public SourcePos pos() {
+            return written.pos();
+        }
+    }
 
     /**
      * One written name in the value namespace and what it turned out to denote, where it was
      * written. What {@link Denotation} is for a type, and collected for the same reason: an editor
      * asking what is under the cursor is asking about the answer this traversal already gave.
      */
-    public record ValueUse(String written, ValueName denotes, SourcePos pos) {}
+    public record ValueUse(WrittenName written, ValueName denotes) {
+
+        /** Where the name is written. */
+        public SourcePos pos() {
+            return written.pos();
+        }
+    }
 
     /**
      * A resolved module, every name the pass answered in it, and the names it could not answer.
@@ -171,8 +185,9 @@ public final class Resolve {
      * <p>{@code binders} says what each binding is called and where the author wrote that name. A
      * binding is not its position — a pass that expands a helper stamps the call site over the
      * positions in the copy — so the two are kept apart, and a reader asking about the source rather
-     * than about the program reads this. The spelling comes with it because a reader asking what a
-     * cursor is on has to know how far the name reaches, and a position alone does not say.
+     * than about the program reads this. The characters that spell it come with it, because a reader
+     * asking what a cursor is on has to know how far the name reaches, and neither a position nor
+     * the name alone says.
      *
      * <p>Only the bindings whose names the author wrote are in it. A desugaring binds a value to a
      * name of its own — the parameter {@code .field} becomes, the value a {@code match} is held in —
@@ -183,8 +198,14 @@ public final class Resolve {
     public record Resolved(Ast.Module module, List<Denotation> denotations, List<ValueUse> values,
                            List<CompileException> unresolved, Map<BindingId, BoundName> binders) {}
 
-    /** What a binding is called, and where that name is written. */
-    public record BoundName(String written, SourcePos pos) {}
+    /** What a binding is called, and the occurrence of that name the author wrote. */
+    public record BoundName(WrittenName written) {
+
+        /** Where the name is written. */
+        public SourcePos pos() {
+            return written.pos();
+        }
+    }
 
     /** {@code m} with every name it writes resolved against its own definitions — a module compiled
      * with nothing else in sight. */
@@ -220,9 +241,9 @@ public final class Resolve {
         List<Ast.BehaviorDef> behaviors = new ArrayList<>();
         for (Ast.BehaviorDef b : m.behaviors()) {
             behaviors.add(switch (b) {
-                case Ast.SpecBehavior spec -> new Ast.SpecBehavior(spec.name(), r.params(spec.params()),
+                case Ast.SpecBehavior spec -> new Ast.SpecBehavior(spec.written(), r.params(spec.params()),
                         r.retType(spec.ret()), r.names(spec.constructs()), spec.dependsOn(), spec.pos());
-                case Ast.PipeBehavior pipe -> new Ast.PipeBehavior(pipe.name(), pipe.stages(),
+                case Ast.PipeBehavior pipe -> new Ast.PipeBehavior(pipe.written(), pipe.stages(),
                         r.retType(pipe.declaredOut()), pipe.pos());
             });
         }
@@ -278,7 +299,7 @@ public final class Resolve {
             case Ast.FnBody.Written w -> new Ast.FnBody.Written(expr(w.expr(), bound));
             case Ast.FnBody.Intrinsic i -> i;
         };
-        return new Ast.FnDef(f.name(), params, retType(f.declaredReturn()), body, f.partial(),
+        return new Ast.FnDef(f.written(), params, retType(f.declaredReturn()), body, f.modifiers(),
                 f.pos());
     }
 
@@ -287,7 +308,7 @@ public final class Resolve {
     private List<Ast.Param> params(List<Ast.Param> params) {
         List<Ast.Param> out = new ArrayList<>();
         for (Ast.Param p : params) {
-            out.add(new Ast.Param(p.name(), retType(p.type()), p.pos()));
+            out.add(new Ast.Param(p.written(), retType(p.type())));
         }
         return out;
     }
@@ -295,7 +316,7 @@ public final class Resolve {
     private List<Ast.Field> fields(List<Ast.Field> fields) {
         List<Ast.Field> out = new ArrayList<>();
         for (Ast.Field f : fields) {
-            out.add(new Ast.Field(f.name(), typeTerm(f.type()), f.pos()));
+            out.add(new Ast.Field(f.written(), typeTerm(f.type())));
         }
         return out;
     }
@@ -343,13 +364,13 @@ public final class Resolve {
                 elems.add(typeTerm(e));
             }
         }
-        Ast.TypeRef resolved = new Ast.TypeRef(ref.name(), arg, elems, ref.pos());
+        Ast.TypeRef resolved = new Ast.TypeRef(ref.written(), arg, elems, null, ref.anchor());
         Ast.TypeRef denoted = resolved.denoting(typeOf(resolved));
         // A reference with no name is a tuple or a container shape, which names no declaration.
         if (denoted.name() != null && denoted.pos() != null) {
             TypeName names = symbols.resolve(denoted.name());
             if (names != null) {
-                denotations.add(new Denotation(denoted.name(), names, denoted.pos()));
+                denotations.add(new Denotation(denoted.written(), names));
             }
         }
         return denoted;
@@ -365,13 +386,13 @@ public final class Resolve {
             // names — `value > 0` is about this declaration's `value`, whatever else is in scope
             case Ast.Data d -> {
                 declareFields(d);
-                yield new Ast.Data(d.name(), d.newtype(), names(d.includes()), fields(d.fields()),
+                yield new Ast.Data(d.written(), d.newtype(), names(d.includes()), fields(d.fields()),
                         Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
                         d.decoder().map(this::decoder), d.encoder().map(this::encoder),
-                        d.namePos(), d.pos());
+                        d.pos());
             }
-            case Ast.SumData s -> new Ast.SumData(s.name(), sumCases(s), s.decoder().map(this::discriminate),
-                    s.encoder().map(this::sumEncoder), s.namePos(), s.pos());
+            case Ast.SumData s -> new Ast.SumData(s.written(), sumCases(s), s.decoder().map(this::discriminate),
+                    s.encoder().map(this::sumEncoder), s.pos());
         };
     }
 
@@ -417,7 +438,7 @@ public final class Resolve {
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
             if (binding != null) {
-                binders.put(binding, new BoundName(field.name(), field.pos()));   // OfFields
+                binders.put(binding, new BoundName(field.written()));   // OfFields
             }
         }
     }
@@ -503,7 +524,7 @@ public final class Resolve {
     private Ast.Construct construct(Ast.Construct c, Bindings bound) {
         List<Ast.FieldInit> inits = new ArrayList<>();
         for (Ast.FieldInit i : c.inits()) {
-            inits.add(new Ast.FieldInit(i.name(), expr(i.value(), bound), i.pos()));
+            inits.add(new Ast.FieldInit(i.written(), expr(i.value(), bound)));
         }
         return new Ast.Construct(type(c.typeName()), inits, c.pos());
     }
@@ -572,13 +593,12 @@ public final class Resolve {
      */
     private Ast.Expr expr(Ast.Expr e, Bindings bound) {
         return switch (e) {
-            case Ast.Var v -> v.denoting(answered(v.name(), v.pos(),
-                    valueName(v.name(), v.pos(), bound)));
+            case Ast.Var v -> v.denoting(answered(v.written(), valueName(v.written(), bound)));
             // Applying a name is answered as a name: which of a binding, a helper, a library
             // function or a type it is decides what the application means. Applying anything else
             // is answered as the expression it is, and what may be applied is the check's to say.
             case Ast.Apply call when call.appliesAName() -> new Ast.Apply(call.written(),
-                    answered(call.written(), call.pos(), calledName(call, bound)),
+                    answered(call.name(), calledName(call, bound)),
                     exprs(call.args(), bound), call.origin(), call.pos());
             case Ast.Apply call -> new Ast.Apply(callee(call.function(), bound),
                     exprs(call.args(), bound), call.origin(), call.pos());
@@ -642,8 +662,7 @@ public final class Resolve {
      */
     private Ast.Var name(Ast.Var written, Bindings bound) {
         return written.denotes() != null ? written
-                : written.denoting(answered(written.name(), written.pos(),
-                        valueName(written.name(), written.pos(), bound)));
+                : written.denoting(answered(written.written(), valueName(written.written(), bound)));
     }
 
     private List<Ast.ElseArm> arms(List<Ast.ElseArm> arms, Bindings bound) {
@@ -696,9 +715,16 @@ public final class Resolve {
         // whole name, included. Whether the library has a member of that name is the check's to say:
         // asking here would tie the answer to how much of the library has been loaded, and the
         // library resolves its own sources while it loads.
+        //
+        // A `private` declaration is the exception, and asking about it here is safe for the same
+        // reason: the only modules that may name one are the library's own, and they are told yes
+        // without the entry being looked up at all.
         int dot = written.lastIndexOf('.');
         if (Prelude.isQualifier(dot < 0 ? written : written.substring(0, dot))) {
-            return new ValueName.Stdlib(written);
+            if (Reserved.isNamespace(values.module()) || !Prelude.isPrivateMember(written)) {
+                return new ValueName.Stdlib(written);
+            }
+            return null;
         }
         TypeName type = symbols.resolve(written);
         if (type != null && !type.isUnresolved()) {
@@ -762,12 +788,12 @@ public final class Resolve {
         if (root == null || root.denotes() != null || bound.binderOf(root.name()) != null) {
             return null;
         }
-        String written = dottedName(fa);
-        ValueName denotes = lookup(written, applied, bound);
+        WrittenName written = dottedName(fa);
+        ValueName denotes = lookup(written.canonical(), applied, bound);
         if (denotes != null) {
-            return new Ast.Var(written, answered(written, root.pos(), denotes), root.pos());
+            return new Ast.Var(written, answered(written, denotes));
         }
-        return unknownMember(fa, written, applied, root.pos(), bound);
+        return unknownMember(fa, written, applied, bound);
     }
 
     /**
@@ -781,15 +807,15 @@ public final class Resolve {
      * as the unknown identifier it is once the chain is read as the field access it turned out to
      * be.
      */
-    private Ast.Var unknownMember(Ast.FieldAccess fa, String written, boolean applied,
-                                  SourcePos pos, Bindings bound) {
-        String qualifier = dottedName(fa.target());
-        if (qualifier == null || !isNamespace(qualifier)) {
+    private Ast.Var unknownMember(Ast.FieldAccess fa, WrittenName written, boolean applied,
+                                  Bindings bound) {
+        WrittenName qualifier = dottedName(fa.target());
+        if (qualifier == null || !isNamespace(qualifier.canonical())) {
             return null;
         }
-        CompileException why = applied ? notCallable(written, pos, bound)
-                : unknownIdentifier(written, pos, bound);
-        return new Ast.Var(written, answered(written, pos, nothing(written, pos, why)), pos);
+        CompileException why = applied ? notCallable(written, bound)
+                : unknownIdentifier(written, bound);
+        return new Ast.Var(written, answered(written, nothing(written.canonical(), why)));
     }
 
     /** Whether {@code qualifier} names a namespace a member may be reached through: a
@@ -809,29 +835,29 @@ public final class Resolve {
     }
 
     /** The dotted spelling of a chain of names, or null where it is not one. */
-    private static String dottedName(Ast.Expr e) {
+    private static WrittenName dottedName(Ast.Expr e) {
         return switch (e) {
-            case Ast.Var v -> v.name();
+            case Ast.Var v -> v.written();
             case Ast.FieldAccess fa -> {
-                String target = dottedName(fa.target());
-                yield target == null ? null : target + "." + fa.field();
+                WrittenName target = dottedName(fa.target());
+                yield target == null ? null : target.then(fa.name());
             }
             default -> null;
         };
     }
 
     /** What a name used as a value denotes, and the report for one that denotes nothing. */
-    private ValueName valueName(String written, SourcePos pos, Bindings bound) {
-        ValueName denotes = lookup(written, false, bound);
+    private ValueName valueName(WrittenName written, Bindings bound) {
+        ValueName denotes = lookup(written.canonical(), false, bound);
         return denotes != null ? denotes
-                : nothing(written, pos, unknownIdentifier(written, pos, bound));
+                : nothing(written.canonical(), unknownIdentifier(written, bound));
     }
 
     /** The same, for the name an application applies: what is not there is reported differently. */
     private ValueName calledName(Ast.Apply call, Bindings bound) {
         ValueName denotes = lookup(call.written(), true, bound);
         return denotes != null ? denotes
-                : nothing(call.written(), call.pos(), notCallable(call.written(), call.pos(), bound));
+                : nothing(call.written(), notCallable(call.name(), bound));
     }
 
     /**
@@ -842,19 +868,19 @@ public final class Resolve {
      * one too. Otherwise renaming the type would rewrite every other mention of it and leave these,
      * which is a rename that stops the workspace compiling.
      */
-    private ValueName answered(String written, SourcePos pos, ValueName denotes) {
-        if (pos == null) {
+    private ValueName answered(WrittenName written, ValueName denotes) {
+        if (written.pos() == null) {
             return denotes;
         }
-        values0.add(new ValueUse(written, denotes, pos));
+        values0.add(new ValueUse(written, denotes));
         if (denotes instanceof ValueName.OfType named) {
-            denotations.add(new Denotation(written, named.type(), pos));
+            denotations.add(new Denotation(written, named.type()));
         }
         return denotes;
     }
 
     /** Records that a name in a body denotes nothing, and gives it the name that says so. */
-    private ValueName nothing(String written, SourcePos pos, CompileException why) {
+    private ValueName nothing(String written, CompileException why) {
         unresolved.add(why);
         return new ValueName.Unresolved(written);
     }
@@ -867,38 +893,69 @@ public final class Resolve {
         return names;
     }
 
-    private CompileException unknownIdentifier(String written, SourcePos pos, Bindings bound) {
-        if (written.equals("null")) {
-            return new CompileException(pos, "E1301",
+    /**
+     * The report for a spelling under a library qualifier that the library has no member for, or
+     * null where the spelling is not one. A {@code private} declaration lands here: from outside the
+     * reserved namespace the library has no such member, which is what a caller is told — the same
+     * answer a misspelling gets, because from where the caller stands they are the same thing.
+     */
+    private CompileException notALibraryMember(WrittenName written) {
+        String name = written.canonical();
+        int dot = name.lastIndexOf('.');
+        if (dot < 0 || !Prelude.isQualifier(name.substring(0, dot))) {
+            return null;
+        }
+        return CompileException.of(
+                Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
+                        .at(written.region()).args(written.quoted()).build(),
+                "`" + written.quoted() + "` is not a standard-library function.");
+    }
+
+    private CompileException unknownIdentifier(WrittenName written, Bindings bound) {
+        String name = written.canonical();
+        if (name.equals("null")) {
+            return new CompileException(written.pos(), "E1301",
                     "`null` is not part of the language. Use an optional field with `?`.");
+        }
+        CompileException notALibraryMember = notALibraryMember(written);
+        if (notALibraryMember != null) {
+            return notALibraryMember;
         }
         List<String> candidates = reachable(bound);
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.name.msg").title("check.unknown.title")
-                        .at(pos, written.length()).args(written)
-                        .suggestion(Suggest.candidate(written, candidates)).build(),
-                "unknown identifier `" + written + "`" + Suggest.hint(written, candidates));
+                        .at(written.region()).args(written.quoted())
+                        .suggestion(Suggest.candidate(name, candidates)).build(),
+                "unknown identifier `" + written.quoted() + "`" + Suggest.hint(name, candidates));
     }
 
     /**
      * A name applied to arguments that names nothing that can be applied. A standard-library
      * function written bare is told apart: it exists, and is reached qualified (spec §stdlib).
      */
-    private CompileException notCallable(String written, SourcePos pos, Bindings bound) {
-        String qualified = Prelude.qualifiedFor(written);
+    private CompileException notCallable(WrittenName written, Bindings bound) {
+        CompileException notALibraryMember = notALibraryMember(written);
+        if (notALibraryMember != null) {
+            return notALibraryMember;
+        }
+        String name = written.canonical();
+        String qualified = Prelude.qualifiedFor(name);
         if (qualified != null) {
             return CompileException.of(
                     Diagnostic.of(null, "check.stdlib.qualified.msg").title("check.unknown.title")
-                            .at(pos, written.length()).args(written, qualified).build(),
-                    "`" + written + "` is a standard-library function and must be called qualified,"
-                            + " as `" + qualified + "` (spec §stdlib).");
+                            .at(written.region()).args(written.quoted(), qualified)
+                            .build(),
+                    "`" + written.quoted() + "` is a standard-library function and must be called"
+                            + " qualified, as `" + qualified + "` (spec §stdlib).");
         }
         List<String> candidates = reachable(bound);
         return CompileException.of(
-                Diagnostic.of("E1401", "e1401.msg").at(pos, written.length()).args(written)
-                        .suggestion(Suggest.candidate(written, candidates))
+                Diagnostic.of("E1401", "e1401.msg").at(written.region())
+                        .args(written.quoted())
+                        .suggestion(Suggest.candidate(name, candidates))
                         .hint("e1401.hint").build(),
-                "`" + written + "` is not a behavior or builtin" + Suggest.hint(written, candidates)
+                "`" + written.quoted() + "` is not a behavior or builtin"
+                        + Suggest.hint(name, candidates)
                         + ". Calling arbitrary JVM methods is not allowed; declare a behavior"
                         + " without a `let` and implement it from Java.");
     }
@@ -987,7 +1044,7 @@ public final class Resolve {
 
     /** Records that {@code n} denotes nothing, and gives it the name that says so. */
     private TypeName nothingDenotes(Ast.Name n) {
-        unresolved.add(TypeOps.unknownType(n.written(), n.pos(), symbols));
+        unresolved.add(TypeOps.unknownType(n.name(), symbols));
         return TypeName.unresolved(n.written());
     }
 
@@ -995,7 +1052,7 @@ public final class Resolve {
      * synthesized by an earlier pass rather than written, so there is nothing to point at. */
     private Ast.Name answered(Ast.Name n) {
         if (n.pos() != null) {
-            denotations.add(new Denotation(n.written(), n.denotes(), n.pos()));
+            denotations.add(new Denotation(n.name(), n.denotes()));
         }
         return n;
     }

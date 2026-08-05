@@ -6,7 +6,7 @@ Status: Accepted. Amends ADR-0042.
 
 ADR-0060 took the fold path's cost out of `PersistentVector` by letting successive appends claim a
 slot in a shared tail. The obvious next question is whether the same applies to `PersistentHashMap`
-and `PersistentHashSet`, which `groupBy`, `indexBy`, `Map.map`, `Map.filter`, `Set.partition` and
+and `PersistentHashSet`, which `groupBy`, `indexBy`, `Map.mapValues`, `Map.filterEntries`, `Set.partition` and
 `List.distinct` all grow one entry at a time.
 
 Allocation per entry, measured with `ThreadMXBean.getThreadAllocatedBytes` after warm-up on GraalVM
@@ -16,7 +16,7 @@ Allocation per entry, measured with `ThreadMXBean.getThreadAllocatedBytes` after
 | --- | --- |
 | `PersistentHashMap.from` — every decoded `Map` field, `Map.fromList` | 406 B/entry |
 | `PersistentHashSet.from` — every decoded `Set` field, `Set.map`/`filter`, the set algebra | 415 B/entry |
-| `assoc` one entry at a time — `groupBy`, `indexBy`, `Map.map`, `distinct` | 357 B/entry |
+| `assoc` one entry at a time — `groupBy`, `indexBy`, `Map.mapValues`, `distinct` | 357 B/entry |
 
 `from` costing *more* than the element-wise loop it exists to replace is the first thing to notice:
 it had no bulk path at all, and simply looped `assoc` over an intermediate `HashMap`.
@@ -60,7 +60,7 @@ Bulk construction runs about 2.4× leaner, and the persistent path is untouched 
 the allocation test asserts the first row so it stays that way.
 
 **The fold-accumulated stdlib is not covered and cannot be, at this layer.** `List.groupBy`,
-`List.indexBy`, `List.distinct`, `Map.map`, `Map.filter`, `Map.union`, `Map.intersect` and
+`List.indexBy`, `List.distinct`, `Map.mapValues`, `Map.filterEntries`, `Map.union`, `Map.intersection` and
 `Set.partition` call `Map.insert`/`Set.insert` per element from generated code, where the accumulator
 is a genuine persistent value the caller may branch on. Making those cheaper needs the accumulator to
 be known linear, which is the compiler-side analysis ADR-0042 deferred and still defers. What did

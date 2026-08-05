@@ -51,7 +51,7 @@ public final class DataChecker {
     public static List<ConstCheck> constNewtypeChecks(Ast.Module module, Symbols symbols) {
         List<ConstCheck> out = new ArrayList<>();
         for (Ast.FnDef fn : module.fns()) {
-            collectConstChecks(fn.written(), symbols, out);
+            collectConstChecks(fn.writtenBody(), symbols, out);
         }
         return out;
     }
@@ -185,7 +185,7 @@ public final class DataChecker {
                 // it compares against a limit rather than setting one.
                 Map<TypeName, String> side = carried(nd, nd.typeName().denotes())
                         ? out.carried() : out.originated();
-                side.putIfAbsent(nd.typeName().denotes(), nd.typeName().written());
+                side.putIfAbsent(nd.typeName().denotes(), nd.typeName().name().quoted());
                 for (Ast.FieldInit init : nd.inits()) {
                     collectConstructs(init.value(), out, symbols, recConstructs);
                 }
@@ -250,7 +250,7 @@ public final class DataChecker {
                     && symbols.get(named.type()) instanceof Ast.UnitData -> {
                 Map<TypeName, String> side = named.origin().carried(named.type())
                         ? out.carried() : out.originated();
-                side.putIfAbsent(named.type(), v.name());
+                side.putIfAbsent(named.type(), v.written().quoted());
             }
             case Ast.IntLit _ -> { }
             case Ast.DecimalLit _ -> { }
@@ -353,7 +353,7 @@ public final class DataChecker {
             if (symbols.isForeign(c.denotes())) {
                 throw CompileException.of(
                         Diagnostic.of("E1606", "check.sum.foreigncase").title("check.sum.title")
-                                .at(c.pos(), c.written().length())
+                                .at(c.name().region())
                                 .args(c.written(), sum.name(), c.denotes().module())
                                 .hint("check.sum.foreigncase.hint").build(),
                         "`" + c.written() + "` is declared in `" + c.denotes().module() + "`, so it"
@@ -662,7 +662,7 @@ public final class DataChecker {
             if (ft == null) {
                 throw CompileException.of(
                         Diagnostic.of(null, "check.construct.nofield").title("check.construct.title")
-                                .at(init.pos(), init.name().length()).args(init.name(), typeName).build(),
+                                .at(init.written().region()).args(init.name(), typeName).build(),
                         "`" + init.name() + "` is not a field of `" + typeName + "`");
             }
             // push the field's declared type into the value expression, so a field initialised from a
@@ -678,7 +678,7 @@ public final class DataChecker {
             if (!TypeOps.assignable(vt, ft, ctx.symbols())) {   // a case value widens to its sum-typed field (spec 8.3)
                 throw CompileException.of(
                         Diagnostic.of(null, "check.field.type").title("check.type.mismatch.title")
-                                .at(init.pos(), init.name().length())
+                                .at(init.written().region())
                                 .args(init.name(), Type.show(ft), Type.show(vt))
                                 .diff(Type.show(vt, ft), Type.show(ft, vt)).build(),
                         "field `" + init.name() + "` expects " + ft + " but got " + vt);

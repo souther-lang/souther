@@ -99,7 +99,7 @@ final class TotalityChecker {
         }
         Ast.FnDef anchor = own.get(java.util.Collections.min(group));
         String members = backtickJoin(group);
-        return error(anchor, anchor.name().length(), members, "check.totality.sizechange",
+        return error(anchor, members, "check.totality.sizechange",
                 "recursive helpers " + members + " are mutually recursive but not size-change"
                         + " terminating: no argument strictly decreases around every recursive cycle."
                         + " Recurse on a strictly smaller part obtained by `match`, or mark one of them"
@@ -111,7 +111,7 @@ final class TotalityChecker {
     private static CompileException tooComplex(Set<String> group, Map<String, Ast.FnDef> own) {
         Ast.FnDef anchor = own.get(java.util.Collections.min(group));
         String members = backtickJoin(group);
-        return error(anchor, anchor.name().length(), members, "check.totality.toocomplex",
+        return error(anchor, members, "check.totality.toocomplex",
                 "recursion " + members + " is too complex to prove total by size-change analysis;"
                         + " mark one of them `partial` to opt out");
     }
@@ -171,7 +171,7 @@ final class TotalityChecker {
                 idxOf.put(params.get(i).binder().id(), i);
             }
             List<RecCall> calls = new ArrayList<>();
-            walk(def.written(), group, paramNames, Map.of(), Map.of(), calls);
+            walk(def.writtenBody(), group, paramNames, Map.of(), Map.of(), calls);
             for (RecCall rc : calls) {
                 firstCall.putIfAbsent(f, rc.call());
                 int toArity = own.get(rc.callee()).params().size();
@@ -303,28 +303,28 @@ final class TotalityChecker {
     private static final Map<String, Combinator> COMBINATORS = Map.ofEntries(
             Map.entry("List.fold", new Combinator(0, 1, 2)),
             Map.entry("List.foldFrom", new Combinator(0, 1, 2)),
-            Map.entry("List.foldr", new Combinator(0, 1, 2)),
+            Map.entry("List.foldRight", new Combinator(0, 0, 2)),
             Map.entry("List.map", new Combinator(0, 0, 1)),
             Map.entry("List.filter", new Combinator(0, 0, 1)),
             Map.entry("List.all", new Combinator(0, 0, 1)),
             Map.entry("List.any", new Combinator(0, 0, 1)),
             Map.entry("List.find", new Combinator(0, 0, 1)),
             Map.entry("List.partition", new Combinator(0, 0, 1)),
-            Map.entry("List.concatMap", new Combinator(0, 0, 1)),
+            Map.entry("List.flatMap", new Combinator(0, 0, 1)),
             Map.entry("List.filterMap", new Combinator(0, 0, 1)),
             Map.entry("List.sortBy", new Combinator(0, 0, 1)),
             Map.entry("List.groupBy", new Combinator(0, 0, 1)),
             Map.entry("List.indexBy", new Combinator(0, 0, 1)),
-            Map.entry("List.allUniqueBy", new Combinator(0, 0, 1)),
-            // indexedMap's closure takes (index, element), so the element is its second parameter.
-            Map.entry("List.indexedMap", new Combinator(0, 1, 1)),
+            Map.entry("List.allDistinctBy", new Combinator(0, 0, 1)),
+            // mapIndexed's closure takes (index, element), so the element is its second parameter.
+            Map.entry("List.mapIndexed", new Combinator(0, 1, 1)),
             // A map hands its closure the key and the value; the value is the one that can hold a
             // nested structure, so that is the parameter credited as a sub-term.
             Map.entry("Map.fold", new Combinator(0, 2, 2)),
-            Map.entry("Map.map", new Combinator(0, 1, 1)),
-            Map.entry("Map.filter", new Combinator(0, 1, 1)),
-            Map.entry("Map.update", new Combinator(1, 0, 2)),
-            Map.entry("Map.upsert", new Combinator(2, 0, 3)),
+            Map.entry("Map.mapValues", new Combinator(0, 1, 1)),
+            Map.entry("Map.filterEntries", new Combinator(0, 1, 1)),
+            Map.entry("Map.updateIfPresent", new Combinator(1, 0, 2)),
+            Map.entry("Map.updateOrInsert", new Combinator(2, 0, 3)),
             Map.entry("Set.fold", new Combinator(0, 1, 2)),
             Map.entry("Set.map", new Combinator(0, 0, 1)),
             Map.entry("Set.filter", new Combinator(0, 0, 1)),
@@ -471,7 +471,7 @@ final class TotalityChecker {
         Map<String, Set<String>> edges = new HashMap<>();
         for (Ast.FnDef h : own.values()) {
             Set<String> called = new HashSet<>();
-            collectOwnCalls(h.written(), own.keySet(), called);
+            collectOwnCalls(h.writtenBody(), own.keySet(), called);
             edges.put(h.name(), called);
         }
         return edges;
@@ -509,24 +509,19 @@ final class TotalityChecker {
         return seen;
     }
 
+    /** Said at the helper's own name: `let` comes first, and a report anchored at the definition
+     *  underlines the keyword rather than what it is about. */
     private static CompileException error(Ast.FnDef h, String name, String key, String message) {
         return CompileException.of(
                 Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(h.pos(), name.length()).args(name).build(),
-                message);
-    }
-
-    private static CompileException error(Ast.FnDef h, int underlineLen, String arg, String key, String message) {
-        return CompileException.of(
-                Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(h.pos(), underlineLen).args(arg).build(),
+                        .at(h.written().region()).args(name).build(),
                 message);
     }
 
     private static CompileException error(Ast.Apply call, String name, String key, String message) {
         return CompileException.of(
                 Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(call.pos(), call.written().length()).args(name).build(),
+                        .at(call.name().region()).args(name).build(),
                 message);
     }
 

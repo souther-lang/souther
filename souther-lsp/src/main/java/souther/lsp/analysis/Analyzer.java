@@ -9,7 +9,9 @@ import souther.compiler.query.Shapes;
 import souther.compiler.check.ClauseDischarge;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
+import souther.compiler.Reserved;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.cst.CstError;
 import souther.compiler.cst.CstLexer;
 import souther.compiler.cst.CstParser;
@@ -284,13 +286,24 @@ public final class Analyzer {
         return compilation.db().ask(new Names.TypeAt(cursor(uri, pos))).value();
     }
 
-    /** The range of one written name, counting only its last segment: renaming a type rewrites the
-     * {@code Amount} of {@code up.Amount}, never the {@code up}. */
-    private Range writtenRange(SourcePos pos, String written) {
-        int line = pos.line() - 1;
-        int start = pos.column() - 1 + written.lastIndexOf('.') + 1;
-        return new Range(new Position(line, start),
-                new Position(line, pos.column() - 1 + written.length()));
+    /**
+     * The characters one written name occupies, counting only its last segment: renaming a type
+     * rewrites the {@code Amount} of {@code up.Amount}, never the {@code up}.
+     *
+     * <p>Read off the tokens the name is written with, not measured in the name. The two differ by
+     * however many combining marks the author typed, and by whatever the grammar lets stand between
+     * a qualifier and the name it qualifies — a space, a comment, a line break — so an offset
+     * counted in the name lands inside the qualifier at one end and short of the last character at
+     * the other.
+     */
+    private Range writtenRange(WrittenName written) {
+        Region segment = written.lastSegment();
+        return new Range(editorPosition(segment.start()), editorPosition(segment.end()));
+    }
+
+    /** A compiler position as an editor counts, both of its numbers being one less. */
+    private static Position editorPosition(SourcePos at) {
+        return new Position(at.line() - 1, at.column() - 1);
     }
 
     /**
@@ -311,23 +324,21 @@ public final class Analyzer {
     /**
      * Where a name the compiler answered about is written, as a place an editor can open.
      *
-     * <p>Which file and which name is the compiler's answer; which characters spell it there is the
-     * syntax tree's, being what knows about characters. The position is the start of the form that
-     * writes the name — a binding's is the pattern that binds it — so the token is looked for from
-     * there rather than assumed to be at it.
+     * <p>Which file, which characters and how many of them all come from the compiler's answer,
+     * which carries the occurrence the name was read from. This used to take a name and a position
+     * and look through the syntax tree for a token at or after it spelling that name, because the
+     * position it was given was the start of a form rather than of a name. Two things went wrong
+     * with that and both were invisible until someone wrote a decomposed name: the token was
+     * compared to the name, so a declaration spelled one way was never found from a reference
+     * spelled the other; and the range came out as wide as the name rather than as the spelling.
      */
-    private Optional<Location> nameAt(SourcePos written, String name, String moduleUri,
-                                      ModuleGraph graph) {
-        String uri = documentOf(written, moduleUri, graph);
-        if (uri == null || written == null) {
+    private Optional<Location> nameAt(WrittenName written, String moduleUri, ModuleGraph graph) {
+        if (written == null || !written.authored()) {
             return Optional.empty();
         }
-        String text = graph.text(uri);
-        LineIndex lines = new LineIndex(text);
-        SyntaxToken token = identFrom(CstParser.parse(text).root(),
-                lines.offsetOf(written.line() - 1, written.column() - 1), name);
-        return token == null ? Optional.empty()
-                : Optional.of(new Location(uri, tokenRange(lines, token)));
+        String uri = documentOf(written.pos(), moduleUri, graph);
+        return uri == null ? Optional.empty()
+                : Optional.of(new Location(uri, writtenRange(written)));
     }
 
     /**
@@ -610,16 +621,16 @@ public final class Analyzer {
         }
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, lines.offsetOf(pos.line(), pos.character()));
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return Optional.empty();
         }
-        SyntaxNode local = declaringDef(root, ident.text());
+        SyntaxNode local = declaringDef(root, nameOf(ident));
         if (local != null) {
             SyntaxToken name = nameToken(local);
             return name == null ? Optional.empty() : Optional.of(new Location(uri, tokenRange(lines, name)));
         }
-        String targetModule = importedFrom(text, ident.text());
+        String targetModule = importedFrom(text, nameOf(ident));
         if (targetModule == null) {
             return Optional.empty();
         }
@@ -628,7 +639,7 @@ public final class Analyzer {
             return Optional.empty();
         }
         String targetText = graph.text(targetUri);
-        SyntaxNode def = declaringDef(CstParser.parse(targetText).root(), ident.text());
+        SyntaxNode def = declaringDef(CstParser.parse(targetText).root(), nameOf(ident));
         if (def == null) {
             return Optional.empty();
         }
@@ -669,11 +680,12 @@ public final class Analyzer {
             // the cursor may be on a name it never saw. Matching the spelling still answers those.
         }
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        LineIndex lines = new LineIndex(text);
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return List.of();
         }
-        String name = ident.text();
+        String name = nameOf(ident);
         String definingModule = declaringDef(root, name) != null
                 ? moduleOf(compilation, graph, uri) : importedFrom(text, name);
         if (definingModule == null) {
@@ -720,8 +732,9 @@ public final class Analyzer {
             List<TextEdit> edits = new ArrayList<>();
             SyntaxNode root = CstParser.parse(graph.text(e.getKey())).root();
             LineIndex lines = new LineIndex(graph.text(e.getKey()));
+            List<SyntaxToken> tokens = meaningfulTokens(root);
             for (Range range : e.getValue()) {
-                String field = fieldTakenAsName(root,
+                String field = fieldTakenAsName(tokens, lines,
                         lines.offsetOf(range.start().line(), range.start().character()));
                 edits.add(new TextEdit(range,
                         field == null ? newName : field + " = " + newName));
@@ -738,8 +751,8 @@ public final class Analyzer {
      * <p>Which characters are there is the syntax tree's question, being what knows about
      * characters, and this is the one place where what a rename writes is not the name it was given.
      */
-    private String fieldTakenAsName(SyntaxNode root, int offset) {
-        SyntaxToken token = identAt(root, offset);
+    private String fieldTakenAsName(List<SyntaxToken> tokens, LineIndex lines, int offset) {
+        SyntaxToken token = identAt(tokens, lines, offset);
         SyntaxNode parent = token == null ? null : token.parent();
         if (parent == null || token.start() != offset) {
             return null;
@@ -829,9 +842,10 @@ public final class Analyzer {
         }
         String text = graph.text(uri);
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        LineIndex lines = new LineIndex(text);
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident != null) {
-            String name = ident.text();
+            String name = nameOf(ident);
             String definingModule = declaringDef(root, name) != null
                     ? moduleOf(compilation, graph, uri) : importedFrom(text, name);
             if (definingModule != null) {
@@ -865,8 +879,8 @@ public final class Analyzer {
 
     private Optional<Location> valueDeclarationOf(Compilation compilation, ValueName target,
                                                   String uri, ModuleGraph graph) {
-        SourcePos at = compilation.db().ask(new Names.ValueDeclaredAt(target)).value();
-        return nameAt(at, target.name(), declaringFile(compilation, target, uri), graph);
+        WrittenName at = compilation.db().ask(new Names.ValueDeclaredAt(target)).value();
+        return nameAt(at, declaringFile(compilation, target, uri), graph);
     }
 
     /**
@@ -879,15 +893,14 @@ public final class Analyzer {
      */
     private List<Location> valueDeclarationsOf(Compilation compilation, ValueName target,
                                                String uri, ModuleGraph graph) {
-        List<SourcePos> written =
+        List<WrittenName> written =
                 compilation.db().ask(new Names.ValueDeclarationsOf(target)).value();
         if (written == null) {
             return List.of();
         }
         List<Location> out = new ArrayList<>();
-        for (SourcePos at : written) {
-            nameAt(at, target.name(), declaringFile(compilation, target, uri), graph)
-                    .ifPresent(out::add);
+        for (WrittenName at : written) {
+            nameAt(at, declaringFile(compilation, target, uri), graph).ifPresent(out::add);
         }
         return out;
     }
@@ -903,24 +916,26 @@ public final class Analyzer {
         };
     }
 
-    /** The first identifier spelled {@code name} at or after {@code offset} — the name token of the
-     * form that starts there. */
-    private SyntaxToken identFrom(SyntaxNode node, int offset, String name) {
-        for (SyntaxElement e : node.children()) {
-            if (e instanceof SyntaxNode child) {
-                if (child.end() <= offset) {
-                    continue;
-                }
-                SyntaxToken found = identFrom(child, offset, name);
-                if (found != null) {
-                    return found;
-                }
-            } else if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT
-                    && t.start() >= offset && t.text().equals(name)) {
-                return t;
-            }
-        }
-        return null;
+    /**
+     * The name an identifier token spells.
+     *
+     * <p>The one door from a token to a name in the paths that read the tree of characters rather
+     * than the compiler's answer — an import list entry, a file the compile could not read.
+     * Canonically equivalent spellings are one name, and a token is characters, so every one of
+     * those paths turns a token into a name exactly here.
+     *
+     * <p>Canonicalizing at the comparison instead — which is where it was — leaves whichever side
+     * came from a cursor raw, so a cursor on a decomposed spelling found no declaration and a
+     * cursor on a composed one found it. Which spelling the author's cursor happened to be on is
+     * not a thing an editor may answer differently.
+     */
+    private static String nameOf(SyntaxToken token) {
+        return token == null ? null : Reserved.name(token.text());
+    }
+
+    /** Whether an identifier token spells {@code name}, which is canonical. */
+    private static boolean spells(SyntaxToken token, String name) {
+        return token != null && name.equals(nameOf(token));
     }
 
     /**
@@ -943,8 +958,8 @@ public final class Analyzer {
                                              ModuleGraph graph) {
         // Which module, which name and where it was written is the compiler's answer — the part a
         // spelling match gets wrong.
-        SourcePos at = compilation.db().ask(new Names.DeclaredAt(target)).value();
-        return nameAt(at, target.name(), compilation.sourceIdOf(target.module()), graph);
+        WrittenName at = compilation.db().ask(new Names.DeclaredAt(target)).value();
+        return nameAt(at, compilation.sourceIdOf(target.module()), graph);
     }
 
     /**
@@ -969,7 +984,7 @@ public final class Analyzer {
                     : compilation.db().ask(new Names.UsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
                 if (at != null) {
-                    out.add(new Location(at, writtenRange(use.pos(), use.written())));
+                    out.add(new Location(at, writtenRange(use.written())));
                 }
             }
         }
@@ -1001,7 +1016,7 @@ public final class Analyzer {
                     : compilation.db().ask(new Names.ValueUsesOf(module, target)).value()) {
                 String at = documentOf(use.pos(), moduleUri, graph);
                 if (at != null) {
-                    out.add(new Location(at, writtenRange(use.pos(), use.written())));
+                    out.add(new Location(at, writtenRange(use.written())));
                 }
             }
         }
@@ -1028,7 +1043,7 @@ public final class Analyzer {
                             }
                             entry.child(SyntaxKind.QUALIFIED_NAME).ifPresent(qn -> {
                                 SyntaxToken tok = nameToken(qn);
-                                if (tok != null && tok.text().equals(name)) {
+                                if (spells(tok, name)) {
                                     byUri.computeIfAbsent(u, k -> new ArrayList<>()).add(tokenRange(lines, tok));
                                 }
                             });
@@ -1040,7 +1055,7 @@ public final class Analyzer {
                         top.child(SyntaxKind.NAME_LIST).ifPresent(list -> {
                             for (SyntaxElement e : list.children()) {
                                 if (e instanceof SyntaxToken tok && tok.kind() == SyntaxKind.IDENT
-                                        && tok.text().equals(name)) {
+                                        && spells(tok, name)) {
                                     byUri.computeIfAbsent(u, k -> new ArrayList<>()).add(tokenRange(lines, tok));
                                 }
                             }
@@ -1059,7 +1074,7 @@ public final class Analyzer {
                 if (sb.length() > 0) {
                     sb.append('.');
                 }
-                sb.append(t.text());
+                sb.append(nameOf(t));
             }
         }
         return sb.toString();
@@ -1105,7 +1120,7 @@ public final class Analyzer {
     private void addName(Map<String, CompletionItem> out, SyntaxNode def, int kind) {
         SyntaxToken name = nameToken(def);
         if (name != null) {
-            out.putIfAbsent(name.text(), new CompletionItem(name.text(), kind));
+            out.putIfAbsent(nameOf(name), new CompletionItem(nameOf(name), kind));
         }
     }
 
@@ -1128,8 +1143,8 @@ public final class Analyzer {
                 if (VALUE_BINDINGS.contains(child.kind())) {
                     SyntaxToken bound = firstIdent(child);
                     if (bound != null) {
-                        out.putIfAbsent(bound.text(),
-                                new CompletionItem(bound.text(), CompletionItem.VARIABLE));
+                        out.putIfAbsent(nameOf(bound),
+                                new CompletionItem(nameOf(bound), CompletionItem.VARIABLE));
                     }
                 }
                 collectLocalBindings(child, out);
@@ -1197,7 +1212,7 @@ public final class Analyzer {
                 collectInNode(child, name, isType, uri, lines, includeDeclaration, shadowed, out);
             } else {
                 SyntaxToken t = (SyntaxToken) e;
-                if (t.kind() != SyntaxKind.IDENT || !t.text().equals(name)) {
+                if (t.kind() != SyntaxKind.IDENT || !spells(t, name)) {
                     continue;
                 }
                 if (isDeclarationName(node, t)) {
@@ -1230,7 +1245,7 @@ public final class Analyzer {
                     SyntaxToken bound = child.kind() == SyntaxKind.PATTERN_FIELD
                             ? lastIdent(child)
                             : firstIdent(child);
-                    if (bound != null && bound.text().equals(name)) {
+                    if (spells(bound, name)) {
                         return true;
                     }
                 }
@@ -1305,11 +1320,11 @@ public final class Analyzer {
     public Optional<Range> definition(String text, Position pos) {
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, lines.offsetOf(pos.line(), pos.character()));
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return Optional.empty();
         }
-        SyntaxNode def = declaringDef(root, ident.text());
+        SyntaxNode def = declaringDef(root, nameOf(ident));
         if (def == null) {
             return Optional.empty();
         }
@@ -1352,7 +1367,7 @@ public final class Analyzer {
         Map<TypeName, List<ClauseDischarge>> byType =
                 compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
         List<ClauseDischarge> clauses = byType == null
-                ? null : byType.get(new TypeName(module, name.text()));
+                ? null : byType.get(new TypeName(module, nameOf(name)));
         if (clauses == null || clauses.isEmpty()) {
             return Optional.empty();
         }
@@ -1410,7 +1425,7 @@ public final class Analyzer {
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
         int offset = lines.offsetOf(pos.line(), pos.character());
-        SyntaxToken ident = identAt(root, offset);
+        SyntaxToken ident = identAt(meaningfulTokens(root), lines, offset);
         if (ident == null) {
             return Optional.empty();
         }
@@ -1421,7 +1436,7 @@ public final class Analyzer {
             // a declaration site: show the binding's own `name: Type`, read straight from the tree
             signature = signatureLine(text, parent);
         } else {
-            SyntaxNode def = declaringDef(root, ident.text());
+            SyntaxNode def = declaringDef(root, nameOf(ident));
             signature = def != null ? signatureLine(text, def) : ident.text();
         }
         String contents = "```souther\n" + signature + "\n```";
@@ -1445,7 +1460,7 @@ public final class Analyzer {
             if (def.kind() == SyntaxKind.DATA_DEF || def.kind() == SyntaxKind.BEHAVIOR_DEF
                     || def.kind() == SyntaxKind.FN_DEF) {
                 SyntaxToken n = nameToken(def);
-                if (n != null && n.text().equals(name)) {
+                if (spells(n, name)) {
                     return def;
                 }
             }
@@ -1453,24 +1468,107 @@ public final class Analyzer {
         return null;
     }
 
-    /** The identifier token covering {@code offset}, descending only into the node that contains it. */
-    private SyntaxToken identAt(SyntaxNode node, int offset) {
-        for (SyntaxElement e : node.children()) {
-            if (e instanceof SyntaxNode child) {
-                if (offset >= child.start() && offset < child.end()) {
-                    SyntaxToken found = identAt(child, offset);
-                    if (found != null) {
-                        return found;
-                    }
-                }
-            } else {
-                SyntaxToken t = (SyntaxToken) e;
-                if (t.kind() == SyntaxKind.IDENT && offset >= t.start() && offset < t.end()) {
-                    return t;
-                }
+    /**
+     * The identifier a cursor at {@code offset} is on.
+     *
+     * <p>Read as the name it spells and asked of that name. The dotted run of identifiers around the
+     * cursor is one written name, and {@link WrittenName#partAt} says which of its parts a cursor is
+     * on — including where it stops being on one, which is a rule about ends that belongs in one
+     * place. This path had a rule of its own twice and it disagreed with the compiler's both times:
+     * once by stopping a character early at the end of a name, once by counting the character after
+     * a qualifier.
+     *
+     * <p>What it cannot do is tell {@code up.Amount} from {@code x.field}: one is a name and the
+     * other is a field taken off a value, and which it is has to be resolved, which is the thing
+     * that is missing whenever this runs. So a dotted run is read as a name, and the boundary inside
+     * one is a separator. Said rather than left to be found: this is an approximation the syntax
+     * forces, not a second opinion about where a name ends.
+     */
+    private SyntaxToken identAt(List<SyntaxToken> tokens, LineIndex lines, int offset) {
+        DottedRun run = dottedRun(tokens, offset);
+        if (run.parts().isEmpty()) {
+            return null;
+        }
+        WrittenName name = spelledBy(run.parts().get(0), lines);
+        for (int i = 1; i < run.parts().size(); i++) {
+            name = name.then(spelledBy(run.parts().get(i), lines));
+        }
+        SourcePos at = lines.posOf(offset);
+        // A run a dot continues is a name the author is still writing, and the end of what is
+        // written of it is not the end of the name — the member is what comes next, and a caret
+        // waiting for it means neither the qualifier nor the name.
+        int part = run.unfinished() ? name.partWithin(at) : name.partAt(at);
+        return part < 0 ? null : run.parts().get(part);
+    }
+
+    /** The identifiers of one dotted name, and whether a dot carries it past the last of them —
+     *  which is what a name being typed looks like and what a written one never does. */
+    private record DottedRun(List<SyntaxToken> parts, boolean unfinished) {
+
+        static DottedRun none() {
+            return new DottedRun(List.of(), false);
+        }
+    }
+
+    /** One token's name, where it is written. */
+    private static WrittenName spelledBy(SyntaxToken token, LineIndex lines) {
+        return WrittenName.of(token.text(), lines.posOf(token.start()));
+    }
+
+    /**
+     * The identifiers of the dotted run the cursor is at, in order, or none where it is at no
+     * identifier at all.
+     *
+     * <p>Generous about the ends, because what a cursor at a boundary means is the name's to say
+     * and not this walk's. Two identifiers cannot touch — the grammar puts something between them —
+     * so at most one answers.
+     */
+    private DottedRun dottedRun(List<SyntaxToken> tokens, int offset) {
+        int at = -1;
+        for (int i = 0; i < tokens.size() && at < 0; i++) {
+            SyntaxToken t = tokens.get(i);
+            if (t.kind() == SyntaxKind.IDENT && offset >= t.start() && offset <= t.end()) {
+                at = i;
             }
         }
-        return null;
+        if (at < 0) {
+            return DottedRun.none();
+        }
+        int first = at;
+        while (first >= 2 && tokens.get(first - 1).kind() == SyntaxKind.DOT
+                && tokens.get(first - 2).kind() == SyntaxKind.IDENT) {
+            first -= 2;
+        }
+        int last = at;
+        while (last + 2 < tokens.size() && tokens.get(last + 1).kind() == SyntaxKind.DOT
+                && tokens.get(last + 2).kind() == SyntaxKind.IDENT) {
+            last += 2;
+        }
+        List<SyntaxToken> parts = new ArrayList<>();
+        for (int i = first; i <= last; i += 2) {
+            parts.add(tokens.get(i));
+        }
+        boolean unfinished = last + 1 < tokens.size()
+                && tokens.get(last + 1).kind() == SyntaxKind.DOT;
+        return new DottedRun(parts, unfinished);
+    }
+
+    /** Every token of {@code root} that is not trivia, in the order they are written — read once
+     *  per parse and asked many times, since a rename asks about every place it touches. */
+    private List<SyntaxToken> meaningfulTokens(SyntaxNode root) {
+        List<SyntaxToken> out = new ArrayList<>();
+        meaningfulTokens(root, out);
+        return out;
+    }
+
+    private void meaningfulTokens(SyntaxNode node, List<SyntaxToken> out) {
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxNode child) {
+                meaningfulTokens(child, out);
+            } else if (e instanceof SyntaxToken t && !t.isTrivia()) {
+                out.add(t);
+            }
+        }
     }
 
     private SyntaxToken firstMeaningfulToken(SyntaxNode node) {
@@ -1552,7 +1650,7 @@ public final class Analyzer {
      *
      * <p>{@code callee} says this node is what an application applies. It cannot be worked out from
      * the parent alone: a qualified callee is a field read, and only its last name is the function —
-     * {@code Map.map(f, xs)} names a namespace and then a function in it. So it is carried down, to
+     * {@code Map.mapValues(f, m)} names a namespace and then a function in it. So it is carried down, to
      * the field a read takes and not to what the read is taken off.
      */
     private void collectTokens(SyntaxNode node, LineIndex lines, List<int[]> out,

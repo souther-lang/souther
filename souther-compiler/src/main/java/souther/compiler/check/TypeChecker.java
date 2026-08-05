@@ -188,7 +188,7 @@ public final class TypeChecker {
                                         Map<String, Ast.FnDef> publishedToHere) {
         Map<String, Ast.Expr> loweredBodies = new HashMap<>();
         for (Ast.FnDef fn : lowered.fns()) {
-            loweredBodies.put(fn.name(), fn.written());
+            loweredBodies.put(fn.name(), fn.writtenBody());
         }
         // The imported definitions join the table this module's bodies are expanded against: a
         // published helper is expanded at its call sites here exactly as one of this module's own is,
@@ -362,7 +362,7 @@ public final class TypeChecker {
         // A binding whose value is a lambda takes no annotation (spec 16.1). Read on the surface bodies:
         // lowering has already expanded such a binding away at each of its applications.
         for (Ast.FnDef fn : module.fns()) {
-            collect(errors, abandoned, () -> Elaborator.checkAnnotatedLambdaBindings(fn.written(), symbols));
+            collect(errors, abandoned, () -> Elaborator.checkAnnotatedLambdaBindings(fn.writtenBody(), symbols));
         }
         // Helper fns (no matching behavior) are expanded inline at each call site (spec 12.5); a
         // helper is checked standalone against its own parameter types, which its body settles
@@ -447,7 +447,7 @@ public final class TypeChecker {
                 // declaration is rejected here rather than allowed to collide (ADR-0035).
                 rejected.add(CompileException.of(
                         Diagnostic.of(null, "check.sum.optioncase").title("check.sum.title")
-                                .at(def.pos(), def.name().length()).args(def.name()).build(),
+                                .at(def.written().region()).args(def.name()).build(),
                         "`" + def.name() + "` is a built-in Option case and cannot be declared as a data type"));
                 continue;
             }

@@ -48,7 +48,7 @@ class CompileNamedInvariantClauseTest {
 
     private static final String TWO_NAMED = """
                 invariant nonEmpty = List.length(value) >= 1
-                invariant unique = List.allUniqueBy(x -> x, value)""";
+                invariant unique = List.allDistinctBy(x -> x, value)""";
 
     private static final String BY_CLAUSE = """
 
@@ -95,9 +95,9 @@ class CompileNamedInvariantClauseTest {
         // [1, 1] is both shorter than three and repeating
         String nonEmptyFirst = """
                     invariant nonEmpty = List.length(value) >= 3
-                    invariant unique = List.allUniqueBy(x -> x, value)""";
+                    invariant unique = List.allDistinctBy(x -> x, value)""";
         String uniqueFirst = """
-                    invariant unique = List.allUniqueBy(x -> x, value)
+                    invariant unique = List.allDistinctBy(x -> x, value)
                     invariant nonEmpty = List.length(value) >= 3""";
         assertEquals("demo.NoItems", departs(nonEmptyFirst, BY_CLAUSE, List.of(1L, 1L)));
         assertEquals("demo.DuplicateItem", departs(uniqueFirst, BY_CLAUSE, List.of(1L, 1L)));
@@ -115,7 +115,7 @@ class CompileNamedInvariantClauseTest {
 
                 data Items = List<Int>
                     invariant nonEmpty = List.length(value) >= 1
-                    invariant unique = List.allUniqueBy(x -> x, value)
+                    invariant unique = List.allDistinctBy(x -> x, value)
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems
                     constructs Accepted, Items, NoItems
@@ -138,7 +138,7 @@ class CompileNamedInvariantClauseTest {
     void anUnnamedClauseIsAnsweredByTheWildcard() throws Exception {
         String oneUnnamed = """
                     invariant nonEmpty = List.length(value) >= 1
-                    invariant List.allUniqueBy(x -> x, value)""";
+                    invariant List.allDistinctBy(x -> x, value)""";
         String withWildcard = """
 
                         | nonEmpty -> NoItems
@@ -159,7 +159,7 @@ class CompileNamedInvariantClauseTest {
 
                 data Items = List<Int>
                     invariant nonEmpty = List.length(value) >= 1
-                    invariant unique = List.allUniqueBy(x -> x, value)
+                    invariant unique = List.allDistinctBy(x -> x, value)
 
                 behavior build : (xs: List<Int>) -> Accepted | NoItems | DuplicateItem
                     constructs Accepted, Items, NoItems, DuplicateItem
@@ -187,7 +187,7 @@ class CompileNamedInvariantClauseTest {
 
                 data Items = List<Int>
                     invariant nonEmpty = List.length(value) >= 1
-                    invariant unique = List.allUniqueBy(x -> x, value)
+                    invariant unique = List.allDistinctBy(x -> x, value)
 
                 data Verdict = { code: Int }
 
@@ -223,7 +223,7 @@ class CompileNamedInvariantClauseTest {
                 module demo
                 data Items = List<Int>
                     invariant same = List.length(value) >= 1
-                    invariant same = List.allUniqueBy(x -> x, value)
+                    invariant same = List.allDistinctBy(x -> x, value)
                 """));
         assertEquals("check.invariant.duplicate", e.diagnostics().get(0).messageKey());
     }
@@ -332,7 +332,7 @@ class CompileNamedInvariantClauseTest {
                 module up exposing ( Items )
                 data Items = List<Int>
                     invariant nonEmpty = List.length(value) >= 1
-                    invariant unique = List.allUniqueBy(x -> x, value)
+                    invariant unique = List.allDistinctBy(x -> x, value)
                 """, """
                 module down
                 import up ( Items )
@@ -406,7 +406,7 @@ class CompileNamedInvariantClauseTest {
     void anUnnamedClauseWithNoWildcardIsReported() {
         String oneUnnamed = """
                     invariant nonEmpty = List.length(value) >= 1
-                    invariant List.allUniqueBy(x -> x, value)""";
+                    invariant List.allDistinctBy(x -> x, value)""";
         assertEquals("E2016", armError(oneUnnamed, """
 
                         | nonEmpty -> NoItems""").code());

@@ -164,8 +164,7 @@ public final class CstParser {
                 dataDef();
             } else if (at(SyntaxKind.BEHAVIOR_KW)) {
                 behaviorDef();
-            } else if (at(SyntaxKind.LET_KW)
-                    || (atContextual("partial") && nth(1) == SyntaxKind.LET_KW)) {
+            } else if (at(SyntaxKind.LET_KW) || atModifiedLet()) {
                 fnDef();
             } else if (atContextual("example")) {
                 exampleDef();
@@ -186,7 +185,7 @@ public final class CstParser {
         do {
             bump();
         } while (!at(SyntaxKind.EOF) && !at(SyntaxKind.DATA_KW) && !at(SyntaxKind.BEHAVIOR_KW)
-                && !at(SyntaxKind.LET_KW) && !at(SyntaxKind.IMPORT_KW)
+                && !at(SyntaxKind.LET_KW) && !atModifiedLet() && !at(SyntaxKind.IMPORT_KW)
                 && !atContextual("example") && !atContextual("fake"));
         finish();
     }
@@ -490,8 +489,25 @@ public final class CstParser {
 
     // --- fn ---
 
+    /** Whether a modifier opens a {@code let}: {@code private let}, {@code partial let}, or
+     * {@code private partial let}. Both are contextual soft-keywords, so a parameter or field may
+     * still be named {@code private} or {@code partial} — only the word directly before a
+     * {@code let} (or before the other modifier and then a {@code let}) is read as one. */
+    private boolean atModifiedLet() {
+        if (atContextual("private")) {
+            return nth(1) == SyntaxKind.LET_KW
+                    || (contextualAt(1, "partial") && nth(2) == SyntaxKind.LET_KW);
+        }
+        return atContextual("partial") && nth(1) == SyntaxKind.LET_KW;
+    }
+
     private void fnDef() {
         start(SyntaxKind.FN_DEF);
+        if (atContextual("private")) {
+            start(SyntaxKind.PRIVATE_MODIFIER);
+            bump();   // private (a contextual soft-keyword, kept out of the fn name)
+            finish();
+        }
         if (atContextual("partial")) {
             start(SyntaxKind.PARTIAL_MODIFIER);
             bump();   // partial (a contextual soft-keyword, kept out of the fn name)
@@ -1567,7 +1583,13 @@ public final class CstParser {
      * contextual soft-keywords {@code example} / {@code examples} / {@code for}, which stay ordinary
      * identifiers everywhere else. */
     private boolean atContextual(String text) {
-        return at(SyntaxKind.IDENT) && tokenText(mi(0)).equals(text);
+        return contextualAt(0, text);
+    }
+
+    /** The same question about the {@code n}th meaningful token ahead, for a modifier that may be
+     * followed by another one. */
+    private boolean contextualAt(int n, String text) {
+        return nth(n) == SyntaxKind.IDENT && tokenText(mi(n)).equals(text);
     }
 
     private boolean eat(SyntaxKind kind) {

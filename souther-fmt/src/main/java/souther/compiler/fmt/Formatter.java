@@ -429,7 +429,10 @@ public final class Formatter {
 
     private Doc fnDef(SyntaxNode n) {
         String name = firstIdent(n);
-        Doc keyword = n.child(SyntaxKind.PARTIAL_MODIFIER).isPresent() ? text("partial let ") : text("let ");
+        // The modifiers are written back in the order the parser reads them: `private partial let`.
+        String modifiers = (n.child(SyntaxKind.PRIVATE_MODIFIER).isPresent() ? "private " : "")
+                + (n.child(SyntaxKind.PARTIAL_MODIFIER).isPresent() ? "partial " : "");
+        Doc keyword = text(modifiers + "let ");
         var written = n.child(SyntaxKind.FN_PARAM_LIST);
         // A lambda on the right of `=` is the parameter-list form written the other way round, so it
         // is written back with its parameters on the left. A definition with neither is a value, and

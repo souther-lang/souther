@@ -130,7 +130,7 @@ class CompileFilterMapTest {
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
         String out = new HumanRenderer(false).render(e.diagnostic(),
                 new SourceContext("demo.sou", src), Locale.ENGLISH);
-        assertTrue(out.contains("concatMap"), out);
+        assertTrue(out.contains("flatMap"), out);
     }
 
     @Test

@@ -2,6 +2,7 @@ package souther.compiler;
 
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.HumanRenderer;
+import souther.compiler.diag.Region;
 import souther.compiler.diag.SourceContext;
 
 import org.junit.jupiter.api.Test;
@@ -108,6 +109,27 @@ class AGeneratedMethodStaysWithinTheJvmParameterSlotLimitTest {
                 new SourceContext("demo.sou", src), Locale.JAPANESE);
         assertTrue(ja.contains("256"), ja);
         assertTrue(ja.contains("data"), ja);
+    }
+
+    /**
+     * The refusal underlines the name it is about, which is not where the declaration starts.
+     *
+     * <p>`data` comes first, so anchoring at the declaration and taking the name's length for a
+     * width underlines the keyword and stops before the name — a caret under `data` for a report
+     * whose subject is `Wide`. The declaration carries where its name is written, so neither number
+     * has to be worked out here.
+     */
+    @Test
+    void theRefusalUnderlinesTheNameAndNotTheKeywordInFrontOfIt() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile(dataOf(128, "Int")));
+
+        Region region = e.diagnostic().region();
+        assertEquals(3, region.start().line(), "the `data Wide` line");
+        assertEquals("module demo\n\ndata ".length()
+                - "module demo\n\n".length() + 1, region.start().column(),
+                "the caret sits on `data` rather than on the name it is about");
+        assertEquals("Wide".length(), region.end().column() - region.start().column());
     }
 
     private static String fields(int n, String type) {

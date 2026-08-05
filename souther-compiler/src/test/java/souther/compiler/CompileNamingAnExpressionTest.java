@@ -32,9 +32,9 @@ class CompileNamingAnExpressionTest {
             "c.value / 2",                          // an integer divide, outside it too
             "Int.add(c.value, 1)",                  // the function form of an operator
             "Int.subtract(c.value, 1)",
-            "Int.modBy(p.value, c.value)",          // a call the check has no rule about
+            "Int.floorMod(c.value, p.value)",          // a call the check has no rule about
             "Int.max(0, c.value)",
-            "Int.modBy(p.value, c.value) + 1",      // one inside arithmetic
+            "Int.floorMod(c.value, p.value) + 1",      // one inside arithmetic
             "if n > 0 then c.value else 0",         // a conditional over locations
             "if n > 0 then c.value else n",         // one branch bounded and one not
             "5",                                    // written out

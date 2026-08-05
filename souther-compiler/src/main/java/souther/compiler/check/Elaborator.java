@@ -143,7 +143,7 @@ public final class Elaborator {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.neg.msg")
                                     .title("check.neg.title")
-                                    .at(neg.pos(), width(neg.operand()))
+                                    .at(new Region(neg.pos(), region(neg.operand()).end()))
                                     .args(Type.show(t))
                                     .build(),
                             "unary minus needs an Int or Decimal, got " + t);
@@ -244,8 +244,9 @@ public final class Elaborator {
                 if (!(ctx.symbols().get(built.denotes()) instanceof Ast.Data owner)) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.construct.no").title("check.construct.title")
-                                    .at(nd.pos(), built.written().length()).args(built.written()).build(),
-                            "cannot construct `" + built.written() + "`");
+                                    .at(built.name().region()).args(built.name().quoted())
+                                    .build(),
+                            "cannot construct `" + built.name().quoted() + "`");
                 }
                 // by here every spread names a binding in force: a value spread was bound ahead of
                 // the construction when it was inlined, so Core reads the binding it copies from
@@ -298,7 +299,7 @@ public final class Elaborator {
                     throw CompileException.of(
                             Diagnostic.of("E2012", "check.attempt.notconstruction")
                                     .title("check.attempt.title")
-                                    .at(ic.construct().pos(), width(ic.construct()))
+                                    .at(region(ic.construct()))
                                     .hint("check.attempt.notconstruction.hint")
                                     .build(),
                             "`as` attempts a construction, and this is not one");
@@ -310,7 +311,7 @@ public final class Elaborator {
                     throw CompileException.of(
                             Diagnostic.of("E2013", "check.attempt.noinvariant")
                                     .title("check.attempt.title")
-                                    .at(ic.construct().pos(), width(ic.construct()))
+                                    .at(region(ic.construct()))
                                     .args(construct.typeName().name())
                                     .hint("check.attempt.noinvariant.hint")
                                     .build(),
@@ -420,7 +421,7 @@ public final class Elaborator {
             }
             Diagnostic.Builder d = Diagnostic.of(null, "check.access.sum")
                     .title("check.type.mismatch.title")
-                    .at(fa.pos(), fa.field().length()).args(fa.field(), Type.show(target));
+                    .at(fa.name().region()).args(fa.field(), Type.show(target));
             if (!without.isEmpty()) {
                 d = d.hint("check.access.sum.missing", fa.field(), String.join(", ", without));
             } else if (target instanceof Type.Ref) {
@@ -435,7 +436,7 @@ public final class Elaborator {
         }
         throw CompileException.of(
                 Diagnostic.of(null, "check.access").title("check.type.mismatch.title")
-                        .at(fa.pos(), fa.field().length()).args(fa.field()).build(),
+                        .at(fa.name().region()).args(fa.field()).build(),
                 "cannot access field `" + fa.field() + "` on this value");
     }
 
@@ -1319,7 +1320,7 @@ public final class Elaborator {
             throw CompileException.of(
                     Diagnostic.of(null, "check.type.mismatch.msg")
                             .title("check.type.mismatch.title")
-                            .at(e.pos(), width(e))
+                            .at(region(e))
                             .args(what)
                             .diff(Type.show(actual, expected), Type.show(expected, actual))
                             .hint("check.type.mismatch.hint")
@@ -1371,13 +1372,13 @@ public final class Elaborator {
         if (denotes != null) {
             return CompileException.of(
                     Diagnostic.of(null, "check.notavalue").title("check.unknown.title")
-                            .at(v.pos(), v.name().length()).args(v.name(), denotes).build(),
+                            .at(v.written().region()).args(v.name(), denotes).build(),
                     "`" + v.name() + "` is " + denotes + ", and cannot be held as a value here");
         }
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.name.msg")
                         .title("check.unknown.title")
-                        .at(v.pos(), v.name().length())
+                        .at(v.written().region())
                         .args(v.name())
                         .suggestion(Suggest.candidate(v.name(), env.spellings()))
                         .build(),
@@ -1409,7 +1410,7 @@ public final class Elaborator {
                         : "`None` is the empty value of a `?` field, and nothing here is asking for"
                                 + " one. Where the model owns the absence, make it a case of its own"
                                 + " sum. Absence of that kind does not reach `List.filterMap`, whose"
-                                + " step has to answer an optional: use `List.concatMap` over a step"
+                                + " step has to answer an optional: use `List.flatMap` over a step"
                                 + " answering a list of nought or one.");
     }
 
@@ -1496,6 +1497,23 @@ public final class Elaborator {
 
     /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source
      * text is known, otherwise 1. The renderer underlines this many columns from the node's start. */
+    /**
+     * The characters an expression occupies, as far as a report needs to underline it.
+     *
+     * <p>A name answers with where it is written, which is not what {@link #width} would measure: a
+     * decomposed spelling is wider than the name it denotes, and a qualified one is as far apart as
+     * the source spells it. Everything else is measured from its start, there being nothing else to
+     * measure it by.
+     */
+    public static Region region(Ast.Expr e) {
+        return switch (e) {
+            case Ast.Var v -> v.written().region();
+            case Ast.FieldAccess fa -> fa.name().region();
+            case Ast.Apply c -> c.name().region();
+            default -> Region.ofWidth(e.pos(), width(e));
+        };
+    }
+
     public static int width(Ast.Expr e) {
         return switch (e) {
             case Ast.Var v -> v.name().length();

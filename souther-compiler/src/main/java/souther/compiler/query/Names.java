@@ -2,6 +2,7 @@ package souther.compiler.query;
 
 import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
+import souther.compiler.ast.WrittenName;
 import souther.compiler.check.HelperInliner;
 import souther.compiler.check.Registry;
 import souther.compiler.check.Resolve;
@@ -122,7 +123,7 @@ public final class Names {
                         for (Ast.Var stage : pipe.stages()) {
                             stages.add(binding.stage(stage));
                         }
-                        behaviors.add(new Ast.PipeBehavior(pipe.name(), stages, pipe.declaredOut(),
+                        behaviors.add(new Ast.PipeBehavior(pipe.written(), stages, pipe.declaredOut(),
                                 pipe.pos()));
                     }
                     case Ast.SpecBehavior spec -> {
@@ -130,7 +131,7 @@ public final class Names {
                         for (Ast.Var req : spec.dependsOn()) {
                             dependsOn.add(binding.required(req, spec.name()));
                         }
-                        behaviors.add(new Ast.SpecBehavior(spec.name(), spec.params(), spec.ret(),
+                        behaviors.add(new Ast.SpecBehavior(spec.written(), spec.params(), spec.ret(),
                                 spec.constructs(), dependsOn, spec.pos()));
                     }
                 }
@@ -266,7 +267,7 @@ public final class Names {
         Ast.Var required(Ast.Var ref, String by) {
             return behavior(ref, (name, candidates) -> Report.raised(
                     Diagnostic.of("E1607", "e1607.unknown").title("e1607.title")
-                            .at(name.pos(), name.name().length()).args(by, name.name())
+                            .at(name.written().region()).args(by, name.name())
                             .suggestion(Suggest.candidate(name.name(), candidates))
                             .hint("e1607.unknown.hint").build(),
                     "`behavior " + by + "` declares `depends on " + name.name() + "`, which is not a"
@@ -337,13 +338,14 @@ public final class Names {
         }
 
         private Report unknownBehavior(Ast.Var ref, Set<String> candidates) {
-            String written = ref.name();
+            WrittenName written = ref.written();
+            String name = written.canonical();
             return Report.raised(
                     Diagnostic.of(null, "check.unknown.behavior.msg").title("check.unknown.title")
-                            .at(ref.pos(), written.length()).args(written)
-                            .suggestion(Suggest.candidate(written, candidates)).build(),
-                    "unknown behavior `" + written + "` in pipeline"
-                            + Suggest.hint(written, candidates));
+                            .at(written.region()).args(written.quoted())
+                            .suggestion(Suggest.candidate(name, candidates)).build(),
+                    "unknown behavior `" + written.quoted() + "` in pipeline"
+                            + Suggest.hint(name, candidates));
         }
 
         /** Records why a name denotes nothing, and gives it the name that says so. */
@@ -809,8 +811,8 @@ public final class Names {
                     }
                     reports.add(Report.of(Diagnostic.of("E1922", "check.import.unused").warning()
                             .title("check.import.title")
-                            .at(imported.pos(), imported.text().length())
-                            .args(imported.text())
+                            .at(imported.written().region())
+                            .args(imported.written().quoted())
                             .hint("check.import.unused.hint")
                             .build()));
                 }
@@ -860,19 +862,22 @@ public final class Names {
         Set<Use> used = new HashSet<>();
         for (Resolve.Denotation d : resolution.value().denotations()) {
             if (!d.denotes().isUnresolved()) {
-                used.add(new Use(d.written(), d.denotes().module(), d.denotes().name()));
+                used.add(new Use(d.written().canonical(), d.denotes().module(),
+                        d.denotes().name()));
             }
         }
         for (Resolve.ValueUse v : resolution.value().values()) {
             switch (v.denotes()) {
-                case ValueName.Behavior b -> used.add(new Use(v.written(), b.module(), b.name()));
-                case ValueName.Helper h -> used.add(new Use(v.written(), h.module(), h.name()));
+                case ValueName.Behavior b ->
+                        used.add(new Use(v.written().canonical(), b.module(), b.name()));
+                case ValueName.Helper h ->
+                        used.add(new Use(v.written().canonical(), h.module(), h.name()));
                 // `List.map` and a bare `map` an import brought in both denote the same library
                 // function, and the qualified name it is known by carries the module.
                 case ValueName.Stdlib s -> {
                     int dot = s.qualified().lastIndexOf('.');
                     if (dot > 0) {
-                        used.add(new Use(v.written(), s.qualified().substring(0, dot),
+                        used.add(new Use(v.written().canonical(), s.qualified().substring(0, dot),
                                 s.qualified().substring(dot + 1)));
                     }
                 }
@@ -981,12 +986,12 @@ public final class Names {
             }
             Resolve.Denotation innermost = null;
             for (Resolve.Denotation d : resolution.value().denotations()) {
-                if (!spans(d.pos(), d.written(), at)) {
+                if (!spans(d.written(), at)) {
                     continue;
                 }
-                // A container writes its element's name inside its own span, so the shortest match
-                // is the one the cursor is actually on.
-                if (innermost == null || d.written().length() < innermost.written().length()) {
+                // A container writes its element's name inside its own span, so the one written
+                // inside the other is the one the cursor is actually on.
+                if (innermost == null || d.written().within(innermost.written())) {
                     innermost = d;
                 }
             }
@@ -1016,7 +1021,7 @@ public final class Names {
             Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(name));
             if (defs.present()) {
                 for (Ast.Def def : defs.value().values()) {
-                    if (spans(def.namePos(), def.name(), at)) {
+                    if (spans(def.written(), at)) {
                         return Answer.of(new TypeName(name, def.name()));
                     }
                 }
@@ -1073,7 +1078,7 @@ public final class Names {
                 return Answer.absent();
             }
             for (Resolve.ValueUse use : resolution.value().values()) {
-                if (spans(use.pos(), use.written(), at)) {
+                if (spans(use.written(), at)) {
                     return Answer.of(use);
                 }
             }
@@ -1139,8 +1144,9 @@ public final class Names {
             for (Map.Entry<BindingId, Resolve.BoundName> bound : binders.entrySet()) {
                 Resolve.BoundName written = bound.getValue();
                 if (answerable(bound.getKey(), binders)
-                        && spans(written.pos(), written.written(), at)) {
-                    ValueName local = new ValueName.Local(written.written(), bound.getKey());
+                        && spans(written.written(), at)) {
+                    ValueName local =
+                            new ValueName.Local(written.written().canonical(), bound.getKey());
                     return Answer.of(local);
                 }
             }
@@ -1179,7 +1185,7 @@ public final class Names {
      * declaration wants the first of them; a rename has to rewrite all of them, or the module goes
      * on naming something that is no longer there.
      */
-    public record ValueDeclarationsOf(ValueName denoted) implements Key<List<SourcePos>> {
+    public record ValueDeclarationsOf(ValueName denoted) implements Key<List<WrittenName>> {
         @Override
         public String module() {
             return switch (denoted) {
@@ -1192,7 +1198,7 @@ public final class Names {
         }
 
         @Override
-        public Answer<List<SourcePos>> compute(Db db) {
+        public Answer<List<WrittenName>> compute(Db db) {
             // a binding is not a position, so where it was written is asked of the pass that
             // answered it rather than read off the name
             if (denoted instanceof ValueName.Local local) {
@@ -1202,7 +1208,7 @@ public final class Names {
                     return Answer.absent();
                 }
                 Resolve.BoundName binder = resolution.value().binders().get(local.id());
-                return binder == null ? Answer.absent() : Answer.of(List.of(binder.pos()));
+                return binder == null ? Answer.absent() : Answer.of(List.of(binder.written()));
             }
             String in = module();
             if (in == null) {
@@ -1212,15 +1218,15 @@ public final class Names {
             if (m == null) {
                 return Answer.absent();
             }
-            List<SourcePos> written = new ArrayList<>();
+            List<WrittenName> written = new ArrayList<>();
             for (Ast.BehaviorDef b : m.behaviors()) {
-                if (b.name().equals(denoted.name())) {
-                    written.add(b.pos());
+                if (b.name().equals(denoted.name()) && b.written().authored()) {
+                    written.add(b.written());
                 }
             }
             for (Ast.FnDef fn : m.fns()) {
-                if (fn.name().equals(denoted.name())) {
-                    written.add(fn.pos());
+                if (fn.name().equals(denoted.name()) && fn.written().authored()) {
+                    written.add(fn.written());
                 }
             }
             return written.isEmpty() ? Answer.absent() : Answer.of(List.copyOf(written));
@@ -1234,23 +1240,31 @@ public final class Names {
      * <p>The first of {@link ValueDeclarationsOf}, which is the one to send a reader to. A behavior
      * has two, and its signature says more about it than its body does.
      */
-    public record ValueDeclaredAt(ValueName denoted) implements Key<SourcePos> {
+    public record ValueDeclaredAt(ValueName denoted) implements Key<WrittenName> {
         @Override
         public String module() {
             return new ValueDeclarationsOf(denoted).module();
         }
 
         @Override
-        public Answer<SourcePos> compute(Db db) {
-            Answer<List<SourcePos>> written = db.ask(new ValueDeclarationsOf(denoted));
+        public Answer<WrittenName> compute(Db db) {
+            Answer<List<WrittenName>> written = db.ask(new ValueDeclarationsOf(denoted));
             return written.present() ? Answer.of(written.value().get(0)) : Answer.absent();
         }
     }
 
     /**
-     * Whether the name {@code written} starting at {@code start} covers {@code at}. A name is one
-     * line's worth of text, so a position on another line is not on it — and a name in another file
-     * is not on it either, however the line numbers happen to line up.
+     * Whether the occurrence {@code written} covers {@code at}. A name is one line's worth of text,
+     * so a position on another line is not on it — and a name in another file is not on it either,
+     * however the line numbers happen to line up.
+     *
+     * <p>How far it reaches is the characters that spell it, not the name they spell. A decomposed
+     * spelling is wider than the composed name it denotes, so measuring in the name puts the far end
+     * of every such name out of reach of a cursor sitting on it.
+     *
+     * <p>A name nobody wrote is under no cursor. A desugaring's binding is anchored on the form it
+     * was rewriting, and that form is holding something else — so a reader answered from one would
+     * be answered about a name that is not there, at a width that is not its.
      *
      * <p>The file matters here for the reason it matters anywhere: what a module is made of is not
      * all written in one file. An attached {@code examples for} file's rows, tables and values join
@@ -1263,30 +1277,29 @@ public final class Names {
      * arrives as one, because the module it is answered about is read off the file it names, so
      * there is no longer a caller with only a line and a column to give.
      */
-    static boolean spans(SourcePos start, String written, SourcePos at) {
-        return start != null && at != null && start.line() == at.line()
-                && Objects.equals(at.sourceId(), start.sourceId())
-                && at.column() >= start.column()
-                && at.column() <= start.column() + written.length();
+    static boolean spans(WrittenName written, SourcePos at) {
+        return written != null && written.authored() && written.covers(at);
     }
-    public record DeclaredAt(TypeName denoted) implements Key<SourcePos> {
+
+    /** The occurrence of a type's own name, in the declaration that declares it. */
+    public record DeclaredAt(TypeName denoted) implements Key<WrittenName> {
         @Override
         public String module() {
             return denoted.module();
         }
 
         @Override
-        public Answer<SourcePos> compute(Db db) {
+        public Answer<WrittenName> compute(Db db) {
             Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(denoted.module()));
             if (!defs.present()) {
                 return Answer.absent();
             }
-            // Where the name is written, not where the declaration starts: a reader sent to a
-            // declaration is being sent to the name it declares, and the keyword in front of it is
-            // not what they asked about.
+            // The occurrence of the name, not where the declaration starts: a reader sent to a
+            // declaration is being sent to the name it declares, the keyword in front of it is not
+            // what they asked about, and how far the name reaches is the characters that spell it.
             Ast.Def def = defs.value().get(denoted.name());
-            return def == null || def.namePos() == null
-                    ? Answer.absent() : Answer.of(def.namePos());
+            return def == null || !def.written().authored()
+                    ? Answer.absent() : Answer.of(def.written());
         }
     }
 

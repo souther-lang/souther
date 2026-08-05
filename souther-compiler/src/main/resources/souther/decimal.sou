@@ -13,10 +13,15 @@ module souther.decimal
 // value that crosses a serialization boundary.
 data RoundingMode = HALF_UP | HALF_EVEN | HALF_DOWN | UP | DOWN | CEILING | FLOOR
 
-let divide (a: Decimal, b: Decimal, scale: Int, mode: RoundingMode) : Decimal | DivisionByZero
-    = intrinsic "decimal.divide"
-let toInt (d: Decimal, mode: RoundingMode) : Int = intrinsic "decimal.toInt"
-let round (d: Decimal, scale: Int, mode: RoundingMode) : Decimal = intrinsic "decimal.round"
+// `toInt` and `round` each work on one Decimal, so the Decimal comes last and the rounding policy
+// leads: `d |> Decimal.round(2, HALF_UP)`. `divide` is a binary operation, so its two operands keep
+// the order the mathematics writes them in and the policy follows them. The `(scale, mode)` pair
+// therefore sits in front of the subject in one and behind the operands in the other, which is the
+// two rules meeting rather than an accident.
+let divide (dividend: Decimal, divisor: Decimal, scale: Int, mode: RoundingMode)
+    : Decimal | DivisionByZero = intrinsic "decimal.divide"
+let toInt (mode: RoundingMode, d: Decimal) : Int = intrinsic "decimal.toInt"
+let round (scale: Int, mode: RoundingMode, d: Decimal) : Decimal = intrinsic "decimal.round"
 
 let add (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.add"
 let subtract (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.subtract"
@@ -26,7 +31,7 @@ let multiply (a: Decimal, b: Decimal) : Decimal = intrinsic "decimal.multiply"
 let compare (a: Decimal, b: Decimal) : Int = intrinsic "decimal.compare"
 
 // `fromInt` widens an Int to a Decimal. It is exact — every Int is a Decimal — so nothing has to be
-// stated and it is an ordinary function. The narrowing back, `Decimal.toInt(d, mode)`, drops a
+// stated and it is an ordinary function. The narrowing back, `Decimal.toInt(mode, d)`, drops a
 // fraction, and by which rule is a domain decision, so it takes the mode as an argument.
 //
 // There is no implicit widening. An arithmetic operator takes two operands of one type, so a rate

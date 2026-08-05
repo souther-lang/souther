@@ -64,7 +64,7 @@ class CompileDidYouMeanTest {
                 behavior run : (i: In) -> Out constructs Out
                 let run (i) = Out { kept = filter(n -> n > 0, i.xs) }
                 """);
-        assertTrue(e.getMessage().contains("`List.filter`, `Map.filter`, or `Set.filter`"), e.getMessage());
+        assertTrue(e.getMessage().contains("`List.filter` or `Set.filter`"), e.getMessage());
     }
 
     @Test

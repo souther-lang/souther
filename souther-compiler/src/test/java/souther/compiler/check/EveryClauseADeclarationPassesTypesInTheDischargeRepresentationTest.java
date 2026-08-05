@@ -54,7 +54,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
             data Order = { lines: List<Line> }
                 invariant List.length(lines) >= 1
                     && List.all(l -> l.qty >= 1, lines)
-                    && List.allUniqueBy(.product, lines)
+                    && List.allDistinctBy(.product, lines)
             behavior f : (o: Order) -> Int
             let f (o) = List.length(o.lines)
             """,
@@ -79,7 +79,7 @@ class EveryClauseADeclarationPassesTypesInTheDischargeRepresentationTest {
             """,
             """
             module demo
-            let remainder (n: Int) : Int = Int.modBy(2, n)
+            let remainder (n: Int) : Int = Int.floorMod(n, 2)
             data Even = Int
                 invariant remainder(value) == 0
             behavior f : (e: Even) -> Int

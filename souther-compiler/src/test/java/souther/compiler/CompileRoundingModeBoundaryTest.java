@@ -36,7 +36,7 @@ class CompileRoundingModeBoundaryTest {
                 data Out = { n: Int }
 
                 behavior g : (m: RoundingMode, d: Decimal) -> Out constructs Out
-                let g (m, d) = Out { n = Decimal.toInt(d, m) }
+                let g (m, d) = Out { n = Decimal.toInt(m, d) }
 
                 example g
                     | "rounds up at the half" :

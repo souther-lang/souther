@@ -1,5 +1,6 @@
 package souther.compiler.query;
 
+import souther.compiler.ast.WrittenName;
 import souther.compiler.check.Resolve;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.meta.ModulePath;
@@ -82,7 +83,7 @@ class ACursorIsOnAPlaceNotACoordinateTest {
     void aCursorInTheModelFileIsOnTheNameTheModelFileWrote() {
         Resolve.ValueUse use = under(MODEL_ID);
 
-        assertEquals("もと", use.written());
+        assertEquals("もと", use.written().canonical());
         assertEquals(MODEL_ID, use.pos().sourceId());
     }
 
@@ -90,7 +91,7 @@ class ACursorIsOnAPlaceNotACoordinateTest {
     void aCursorInTheAttachedFileIsOnTheNameThatFileWrote() {
         Resolve.ValueUse use = under(ATTACHED_ID);
 
-        assertEquals("べつ", use.written());
+        assertEquals("べつ", use.written().canonical());
         assertEquals(ATTACHED_ID, use.pos().sourceId());
     }
 
@@ -117,7 +118,8 @@ class ACursorIsOnAPlaceNotACoordinateTest {
 
     @Test
     void aQuestionThatNamesNoFileIsNotAnsweredWithANameFromOne() {
-        assertFalse(Names.spans(new SourcePos(8, 14, MODEL_ID), "name", new SourcePos(8, 14)));
+        assertFalse(Names.spans(WrittenName.of("name", new SourcePos(8, 14, MODEL_ID)),
+                new SourcePos(8, 14)));
     }
 
     /**
@@ -127,12 +129,13 @@ class ACursorIsOnAPlaceNotACoordinateTest {
      */
     @Test
     void aQuestionAboutAFileIsNotAnsweredWithANameFromNoFile() {
-        assertFalse(Names.spans(new SourcePos(8, 14), "name", new SourcePos(8, 14, MODEL_ID)));
+        assertFalse(Names.spans(WrittenName.of("name", new SourcePos(8, 14)),
+                new SourcePos(8, 14, MODEL_ID)));
     }
 
     @Test
     void aNameInAnotherFileIsNotUnderTheCursorHoweverTheLinesLineUp() {
-        assertFalse(Names.spans(new SourcePos(8, 14, ATTACHED_ID), "name",
+        assertFalse(Names.spans(WrittenName.of("name", new SourcePos(8, 14, ATTACHED_ID)),
                 new SourcePos(8, 14, MODEL_ID)));
     }
 }

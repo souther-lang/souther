@@ -39,11 +39,11 @@ class CompileIssue260Test {
             let go (r) = {
                 let rates = List.map(x -> x.rate, r.rows)
                 Out { equalUnderMember =
-                        List.member(List.get(0, rates) |> Option.withDefault(0.0m),
+                        List.contains(List.get(0, rates) |> Option.withDefault(0.0m),
                                     List.drop(1, rates))
                     , distinctCount = List.length(List.distinct(rates))
                     , setSize = Set.size(Set.fromList(rates))
-                    , allUnique = List.allUniqueBy(x -> x.rate, r.rows)
+                    , allUnique = List.allDistinctBy(x -> x.rate, r.rows)
                     }
             }
             """;
@@ -53,7 +53,7 @@ class CompileIssue260Test {
 
             data Transition = { from: String, event: String, to: String }
             data Machine = { transitions: List<Transition> }
-                invariant deterministic = List.allUniqueBy(t -> (t.from, t.event), transitions)
+                invariant deterministic = List.allDistinctBy(t -> (t.from, t.event), transitions)
             data Out = { n: Int }
             behavior load : (m: Machine) -> Out
                 constructs Out

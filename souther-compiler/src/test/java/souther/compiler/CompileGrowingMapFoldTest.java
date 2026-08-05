@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 /**
  * The map side of the same rewrite: a fold whose accumulator is a map it only reads and writes
  * carries a builder for the length of the walk, instead of rebuilding the trie on every element.
- * Reading is what separates this from the list case — {@code Map.upsert} looks the key up before it
+ * Reading is what separates this from the list case — {@code Map.updateOrInsert} looks the key up before it
  * writes — so what these tests hold is that the read answers from what the walk has written so far.
  *
  * <p>The keys are strings because that is what a map crossing the boundary may be keyed by
@@ -72,7 +72,7 @@ class CompileGrowingMapFoldTest {
     }
 
     private static final String TALLY =
-            "List.fold((acc, x) -> Map.upsert(x, 1, c -> c + 1, acc), Map.empty, %s)";
+            "List.fold((acc, x) -> Map.updateOrInsert(x, 1, c -> c + 1, acc), Map.empty, %s)";
 
     @Test
     void countingWithUpsertReadsWhatTheWalkHasWritten() throws Exception {

@@ -56,7 +56,7 @@ public final class DecimalMath {
     }
 
     /**
-     * {@code Decimal.toInt(d, mode)}: the whole number {@code d} rounds to under {@code mode}. The
+     * {@code Decimal.toInt(mode, d)}: the whole number {@code d} rounds to under {@code mode}. The
      * mode is an argument because dropping a fraction is a domain decision — a tax is truncated or
      * rounded by rule, not by default — the same reason {@code Decimal.divide} states its scale and
      * mode.
@@ -64,7 +64,7 @@ public final class DecimalMath {
      * <p>A value too large for {@code Int} aborts, as an Int overflow does ({@link IntMath}): it is a
      * model bug rather than a business result.
      */
-    public static long toInt(BigDecimal d, RoundingMode mode) {
+    public static long toInt(RoundingMode mode, BigDecimal d) {
         try {
             return d.setScale(0, toJava(mode)).longValueExact();
         } catch (ArithmeticException _) {
@@ -72,8 +72,10 @@ public final class DecimalMath {
         }
     }
 
-    /** {@code Decimal.round(d, scale, mode)}: {@code d} rounded to {@code scale} places by {@code mode}. */
-    public static BigDecimal round(BigDecimal d, long scale, RoundingMode mode) {
+    /** {@code Decimal.round(scale, mode, d)}: {@code d} rounded to {@code scale} places by
+     *  {@code mode}. The parameters are in the order the core declaration writes them — the kernel's
+     *  descriptor is derived from that declaration, so the two cannot drift apart. */
+    public static BigDecimal round(long scale, RoundingMode mode, BigDecimal d) {
         return d.setScale((int) scale, toJava(mode));
     }
 }

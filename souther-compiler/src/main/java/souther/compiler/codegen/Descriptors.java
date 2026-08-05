@@ -200,6 +200,8 @@ final class Descriptors {
     static final ClassDesc CD_Comparable = ClassDesc.of("java.lang.Comparable");
     static final MethodTypeDesc MTD_compareTo_Object = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
     static final MethodTypeDesc MTD_Map_put = MethodTypeDesc.of(CD_Object, CD_Object, CD_Object);
+    static final MethodTypeDesc MTD_Map_containsKey =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     static final MethodTypeDesc MTD_apply = MethodTypeDesc.of(CD_Object, CD_Object);
     static final MethodTypeDesc MTD_orThrow = MethodTypeDesc.of(CD_Object, CD_Result);
     static final ClassDesc CD_StringBuilder = ClassDesc.of("java.lang.StringBuilder");
@@ -231,7 +233,11 @@ final class Descriptors {
     static final ClassDesc CD_JooqDecoders = ClassDesc.of("net.unit8.raoh.jooq.JooqRecordDecoders");
     static final ClassDesc CD_RDecoders = ClassDesc.of("net.unit8.raoh.decode.Decoders");
     static final ClassDesc CD_RVariant = CD_RDecoders.nested("Variant");
-    static final ClassDesc CD_FieldDecoder = ClassDesc.of("net.unit8.raoh.decode.FieldDecoder");
+    /** Raoh's {@code CombinePart}: what a {@code field(...)} answers. Deliberately not a
+     *  {@code Decoder} — what field a component consumes is part of a schema, and an ordinary
+     *  decoder wrapper would erase it — so it carries its own {@code decode} and an
+     *  {@code asDecoder()} for the positions that want a decoder. */
+    static final ClassDesc CD_CombinePart = ClassDesc.of("net.unit8.raoh.decode.combinator.CombinePart");
     static final ClassDesc CD_StringDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.StringDecoder");
     static final ClassDesc CD_LongDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.LongDecoder");
     static final ClassDesc CD_BoolDecoder = ClassDesc.of("net.unit8.raoh.decode.builtin.BoolDecoder");
@@ -252,12 +258,17 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Rdecoder = MethodTypeDesc.of(CD_RDecoder);
     static final MethodTypeDesc MTD_Rencoder = MethodTypeDesc.of(CD_REncoder);
     static final MethodTypeDesc MTD_leafString = MethodTypeDesc.of(CD_StringDecoder);
+    /** {@code StringDecoder.normalize()} — the no-argument form, which is NFC. */
+    static final MethodTypeDesc MTD_normalize = MethodTypeDesc.of(CD_StringDecoder);
     static final MethodTypeDesc MTD_leafLong = MethodTypeDesc.of(CD_LongDecoder);
     static final MethodTypeDesc MTD_leafBool = MethodTypeDesc.of(CD_BoolDecoder);
     static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
     static final MethodTypeDesc MTD_leafTemporal = MethodTypeDesc.of(CD_TemporalDecoder);
-    static final MethodTypeDesc MTD_field = MethodTypeDesc.of(CD_FieldDecoder, CD_String, CD_RDecoder);
-    static final MethodTypeDesc MTD_optionalField = MethodTypeDesc.of(CD_RDecoder, CD_String, CD_RDecoder);
+    static final MethodTypeDesc MTD_field = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
+    static final MethodTypeDesc MTD_optionalField = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
+    /** {@code CombinePart}'s own decode, and the conversion for a position that wants a decoder. */
+    static final MethodTypeDesc MTD_partDecode = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
+    static final MethodTypeDesc MTD_asDecoder = MethodTypeDesc.of(CD_RDecoder);
     static final MethodTypeDesc MTD_listDec = MethodTypeDesc.of(CD_ListDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_mapDec = MethodTypeDesc.of(CD_RecordDecoder, CD_RDecoder);
     static final MethodTypeDesc MTD_Rvariant = MethodTypeDesc.of(CD_RVariant, CD_String, CD_RDecoder);
@@ -369,13 +380,13 @@ final class Descriptors {
     static final ClassDesc CD_JavaOptional = ClassDesc.of("java.util.Optional");
     static final MethodTypeDesc MTD_ofOptional = MethodTypeDesc.of(CD_Option, CD_JavaOptional);
     static final MethodTypeDesc MTD_error = MethodTypeDesc.of(CD_Object);
-    // Per-source (JSON / jOOQ) decode targets (spec 10.6). JooqRecordDecoders.field returns a
-    // JooqRecordDecoder (not FieldDecoder); JsonDecoders.field returns FieldDecoder like the map source.
+    // Per-source (JSON / jOOQ) decode targets (spec 10.6). Every source's `field` answers a
+    // `CombinePart`; the three differ only in the input type they read, which is erased.
     static final ClassDesc CD_JooqRecordDecoder = ClassDesc.of("net.unit8.raoh.jooq.JooqRecordDecoder");
     static final MethodTypeDesc MTD_fieldJooq =
-            MethodTypeDesc.of(CD_JooqRecordDecoder, CD_String, CD_RDecoder);
+            MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
     static final MethodTypeDesc MTD_optFieldJooq =
-            MethodTypeDesc.of(CD_JooqRecordDecoder, CD_String, CD_RDecoder);
+            MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
 
     // Value-equality / hashCode targets, shared by the value-class equality codegen and `==`. The
     // rule is the runtime's: what a Decimal's identity ignores and what a container answers is

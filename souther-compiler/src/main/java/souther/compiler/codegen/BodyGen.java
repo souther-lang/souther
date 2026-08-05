@@ -1168,7 +1168,7 @@ final class BodyGen {
                     intDivide(call, true);
                     return;
                 }
-                case "Int.remainder" -> {
+                case "Int.truncatingRemainder" -> {
                     intDivide(call, false);
                     return;
                 }

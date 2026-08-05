@@ -142,7 +142,7 @@ class CompilePostfixApplicationTest {
         Ast.FnDef def = souther.compiler.query.Compilation
                 .ofDocuments(byId, java.util.Set.of(), souther.compiler.meta.ModulePath.EMPTY)
                 .db().ask(new souther.compiler.query.Bodies.SettledFn("demo", "go")).value();
-        assertEquals(1, occurrences(def.written(), "pick"), "the callee was worked out more than once");
+        assertEquals(1, occurrences(def.writtenBody(), "pick"), "the callee was worked out more than once");
     }
 
     private static int occurrences(Ast.Expr e, String callee) {

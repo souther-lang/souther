@@ -46,7 +46,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
 
     @Test
     void whatAFunctionArgumentAnswersSettlesTheRest() {
-        // List.concatMap : (('a) -> List<'b>, List<'a>) -> List<'b>. The declared result of the
+        // List.flatMap : (('a) -> List<'b>, List<'a>) -> List<'b>. The declared result of the
         // function argument is `List<'b>` and not `'b`, so reading it as an accumulator to grow —
         // which is one operation's meaning and not what applying a signature is — leaves `'b` a
         // variable and refuses the call. Applying the signature settles it from what the function
@@ -54,7 +54,7 @@ class ALanguageOperationKeptStandingTypesFromWhatItDeclaresTest {
         Ast.Binders binders = new Ast.Binders(new BindingOwner.OfValue("demo", "test"));
         Ast.Block step = new Ast.Block(List.of(binders.binder("x", POS)),
                 new Ast.ListLit(List.of(new Ast.IntLit(1, POS)), POS), POS);
-        Ast.Expr call = new Ast.Apply("List.concatMap", new ValueName.Stdlib("List.concatMap"),
+        Ast.Expr call = new Ast.Apply("List.flatMap", new ValueName.Stdlib("List.flatMap"),
                 List.of(step, new Ast.ListLit(List.of(new Ast.IntLit(2, POS)), POS)),
                 ConstructionOrigin.own(), POS);
 
