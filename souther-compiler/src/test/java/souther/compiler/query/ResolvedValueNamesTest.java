@@ -393,7 +393,8 @@ class ResolvedValueNamesTest {
 
         assertEquals(new SourcePos(4, 7, "a.sou"), declared.pos(), "the field on line 4");
         assertEquals(decomposed, declared.spelling(), "quoted as the declaration writes it");
-        assertEquals(decomposed.length(), declared.width(),
+        assertEquals(decomposed.length(),
+                declared.region().end().column() - declared.region().start().column(),
                 "an underline over the name would stop one character short");
     }
 

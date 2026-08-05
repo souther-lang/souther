@@ -290,16 +290,20 @@ public final class Analyzer {
      * The characters one written name occupies, counting only its last segment: renaming a type
      * rewrites the {@code Amount} of {@code up.Amount}, never the {@code up}.
      *
-     * <p>Measured in the spelling the source has and not in the name it denotes. The two differ by
-     * however many combining marks the author typed, and taking either end off the name puts the
-     * range inside the qualifier at one end and short of the last character at the other.
+     * <p>Read off the tokens the name is written with, not measured in the name. The two differ by
+     * however many combining marks the author typed, and by whatever the grammar lets stand between
+     * a qualifier and the name it qualifies — a space, a comment, a line break — so an offset
+     * counted in the name lands inside the qualifier at one end and short of the last character at
+     * the other.
      */
     private Range writtenRange(WrittenName written) {
-        SourcePos pos = written.pos();
-        int line = pos.line() - 1;
-        int start = pos.column() - 1 + written.lastSegmentOffset();
-        return new Range(new Position(line, start),
-                new Position(line, pos.column() - 1 + written.width()));
+        Region segment = written.lastSegment();
+        return new Range(editorPosition(segment.start()), editorPosition(segment.end()));
+    }
+
+    /** A compiler position as an editor counts, both of its numbers being one less. */
+    private static Position editorPosition(SourcePos at) {
+        return new Position(at.line() - 1, at.column() - 1);
     }
 
     /**

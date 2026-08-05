@@ -1407,7 +1407,7 @@ public final class TypeOps {
             if (module == null) {
                 return CompileException.of(
                         Diagnostic.of(null, "check.qualified.unknownmodule").title("check.module.title")
-                                .at(written.pos(), written.width()).args(qualifier, name)
+                                .at(written.region()).args(qualifier, name)
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
                                 .build(),
                         "no module named `" + qualifier + "`");
@@ -1416,7 +1416,7 @@ public final class TypeOps {
                     ? "check.qualified.notexposed" : "check.qualified.notdefined";
             return CompileException.of(
                     Diagnostic.of(null, key).title("check.module.title")
-                            .at(written.pos(), written.width()).args(name, module)
+                            .at(written.region()).args(name, module)
                             .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
                             .build(),
                     "`" + name + "` is not " + (key.endsWith("notexposed") ? "exposed by" : "defined in")
@@ -1426,7 +1426,7 @@ public final class TypeOps {
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.type.msg")
                         .title("check.unknown.title")
-                        .at(written.pos(), written.width())
+                        .at(written.region())
                         .args(written.quoted())
                         .suggestion(Suggest.candidate(canonical, known))
                         .build(),

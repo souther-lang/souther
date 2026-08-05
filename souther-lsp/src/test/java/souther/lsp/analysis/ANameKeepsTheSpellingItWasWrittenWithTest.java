@@ -221,6 +221,33 @@ class ANameKeepsTheSpellingItWasWrittenWithTest {
                 "the qualifier was rewritten along with the name: " + escape(rewritten));
     }
 
+    /**
+     * A qualified name is read over meaningful tokens, so its parts need not be adjacent — and where
+     * the last one is written is the only thing a rename may rewrite.
+     *
+     * <p>Nothing in the joined spelling `up.Amount` says how far apart the parts are. Counting the
+     * last segment's start in it puts a rename on the dot for `up . Amount`, and on the wrong line
+     * for a name a comment carries over a line break. Both parse; the second is how an author
+     * annotates which module they meant.
+     */
+    @Test
+    void aQualifiedNameIsRenamedWhereItsLastPartIsWrittenHoweverFarApartTheyAre() {
+        String up = "module up exposing ( Amount )\n\ndata Amount = Int\n";
+        for (String reference : List.of("up.Amount", "up . Amount",
+                "up // which module\n    . Amount")) {
+            String here = "module here\n\ndata Box = { v: " + reference + " }\n";
+            Map<String, String> sources =
+                    Map.of("file:///up.sou", up, "file:///here.sou", here);
+
+            Map<String, List<TextEdit>> edits = new Analyzer().renameEdits("file:///here.sou",
+                    after(here, "Amount }", 0), graphOf(sources), "Renamed");
+
+            assertEquals(here.replace("Amount }", "Renamed }"),
+                    apply(here, edits.get("file:///here.sou")),
+                    "renaming through `" + reference.replace("\n", "\\n") + "`");
+        }
+    }
+
     /** The composed spelling of a decomposed name — what the same name looks like typed the other
      *  way. */
     private static String compose(String decomposed) {

@@ -71,6 +71,29 @@ class AReportUnderlinesWhatTheAuthorTypedTest {
         assertEquals(written.length(), width(report));
     }
 
+    /**
+     * A qualified name is read over meaningful tokens, so what a report underlines runs from the
+     * qualifier to the end of the name however far apart the two are written.
+     *
+     * <p>The joined spelling says nothing about the distance. Measuring the underline in it stops it
+     * short by whatever stands between the parts, which is the same defect as measuring it in the
+     * canonical name and is not fixed by keeping the spelling.
+     */
+    @Test
+    void aQualifiedNameIsUnderlinedFromItsQualifierToItsEndHoweverFarApartTheyAre() {
+        Diagnostic report = only("""
+                module demo
+
+                data Box = { v: %s . Missing }
+                """.formatted(NFD));
+
+        Region region = report.region();
+        assertEquals(region.start().line(), region.end().line());
+        assertEquals((NFD + " . Missing").length(),
+                region.end().column() - region.start().column(),
+                "the underline stops short of the name it is about");
+    }
+
     /** The one report compiling {@code source} produces. */
     private static Diagnostic only(String source) {
         CompileException thrown =

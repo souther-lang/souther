@@ -930,13 +930,14 @@ public final class AstBuilder {
      * from a run of tokens the parser did not wrap in a node. Advances {@code at} past the name, and
      * positions the name at its first identifier so a diagnostic points at the name, not the clause. */
     private Ast.Name dottedName(List<SyntaxElement> es, int[] at) {
-        WrittenName name = nameOf((SyntaxToken) es.get(at[0]++));
+        List<SyntaxToken> parts = new ArrayList<>();
+        parts.add((SyntaxToken) es.get(at[0]++));
         while (at[0] + 1 < es.size() && isToken(es.get(at[0]), SyntaxKind.DOT)
                 && isToken(es.get(at[0] + 1), SyntaxKind.IDENT)) {
             at[0]++;                              // .
-            name = name.then(nameOf((SyntaxToken) es.get(at[0]++)));
+            parts.add((SyntaxToken) es.get(at[0]++));
         }
-        return new Ast.Name(name, null);
+        return new Ast.Name(joined(parts), null);
     }
 
     /** The comma-separated names of a {@code constructs}/{@code depends on} clause, each possibly
@@ -1368,11 +1369,21 @@ public final class AstBuilder {
         throw new IllegalStateException("no type in " + n.kind());
     }
 
-    /** The name a run of dotted identifiers spells, kept with the characters that spell it. The
-     *  qualifier may compose to fewer units than it was written with, so where the last segment
-     *  starts is a fact about the spelling and cannot be counted in the name. */
+    /**
+     * The name a run of dotted identifiers spells, and where each part of it is written.
+     *
+     * <p>Read off the tokens rather than off the joined spelling. A qualified name is read over
+     * meaningful tokens, so the parts may be separated by whitespace, a comment or a line break, and
+     * counting a dot's worth of characters between them puts the last segment — which is the part a
+     * rename rewrites — in the wrong column.
+     */
     private WrittenName qualifiedNameOf(SyntaxNode n) {
-        List<SyntaxToken> parts = identTokens(n);
+        return joined(identTokens(n));
+    }
+
+    /** The one name a run of identifier tokens spells, occupying everything from the first to the
+     *  last of them. */
+    private WrittenName joined(List<SyntaxToken> parts) {
         WrittenName name = nameOf(parts.get(0));
         for (int i = 1; i < parts.size(); i++) {
             name = name.then(nameOf(parts.get(i)));

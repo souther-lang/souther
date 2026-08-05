@@ -989,9 +989,9 @@ public final class Names {
                 if (!spans(d.written(), at)) {
                     continue;
                 }
-                // A container writes its element's name inside its own span, so the shortest match
-                // is the one the cursor is actually on.
-                if (innermost == null || d.written().width() < innermost.written().width()) {
+                // A container writes its element's name inside its own span, so the one written
+                // inside the other is the one the cursor is actually on.
+                if (innermost == null || d.written().within(innermost.written())) {
                     innermost = d;
                 }
             }
@@ -1278,14 +1278,7 @@ public final class Names {
      * there is no longer a caller with only a line and a column to give.
      */
     static boolean spans(WrittenName written, SourcePos at) {
-        if (written == null || !written.authored() || at == null) {
-            return false;   // a name nobody wrote is under no cursor
-        }
-        SourcePos start = written.pos();
-        return start != null && start.line() == at.line()
-                && Objects.equals(at.sourceId(), start.sourceId())
-                && at.column() >= start.column()
-                && at.column() <= start.column() + written.width();
+        return written != null && written.authored() && written.covers(at);
     }
 
     /** The occurrence of a type's own name, in the declaration that declares it. */

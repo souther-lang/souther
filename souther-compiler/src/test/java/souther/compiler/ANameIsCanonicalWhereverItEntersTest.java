@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -37,6 +38,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * command line ({@code run --behavior}, {@code examples --module}, {@code examples --behavior}).
  * The last three are one line each in the argument parser, and a line is exactly what gets deleted
  * by someone who cannot see what it is for — so each is driven rather than described.
+ *
+ * <p>What is canonical is what a name is called. What the author typed is kept beside it and is not
+ * canonical, which is the whole of {@code WrittenName} and is asserted here too — otherwise a tree
+ * that had thrown the spelling away would pass this class as readily as one that had not.
  */
 class ANameIsCanonicalWhereverItEntersTest {
 
@@ -87,13 +92,11 @@ class ANameIsCanonicalWhereverItEntersTest {
                 "generated: " + classes.keySet());
     }
 
-    @Test
-    void nothingDecomposedSurvivesIntoTheTree() {
-        // The property behind all of the above, asked of the whole tree rather than of one door: a
-        // data name, a field name, a type variable and a string literal all written decomposed, and
-        // nothing decomposed left once it is parsed. A type variable is only checkable this way —
-        // it is a core privilege, so it never reaches a compiled user module.
-        Ast.Module parsed = CstFrontend.parse("""
+    /** A data name, a field name, a type variable and a string literal, all written decomposed. A
+     *  type variable is only checkable this way — it is a core privilege, so it never reaches a
+     *  compiled user module. */
+    private static Ast.Module decomposedThroughout() {
+        return CstFrontend.parse("""
                 module souther.probe
 
                 data %s = { %s: String }
@@ -101,8 +104,36 @@ class ANameIsCanonicalWhereverItEntersTest {
                 let same (x: '%s) : '%s = x
                 let label = "%s"
                 """.formatted(NFD, NFD, NFD, NFD, NFD), null);
-        assertTrue(!parsed.toString().contains(NFD),
-                "something kept the decomposed spelling: " + parsed);
+    }
+
+    @Test
+    void everyNameInTheTreeIsCanonicalWhicheverWayItWasWritten() {
+        // The property behind all of the above, asked of the whole tree rather than of one door.
+        // `toString` reaches every name, and a name reads as what it is called.
+        assertTrue(!decomposedThroughout().toString().contains(NFD),
+                "something is called by its decomposed spelling: " + decomposedThroughout());
+    }
+
+    @Test
+    void aNameKeepsTheDecomposedSpellingItWasWrittenWith() {
+        // The other half, and the reason the assertion above is not the whole story: what a name is
+        // called is canonical and what the file says is not, so the decomposed characters are still
+        // in the tree — in the occurrence, which is what a report quotes and an editor measures.
+        Ast.Def data = decomposedThroughout().defs().get(0);
+
+        assertEquals(NFC, data.name());
+        assertEquals(NFD, data.written().spelling(),
+                "the declaration no longer says what the author typed");
+    }
+
+    @Test
+    void aStringLiteralIsCanonicalizedAsAValueAndKeepsNoSpelling() {
+        // A literal is not a name. It crosses a boundary as a value, so what it holds is the
+        // canonical text itself and there is no second answer to keep (ADR-0096).
+        Ast.FnDef label = decomposedThroughout().fns().stream()
+                .filter(fn -> fn.name().equals("label")).findFirst().orElseThrow();
+
+        assertEquals(NFC, assertInstanceOf(Ast.StringLit.class, label.writtenBody()).value());
     }
 
     @Test

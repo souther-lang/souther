@@ -907,7 +907,7 @@ public final class Resolve {
         }
         return CompileException.of(
                 Diagnostic.of(null, "check.stdlib.notfunction").title("check.unknown.title")
-                        .at(written.pos(), written.width()).args(written.quoted()).build(),
+                        .at(written.region()).args(written.quoted()).build(),
                 "`" + written.quoted() + "` is not a standard-library function.");
     }
 
@@ -924,7 +924,7 @@ public final class Resolve {
         List<String> candidates = reachable(bound);
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.name.msg").title("check.unknown.title")
-                        .at(written.pos(), written.width()).args(written.quoted())
+                        .at(written.region()).args(written.quoted())
                         .suggestion(Suggest.candidate(name, candidates)).build(),
                 "unknown identifier `" + written.quoted() + "`" + Suggest.hint(name, candidates));
     }
@@ -943,14 +943,14 @@ public final class Resolve {
         if (qualified != null) {
             return CompileException.of(
                     Diagnostic.of(null, "check.stdlib.qualified.msg").title("check.unknown.title")
-                            .at(written.pos(), written.width()).args(written.quoted(), qualified)
+                            .at(written.region()).args(written.quoted(), qualified)
                             .build(),
                     "`" + written.quoted() + "` is a standard-library function and must be called"
                             + " qualified, as `" + qualified + "` (spec §stdlib).");
         }
         List<String> candidates = reachable(bound);
         return CompileException.of(
-                Diagnostic.of("E1401", "e1401.msg").at(written.pos(), written.width())
+                Diagnostic.of("E1401", "e1401.msg").at(written.region())
                         .args(written.quoted())
                         .suggestion(Suggest.candidate(name, candidates))
                         .hint("e1401.hint").build(),
