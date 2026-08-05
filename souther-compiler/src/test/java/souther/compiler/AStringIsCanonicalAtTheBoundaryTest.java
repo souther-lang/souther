@@ -8,7 +8,10 @@ import net.unit8.raoh.decode.Decoder;
 
 import org.junit.jupiter.api.Test;
 
+import net.unit8.raoh.Issue;
+
 import java.text.Normalizer;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -127,6 +130,57 @@ class AStringIsCanonicalAtTheBoundaryTest {
         // form their editor wrote, so the compiler settles it rather than leaving it to the file.
         assertEquals(1L, number("String.length(\"" + GA_NFD + "\")", "x"),
                 "a decomposed literal is one character to the compiler that read it");
+    }
+
+    @Test
+    void aMapKeyIsCanonicalToo() throws Exception {
+        // The keys of a decoded map do not pass the string leaf that canonicalizes — they are
+        // whatever the object carried — so they are remapped after decoding. Without that,
+        // Map<String, V> was the one place a boundary handed the domain text it had not
+        // canonicalized, and Map.get with a literal missed a key written the other way.
+        String src = """
+                module demo
+
+                data In = { m: Map<String, Int> }
+                data Out = Int
+
+                behavior calc : (i: In) -> Out constructs Out
+
+                let calc (i) = Out(Map.get("%s", i.m) |> Option.withDefault(-1))
+                """.formatted(GA_NFC);
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src),
+                AStringIsCanonicalAtTheBoundaryTest.class.getClassLoader());
+        Object behavior = loader.loadClass("demo.Calc$Impl").getDeclaredConstructor().newInstance();
+
+        for (String key : new String[] {GA_NFC, GA_NFD}) {
+            Object in = Codecs.decoded(loader, "demo.In", Map.of("m", Map.of(key, 7L)));
+            assertEquals(7L, Codecs.encode(loader, "demo.Out", Codecs.apply(behavior, in)),
+                    "a key written as " + key.length() + " UTF-16 units is found by the same literal");
+        }
+    }
+
+    @Test
+    void twoKeysThatCanonicalizeTogetherAreADecodeFailure() throws Exception {
+        // A Set may collapse them — canonically equivalent text is one element — but a map would lose
+        // the first key's value to the second with nothing said. So it fails at the key.
+        ClassLoader loader = new BytesClassLoader(Compiler.compile("""
+                module demo
+
+                data V = { m: Map<String, Int> }
+                """), getClass().getClassLoader());
+
+        Map<String, Object> both = new LinkedHashMap<>();
+        both.put(GA_NFC, 1L);
+        both.put(GA_NFD, 2L);
+        Result<?> r = Codecs.decoder(loader, "demo.V").decode(Map.of("m", both), Path.ROOT);
+
+        assertTrue(r instanceof Err, "two keys, one text: the second value would replace the first");
+        Issue issue = ((Err<?>) r).issues().asList().get(0);
+        assertEquals("duplicate_key", issue.code());
+
+        // One of them alone is fine, so the failure is the collision and not the character.
+        assertTrue(Codecs.decoder(loader, "demo.V").decode(Map.of("m", Map.of(GA_NFD, 2L)), Path.ROOT)
+                instanceof Ok);
     }
 
     @Test

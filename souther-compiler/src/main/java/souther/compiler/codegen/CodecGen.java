@@ -110,8 +110,13 @@ final class CodecGen {
         switch (key) {
             case Ast.DataDecRef d -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
             case Ast.PrimDecRef p -> {
-                // Only a temporal is parsed here: a String key never reaches this method (it needs no
-                // remapping at all), and no other primitive is a boundary key.
+                // A String key is the string leaf itself, which canonicalizes and does nothing else.
+                // A temporal is that leaf parsed. No other primitive is a boundary key.
+                if (p.kind() == Ast.PrimKind.STRING) {
+                    code.invokestatic(CD_ObjectDecoders, "string", MTD_leafString);
+                    code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+                    return;
+                }
                 String parse = switch (p.kind()) {
                     case DATE -> "date";
                     case DATETIME -> "dateTime";
@@ -119,16 +124,29 @@ final class CodecGen {
                             throw new CompileException(key.pos(), "not a map key decoder: " + p.kind());
                 };
                 code.invokestatic(CD_ObjectDecoders, "string", MTD_leafString);
+                code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
                 code.invokevirtual(CD_StringDecoder, parse, MTD_leafTemporal);
             }
             default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
         }
     }
 
-    /** Whether a map's keys need remapping at all: a plain {@code String} key is already what the
-     *  decoded object carries. */
+    /**
+     * Whether a map's keys are remapped after decoding. Every boundary map's are.
+     *
+     * <p>A plain {@code String} key used to be left alone — it is already what the decoded object
+     * carries — and that was true until text arriving from outside became canonical (ADR-0096). The
+     * keys of a decoded map do not pass the string leaf that canonicalizes, so leaving them alone
+     * left `Map<String, V>` the one place a boundary handed the domain text it had not canonicalized:
+     * `Map.get` with a literal would miss a key written the other way, while `Map<UserId, V>` beside
+     * it was canonical because a newtype key runs its own decoder here.
+     *
+     * <p>Kept as a question rather than deleted because the walk it turns on is also where a
+     * canonicalization collision is caught, and that is a property of every key type, not of the
+     * ones that need converting.
+     */
     private static boolean needsRekey(Ast.DecRef key) {
-        return !(key instanceof Ast.PrimDecRef p && p.kind() == Ast.PrimKind.STRING);
+        return true;
     }
 
     /** The name of the generated per-$Dec helper that remaps a decoded {@code Map<String, V>}'s keys
@@ -671,7 +689,10 @@ final class CodecGen {
         if (!(dec instanceof Ast.NewtypeDecoder nt)) {
             return true;   // a prim leaf is typed; an object decoder maps nothing either way
         }
-        return !(nt.inner() instanceof Ast.MapDecRef mp) || !needsRekey(mp.key());
+        // A newtype over a map keeps its typed leaf: the key remap is appended *after* the
+        // constraints rather than before them (see emitNewtypeDecode), so a size bound still becomes
+        // Raoh's own too_small / too_large rather than falling back to invariant_violation.
+        return true;
     }
 
     /**
@@ -729,7 +750,7 @@ final class CodecGen {
     private void emitRekeyHelper(ClassBuilder cb, Ast.DecRef key) {
         cb.withMethodBody(rekeyMethod(key), MTD_rekey, ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC,
                 code -> {
-            // locals: src=0, path=1, keyDec=2, out=3, issues=4, it=5, entry=6, key=7, kr=8
+            // locals: src=0, path=1, keyDec=2, out=3, issues=4, it=5, entry=6, key=7, kr=8, decoded=9
             emitKeyDecoder(code, key);
             code.astore(2);                                              // keyDec = K.decoder()
             code.new_(CD_LinkedHashMap);
@@ -778,11 +799,36 @@ final class CodecGen {
             code.astore(4);
             code.goto_(loop);
             code.labelBinding(ok);
-            // out.put(((Ok) kr).value(), entry.getValue())
-            code.aload(3);
             code.aload(8);
             code.checkcast(CD_ROk);
             code.invokevirtual(CD_ROk, "value", MTD_Object);
+            code.astore(9);                                            // decoded = the remapped key
+            // Two source keys can be one decoded key: canonicalizing (ADR-0096) makes text written
+            // two ways into one text, and a newtype key's invariant can map two spellings together.
+            // A Set may collapse them — equivalent text is one element — but a map would lose the
+            // first key's value to the second with nothing said, so it is a failure at the key.
+            code.aload(3);
+            code.aload(9);
+            code.invokeinterface(CD_Map, "containsKey", MTD_Map_containsKey);
+            Label fresh = code.newLabel();
+            code.ifeq(fresh);
+            code.aload(4);
+            code.aload(1);
+            code.aload(7);
+            code.checkcast(CD_String);
+            code.invokevirtual(CD_RPath, "append", MTD_Path_append);
+            code.loadConstant("duplicate_key");
+            code.loadConstant("two keys are the same key once decoded");
+            code.invokestatic(CD_RResult, "fail", MTD_Rfail, true);
+            code.checkcast(CD_RErr);
+            code.invokevirtual(CD_RErr, "issues", MTD_Err_issues);
+            code.invokevirtual(CD_RIssues, "merge", MTD_Issues_merge);
+            code.astore(4);
+            code.goto_(loop);
+            code.labelBinding(fresh);
+            // out.put(decoded, entry.getValue())
+            code.aload(3);
+            code.aload(9);
             code.aload(6);
             code.invokeinterface(CD_MapEntry, "getValue", MTD_getKeyValue);
             code.invokeinterface(CD_Map, "put", MTD_Map_put);
@@ -925,10 +971,22 @@ final class CodecGen {
      */
     private void emitNewtypeDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.NewtypeDecoder dec,
                                    Map<String, Type> fields, Src src, Invariants invariants) {
-        emitDecoderObject(code, dec.inner(), src);                    // Y's decoder (for this source)
-        // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the invariant
-        // says is checked through refine (and again by __construct).
-        emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
+        if (dec.inner() instanceof Ast.MapDecRef mp) {
+            // The map's own decoder, its constraints, and only then the key remap. Ordering matters:
+            // the remap answers a plain Decoder, so a constraint applied after it could not be one of
+            // Raoh's typed ones. Size is the same either way on the success path — a remap that
+            // collided has already failed (see emitRekeyHelper), so no entry is lost between the two.
+            emitDecoderObject(code, mp.value(), src);
+            code.invokestatic(srcListOwner(src), "map", MTD_mapDec);
+            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
+            code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));
+            code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+        } else {
+            emitDecoderObject(code, dec.inner(), src);                // Y's decoder (for this source)
+            // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the
+            // invariant says is checked through refine (and again by __construct).
+            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
+        }
         code.aload(1);                                               // in
         code.aload(2);                                               // path
         code.invokeinterface(CD_RDecoder, "decode", MTD_Rdecode);   // Result

@@ -1552,7 +1552,7 @@ public final class Analyzer {
      *
      * <p>{@code callee} says this node is what an application applies. It cannot be worked out from
      * the parent alone: a qualified callee is a field read, and only its last name is the function —
-     * {@code Map.mapValues(f, xs)} names a namespace and then a function in it. So it is carried down, to
+     * {@code Map.mapValues(f, m)} names a namespace and then a function in it. So it is carried down, to
      * the field a read takes and not to what the read is taken off.
      */
     private void collectTokens(SyntaxNode node, LineIndex lines, List<int[]> out,

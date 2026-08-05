@@ -200,6 +200,8 @@ final class Descriptors {
     static final ClassDesc CD_Comparable = ClassDesc.of("java.lang.Comparable");
     static final MethodTypeDesc MTD_compareTo_Object = MethodTypeDesc.of(ConstantDescs.CD_int, CD_Object);
     static final MethodTypeDesc MTD_Map_put = MethodTypeDesc.of(CD_Object, CD_Object, CD_Object);
+    static final MethodTypeDesc MTD_Map_containsKey =
+            MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object);
     static final MethodTypeDesc MTD_apply = MethodTypeDesc.of(CD_Object, CD_Object);
     static final MethodTypeDesc MTD_orThrow = MethodTypeDesc.of(CD_Object, CD_Result);
     static final ClassDesc CD_StringBuilder = ClassDesc.of("java.lang.StringBuilder");

@@ -2,6 +2,8 @@ package souther.compiler.diag;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.Prelude;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -197,6 +199,51 @@ class MessageCatalogFormatTest {
     @Test
     void noJapaneseKeyIsDefinedTwice() throws IOException {
         assertEquals(List.of(), duplicateKeys("/souther/compiler/diag/messages_ja.properties"));
+    }
+
+    @Test
+    void everyStandardLibraryFunctionADiagnosticNamesExists() throws IOException {
+        assertEquals(Set.of(), missingLibraryNames("/souther/compiler/diag/messages.properties"));
+    }
+
+    @Test
+    void theJapaneseCatalogNamesTheSameOnes() throws IOException {
+        assertEquals(Set.of(), missingLibraryNames("/souther/compiler/diag/messages_ja.properties"));
+    }
+
+    /**
+     * The qualified standard-library names this catalog quotes that the library does not publish.
+     *
+     * <p>A hint that tells an author to reach for {@code List.concatMap} after it was renamed sends
+     * them to a compile error, in the one text whose whole job is to get them out of one. Nothing
+     * else notices: the catalog is prose, so a rename sweeps the code and the tests and leaves the
+     * advice behind — which is exactly what happened to two hints here, found in review rather than
+     * by a build.
+     *
+     * <p>Only a name under a library qualifier is checked, and only where the catalog wrote it as
+     * code. A qualifier the library does not have is somebody's module and not this test's business.
+     */
+    private static Set<String> missingLibraryNames(String resource) throws IOException {
+        Pattern quoted = Pattern.compile("`([A-Z][A-Za-z]*)\\.([a-zA-Z_][A-Za-z0-9_]*)`");
+        Set<String> missing = new TreeSet<>();
+        try (InputStream in = MessageCatalogFormatTest.class.getResourceAsStream(resource);
+                BufferedReader lines =
+                        new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = lines.readLine()) != null) {
+                Matcher m = quoted.matcher(line);
+                while (m.find()) {
+                    if (!Prelude.isQualifier(m.group(1))) {
+                        continue;
+                    }
+                    String qualified = m.group(1) + "." + m.group(2);
+                    if (!Prelude.published().contains(qualified)) {
+                        missing.add(qualified);
+                    }
+                }
+            }
+        }
+        return Set.copyOf(missing);
     }
 
     /**
