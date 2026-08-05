@@ -455,8 +455,8 @@ class AnalyzerTest {
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
 
         // cursor on the `data N` declaration in a (line 1, char 5)
-        java.util.Map<String, List<Range>> edits =
-                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
 
         assertEquals(java.util.Set.of("file:///a.sou", "file:///b.sou"), edits.keySet(), edits.toString());
         // a: the `exposing ( N )` entry (line 0) and the `data N` declaration (line 1)
@@ -479,12 +479,12 @@ class AnalyzerTest {
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
 
         // cursor on the `data N` declaration (line 1, char 5)
-        java.util.Map<String, List<Range>> edits =
-                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
 
         java.util.Set<Integer> lines = new java.util.HashSet<>();
-        for (Range r : edits.get("file:///a.sou")) {
-            lines.add(r.start().line());
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///a.sou")) {
+            lines.add(e.range().start().line());
         }
         assertTrue(lines.contains(4), "the annotation on line 4 is renamed: " + lines);
     }
@@ -501,12 +501,12 @@ class AnalyzerTest {
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
 
         // cursor on the `data Tag` declaration (line 1, char 5)
-        java.util.Map<String, List<Range>> edits =
-                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
 
         java.util.Set<Integer> lines = new java.util.HashSet<>();
-        for (Range r : edits.get("file:///a.sou")) {
-            lines.add(r.start().line());
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///a.sou")) {
+            lines.add(e.range().start().line());
         }
         assertTrue(lines.contains(2), "the element inside `List<Tag>` on line 2 is renamed: " + lines);
     }
@@ -524,12 +524,12 @@ class AnalyzerTest {
                 + "}\n";
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a));
 
-        java.util.Map<String, List<Range>> edits =
-                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
 
         java.util.Set<Integer> lines = new java.util.HashSet<>();
-        for (Range r : edits.get("file:///a.sou")) {
-            lines.add(r.start().line());
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///a.sou")) {
+            lines.add(e.range().start().line());
         }
         assertTrue(lines.contains(4), "the pattern on line 4 is renamed: " + lines);
     }
@@ -562,18 +562,18 @@ class AnalyzerTest {
         String b = "module b\nimport a ( N )\nbehavior f : (n: N) -> N\nlet f (n) = n\n";
         ModuleGraph graph = ModuleGraph.of(java.util.Map.of("file:///a.sou", a, "file:///b.sou", b));
 
-        java.util.Map<String, List<Range>> edits =
-                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph);
+        java.util.Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits("file:///a.sou", new Position(1, 5), graph, "Renamed");
 
         java.util.Set<Integer> aLines = new java.util.HashSet<>();
-        for (Range r : edits.get("file:///a.sou")) {
-            aLines.add(r.start().line());
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///a.sou")) {
+            aLines.add(e.range().start().line());
         }
         assertTrue(aLines.contains(0), "the exposing clause on line 0 is renamed: " + aLines);
 
         java.util.Set<Integer> bLines = new java.util.HashSet<>();
-        for (Range r : edits.get("file:///b.sou")) {
-            bLines.add(r.start().line());
+        for (souther.lsp.protocol.TextEdit e : edits.get("file:///b.sou")) {
+            bLines.add(e.range().start().line());
         }
         assertTrue(bLines.contains(1), "the import list on line 1 is renamed: " + bLines);
     }

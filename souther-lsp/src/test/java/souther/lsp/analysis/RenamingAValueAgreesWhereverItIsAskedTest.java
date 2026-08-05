@@ -3,6 +3,7 @@ package souther.lsp.analysis;
 import org.junit.jupiter.api.Test;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.TextEdit;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -49,20 +50,20 @@ class RenamingAValueAgreesWhereverItIsAskedTest {
             data N = { v: Int }
             """;
 
-    private static Map<String, List<Range>> renameFrom(Position pos) {
+    private static Map<String, List<TextEdit>> renameFrom(Position pos) {
         Map<String, String> sources = new LinkedHashMap<>();
         sources.put(URI, SOURCE);
         ModuleGraph graph = ModuleGraph.of(sources);
         Analyzer analyzer = new Analyzer();
         analyzer.diagnostics(graph);
-        return analyzer.renameEdits(URI, pos, graph);
+        return analyzer.renameEdits(URI, pos, graph, "renamed");
     }
 
     /** The lines an edit set touches, as `line:character`, sorted. */
-    private static Set<String> places(Map<String, List<Range>> edits) {
+    private static Set<String> places(Map<String, List<TextEdit>> edits) {
         Set<String> out = new TreeSet<>();
-        edits.forEach((uri, ranges) -> ranges.forEach(r ->
-                out.add(r.start().line() + ":" + r.start().character())));
+        edits.forEach((uri, made) -> made.forEach(e ->
+                out.add(e.range().start().line() + ":" + e.range().start().character())));
         return out;
     }
 
@@ -115,13 +116,13 @@ class RenamingAValueAgreesWhereverItIsAskedTest {
             let total (ds) = List.sum(List.map(.v, ds))
             """;
 
-    private static Map<String, List<Range>> renameInGetter(Position pos) {
+    private static Map<String, List<TextEdit>> renameInGetter(Position pos) {
         Map<String, String> sources = new LinkedHashMap<>();
         sources.put("file:///b.sou", GETTER);
         ModuleGraph graph = ModuleGraph.of(sources);
         Analyzer analyzer = new Analyzer();
         analyzer.diagnostics(graph);
-        return analyzer.renameEdits("file:///b.sou", pos, graph);
+        return analyzer.renameEdits("file:///b.sou", pos, graph, "renamed");
     }
 
     @Test
@@ -171,7 +172,7 @@ class RenamingAValueAgreesWhereverItIsAskedTest {
         ModuleGraph graph = ModuleGraph.of(sources);
         Analyzer analyzer = new Analyzer();
         analyzer.diagnostics(graph);
-        return places(analyzer.renameEdits("file:///c.sou", pos, graph));
+        return places(analyzer.renameEdits("file:///c.sou", pos, graph, "renamed"));
     }
 
     @Test

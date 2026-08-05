@@ -382,15 +382,18 @@ public final class LspServer {
             return null;
         }
         ModuleGraph graph = workspace.snapshot(documents.openDocuments());
-        Map<String, List<Range>> edits = analyzer.renameEdits(p.uri(), p.position(), graph);
+        Map<String, List<souther.lsp.protocol.TextEdit>> edits =
+                analyzer.renameEdits(p.uri(), p.position(), graph, p.newName());
         if (edits.isEmpty()) {
             return null;
         }
         Map<String, Object> changes = new LinkedHashMap<>();
-        for (Map.Entry<String, List<Range>> e : edits.entrySet()) {
+        for (Map.Entry<String, List<souther.lsp.protocol.TextEdit>> e : edits.entrySet()) {
             List<Object> textEdits = new ArrayList<>();
-            for (Range r : e.getValue()) {
-                textEdits.add(textEdit(r, p.newName()));
+            for (souther.lsp.protocol.TextEdit edit : e.getValue()) {
+                // what to write comes with the place: a binding written as a field's own name is
+                // renamed by naming the field it reads, not by writing over it
+                textEdits.add(textEdit(edit.range(), edit.newText()));
             }
             changes.put(e.getKey(), textEdits);
         }

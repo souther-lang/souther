@@ -3,6 +3,7 @@ package souther.lsp.analysis;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.TextEdit;
 
 import org.junit.jupiter.api.Test;
 
@@ -117,14 +118,20 @@ class NavigationResolvesValuesTest {
      */
     @Test
     void renamingATypeRewritesTheConstructionsOfItInBodies() {
-        Map<String, List<Range>> edits =
-                new Analyzer().renameEdits("file:///up.sou", new Position(2, 5), twoModules());
+        Map<String, List<TextEdit>> edits = new Analyzer()
+                .renameEdits("file:///up.sou", new Position(2, 5), twoModules(), "Renamed");
 
-        List<Range> here = edits.getOrDefault("file:///here.sou", List.of());
+        List<Range> here = ranges(edits.get("file:///here.sou"));
         assertTrue(here.stream().anyMatch(r -> r.start().line() == 8 && r.start().character() == 14),
                 "the `Amount` of `B.Amount(n)` on the last line: " + here);
         assertEquals(3, here.size(),
                 "the output, the `constructs`, and the construction — not this module's own Amount: "
                         + here);
+    }
+
+    /** The places a set of edits touches; these tests are about where a rename reaches. What each
+     * edit writes is {@code RenamedSourceStillCompilesTest}'s. */
+    private static List<Range> ranges(List<TextEdit> edits) {
+        return edits == null ? List.of() : edits.stream().map(TextEdit::range).toList();
     }
 }

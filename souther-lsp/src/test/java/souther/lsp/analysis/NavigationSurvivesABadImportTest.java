@@ -69,8 +69,8 @@ class NavigationSurvivesABadImportTest {
 
     @Test
     void renamingIsStillAboutWhatNamesDenote() {
-        Map<String, java.util.List<souther.lsp.protocol.Range>> edits =
-                new Analyzer().renameEdits("file:///here.sou", new Position(4, 5), graph());
+        Map<String, java.util.List<souther.lsp.protocol.TextEdit>> edits = new Analyzer()
+                .renameEdits("file:///here.sou", new Position(4, 5), graph(), "Renamed");
 
         assertTrue(edits.getOrDefault("file:///up.sou", java.util.List.of()).isEmpty(),
                 "up declares an Amount of its own, which this rename is not about");

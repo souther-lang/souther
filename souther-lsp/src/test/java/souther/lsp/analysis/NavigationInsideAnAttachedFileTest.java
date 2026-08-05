@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.TextEdit;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -147,8 +148,8 @@ class NavigationInsideAnAttachedFileTest {
     void renamingFromTheAttachedFileReachesTheDeclaringFile() {
         ModuleGraph graph = graph();
 
-        Map<String, List<Range>> edits =
-                warmed(graph).renameEdits(ATTACHED_URI, new Position(4, 4), graph);
+        Map<String, List<TextEdit>> edits =
+                warmed(graph).renameEdits(ATTACHED_URI, new Position(4, 4), graph, "Renamed");
 
         assertTrue(edits.containsKey(MODEL_URI),
                 "renaming `D` from here rewrites where it is declared: " + edits);

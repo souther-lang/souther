@@ -3,6 +3,7 @@ package souther.lsp.analysis;
 import souther.lsp.protocol.Location;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.TextEdit;
 
 import org.junit.jupiter.api.Test;
 
@@ -53,12 +54,12 @@ class NavigationResolvesNamesTest {
 
     @Test
     void renamingOneModulesTypeLeavesTheOtherModulesAlone() {
-        Map<String, List<Range>> edits =
-                new Analyzer().renameEdits("file:///here.sou", HERES_AMOUNT, graph());
+        Map<String, List<TextEdit>> edits = new Analyzer()
+                .renameEdits("file:///here.sou", HERES_AMOUNT, graph(), "Renamed");
 
         assertTrue(edits.getOrDefault("file:///up.sou", List.of()).isEmpty(),
                 "up declares an Amount of its own, which this rename is not about");
-        List<Range> here = edits.getOrDefault("file:///here.sou", List.of());
+        List<Range> here = ranges(edits.get("file:///here.sou"));
         assertEquals(3, here.size(),
                 "the declaration, the `exposing` entry, and the one bare use — not the tail of"
                         + " `up.Amount`");
@@ -75,12 +76,12 @@ class NavigationResolvesNamesTest {
      */
     @Test
     void renamingFromAQualifiedUseCarriesTheRightModulesExposing() {
-        Map<String, List<Range>> edits =
-                new Analyzer().renameEdits("file:///here.sou", THE_QUALIFIED_USE, graph());
+        Map<String, List<TextEdit>> edits = new Analyzer()
+                .renameEdits("file:///here.sou", THE_QUALIFIED_USE, graph(), "Renamed");
 
         assertEquals(2, edits.getOrDefault("file:///up.sou", List.of()).size(),
                 "up's declaration and up's `exposing` entry");
-        List<Range> here = edits.getOrDefault("file:///here.sou", List.of());
+        List<Range> here = ranges(edits.get("file:///here.sou"));
         assertEquals(1, here.size(), "only the tail of `up.Amount`");
         assertEquals(4, here.get(0).start().line());
         assertEquals(21, here.get(0).start().character(),
@@ -95,5 +96,11 @@ class NavigationResolvesNamesTest {
         assertTrue(found.isPresent(), "up.Amount denotes up's declaration");
         assertEquals("file:///up.sou", found.get().uri(),
                 "a spelling match would have stopped at this module's own Amount");
+    }
+
+    /** The places a set of edits touches; these tests are about where a rename reaches. What each
+     * edit writes is {@code RenamedSourceStillCompilesTest}'s. */
+    private static List<Range> ranges(List<TextEdit> edits) {
+        return edits == null ? List.of() : edits.stream().map(TextEdit::range).toList();
     }
 }

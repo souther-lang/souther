@@ -39,6 +39,7 @@ import souther.lsp.protocol.Location;
 import souther.lsp.protocol.LspDiagnostic;
 import souther.lsp.protocol.Position;
 import souther.lsp.protocol.Range;
+import souther.lsp.protocol.TextEdit;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -698,13 +699,98 @@ public final class Analyzer {
     }
 
     /**
-     * The edit ranges for renaming the name under the cursor, grouped by document uri: every
-     * reference to it plus every line that declares it. Empty when the cursor is not on a name.
+     * The edits for renaming the name under the cursor to {@code newName}, grouped by document uri:
+     * every reference to it plus every line that declares it. Empty when the cursor is not on a
+     * name.
      *
      * <p>A local is renameable, from its binding as much as from a use of it — the same reach
      * find-references has, for the same reason.
+     *
+     * <p>Each edit says what to write as well as where, because those differ. A record pattern's
+     * {@code { right }} names the field it reads and binds the value under that same spelling, and
+     * once the two are no longer spelled alike the field has to be named: what goes there is
+     * {@code right = r}. Answering with places alone left the caller to write one name over all of
+     * them, which is right everywhere else and silently produced a module reading a field that does
+     * not exist here.
      */
-    public Map<String, List<Range>> renameEdits(String uri, Position pos, ModuleGraph graph) {
+    public Map<String, List<TextEdit>> renameEdits(String uri, Position pos, ModuleGraph graph,
+                                                   String newName) {
+        Map<String, List<TextEdit>> out = new LinkedHashMap<>();
+        for (Map.Entry<String, List<Range>> e : renameRanges(uri, pos, graph).entrySet()) {
+            List<TextEdit> edits = new ArrayList<>();
+            SyntaxNode root = CstParser.parse(graph.text(e.getKey())).root();
+            LineIndex lines = new LineIndex(graph.text(e.getKey()));
+            for (Range range : e.getValue()) {
+                String field = fieldTakenAsName(root,
+                        lines.offsetOf(range.start().line(), range.start().character()));
+                edits.add(new TextEdit(range,
+                        field == null ? newName : field + " = " + newName));
+            }
+            out.put(e.getKey(), edits);
+        }
+        return out;
+    }
+
+    /**
+     * The field a binding takes its name from, or null where the binding is written as a name of
+     * its own.
+     *
+     * <p>Which characters are there is the syntax tree's question, being what knows about
+     * characters, and this is the one place where what a rename writes is not the name it was given.
+     */
+    private String fieldTakenAsName(SyntaxNode root, int offset) {
+        SyntaxToken token = identAt(root, offset);
+        SyntaxNode parent = token == null ? null : token.parent();
+        if (parent == null || token.start() != offset) {
+            return null;
+        }
+        if (parent.kind() == SyntaxKind.PATTERN_FIELD) {
+            // `{ f }` writes one name for both jobs; `{ f = x }` writes the binding's own
+            return onlyIdent(parent) ? token.text() : null;
+        }
+        if (parent.kind() == SyntaxKind.MATCH_CASE) {
+            // an arm's fields are the case's own tokens: `Flat { f }` against `Flat { f = x }`
+            return standsAlone(parent, token) ? token.text() : null;
+        }
+        return null;
+    }
+
+    /** Whether {@code node} holds one identifier and no other. */
+    private boolean onlyIdent(SyntaxNode node) {
+        int found = 0;
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+                found++;
+            }
+        }
+        return found == 1;
+    }
+
+    /** Whether {@code token} is a field written with nothing beside it — the previous and next
+     * tokens that are not trivia open or separate the list rather than assign to it. */
+    private boolean standsAlone(SyntaxNode node, SyntaxToken token) {
+        SyntaxToken before = null;
+        boolean past = false;
+        for (SyntaxElement e : node.children()) {
+            if (!(e instanceof SyntaxToken t) || t.isTrivia()) {
+                continue;
+            }
+            if (past) {
+                return (t.kind() == SyntaxKind.COMMA || t.kind() == SyntaxKind.RBRACE)
+                        && before != null
+                        && (before.kind() == SyntaxKind.LBRACE || before.kind() == SyntaxKind.COMMA);
+            }
+            if (t == token) {
+                past = true;
+                continue;
+            }
+            before = t;
+        }
+        return false;
+    }
+
+    /** Where renaming touches, before what to write there is decided. */
+    private Map<String, List<Range>> renameRanges(String uri, Position pos, ModuleGraph graph) {
         Map<String, List<Range>> byUri = new LinkedHashMap<>();
         for (Location loc : references(uri, pos, graph, true)) {
             byUri.computeIfAbsent(loc.uri(), k -> new ArrayList<>()).add(loc.range());
