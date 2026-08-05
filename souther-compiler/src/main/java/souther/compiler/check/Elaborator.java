@@ -735,7 +735,12 @@ public final class Elaborator {
         List<Core> values = new ArrayList<>();
         Scope inner = env;
         for (Ast.Bound b : ex.bound()) {
-            Core value = elaborate(b.value(), env, ctx);
+            // A lambda bound rather than applied needs to be told what it takes — it is a block, and a
+            // block is a value only where something says its parameter types. The declaration this
+            // binding came from says them, and nothing else here does.
+            Type says = b.value() instanceof Ast.Block && b.declaredType() != null
+                    ? TypeOps.resolveParamType(b.declaredType(), ctx.symbols()) : null;
+            Core value = elaborate(b.value(), env, ctx, says instanceof Type.FnOf ? says : null);
             Type bindType = value.type();
             if (b.declaredType() != null) {
                 Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());

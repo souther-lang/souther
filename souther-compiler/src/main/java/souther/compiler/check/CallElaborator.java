@@ -165,11 +165,25 @@ public final class CallElaborator {
         // The values first, so what they settle is in force when a function argument is read at the
         // parameter types this call gives it — `List.map(f, xs)` decides `'a` from `xs` and hands `f`
         // the element type rather than a variable.
+        // An argument that answers no value states nothing about one — an empty collection carries a
+        // bottom, and letting it fix a variable would hold every other argument to the element type
+        // of nothing. The ones that state something go first, and a bottom then widens to what they
+        // settled instead of the other way round.
+        List<Integer> stating = new ArrayList<>();
+        List<Integer> bottoms = new ArrayList<>();
         for (int i = 0; i < params.size(); i++) {
-            if (!(params.get(i) instanceof Type.FnOf)) {
-                TypeOps.unify(params.get(i), ca.type(i), bind, ctx.symbols(),
-                        call.pos(), "argument " + (i + 1) + " of " + call.written());
+            if (params.get(i) instanceof Type.FnOf) {
+                continue;
             }
+            (Type.mentions(ca.type(i), BottomInfer::answersNoValue) ? bottoms : stating).add(i);
+        }
+        for (int i : stating) {
+            TypeOps.unify(params.get(i), ca.type(i), bind, ctx.symbols(),
+                    call.pos(), "argument " + (i + 1) + " of " + call.written());
+        }
+        for (int i : bottoms) {
+            TypeOps.unify(params.get(i), ca.type(i), bind, ctx.symbols(),
+                    call.pos(), "argument " + (i + 1) + " of " + call.written());
         }
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {

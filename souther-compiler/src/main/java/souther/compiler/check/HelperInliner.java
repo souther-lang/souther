@@ -1182,6 +1182,11 @@ public final class HelperInliner {
                 // the argument's own answer rather than deciding one for it
                 Map<BindingId, ValueName> substDenotes = new HashMap<>();
                 List<BindingId> scoped = new ArrayList<>();   // the lambdas given to fn params
+                // A scoped lambda is reduced where the parameter is applied, and a representation may
+                // hold the application inside a call it keeps standing, so some are not applied here at
+                // all. What is left then is a name for a lambda, which is a value a `let` can hold —
+                // kept ready and used only for the ones the expansion did not reduce away.
+                Map<BindingId, Ast.Bound> unreduced = new LinkedHashMap<>();
                 List<Ast.Bound> bound = new ArrayList<>();
                 List<Ast.Given> given = new ArrayList<>();
                 for (int i = 0; i < helper.params().size(); i++) {
@@ -1232,6 +1237,8 @@ public final class HelperInliner {
                                             declares == null ? null : declares.result(),
                                             new Ast.FnBody.Written(lambda.body()), lambda.pos()));
                             lambdaOrigins.put(f.id(), new LambdaOrigin(p.name(), helper.name(), lambda.pos()));
+                            unreduced.put(f.id(),
+                                    new Ast.Bound(f, instantiated(p.type(), applied), lambda));
                         } else {
                             // Neither a name nor a lambda: a value written where the function goes —
                             // the argument-order mistake made with a named helper rather than a
@@ -1270,6 +1277,14 @@ public final class HelperInliner {
                 SourcePos at = keepsItsPositions(call) ? null : call.pos();
                 Copy copy = new Copy(helper.written(), ours);
                 Ast.Expr body = inline(rename(helper.written(), subst, substDenotes, at, copy));   // expand nested helpers too
+                // A scoped lambda the body still names was passed rather than applied, so nothing
+                // reduced it and the name would stand for nothing. It is bound to what it names, which
+                // is what a lambda given a name is anywhere else.
+                unreduced.forEach((id, lambda) -> {
+                    if (references(body, id)) {
+                        bound.add(lambda);
+                    }
+                });
                 scoped.forEach(scopedLambdas::remove);
                 scoped.forEach(lambdaOrigins::remove);
                 yield new Ast.Expansion(call.denotes(), mine, bound, given,
