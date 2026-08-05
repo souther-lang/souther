@@ -33,7 +33,7 @@ let modBy (divisor: Int, n: Int) : Int = intrinsic "int.modBy"
 // `min` / `max` are the two-value form the comparison operators imply; `List.min` / `List.max` are
 // the list form and answer an optional, since a list may be empty. `clamp(lo, hi, n)` holds a value
 // inside a range (Elm's `clamp low high number`), the subject last as the pipe convention wants.
-let abs (n: Int) = if n < 0 then 0 - n else n
-let min (a: Int, b: Int) = if a < b then a else b
-let max (a: Int, b: Int) = if a > b then a else b
-let clamp (lo: Int, hi: Int, n: Int) = if n < lo then lo else if n > hi then hi else n
+let abs (n: Int): Int = if n < 0 then 0 - n else n
+let min (a: Int, b: Int): Int = if a < b then a else b
+let max (a: Int, b: Int): Int = if a > b then a else b
+let clamp (lo: Int, hi: Int, n: Int): Int = if n < lo then lo else if n > hi then hi else n

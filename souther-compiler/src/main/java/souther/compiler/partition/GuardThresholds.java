@@ -1,6 +1,7 @@
 package souther.compiler.partition;
 
 import souther.compiler.ast.Ast;
+import souther.compiler.check.Location;
 import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeOps;
 import souther.compiler.core.Core;
@@ -103,10 +104,14 @@ public final class GuardThresholds {
     /**
      * The input position a comparison names, spelled the way a parameter's own path is spelled.
      *
-     * <p>A newtype's {@code value} is not a step: {@code request.cost} and {@code request.cost.value}
-     * are one location, and if the two spellings disagreed the same position would become two axes,
-     * one of which no row would ever cover. This is the rule {@code InvariantChecker} follows over the
-     * surface tree; the same rule, over the tree the checker produced.
+     * <p>Which fields are steps is {@link Location}'s rule, asked here rather than restated: a
+     * newtype's {@code value} is not one, so {@code request.cost} and {@code request.cost.value} are
+     * one position, and if the two spellings disagreed the same position would become two axes, one
+     * of which no row would ever cover.
+     *
+     * <p>The root is not that rule's. A partition is derived from what a behavior declares, and a
+     * declared parameter is not a binding — a behavior with no implementation has axes all the same —
+     * so this path is rooted at the parameter and {@link Location} at the binding a body gave it.
      */
     static TermPath pathOf(Core e, List<String> parameters, Symbols symbols) {
         return switch (e) {
@@ -116,10 +121,13 @@ public final class GuardThresholds {
                 if (base == null) {
                     yield null;
                 }
-                yield fa.field().equals("value")
-                        && TypeOps.isSingleValueNewtype(fa.target().type(), symbols)
-                        ? base : base.then(fa.field());
+                yield Location.isStep(fa.target().type(), fa.field(), symbols)
+                        ? base.then(fa.field()) : base;
             }
+            // A call kept standing names no location, and its presence says this walk was handed a
+            // representation it does not read. Said rather than answered with "no path", which would
+            // be the same answer a number gives.
+            case Core.PreservedCall p -> throw p.unexpectedIn("guard thresholds");
             case null, default -> null;
         };
     }

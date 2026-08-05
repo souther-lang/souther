@@ -26,7 +26,7 @@ let endsWith (suffix: String, s: String) : Bool = intrinsic "string.endsWith"
 // newtype invariant: a derived decoder recognises `String.length(value) >= 1` and reports a violation
 // as `too_short` with its bound, while the helper's inlined form leaves it the generic
 // `invariant_violation` (§codec-constraints).
-let isEmpty (s: String) = String.length(s) == 0
+let isEmpty (s: String): Bool = String.length(s) == 0
 
 // Whole-string regex match (Java Pattern flavour, anchored), for format-constrained values in an
 // invariant — `invariant String.matches("[0-9]{3}-[0-9]{4}", value)`. The pattern must be a string
