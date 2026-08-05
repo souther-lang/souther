@@ -46,10 +46,18 @@ public record Preserved(Map<ValueName, CompleteSignature> operations) {
      * is asked once per definition typed in such a representation.
      */
     public static Preserved byTheLanguagesOwnOperations() {
-        return THE_LANGUAGES_OWN;
+        return TheLanguagesOwn.OPERATIONS;
     }
 
-    private static final Preserved THE_LANGUAGES_OWN = readTheLibrary();
+    /**
+     * Built on the first ask and not before. What is required of these signatures is required of a
+     * representation that keeps them standing, so a checker that keeps none must not be held to it —
+     * and a class is initialized whole, so building this beside {@link #NONE} would raise the
+     * discharge representation's demand the moment anything asked for no representation at all.
+     */
+    private static final class TheLanguagesOwn {
+        private static final Preserved OPERATIONS = readTheLibrary();
+    }
 
     private static Preserved readTheLibrary() {
         Map<ValueName, CompleteSignature> operations = new LinkedHashMap<>();

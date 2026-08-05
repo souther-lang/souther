@@ -125,7 +125,7 @@ public final class CallElaborator {
         // it is not this walk's business, and a kept call with no rule types like any other.
         CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
         if (kept != null) {
-            return preservedCall(call, kept, env, ctx);
+            return preservedCall(call, kept, env, ctx, expected);
         }
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         Type result = typeOfCall(ca, call, env, ctx, expected);
@@ -150,38 +150,13 @@ public final class CallElaborator {
      * try to emit.
      */
     private static Core preservedCall(Ast.Apply call, CompleteSignature kept, Scope env,
-                                      CheckContext ctx) {
+                                      CheckContext ctx, Type expected) {
         List<Type> params = kept.params();
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         if (call.args().size() != params.size()) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.arity").title("check.arity.title")
-                            .at(call.pos(), call.written().length())
-                            .args(call.written(), params.size(), call.args().size()).build(),
-                    "`" + call.written() + "` takes " + params.size()
-                            + " argument(s) but is applied to " + call.args().size());
+            arity(call, params.size());
         }
-        Map<String, Type> bind = new HashMap<>();
-        // The values first, so what they settle is in force when a function argument is read at the
-        // parameter types this call gives it — `List.map(f, xs)` decides `'a` from `xs` and hands `f`
-        // the element type rather than a variable.
-        // An argument that answers no value states nothing about one — an empty collection carries a
-        // bottom, and letting it fix a variable would hold every other argument to the element type
-        // of nothing. The ones that state something go first, and a bottom then widens to what they
-        // settled instead of the other way round.
-        List<Integer> stating = new ArrayList<>();
-        List<Integer> bottoms = new ArrayList<>();
-        for (int i = 0; i < params.size(); i++) {
-            if (params.get(i) instanceof Type.FnOf) {
-                continue;
-            }
-            (Type.mentions(ca.type(i), BottomInfer::answersNoValue) ? bottoms : stating).add(i);
-        }
-        stating.addAll(bottoms);
-        for (int i : stating) {
-            TypeOps.unify(params.get(i), ca.type(i), bind, ctx.symbols(),
-                    call.pos(), "argument " + (i + 1) + " of " + call.written());
-        }
+        Map<String, Type> bind = settledByValues(call, params, kept.result(), expected, ca::type, ctx);
         for (int i = 0; i < params.size(); i++) {
             if (params.get(i) instanceof Type.FnOf declared) {
                 Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
@@ -202,6 +177,56 @@ public final class CallElaborator {
         }
         return new Core.PreservedCall(call.denotes(), ca.cores(),
                 TypeOps.substitute(kept.result(), bind), call.pos());
+    }
+
+    /**
+     * What a call settles of the signature it applies, before any function argument is typed.
+     *
+     * <p>Two things state something about a polymorphic signature's variables, and they are asked in
+     * this order because the order is the whole of the rule.
+     *
+     * <ol>
+     *   <li>What the context expects of the result, where the signature takes a function at all. A
+     *       variable a function parameter mentions has to be decided before that function is typed,
+     *       and where no argument decides it the position the call stands in is the only thing that
+     *       does.</li>
+     *   <li>What each value argument states, the ones that state something first. An argument that
+     *       answers no value — an empty collection carries a bottom — says nothing about what it
+     *       holds, and letting it settle a variable would hold every other argument to the element
+     *       type of nothing. A bottom then widens to what the others settled instead of the other way
+     *       round.</li>
+     * </ol>
+     *
+     * <p>Every reader of a declared signature asks this: the call that expands one, the call that
+     * keeps one standing, and the walk that reads one to learn what a function it was handed takes.
+     * They differ in what they do with a function argument afterwards — a fold reads its result as
+     * the accumulator to grow, an ordinary application does not — and in nothing before it. Said once
+     * because a difference here is not a failure but a variable settled to the wrong type, which is
+     * reported somewhere else as something else.
+     */
+    static Map<String, Type> settledByValues(Ast.Apply call, List<Type> params, Type result,
+                                             Type expected,
+                                             java.util.function.IntFunction<Type> argType,
+                                             CheckContext ctx) {
+        Map<String, Type> bind = new HashMap<>();
+        if (params.stream().anyMatch(Type.FnOf.class::isInstance)) {
+            BottomInfer.pinResultTypeVars(result, expected, bind, ctx.symbols(),
+                    call.pos(), "result of " + call.written());
+        }
+        List<Integer> stating = new ArrayList<>();
+        List<Integer> bottoms = new ArrayList<>();
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i) instanceof Type.FnOf) {
+                continue;
+            }
+            (Type.mentions(argType.apply(i), BottomInfer::answersNoValue) ? bottoms : stating).add(i);
+        }
+        stating.addAll(bottoms);
+        for (int i : stating) {
+            TypeOps.unify(params.get(i), argType.apply(i), bind, ctx.symbols(),
+                    call.pos(), "argument " + (i + 1) + " of " + call.written());
+        }
+        return bind;
     }
 
     /**
@@ -396,20 +421,8 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written() + "` reached signature application"
                     + " with " + args.size() + " argument(s) against " + signature.params().size());
         }
-        boolean takesAFunction = signature.params().stream().anyMatch(Type.FnOf.class::isInstance);
-        Map<String, Type> bind = new HashMap<>();
-        if (takesAFunction) {
-            BottomInfer.pinResultTypeVars(signature.result(), expected, bind, ctx.symbols(),
-                    call.pos(), "result of " + call.written());
-        }
-        for (int i = 0; i < args.size(); i++) {
-            Type param = signature.params().get(i);
-            if (param instanceof Type.FnOf) {
-                continue;
-            }
-            TypeOps.unify(param, ca.type(i), bind, ctx.symbols(),
-                    call.pos(), "argument " + (i + 1) + " of " + call.written());
-        }
+        Map<String, Type> bind = settledByValues(call, signature.params(), signature.result(),
+                expected, ca::type, ctx);
         try {
             for (int i = 0; i < args.size(); i++) {
                 if (signature.params().get(i) instanceof Type.FnOf declaredStep) {

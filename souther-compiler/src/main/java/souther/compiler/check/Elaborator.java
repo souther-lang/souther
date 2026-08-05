@@ -1125,15 +1125,13 @@ public final class Elaborator {
                     || !(kept.params().get(i) instanceof Type.FnOf declared)) {
                 continue;
             }
-            Map<String, Type> bind = new HashMap<>();
+            Map<String, Type> bind;
             try {
-                for (int j = 0; j < call.args().size(); j++) {
-                    if (j != i && !(kept.params().get(j) instanceof Type.FnOf)) {
-                        TypeOps.unify(kept.params().get(j), typeOf(call.args().get(j), env, ctx),
-                                bind, ctx.symbols(), call.pos(),
-                                "argument " + (j + 1) + " of " + call.written());
-                    }
-                }
+                // The same settling the call itself does — this walk is reading that call's own
+                // question one position early, and an answer that differed from the one the call
+                // reaches would be a parameter type nothing later agrees with.
+                bind = CallElaborator.settledByValues(call, kept.params(), kept.result(), null,
+                        j -> typeOf(call.args().get(j), env, ctx), ctx);
             } catch (CompileException _) {
                 return;   // this call decides nothing here; what is wrong with it is reported there
             }
