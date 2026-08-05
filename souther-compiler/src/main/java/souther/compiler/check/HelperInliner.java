@@ -1559,9 +1559,11 @@ public final class HelperInliner {
                     mine.put(binder.id(), binders.binder(binder.name(), binder.pos()).id()));
         }
 
-        /** This copy's binder for one the body has. */
+        /** This copy's binder for one the body has. The copy is this pass's writing, however much
+         * it reads like the body it was taken from, so it claims no name position: the place the
+         * author wrote that name is the original binding's and stays with it. */
         Ast.Binder of(Ast.Binder binder) {
-            return new Ast.Binder.Bound(binder.name(), mine.get(binder.id()), binder.pos());
+            return new Ast.Binder.Bound(binder.name(), mine.get(binder.id()), null, binder.pos());
         }
 
         /** The same, for a name that reads one. A name bound outside the body — a parameter, which

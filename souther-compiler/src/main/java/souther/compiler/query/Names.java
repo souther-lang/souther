@@ -13,6 +13,7 @@ import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Region;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.types.BindingId;
+import souther.compiler.types.BindingOwner;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
 
@@ -1134,16 +1135,39 @@ public final class Names {
             if (!resolution.present()) {
                 return Answer.absent();
             }
-            for (Map.Entry<BindingId, Resolve.BoundName> bound
-                    : resolution.value().binders().entrySet()) {
+            Map<BindingId, Resolve.BoundName> binders = resolution.value().binders();
+            for (Map.Entry<BindingId, Resolve.BoundName> bound : binders.entrySet()) {
                 Resolve.BoundName written = bound.getValue();
-                if (spans(written.pos(), written.written(), at)) {
+                if (answerable(bound.getKey(), binders)
+                        && spans(written.pos(), written.written(), at)) {
                     ValueName local = new ValueName.Local(written.written(), bound.getKey());
                     return Answer.of(local);
                 }
             }
             Resolve.ValueUse use = db.ask(new ValueDenotedAt(at)).value();
-            return use == null ? Answer.absent() : Answer.of(use.denotes());
+            if (use == null) {
+                return Answer.absent();
+            }
+            if (use.denotes() instanceof ValueName.Local local
+                    && !answerable(local.id(), binders)) {
+                return Answer.absent();
+            }
+            return Answer.of(use.denotes());
+        }
+
+        /**
+         * Whether a reader can be told about this binding at all.
+         *
+         * <p>Two things have to hold, and both are about what the resolve pass read rather than
+         * about what an editor would like. The binding's name has to be one the author wrote —
+         * absent from {@code binders} means a desugaring invented it, and a name nobody wrote is
+         * under no cursor and cannot be renamed. And it has to be a binding whose uses this pass
+         * records: a field's are not names in scope but reads resolved by the type of what they are
+         * read from, and only the ones inside an {@code invariant} come through here. A field
+         * answered from what is written here would be renamed at its declaration and nowhere else.
+         */
+        private static boolean answerable(BindingId id, Map<BindingId, Resolve.BoundName> binders) {
+            return binders.containsKey(id) && !(id.owner() instanceof BindingOwner.OfFields);
         }
     }
 

@@ -78,8 +78,14 @@ public final class Resolve {
     private Answered bind(Bindings bound, Ast.Binder binder) {
         int ordinal = counts.merge(owner, 1, Integer::sum) - 1;
         BindingId id = new BindingId(owner, ordinal);
-        binders.put(id, new BoundName(binder.name(), binder.pos()));
-        return new Answered(new Ast.Binder.Bound(binder.name(), id, binder.pos()),
+        if (binder.namePos() != null) {
+            // Only a name the author wrote is a place a reader can be sent to or asked about. A
+            // desugaring's binding is anchored on the form it came from, which is a place holding
+            // something the author did write.
+            binders.put(id, new BoundName(binder.name(), binder.namePos()));
+        }
+        return new Answered(
+                new Ast.Binder.Bound(binder.name(), id, binder.namePos(), binder.pos()),
                 bound.and(binder.name(), new ValueName.Local(binder.name(), id)));
     }
 
@@ -162,11 +168,17 @@ public final class Resolve {
      * resolved as if the mistake were not there — so an author is told about every unknown name at
      * once instead of one per compile, and an editor can still say what the names around it mean.
      *
-     * <p>{@code binders} says what each binding is called and where that was written. A binding is
-     * not its position — a pass that expands a helper stamps the call site over the positions in the
-     * copy — so the two are kept apart, and a reader asking about the source rather than about the
-     * program reads this. The spelling comes with it because a reader asking what a cursor is on has
-     * to know how far the name reaches, and a position alone does not say.
+     * <p>{@code binders} says what each binding is called and where the author wrote that name. A
+     * binding is not its position — a pass that expands a helper stamps the call site over the
+     * positions in the copy — so the two are kept apart, and a reader asking about the source rather
+     * than about the program reads this. The spelling comes with it because a reader asking what a
+     * cursor is on has to know how far the name reaches, and a position alone does not say.
+     *
+     * <p>Only the bindings whose names the author wrote are in it. A desugaring binds a value to a
+     * name of its own — the parameter {@code .field} becomes, the value a {@code match} is held in —
+     * and anchors it on the form it was rewriting. That anchor is a place in the source holding
+     * something else, so a reader answered with one of these would be answered about a name that is
+     * not there, at a width that is not its.
      */
     public record Resolved(Ast.Module module, List<Denotation> denotations, List<ValueUse> values,
                            List<CompileException> unresolved, Map<BindingId, BoundName> binders) {}
@@ -405,7 +417,7 @@ public final class Resolve {
         for (Ast.Field field : d.fields()) {
             BindingId binding = bindings.get(field.name());
             if (binding != null) {
-                binders.put(binding, new BoundName(field.name(), field.pos()));
+                binders.put(binding, new BoundName(field.name(), field.pos()));   // OfFields
             }
         }
     }

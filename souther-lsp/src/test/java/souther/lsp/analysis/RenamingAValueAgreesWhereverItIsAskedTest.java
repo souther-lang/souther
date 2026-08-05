@@ -101,4 +101,37 @@ class RenamingAValueAgreesWhereverItIsAskedTest {
         assertEquals(Set.of("7:8", "8:4"), found,
                 "a binding is what its uses denote, whichever end the question comes from");
     }
+
+    /** Line 3 writes the getter `.v` at column 36; a field getter desugars to a parameter nobody
+     * wrote, three characters wide, anchored there. */
+    private static final String GETTER = """
+            module b exposing ( D, total )
+
+            data D = { v: Int }
+
+            behavior total : (ds: List<D>) -> Int
+            let total (ds) = List.sum(List.map(.v, ds))
+            """;
+
+    private static Map<String, List<Range>> renameInGetter(Position pos) {
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("file:///b.sou", GETTER);
+        ModuleGraph graph = ModuleGraph.of(sources);
+        Analyzer analyzer = new Analyzer();
+        analyzer.diagnostics(graph);
+        return analyzer.renameEdits("file:///b.sou", pos, graph);
+    }
+
+    @Test
+    void aGetterIsNotSomethingToRename() {
+        assertEquals(Map.of(), renameInGetter(new Position(5, 35)),
+                "the `.` of `.v` names nothing an author can rename");
+        assertEquals(Map.of(), renameInGetter(new Position(5, 36)), "nor its field");
+    }
+
+    @Test
+    void aFieldIsNotSomethingToRenameEither() {
+        assertEquals(Map.of(), renameInGetter(new Position(2, 11)),
+                "renaming `v` here would rewrite the declaration and leave every read of it");
+    }
 }
