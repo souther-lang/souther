@@ -126,19 +126,6 @@ final class CodecGen {
     }
 
 
-    /**
-     * A variant's tag as the wire carries it: the case's name, canonicalized.
-     *
-     * <p>A decoder canonicalizes the tag it reads (ADR-0096), so the constant it is matched against
-     * has to be canonical too or a case whose name contains a combining sequence could never be
-     * chosen. The name comes from an identifier in a source file, and an identifier is not a string
-     * literal — nothing else normalizes it — so it is done here, where the tag becomes a string that
-     * crosses a boundary in both directions.
-     */
-    private static String tagOf(String tag) {
-        return java.text.Normalizer.normalize(tag, java.text.Normalizer.Form.NFC);
-    }
-
     private void emitKeyDecoder(CodeBuilder code, Ast.DecRef key) {
         switch (key) {
             case Ast.DataDecRef d -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
@@ -275,7 +262,7 @@ final class CodecGen {
                     code.checkcast(CD_Map);
                     code.dup();
                     code.loadConstant(enc.key());
-                    code.loadConstant(tagOf(v.tag()));
+                    code.loadConstant(v.tag());
                     code.invokeinterface(CD_Map, "put", MTD_Map_put);
                     code.pop();
                     code.areturn();
@@ -314,7 +301,7 @@ final class CodecGen {
                 for (Ast.Variant v : disc.variants()) {
                     code.dup();
                     pushInt(code, i);
-                    code.loadConstant(tagOf(v.tag()));
+                    code.loadConstant(v.tag());
                     invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
                     code.invokestatic(CD_RDecoders, "variant", MTD_Rvariant);
                     code.aastore();
@@ -361,7 +348,7 @@ final class CodecGen {
         cb.withMethodBody("__fromName", MTD_fromName,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
             for (TypeName c : cases) {
-                code.loadConstant(tagOf(c.name()));
+                code.loadConstant(c.name());
                 code.aload(0);
                 code.invokevirtual(CD_String, "equals", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
                 Label next = code.newLabel();

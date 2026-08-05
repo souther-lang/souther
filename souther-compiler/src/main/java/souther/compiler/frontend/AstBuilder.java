@@ -158,7 +158,7 @@ public final class AstBuilder {
      * the target is the second identifier token. */
     private Ast.Example example(SyntaxNode n) {
         List<SyntaxToken> idents = identTokens(n);
-        String target = idents.size() >= 2 ? idents.get(1).text() : "";
+        String target = idents.size() >= 2 ? ident(idents.get(1)) : "";
         SourcePos pos = idents.size() >= 2 ? posOf(idents.get(1)) : pos(n);
         List<Ast.ExampleRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.EXAMPLE_ROW)) {
@@ -193,7 +193,7 @@ public final class AstBuilder {
      * target is the second identifier token. */
     private Ast.Fake fake(SyntaxNode n) {
         List<SyntaxToken> idents = identTokens(n);
-        String target = idents.size() >= 2 ? idents.get(1).text() : "";
+        String target = idents.size() >= 2 ? ident(idents.get(1)) : "";
         SourcePos pos = idents.size() >= 2 ? posOf(idents.get(1)) : pos(n);
         List<Ast.FakeRow> rows = new ArrayList<>();
         for (SyntaxNode row : childNodes(n, SyntaxKind.FAKE_ROW)) {
@@ -228,11 +228,11 @@ public final class AstBuilder {
     private Ast.Import importDecl(SyntaxNode n) {
         String module = qualifiedNameText(n.child(SyntaxKind.QUALIFIED_NAME).orElseThrow());
         String alias = n.child(SyntaxKind.IMPORT_ALIAS)
-                .map(a -> identTokens(a).get(0).text()).orElse(null);
+                .map(a -> ident(identTokens(a).get(0))).orElse(null);
         List<Ast.ImportedName> names = new ArrayList<>();
         n.child(SyntaxKind.NAME_LIST).ifPresent(list -> {
             for (SyntaxToken t : identTokens(list)) {
-                names.add(new Ast.ImportedName(t.text(), posOf(t)));
+                names.add(new Ast.ImportedName(ident(t), posOf(t)));
             }
         });
         return new Ast.Import(module, alias, names, pos(n));
@@ -253,7 +253,7 @@ public final class AstBuilder {
             for (SyntaxNode member : product.get().childNodes()) {
                 if (member.kind() == SyntaxKind.SPREAD_MEMBER) {
                     SyntaxToken included = identTokens(member).get(0);
-                    includes.add(Ast.Name.written(included.text(), posOf(included)));
+                    includes.add(Ast.Name.written(ident(included), posOf(included)));
                 } else if (member.kind() == SyntaxKind.FIELD) {
                     fields.add(field(member));
                 }
@@ -275,7 +275,7 @@ public final class AstBuilder {
         if (sum.isPresent()) {
             List<Ast.Name> cases = new ArrayList<>();
             for (SyntaxToken t : identTokens(sum.get())) {
-                cases.add(Ast.Name.written(t.text(), posOf(t)));
+                cases.add(Ast.Name.written(ident(t), posOf(t)));
             }
             return new Ast.SumData(name, cases, Optional.empty(), Optional.empty(), namePos, pos);
         }
@@ -321,7 +321,7 @@ public final class AstBuilder {
                 // `_` is what an attempt writes for the clauses that carry no name, so a clause named
                 // `_` could not be answered by name at all: the arm reading it would be that wildcard.
                 // Refused here rather than left to be discovered at the attempt.
-                if (label.text().equals("_")) {
+                if (ident(label).equals("_")) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.invariant.underscore")
                                     .title("check.invariant.invalid.title")
@@ -329,15 +329,15 @@ public final class AstBuilder {
                                     .hint("check.invariant.underscore.hint").build(),
                             "`_` cannot name an invariant clause");
                 }
-                if (!named.add(label.text())) {
+                if (!named.add(ident(label))) {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.invariant.duplicate")
                                     .title("check.invariant.invalid.title")
-                                    .at(posOf(label)).args(label.text(), typeName).build(),
+                                    .at(posOf(label)).args(ident(label), typeName).build(),
                             "`" + typeName + "` declares two invariant clauses named `"
-                                    + label.text() + "`");
+                                    + ident(label) + "`");
                 }
-                name = Optional.of(label.text());
+                name = Optional.of(ident(label));
             }
             out.add(new Ast.InvariantClause(name, expr, pos(clause)));
         }
@@ -393,7 +393,7 @@ public final class AstBuilder {
                 if (sb.length() > 0) {
                     sb.append('.');
                 }
-                sb.append(t.text());
+                sb.append(ident(t));
             }
             stages.add(new Ast.Var(sb.toString(), pos(st)));
         }
@@ -685,7 +685,7 @@ public final class AstBuilder {
     private Ast.Expr fieldAccess(SyntaxNode n) {
         Ast.Expr target = expr(firstExprChild(n));
         SyntaxToken field = lastIdentToken(n);
-        return new Ast.FieldAccess(target, field.text(), posOf(field));
+        return new Ast.FieldAccess(target, ident(field), posOf(field));
     }
 
     /**
@@ -771,7 +771,7 @@ public final class AstBuilder {
     private Ast.Expr ifExpr(SyntaxNode n) {
         List<SyntaxNode> exprs = exprChildren(n);
         SyntaxToken as = attemptBinder(n);
-        String binder = as == null ? null : as.text();
+        String binder = as == null ? null : ident(as);
         List<Ast.ElseArm> arms = elseArms(n, binder);
         if (arms != null) {
             return new Ast.IfConstructed(expr(exprs.get(0)),
@@ -805,17 +805,17 @@ public final class AstBuilder {
         Set<String> answered = new HashSet<>();
         for (SyntaxNode arm : childNodes(node.get(), SyntaxKind.ELSE_ARM)) {
             SyntaxToken label = identTokens(arm).get(0);
-            if (!answered.add(label.text())) {
+            if (!answered.add(ident(label))) {
                 throw CompileException.of(
                         Diagnostic.of("E2019", "check.attempt.armtwice")
                                 .title("check.attempt.title").at(posOf(label))
-                                .args(label.text()).build(),
-                        "the arm `" + label.text() + "` is written twice");
+                                .args(ident(label)).build(),
+                        "the arm `" + ident(label) + "` is written twice");
             }
             Ast.Expr body = expr(onlyExpr(arm));
-            arms.add(label.text().equals("_")
+            arms.add(ident(label).equals("_")
                     ? Ast.ElseArm.any(body)
-                    : new Ast.ElseArm(Optional.of(label.text()), body, posOf(label)));
+                    : new Ast.ElseArm(Optional.of(ident(label)), body, posOf(label)));
         }
         return arms;
     }
@@ -868,13 +868,13 @@ public final class AstBuilder {
         SyntaxToken field = lastIdentToken(n);
         SourcePos pos = pos(n);
         String param = "$g" + (getterCounter++);
-        Ast.Expr body = new Ast.FieldAccess(new Ast.Var(param, pos), field.text(), posOf(field));
+        Ast.Expr body = new Ast.FieldAccess(new Ast.Var(param, pos), ident(field), posOf(field));
         return Ast.Block.desugared(List.of(param), body, pos);
     }
 
     private Ast.Expr newData(SyntaxNode n) {
         SyntaxToken head = identTokens(n).get(0);
-        Ast.Name typeName = Ast.Name.written(head.text(), posOf(head));
+        Ast.Name typeName = Ast.Name.written(ident(head), posOf(head));
         List<Ast.FieldInit> inits = new ArrayList<>();
         List<Ast.Var> spreads = new ArrayList<>();
         // a spread naming a field path (`...c.address`) binds that path first, so the construction
@@ -885,12 +885,12 @@ public final class AstBuilder {
             if (c.kind() == SyntaxKind.SPREAD_MEMBER) {
                 List<SyntaxToken> path = identTokens(c);
                 if (path.size() == 1) {
-                    spreads.add(new Ast.Var(path.get(0).text(), posOf(path.get(0))));
+                    spreads.add(new Ast.Var(ident(path.get(0)), posOf(path.get(0))));
                 } else {
                     String bound = "$s" + (spreadCounter++);
-                    Ast.Expr value = new Ast.Var(path.get(0).text(), posOf(path.get(0)));
+                    Ast.Expr value = new Ast.Var(ident(path.get(0)), posOf(path.get(0)));
                     for (int i = 1; i < path.size(); i++) {
-                        value = new Ast.FieldAccess(value, path.get(i).text(), posOf(path.get(i)));
+                        value = new Ast.FieldAccess(value, ident(path.get(i)), posOf(path.get(i)));
                     }
                     pathNames.add(bound);
                     pathValues.add(value);
@@ -1028,7 +1028,7 @@ public final class AstBuilder {
                     i++;
                     varToken = (SyntaxToken) es.get(i++);
                 }
-                fieldNames.add(fieldToken.text());
+                fieldNames.add(ident(fieldToken));
                 fieldVars.add(binderOf(varToken));
                 if (i < es.size() && isToken(es.get(i), SyntaxKind.COMMA)) {
                     i++;
@@ -1134,7 +1134,7 @@ public final class AstBuilder {
             case GUARD_STMT -> {
                 List<SyntaxNode> exprs = exprChildren(s);
                 SyntaxToken as = attemptBinder(s);
-                String binder = as == null ? null : as.text();
+                String binder = as == null ? null : ident(as);
                 Ast.Expr rest = foldStatements(stmts, index + 1, result);
                 List<Ast.ElseArm> arms = elseArms(s, binder);
                 if (arms != null) {
@@ -1191,7 +1191,7 @@ public final class AstBuilder {
                 List<SyntaxNode> fields = childNodes(pat, SyntaxKind.PATTERN_FIELD);
                 for (int k = fields.size() - 1; k >= 0; k--) {
                     List<SyntaxToken> names = identTokens(fields.get(k));
-                    String field = names.get(0).text();
+                    String field = ident(names.get(0));
                     SyntaxToken var = names.size() > 1 ? names.get(1) : names.get(0);
                     body = new Ast.LetIn(binderOf(var),
                             new Ast.FieldAccess(new Ast.Var(whole, pos), field, pos), body, pos);
@@ -1301,8 +1301,25 @@ public final class AstBuilder {
     /** The name a top-level declaration declares: the first identifier in it. This is how the
      * builder names a {@code data}, a {@code behavior} and a {@code let}, and how the declaration's
      * source is filed under the same name when a module publishes what it declares. */
+    /**
+     * The name an identifier token spells, canonicalized to NFC.
+     *
+     * <p>A source file is bytes from an editor, and two spellings that Unicode calls canonically
+     * equivalent are the same text — so they have to be the same name. Without this the compiler
+     * holds two names that no reader can tell apart: two fields, two cases, two helpers. It also has
+     * to happen here rather than to the source: normalizing before lexing would shorten a line and
+     * move every position after it, so a diagnostic's caret would point at the wrong column of the
+     * file the author is looking at. A token keeps its own width; only the name it spells is settled.
+     *
+     * <p>A string literal is canonicalized by {@link #stringValue}, for the same reason. A numeric
+     * literal is not: it is parsed, not compared.
+     */
+    private static String ident(SyntaxToken t) {
+        return java.text.Normalizer.normalize(t.text(), java.text.Normalizer.Form.NFC);
+    }
+
     static String firstIdentText(SyntaxNode n) {
-        return firstIdentToken(n).text();
+        return ident(firstIdentToken(n));
     }
 
     /** The token that spells what a top-level declaration declares. */
@@ -1356,7 +1373,7 @@ public final class AstBuilder {
             if (sb.length() > 0) {
                 sb.append('.');
             }
-            sb.append(t.text());
+            sb.append(ident(t));
         }
         return sb.toString();
     }
@@ -1376,7 +1393,7 @@ public final class AstBuilder {
     }
 
     private static String tokenText(SyntaxElement e) {
-        return ((SyntaxToken) e).text();
+        return ident((SyntaxToken) e);
     }
 
     private SyntaxToken firstMeaningfulToken(SyntaxNode n) {
@@ -1426,7 +1443,7 @@ public final class AstBuilder {
      * binding out of something the author wrote: the token carries both halves, so they cannot be
      * paired wrongly. */
     private Ast.Binder binderOf(SyntaxToken token) {
-        return Ast.Binder.of(Ast.Name.written(token.text(), posOf(token)));
+        return Ast.Binder.of(Ast.Name.written(ident(token), posOf(token)));
     }
 
 

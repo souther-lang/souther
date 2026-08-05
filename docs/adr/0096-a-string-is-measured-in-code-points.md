@@ -89,14 +89,24 @@ form.
 has an arm of its own because "Java's equality is finer than the language's". `String` is the second
 case and nobody had noticed.
 
-**Text that arrives from outside is canonicalized to NFC.** There are two places it arrives, and both
-do it:
+**Text that arrives from outside is canonicalized to NFC.** There are two places it arrives, and each
+has one place that does it:
 
-- A derived decoder normalizes at the string leaf, before any constraint chained after it. A length
-  bound, a pattern, a fixed length all see the canonical form.
-- A string literal in a `.sou` file is normalized when it is read. A source file is bytes from an
-  editor, and which form an editor writes is not something the author chose. Without this a pattern
-  written in one form would not match a value that arrived in the other.
+- A derived decoder, at the string leaf. Every leaf comes from one method, so a field, a newtype's
+  base, a map's key, a list or set element, a sum's discriminator and an enumeration's name are all
+  the same path, and a constraint chained after it — a length bound, a pattern — sees the canonical
+  form. Writing the normalization at each site instead was the first attempt and it left four paths
+  behind, found one at a time in review.
+- A source file, at the token. Both a string literal and an *identifier* are canonicalized as the
+  tree is built. An identifier matters because names become text at a boundary: a case name is a
+  wire tag. Canonicalizing the tag where it is emitted, and leaving the name alone, was the second
+  wrong answer — two cases that no reader can tell apart stayed two names in the compiler and became
+  one tag on the wire, so the second was unreachable from outside. Canonicalized as names, they are
+  one name, and declaring it twice is refused where any duplicate is.
+
+  It is done as the tree is built rather than to the source text, because normalizing before lexing
+  would shorten a line and move every position after it, and a diagnostic's caret would point at the
+  wrong column of the file the author is reading.
 
 The fix is that *values are canonical*, not that comparison ignores the difference. Normalizing
 inside `Values.equal` was considered and refused: `String.length`, `characters` and `slice` all see
