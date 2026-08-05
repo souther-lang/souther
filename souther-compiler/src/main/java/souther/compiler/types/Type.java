@@ -346,14 +346,20 @@ public sealed interface Type permits Type.Leaf, Type.Compound {
 
     /** Every name {@code t} mentions, by the simple name it would be written under. A simple name
      * that covers two different types in one type is already ambiguous within it, and is recorded
-     * under whichever came first — the pair rendering only has to tell the two sides apart. */
+     * under whichever came first — the pair rendering only has to tell the two sides apart.
+     *
+     * <p>Every constructor is named here rather than answered by {@link Leaf} and {@link Compound},
+     * because what this asks is not what those divide types by. They say whether one holds a type;
+     * this asks whether one holds a name, and {@link Ref} and {@link Union} are leaves that do. A
+     * constructor added later has to answer for itself, so it stops the build here. Only the descent
+     * is delegated: which positions a compound holds is still {@link #atChildren}'s to say. */
     private static void collectNames(Type t, java.util.Map<String, TypeName> out) {
         switch (t) {
-            // the two that hold a name: what this is after, and neither of them holds a type
             case Ref r -> out.putIfAbsent(r.name().name(), r.name());
             case Union u -> u.members().forEach(m -> out.putIfAbsent(m.name(), m));
-            case Leaf _ -> { }
-            case Compound c -> forEachChild(c, held -> collectNames(held, out));
+            case ListOf _, SetOf _, OptionOf _, MapOf _, TupleOf _, FnOf _ ->
+                    forEachChild(t, held -> collectNames(held, out));
+            case Prim _, Var _, MetaVar _, Nothing _, Never _, Erroneous _ -> { }
         }
     }
 

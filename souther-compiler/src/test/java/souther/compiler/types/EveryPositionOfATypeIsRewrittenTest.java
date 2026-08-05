@@ -62,19 +62,56 @@ class EveryPositionOfATypeIsRewrittenTest {
         assertEquals(constructorsOf(Type.Leaf.class), classesOf(leaves()));
     }
 
+    /**
+     * Each position is given a mark of its own, so what comes back says more than that something
+     * was written: a position left alone holds no mark, one written twice holds a mark another
+     * position was given, and a rebuild that puts an answer in the wrong slot holds them out of
+     * order. The result is read back through the record rather than through the walk under test, so
+     * a position the walk never knew about is still counted.
+     */
     @Test
-    void everyPositionThatHoldsATypeIsRewritten() {
+    void everyPositionThatHoldsATypeIsRewrittenOnceAndInTheOrderItIsWritten() {
         for (Type before : compounds()) {
-            Type after = Type.mapChildren(before, t -> REWRITTEN);
-            int positions = 0;
-            for (RecordComponent slot : after.getClass().getRecordComponents()) {
-                for (Type held : typesAt(slot, after)) {
-                    positions++;
-                    assertSame(REWRITTEN, held, after.getClass().getSimpleName() + "."
-                            + slot.getName() + " was not rewritten");
+            List<Type> marks = new ArrayList<>();
+            Type after = Type.mapChildren(before, held -> {
+                Type mark = Type.ref(new TypeName("m", "Mark" + marks.size()));
+                marks.add(mark);
+                return mark;
+            });
+            assertTrue(marks.size() > 0, before.getClass().getSimpleName() + " holds no type");
+            assertEquals(marks, typesHeldBy(after),
+                    after.getClass().getSimpleName() + " does not hold what it was answered");
+        }
+    }
+
+    /** Every type {@code t} holds, read off the record in the order its positions are written. */
+    private static List<Type> typesHeldBy(Type t) {
+        List<Type> held = new ArrayList<>();
+        for (RecordComponent slot : t.getClass().getRecordComponents()) {
+            collect(read(slot, t), held);
+        }
+        return held;
+    }
+
+    private static void collect(Object value, List<Type> into) {
+        switch (value) {
+            case Type t -> into.add(t);
+            case java.util.Collection<?> xs -> xs.forEach(x -> collect(x, into));
+            case java.util.Map<?, ?> m -> m.values().forEach(x -> collect(x, into));
+            case Object[] xs -> {
+                for (Object x : xs) {
+                    collect(x, into);
                 }
             }
-            assertTrue(positions > 0, before.getClass().getSimpleName() + " holds no type");
+            case null, default -> { }
+        }
+    }
+
+    private static Object read(RecordComponent slot, Type of) {
+        try {
+            return slot.getAccessor().invoke(of);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("cannot read " + slot, e);
         }
     }
 
@@ -134,25 +171,4 @@ class EveryPositionOfATypeIsRewrittenTest {
         return out;
     }
 
-    /** Whatever types {@code slot} holds on {@code of}: the type itself, or each type in a list. */
-    private static List<Type> typesAt(RecordComponent slot, Type of) {
-        Object value;
-        try {
-            value = slot.getAccessor().invoke(of);
-        } catch (ReflectiveOperationException e) {
-            throw new AssertionError("cannot read " + slot, e);
-        }
-        if (value instanceof Type t) {
-            return List.of(t);
-        }
-        List<Type> held = new ArrayList<>();
-        if (value instanceof List<?> xs) {
-            for (Object x : xs) {
-                if (x instanceof Type t) {
-                    held.add(t);
-                }
-            }
-        }
-        return held;
-    }
 }
