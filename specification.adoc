@@ -3800,6 +3800,48 @@ declared (`invariant <name> = ...`); one declared without a name is answered by 
 
 Emitted when a per-clause departure names a clause the type does not declare (<<attempt-departures>>, <<invariant-clause-name>>). The rest of that form is checked with its own codes: a clause that can fail and has no arm is E2015, unnamed clauses left unanswered E2016, a `+| _+` with nothing to answer E2017, arms with no attempted construction to answer for E2018, and a clause answered twice E2019.
 
+[#e2101]
+=== A generated method exceeds the JVM parameter-slot limit
+
+[,text]
+----
+`data Wide` needs 256 JVM parameter slots, but the constructor generated for it takes at
+most 254. An `Int` field is carried as a `long` and takes two slots; every other field
+takes one.
+Hint: Split `Wide` into smaller data and hold them as fields.
+----
+
+A JVM method signature holds 255 argument slots, and an instance method spends one of them on the receiver. A declaration is emitted as methods that take what it declares — a `+data+`'s fields become the constructor's arguments, a `+behavior+`'s parameters become `+apply+`'s, its dependencies become its implementation constructor's, and a recursive helper's parameters become a static method's — so past a certain width the class cannot be loaded at all. This is decided before anything is emitted, at the declaration.
+
+What the width is depends on which of them it is, because the emitted form is not the same. A `+data+`'s fields keep their runtime types, so an `+Int+` field takes two slots and every other field one, and the limit falls at 254 slots. A `+behavior+`'s parameters and dependencies are references whatever they were declared as, so each takes one and the limit falls at 254 of them. A recursive helper is emitted as a static method, which spends nothing on a receiver, so its limit is 255 parameters.
+
+[#e2102]
+=== A generated method exceeds the JVM code-size limit
+
+[,text]
+----
+The `apply` method generated for `f` is 88025 bytes of code, but a JVM method holds at
+most 65535.
+Hint: Split the work into another behavior, which is emitted as a class of its own, or
+move the table out of the source. Naming parts with `let` does not divide it: a
+non-recursive helper is inlined before it is emitted.
+----
+
+How much code a definition becomes is not known until it is written, so unlike E2101 this is not decided at the declaration; it is reported as the definition that was being emitted when the class file writer refused. The message names the generated method, because one declaration becomes several — a `+data+` is emitted as a value class, a decoder and an encoder, and a `+behavior+` as an implementation and an interface — and which of them grew is not readable from the declaration.
+
+[#e2103]
+=== A generated class exceeds the JVM constant-pool limit
+
+[,text]
+----
+The class generated for `f` needs constant-pool entry 80031, and a class file holds at
+most 65535. The pool holds every name, type and literal the class refers to.
+Hint: Move the table out of the source, or split the work into another behavior, whose
+constants belong to a class of its own.
+----
+
+As E2102, for the other thing a class file runs out of. The pool belongs to the class rather than to any one method of it, so this is reported as the definition the class was generated for and names no method.
+
 [#example]
 == Example: the business-trip application model
 
