@@ -45,6 +45,11 @@ enum Question {
         }
 
         @Override
+        Set<ValueName> answeredOperations() {
+            return Combinators.answered();
+        }
+
+        @Override
         Set<ValueName> nothingSaidOf() {
             return Combinators.HANDS_ITS_CLOSURE_NOTHING;
         }
@@ -63,6 +68,11 @@ enum Question {
         @Override
         boolean answeredFor(ValueName operation) {
             return DischargeRules.builtFrom(operation) != null;
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.builtOperations();
         }
 
         @Override
@@ -87,6 +97,11 @@ enum Question {
         }
 
         @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.carryingOperations();
+        }
+
+        @Override
         Set<ValueName> nothingSaidOf() {
             return DischargeRules.NOTHING_CARRIED;
         }
@@ -105,6 +120,11 @@ enum Question {
         @Override
         boolean answeredFor(ValueName operation) {
             return DischargeRules.sizeMeantBy(operation) != null;
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.emptinessChecks();
         }
 
         @Override
@@ -128,6 +148,11 @@ enum Question {
         @Override
         boolean answeredFor(ValueName operation) {
             return DischargeRules.isQuantifier(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.quantifiers();
         }
 
         @Override
@@ -155,6 +180,11 @@ enum Question {
         }
 
         @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.projections();
+        }
+
+        @Override
         Set<ValueName> nothingSaidOf() {
             return DischargeRules.NOT_STATED_OVER_A_PROJECTION;
         }
@@ -171,6 +201,11 @@ enum Question {
         @Override
         boolean answeredFor(ValueName operation) {
             return DischargeRules.isSize(operation);
+        }
+
+        @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.sizeCalls();
         }
 
         @Override
@@ -196,6 +231,11 @@ enum Question {
         }
 
         @Override
+        Set<ValueName> answeredOperations() {
+            return DischargeRules.operatorForms();
+        }
+
+        @Override
         Set<ValueName> nothingSaidOf() {
             return DischargeRules.NOT_AN_OPERATOR;
         }
@@ -213,17 +253,33 @@ enum Question {
     /** Whether {@code operation} has a rule answering this. */
     abstract boolean answeredFor(ValueName operation);
 
+    /** The operations there is a rule about, for the check that a rule answers a question its
+     * operation is asked — a rule under a name nothing asks is a rule nothing reaches. */
+    abstract Set<ValueName> answeredOperations();
+
     /** The operations this is asked of and has nothing to say of. */
     abstract Set<ValueName> nothingSaidOf();
 
-    /** The questions an operation declared with {@code signature} is in range of. A declaration that
-     * leaves its result to its body is in range of nothing: what these ask about is what it answers,
-     * and it has not said. */
+    /**
+     * The questions an operation declared with {@code signature} is in range of.
+     *
+     * <p>Each reads the declaration for what it asks about and no more. A declaration that leaves
+     * its result to its body — which the library allows a helper with parameters to do — has said
+     * nothing about what it answers, so the questions about that are not asked of it; what it hands
+     * its closure is a question about its arguments, and is.
+     */
     static List<Question> askedOf(Prelude.Signature signature) {
-        if (signature.result() == null) {
-            return List.of();
-        }
         return List.of(values()).stream().filter(q -> q.asksOf(signature)).toList();
+    }
+
+    /** Whether this is asked of the library operation named {@code qualified}. A sugar has no
+     * declaration of its own and is asked what the call it becomes is asked: it is that call, with
+     * some of its arguments already supplied. */
+    boolean asksOfOperation(String qualified) {
+        Prelude.Rewrite rewrite = Prelude.rewriteOf(qualified);
+        Prelude.PreludeEntry entry =
+                Prelude.entry(rewrite == null ? qualified : rewrite.target());
+        return entry != null && asksOf(entry.signature());
     }
 
     /** Whether a construction over {@code t} is one whose elements a shape can speak of. */

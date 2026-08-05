@@ -60,6 +60,18 @@ for most of that question's range, and not for all of it: an operation that take
 hands it nothing a container holds derives no rule, which is a decision and not a gap. It is written
 down as one, in the same form as the rest.
 
+*A range reads the part of the declaration its question is about, and no more.* What an operation
+hands its closure is a question about its arguments, so an operation is asked it whatever it leaves
+unsaid about what it answers — and a helper with parameters may leave its result to its body. A range
+that skipped such a declaration wholesale would put back the silence, for exactly the operations
+nobody wrote a return type for.
+
+*Both directions are the same defect.* An operation in range with no answer is a rule nobody wrote;
+a written answer against an operation the question is not asked of is a rule nothing reaches — an
+operation renamed or removed, or a range that moved out from under a row. Each question is held to
+both, and the second is read off the tables rather than off what the library declares today, or a row
+for an operation that no longer exists would be invisible to it.
+
 A rule is worth having only where something can travel through it. What the check states of a
 container it names by that container's kind — `List.length` and `List.all`, or `Set.size` and
 `Set.contains` — so a rule relating a set to the list of its elements carries nothing however true it

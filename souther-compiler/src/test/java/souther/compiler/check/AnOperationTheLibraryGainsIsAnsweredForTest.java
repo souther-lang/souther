@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.Prelude;
+import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
@@ -49,43 +50,45 @@ class AnOperationTheLibraryGainsIsAnsweredForTest {
     }
 
     /**
-     * The other way round: a name said to have nothing to say must be in range of the question it is
-     * said that of, or it is a name nobody will ever look up — a library operation that was renamed
-     * or removed, or a question whose range moved out from under it.
+     * The other way round: every name written down must be one the question is asked of, whether it
+     * was written as a rule or as a silence. A table keyed by a name takes any name, so a row under
+     * one nothing asks is a row nothing reaches — a library operation that was renamed or removed,
+     * or a question whose range moved out from under it. Both directions are the same defect seen
+     * from the two ends, so both are read off the tables themselves rather than off what the library
+     * happens to declare today.
      */
     @Test
-    void nothingIsSaidOfAnOperationNoQuestionIsAskedOf() {
-        List<String> outOfRange = new ArrayList<>();
-        for (Question question : Question.values()) {
-            for (ValueName operation : question.nothingSaidOf()) {
-                Prelude.PreludeEntry entry = Prelude.entry(operation.name());
-                if (entry == null || !Question.askedOf(entry.signature()).contains(question)) {
-                    outOfRange.add(operation.name() + " — " + question);
-                }
-            }
-        }
-        assertEquals(List.of(), outOfRange,
-                "these are said to have nothing to say about a question they are not asked");
-    }
-
-    /**
-     * And a rule answers a question it is in range of. A table keyed by name takes any name, so a
-     * rule under one the question is not asked of is a rule nothing reaches — the same silence from
-     * the other end.
-     */
-    @Test
-    void everyRuleAnswersAQuestionItsOperationIsAsked() {
+    void everyOperationWrittenDownIsOneTheQuestionIsAskedOf() {
         List<String> unasked = new ArrayList<>();
         for (Question question : Question.values()) {
-            for (Map.Entry<String, Prelude.PreludeEntry> e : Prelude.entries().entrySet()) {
-                ValueName operation = new ValueName.Stdlib(e.getKey());
-                if (question.answeredFor(operation)
-                        && !Question.askedOf(e.getValue().signature()).contains(question)) {
-                    unasked.add(e.getKey() + " — " + question);
+            for (ValueName operation : question.answeredOperations()) {
+                if (!question.asksOfOperation(operation.name())) {
+                    unasked.add(operation.name() + " — " + question + " (a rule)");
+                }
+            }
+            for (ValueName operation : question.nothingSaidOf()) {
+                if (!question.asksOfOperation(operation.name())) {
+                    unasked.add(operation.name() + " — " + question + " (nothing to say)");
                 }
             }
         }
         assertEquals(List.of(), unasked,
-                "these have a rule answering a question they are not in range of");
+                "these are written down against a question they are not asked");
+    }
+
+    /**
+     * A question reads the declaration for what it asks about and no more. What an operation hands
+     * its closure is a question about its arguments, so a declaration that leaves its result to its
+     * body — which the library allows a helper with parameters to do — is still asked it. Nothing in
+     * the library takes that shape today, and a range is meant to hold an operation nobody thought
+     * of, so it is held to a signature written here rather than to one the library declares.
+     */
+    @Test
+    void aDeclarationThatWritesNoReturnTypeIsStillAskedWhatItHandsItsClosure() {
+        Prelude.Signature leavesItsResultToItsBody = new Prelude.Signature(
+                List.of(new Type.FnOf(List.of(Type.Prim.INT), Type.Prim.INT), Type.Prim.INT), null);
+        assertEquals(List.of(Question.COMBINATOR), Question.askedOf(leavesItsResultToItsBody),
+                "an operation that takes a function is asked what it hands it, whatever it leaves"
+                        + " unsaid about what it answers");
     }
 }

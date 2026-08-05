@@ -200,7 +200,37 @@ final class DischargeRules {
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool.not");
 
-    /** The operations there is a building rule for, for the test that holds each to a construction
+    /** The operations each table has a rule for. What is asked of them is {@link Question}'s to
+     * settle; these are so it can hold a rule to being one an operation is asked for. */
+    static Set<ValueName> builtOperations() {
+        return BUILT_FROM.keySet();
+    }
+
+    static Set<ValueName> carryingOperations() {
+        return CARRIED.keySet();
+    }
+
+    static Set<ValueName> emptinessChecks() {
+        return EMPTINESS.keySet();
+    }
+
+    static Set<ValueName> quantifiers() {
+        return QUANTIFIERS;
+    }
+
+    static Set<ValueName> projections() {
+        return PROJECTION_OF.keySet();
+    }
+
+    static Set<ValueName> sizeCalls() {
+        return SIZE_CALLS;
+    }
+
+    static Set<ValueName> operatorForms() {
+        return OPERATOR_CALLS.keySet();
+    }
+
+    /** Those of them the building table has, by name, for the test that holds each to a construction
      * it discharges. */
     static Set<String> builtNames() {
         Set<String> names = new LinkedHashSet<>();

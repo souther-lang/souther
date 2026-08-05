@@ -59,6 +59,12 @@ final class Combinators {
      */
     static final Set<ValueName> HANDS_ITS_CLOSURE_NOTHING = Set.of();
 
+    /** The operations a rule was read off, for the check that a rule answers a question its
+     * operation is asked. */
+    static Set<ValueName> answered() {
+        return Derived.RULES.keySet();
+    }
+
     /** The operations there is a rule for, for the tests that hold them to firing. */
     static Set<String> names() {
         Set<String> names = new LinkedHashSet<>();
