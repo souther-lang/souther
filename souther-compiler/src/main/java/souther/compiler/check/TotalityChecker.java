@@ -99,7 +99,7 @@ final class TotalityChecker {
         }
         Ast.FnDef anchor = own.get(java.util.Collections.min(group));
         String members = backtickJoin(group);
-        return error(anchor, anchor.name().length(), members, "check.totality.sizechange",
+        return error(anchor, members, "check.totality.sizechange",
                 "recursive helpers " + members + " are mutually recursive but not size-change"
                         + " terminating: no argument strictly decreases around every recursive cycle."
                         + " Recurse on a strictly smaller part obtained by `match`, or mark one of them"
@@ -111,7 +111,7 @@ final class TotalityChecker {
     private static CompileException tooComplex(Set<String> group, Map<String, Ast.FnDef> own) {
         Ast.FnDef anchor = own.get(java.util.Collections.min(group));
         String members = backtickJoin(group);
-        return error(anchor, anchor.name().length(), members, "check.totality.toocomplex",
+        return error(anchor, members, "check.totality.toocomplex",
                 "recursion " + members + " is too complex to prove total by size-change analysis;"
                         + " mark one of them `partial` to opt out");
     }
@@ -316,7 +316,7 @@ final class TotalityChecker {
             Map.entry("List.groupBy", new Combinator(0, 0, 1)),
             Map.entry("List.indexBy", new Combinator(0, 0, 1)),
             Map.entry("List.allDistinctBy", new Combinator(0, 0, 1)),
-            // indexedMap's closure takes (index, element), so the element is its second parameter.
+            // mapIndexed's closure takes (index, element), so the element is its second parameter.
             Map.entry("List.mapIndexed", new Combinator(0, 1, 1)),
             // A map hands its closure the key and the value; the value is the one that can hold a
             // nested structure, so that is the parameter credited as a sub-term.
@@ -509,17 +509,12 @@ final class TotalityChecker {
         return seen;
     }
 
+    /** Said at the helper's own name: `let` comes first, and a report anchored at the definition
+     *  underlines the keyword rather than what it is about. */
     private static CompileException error(Ast.FnDef h, String name, String key, String message) {
         return CompileException.of(
                 Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(h.pos(), name.length()).args(name).build(),
-                message);
-    }
-
-    private static CompileException error(Ast.FnDef h, int underlineLen, String arg, String key, String message) {
-        return CompileException.of(
-                Diagnostic.of("E2001", key).title("check.totality.title")
-                        .at(h.pos(), underlineLen).args(arg).build(),
+                        .at(h.written().region()).args(name).build(),
                 message);
     }
 

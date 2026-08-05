@@ -307,8 +307,8 @@ class CompileListLibTest {
     }
 
     @Test
-    void indexedMapAppliesTheZeroBasedIndexToEachElement() throws Exception {
-        // indexedMap threads a (i, ys) pair through fold — the same tuple-accumulator shape as
+    void mapIndexedAppliesTheZeroBasedIndexToEachElement() throws Exception {
+        // mapIndexed threads a (i, ys) pair through fold — the same tuple-accumulator shape as
         // distinct/partition — so the user writes a positional transform without hand-rolling it.
         // Here it forms the EAN-13 weighted sum: even index weight 1, odd index weight 3.
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
@@ -345,8 +345,8 @@ class CompileListLibTest {
     }
 
     @Test
-    void allUniqueByHoldsWhenTheProjectedKeysAreDistinct() throws Exception {
-        // allUniqueBy is the "this projection is a unique id" invariant: true when mapping the key
+    void allDistinctByHoldsWhenTheProjectedKeysAreDistinct() throws Exception {
+        // allDistinctBy is the "this projection is a unique id" invariant: true when mapping the key
         // over the list leaves no duplicates. It derives from map/distinct, both fold-based.
         BytesClassLoader loader = new BytesClassLoader(Compiler.compile("""
                 module demo

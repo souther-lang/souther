@@ -3,6 +3,7 @@ package souther.compiler.core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 
@@ -65,6 +66,37 @@ public sealed interface Core {
      * method — each reached by the name it is declared under, none of them bound by this body. A
      * non-recursive helper is already inlined. */
     record Call(String fn, List<Core> args, Type type, SourcePos pos) implements Core {}
+
+    /**
+     * A call a representation kept standing on purpose: resolved to the declaration it names, typed
+     * from that declaration's signature, and deliberately not expanded.
+     *
+     * <p>Not a call this compiler failed to expand. Which calls survive is a representation's to
+     * decide ({@link souther.compiler.check.InliningPolicy}): an analysis that has rules about an
+     * operation loses them the moment the operation becomes the algorithm it is, so the
+     * representation that analysis reads keeps the operation. The tree the backend emits from keeps
+     * none, and one arriving there is this compiler having failed to expand it.
+     *
+     * <p>{@code operation} is what the name was resolved to, not how it was written: two spellings
+     * that reach one operation are one of these, and having a type in common is not being the same
+     * operation. A reader with no rule for what this names types it and learns nothing from it,
+     * which is the difference between a representation keeping a call and an analysis understanding
+     * one.
+     */
+    record PreservedCall(ValueName operation, List<Core> args, Type type,
+                         SourcePos pos) implements Core {
+
+        /**
+         * What a reader that keeps no call standing says when one reaches it: this compiler failed to
+         * expand it. Said here so every such reader says it the same way, and says it about the node
+         * rather than about the operation — which of them a reader has bytecode for is not the
+         * question.
+         */
+        public IllegalStateException unexpectedIn(String reader) {
+            return new IllegalStateException(
+                    "a preserved call (" + operation + ") reached " + reader + ", at " + pos);
+        }
+    }
 
     /**
      * Applying a function value the body holds: a helper's function parameter, or a lambda a
@@ -218,6 +250,13 @@ public sealed interface Core {
                 List<Core> args = each(c.args(), atExpr);
                 yield args == c.args() ? c : new Call(c.fn(), args, c.type(), c.pos());
             }
+            // Its arguments are children like any other, so a pass that asks what a body reads
+            // reaches them without knowing what was kept standing over them.
+            case PreservedCall p -> {
+                List<Core> args = each(p.args(), atExpr);
+                yield args == p.args() ? p
+                        : new PreservedCall(p.operation(), args, p.type(), p.pos());
+            }
             // what is applied is a binding holding a function: a name slot, the same kind a spread is
             case Apply a -> {
                 Read fn = atName.apply(a.fn());
@@ -332,6 +371,17 @@ public sealed interface Core {
                             java.util.function.UnaryOperator<Read> onNameSlot,
                             java.util.function.UnaryOperator<NewData> onConstructionSlot) {
         return atSlots(e, onExprSlot, onNameSlot, onConstructionSlot);
+    }
+
+    /**
+     * The same, recursing into a construction slot with the operators the other slots are given —
+     * what a pass that rewrites expressions wants, since a construction an attempt holds is as much
+     * an expression as anything else and no such pass has anything else to say about one.
+     */
+    static Core mapAll(Core e, java.util.function.UnaryOperator<Core> onExprSlot,
+                       java.util.function.UnaryOperator<Read> onNameSlot) {
+        return atSlots(e, onExprSlot, onNameSlot,
+                nd -> atSlots(nd, onExprSlot, onNameSlot));
     }
 
     /**

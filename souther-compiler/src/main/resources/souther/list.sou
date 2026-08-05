@@ -31,17 +31,17 @@ private let foldFrom (step: ('acc, 'a) -> 'acc, seed: 'acc, xs: List<'a>, i: Int
         | Some x -> List.foldFrom(step, step(seed, x), xs, i + 1)
         | None -> seed
 
-let map (f: ('a) -> 'b, xs: List<'a>) = List.fold((acc, x) -> acc ++ [f(x)], [], xs)
-let filter (keep: ('a) -> Bool, xs: List<'a>) = List.fold((acc, x) -> if keep(x) then acc ++ [x] else acc, [], xs)
-let all (p: ('a) -> Bool, xs: List<'a>) = List.fold((acc, x) -> acc && p(x), true, xs)
-let any (p: ('a) -> Bool, xs: List<'a>) = List.fold((acc, x) -> acc || p(x), false, xs)
+let map (f: ('a) -> 'b, xs: List<'a>): List<'b> = List.fold((acc, x) -> acc ++ [f(x)], [], xs)
+let filter (keep: ('a) -> Bool, xs: List<'a>): List<'a> = List.fold((acc, x) -> if keep(x) then acc ++ [x] else acc, [], xs)
+let all (p: ('a) -> Bool, xs: List<'a>): Bool = List.fold((acc, x) -> acc && p(x), true, xs)
+let any (p: ('a) -> Bool, xs: List<'a>): Bool = List.fold((acc, x) -> acc || p(x), false, xs)
 
 // `mapIndexed` applies `f(index, element)` down the list, the index starting at 0. `fold` carries no
 // index of its own, so it threads one in a pair accumulator `(i, ys)` — the same tuple-accumulator
 // shape as `distinct`/`partition` below — and drops the counter at the end. It saves the caller from
 // hand-rolling that `(i, acc)` fold for a weighted sum or a positional transform (a check-digit
 // weighting reads `mapIndexed((i, c) -> w(i) * d(c)) |> sum`).
-let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>) = {
+let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>): List<'b> = {
     let (_, out) = List.fold((acc, x) -> {
         let (i, ys) = acc
         let mapped = ys ++ [f(i, x)]
@@ -58,7 +58,7 @@ let mapIndexed (f: (Int, 'a) -> 'b, xs: List<'a>) = {
 // F#'s `List.zip` raises. This one truncates to the shorter list, and says so rather than leaving
 // the caller to find out. It walks `xs` with the same `(i, ys)` pair accumulator `mapIndexed` uses
 // and reads the partner with `List.get`, so a missing partner simply ends the pairing.
-let zipShortest (xs: List<'a>, ys: List<'b>) = {
+let zipShortest (xs: List<'a>, ys: List<'b>): List<('a, 'b)> = {
     let (_, out) = List.fold((acc, x) -> {
         let (i, pairs) = acc
         let next = i + 1
@@ -69,7 +69,7 @@ let zipShortest (xs: List<'a>, ys: List<'b>) = {
     out
 }
 
-let unzip (ps: List<('a, 'b)>) =
+let unzip (ps: List<('a, 'b)>): (List<'a>, List<'b>) =
     List.fold((acc, p) -> {
         let (xs, ys) = acc
         let (x, y) = p
@@ -99,16 +99,16 @@ let reverse (xs: List<'a>) : List<'a> = intrinsic "list.reverse"
 // of them is summed by mapping to the wrapped value first.
 let sum (xs: List<'a>) : 'a = intrinsic "list.sum"
 let product (xs: List<'a>) : 'a = intrinsic "list.product"
-let append (a: List<'a>, b: List<'a>) = a ++ b
-let concat (xss: List<List<'a>>) = List.fold((acc, xs) -> acc ++ xs, [], xss)
-let contains (value: 'a, xs: List<'a>) = List.fold((acc, x) -> acc || x == value, false, xs)
-let isEmpty (xs: List<'a>) = List.length(xs) == 0
+let append (a: List<'a>, b: List<'a>): List<'a> = a ++ b
+let concat (xss: List<List<'a>>): List<'a> = List.fold((acc, xs) -> acc ++ xs, [], xss)
+let contains (value: 'a, xs: List<'a>): Bool = List.fold((acc, x) -> acc || x == value, false, xs)
+let isEmpty (xs: List<'a>): Bool = List.length(xs) == 0
 
 // `take` keeps the first `n` elements and `drop` skips them (Elm's `List.take` / `List.drop`). Both
 // clamp rather than fail: a count of 0 or less takes nothing / drops nothing, and a count past the
 // end takes the whole list / leaves it empty. They thread the same `(i, ys)` pair accumulator
 // `mapIndexed` uses, keeping the elements whose index falls on the wanted side of `n`.
-let take (n: Int, xs: List<'a>) = {
+let take (n: Int, xs: List<'a>): List<'a> = {
     let (_, out) = List.fold((acc, x) -> {
         let (i, ys) = acc
         let next = i + 1
@@ -117,7 +117,7 @@ let take (n: Int, xs: List<'a>) = {
     out
 }
 
-let drop (n: Int, xs: List<'a>) = {
+let drop (n: Int, xs: List<'a>): List<'a> = {
     let (_, out) = List.fold((acc, x) -> {
         let (i, ys) = acc
         let next = i + 1
@@ -139,7 +139,7 @@ let drop (n: Int, xs: List<'a>) = {
 // `length(distinct(map ...)) == length` by hand. All three share the `distinct` stem, so a reader
 // who knows one can predict the others. Deriving from the total `fold`, they may stand in an
 // invariant.
-let distinct (xs: List<'a>) = {
+let distinct (xs: List<'a>): List<'a> = {
     let (_, out) = List.fold((acc, x) -> {
         let (seen, ys) = acc
         if Set.contains(x, seen) then acc else (Set.insert(x, seen), ys ++ [x])
@@ -147,7 +147,7 @@ let distinct (xs: List<'a>) = {
     out
 }
 
-let distinctBy (key: ('a) -> 'k, xs: List<'a>) = {
+let distinctBy (key: ('a) -> 'k, xs: List<'a>): List<'a> = {
     let (_, out) = List.fold((acc, x) -> {
         let (seen, ys) = acc
         if Set.contains(key(x), seen) then acc else (Set.insert(key(x), seen), ys ++ [x])
@@ -155,12 +155,12 @@ let distinctBy (key: ('a) -> 'k, xs: List<'a>) = {
     out
 }
 
-let allDistinctBy (key: ('a) -> 'k, xs: List<'a>) =
+let allDistinctBy (key: ('a) -> 'k, xs: List<'a>): Bool =
     List.length(List.distinct(List.map(key, xs))) == List.length(xs)
 
 // `partition` splits the list by a predicate into (kept, rest), preserving order in each (Elm's
 // List.partition). It folds a pair of empty lists `([], [])`, appending each element to one side.
-let partition (keep: ('a) -> Bool, xs: List<'a>) =
+let partition (keep: ('a) -> Bool, xs: List<'a>): (List<'a>, List<'a>) =
     List.fold((acc, x) -> {
         let (yes, no) = acc
         if keep(x) then (yes ++ [x], no) else (yes, no ++ [x])
@@ -170,7 +170,7 @@ let partition (keep: ('a) -> Bool, xs: List<'a>) =
 // order (Elm's Dict-based grouping). It folds `Map.empty`, reading the current bucket with `Map.get`
 // (a `None` starts a new one) and writing back the extended bucket — a Map accumulator grown the same
 // way `distinct` grows a list, its key and value types recovered from the block.
-let groupBy (key: ('a) -> 'k, xs: List<'a>) =
+let groupBy (key: ('a) -> 'k, xs: List<'a>): Map<'k, List<'a>> =
     List.fold((acc, x) ->
         Map.insert(key(x),
             match Map.get(key(x), acc) with
@@ -190,7 +190,7 @@ let groupBy (key: ('a) -> 'k, xs: List<'a>) =
 // So `filterMap` serves the absence a model reads. Absence the model owns — a sum case with nothing
 // to give — cannot reach it, because nothing but the core builds an optional; that projection answers
 // a list of nought or one and `flatMap` joins them.
-let filterMap (f: ('a) -> 'b?, xs: List<'a>) =
+let filterMap (f: ('a) -> 'b?, xs: List<'a>): List<'b> =
     List.fold((acc, x) ->
         match f(x) with
             | None -> acc
@@ -200,7 +200,7 @@ let filterMap (f: ('a) -> 'b?, xs: List<'a>) =
 // `concat` builds an intermediate `List<List<'b>>`, which is why the shape is usually hand-rolled as
 // a fold with `++` in the step — this is that fold, named. The name is the one settled across
 // ecosystems for this operation; Elm's `concatMap` and F#'s `collect` are the same function.
-let flatMap (f: ('a) -> List<'b>, xs: List<'a>) = List.fold((acc, x) -> acc ++ f(x), [], xs)
+let flatMap (f: ('a) -> List<'b>, xs: List<'a>): List<'b> = List.fold((acc, x) -> acc ++ f(x), [], xs)
 
 // `foldRight` walks from the end, the counterpart of the left `fold`. Its step takes the element
 // first and the accumulator second — the shape a right fold has, and the opposite of `fold`'s.
@@ -217,7 +217,7 @@ let foldRight (step: ('a, 'acc) -> 'acc, seed: 'acc, xs: List<'a>) : 'acc =
 // scanning the list once per lookup. Two elements with the same key collapse and the later one wins,
 // as `Map.fromList` does — say the key is an id with `List.allDistinctBy` and the collapse cannot
 // happen.
-let indexBy (key: ('a) -> 'k, xs: List<'a>) =
+let indexBy (key: ('a) -> 'k, xs: List<'a>): Map<'k, 'a> =
     List.fold((acc, x) -> Map.insert(key(x), x, acc), Map.empty, xs)
 
 // `sort` orders by the elements' natural order (Elm `List.sort`). Like Elm it is a native

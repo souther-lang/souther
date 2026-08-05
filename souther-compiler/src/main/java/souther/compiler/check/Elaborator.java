@@ -143,7 +143,7 @@ public final class Elaborator {
                     throw CompileException.of(
                             Diagnostic.of(null, "check.neg.msg")
                                     .title("check.neg.title")
-                                    .at(neg.pos(), width(neg.operand()))
+                                    .at(new Region(neg.pos(), region(neg.operand()).end()))
                                     .args(Type.show(t))
                                     .build(),
                             "unary minus needs an Int or Decimal, got " + t);
@@ -299,7 +299,7 @@ public final class Elaborator {
                     throw CompileException.of(
                             Diagnostic.of("E2012", "check.attempt.notconstruction")
                                     .title("check.attempt.title")
-                                    .at(ic.construct().pos(), width(ic.construct()))
+                                    .at(region(ic.construct()))
                                     .hint("check.attempt.notconstruction.hint")
                                     .build(),
                             "`as` attempts a construction, and this is not one");
@@ -311,7 +311,7 @@ public final class Elaborator {
                     throw CompileException.of(
                             Diagnostic.of("E2013", "check.attempt.noinvariant")
                                     .title("check.attempt.title")
-                                    .at(ic.construct().pos(), width(ic.construct()))
+                                    .at(region(ic.construct()))
                                     .args(construct.typeName().name())
                                     .hint("check.attempt.noinvariant.hint")
                                     .build(),
@@ -736,7 +736,12 @@ public final class Elaborator {
         List<Core> values = new ArrayList<>();
         Scope inner = env;
         for (Ast.Bound b : ex.bound()) {
-            Core value = elaborate(b.value(), env, ctx);
+            // A lambda bound rather than applied needs to be told what it takes — it is a block, and a
+            // block is a value only where something says its parameter types. The declaration this
+            // binding came from says them, and nothing else here does.
+            Type says = b.value() instanceof Ast.Block && b.declaredType() != null
+                    ? TypeOps.resolveParamType(b.declaredType(), ctx.symbols()) : null;
+            Core value = elaborate(b.value(), env, ctx, says instanceof Type.FnOf ? says : null);
             Type bindType = value.type();
             if (b.declaredType() != null) {
                 Type declared = TypeOps.resolveParamType(b.declaredType(), ctx.symbols());
@@ -1049,6 +1054,13 @@ public final class Elaborator {
     static void collectApplications(Ast.Binder binder, Ast.Expr e, Scope env,
                                             CheckContext ctx, List<List<Type>> out,
                                             Set<BindingId> inner) {
+        // Handed to something that declares what it takes. A call a representation keeps standing
+        // holds the application inside itself, so a function passed to one is applied nowhere this
+        // walk can see — but the declaration says the parameter types as plainly as an application
+        // would, and it says them at the position the function was given to.
+        if (e instanceof Ast.Apply call) {
+            handedOver(binder, call, env, ctx, out);
+        }
         if (e instanceof Ast.Apply call && call.denotes() instanceof ValueName.Local applied
                 && applied.id().equals(binder.id())
                 && call.args().stream().noneMatch(a -> reaches(a, inner))) {
@@ -1064,6 +1076,13 @@ public final class Elaborator {
             case Ast.LetIn li -> {
                 collectApplications(binder, li.value(), env, ctx, out, inner);
                 collectApplications(binder, li.body(), env, ctx, out, with(inner, List.of(li.binder())));
+                // A name given to this function is this function: what the second name is used for is
+                // what the first one is used for. Followed rather than left to the applications alone,
+                // because an alias may be the only thing that is ever applied or handed over.
+                if (li.value() instanceof Ast.Var v && v.denotes() instanceof ValueName.Local local
+                        && local.id().equals(binder.id())) {
+                    collectApplications(li.binder(), li.body(), env, ctx, out, inner);
+                }
             }
             case Ast.IfConstructed ic -> {
                 collectApplications(binder, ic.construct(), env, ctx, out, inner);
@@ -1082,6 +1101,45 @@ public final class Elaborator {
             }
             default -> TypeChecker.forEachChild(e,
                     sub -> collectApplications(binder, sub, env, ctx, out, inner));
+        }
+    }
+
+    /**
+     * What {@code call} says the parameter types are, where {@code binder} is the function it was
+     * given at a position declared to take one.
+     *
+     * <p>The declaration is polymorphic, so what it says depends on the call: {@code List.filter}
+     * takes {@code ('a) -> Bool} and the list beside it decides {@code 'a}. The other arguments are
+     * read first for that reason, and one that cannot be read yet leaves this call saying nothing —
+     * another use, or the author's annotation, answers instead.
+     */
+    private static void handedOver(Ast.Binder binder, Ast.Apply call, Scope env, CheckContext ctx,
+                                   List<List<Type>> out) {
+        CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
+        if (kept == null || kept.params().size() != call.args().size()) {
+            return;
+        }
+        for (int i = 0; i < call.args().size(); i++) {
+            if (!(call.args().get(i) instanceof Ast.Var v)
+                    || !(v.denotes() instanceof ValueName.Local local)
+                    || !local.id().equals(binder.id())
+                    || !(kept.params().get(i) instanceof Type.FnOf declared)) {
+                continue;
+            }
+            Map<String, Type> bind;
+            try {
+                // The same settling the call itself does — this walk is reading that call's own
+                // question one position early, and an answer that differed from the one the call
+                // reaches would be a parameter type nothing later agrees with.
+                bind = CallElaborator.settledByValues(call, kept.params(), kept.result(), null,
+                        j -> typeOf(call.args().get(j), env, ctx), ctx);
+            } catch (CompileException _) {
+                return;   // this call decides nothing here; what is wrong with it is reported there
+            }
+            Type.FnOf settled = (Type.FnOf) TypeOps.substitute(declared, bind);
+            if (settled.params().stream().noneMatch(p -> Type.mentions(p, t -> t instanceof Type.Var))) {
+                out.add(settled.params());
+            }
         }
     }
 
@@ -1262,7 +1320,7 @@ public final class Elaborator {
             throw CompileException.of(
                     Diagnostic.of(null, "check.type.mismatch.msg")
                             .title("check.type.mismatch.title")
-                            .at(e.pos(), width(e))
+                            .at(region(e))
                             .args(what)
                             .diff(Type.show(actual, expected), Type.show(expected, actual))
                             .hint("check.type.mismatch.hint")
@@ -1439,6 +1497,23 @@ public final class Elaborator {
 
     /** A best-effort caret width for {@code e}: the token length when the node is a leaf whose source
      * text is known, otherwise 1. The renderer underlines this many columns from the node's start. */
+    /**
+     * The characters an expression occupies, as far as a report needs to underline it.
+     *
+     * <p>A name answers with where it is written, which is not what {@link #width} would measure: a
+     * decomposed spelling is wider than the name it denotes, and a qualified one is as far apart as
+     * the source spells it. Everything else is measured from its start, there being nothing else to
+     * measure it by.
+     */
+    public static Region region(Ast.Expr e) {
+        return switch (e) {
+            case Ast.Var v -> v.written().region();
+            case Ast.FieldAccess fa -> fa.name().region();
+            case Ast.Apply c -> c.name().region();
+            default -> Region.ofWidth(e.pos(), width(e));
+        };
+    }
+
     public static int width(Ast.Expr e) {
         return switch (e) {
             case Ast.Var v -> v.name().length();

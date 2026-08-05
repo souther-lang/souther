@@ -251,7 +251,7 @@ class CompileInvariantConstraintTest {
         assertEquals(1, issue.meta().get("max"));
     }
 
-    /** {@code allUniqueBy} with the identity projection says of the elements what Raoh's
+    /** {@code allDistinctBy} with the identity projection says of the elements what Raoh's
      * {@code unique()} says of them, and Raoh names the duplicates it found. */
     @Test
     void aRepeatedElementIsADuplicate() throws Exception {

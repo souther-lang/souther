@@ -45,7 +45,7 @@ let fromInt (n: Int) : Decimal = intrinsic "decimal.fromInt"
 // differs still answers by numeric value, as `compare` does. `clamp(lo, hi, d)` keeps a rate or a
 // ratio inside a range without a `match`, and the bounds keep their own scale — clamping returns one
 // of the three values written, never a re-scaled copy.
-let abs (d: Decimal) = if d < 0.0m then 0.0m - d else d
-let min (a: Decimal, b: Decimal) = if a < b then a else b
-let max (a: Decimal, b: Decimal) = if a > b then a else b
-let clamp (lo: Decimal, hi: Decimal, d: Decimal) = if d < lo then lo else if d > hi then hi else d
+let abs (d: Decimal): Decimal = if d < 0.0m then 0.0m - d else d
+let min (a: Decimal, b: Decimal): Decimal = if a < b then a else b
+let max (a: Decimal, b: Decimal): Decimal = if a > b then a else b
+let clamp (lo: Decimal, hi: Decimal, d: Decimal): Decimal = if d < lo then lo else if d > hi then hi else d

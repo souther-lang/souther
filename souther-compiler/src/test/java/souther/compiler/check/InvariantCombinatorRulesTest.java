@@ -232,7 +232,7 @@ class InvariantCombinatorRulesTest {
 
     @Test
     void everyRuleIsKeyedByANameTheAnalysisStillSees() {
-        for (String fn : InvariantChecker.combinatorNames()) {
+        for (String fn : DischargeRules.combinatorNames()) {
             assertTrue(Prelude.isLibraryFunction(fn), fn + " is not a standard-library operation");
             assertFalse(Prelude.sugared(fn),
                     fn + " is rewritten to another call before this tree is read, so its rule cannot"
@@ -243,7 +243,7 @@ class InvariantCombinatorRulesTest {
     @Test
     void everyRuleHasAProgramThatFiresIt() {
         Set<String> covered = FIRES.stream().map(Fires::fn).collect(Collectors.toCollection(TreeSet::new));
-        assertEquals(new TreeSet<>(InvariantChecker.combinatorNames()), covered,
+        assertEquals(new TreeSet<>(DischargeRules.combinatorNames()), covered,
                 "a rule is registered with no program that fires it, or the other way round");
     }
 

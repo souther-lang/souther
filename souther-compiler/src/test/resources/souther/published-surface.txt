@@ -1,4 +1,4 @@
-Bool.not(b: Bool)
+Bool.not(b: Bool) : Bool
 String.length(s: String) : Int
 String.toInt(s: String) : Int | NotANumber
 String.toDecimal(s: String) : Decimal | NotANumber
@@ -8,7 +8,7 @@ String.uppercase(s: String) : String
 String.contains(sub: String, s: String) : Bool
 String.startsWith(prefix: String, s: String) : Bool
 String.endsWith(suffix: String, s: String) : Bool
-String.isEmpty(s: String)
+String.isEmpty(s: String) : Bool
 String.matches(pattern: String, s: String) : Bool
 String.slice(fromInclusive: Int, toExclusive: Int, s: String) : String
 String.append(a: String, b: String) : String
@@ -52,31 +52,31 @@ List.sortBy(key: ('a) -> 'k, xs: List<'a>) : List<'a>
 List.max(xs: List<'a>) : 'a?
 List.min(xs: List<'a>) : 'a?
 List.get(index: Int, xs: List<'a>) : 'a?
-List.map(f: ('a) -> 'b, xs: List<'a>)
-List.filter(keep: ('a) -> Bool, xs: List<'a>)
-List.all(p: ('a) -> Bool, xs: List<'a>)
-List.any(p: ('a) -> Bool, xs: List<'a>)
-List.mapIndexed(f: (Int, 'a) -> 'b, xs: List<'a>)
-List.zipShortest(xs: List<'a>, ys: List<'b>)
-List.unzip(ps: List<('a, 'b)>)
+List.map(f: ('a) -> 'b, xs: List<'a>) : List<'b>
+List.filter(keep: ('a) -> Bool, xs: List<'a>) : List<'a>
+List.all(p: ('a) -> Bool, xs: List<'a>) : Bool
+List.any(p: ('a) -> Bool, xs: List<'a>) : Bool
+List.mapIndexed(f: (Int, 'a) -> 'b, xs: List<'a>) : List<'b>
+List.zipShortest(xs: List<'a>, ys: List<'b>) : List<('a, 'b)>
+List.unzip(ps: List<('a, 'b)>) : (List<'a>, List<'b>)
 List.reverse(xs: List<'a>) : List<'a>
 List.sum(xs: List<'a>) : 'a
 List.product(xs: List<'a>) : 'a
-List.append(a: List<'a>, b: List<'a>)
-List.concat(xss: List<List<'a>>)
-List.contains(value: 'a, xs: List<'a>)
-List.isEmpty(xs: List<'a>)
-List.take(n: Int, xs: List<'a>)
-List.drop(n: Int, xs: List<'a>)
-List.distinct(xs: List<'a>)
-List.distinctBy(key: ('a) -> 'k, xs: List<'a>)
-List.allDistinctBy(key: ('a) -> 'k, xs: List<'a>)
-List.partition(keep: ('a) -> Bool, xs: List<'a>)
-List.groupBy(key: ('a) -> 'k, xs: List<'a>)
-List.filterMap(f: ('a) -> 'b?, xs: List<'a>)
-List.flatMap(f: ('a) -> List<'b>, xs: List<'a>)
+List.append(a: List<'a>, b: List<'a>) : List<'a>
+List.concat(xss: List<List<'a>>) : List<'a>
+List.contains(value: 'a, xs: List<'a>) : Bool
+List.isEmpty(xs: List<'a>) : Bool
+List.take(n: Int, xs: List<'a>) : List<'a>
+List.drop(n: Int, xs: List<'a>) : List<'a>
+List.distinct(xs: List<'a>) : List<'a>
+List.distinctBy(key: ('a) -> 'k, xs: List<'a>) : List<'a>
+List.allDistinctBy(key: ('a) -> 'k, xs: List<'a>) : Bool
+List.partition(keep: ('a) -> Bool, xs: List<'a>) : (List<'a>, List<'a>)
+List.groupBy(key: ('a) -> 'k, xs: List<'a>) : Map<'k, List<'a>>
+List.filterMap(f: ('a) -> 'b?, xs: List<'a>) : List<'b>
+List.flatMap(f: ('a) -> List<'b>, xs: List<'a>) : List<'b>
 List.foldRight(step: ('a, 'acc) -> 'acc, seed: 'acc, xs: List<'a>) : 'acc
-List.indexBy(key: ('a) -> 'k, xs: List<'a>)
+List.indexBy(key: ('a) -> 'k, xs: List<'a>) : Map<'k, 'a>
 List.sort(xs: List<'a>) : List<'a>
 List.rangeInclusive(from: Int, to: Int) : List<Int>
 List.fold(step, seed, xs)
@@ -95,7 +95,7 @@ Set.fromList(xs: List<'a>) : Set<'a>
 Set.fold(step: ('acc, 'a) -> 'acc, seed: 'acc, s: Set<'a>) : 'acc
 Set.map(f: ('a) -> 'b, s: Set<'a>) : Set<'b>
 Set.filter(keep: ('a) -> Bool, s: Set<'a>) : Set<'a>
-Set.partition(keep: ('a) -> Bool, s: Set<'a>)
+Set.partition(keep: ('a) -> Bool, s: Set<'a>) : (Set<'a>, Set<'a>)
 Date.addDays(days: Int, d: Date) : Date
 Date.addMonths(months: Int, d: Date) : Date
 Date.addYears(years: Int, d: Date) : Date
@@ -115,10 +115,10 @@ Int.subtract(a: Int, b: Int) : Int
 Int.multiply(a: Int, b: Int) : Int
 Int.compare(a: Int, b: Int) : Int
 Int.floorMod(dividend: Int, divisor: Int) : Int
-Int.abs(n: Int)
-Int.min(a: Int, b: Int)
-Int.max(a: Int, b: Int)
-Int.clamp(lo: Int, hi: Int, n: Int)
+Int.abs(n: Int) : Int
+Int.min(a: Int, b: Int) : Int
+Int.max(a: Int, b: Int) : Int
+Int.clamp(lo: Int, hi: Int, n: Int) : Int
 Decimal.divide(dividend: Decimal, divisor: Decimal, scale: Int, mode: RoundingMode) : Decimal | DivisionByZero
 Decimal.toInt(mode: RoundingMode, d: Decimal) : Int
 Decimal.round(scale: Int, mode: RoundingMode, d: Decimal) : Decimal
@@ -127,9 +127,9 @@ Decimal.subtract(a: Decimal, b: Decimal) : Decimal
 Decimal.multiply(a: Decimal, b: Decimal) : Decimal
 Decimal.compare(a: Decimal, b: Decimal) : Int
 Decimal.fromInt(n: Int) : Decimal
-Decimal.abs(d: Decimal)
-Decimal.min(a: Decimal, b: Decimal)
-Decimal.max(a: Decimal, b: Decimal)
-Decimal.clamp(lo: Decimal, hi: Decimal, d: Decimal)
+Decimal.abs(d: Decimal) : Decimal
+Decimal.min(a: Decimal, b: Decimal) : Decimal
+Decimal.max(a: Decimal, b: Decimal) : Decimal
+Decimal.clamp(lo: Decimal, hi: Decimal, d: Decimal) : Decimal
 Option.map(f: ('a) -> 'b, opt: 'a?) : 'b?
 Option.withDefault(default: 'a, opt: 'a?) : 'a

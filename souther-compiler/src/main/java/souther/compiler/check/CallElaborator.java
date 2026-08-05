@@ -119,6 +119,14 @@ public final class CallElaborator {
 
     static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
                                       Type expected) {
+        // A call this representation said it keeps standing, asked before anything tries to expand or
+        // resolve it: what it names is settled, and the only question left is its signature. Asked of
+        // the representation and not of the operation — whether anything downstream has a rule about
+        // it is not this walk's business, and a kept call with no rule types like any other.
+        CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
+        if (kept != null) {
+            return preservedCall(call, kept, env, ctx, expected);
+        }
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         Type result = typeOfCall(ca, call, env, ctx, expected);
         // applying something this body binds is a different operation from calling something
@@ -130,6 +138,102 @@ public final class CallElaborator {
                     ca.cores(), result, call.pos());
         }
         return new Core.Call(call.reaches(), ca.cores(), result, call.pos());
+    }
+
+    /**
+     * A kept call, typed by applying the signature it was declared with.
+     *
+     * <p>The same application a recursive helper's call goes through: a declaration that is not
+     * expanded is typed from what it declares, and its type variables are settled by the arguments it
+     * was given. What differs is only that this one is a node of its own, so a reader that has no
+     * business with a call left standing meets it as itself rather than as an ordinary call it might
+     * try to emit.
+     */
+    private static Core preservedCall(Ast.Apply call, CompleteSignature kept, Scope env,
+                                      CheckContext ctx, Type expected) {
+        List<Type> params = kept.params();
+        CallArgs ca = new CallArgs(call.args(), env, ctx);
+        if (call.args().size() != params.size()) {
+            arity(call, params.size());
+        }
+        Map<String, Type> bind = settledByValues(call, params, kept.result(), expected, ca::type, ctx);
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i) instanceof Type.FnOf declared) {
+                Type.FnOf at = (Type.FnOf) TypeOps.substitute(declared, bind);
+                Type answered = ca.block(i, call.written(), at.params());
+                // What the function answers settles the rest: this is an application of a declared
+                // signature and nothing more. The fold rule that reads a step's result as an
+                // accumulator to grow is one operation's meaning, and an operation kept standing is
+                // kept because its meaning belongs to whoever reads it, not to this.
+                TypeOps.unify(declared.result(), answered, bind, ctx.symbols(),
+                        call.pos(), "argument " + (i + 1) + " of " + call.written());
+            }
+        }
+        for (int i = 0; i < params.size(); i++) {
+            if (!(params.get(i) instanceof Type.FnOf)) {
+                ca.requireTyped(i, TypeOps.substitute(params.get(i), bind),
+                        "argument " + (i + 1) + " of " + call.written());
+            }
+        }
+        return new Core.PreservedCall(call.denotes(), ca.cores(),
+                TypeOps.substitute(kept.result(), bind), call.pos());
+    }
+
+    /**
+     * What a call settles of the signature it applies, before any function argument is typed.
+     *
+     * <p>Two things state something about a polymorphic signature's variables, and they are asked in
+     * this order because the order is the whole of the rule.
+     *
+     * <ol>
+     *   <li>What the context expects of the result, where the signature takes a function at all. A
+     *       variable a function parameter mentions has to be decided before that function is typed,
+     *       and where no argument decides it the position the call stands in is the only thing that
+     *       does.</li>
+     *   <li>What each value argument states, the ones that state something first. An argument that
+     *       answers no value — an empty collection carries a bottom — says nothing about what it
+     *       holds, and letting it settle a variable would hold every other argument to the element
+     *       type of nothing. A bottom then widens to what the others settled instead of the other way
+     *       round.</li>
+     * </ol>
+     *
+     * <p>Every reader of a declared signature asks this: the call that expands one, the call that
+     * keeps one standing, and the walk that reads one to learn what a function it was handed takes.
+     * They differ in what they do with a function argument afterwards — a fold reads its result as
+     * the accumulator to grow, an ordinary application does not — and in nothing before it. Said once
+     * because a difference here is not a failure but a variable settled to the wrong type, which is
+     * reported somewhere else as something else.
+     */
+    static Map<String, Type> settledByValues(Ast.Apply call, List<Type> params, Type result,
+                                             Type expected,
+                                             java.util.function.IntFunction<Type> argType,
+                                             CheckContext ctx) {
+        Map<String, Type> bind = new HashMap<>();
+        if (params.stream().anyMatch(Type.FnOf.class::isInstance)) {
+            BottomInfer.pinResultTypeVars(result, expected, bind, ctx.symbols(),
+                    call.pos(), "result of " + call.written());
+        }
+        // Each value argument is asked once, here, in the order it is written. What the ordering
+        // below decides is which of them settles a variable first, and nothing about how many times
+        // an argument is read: typing one can decide a variable of the application it stands in, so a
+        // second reading is a second answer, and then the argument classified and the argument
+        // unified are not the same reading of it.
+        Type[] stated = new Type[params.size()];
+        List<Integer> stating = new ArrayList<>();
+        List<Integer> bottoms = new ArrayList<>();
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i) instanceof Type.FnOf) {
+                continue;
+            }
+            stated[i] = argType.apply(i);
+            (Type.mentions(stated[i], BottomInfer::answersNoValue) ? bottoms : stating).add(i);
+        }
+        stating.addAll(bottoms);
+        for (int i : stating) {
+            TypeOps.unify(params.get(i), stated[i], bind, ctx.symbols(),
+                    call.pos(), "argument " + (i + 1) + " of " + call.written());
+        }
+        return bind;
     }
 
     /**
@@ -155,11 +259,24 @@ public final class CallElaborator {
             this.ctx = ctx.makingAnOptional(false);
         }
 
-        /** The type of argument {@code i}, elaborated with no expected type (bottom-up). */
+        /**
+         * The type of argument {@code i}, elaborated with no expected type (bottom-up) the first
+         * time it is asked and remembered.
+         *
+         * <p>Remembered because elaborating an argument is not a question with a stable answer:
+         * typing it can decide a variable of the application it stands in, and the decision is
+         * written into the enclosing substitution. A second elaboration would then read the state the
+         * first one left, so two readers of one argument would be reading two arguments — and the
+         * Core that reached the tree would be the later one while the type a rule reasoned about was
+         * the earlier. A rule may ask in whatever order it types in ({@link #requireTyped} already
+         * rests on this), so the guarantee belongs here rather than in each rule remembering to ask
+         * once.
+         */
         Type type(int i) {
-            Core c = Elaborator.elaborate(args.get(i), env, ctx);
-            cores[i] = c;
-            return c.type();
+            if (cores[i] == null) {
+                cores[i] = Elaborator.elaborate(args.get(i), env, ctx);
+            }
+            return cores[i].type();
         }
 
         /** Argument {@code i} checked against {@code expected}, as {@link #requireType} does. */
@@ -324,20 +441,8 @@ public final class CallElaborator {
             throw new IllegalStateException("`" + call.written() + "` reached signature application"
                     + " with " + args.size() + " argument(s) against " + signature.params().size());
         }
-        boolean takesAFunction = signature.params().stream().anyMatch(Type.FnOf.class::isInstance);
-        Map<String, Type> bind = new HashMap<>();
-        if (takesAFunction) {
-            BottomInfer.pinResultTypeVars(signature.result(), expected, bind, ctx.symbols(),
-                    call.pos(), "result of " + call.written());
-        }
-        for (int i = 0; i < args.size(); i++) {
-            Type param = signature.params().get(i);
-            if (param instanceof Type.FnOf) {
-                continue;
-            }
-            TypeOps.unify(param, ca.type(i), bind, ctx.symbols(),
-                    call.pos(), "argument " + (i + 1) + " of " + call.written());
-        }
+        Map<String, Type> bind = settledByValues(call, signature.params(), signature.result(),
+                expected, ca::type, ctx);
         try {
             for (int i = 0; i < args.size(); i++) {
                 if (signature.params().get(i) instanceof Type.FnOf declaredStep) {
@@ -352,7 +457,7 @@ public final class CallElaborator {
             }
             Diagnostic.Builder b = Diagnostic.of(null, "check.fold.seed.untyped")
                     .title("check.fold.seed.title")
-                    .at(args.get(seed).pos(), Elaborator.width(args.get(seed)));
+                    .at(Elaborator.region(args.get(seed)));
             if (stepError.diagnostic() != null && stepError.diagnostic().region() != null) {
                 b.secondary(stepError.diagnostic().region(), "check.fold.seed.here");
             }

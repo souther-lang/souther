@@ -61,6 +61,36 @@ public final class Main {
               --color auto|always|never  color the human output (default: auto)""";
 
     public static void main(String[] args) {
+        int code = guarded(() -> dispatch(args));
+        if (code != 0) {
+            System.exit(code);
+        }
+    }
+
+    /**
+     * Runs the command with the last boundary this compiler has around it, and answers with the exit
+     * code.
+     *
+     * <p>Around the whole command and not around the compile inside it: reading the arguments builds
+     * paths and options, and a failure there is as much this compiler's as one from the emitter. A
+     * {@link CompileException} is not one of these — it is an answer about the source and is rendered
+     * as one where it is caught — so it goes on rather than being reported as a fault of the compiler.
+     */
+    static int guarded(Runnable command) {
+        try {
+            command.run();
+            return 0;
+        } catch (RuntimeException e) {
+            String said = internalFailure(e);
+            if (said == null) {
+                throw e;
+            }
+            System.err.println(said);
+            return 1;
+        }
+    }
+
+    private static void dispatch(String[] args) {
         String command = args.length == 0 ? "" : args[0];
         String[] rest = args.length == 0 ? args : java.util.Arrays.copyOfRange(args, 1, args.length);
         switch (command) {
@@ -78,6 +108,24 @@ public final class Main {
                 System.exit(2);
             }
         }
+    }
+
+    /**
+     * The one line the command line says when the compiler fails for a reason nobody listed, or
+     * {@code null} for a {@link CompileException}, which is an answer about the source and is
+     * rendered as one wherever it is caught.
+     *
+     * <p>A stack trace at this point asks the author to read this compiler's call stack for a problem
+     * that is not theirs. What is left — the exception's name and what it said — is what a report of
+     * it would be filed with, and is the only part of it they can pass on.
+     */
+    static String internalFailure(RuntimeException e) {
+        if (e instanceof CompileException) {
+            return null;
+        }
+        String said = e.getMessage();
+        return "internal compiler error: " + e.getClass().getSimpleName()
+                + (said == null ? "" : ": " + said.replaceAll("\\R", " "));
     }
 
     /** {@code souther compile <file.sou>... -d <outdir>}: writes the generated {@code .class} files. */
@@ -321,6 +369,10 @@ public final class Main {
                 // made, and either can find a limit; a `fmt` that answered those with a stack trace
                 // told the author about the compiler rather than about their file.
                 System.err.println(file + ": " + e.getMessage());
+                failed = true;
+                continue;
+            } catch (RuntimeException e) {
+                System.err.println(file + ": " + internalFailure(e));
                 failed = true;
                 continue;
             }

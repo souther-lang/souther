@@ -394,8 +394,8 @@ class CompileRecursiveHelperTest {
         assertTrue(ex.getMessage().contains("Tag"), ex.getMessage());
     }
 
-    // A tree walk that produces a list is written with `concatMap`, and the recursive call sits in the
-    // lambda `concatMap` is handed. `concatMap` is a prelude helper expanded into its caller, so the
+    // A tree walk that produces a list is written with `flatMap`, and the recursive call sits in the
+    // lambda `flatMap` is handed. `flatMap` is a prelude helper expanded into its caller, so the
     // lambda is checked against the parameter type before that expansion runs — and the call in it is
     // to a helper that is lowered to a method and so stays a call. It is typed against the recursive
     // helper's signature, the same way the helper's own body is.

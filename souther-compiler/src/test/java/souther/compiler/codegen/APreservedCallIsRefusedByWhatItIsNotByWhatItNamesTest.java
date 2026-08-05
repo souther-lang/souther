@@ -1,0 +1,54 @@
+package souther.compiler.codegen;
+
+import souther.compiler.core.Core;
+import souther.compiler.diag.SourcePos;
+import souther.compiler.types.Type;
+import souther.compiler.types.ValueName;
+
+import org.junit.jupiter.api.Test;
+
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * A representation keeps a call standing for the analysis that has rules about the operation. The
+ * tree the backend emits from keeps none, so one reaching the emitter means it was handed another
+ * tree — and that is decided by what the node is.
+ *
+ * <p>Not by what the call names. An emitter that refused only the operations it had no bytecode for
+ * would emit the ones it happened to know, which is the same table lookup that let the two
+ * representations be confused in the first place: {@code List.sortBy} has an emitter and
+ * {@code List.map} does not, and neither of them belongs in a tree that runs.
+ */
+class APreservedCallIsRefusedByWhatItIsNotByWhatItNamesTest {
+
+    private static final SourcePos POS = new SourcePos(3, 7);
+
+    @Test
+    void anOperationTheEmitterHasNoBytecodeForIsRefused() {
+        assertRefused(new ValueName.Stdlib("List.map"));
+    }
+
+    @Test
+    void anOperationTheEmitterDoesHaveBytecodeForIsRefusedTheSameWay() {
+        // `List.sortBy` is written out by name in the emitter's own call dispatch, so this is the
+        // case an operation-keyed refusal would have let through
+        assertRefused(new ValueName.Stdlib("List.sortBy"));
+    }
+
+    @Test
+    void soIsOneThatNamesAModulesOwnHelper() {
+        assertRefused(new ValueName.Helper("demo", "half"));
+    }
+
+    private static void assertRefused(ValueName operation) {
+        IllegalStateException e = new Core.PreservedCall(operation, List.of(), Type.INT, POS)
+                .unexpectedIn("the emitter");
+
+        assertEquals(IllegalStateException.class, e.getClass());
+        assertTrue(e.getMessage().contains(String.valueOf(operation)), e.getMessage());
+        assertTrue(e.getMessage().contains("3:7"), "and where it was: " + e.getMessage());
+    }
+}

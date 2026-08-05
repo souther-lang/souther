@@ -214,7 +214,7 @@ class MessageCatalogFormatTest {
     /**
      * The qualified standard-library names this catalog quotes that the library does not publish.
      *
-     * <p>A hint that tells an author to reach for {@code List.concatMap} after it was renamed sends
+     * <p>A hint that tells an author to reach for {@code List.flatMap} after it was renamed sends
      * them to a compile error, in the one text whose whole job is to get them out of one. Nothing
      * else notices: the catalog is prose, so a rename sweeps the code and the tests and leaves the
      * advice behind — which is exactly what happened to two hints here, found in review rather than

@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * A fold that only grows a list builds it instead of rebuilding it: the accumulator is a builder for
  * the length of the walk and is sealed at the end. What these tests hold is that the rewrite gives
  * the same list the immutable append gave — over the combinators derived from fold ({@code map},
- * {@code filter}, {@code concatMap}, {@code filterMap}), over a fold an author wrote in that shape,
+ * {@code filter}, {@code flatMap}, {@code filterMap}), over a fold an author wrote in that shape,
  * and over the folds that must be left alone because their accumulator is read as a list.
  */
 class CompileGrowingFoldTest {

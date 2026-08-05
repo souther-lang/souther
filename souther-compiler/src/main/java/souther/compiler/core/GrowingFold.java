@@ -430,6 +430,9 @@ public final class GrowingFold {
                 }
                 return new Core.Match(m.scrutinee(), cases, m.type(), m.pos());
             }
+            // A call a representation kept standing is not part of the tree a fold grows in: this
+            // reads what the backend emits, and that keeps none.
+            case Core.PreservedCall p -> throw p.unexpectedIn("fold growing");
             default -> {
                 Core grown = growth.at(e, acc);
                 if (grown != null) {
