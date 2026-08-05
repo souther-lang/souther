@@ -13,7 +13,7 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * What a module is made of is not all written in one file. An attached {@code examples for} file's
@@ -69,7 +69,7 @@ class ACursorIsOnAPlaceNotACoordinateTest {
     /** What the compiler says is under a cursor at line 8 column 14 of {@code inFile}. */
     private static Resolve.ValueUse under(String inFile) {
         return compiled().db()
-                .ask(new Names.ValueDenotedAt("m", new SourcePos(8, 14, inFile))).value();
+                .ask(new Names.ValueDenotedAt(new SourcePos(8, 14, inFile))).value();
     }
 
     @Test
@@ -100,28 +100,30 @@ class ACursorIsOnAPlaceNotACoordinateTest {
         assertEquals("m.べつ", under(ATTACHED_ID).denotes().toString());
     }
 
-    /** A caller with only a coordinate to give is answered by coordinate, as it always was. */
+    /**
+     * A question that names no file names no place. It used to be answered by line and column
+     * alone, for callers that had only those to give; the module a question is answered about is
+     * now read off the file it names, so a question without one names no module either.
+     */
     @Test
-    void aCursorThatNamesNoFileIsStillAnsweredByCoordinate() {
+    void aCursorThatNamesNoFileIsOnNothing() {
         Resolve.ValueUse use = compiled().db()
-                .ask(new Names.ValueDenotedAt("m", new SourcePos(8, 14))).value();
+                .ask(new Names.ValueDenotedAt(new SourcePos(8, 14))).value();
 
-        assertNotNull(use, "nothing was taken away from a caller that names no source");
+        assertNull(use, "a line and a column are not a place");
     }
 
-    // --- the two absences are not the same absence ------------------------------------------------
+    // --- a name is somewhere, and a question is about somewhere ------------------------------------
 
-    /** A question with only a coordinate to give is answered by coordinate. */
     @Test
-    void aQuestionThatNamesNoFileIsAnsweredByCoordinate() {
-        assertTrue(Names.spans(new SourcePos(8, 14, MODEL_ID), "name", new SourcePos(8, 14)));
+    void aQuestionThatNamesNoFileIsNotAnsweredWithANameFromOne() {
+        assertFalse(Names.spans(new SourcePos(8, 14, MODEL_ID), "name", new SourcePos(8, 14)));
     }
 
     /**
      * A name that names no source was read from no source of this compile — a synthesized node, or
      * a module read off the module path. It is under nothing a reader has open, so a question about
-     * an open file is not answered with it. This is the same misreading as the one above, arrived at
-     * from the other side, which is why the two absences cannot be treated alike.
+     * an open file is not answered with it.
      */
     @Test
     void aQuestionAboutAFileIsNotAnsweredWithANameFromNoFile() {

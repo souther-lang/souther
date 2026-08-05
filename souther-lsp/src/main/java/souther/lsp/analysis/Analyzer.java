@@ -270,27 +270,63 @@ public final class Analyzer {
                 : compiledAgainst, clean, broken);
     }
 
+    /** Where the cursor is, in the terms the compiler answers about: a place in a file, not a line
+     * and a column that any file might have. */
+    private static SourcePos cursor(String uri, Position pos) {
+        return new SourcePos(pos.line() + 1, pos.character() + 1, uri);
+    }
+
     /** What the cursor is on, as the compiler answers it: the type a name at {@code pos} denotes,
-     * or the declaration whose own name is there. Null when the compiler cannot say — a file that
-     * does not compile, or a name in the value namespace, which is still matched by spelling. */
-    private TypeName typeUnderCursor(Compilation compilation, String uri, ModuleGraph graph,
-                                     Position pos) {
-        String text = graph.text(uri);
-        String module = text == null ? null : Compiler.moduleNameFromHeader(text);
-        if (module == null) {
-            return null;
-        }
-        SourcePos at = new SourcePos(pos.line() + 1, pos.character() + 1, uri);
-        return compilation.db().ask(new Names.TypeAt(module, at)).value();
+     * or the declaration whose own name is there. Null when the compiler cannot say — a file it
+     * could not read, or a name in the value namespace. */
+    private TypeName typeUnderCursor(Compilation compilation, String uri, Position pos) {
+        return compilation.db().ask(new Names.TypeAt(cursor(uri, pos))).value();
     }
 
     /** The range of one written name, counting only its last segment: renaming a type rewrites the
      * {@code Amount} of {@code up.Amount}, never the {@code up}. */
-    private Range writtenRange(Resolve.Denotation denotation) {
-        int line = denotation.pos().line() - 1;
-        int start = denotation.pos().column() - 1 + denotation.written().lastIndexOf('.') + 1;
+    private Range writtenRange(SourcePos pos, String written) {
+        int line = pos.line() - 1;
+        int start = pos.column() - 1 + written.lastIndexOf('.') + 1;
         return new Range(new Position(line, start),
-                new Position(line, denotation.pos().column() - 1 + denotation.written().length()));
+                new Position(line, pos.column() - 1 + written.length()));
+    }
+
+    /**
+     * The document a compiler answer is about: the file its position names, or — for a position
+     * that names none — the file of the module it was asked of. Null when neither is a document
+     * this editor has open.
+     *
+     * <p>Every answer that carries a position carries the file it was written in, and what a module
+     * is made of is not all written in one file: its own source and every attached {@code examples
+     * for} file beside it. Filing an answer under the module's own source is right exactly while a
+     * module is one file, and nothing checks that it is.
+     */
+    private String documentOf(SourcePos written, String moduleUri, ModuleGraph graph) {
+        String uri = written != null && written.sourceId() != null ? written.sourceId() : moduleUri;
+        return uri != null && graph.text(uri) != null ? uri : null;
+    }
+
+    /**
+     * Where a name the compiler answered about is written, as a place an editor can open.
+     *
+     * <p>Which file and which name is the compiler's answer; which characters spell it there is the
+     * syntax tree's, being what knows about characters. The position is the start of the form that
+     * writes the name — a binding's is the pattern that binds it — so the token is looked for from
+     * there rather than assumed to be at it.
+     */
+    private Optional<Location> nameAt(SourcePos written, String name, String moduleUri,
+                                      ModuleGraph graph) {
+        String uri = documentOf(written, moduleUri, graph);
+        if (uri == null || written == null) {
+            return Optional.empty();
+        }
+        String text = graph.text(uri);
+        LineIndex lines = new LineIndex(text);
+        SyntaxToken token = identFrom(CstParser.parse(text).root(),
+                lines.offsetOf(written.line() - 1, written.column() - 1), name);
+        return token == null ? Optional.empty()
+                : Optional.of(new Location(uri, tokenRange(lines, token)));
     }
 
     /**
@@ -310,7 +346,7 @@ public final class Analyzer {
             return List.of();
         }
         Compilation compilation = compileOf(graph);
-        String module = moduleOf(compilation, uri);
+        String module = moduleOf(compilation, graph, uri);
         if (module == null) {
             return List.of();
         }
@@ -322,23 +358,35 @@ public final class Analyzer {
         LineIndex lines = new LineIndex(graph.text(uri));
         List<CodeLens> out = new ArrayList<>();
         for (Ast.BehaviorDef behavior : written.behaviors()) {
+            // A module's declarations need not all be in this document, and a line number from
+            // another file read against this one's index points somewhere arbitrary.
+            if (!uri.equals(documentOf(behavior.pos(), null, graph))) {
+                continue;
+            }
             String title = lensTitle(compilation, module, behavior.name(), adequacy);
-            if (title != null && behavior.pos() != null) {
+            if (title != null) {
                 out.add(new CodeLens(pointRange(lines, behavior.pos()), title));
             }
         }
         return out;
     }
 
-    /** Which module this document declares, or null where it declares none — a file held out for its
-     * syntax errors, or one the compile never reached. */
-    private static String moduleOf(Compilation compilation, String uri) {
-        for (String module : compilation.modules()) {
-            if (uri.equals(compilation.sourceIdOf(module))) {
-                return module;
-            }
+    /**
+     * The module this document is part of — the one it declares, or the one an attached
+     * {@code examples for} file's rows are for.
+     *
+     * <p>The compile's answer, with the header read only for a file the compile does not have: one
+     * held out for its syntax errors, which is the one case where there is nothing to ask. Reading
+     * the header first is what left a cursor in an attached file belonging to no module and being
+     * asked nothing.
+     */
+    private String moduleOf(Compilation compilation, ModuleGraph graph, String uri) {
+        String known = compilation.moduleOf(uri);
+        if (known != null) {
+            return known;
         }
-        return null;
+        String text = graph.text(uri);
+        return text == null ? null : Compiler.moduleNameFromHeader(text);
     }
 
     /**
@@ -465,7 +513,7 @@ public final class Analyzer {
             return List.of();
         }
         Compilation compilation = compileOf(graph);
-        String module = moduleOf(compilation, uri);
+        String module = moduleOf(compilation, graph, uri);
         if (module == null) {
             return List.of();
         }
@@ -475,7 +523,9 @@ public final class Analyzer {
         }
         LineIndex lines = new LineIndex(text);
         for (Ast.BehaviorDef behavior : written.behaviors()) {
-            if (behavior.pos() == null
+            // The cursor is in this document, so a declaration written in another one is not what
+            // it is on, however the lines happen to line up.
+            if (!uri.equals(documentOf(behavior.pos(), null, graph))
                     || !overlaps(pointRange(lines, behavior.pos()), requested)) {
                 continue;
             }
@@ -546,13 +596,16 @@ public final class Analyzer {
         if (text == null) {
             return Optional.empty();
         }
-        Optional<Location> answered = declarationOf(uri, pos, graph);
-        if (answered.isPresent()) {
-            return answered;
-        }
-        Optional<Location> value = valueDeclarationOf(uri, pos, graph);
-        if (value.isPresent()) {
-            return value;
+        Compilation compilation = compileOf(graph);
+        if (resolves(compilation, uri)) {
+            TypeName type = typeUnderCursor(compilation, uri, pos);
+            if (type != null) {
+                return declarationOf(compilation, type, graph);
+            }
+            Optional<Location> value = valueDeclarationOf(compilation, uri, pos, graph);
+            if (value.isPresent()) {
+                return value;
+            }
         }
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
@@ -569,7 +622,7 @@ public final class Analyzer {
         if (targetModule == null) {
             return Optional.empty();
         }
-        String targetUri = uriOfModule(graph, targetModule);
+        String targetUri = uriOfModule(compilation, graph, targetModule);
         if (targetUri == null) {
             return Optional.empty();
         }
@@ -595,9 +648,19 @@ public final class Analyzer {
         if (text == null) {
             return List.of();
         }
-        List<Location> answered = usesOf(uri, pos, graph, includeDeclaration);
-        if (answered != null) {
-            return answered;
+        Compilation compilation = compileOf(graph);
+        if (resolves(compilation, uri)) {
+            List<Location> uses = usesOf(compilation, uri, pos, graph, includeDeclaration);
+            if (uses != null) {
+                return uses;
+            }
+            List<Location> values = valueUsesOf(compilation, uri, pos, graph, includeDeclaration);
+            if (!values.isEmpty()) {
+                return values;
+            }
+            // Nothing found is not nothing here: the resolve pass records the value names written
+            // in a body, and a composition's stages and a declaration's own name are not those, so
+            // the cursor may be on a name it never saw. Matching the spelling still answers those.
         }
         SyntaxNode root = CstParser.parse(text).root();
         SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
@@ -606,11 +669,11 @@ public final class Analyzer {
         }
         String name = ident.text();
         String definingModule = declaringDef(root, name) != null
-                ? Compiler.moduleNameFromHeader(text) : importedFrom(text, name);
+                ? moduleOf(compilation, graph, uri) : importedFrom(text, name);
         if (definingModule == null) {
             return List.of();
         }
-        String definingUri = uriOfModule(graph, definingModule);
+        String definingUri = uriOfModule(compilation, graph, definingModule);
         if (definingUri == null) {
             return List.of();
         }
@@ -619,7 +682,7 @@ public final class Analyzer {
         List<Location> out = new ArrayList<>();
         for (String u : graph.uris()) {
             String t = graph.text(u);
-            boolean owns = definingModule.equals(Compiler.moduleNameFromHeader(t));
+            boolean owns = definingModule.equals(moduleOf(compilation, graph, u));
             if (!owns && !definingModule.equals(importedFrom(t, name))) {
                 continue;   // this file neither defines nor imports the symbol
             }
@@ -650,9 +713,25 @@ public final class Analyzer {
         // to be answered the same way: renaming from a qualified use renames the module the
         // reference names, and matching the spelling here would edit this module's own `exposing`
         // instead — leaving both modules uncompilable.
-        TypeName target = typeUnderCursor(compileOf(graph), uri, graph, pos);
-        if (target != null) {
-            addExposingAndImportSites(target.name(), target.module(), graph, byUri);
+        Compilation compilation = compileOf(graph);
+        TypeName type = typeUnderCursor(compilation, uri, pos);
+        if (type != null) {
+            addExposingAndImportSites(compilation, type.name(), type.module(), graph, byUri);
+            return byUri;
+        }
+        ValueName value = valueUnderCursor(compilation, uri, pos);
+        if (value != null) {
+            String declaring = switch (value) {
+                case ValueName.Helper h -> h.module();
+                case ValueName.Behavior b -> b.module();
+                // a local is named where it is bound and nowhere else; the library and the language
+                // are not this workspace's to rename
+                case ValueName.Local _, ValueName.Stdlib _, ValueName.OfType _,
+                        ValueName.Builtin _, ValueName.Unresolved _ -> null;
+            };
+            if (declaring != null) {
+                addExposingAndImportSites(compilation, value.name(), declaring, graph, byUri);
+            }
             return byUri;
         }
         String text = graph.text(uri);
@@ -661,9 +740,9 @@ public final class Analyzer {
         if (ident != null) {
             String name = ident.text();
             String definingModule = declaringDef(root, name) != null
-                    ? Compiler.moduleNameFromHeader(text) : importedFrom(text, name);
+                    ? moduleOf(compilation, graph, uri) : importedFrom(text, name);
             if (definingModule != null) {
-                addExposingAndImportSites(name, definingModule, graph, byUri);
+                addExposingAndImportSites(compilation, name, definingModule, graph, byUri);
             }
         }
         return byUri;
@@ -671,15 +750,9 @@ public final class Analyzer {
 
     /** What the cursor is on in the value namespace, as the compiler answers it, or null when
      * nothing there is a name used as a value. */
-    private ValueName valueUnderCursor(Compilation compilation, String uri, ModuleGraph graph,
-                                       Position pos) {
-        String text = graph.text(uri);
-        String module = text == null ? null : Compiler.moduleNameFromHeader(text);
-        if (module == null) {
-            return null;
-        }
-        SourcePos at = new SourcePos(pos.line() + 1, pos.character() + 1, uri);
-        Resolve.ValueUse use = compilation.db().ask(new Names.ValueDenotedAt(module, at)).value();
+    private ValueName valueUnderCursor(Compilation compilation, String uri, Position pos) {
+        Resolve.ValueUse use =
+                compilation.db().ask(new Names.ValueDenotedAt(cursor(uri, pos))).value();
         return use == null ? null : use.denotes();
     }
 
@@ -690,38 +763,25 @@ public final class Analyzer {
      * <p>A local was out of reach while this was matched by spelling — one spelling may be bound in
      * several bodies, and nothing said which binding a use belonged to. Resolution says.
      */
-    private Optional<Location> valueDeclarationOf(String uri, Position pos, ModuleGraph graph) {
-        Compilation compilation = compileOf(graph);
-        ValueName target = valueUnderCursor(compilation, uri, graph, pos);
+    private Optional<Location> valueDeclarationOf(Compilation compilation, String uri, Position pos,
+                                                  ModuleGraph graph) {
+        ValueName target = valueUnderCursor(compilation, uri, pos);
         if (target == null) {
             return Optional.empty();
         }
+        return valueDeclarationOf(compilation, target, uri, graph);
+    }
+
+    private Optional<Location> valueDeclarationOf(Compilation compilation, ValueName target,
+                                                  String uri, ModuleGraph graph) {
         SourcePos at = compilation.db().ask(new Names.ValueDeclaredAt(target)).value();
-        if (at == null) {
-            return Optional.empty();
-        }
-        // Where the declaration was written is what the declaration's position says. Reading it off
-        // the module instead is right only while a module is one file, and a value declared in an
-        // attached `examples for` file is one the module has and that file wrote.
-        String targetUri = at.sourceId() != null ? at.sourceId() : switch (target) {
+        return nameAt(at, target.name(), switch (target) {
             case ValueName.Local _ -> uri;   // bound in the body the cursor is in
             case ValueName.Helper h -> compilation.sourceIdOf(h.module());
             case ValueName.Behavior b -> compilation.sourceIdOf(b.module());
             case ValueName.Stdlib _, ValueName.OfType _, ValueName.Builtin _,
                     ValueName.Unresolved _ -> null;
-        };
-        String targetText = targetUri == null ? null : graph.text(targetUri);
-        if (targetText == null) {
-            return Optional.empty();
-        }
-        // Which name, and where it was written, is the compiler's; which characters spell it there
-        // is the syntax tree's — the declaration's position is its first keyword, and a binding's is
-        // the form that binds it.
-        LineIndex lines = new LineIndex(targetText);
-        SyntaxToken name = identFrom(CstParser.parse(targetText).root(),
-                lines.offsetOf(at.line() - 1, at.column() - 1), target.name());
-        return name == null ? Optional.empty()
-                : Optional.of(new Location(targetUri, tokenRange(lines, name)));
+        }, graph);
     }
 
     /** The first identifier spelled {@code name} at or after {@code offset} — the name token of the
@@ -745,56 +805,85 @@ public final class Analyzer {
     }
 
     /**
-     * Where the type under the cursor is declared, as the compiler answers it. Empty when it cannot
-     * say: the workspace does not compile, or the cursor is on a name in the value namespace, which
-     * is still matched by spelling below.
+     * Whether the compile read this document and answered about the names in it.
+     *
+     * <p>This is what decides whether an unanswered question is a question with no answer or a
+     * question nothing could be asked of. Where the compile read the file, its silence is the
+     * answer: nothing is named under the cursor. Where it could not — a file with a syntax error is
+     * held out of the module set, and a module whose names would not resolve has no answers to give
+     * — matching the spelling is all there is, and it goes on being what an author gets while a file
+     * is half-typed.
      */
-    private Optional<Location> declarationOf(String uri, Position pos, ModuleGraph graph) {
-        Compilation compilation = compileOf(graph);
-        TypeName target = typeUnderCursor(compilation, uri, graph, pos);
-        if (target == null) {
-            return Optional.empty();
-        }
-        String targetUri = compilation.sourceIdOf(target.module());
-        String targetText = targetUri == null ? null : graph.text(targetUri);
-        if (targetText == null) {
-            return Optional.empty();
-        }
-        // Which module and which name is the compiler's answer — the part a spelling match gets
-        // wrong. Where in that file the name is written is the syntax tree's, which is what knows
-        // about characters; a module declares a name once, so there is nothing to choose between.
-        SyntaxNode def = declaringDef(CstParser.parse(targetText).root(), target.name());
-        SyntaxToken name = def == null ? null : nameToken(def);
-        return name == null ? Optional.empty()
-                : Optional.of(new Location(targetUri,
-                        tokenRange(new LineIndex(targetText), name)));
+    private boolean resolves(Compilation compilation, String uri) {
+        String module = compilation.moduleOf(uri);
+        return module != null && compilation.db().ask(new Names.Resolution(module)).present();
+    }
+
+    /** Where a type is declared, as the compiler answers it. */
+    private Optional<Location> declarationOf(Compilation compilation, TypeName target,
+                                             ModuleGraph graph) {
+        // Which module, which name and where it was written is the compiler's answer — the part a
+        // spelling match gets wrong.
+        SourcePos at = compilation.db().ask(new Names.DeclaredAt(target)).value();
+        return nameAt(at, target.name(), compilation.sourceIdOf(target.module()), graph);
     }
 
     /**
-     * Every place the type under the cursor is named, as the compiler answers it, or null when it
-     * cannot say. A name resolves to one declaration wherever it is written, so a module that
-     * declares its own type of the same spelling is not swept up, and a qualified reference to
-     * another module's is.
+     * Every place the type under the cursor is named, as the compiler answers it, or null when the
+     * cursor is not on a type. A name resolves to one declaration wherever it is written, so a
+     * module that declares its own type of the same spelling is not swept up, and a qualified
+     * reference to another module's is.
      */
-    private List<Location> usesOf(String uri, Position pos, ModuleGraph graph,
-                                  boolean includeDeclaration) {
-        Compilation compilation = compileOf(graph);
-        TypeName target = typeUnderCursor(compilation, uri, graph, pos);
+    private List<Location> usesOf(Compilation compilation, String uri, Position pos,
+                                  ModuleGraph graph, boolean includeDeclaration) {
+        TypeName target = typeUnderCursor(compilation, uri, pos);
         if (target == null) {
             return null;
         }
         List<Location> out = new ArrayList<>();
         if (includeDeclaration) {
-            declarationOf(uri, pos, graph).ifPresent(out::add);
+            declarationOf(compilation, target, graph).ifPresent(out::add);
         }
         for (String module : compilation.modules()) {
             String moduleUri = compilation.sourceIdOf(module);
-            if (moduleUri == null || graph.text(moduleUri) == null) {
-                continue;
-            }
             for (Resolve.Denotation use
                     : compilation.db().ask(new Names.UsesOf(module, target)).value()) {
-                out.add(new Location(moduleUri, writtenRange(use)));
+                String at = documentOf(use.pos(), moduleUri, graph);
+                if (at != null) {
+                    out.add(new Location(at, writtenRange(use.pos(), use.written())));
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Every place the value under the cursor is named, as the compiler answers it. Empty when the
+     * cursor is not on one.
+     *
+     * <p>{@link #usesOf} for the value namespace, and the reason a local can be asked about at all:
+     * a use denotes a binding, so the uses of one body's {@code x} are not another's. Matching the
+     * spelling could only ever answer about top-level names, and answered about the wrong one where
+     * two modules spelled a name alike.
+     */
+    private List<Location> valueUsesOf(Compilation compilation, String uri, Position pos,
+                                       ModuleGraph graph, boolean includeDeclaration) {
+        ValueName target = valueUnderCursor(compilation, uri, pos);
+        if (target == null) {
+            return List.of();
+        }
+        List<Location> out = new ArrayList<>();
+        if (includeDeclaration) {
+            valueDeclarationOf(compilation, target, uri, graph).ifPresent(out::add);
+        }
+        for (String module : compilation.modules()) {
+            String moduleUri = compilation.sourceIdOf(module);
+            for (Resolve.ValueUse use
+                    : compilation.db().ask(new Names.ValueUsesOf(module, target)).value()) {
+                String at = documentOf(use.pos(), moduleUri, graph);
+                if (at != null) {
+                    out.add(new Location(at, writtenRange(use.pos(), use.written())));
+                }
             }
         }
         return out;
@@ -803,13 +892,14 @@ public final class Analyzer {
     /** Adds the {@code exposing ( name )} occurrence in the module that defines {@code name}, and each
      * {@code import <definingModule> ( name )} occurrence in the modules that import it — the binding
      * sites find-references skips but rename must carry along. */
-    private void addExposingAndImportSites(String name, String definingModule, ModuleGraph graph,
+    private void addExposingAndImportSites(Compilation compilation, String name,
+                                           String definingModule, ModuleGraph graph,
                                            Map<String, List<Range>> byUri) {
         for (String u : graph.uris()) {
             String t = graph.text(u);
             SyntaxNode root = CstParser.parse(t).root();
             LineIndex lines = new LineIndex(t);
-            boolean owns = definingModule.equals(Compiler.moduleNameFromHeader(t));
+            boolean owns = definingModule.equals(moduleOf(compilation, graph, u));
             for (SyntaxNode top : root.childNodes()) {
                 if (top.kind() == SyntaxKind.MODULE_HEADER && owns) {
                     top.child(SyntaxKind.EXPOSING_CLAUSE).ifPresent(clause -> {
@@ -1074,8 +1164,14 @@ public final class Analyzer {
         return null;
     }
 
-    /** The document URI of the module declared with {@code moduleName}, or {@code null} if none. */
-    private String uriOfModule(ModuleGraph graph, String moduleName) {
+    /** The document the module {@code moduleName} is declared in, or {@code null} if none — the
+     * compile's answer, with the headers read only for a module whose file the compile could not
+     * read. */
+    private String uriOfModule(Compilation compilation, ModuleGraph graph, String moduleName) {
+        String declared = compilation.sourceIdOf(moduleName);
+        if (declared != null && graph.text(declared) != null) {
+            return declared;
+        }
         for (String uri : graph.uris()) {
             if (moduleName.equals(Compiler.moduleNameFromHeader(graph.text(uri)))) {
                 return uri;
@@ -1129,11 +1225,11 @@ public final class Analyzer {
         }
         SyntaxNode data = enclosing(root, offset, SyntaxKind.DATA_DEF);
         SyntaxToken name = data == null ? null : nameToken(data);
-        String module = Compiler.moduleNameFromHeader(text);
+        Compilation compilation = compileOf(graph);
+        String module = moduleOf(compilation, graph, uri);
         if (name == null || module == null) {
             return Optional.empty();
         }
-        Compilation compilation = compileOf(graph);
         Map<TypeName, List<ClauseDischarge>> byType =
                 compilation.db().ask(new Shapes.InvariantCapabilities(module)).value();
         List<ClauseDischarge> clauses = byType == null

@@ -22,6 +22,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -939,21 +940,39 @@ public final class Names {
     }
 
     /**
-     * What the name written at {@code offset} in a module's source denotes, or absent when nothing
-     * there is a name of a declared type.
+     * The module a question about a place is a question about, or null when this compilation does
+     * not have the file — including a question that names no file at all, which names no place and
+     * so has no module to be asked of.
+     */
+    private static String moduleAt(Db db, SourcePos at) {
+        return at == null || at.sourceId() == null
+                ? null : db.ask(new Front.ModuleOf(at.sourceId())).value();
+    }
+
+    /**
+     * What the name written at {@code at} denotes, or absent when nothing there is a name of a
+     * declared type.
      *
      * <p>This is what an editor is asking when the cursor is on an identifier. It reads the answers
      * the resolve pass already gave, so a qualified reference names the module it names and not
      * whatever this module happens to declare by the same spelling.
+     *
+     * <p>Asked about a place, not about a module and a place. Which module answers is the file's to
+     * settle — an attached {@code examples for} file declares none and is part of one all the same,
+     * and a caller that had to name the module first was a caller that could name the wrong one.
      */
-    public record DenotedAt(String name, SourcePos at) implements Key<Resolve.Denotation> {
+    public record DenotedAt(SourcePos at) implements Key<Resolve.Denotation> {
         @Override
-        public String module() {
-            return name;
+        public String sourceId() {
+            return at == null ? null : at.sourceId();
         }
 
         @Override
         public Answer<Resolve.Denotation> compute(Db db) {
+            String name = moduleAt(db, at);
+            if (name == null) {
+                return Answer.absent();
+            }
             Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
             if (!resolution.present()) {
                 return Answer.absent();
@@ -974,29 +993,33 @@ public final class Names {
     }
 
     /**
-     * The type the cursor is on at {@code offset}: the one a name there denotes, or — when the
-     * cursor is on a declaration's own name — that declaration.
+     * The type the cursor is on at {@code at}: the one a name there denotes, or — when the cursor is
+     * on a declaration's own name — that declaration.
      *
      * <p>One question, so an editor's go-to-definition, find-references and rename all agree about
      * what the cursor is on. They used to each decide for themselves, by spelling.
      */
-    public record TypeAt(String name, SourcePos at) implements Key<TypeName> {
+    public record TypeAt(SourcePos at) implements Key<TypeName> {
         @Override
-        public String module() {
-            return name;
+        public String sourceId() {
+            return at == null ? null : at.sourceId();
         }
 
         @Override
         public Answer<TypeName> compute(Db db) {
+            String name = moduleAt(db, at);
+            if (name == null) {
+                return Answer.absent();
+            }
             Answer<Map<String, Ast.Def>> defs = db.ask(new Declarations(name));
             if (defs.present()) {
                 for (Ast.Def def : defs.value().values()) {
-                    if (spans(def.pos(), def.name(), at)) {
+                    if (spans(def.namePos(), def.name(), at)) {
                         return Answer.of(new TypeName(name, def.name()));
                     }
                 }
             }
-            Resolve.Denotation denoted = db.ask(new DenotedAt(name, at)).value();
+            Resolve.Denotation denoted = db.ask(new DenotedAt(at)).value();
             return denoted == null ? Answer.absent() : Answer.of(denoted.denotes());
         }
     }
@@ -1031,14 +1054,18 @@ public final class Names {
      * the answer resolution already gave, so a binding is the binding it is and not whatever else
      * in the module happens to be spelled the same.
      */
-    public record ValueDenotedAt(String name, SourcePos at) implements Key<Resolve.ValueUse> {
+    public record ValueDenotedAt(SourcePos at) implements Key<Resolve.ValueUse> {
         @Override
-        public String module() {
-            return name;
+        public String sourceId() {
+            return at == null ? null : at.sourceId();
         }
 
         @Override
         public Answer<Resolve.ValueUse> compute(Db db) {
+            String name = moduleAt(db, at);
+            if (name == null) {
+                return Answer.absent();
+            }
             Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
             if (!resolution.present()) {
                 return Answer.absent();
@@ -1049,6 +1076,35 @@ public final class Names {
                 }
             }
             return Answer.absent();
+        }
+    }
+
+    /**
+     * Every place a module names {@code denoted} as a value, wherever it was declared.
+     *
+     * <p>{@link UsesOf} for the value namespace. A local is answered here as readily as a top-level
+     * name: what a use denotes is a binding and not a spelling, so the uses of one {@code let}'s
+     * {@code x} are not the uses of another's.
+     */
+    public record ValueUsesOf(String name, ValueName denoted) implements Key<List<Resolve.ValueUse>> {
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<List<Resolve.ValueUse>> compute(Db db) {
+            Answer<Resolve.Resolved> resolution = db.ask(new Resolution(name));
+            if (!resolution.present()) {
+                return Answer.of(List.of());
+            }
+            List<Resolve.ValueUse> uses = new ArrayList<>();
+            for (Resolve.ValueUse use : resolution.value().values()) {
+                if (denoted.equals(use.denotes())) {
+                    uses.add(use);
+                }
+            }
+            return Answer.of(List.copyOf(uses));
         }
     }
 
@@ -1114,27 +1170,15 @@ public final class Names {
      * came first. What was under the cursor and what the answer described were then two different
      * names.
      *
-     * <p>Where the question names no source — a caller with only a coordinate to give — the
-     * coordinates decide, which is what every such caller got before.
+     * <p>A question that names no file names no place either. Every question about a cursor now
+     * arrives as one, because the module it is answered about is read off the file it names, so
+     * there is no longer a caller with only a line and a column to give.
      */
     static boolean spans(SourcePos start, String written, SourcePos at) {
         return start != null && at != null && start.line() == at.line()
-                && sameSource(start, at)
+                && Objects.equals(at.sourceId(), start.sourceId())
                 && at.column() >= start.column()
                 && at.column() <= start.column() + written.length();
-    }
-
-    /**
-     * Whether a name written at {@code start} is in the file the question at {@code at} is about.
-     *
-     * <p>The two absences are not the same absence, so this is not symmetric. A question that names
-     * no source is a caller with only a coordinate to give, and is answered by coordinate. A name
-     * that names none was read from no source of this compile, and is under nothing a reader has
-     * open — answering with it would be the thing this is here to stop, arrived at from the other
-     * side.
-     */
-    private static boolean sameSource(SourcePos start, SourcePos at) {
-        return at.sourceId() == null || at.sourceId().equals(start.sourceId());
     }
     public record DeclaredAt(TypeName denoted) implements Key<SourcePos> {
         @Override
@@ -1148,8 +1192,12 @@ public final class Names {
             if (!defs.present()) {
                 return Answer.absent();
             }
+            // Where the name is written, not where the declaration starts: a reader sent to a
+            // declaration is being sent to the name it declares, and the keyword in front of it is
+            // not what they asked about.
             Ast.Def def = defs.value().get(denoted.name());
-            return def == null || def.pos() == null ? Answer.absent() : Answer.of(def.pos());
+            return def == null || def.namePos() == null
+                    ? Answer.absent() : Answer.of(def.namePos());
         }
     }
 

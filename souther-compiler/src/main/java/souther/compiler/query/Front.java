@@ -603,6 +603,45 @@ public final class Front {
     }
 
     /**
+     * The module a source is part of: the one it declares, or — for an {@code examples for} file —
+     * the one its rows are for.
+     *
+     * <p>One question, because a reader that has a file and wants to ask about the names in it needs
+     * both answers and has no way to tell in advance which it will get. Asking it of the header
+     * instead gives the first only, and a file that declares no module of its own then belongs to
+     * nothing and is asked nothing.
+     *
+     * <p>No reports of its own: what is wrong with the source is already said by {@link Declares}
+     * and {@link AttachedTo}, and saying it a second time here would put two markers on one line.
+     */
+    public record ModuleOf(String id) implements Key<String> {
+        @Override
+        public String sourceId() {
+            return id;
+        }
+
+        @Override
+        public Answer<String> compute(Db db) {
+            Layout.Of layout = db.ask(new Layout()).value();
+            if (layout == null) {
+                return Answer.absent();
+            }
+            String attached = layout.exampleFileTargets().get(id);
+            if (attached != null) {
+                return layout.idOfModule().containsKey(attached)
+                        ? Answer.of(attached)
+                        : Answer.absent();   // names a module this compilation does not have
+            }
+            for (Map.Entry<String, String> declared : layout.idOfModule().entrySet()) {
+                if (declared.getValue().equals(id)) {
+                    return Answer.of(declared.getKey());
+                }
+            }
+            return Answer.absent();
+        }
+    }
+
+    /**
      * A source module that also exists on the path. Which one an import means would be decided by
      * nothing the author wrote, and the two would be different types under one name — the same
      * reason two sources may not share a name.
