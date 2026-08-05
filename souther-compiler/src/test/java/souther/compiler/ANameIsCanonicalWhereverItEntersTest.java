@@ -20,13 +20,18 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * <p>Two spellings Unicode calls canonically equivalent are one text, and a name is compared by its
  * code units wherever it is looked up — a declaration against a reference, a case against a wire tag,
  * a `--behavior` argument against what the module declares. So the two have to be one name, and this
- * walks the doors rather than the code: an identifier, a type variable, the module name a header-less
- * source is given, the file stem the CLI derives one from, and the identifiers an invocation names.
+ * walks the doors rather than the code.
  *
  * <p>They come through one function ({@code Reserved.name}) because doing it per door is how this
  * went wrong twice — once with the wire tag canonicalized and the name it came from not, and once
- * with the identifier canonicalized and four other doors not. A door added later that does not use it
- * fails here.
+ * with the identifier canonicalized and four other doors not.
+ *
+ * <p>What this covers: an identifier, a type variable, the module name a header-less source is given,
+ * and the file stem the CLI derives one from. What it does not: the identifiers an invocation names
+ * on the command line ({@code run --behavior}, {@code examples --module}, {@code examples
+ * --behavior}). Those go through the same function and are one line each, but nothing here drives
+ * them, so a door that stopped using it would not be caught. Said rather than implied, because a
+ * comment claiming a door is walked is worse than no comment at all.
  */
 class ANameIsCanonicalWhereverItEntersTest {
 
