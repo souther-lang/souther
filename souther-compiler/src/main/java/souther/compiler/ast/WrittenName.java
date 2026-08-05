@@ -132,14 +132,27 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
      * is another, and only the first is somewhere an author's caret means the name.
      */
     public boolean covers(SourcePos at) {
+        return partAt(at) >= 0;
+    }
+
+    /**
+     * Which part of this name a cursor at {@code at} is on, counting from 0, or {@code -1} where it
+     * is on none.
+     *
+     * <p>What {@link #covers} answers, for a caller that also has to say which token. Reading the
+     * two off one walk is the point: a caller that worked out the part for itself would be a second
+     * place where the rule about the ends lives, and this is the third round of review on that rule
+     * being in two places.
+     */
+    public int partAt(SourcePos at) {
         for (int i = 0; i < segments.size(); i++) {
             Region segment = segments.get(i);
             boolean lastPart = i == segments.size() - 1;
             if (lastPart ? containsCharacterOrEnd(segment, at) : containsCharacter(segment, at)) {
-                return true;
+                return i;
             }
         }
-        return false;
+        return -1;
     }
 
     /**

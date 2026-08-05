@@ -621,7 +621,7 @@ public final class Analyzer {
         }
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, lines.offsetOf(pos.line(), pos.character()));
+        SyntaxToken ident = identAt(root, lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return Optional.empty();
         }
@@ -680,7 +680,8 @@ public final class Analyzer {
             // the cursor may be on a name it never saw. Matching the spelling still answers those.
         }
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        LineIndex lines = new LineIndex(text);
+        SyntaxToken ident = identAt(root, lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return List.of();
         }
@@ -732,7 +733,7 @@ public final class Analyzer {
             SyntaxNode root = CstParser.parse(graph.text(e.getKey())).root();
             LineIndex lines = new LineIndex(graph.text(e.getKey()));
             for (Range range : e.getValue()) {
-                String field = fieldTakenAsName(root,
+                String field = fieldTakenAsName(root, lines,
                         lines.offsetOf(range.start().line(), range.start().character()));
                 edits.add(new TextEdit(range,
                         field == null ? newName : field + " = " + newName));
@@ -749,8 +750,8 @@ public final class Analyzer {
      * <p>Which characters are there is the syntax tree's question, being what knows about
      * characters, and this is the one place where what a rename writes is not the name it was given.
      */
-    private String fieldTakenAsName(SyntaxNode root, int offset) {
-        SyntaxToken token = identAt(root, offset);
+    private String fieldTakenAsName(SyntaxNode root, LineIndex lines, int offset) {
+        SyntaxToken token = identAt(root, lines, offset);
         SyntaxNode parent = token == null ? null : token.parent();
         if (parent == null || token.start() != offset) {
             return null;
@@ -840,7 +841,8 @@ public final class Analyzer {
         }
         String text = graph.text(uri);
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, new LineIndex(text).offsetOf(pos.line(), pos.character()));
+        LineIndex lines = new LineIndex(text);
+        SyntaxToken ident = identAt(root, lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident != null) {
             String name = nameOf(ident);
             String definingModule = declaringDef(root, name) != null
@@ -1317,7 +1319,7 @@ public final class Analyzer {
     public Optional<Range> definition(String text, Position pos) {
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
-        SyntaxToken ident = identAt(root, lines.offsetOf(pos.line(), pos.character()));
+        SyntaxToken ident = identAt(root, lines, lines.offsetOf(pos.line(), pos.character()));
         if (ident == null) {
             return Optional.empty();
         }
@@ -1422,7 +1424,7 @@ public final class Analyzer {
         LineIndex lines = new LineIndex(text);
         SyntaxNode root = CstParser.parse(text).root();
         int offset = lines.offsetOf(pos.line(), pos.character());
-        SyntaxToken ident = identAt(root, offset);
+        SyntaxToken ident = identAt(root, lines, offset);
         if (ident == null) {
             return Optional.empty();
         }
@@ -1466,46 +1468,86 @@ public final class Analyzer {
     }
 
     /**
-     * The identifier the cursor at {@code offset} is on, descending only into the node that holds
-     * it.
+     * The identifier a cursor at {@code offset} is on.
      *
-     * <p>Asked twice. First for the identifier the cursor is inside, which is the answer wherever
-     * there is one. Then, only if there is none, for one that ends exactly there — where a caret
-     * rests when its author has just typed the name, and where the compiler's own answer already
-     * puts them, so the two do not differ over whether the rest of the file happens to parse.
+     * <p>Read as the name it spells and asked of that name. The dotted run of identifiers around the
+     * cursor is one written name, and {@link WrittenName#partAt} says which of its parts a cursor is
+     * on — including where it stops being on one, which is a rule about ends that belongs in one
+     * place. This path had a rule of its own twice and it disagreed with the compiler's both times:
+     * once by stopping a character early at the end of a name, once by counting the character after
+     * a qualifier.
      *
-     * <p>The order is the one that is right rather than one anything here distinguishes: no two
-     * identifiers can touch, so nothing built the second question could steal from the first. It is
-     * written this way round because a cursor is inside something before it is beside it.
+     * <p>What it cannot do is tell {@code up.Amount} from {@code x.field}: one is a name and the
+     * other is a field taken off a value, and which it is has to be resolved, which is the thing
+     * that is missing whenever this runs. So a dotted run is read as a name, and the boundary inside
+     * one is a separator. Said rather than left to be found: this is an approximation the syntax
+     * forces, not a second opinion about where a name ends.
      */
-    private SyntaxToken identAt(SyntaxNode node, int offset) {
-        SyntaxToken inside = identAt(node, offset, false);
-        return inside != null ? inside : identAt(node, offset, true);
+    private SyntaxToken identAt(SyntaxNode root, LineIndex lines, int offset) {
+        List<SyntaxToken> run = dottedRun(root, offset);
+        if (run.isEmpty()) {
+            return null;
+        }
+        WrittenName name = spelledBy(run.get(0), lines);
+        for (int i = 1; i < run.size(); i++) {
+            name = name.then(spelledBy(run.get(i), lines));
+        }
+        int part = name.partAt(lines.posOf(offset));
+        return part < 0 ? null : run.get(part);
     }
 
-    private SyntaxToken identAt(SyntaxNode node, int offset, boolean endsThere) {
-        for (SyntaxElement e : node.children()) {
-            if (e instanceof SyntaxNode child) {
-                if (offset >= child.start() && reaches(offset, child.end(), endsThere)) {
-                    SyntaxToken found = identAt(child, offset, endsThere);
-                    if (found != null) {
-                        return found;
-                    }
-                }
-            } else {
-                SyntaxToken t = (SyntaxToken) e;
-                if (t.kind() == SyntaxKind.IDENT && offset >= t.start()
-                        && reaches(offset, t.end(), endsThere)) {
-                    return t;
-                }
+    /** One token's name, where it is written. */
+    private static WrittenName spelledBy(SyntaxToken token, LineIndex lines) {
+        return WrittenName.of(token.text(), lines.posOf(token.start()));
+    }
+
+    /**
+     * The identifiers of the dotted run the cursor is at, in order, or none where it is at no
+     * identifier at all.
+     *
+     * <p>Generous about the ends, because what a cursor at a boundary means is the name's to say
+     * and not this walk's. Two identifiers cannot touch — the grammar puts something between them —
+     * so at most one answers.
+     */
+    private List<SyntaxToken> dottedRun(SyntaxNode root, int offset) {
+        List<SyntaxToken> tokens = new ArrayList<>();
+        meaningfulTokens(root, tokens);
+        int at = -1;
+        for (int i = 0; i < tokens.size() && at < 0; i++) {
+            SyntaxToken t = tokens.get(i);
+            if (t.kind() == SyntaxKind.IDENT && offset >= t.start() && offset <= t.end()) {
+                at = i;
             }
         }
-        return null;
+        if (at < 0) {
+            return List.of();
+        }
+        int first = at;
+        while (first >= 2 && tokens.get(first - 1).kind() == SyntaxKind.DOT
+                && tokens.get(first - 2).kind() == SyntaxKind.IDENT) {
+            first -= 2;
+        }
+        int last = at;
+        while (last + 2 < tokens.size() && tokens.get(last + 1).kind() == SyntaxKind.DOT
+                && tokens.get(last + 2).kind() == SyntaxKind.IDENT) {
+            last += 2;
+        }
+        List<SyntaxToken> run = new ArrayList<>();
+        for (int i = first; i <= last; i += 2) {
+            run.add(tokens.get(i));
+        }
+        return run;
     }
 
-    /** Whether {@code offset} is before {@code end}, or at it when the boundary counts. */
-    private static boolean reaches(int offset, int end, boolean endsThere) {
-        return endsThere ? offset <= end : offset < end;
+    /** Every token of {@code node} that is not trivia, in the order they are written. */
+    private void meaningfulTokens(SyntaxNode node, List<SyntaxToken> out) {
+        for (SyntaxElement e : node.children()) {
+            if (e instanceof SyntaxNode child) {
+                meaningfulTokens(child, out);
+            } else if (e instanceof SyntaxToken t && !t.isTrivia()) {
+                out.add(t);
+            }
+        }
     }
 
     private SyntaxToken firstMeaningfulToken(SyntaxNode node) {

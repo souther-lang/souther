@@ -94,6 +94,35 @@ class NavigationSurvivesAMistakeTest {
                 .isPresent(), "the caret rests just past `D`");
     }
 
+    /**
+     * The character after a qualifier is not on the name in a file the compiler could not read
+     * either.
+     *
+     * <p>The fixture declares a `up` of its own, so a wrong answer here is a definition jump to an
+     * unrelated local type and a rename of it across the workspace — not an empty result that any
+     * mistake would produce.
+     */
+    @Test
+    void theCharacterAfterAQualifierIsOnNoNameWhileTheFileIsBeingTyped() {
+        for (String reference : List.of("up.Amount", "up . Amount")) {
+            String broken = "module here\n\ndata up = Int\n\ndata Box = { value: " + reference
+                    + " }\n\nlet unfinished (\n";
+            Map<String, String> sources = new LinkedHashMap<>();
+            sources.put("file:///here.sou", broken);
+            ModuleGraph graph = ModuleGraph.of(sources);
+            int start = broken.indexOf(reference)
+                    - broken.lastIndexOf('\n', broken.indexOf(reference)) - 1;
+            Position afterTheQualifier = new Position(4, start + "up".length());
+
+            assertTrue(new Analyzer().definition("file:///here.sou", afterTheQualifier, graph)
+                            .isEmpty(),
+                    "`" + reference + "`: the character after `up` separates the parts");
+            assertTrue(new Analyzer()
+                            .renameEdits("file:///here.sou", afterTheQualifier, graph, "R").isEmpty(),
+                    "`" + reference + "`: a rename started where no name is written");
+        }
+    }
+
     /** {@code edits} written back, latest first so an earlier one does not move a later one. */
     private static String applied(String text, List<TextEdit> edits) {
         StringBuilder sb = new StringBuilder(text);
