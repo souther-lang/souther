@@ -202,7 +202,10 @@ public final class Runner {
         return String.join(", ", names);
     }
 
-    private static Ast.BehaviorDef resolveBehavior(Ast.Module module, String requested) {
+    private static Ast.BehaviorDef resolveBehavior(Ast.Module module, String requestedSpelling) {
+        // What `--behavior` was given is a name arriving from outside, and it is looked up
+        // against names the source settled.
+        String requested = Reserved.name(requestedSpelling);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Ast.FnDef::name).collect(Collectors.toSet());
         Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
@@ -574,7 +577,10 @@ public final class Runner {
     static String moduleName(Path file) {
         String fileName = file.getFileName().toString();
         int dot = fileName.indexOf('.');
-        String stem = dot < 0 ? fileName : fileName.substring(0, dot);
+        // Canonicalized before it is judged, not after: a file delivered by macOS carries its name
+        // decomposed, and a combining mark is not a letter or a digit, so the same file would be
+        // `main` on one machine and its own name on another.
+        String stem = Reserved.name(dot < 0 ? fileName : fileName.substring(0, dot));
         if (stem.isEmpty() || !Character.isLetter(stem.charAt(0))) {
             return "main";
         }

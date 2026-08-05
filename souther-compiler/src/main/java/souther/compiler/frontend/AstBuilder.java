@@ -61,7 +61,10 @@ public final class AstBuilder {
 
     // --- module ---
 
-    private Ast.Module module(SyntaxNode file, String defaultModuleName) {
+    private Ast.Module module(SyntaxNode file, String defaultModuleNameSpelling) {
+        // A header-less source is named by its caller — the CLI's file stem, an
+        // annotation processor, a test — which is a name arriving from outside.
+        String defaultModuleName = souther.compiler.Reserved.name(defaultModuleNameSpelling);
         Optional<SyntaxNode> exampleFile = file.child(SyntaxKind.EXAMPLES_FILE_HEADER);
         if (exampleFile.isPresent()) {
             return exampleFileModule(file, exampleFile.get());
@@ -603,7 +606,7 @@ public final class AstBuilder {
         }
         Optional<SyntaxToken> typevar = n.token(SyntaxKind.TYPEVAR);
         if (typevar.isPresent()) {
-            String v = typevar.get().text();
+            String v = souther.compiler.Reserved.name(typevar.get().text());
             if (!isReservedNamespace(moduleName)) {
                 throw error(pos(n), "parse.typevar.core",
                         "type variable `" + v + "` is only allowed in the core (the reserved `souther`"
@@ -1315,7 +1318,7 @@ public final class AstBuilder {
      * literal is not: it is parsed, not compared.
      */
     private static String ident(SyntaxToken t) {
-        return java.text.Normalizer.normalize(t.text(), java.text.Normalizer.Form.NFC);
+        return souther.compiler.Reserved.name(t.text());
     }
 
     static String firstIdentText(SyntaxNode n) {

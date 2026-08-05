@@ -97,16 +97,27 @@ has one place that does it:
   the same path, and a constraint chained after it — a length bound, a pattern — sees the canonical
   form. Writing the normalization at each site instead was the first attempt and it left four paths
   behind, found one at a time in review.
-- A source file, at the token. Both a string literal and an *identifier* are canonicalized as the
-  tree is built. An identifier matters because names become text at a boundary: a case name is a
-  wire tag. Canonicalizing the tag where it is emitted, and leaving the name alone, was the second
-  wrong answer — two cases that no reader can tell apart stayed two names in the compiler and became
-  one tag on the wire, so the second was unreachable from outside. Canonicalized as names, they are
-  one name, and declaring it twice is refused where any duplicate is.
+- A **name**, wherever one enters. Not only an identifier in a source file: a type variable, the
+  module name a header-less source is given, the file stem the CLI derives one from, and the
+  identifiers an invocation names (`--behavior`, `--module`). They all go through one function,
+  `Reserved.name`.
 
-  It is done as the tree is built rather than to the source text, because normalizing before lexing
-  would shorten a line and move every position after it, and a diagnostic's caret would point at the
-  wrong column of the file the author is reading.
+  Names matter because a name is compared by its code units wherever it is looked up — a declaration
+  against a reference, a case against a wire tag, an argument against what a module declares — and
+  because a name becomes text at a boundary: a case name is a wire tag. Canonicalizing the tag where
+  it was emitted, and leaving the name alone, was the second wrong answer: two cases that no reader
+  can tell apart stayed two names in the compiler and became one tag on the wire, so the second was
+  unreachable from outside. Canonicalizing the identifier and not the other four doors was the third:
+  the same file was one module on a machine that delivers composed names and `main` on one that does
+  not, because the stem was judged for being a usable identifier before it was canonicalized.
+
+  It is one function rather than a rule to remember at each door, which is what those two rounds
+  bought. And it is applied as the tree is built rather than to the source text, because normalizing
+  before lexing would shorten a line and move every position after it, so a diagnostic's caret would
+  point at the wrong column of the file the author is reading.
+
+  Two names that are one name are then one name to every check that was already there — a duplicate
+  declaration, a case listed twice in a sum — so none of those needed a rule of its own.
 
 The fix is that *values are canonical*, not that comparison ignores the difference. Normalizing
 inside `Values.equal` was considered and refused: `String.length`, `characters` and `slice` all see
