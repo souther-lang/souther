@@ -117,32 +117,70 @@ public record WrittenName(String canonical, String spelling, List<Region> segmen
         return segments.isEmpty() ? null : segments.get(segments.size() - 1);
     }
 
-    /** Whether {@code at} is one of the characters that spell this name, the far end of a part
-     *  included so that a cursor resting after its last character is still on it. */
+    /**
+     * Whether a cursor at {@code at} is on this name.
+     *
+     * <p>Inside a part, plainly. And at the end of the last part, because that is where a caret
+     * rests when its author has just finished typing the name, and an editor that answers nothing
+     * there falls back to matching the spelling — which answers, about whatever else in the
+     * workspace is spelled the same.
+     *
+     * <p>Not at the end of a part that is not the last. A {@link Region} ends where the next thing
+     * begins, so the character there belongs to what separates the parts: the {@code .} of
+     * {@code up.Amount}, the space of {@code up . Amount}, the comment in one written over a line
+     * break. Reaching the end of the whole name is one boundary and reaching the end of a qualifier
+     * is another, and only the first is somewhere an author's caret means the name.
+     */
     public boolean covers(SourcePos at) {
-        return segments.stream().anyMatch(segment -> holds(segment, at));
+        for (int i = 0; i < segments.size(); i++) {
+            Region segment = segments.get(i);
+            boolean lastPart = i == segments.size() - 1;
+            if (lastPart ? containsCharacterOrEnd(segment, at) : containsCharacter(segment, at)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
      * Whether this name is written inside {@code other}'s — which of two names that both cover a
      * cursor is the one the cursor is on, a container writing its element's name inside its own.
+     *
+     * <p>This compares two stretches rather than asking about a character, so a name that ends
+     * exactly where the one around it ends is inside it. The last element of a container is written
+     * that way.
      */
     public boolean within(WrittenName other) {
         Region mine = region();
-        Region theirs = other == null ? null : other.region();
-        return mine != null && theirs != null
-                && holds(theirs, mine.start()) && holds(theirs, mine.end());
+        return other != null && encloses(other.region(), mine);
     }
 
-    /** Whether {@code at} lies in {@code region}, both ends included and the file counted. */
-    private static boolean holds(Region region, SourcePos at) {
+    /** Whether the character at {@code at} is in {@code region}: from its start, up to but not
+     *  including its end, in the file it begins in. */
+    private static boolean containsCharacter(Region region, SourcePos at) {
+        return placed(region, at) && before(at, region.end());
+    }
+
+    /** The same, and the boundary at the end — where a caret rests after the last character. */
+    private static boolean containsCharacterOrEnd(Region region, SourcePos at) {
+        return placed(region, at) && !before(region.end(), at);
+    }
+
+    /** Whether {@code at} is a place in {@code region}'s file, at or after its start. */
+    private static boolean placed(Region region, SourcePos at) {
         SourcePos start = region.start();
-        SourcePos end = region.end();
-        if (start == null || end == null || at == null
-                || !Objects.equals(at.sourceId(), start.sourceId())) {
+        return start != null && region.end() != null && at != null
+                && Objects.equals(at.sourceId(), start.sourceId())
+                && !before(at, start);
+    }
+
+    /** Whether {@code inner} lies within {@code outer}, ends allowed to meet. */
+    private static boolean encloses(Region outer, Region inner) {
+        if (outer == null || inner == null
+                || !Objects.equals(inner.start().sourceId(), outer.start().sourceId())) {
             return false;
         }
-        return !before(at, start) && !before(end, at);
+        return !before(inner.start(), outer.start()) && !before(outer.end(), inner.end());
     }
 
     /** Whether {@code a} comes before {@code b} in the file they share. */

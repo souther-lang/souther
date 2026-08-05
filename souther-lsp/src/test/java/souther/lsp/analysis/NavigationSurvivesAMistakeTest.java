@@ -75,6 +75,25 @@ class NavigationSurvivesAMistakeTest {
                         graph, "R").get("file:///demo.sou")));
     }
 
+    /**
+     * A caret just past a name answers the same in a file the compiler could not read.
+     *
+     * <p>That boundary is where a caret rests when its author has just typed the name, and the two
+     * paths were reading it differently — the compiler's answer counted it and the scan of
+     * characters did not. Which of the two answers an author gets is not for whether the rest of
+     * the file happens to parse to decide.
+     */
+    @Test
+    void aCaretJustPastANameAnswersWhetherTheFileParsesOrNot() {
+        String broken = "module demo\n\ndata D = Int\n\ndata Box = { value: D }\n\nlet held (\n";
+        Map<String, String> sources = new LinkedHashMap<>();
+        sources.put("file:///demo.sou", broken);
+        Position pastTheUse = new Position(4, "data Box = { value: D".length());
+
+        assertTrue(new Analyzer().definition("file:///demo.sou", pastTheUse, ModuleGraph.of(sources))
+                .isPresent(), "the caret rests just past `D`");
+    }
+
     /** {@code edits} written back, latest first so an earlier one does not move a later one. */
     private static String applied(String text, List<TextEdit> edits) {
         StringBuilder sb = new StringBuilder(text);

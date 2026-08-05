@@ -279,6 +279,32 @@ class ANameKeepsTheSpellingItWasWrittenWithTest {
         }
     }
 
+    /**
+     * Where one part of a qualified name ends is not on the name; where the whole name ends is.
+     *
+     * <p>These are the two boundaries a {@link souther.compiler.diag.Region} makes look alike, and
+     * they are one character wide, so nothing above catches them. A caret between {@code up} and the
+     * {@code .} is on the separator; a caret after {@code Amount} is where an author's caret rests
+     * when they have just typed the name, which is when they reach for rename.
+     */
+    @Test
+    void theEndOfAQualifierIsNotOnTheNameAndTheEndOfTheNameIs() {
+        String up = "module up exposing ( Amount )\n\ndata Amount = Int\n";
+        for (String reference : List.of("up.Amount", "up . Amount")) {
+            String here = "module here\n\ndata Box = { v: " + reference + " }\n";
+            Map<String, String> sources =
+                    Map.of("file:///up.sou", up, "file:///here.sou", here);
+            ModuleGraph graph = graphOf(sources);
+
+            assertTrue(new Analyzer().definition("file:///here.sou",
+                            after(here, reference, "up".length()), graph).isEmpty(),
+                    "the character after `up` separates the parts, in `" + reference + "`");
+            assertTrue(new Analyzer().definition("file:///here.sou",
+                            after(here, reference, reference.length()), graph).isPresent(),
+                    "a caret just past the whole name is where one rests, in `" + reference + "`");
+        }
+    }
+
     /** The composed spelling of a decomposed name — what the same name looks like typed the other
      *  way. */
     private static String compose(String decomposed) {

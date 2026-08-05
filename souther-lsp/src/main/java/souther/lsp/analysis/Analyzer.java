@@ -1071,7 +1071,7 @@ public final class Analyzer {
                 if (sb.length() > 0) {
                     sb.append('.');
                 }
-                sb.append(Reserved.name(t.text()));
+                sb.append(nameOf(t));
             }
         }
         return sb.toString();
@@ -1465,24 +1465,47 @@ public final class Analyzer {
         return null;
     }
 
-    /** The identifier token covering {@code offset}, descending only into the node that contains it. */
+    /**
+     * The identifier the cursor at {@code offset} is on, descending only into the node that holds
+     * it.
+     *
+     * <p>Asked twice. First for the identifier the cursor is inside, which is the answer wherever
+     * there is one. Then, only if there is none, for one that ends exactly there — where a caret
+     * rests when its author has just typed the name, and where the compiler's own answer already
+     * puts them, so the two do not differ over whether the rest of the file happens to parse.
+     *
+     * <p>The order is the one that is right rather than one anything here distinguishes: no two
+     * identifiers can touch, so nothing built the second question could steal from the first. It is
+     * written this way round because a cursor is inside something before it is beside it.
+     */
     private SyntaxToken identAt(SyntaxNode node, int offset) {
+        SyntaxToken inside = identAt(node, offset, false);
+        return inside != null ? inside : identAt(node, offset, true);
+    }
+
+    private SyntaxToken identAt(SyntaxNode node, int offset, boolean endsThere) {
         for (SyntaxElement e : node.children()) {
             if (e instanceof SyntaxNode child) {
-                if (offset >= child.start() && offset < child.end()) {
-                    SyntaxToken found = identAt(child, offset);
+                if (offset >= child.start() && reaches(offset, child.end(), endsThere)) {
+                    SyntaxToken found = identAt(child, offset, endsThere);
                     if (found != null) {
                         return found;
                     }
                 }
             } else {
                 SyntaxToken t = (SyntaxToken) e;
-                if (t.kind() == SyntaxKind.IDENT && offset >= t.start() && offset < t.end()) {
+                if (t.kind() == SyntaxKind.IDENT && offset >= t.start()
+                        && reaches(offset, t.end(), endsThere)) {
                     return t;
                 }
             }
         }
         return null;
+    }
+
+    /** Whether {@code offset} is before {@code end}, or at it when the boundary counts. */
+    private static boolean reaches(int offset, int end, boolean endsThere) {
+        return endsThere ? offset <= end : offset < end;
     }
 
     private SyntaxToken firstMeaningfulToken(SyntaxNode node) {
