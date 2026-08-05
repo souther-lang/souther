@@ -10,11 +10,13 @@ sharpest case was the membership test: `List.member` (Elm) beside `Set.contains`
 `String.contains` — one question, two words, and everything else in `Map` and `Set` was Elm's
 `Dict`/`Set` while only that one call had defected.
 
-(`Map.containsKey` looks like a third word for the same question and is not. A `Map` has keys, values
-and entries, so "does this contain it" has three answers and the name has to say which — the same
-reason `Map.map` and `Map.filter` were the wrong names. It belongs to the rule below about containers
-with more than one kind of element, not to this defect. The first draft of this ADR listed it here,
-which made the document argue both that the name was an inconsistency and that it was correct.)
+(`Map.containsKey` looks like a third word for the same question and is not. On a `Map`, "does this
+contain it" could ask about a key or a value, so the name has to say — the same reason `Map.map` and
+`Map.filter` were wrong. It belongs to the ambiguity half of rule 1 below, not to this defect. The
+first draft of this ADR listed it here, which made the document argue both that the name was an
+inconsistency and that it was correct; a second draft fixed that by scoping rule 1 to containers with
+one kind of element, which then made `Map.fold` the contradiction instead. Ambiguity is the test that
+holds for all three.)
 
 `List.fold` (F#) sat beside `List.foldr`
 (Elm), a pair that is `foldl`/`foldr` in one language and `fold`/`foldBack` in the other and neither
@@ -45,10 +47,11 @@ caller can write is public whatever it was meant to be.
 **The library follows one naming grammar, and every name that does not is changed at once.** The
 grammar is nine rules:
 
-1. A basic operation shares one name across every container that has a single kind of element:
-   `map`, `filter`, `fold`, `contains`. A container with more than one kind names the one an
-   operation acts on — a `Map` has keys, values and entries, so `containsKey`, `mapValues` and
-   `filterEntries`, where a bare name would leave a reader to guess which half the step answers for.
+1. A basic operation shares one name across containers: `map`, `filter`, `fold`, `contains`. Where a
+   container gives an operation more than one thing it could mean, the name says which — a `Map` has
+   keys, values and entries, so `containsKey`, `mapValues`, `filterEntries`. The test is ambiguity,
+   not the number of parts: `Map.fold` necessarily consumes the whole entry and answers neither a key
+   nor a value, so there is nothing for a reader to guess and it keeps the shared name.
 2. Where a term is settled across several major ecosystems with the same meaning, that term wins:
    `flatMap`, `filterMap`.
 3. A derived operation with no settled term is named so it can be predicted from the family it joins:
@@ -75,7 +78,7 @@ a reader can check a new name against it rather than against a rule alone.
 | `flatMap` | transform each element to a list and flatten one level |
 | `filterMap` | keep only the results that are there |
 | `contains` | is this value in here — of a container with one kind of element |
-| `containsKey` | is this key in here — the `Map` form, since `Map` has three kinds |
+| `containsKey` | is this key in here — the `Map` form, since "contains" alone could mean a value |
 | `fold` | combine from the head; `List.foldRight` combines from the end |
 | `XBy` | X, under a projection or key function |
 

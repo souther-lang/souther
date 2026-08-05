@@ -106,6 +106,39 @@ final class CodecGen {
      * object's keys are strings, and the neutral map's are too — so the temporal key is the
      * string-then-parse form for every source, not the direct temporal factory a field value uses.
      */
+    /**
+     * The only way this backend builds a decoder for text: Raoh's string leaf, canonicalized.
+     *
+     * <p>Every string that reaches the domain from outside comes through here — a field, a newtype's
+     * base, a map's key, a list or set element, a sum's discriminator, an enumeration's name, a
+     * temporal before it is parsed. It is one method rather than a `.normalize()` remembered at each
+     * of them because "text that arrives is canonical" (ADR-0096) is a property of the boundary and
+     * not of any one shape, and the first attempt at it — normalizing where each caller happened to
+     * build a leaf — left four paths behind, each found separately and after the fact.
+     *
+     * <p>{@code ADecoderCanonicalizesEveryShapeTest} is the check that goes with it: it walks the
+     * decoder shapes rather than this file, so a path added later that does not come through here
+     * fails on what a caller would see rather than on how the code is written.
+     */
+    private void emitStringLeaf(CodeBuilder code, ClassDesc leafOwner) {
+        code.invokestatic(leafOwner, "string", MTD_leafString);
+        code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+    }
+
+
+    /**
+     * A variant's tag as the wire carries it: the case's name, canonicalized.
+     *
+     * <p>A decoder canonicalizes the tag it reads (ADR-0096), so the constant it is matched against
+     * has to be canonical too or a case whose name contains a combining sequence could never be
+     * chosen. The name comes from an identifier in a source file, and an identifier is not a string
+     * literal — nothing else normalizes it — so it is done here, where the tag becomes a string that
+     * crosses a boundary in both directions.
+     */
+    private static String tagOf(String tag) {
+        return java.text.Normalizer.normalize(tag, java.text.Normalizer.Form.NFC);
+    }
+
     private void emitKeyDecoder(CodeBuilder code, Ast.DecRef key) {
         switch (key) {
             case Ast.DataDecRef d -> invokeCodec(code, d.typeName(), "decoder", MTD_Rdecoder);
@@ -113,8 +146,7 @@ final class CodecGen {
                 // A String key is the string leaf itself, which canonicalizes and does nothing else.
                 // A temporal is that leaf parsed. No other primitive is a boundary key.
                 if (p.kind() == Ast.PrimKind.STRING) {
-                    code.invokestatic(CD_ObjectDecoders, "string", MTD_leafString);
-                    code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+                    emitStringLeaf(code, CD_ObjectDecoders);
                     return;
                 }
                 String parse = switch (p.kind()) {
@@ -123,8 +155,7 @@ final class CodecGen {
                     case STRING, INT, BOOL, DECIMAL ->
                             throw new CompileException(key.pos(), "not a map key decoder: " + p.kind());
                 };
-                code.invokestatic(CD_ObjectDecoders, "string", MTD_leafString);
-                code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+                emitStringLeaf(code, CD_ObjectDecoders);
                 code.invokevirtual(CD_StringDecoder, parse, MTD_leafTemporal);
             }
             default -> throw new CompileException(key.pos(), "not a map key decoder: " + key);
@@ -244,7 +275,7 @@ final class CodecGen {
                     code.checkcast(CD_Map);
                     code.dup();
                     code.loadConstant(enc.key());
-                    code.loadConstant(v.tag());
+                    code.loadConstant(tagOf(v.tag()));
                     code.invokeinterface(CD_Map, "put", MTD_Map_put);
                     code.pop();
                     code.areturn();
@@ -271,7 +302,7 @@ final class CodecGen {
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
                 code.loadConstant(disc.key());
                 code.loadConstant(disc.key());
-                code.invokestatic(srcLeafOwner(src), "string", MTD_leafString);
+                emitStringLeaf(code, srcLeafOwner(src));
                 code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
                 // `field` answers a CombinePart, and `discriminate` takes a Decoder — the conversion
                 // is written rather than implicit, which is what keeps a part's field declaration
@@ -283,7 +314,7 @@ final class CodecGen {
                 for (Ast.Variant v : disc.variants()) {
                     code.dup();
                     pushInt(code, i);
-                    code.loadConstant(v.tag());
+                    code.loadConstant(tagOf(v.tag()));
                     invokeCodec(code, v.caseType(), srcFactory(src), MTD_Rdecoder);
                     code.invokestatic(CD_RDecoders, "variant", MTD_Rvariant);
                     code.aastore();
@@ -312,7 +343,7 @@ final class CodecGen {
             emitDefaultCtor(cb);
             emitSharedInstance(cb, cdDec);
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
-                code.invokestatic(srcLeafOwner(src), "string", MTD_leafString);
+                emitStringLeaf(code, srcLeafOwner(src));
                 code.invokedynamic(fromNameCallSite(cdDec));
                 code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
                 code.aload(1);
@@ -330,7 +361,7 @@ final class CodecGen {
         cb.withMethodBody("__fromName", MTD_fromName,
                 ClassFile.ACC_STATIC | ClassFile.ACC_SYNTHETIC, code -> {
             for (TypeName c : cases) {
-                code.loadConstant(c.name());
+                code.loadConstant(tagOf(c.name()));
                 code.aload(0);
                 code.invokevirtual(CD_String, "equals", MethodTypeDesc.of(ConstantDescs.CD_boolean, CD_Object));
                 Label next = code.newLabel();
@@ -890,8 +921,7 @@ final class CodecGen {
             // the leaf so every constraint chained after it — a length bound, a pattern — sees the
             // canonical form rather than whatever the sender's keyboard produced.
             case STRING -> {
-                code.invokestatic(owner, "string", MTD_leafString);
-                code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+                emitStringLeaf(code, owner);
             }
             case INT -> code.invokestatic(owner, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(owner, "bool", MTD_leafBool);
@@ -906,7 +936,7 @@ final class CodecGen {
      * whereas the neutral/map source has a direct static factory. */
     private void emitTemporalLeaf(CodeBuilder code, Src src, String method) {
         if (src == Src.JSON) {
-            code.invokestatic(CD_JsonDecoders, "string", MTD_leafString);
+            emitStringLeaf(code, CD_JsonDecoders);
             code.invokevirtual(CD_StringDecoder, method, MTD_leafTemporal);
         } else {
             code.invokestatic(srcLeafOwner(src), method, MTD_leafTemporal);
@@ -922,8 +952,7 @@ final class CodecGen {
             // over Text is the other place text enters, and the two must agree or the same value
             // would be one length in a field and another on its own.
             case TEXT -> {
-                code.invokestatic(leaf, "string", MTD_leafString);
-                code.invokevirtual(CD_StringDecoder, "normalize", MTD_normalize);
+                emitStringLeaf(code, leaf);
             }
             case INT -> code.invokestatic(leaf, "long_", MTD_leafLong);
             case BOOL -> code.invokestatic(leaf, "bool", MTD_leafBool);
@@ -972,15 +1001,19 @@ final class CodecGen {
     private void emitNewtypeDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.NewtypeDecoder dec,
                                    Map<String, Type> fields, Src src, Invariants invariants) {
         if (dec.inner() instanceof Ast.MapDecRef mp) {
-            // The map's own decoder, its constraints, and only then the key remap. Ordering matters:
-            // the remap answers a plain Decoder, so a constraint applied after it could not be one of
-            // Raoh's typed ones. Size is the same either way on the success path — a remap that
-            // collided has already failed (see emitRekeyHelper), so no entry is lost between the two.
+            // The map's own decoder, then its two halves of invariant either side of the key remap.
+            // A mapped constraint is one of Raoh's and needs the typed leaf, which is only before the
+            // remap; size is the same either way on the success path, since a remap that collided has
+            // already failed (see emitRekeyHelper). A refined clause is the model's own predicate and
+            // needs the map the model declared — the keys converted and canonical — so it goes after.
             emitDecoderObject(code, mp.value(), src);
             code.invokestatic(srcListOwner(src), "map", MTD_mapDec);
-            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants);
+            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+                    ConstraintPhase.MAPPED);
             code.invokedynamic(rekeyCallSite(decoderClass, mp.key()));
             code.invokeinterface(CD_RDecoder, "flatMapWithPath", MTD_flatMapWithPath);
+            emitInvariantConstraints(code, cdName, bindType(dec.inner()), invariants,
+                    ConstraintPhase.REFINED);
         } else {
             emitDecoderObject(code, dec.inner(), src);                // Y's decoder (for this source)
             // Y's decoder is a plain Decoder, so no typed constraint applies here; whatever the
@@ -1150,11 +1183,28 @@ final class CodecGen {
      * the order a failure is reported in — the same order {@code __construct} decides in, so the
      * boundary and an attempted construction name the same clause for the same value.
      */
+    /**
+     * Which half of the invariant to emit. A map's keys are converted between the two: a mapped
+     * constraint is one of Raoh's own and has to reach the typed leaf, which is before the
+     * conversion, while a refined clause is the model's own predicate and has to read the map the
+     * model declared — {@code Map<UserId, V>} with canonical keys, not the {@code Map<String, V>} the
+     * object decoded to. Splitting them keeps declaration order, because a clause that needs refining
+     * makes every later clause refined too ({@link #invariantsOf}), so the mapped ones are a prefix.
+     */
+    private enum ConstraintPhase { MAPPED, REFINED, BOTH }
+
     private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
                                           Invariants invariants) {
+        emitInvariantConstraints(code, cdName, base, invariants, ConstraintPhase.BOTH);
+    }
+
+    private void emitInvariantConstraints(CodeBuilder code, ClassDesc cdName, Type base,
+                                          Invariants invariants, ConstraintPhase phase) {
         for (ClauseEmit clause : invariants.clauses()) {
-            clause.constraints().forEach(c -> emitConstraint(code, c));
-            if (clause.refined()) {
+            if (phase != ConstraintPhase.REFINED) {
+                clause.constraints().forEach(c -> emitConstraint(code, c));
+            }
+            if (clause.refined() && phase != ConstraintPhase.MAPPED) {
                 code.invokedynamic(invariantPredicateCallSite(cdName, base, clause.index()));
                 // The clause is captured off the stack, so a clause with no name captures null —
                 // a constant-pool entry could not have been one.
