@@ -1,0 +1,88 @@
+package souther.compiler.check;
+
+import souther.compiler.core.Core;
+import souther.compiler.types.BindingId;
+import souther.compiler.types.Type;
+import souther.compiler.types.TypeName;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Where a value is, as the thing itself rather than as the text that named it: the binding it is
+ * rooted at, and the fields read from there.
+ *
+ * <p>What a fact is about. Two facts are about one value when they are about one of these, and that
+ * is decided by the binding a name was answered with — not by the name. A body may bind {@code a}
+ * twice and mean two values; an expansion may write one body into another and carry a spelling that
+ * means something else where it landed. Neither is a question the text can answer, and both are
+ * settled here by construction, because a second binding is a second {@link BindingId} and the two
+ * are simply different locations.
+ *
+ * <p>So nothing has to be forgotten when a name is bound again. A fact about the old binding stays
+ * true of the old binding, and nothing reads it under the new one — where reading the key's text and
+ * dropping every fact that mentioned the name was the alternative, which drops facts that merely read
+ * like they mention it.
+ *
+ * <p>A step carries the type it is read from, so a field is a field of something rather than a
+ * spelling: two types may both declare {@code value}, and only one of them is the newtype whose
+ * {@code value} is the newtype itself.
+ */
+public record Location(BindingId root, List<Step> path) {
+
+    public Location {
+        path = List.copyOf(path);
+    }
+
+    /** One field read, and the type it was read from. */
+    public record Step(TypeName owner, String field) {}
+
+    public static Location of(BindingId root) {
+        return new Location(root, List.of());
+    }
+
+    /**
+     * This location with {@code field} read from it, or this location unchanged where the field is a
+     * transparent newtype's {@code value}.
+     *
+     * <p>{@code x} and {@code x.value} are one location when {@code x} is a newtype over a single
+     * value: the newtype is what it holds, so a guard on one is a guard on the other. Decided from
+     * what the field is read from rather than from the field being spelled {@code value}, so an
+     * ordinary data that happens to declare a field of that name keeps its two locations apart.
+     */
+    public Location then(Type readFrom, String field, Symbols symbols) {
+        if (field.equals("value") && TypeOps.isSingleValueNewtype(readFrom, symbols)) {
+            return this;
+        }
+        List<Step> longer = new ArrayList<>(path);
+        longer.add(new Step(readFrom instanceof Type.Ref r ? r.name() : null, field));
+        return new Location(root, longer);
+    }
+
+    /**
+     * The location {@code e} names, or null where it names none.
+     *
+     * <p>A location is a binding and the fields read from it. Anything else — a call, an arithmetic
+     * expression, a literal — is a value that was computed, and a computed value is not somewhere a
+     * fact can be about.
+     */
+    public static Location of(Core e, Symbols symbols) {
+        return switch (e) {
+            case Core.Read read -> of(read.binding());
+            case Core.FieldAccess fa -> {
+                Location base = of(fa.target(), symbols);
+                yield base == null ? null : base.then(fa.target().type(), fa.field(), symbols);
+            }
+            default -> null;
+        };
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder(String.valueOf(root));
+        for (Step s : path) {
+            sb.append('.').append(s.field());
+        }
+        return sb.toString();
+    }
+}
