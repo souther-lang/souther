@@ -549,7 +549,11 @@ public final class DataChecker {
             // proven total — is callable from an invariant, so its signature must be in scope here. A
             // field of the same name as a helper wins: a bare name in an invariant is a field reference.
             Scope invEnv = fieldScope(ctx).reaching(recursiveHelperFns);
-            Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx);
+            // A clause is the declaration's, not the body's. Reached from a construction, this is
+            // where one tree stops and another starts, so what the tree being walked keeps standing
+            // is left behind: what this one keeps is its own to say, and a permission inherited by
+            // being reached from somewhere is not a permission a representation gave.
+            Type t = Elaborator.typeOf(clause.expr(), invEnv, ctx.inAnotherRepresentation());
             if (t != Type.BOOL) {
                 throw CompileException.of(
                         Diagnostic.of("E1101", "e1101.msg").at(clause.expr().pos())

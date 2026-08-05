@@ -43,7 +43,7 @@ let filter (keep: ('a) -> Bool, s: Set<'a>) : Set<'a> =
     Set.fromList(List.filter(keep, Set.toList(s)))
 
 // `partition` answers the pair (kept, rest), the same shape `List.partition` gives.
-let partition (keep: ('a) -> Bool, s: Set<'a>) =
+let partition (keep: ('a) -> Bool, s: Set<'a>): (Set<'a>, Set<'a>) =
     Set.fold((acc, x) -> {
         let (yes, no) = acc
         if keep(x) then (Set.insert(x, yes), no) else (yes, Set.insert(x, no))

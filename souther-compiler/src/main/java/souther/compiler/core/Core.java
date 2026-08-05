@@ -3,6 +3,7 @@ package souther.compiler.core;
 import souther.compiler.types.BindingId;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
+import souther.compiler.types.ValueName;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.ast.Ast;
 
@@ -65,6 +66,25 @@ public sealed interface Core {
      * method — each reached by the name it is declared under, none of them bound by this body. A
      * non-recursive helper is already inlined. */
     record Call(String fn, List<Core> args, Type type, SourcePos pos) implements Core {}
+
+    /**
+     * A call a representation kept standing on purpose: resolved to the declaration it names, typed
+     * from that declaration's signature, and deliberately not expanded.
+     *
+     * <p>Not a call this compiler failed to expand. Which calls survive is a representation's to
+     * decide ({@link souther.compiler.check.InliningPolicy}): an analysis that has rules about an
+     * operation loses them the moment the operation becomes the algorithm it is, so the
+     * representation that analysis reads keeps the operation. The tree the backend emits from keeps
+     * none, and one arriving there is this compiler having failed to expand it.
+     *
+     * <p>{@code operation} is what the name was resolved to, not how it was written: two spellings
+     * that reach one operation are one of these, and having a type in common is not being the same
+     * operation. A reader with no rule for what this names types it and learns nothing from it,
+     * which is the difference between a representation keeping a call and an analysis understanding
+     * one.
+     */
+    record PreservedCall(ValueName operation, List<Core> args, Type type,
+                         SourcePos pos) implements Core {}
 
     /**
      * Applying a function value the body holds: a helper's function parameter, or a lambda a
@@ -217,6 +237,13 @@ public sealed interface Core {
             case Call c -> {
                 List<Core> args = each(c.args(), atExpr);
                 yield args == c.args() ? c : new Call(c.fn(), args, c.type(), c.pos());
+            }
+            // Its arguments are children like any other, so a pass that asks what a body reads
+            // reaches them without knowing what was kept standing over them.
+            case PreservedCall p -> {
+                List<Core> args = each(p.args(), atExpr);
+                yield args == p.args() ? p
+                        : new PreservedCall(p.operation(), args, p.type(), p.pos());
             }
             // what is applied is a binding holding a function: a name slot, the same kind a spread is
             case Apply a -> {

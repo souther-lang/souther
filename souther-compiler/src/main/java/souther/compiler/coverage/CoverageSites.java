@@ -164,6 +164,12 @@ public final class CoverageSites {
                     walk(b.right());
                 }
                 case Core.Call c -> c.args().forEach(this::walk);
+                // What a representation kept standing for an analysis to read. Coverage is measured
+                // over the tree that runs, which keeps none of these, so reaching one would mean this
+                // count was taken over a tree nothing executes.
+                case Core.PreservedCall p -> throw new IllegalStateException(
+                        "a preserved call (" + p.operation() + ") reached coverage numbering, at "
+                                + p.pos());
                 case Core.Apply a -> a.args().forEach(this::walk);
                 case Core.LetIn li -> {
                     walk(li.value());

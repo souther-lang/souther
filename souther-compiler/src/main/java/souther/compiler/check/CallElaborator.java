@@ -119,6 +119,14 @@ public final class CallElaborator {
 
     static Core elaborateCall(Ast.Apply call, Scope env, CheckContext ctx,
                                       Type expected) {
+        // A call this representation said it keeps standing, asked before anything tries to expand or
+        // resolve it: what it names is settled, and the only question left is its signature. Asked of
+        // the representation and not of the operation — whether anything downstream has a rule about
+        // it is not this walk's business, and a kept call with no rule types like any other.
+        CompleteSignature kept = ctx.preserved().signatureOf(call.denotes());
+        if (kept != null) {
+            return preservedCall(call, kept, env, ctx);
+        }
         CallArgs ca = new CallArgs(call.args(), env, ctx);
         Type result = typeOfCall(ca, call, env, ctx, expected);
         // applying something this body binds is a different operation from calling something
@@ -130,6 +138,31 @@ public final class CallElaborator {
                     ca.cores(), result, call.pos());
         }
         return new Core.Call(call.reaches(), ca.cores(), result, call.pos());
+    }
+
+    /**
+     * A kept call, typed by applying the signature it was declared with.
+     *
+     * <p>The same application a recursive helper's call goes through: a declaration that is not
+     * expanded is typed from what it declares, and its type variables are settled by the arguments it
+     * was given. What differs is only that this one is a node of its own, so a reader that has no
+     * business with a call left standing meets it as itself rather than as an ordinary call it might
+     * try to emit.
+     */
+    private static Core preservedCall(Ast.Apply call, CompleteSignature kept, Scope env,
+                                      CheckContext ctx) {
+        Type.FnOf signature = kept.asFunction();
+        CallArgs ca = new CallArgs(call.args(), env, ctx);
+        if (call.args().size() != signature.params().size()) {
+            throw CompileException.of(
+                    Diagnostic.of(null, "check.arity").title("check.arity.title")
+                            .at(call.pos(), call.written().length())
+                            .args(call.written(), signature.params().size(), call.args().size()).build(),
+                    "`" + call.written() + "` takes " + signature.params().size()
+                            + " argument(s) but is applied to " + call.args().size());
+        }
+        Type result = applySignature(call, signature, ca, null, env, ctx).result();
+        return new Core.PreservedCall(call.denotes(), ca.cores(), result, call.pos());
     }
 
     /**
