@@ -546,7 +546,7 @@ public final class HelperInliner {
             defs.add(def instanceof Ast.Data d && !d.invariants().isEmpty()
                     ? new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
                             Ast.mapClauses(d.invariants(), inv -> qualifyForeign(inv, m.name())),
-                            d.decoder(), d.encoder(), d.pos())
+                            d.decoder(), d.encoder(), d.namePos(), d.pos())
                     : def);
         }
         return defs;
@@ -702,7 +702,7 @@ public final class HelperInliner {
                 BindingOwner declared = new BindingOwner.OfData(new TypeName(m.name(), d.name()));
                 defs.add(new Ast.Data(d.name(), d.newtype(), d.includes(), d.fields(),
                         Ast.mapClauses(d.invariants(), clause -> inline(clause, declared)),
-                        d.decoder(), d.encoder(), d.pos()));
+                        d.decoder(), d.encoder(), d.namePos(), d.pos()));
             } else {
                 defs.add(def);
             }

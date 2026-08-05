@@ -242,6 +242,7 @@ public final class AstBuilder {
 
     private Ast.Def dataDef(SyntaxNode n) {
         String name = firstIdentText(n);
+        SourcePos namePos = posOf(firstIdentToken(n));
         SourcePos pos = pos(n);
         List<Ast.InvariantClause> clauses = invariants(n, name);
 
@@ -268,7 +269,7 @@ public final class AstBuilder {
                         "data `" + name + "` has an empty body");
             }
             return new Ast.Data(name, false, includes, fields, clauses,
-                    Optional.empty(), Optional.empty(), pos);
+                    Optional.empty(), Optional.empty(), namePos, pos);
         }
         Optional<SyntaxNode> sum = n.child(SyntaxKind.SUM_BODY);
         if (sum.isPresent()) {
@@ -276,7 +277,7 @@ public final class AstBuilder {
             for (SyntaxToken t : identTokens(sum.get())) {
                 cases.add(Ast.Name.written(t.text(), posOf(t)));
             }
-            return new Ast.SumData(name, cases, Optional.empty(), Optional.empty(), pos);
+            return new Ast.SumData(name, cases, Optional.empty(), Optional.empty(), namePos, pos);
         }
         Optional<SyntaxNode> newtype = n.child(SyntaxKind.NEWTYPE_BODY);
         if (newtype.isPresent()) {
@@ -287,7 +288,7 @@ public final class AstBuilder {
             }
             List<Ast.Field> fields = List.of(new Ast.Field("value", innerType, pos(inner)));
             return new Ast.Data(name, true, List.of(), fields, clauses,
-                    Optional.empty(), Optional.empty(), pos);
+                    Optional.empty(), Optional.empty(), namePos, pos);
         }
         // No body of any kind: a unit data, which has no fields for an invariant to observe (spec
         // §unit-data). The parser takes an `invariant` clause after any data, so this is where a
@@ -299,7 +300,7 @@ public final class AstBuilder {
                             .at(pos(clause)).args(name).build(),
                     "unit data `" + name + "` cannot carry an invariant");
         }
-        return new Ast.UnitData(name, pos);
+        return new Ast.UnitData(name, namePos, pos);
     }
 
     /**
@@ -1262,9 +1263,14 @@ public final class AstBuilder {
      * builder names a {@code data}, a {@code behavior} and a {@code let}, and how the declaration's
      * source is filed under the same name when a module publishes what it declares. */
     static String firstIdentText(SyntaxNode n) {
+        return firstIdentToken(n).text();
+    }
+
+    /** The token that spells what a top-level declaration declares. */
+    static SyntaxToken firstIdentToken(SyntaxNode n) {
         for (SyntaxElement e : n.children()) {
             if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
-                return t.text();
+                return t;
             }
         }
         throw new IllegalStateException("no identifier in " + n.kind());

@@ -350,10 +350,11 @@ public final class Resolve {
                 declareFields(d);
                 yield new Ast.Data(d.name(), d.newtype(), names(d.includes()), fields(d.fields()),
                         Ast.mapClauses(d.invariants(), inv -> expr(inv, boundFields(d))),
-                        d.decoder().map(this::decoder), d.encoder().map(this::encoder), d.pos());
+                        d.decoder().map(this::decoder), d.encoder().map(this::encoder),
+                        d.namePos(), d.pos());
             }
             case Ast.SumData s -> new Ast.SumData(s.name(), sumCases(s), s.decoder().map(this::discriminate),
-                    s.encoder().map(this::sumEncoder), s.pos());
+                    s.encoder().map(this::sumEncoder), s.namePos(), s.pos());
         };
     }
 

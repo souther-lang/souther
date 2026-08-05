@@ -374,6 +374,15 @@ public interface Ast {
     sealed interface Def extends Ast permits Data, SumData, UnitData {
         String name();
 
+        /**
+         * Where the name is written, which is not where the declaration starts — {@code data} comes
+         * first. A reader asking what a cursor is on has only the name to compare against, and a
+         * declaration that answers from its keyword answers about the keyword.
+         *
+         * <p>Null for a declaration nobody wrote: a unit data a construction implied.
+         */
+        SourcePos namePos();
+
         SourcePos pos();
     }
 
@@ -393,6 +402,7 @@ public interface Ast {
                 List<InvariantClause> invariants,
                 Optional<DecoderDef> decoder,
                 Optional<EncoderDef> encoder,
+                SourcePos namePos,
                 SourcePos pos) implements Def {}
 
     /**
@@ -424,6 +434,7 @@ public interface Ast {
                    List<Name> cases,
                    Optional<Discriminate> decoder,
                    Optional<SumEncoder> encoder,
+                   SourcePos namePos,
                    SourcePos pos) implements Def {}
 
     /** {@code encoder discriminate on "key" { Case -> "tag" ... }} — the inverse of discriminate. */
@@ -432,7 +443,7 @@ public interface Ast {
     record EncVariant(Name caseType, String tag, SourcePos pos) implements Ast {}
 
     /** A unit data definition {@code data U} with no fields. */
-    record UnitData(String name, SourcePos pos) implements Def {}
+    record UnitData(String name, SourcePos namePos, SourcePos pos) implements Def {}
 
     /** {@code decoder from Object discriminate on "key" { "tag" -> Case.decoder ... }} */
     record Discriminate(String key, List<Variant> variants, SourcePos pos) implements Ast {}

@@ -108,6 +108,9 @@ public final class ImplicitUnits {
                 || BUILT_IN.contains(name)) {
             return;
         }
-        added.put(name, new Ast.UnitData(name, pos));
+        // No name position: nobody wrote this declaration. The place `pos` names is the reference
+        // that implied it, and reading a use as a declaration's name would answer a cursor there
+        // about a declaration that is not in the file.
+        added.put(name, new Ast.UnitData(name, null, pos));
     }
 }
