@@ -559,6 +559,14 @@ public final class InvariantChecker {
         Core made = Core.mapAll(e, child -> without(child, was, becomes), name -> name);
         if (made != e) {
             rebuilt.put(made, e);
+            // What an attempt tries to build is rebuilt through the construction slot, which does not
+            // come back through here, so its rebuild is recorded here instead. Unrecorded, the two
+            // readings key one construction under two occurrences, and the branch that refutes it is
+            // said on its own rather than answered by the branch that proves it.
+            if (made instanceof Core.IfConstructed x && e instanceof Core.IfConstructed from
+                    && x.construct() != from.construct()) {
+                rebuilt.put(x.construct(), from.construct());
+            }
         }
         return made;
     }
