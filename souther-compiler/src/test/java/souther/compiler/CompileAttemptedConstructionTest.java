@@ -217,6 +217,36 @@ class CompileAttemptedConstructionTest {
         assertEquals("E2010", e.code(), e.getMessage());
     }
 
+    /**
+     * A violation one branch of a conditional reaches is not a decided one. Which of the two values
+     * is built is settled where the attempt runs, so the branch that refutes the invariant is the
+     * else branch and not an error — and the attempt says nothing about the branch it cannot decide
+     * either. The plain construction over the same conditional answers with the possible-violation
+     * warning, which is what says the two readings were combined rather than reported one at a time.
+     */
+    @Test
+    void aViolationOnlyOneBranchReachesIsNotDecidedInsideAnAttempt() {
+        String src = """
+                module demo
+                data Reason = A | B
+                data NotRequired = { reasons: List<Reason> }
+                    invariant List.length(reasons) >= 1
+                data Required = { note: String }
+
+                behavior judge : (age: Int) -> Required | NotRequired
+                    constructs Required, NotRequired, A
+
+                let judge (age) =
+                    if NotRequired { reasons = [ A | age >= 75 ] } as excluded
+                    then excluded
+                    else Required { note = "covered" }
+                """;
+        Compiler.Compiled c = Compiler.compileWithWarnings(src);
+        assertEquals(0, c.warnings().stream()
+                        .filter(d -> d.severity() == Severity.WARNING && "E2011".equals(d.code())).count(),
+                "the empty list is the else branch, not a violation to report or to warn about");
+    }
+
     /** An attempt builds the value on its success branch, so it needs the permission any other
      * construction needs. */
     @Test
