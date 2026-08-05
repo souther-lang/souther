@@ -3,7 +3,7 @@ package souther.compiler.check;
 import souther.compiler.ast.Ast;
 import souther.compiler.check.DischargeRules.Built;
 import souther.compiler.check.DischargeRules.Carried;
-import souther.compiler.check.DischargeRules.Combinator;
+import souther.compiler.check.Combinators.Combinator;
 import souther.compiler.check.DischargeRules.Shape;
 import souther.compiler.check.NumericDomain.LinearForm;
 import souther.compiler.check.NumericDomain.Rel;
@@ -103,17 +103,17 @@ final class Predicates {
                 || !DischargeRules.isQuantifier(call.operation())) {
             return;
         }
-        Combinator over = DischargeRules.combinator(call.operation());
+        Combinator over = Combinators.of(call.operation());
         Carried carried = DischargeRules.carried(call.operation());
         if (over == null || carried == null || over.closureArg() >= call.args().size()
-                || over.listArg() >= call.args().size()) {
+                || over.containerArg() >= call.args().size()) {
             return;
         }
         Core.Block p = Terms.blockOf(call.args().get(over.closureArg()), at);
         if (p == null || p.params().size() != 1) {
             return;
         }
-        String container = terms.bodyKey(call.args().get(over.listArg()), at);
+        String container = terms.bodyKey(call.args().get(over.containerArg()), at);
         if (container == null) {
             return;
         }
@@ -501,7 +501,7 @@ final class Predicates {
         }
         // Where the mapping's closure is written is already stated once, by the table that says which
         // argument each combinator hands its elements to.
-        Combinator combo = DischargeRules.combinator(inner.operation());
+        Combinator combo = Combinators.of(inner.operation());
         if (combo == null || combo.closureArg() >= inner.args().size()) {
             return null;
         }

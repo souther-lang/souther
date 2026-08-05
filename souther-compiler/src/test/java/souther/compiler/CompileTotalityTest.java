@@ -134,6 +134,23 @@ class CompileTotalityTest {
     }
 
     @Test
+    void recursingThroughTheClosureOfAnyCombinatorTheLibraryHasIsTotal() {
+        // `distinctBy` hands its closure an element of `t.children` exactly as `map` does. Which
+        // operations do that is read off the library, so one it gains walks structurally without the
+        // check being told about it.
+        String src = """
+                module demo
+                data Tree = { children: List<Tree>, label: Int }
+                data Out = Int
+                behavior run : (t: Tree) -> Out constructs Out
+                let total (t: Tree): Int =
+                    List.length(List.distinctBy(c -> total(c), t.children)) + t.label
+                let run (t) = Out(total(t))
+                """;
+        assertDoesNotThrow(() -> Compiler.compile(src));
+    }
+
+    @Test
     void recursingOnAParameterInsideAFoldClosureIsStillRejected() {
         // The closure binds `c` as smaller, but the recursion passes `t` (the whole parameter),
         // which does not decrease — must stay rejected even though it is inside a combinator.

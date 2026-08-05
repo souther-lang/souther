@@ -285,57 +285,6 @@ final class TotalityChecker {
                            Map<BindingId, Set<BindingId>> eq) {}
 
     /**
-     * A standard-library combinator that hands the contents of its container argument to a closure:
-     * the closure is argument {@code closureArg}, the value it receives is closure parameter
-     * {@code elementParam}, and the container is argument {@code containerArg}. Recursing on that value
-     * inside the closure is structural when the container is (part of) a parameter — the common way to
-     * walk a {@code List<T>} of children, and equally the {@code Some} payload of an {@code Option<T>}
-     * (spec §stdlib-list): a list element is a sub-term of the list, and the unwrapped payload is a
-     * sub-term of the option, so either is a strictly smaller part of a parameter the container is
-     * rooted at. {@code Option.map(f, opt)} has the same shape as {@code List.map(f, xs)} — its closure
-     * receives the unwrapped value, {@code opt} last — so it is registered the same way. An unlisted
-     * combinator is conservatively treated as non-content-producing (the recursion is rejected, never
-     * wrongly accepted); a freshly-constructed container (`Some(p)`) roots at no parameter, so its
-     * payload is not credited as smaller.
-     */
-    private record Combinator(int closureArg, int elementParam, int containerArg) {}
-
-    private static final Map<String, Combinator> COMBINATORS = Map.ofEntries(
-            Map.entry("List.fold", new Combinator(0, 1, 2)),
-            Map.entry("List.foldFrom", new Combinator(0, 1, 2)),
-            Map.entry("List.foldRight", new Combinator(0, 0, 2)),
-            Map.entry("List.map", new Combinator(0, 0, 1)),
-            Map.entry("List.filter", new Combinator(0, 0, 1)),
-            Map.entry("List.all", new Combinator(0, 0, 1)),
-            Map.entry("List.any", new Combinator(0, 0, 1)),
-            Map.entry("List.find", new Combinator(0, 0, 1)),
-            Map.entry("List.partition", new Combinator(0, 0, 1)),
-            Map.entry("List.flatMap", new Combinator(0, 0, 1)),
-            Map.entry("List.filterMap", new Combinator(0, 0, 1)),
-            Map.entry("List.sortBy", new Combinator(0, 0, 1)),
-            Map.entry("List.groupBy", new Combinator(0, 0, 1)),
-            Map.entry("List.indexBy", new Combinator(0, 0, 1)),
-            Map.entry("List.allDistinctBy", new Combinator(0, 0, 1)),
-            // mapIndexed's closure takes (index, element), so the element is its second parameter.
-            Map.entry("List.mapIndexed", new Combinator(0, 1, 1)),
-            // A map hands its closure the key and the value; the value is the one that can hold a
-            // nested structure, so that is the parameter credited as a sub-term.
-            Map.entry("Map.fold", new Combinator(0, 2, 2)),
-            Map.entry("Map.mapValues", new Combinator(0, 1, 1)),
-            Map.entry("Map.filterEntries", new Combinator(0, 1, 1)),
-            Map.entry("Map.updateIfPresent", new Combinator(1, 0, 2)),
-            Map.entry("Map.updateOrInsert", new Combinator(2, 0, 3)),
-            Map.entry("Set.fold", new Combinator(0, 1, 2)),
-            Map.entry("Set.map", new Combinator(0, 0, 1)),
-            Map.entry("Set.filter", new Combinator(0, 0, 1)),
-            Map.entry("Set.partition", new Combinator(0, 0, 1)),
-            // Option is a container of at most one element; its `Some` payload is a sub-term of the
-            // option, so `Option.map`'s closure receives a strictly smaller part when the option is
-            // (part of) a parameter — a manager chain `s.上司 |> Option.map(b -> depth(b) + 1)` walks
-            // structurally, exactly as the list combinators above do (`Option.andThen` does not exist).
-            Map.entry("Option.map", new Combinator(0, 0, 1)));
-
-    /**
      * Walks {@code e}, threading {@code lt} (each local -&gt; the parameters it is a strictly smaller
      * part of) and {@code eq} (each local -&gt; the parameters it is exactly equal to, e.g. a {@code let}
      * alias), and records every call to a member of {@code group}. A {@code match} case binding is a
@@ -371,16 +320,20 @@ final class TotalityChecker {
                 if (group.contains(call.reaches())) {
                     calls.add(new RecCall(call.written(), call, lt, eq));
                 }
-                Combinator combo = COMBINATORS.get(call.reaches());
+                Combinators.Combinator combo = Combinators.of(call.denotes());
                 for (int ai = 0; ai < call.args().size(); ai++) {
                     Ast.Expr arg = call.args().get(ai);
                     if (combo != null && ai == combo.closureArg() && arg instanceof Ast.Block step
                             && combo.elementParam() < step.params().size()
                             && combo.containerArg() < call.args().size()) {
                         // `step` consumes the container argument; each value it is handed (a list
-                        // element, or an option's unwrapped payload) is a sub-term of that container, so
-                        // if the container is (part of) a parameter, the value is a strictly smaller
-                        // part of it. Bind the element parameter accordingly for the step body.
+                        // element, a map's value, or an option's unwrapped payload) is a sub-term of that
+                        // container, so if the container is (part of) a parameter, the value is a strictly
+                        // smaller part of it. Bind the element parameter accordingly for the step body. An
+                        // operation the library states no such thing of is treated as handing its closure
+                        // nothing, which rejects a recursion rather than wrongly accepting one; a
+                        // freshly-constructed container (`Some(p)`) roots at no parameter, so its payload
+                        // is not credited as smaller either.
                         Set<BindingId> elemRoots =
                                 rootParams(call.args().get(combo.containerArg()), lt, eq, paramNames);
                         Map<BindingId, Set<BindingId>> inner = elemRoots.isEmpty()

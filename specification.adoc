@@ -1082,8 +1082,8 @@ Four shapes cover the operations.
 | shape | what the result is
 
 | *permutes* | the same elements in another order — `+List.reverse+`, `+List.sort+`, `+List.sortBy+`
-| *subset* | some of the same elements — `+List.filter+`, `+List.distinct+`, `+List.take+`, `+List.drop+`, `+Set.filter+`, `+Map.filterEntries+`
-| *maps* | one new element for each — `+List.map+`, `+List.mapIndexed+`, `+Map.mapValues+`
+| *subset* | some of the same elements — `+List.filter+`, `+List.distinct+`, `+List.distinctBy+`, `+List.take+`, `+List.drop+`, `+Set.filter+`, `+Set.remove+`, `+Set.intersection+`, `+Set.difference+`, `+Map.filterEntries+`, `+Map.remove+`, `+Map.intersection+`, `+Map.difference+`
+| *maps* | one new element for each — `+List.map+`, `+List.mapIndexed+`, `+Map.mapValues+`, `+Map.updateIfPresent+`
 | *collapses* | at most one new element for each — `+List.filterMap+`, `+Set.map+`
 |===
 

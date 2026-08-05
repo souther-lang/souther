@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.DischargeRules.Combinator;
+import souther.compiler.check.Combinators.Combinator;
 import souther.compiler.check.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
@@ -262,13 +262,13 @@ public final class InvariantChecker {
      * parameter to the container's element type (and seeding its invariant) so a construction inside
      * the closure is analyzed rather than left opaque. */
     private void walkCall(Core.PreservedCall call, Known k, Denotations at, int depth) {
-        Combinator combo = DischargeRules.combinator(call.operation());
+        Combinator combo = Combinators.of(call.operation());
         for (int i = 0; i < call.args().size(); i++) {
             Core arg = call.args().get(i);
             Core.Block step = combo != null && i == combo.closureArg() ? Terms.blockOf(arg, at) : null;
             if (step != null && combo.elementParam() < step.params().size()
-                    && combo.listArg() < call.args().size()) {
-                Core container = call.args().get(combo.listArg());
+                    && combo.containerArg() < call.args().size()) {
+                Core container = call.args().get(combo.containerArg());
                 Type elem = Terms.elementType(container.type());
                 // The container is read where the call is written, so what is known of its elements
                 // is looked up before the closure's parameter stands for anything.

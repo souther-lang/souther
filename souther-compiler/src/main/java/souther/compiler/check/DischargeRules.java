@@ -12,65 +12,21 @@ import java.util.Set;
  * What the language's own operations do to the properties the invariant-discharge check tracks
  * (spec §invariant-discharge-preservation).
  *
- * <p>This is the table that decides how much of a model the language tracks rather than leaves to a
- * run-time check, and it is stated per operation because that is the level an author writes at. It is
- * data and lookups and nothing else: what a rule is <em>used for</em> — seeding a closure's element,
- * carrying a predicate to the container something was built from, naming a size — is the walk's, and
- * lives with the walk.
+ * <p>These are the tables that decide how much of a model the language tracks rather than leaves to a
+ * run-time check, and each is stated per operation because that is the level an author writes at. It
+ * is data and lookups and nothing else: what a rule is <em>used for</em> — carrying a predicate to
+ * the container something was built from, naming a size — is the walk's, and lives with the walk.
  *
  * <p>Every rule is keyed by the operation a call reaches, not by how it was written: a module that
  * imported an operation writes it bare and one that did not writes it qualified, and they are the
- * same operation. It is also keyed by the operation a call still reaches when this tree is read,
- * which is not every name an author can write — {@code List.fold} is rewritten to
- * {@code List.foldFrom} before any of this, so a rule under that name could not be looked up.
- * {@code InvariantCombinatorRulesTest} holds the table to both halves of that.
+ * same operation. What the operations do to the closure they are handed is not here but in
+ * {@link Combinators}, which the totality check reads as well and neither of the two states.
  */
 final class DischargeRules {
 
     /** The library operation written {@code qualified}, as what a name reaching it denotes. */
     private static ValueName op(String qualified) {
         return new ValueName.Stdlib(qualified);
-    }
-
-    /** A stdlib combinator whose closure (argument {@code closureArg}) is handed each element of its
-     * container argument ({@code listArg}) as closure parameter {@code elementParam} — mirrors
-     * {@link TotalityChecker}'s table, so a construction inside a {@code List.map} or
-     * {@code List.foldFrom} closure is analyzed with the element bound to the container's element
-     * type. */
-    record Combinator(int closureArg, int elementParam, int listArg) {}
-
-    private static final Map<ValueName, Combinator> COMBINATORS = Map.ofEntries(
-            Map.entry(op("List.foldFrom"), new Combinator(0, 1, 2)),
-            Map.entry(op("List.foldRight"), new Combinator(0, 0, 2)),
-            Map.entry(op("List.map"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.filter"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.all"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.any"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.find"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.partition"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.flatMap"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.filterMap"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.sortBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.groupBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.indexBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.allDistinctBy"), new Combinator(0, 0, 1)),
-            Map.entry(op("List.mapIndexed"), new Combinator(0, 1, 1)),
-            Map.entry(op("Map.fold"), new Combinator(0, 2, 2)),
-            Map.entry(op("Map.mapValues"), new Combinator(0, 1, 1)),
-            Map.entry(op("Map.filterEntries"), new Combinator(0, 1, 1)),
-            Map.entry(op("Map.updateIfPresent"), new Combinator(1, 0, 2)),
-            Map.entry(op("Map.updateOrInsert"), new Combinator(2, 0, 3)),
-            Map.entry(op("Set.fold"), new Combinator(0, 1, 2)),
-            Map.entry(op("Set.map"), new Combinator(0, 0, 1)),
-            Map.entry(op("Set.filter"), new Combinator(0, 0, 1)),
-            Map.entry(op("Set.partition"), new Combinator(0, 0, 1)),
-            Map.entry(op("Option.map"), new Combinator(0, 0, 1)));
-
-    /** The operations the table has a rule for, for the test that holds it to being reachable. */
-    static Set<String> combinatorNames() {
-        Set<String> names = new LinkedHashSet<>();
-        COMBINATORS.keySet().forEach(operation -> names.add(operation.name()));
-        return names;
     }
 
     /** The pure, total stdlib calls whose result is a number the domain can name: the size of a
@@ -118,8 +74,42 @@ final class DischargeRules {
             Map.entry(op("List.drop"), new Built(1, Shape.SUBSET)),
             Map.entry(op("Set.filter"), new Built(1, Shape.SUBSET)),
             Map.entry(op("Map.filterEntries"), new Built(1, Shape.SUBSET)),
+            Map.entry(op("List.distinctBy"), new Built(1, Shape.SUBSET)),
+            Map.entry(op("Map.remove"), new Built(1, Shape.SUBSET)),
+            Map.entry(op("Set.remove"), new Built(1, Shape.SUBSET)),
+            Map.entry(op("Map.intersection"), new Built(0, Shape.SUBSET)),
+            Map.entry(op("Map.difference"), new Built(0, Shape.SUBSET)),
+            Map.entry(op("Set.intersection"), new Built(0, Shape.SUBSET)),
+            Map.entry(op("Set.difference"), new Built(0, Shape.SUBSET)),
+            Map.entry(op("Map.updateIfPresent"), new Built(2, Shape.MAPS)),
             Map.entry(op("List.filterMap"), new Built(1, Shape.COLLAPSES)),
             Map.entry(op("Set.map"), new Built(1, Shape.COLLAPSES)));
+
+    /**
+     * The constructions this says nothing of, in three groups. Each reason is about what a shape can
+     * say, not about the operation being uninteresting.
+     *
+     * <p>What they answer holds something other than what they read. A map's keys and its entry
+     * pairs are not its values, {@code fromList} takes the values out of pairs, {@code groupBy}
+     * answers lists of the elements rather than the elements, {@code concat} reads the lists inside
+     * its argument, {@code zipShortest} pairs two lists, and {@code flatMap} makes any number of
+     * elements from each — which is neither the elements nor a count.
+     *
+     * <p>They put in what the container they read did not hold. Nothing that held of every element
+     * still does, and the size can rise; a shape says neither of those.
+     *
+     * <p>They answer the same elements in a container of another kind. That is true and unsayable:
+     * every statement the check makes names the kind it is about — {@code List.length} and
+     * {@code List.all}, or {@code Set.size} and {@code Set.contains} — so nothing said of the one is
+     * a statement about the other, and a rule between them would carry nothing. A statement that
+     * spans kinds is what would have to exist first.
+     */
+    static final Set<ValueName> NOTHING_KEPT = Set.of(
+            op("Map.keys"), op("Map.toList"), op("Map.fromList"), op("List.groupBy"),
+            op("List.concat"), op("List.zipShortest"), op("List.flatMap"),
+            op("Map.insert"), op("Set.insert"), op("Map.union"), op("Set.union"),
+            op("List.append"), op("Map.updateOrInsert"),
+            op("Map.values"), op("Set.toList"), op("Set.fromList"), op("List.indexBy"));
 
     /** Where a predicate reads its container, and which shapes of construction carry it there.
      * {@code List.all} holds of any sublist of a list it holds of; {@code List.contains} does not, and
@@ -141,7 +131,7 @@ final class DischargeRules {
 
     /** The calls that state their predicate of <em>every</em> element, so what they say of a
      * container is what holds of each element a closure is handed. Which argument is the predicate
-     * and which the container is what {@link #combinator} already answers of any combinator, and how
+     * and which the container is what {@link Combinators} already answers of any combinator, and how
      * far the statement travels is what {@link #carried} already answers of any predicate — so a
      * quantifier is the name and nothing else. {@code List.all} is the only one the library has. */
     private static final Set<ValueName> QUANTIFIERS = Set.of(op("List.all"));
@@ -157,6 +147,35 @@ final class DischargeRules {
             op("Map.isEmpty"), op("Map.size"),
             op("String.isEmpty"), op("String.length"));
 
+    /** The predicates whose statement this carries nowhere. A predicate over a string states
+     * something of the characters it holds in the order it holds them, and what would carry such a
+     * statement is a construction of a container from a container — which a string is not one of,
+     * its length being all this names of it. An emptiness check states a size, which travels as a
+     * size does ({@link #EMPTINESS}) and not as a property of elements. */
+    static final Set<ValueName> NOTHING_CARRIED = Set.of(
+            op("String.contains"), op("String.startsWith"), op("String.endsWith"),
+            op("String.matches"),
+            op("List.isEmpty"), op("Set.isEmpty"), op("Map.isEmpty"), op("String.isEmpty"));
+
+    /** The predicates of a single container that are not emptiness checks. The library has none:
+     * every one-argument predicate it declares over a container or a string is one, and one that was
+     * not would be named here with what it says instead. */
+    static final Set<ValueName> NOT_AN_EMPTINESS_CHECK = Set.of();
+
+    /** The predicates that apply a predicate to what a container holds without stating it of every
+     * element. {@code List.any} states it of some, so what it says of the container says nothing
+     * about the element a closure is handed. */
+    static final Set<ValueName> NOT_A_QUANTIFIER = Set.of(op("List.any"));
+
+    /** The predicates that compute something other than a truth value from each element and are not
+     * stated over it. The library has none: {@code allDistinctBy} is the only such predicate and its
+     * projection is its closure's answer. */
+    static final Set<ValueName> NOT_STATED_OVER_A_PROJECTION = Set.of();
+
+    /** The numbers answered about a container that are not one of its sizes. The library has none:
+     * every {@code Int} it answers about a container is how many it holds. */
+    static final Set<ValueName> NOT_A_SIZE = Set.of();
+
     /**
      * The library's function forms of the arithmetic operators, and the operator each one is. They
      * reach the same kernel in the same argument order — {@code Int.add} is {@code IntMath.addExact},
@@ -171,11 +190,52 @@ final class DischargeRules {
             op("Decimal.subtract"), Ast.BinOp.SUB,
             op("Decimal.multiply"), Ast.BinOp.MUL);
 
+    /** The operations over two numbers that are the function form of no operator: the language
+     * writes no {@code min}, {@code max}, {@code floorMod} or {@code compare}, so there is no second
+     * spelling for a term to be read as one of. */
+    static final Set<ValueName> NOT_AN_OPERATOR = Set.of(
+            op("Int.min"), op("Int.max"), op("Int.floorMod"), op("Int.compare"),
+            op("Decimal.min"), op("Decimal.max"));
+
     /** Denial, which the analysis representation keeps as the call it is. */
     static final ValueName NOT = op("Bool.not");
 
-    static Combinator combinator(ValueName operation) {
-        return COMBINATORS.get(operation);
+    /** The operations each table has a rule for. What is asked of them is {@link Question}'s to
+     * settle; these are so it can hold a rule to being one an operation is asked for. */
+    static Set<ValueName> builtOperations() {
+        return BUILT_FROM.keySet();
+    }
+
+    static Set<ValueName> carryingOperations() {
+        return CARRIED.keySet();
+    }
+
+    static Set<ValueName> emptinessChecks() {
+        return EMPTINESS.keySet();
+    }
+
+    static Set<ValueName> quantifiers() {
+        return QUANTIFIERS;
+    }
+
+    static Set<ValueName> projections() {
+        return PROJECTION_OF.keySet();
+    }
+
+    static Set<ValueName> sizeCalls() {
+        return SIZE_CALLS;
+    }
+
+    static Set<ValueName> operatorForms() {
+        return OPERATOR_CALLS.keySet();
+    }
+
+    /** Those of them the building table has, by name, for the test that holds each to a construction
+     * it discharges. */
+    static Set<String> builtNames() {
+        Set<String> names = new LinkedHashSet<>();
+        BUILT_FROM.keySet().forEach(operation -> names.add(operation.name()));
+        return names;
     }
 
     static Built builtFrom(ValueName operation) {

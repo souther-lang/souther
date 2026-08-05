@@ -744,17 +744,21 @@ public final class HelperInliner {
      * directly. */
     private static final Map<String, Integer> BLOCK_ARG = Map.of("List.foldFrom", 0);
 
-    /** {@code List.fold(step, seed, xs)} is sugar for {@code List.foldFrom(step, seed, xs, 0)} — the
-     * walk from the head. Rewriting it here, before inlining, means the step reaches {@code foldFrom}
-     * (the one recursive helper) directly rather than through a wrapper that would pass the function on
-     * as a value. */
-    private static Ast.Apply desugarFold(Ast.Apply call) {
-        if (!"List.fold".equals(call.reaches()) || call.args().size() != 3) {
+    /** The call a sugared name becomes, written out: what it becomes and what it supplies are the
+     * library's to say ({@link Prelude#rewriteOf}), and this is where it is done. {@code List.fold(step,
+     * seed, xs)} is {@code List.foldFrom(step, seed, xs, 0)} — the walk from the head. Rewriting here,
+     * before inlining, means the step reaches {@code foldFrom} (the one recursive helper) directly
+     * rather than through a wrapper that would pass the function on as a value. */
+    private static Ast.Apply desugar(Ast.Apply call) {
+        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
+        if (rewrite == null || call.args().size() != rewrite.keptArgs()) {
             return call;
         }
         List<Ast.Expr> args = new ArrayList<>(call.args());
-        args.add(new Ast.IntLit(0, call.pos()));
-        return new Ast.Apply("List.foldFrom", new ValueName.Stdlib("List.foldFrom"), args,
+        for (int supplied : rewrite.supplied()) {
+            args.add(new Ast.IntLit(supplied, call.pos()));
+        }
+        return new Ast.Apply(rewrite.target(), new ValueName.Stdlib(rewrite.target()), args,
                 ConstructionOrigin.own(),
                 call.pos());
     }
@@ -916,9 +920,10 @@ public final class HelperInliner {
      * Null when the name is not a helper (a builtin, an injected behavior, or unknown).
      */
     private List<Ast.FnParam> declaredParams(Ast.Apply call) {
-        if ("List.fold".equals(call.reaches()) && call.args().size() == 3) {
-            Ast.FnDef foldFrom = helpers.get("List.foldFrom");
-            return foldFrom == null ? null : foldFrom.params().subList(0, 3);
+        Prelude.Rewrite rewrite = Prelude.rewriteOf(call.reaches());
+        if (rewrite != null && call.args().size() == rewrite.keptArgs()) {
+            Ast.FnDef target = helpers.get(rewrite.target());
+            return target == null ? null : target.params().subList(0, rewrite.keptArgs());
         }
         Ast.FnDef helper = helpers.get(call.reaches());
         return helper == null ? null : helper.params();
@@ -1118,7 +1123,7 @@ public final class HelperInliner {
             }
             case Ast.Apply rawCall -> {
                 checkFunctionArgumentPlacement(rawCall);
-                Ast.Apply call = desugarNamedBlock(desugarFold(rawCall));
+                Ast.Apply call = desugarNamedBlock(desugar(rawCall));
                 List<Ast.Expr> args = new ArrayList<>();
                 for (Ast.Expr a : call.args()) {
                     args.add(inline(a));
