@@ -77,7 +77,21 @@ public final class HelperInliner {
      * table, so a narrowed table does not narrow it: what recurses was settled over the table as it
      * was built. */
     private final HelperGraph graph;
-    private int counter = 0;
+    /**
+     * How much this pass has written into each body, which is what tells two of its writings apart.
+     *
+     * <p>Counted per body and not per pass. What a body is written into is not affected by what was
+     * written into another — {@link BindingOwner.Expansion} says so of its ordinal — and one pass
+     * expands many bodies: a helper checked on its own and then the behavior that calls it, every
+     * definition a module publishes, every clause of a declaration's invariant. Counted across all of
+     * them, a body's bindings moved when a body beside it gained an expansion or lost one to a
+     * refusal, and a query answer that moves is a query answer everything below it is recomputed for.
+     *
+     * <p>Counted per body and not per writing, either. Two writings can share one body — one per
+     * clause of an invariant, one per argument of a helper being checked — so a count that restarted
+     * with each would give two of them the same binding.
+     */
+    private final Map<BindingOwner, Integer> written = new HashMap<>();
     /** The body being expanded, and the bindings this expansion introduces into it. An expansion
      * writes bindings no source wrote, so they belong to it rather than to the definition whose text
      * it is splicing, which is what keeps two copies of one helper's body apart. */
@@ -738,7 +752,7 @@ public final class HelperInliner {
                     || !dependencies.contains(local.id())) {
                 continue;
             }
-            out.set(i, etaExpand(v, want.params().size(), _ -> "$" + counter++ + "_" + v.name()));
+            out.set(i, etaExpand(v, want.params().size(), _ -> "$" + next() + "_" + v.name()));
         }
         return out;
     }
@@ -770,13 +784,21 @@ public final class HelperInliner {
         Ast.Binders outerBinders = binders;
         BindingOwner outerInto = this.into;
         this.into = into;
-        binders = new Ast.Binders(new BindingOwner.Synthesized(into, BindingOwner.Pass.INLINER, 0));
+        // Numbered among what this pass has written into that body, so a second writing into it — a
+        // second clause of one invariant, a second argument of one helper — writes bindings of its
+        // own rather than the first one's over again.
+        binders = new Ast.Binders(new BindingOwner.Synthesized(into, BindingOwner.Pass.INLINER, next()));
         try {
             return inline(e);
         } finally {
             binders = outerBinders;
             this.into = outerInto;
         }
+    }
+
+    /** The next number this pass has for the body it is writing into. */
+    private int next() {
+        return written.merge(into, 1, Integer::sum) - 1;
     }
 
     /** How the source wrote an expression that is a name or a chain of field reads off one, or null
@@ -803,7 +825,7 @@ public final class HelperInliner {
             // — and which says outright what the order is: the function is worked out once, before
             // any argument, and the binding is what is applied.
             case Ast.Apply raw when !raw.appliesAName() -> {
-                Ast.Binder f = binders.binder("$fn" + counter++, raw.function().pos());
+                Ast.Binder f = binders.binder("$fn" + next(), raw.function().pos());
                 // What the application reaches is the binding, and what a report about it quotes is
                 // what the author wrote — a field read applied (`deps.count(x)`) has a spelling, and
                 // quoting the binding would name `$fn0`, which is nowhere in the source. The two are
@@ -949,7 +971,7 @@ public final class HelperInliner {
         // declared return is carried on, and every binding copied out of the callee's body.
         // One minter, so no two of them are the same binding, and a reader can ask of any of
         // them which call it came from.
-        BindingOwner mine = new BindingOwner.Expansion(into, call.denotes(), counter++);
+        BindingOwner mine = new BindingOwner.Expansion(into, call.denotes(), next());
         Ast.Binders ours = new Ast.Binders(mine);
         // What the callee's signature leaves open, this call decides. Its variables are
         // instantiated once, here, over the whole signature at once — so a variable it wrote
@@ -1210,7 +1232,7 @@ public final class HelperInliner {
     private Ast.Expr valueOf(Ast.Var v) {
         OptionalInt arity = declarationArity(v);
         if (arity.isPresent()) {
-            int k = counter++;
+            int k = next();
             return inline(etaExpand(v, arity.getAsInt(), i -> "$v" + k + "_" + i));
         }
         if (!(v.denotes() instanceof ValueName.Helper)) {
@@ -1241,7 +1263,7 @@ public final class HelperInliner {
                 spreads.add(spread);
                 continue;
             }
-            Ast.Binder name = binders.binder("$s" + counter++ + "_" + spread.bare(), spread.pos());
+            Ast.Binder name = binders.binder("$s" + next() + "_" + spread.bare(), spread.pos());
             bound.add(name);
             values.add(HelperNames.carriedByValue(inline(value.writtenBody())));
             spreads.add(Ast.Var.local(name, spread.pos()));
@@ -1289,7 +1311,7 @@ public final class HelperInliner {
         if (helper == null) {
             return call;   // a bare name that stands for no body is left for the type checker to report
         }
-        int k = counter++;
+        int k = next();
         Ast.Block block = etaExpand(v, helper.params().size(), i -> "$b" + k + "_" + i);
         List<Ast.Expr> args = new ArrayList<>(call.args());
         args.set(idx, block);
