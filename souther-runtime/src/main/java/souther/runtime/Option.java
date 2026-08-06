@@ -1,5 +1,7 @@
 package souther.runtime;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * The optional type from spec section 7.3: {@code Some(T)} or {@code None}.
  *
@@ -43,8 +45,8 @@ public sealed interface Option<T> permits Option.Some, Option.None {
     /** Bridges the value a Raoh nullable-field decoder lands on to the Souther {@code Option}.
      * Called by generated decode bodies for {@code ?} fields. A {@code ?} field is {@code None} for
      * an absent key and for a written {@code null} alike, and that decoder answers both with a
-     * null. */
-    static <T> Option<T> ofNullable(T value) {
+     * null — so this is one of the places the package says admit a null, and it says so. */
+    static <T> Option<T> ofNullable(@Nullable T value) {
         return value == null ? none() : new Some<>(value);
     }
 
