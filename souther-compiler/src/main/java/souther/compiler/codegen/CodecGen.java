@@ -287,6 +287,8 @@ final class CodecGen {
             // discriminator key of the source, each case dispatches to that case's decoder for the
             // same source (spec 10.3). discriminate/variant are the core (input-generic) combinators.
             cb.withMethodBody("decode", MTD_Rdecode, ClassFile.ACC_PUBLIC, code -> {
+                // this=0, in=1, path=2, so 3 is the first free slot for the guard to hold the node in.
+                emitObjectGuard(code, src, 3);
                 code.loadConstant(disc.key());
                 code.loadConstant(disc.key());
                 emitStringLeaf(code, srcLeafOwner(src));
@@ -1043,15 +1045,20 @@ final class CodecGen {
      * the record. A data whose fields are all optional went the other way and decoded, since an absent
      * field is what {@code nullableField} makes of a node it cannot read.
      *
+     * <p>A sum is read as an object too — its discriminator is a field — so it asks the same question
+     * in the same place. Left to the discriminator, the mismatch is blamed on the discriminator key,
+     * the one field of the object the author never writes.
+     *
      * <p>Only the JSON source needs it. The neutral decoder is handed a {@code Map} by its own
      * signature, and a nested one is bridged through {@code MapDecoders.nested}, which asks the same
      * question at the same place; a jOOQ {@code Record} is a row and has no other shape to be.
+     *
+     * @param node a free local slot, which the guard holds the cast node in
      */
-    private void emitObjectGuard(CodeBuilder code, BodyGen gen, Src src) {
+    private void emitObjectGuard(CodeBuilder code, Src src, int node) {
         if (src != Src.JSON) {
             return;
         }
-        int node = gen.slot(Type.STRING);
         Label required = code.newLabel();
         Label ok = code.newLabel();
         code.aload(1);
@@ -1097,7 +1104,7 @@ final class CodecGen {
 
     private void emitObjectDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.ObjectDecoder obj,
                                   Map<String, Type> fields, Src src) {
-        emitObjectGuard(code, gen, src);
+        emitObjectGuard(code, src, gen.slot(Type.STRING));
         List<Ast.Bind> binds = obj.binds();
         int[] resultSlots = new int[binds.size()];
         for (int i = 0; i < binds.size(); i++) {

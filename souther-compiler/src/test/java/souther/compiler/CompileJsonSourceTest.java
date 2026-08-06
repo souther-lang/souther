@@ -167,6 +167,54 @@ class CompileJsonSourceTest {
         assertEquals("required", issues.get(0).code());
     }
 
+    /**
+     * A sum is read as an object too — its discriminator is a field — so the same rule holds for it.
+     * Read through the discriminator alone, the shape mismatch is blamed on the discriminator key,
+     * which is the one field the author had no chance to write.
+     */
+    @Test
+    void jsonDecoderReportsANonObjectSumAtTheSumItself() throws Exception {
+        Result<?> r = Codecs.decode(compile(), "demo.Application", "jsonDecoder",
+                mapper.readTree("5"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), "one node, one issue: " + issues);
+        assertEquals("", issues.get(0).path().toString(), "reported at the sum, not at its tag");
+        assertEquals("type_mismatch", issues.get(0).code());
+    }
+
+    @Test
+    void jsonDecoderReportsANestedNonObjectSumAtTheFieldNotItsTag() throws Exception {
+        String src = """
+                module demo
+                data Submitted = { note: String }
+                data Rejected = { reason: String }
+                data Application = Submitted | Rejected
+                data Envelope = { content: Application }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+        Result<?> r = Codecs.decode(loader, "demo.Envelope", "jsonDecoder",
+                mapper.readTree("{\"content\":5}"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), "one node, one issue: " + issues);
+        assertEquals("/content", issues.get(0).path().toString());
+    }
+
+    @Test
+    void jsonDecoderCallsANullSumRequired() throws Exception {
+        Result<?> r = Codecs.decode(compile(), "demo.Application", "jsonDecoder",
+                mapper.readTree("null"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), issues.toString());
+        assertEquals("", issues.get(0).path().toString());
+        assertEquals("required", issues.get(0).code());
+    }
+
     /** An object still accumulates every field's error, which is what makes the guard a guard. */
     @Test
     void jsonDecoderStillAccumulatesEveryFieldErrorOfAnObject() throws Exception {
