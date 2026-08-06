@@ -37,7 +37,8 @@ public final class ApiCommand {
             return printSource(args[1], out, err);
         }
         if (args[0].equals("--search")) {
-            if (args.length < 2) {
+            if (args.length < 2 || args[1].isBlank()) {
+                err.println("`--search` needs a term to look for");
                 err.println("usage: souther api --search <term>");
                 return 2;
             }

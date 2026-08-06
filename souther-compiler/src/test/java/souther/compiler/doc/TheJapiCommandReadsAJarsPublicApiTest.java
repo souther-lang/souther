@@ -60,6 +60,22 @@ class TheJapiCommandReadsAJarsPublicApiTest {
                     }
                 }
                 """);
+        Path hidden = dir.resolve("acme/Hidden.java");
+        Files.writeString(hidden, """
+                package acme;
+
+                /** Not for anyone outside this package. */
+                final class Hidden {
+                    public String secret() {
+                        return "s";
+                    }
+                }
+                """);
+        Path packageInfo = dir.resolve("acme/package-info.java");
+        Files.writeString(packageInfo, """
+                /** The acme package. */
+                package acme;
+                """);
         Path record = dir.resolve("acme/Pair.java");
         Files.writeString(record, """
                 package acme;
@@ -72,7 +88,8 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         Path classes = dir.resolve("classes");
         Files.createDirectories(classes);
         assertEquals(0, javac.run(null, OutputStream.nullOutputStream(), OutputStream.nullOutputStream(),
-                "-d", classes.toString(), "-parameters", src.toString(), record.toString()));
+                "-d", classes.toString(), "-parameters", src.toString(), record.toString(),
+                hidden.toString(), packageInfo.toString()));
 
         jar = dir.resolve("greeter-1.0.jar");
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
@@ -214,6 +231,28 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         assertTrue(answer.out().contains("class acme.Greeter"), answer.out());
         assertTrue(answer.err().contains(notAJar.getFileName().toString()),
                 "the entry it could not read is named: " + answer.err());
+    }
+
+    @Test
+    void aPackageListsOnlyWhatIsPublishedFromIt() {
+        Answer answer = run("acme", "-cp", jar.toString());
+
+        assertEquals(0, answer.code(), answer.err());
+        assertTrue(answer.out().lines().anyMatch(l -> l.equals("acme.Greeter")), answer.out());
+        assertTrue(answer.out().lines().noneMatch(l -> l.endsWith(".package-info")),
+                "a package descriptor is not a type anyone calls:\n" + answer.out());
+        assertTrue(answer.out().lines().noneMatch(l -> l.equals("acme.Hidden")),
+                "a package-private type is not part of the published API:\n" + answer.out());
+    }
+
+    @Test
+    void aTypeAskedForByNameIsShownEvenWhenItIsNotPublished() {
+        Answer answer = run("acme.Hidden", "-cp", jar.toString());
+
+        assertEquals(0, answer.code(), answer.err());
+        assertTrue(answer.out().contains("class acme.Hidden"), answer.out());
+        assertTrue(answer.err().contains("not public"),
+                "and it is said that this is not part of the published API: " + answer.err());
     }
 
     @Test

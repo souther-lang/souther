@@ -42,6 +42,24 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
     }
 
     @Test
+    void aClientsOwnRevisionIsEchoedWhenItIsOneThisServerAnswersUnder() {
+        List<JsonNode> answers = serve("""
+                {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}""");
+
+        assertEquals("2025-06-18", answers.getFirst().get("result").get("protocolVersion").asString(),
+                "a client on an older revision is answered on its own");
+    }
+
+    @Test
+    void arevisionThisServerDoesNotKnowIsAnsweredWithTheOneItPrefers() {
+        List<JsonNode> answers = serve("""
+                {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1999-01-01","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}""");
+
+        assertEquals("2026-07-28", answers.getFirst().get("result").get("protocolVersion").asString(),
+                "the server names what it does answer under, and lets the client decide");
+    }
+
+    @Test
     void aNotificationIsAnsweredWithSilence() {
         List<JsonNode> answers = serve(
                 "{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}");

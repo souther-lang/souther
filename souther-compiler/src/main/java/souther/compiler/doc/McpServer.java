@@ -29,7 +29,18 @@ import java.util.Map;
 public final class McpServer {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
-    private static final String PROTOCOL_VERSION = "2025-06-18";
+
+    /**
+     * The protocol revisions this server answers under, newest first.
+     *
+     * <p>What it serves — the three tools and their results — is the same under all of them; the
+     * revisions differ in what a client may additionally ask for, and this server declares only
+     * {@code tools}. So the client's own revision is echoed when it is one of these, which is what
+     * lets a newer client keep talking without the server claiming a revision it was not written
+     * against.
+     */
+    private static final List<String> PROTOCOL_VERSIONS =
+            List.of("2026-07-28", "2025-11-25", "2025-06-18");
 
     /** name → its description and input schema; order is the order tools/list answers with. */
     private static final List<Tool> TOOLS = List.of(
@@ -88,12 +99,16 @@ public final class McpServer {
     private static ObjectNode respond(JsonNode request, JsonNode id) {
         String method = request.get("method") == null ? "" : request.get("method").asString();
         return switch (method) {
-            case "initialize" -> result(id, initializeResult());
+            case "initialize" -> result(id, initializeResult(request.get("params")));
             case "ping" -> result(id, JSON.createObjectNode());
             case "tools/list" -> result(id, toolsResult());
             // A tool that blows up is this call's failure, not the session's: the server is long
             // lived and a client that mistypes an argument must not lose the ones after it.
             case "tools/call" -> {
+                String invalid = invalidArguments(request.get("params"));
+                if (invalid != null) {
+                    yield error(id, -32602, invalid);
+                }
                 try {
                     yield result(id, call(request.get("params")));
                 } catch (RuntimeException e) {
@@ -105,14 +120,18 @@ public final class McpServer {
         };
     }
 
-    private static ObjectNode initializeResult() {
+    private static ObjectNode initializeResult(JsonNode params) {
+        JsonNode asked = params == null ? null : params.get("protocolVersion");
+        String version = asked != null && asked.isString() && PROTOCOL_VERSIONS.contains(asked.asString())
+                ? asked.asString()
+                : PROTOCOL_VERSIONS.getFirst();
         ObjectNode result = JSON.createObjectNode();
-        result.put("protocolVersion", PROTOCOL_VERSION);
+        result.put("protocolVersion", version);
         result.putObject("capabilities").putObject("tools");
         ObjectNode server = result.putObject("serverInfo");
         server.put("name", "souther");
-        String version = McpServer.class.getPackage().getImplementationVersion();
-        server.put("version", version == null ? "dev" : version);
+        String built = McpServer.class.getPackage().getImplementationVersion();
+        server.put("version", built == null ? "dev" : built);
         return result;
     }
 
@@ -135,6 +154,45 @@ public final class McpServer {
             tool.required().forEach(required::add);
         }
         return result;
+    }
+
+    /**
+     * What is wrong with a call's arguments, or null when nothing is.
+     *
+     * <p>The arguments arrive from a client and are checked against the tool's own schema before
+     * anything runs. An argument that is absent, of another type, or a string of no characters is
+     * not a value to be worked with — the search term this matters most for matches everything and
+     * at every position, and the walk over its occurrences would not advance. Reporting it as an
+     * invalid parameter says the tool was never entered, which a tool error would not.
+     */
+    private static String invalidArguments(JsonNode params) {
+        String name = params == null || params.get("name") == null ? "" : params.get("name").asString();
+        Tool tool = TOOLS.stream().filter(t -> t.name().equals(name)).findFirst().orElse(null);
+        if (tool == null) {
+            return "no tool `" + name + "`";
+        }
+        JsonNode arguments = params.get("arguments");
+        for (String required : tool.required()) {
+            JsonNode value = arguments == null ? null : arguments.get(required);
+            if (value == null || value.isNull()) {
+                return "`" + name + "` needs `" + required + "`";
+            }
+            if (!value.isString()) {
+                return "`" + required + "` must be a string";
+            }
+            if (value.asString().isBlank()) {
+                return "`" + required + "` must not be empty";
+            }
+        }
+        if (arguments != null) {
+            for (String given : tool.params().keySet()) {
+                JsonNode value = arguments.get(given);
+                if (value != null && !value.isNull() && !value.isString()) {
+                    return "`" + given + "` must be a string";
+                }
+            }
+        }
+        return null;
     }
 
     private static ObjectNode call(JsonNode params) {

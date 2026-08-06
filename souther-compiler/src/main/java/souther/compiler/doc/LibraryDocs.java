@@ -72,15 +72,44 @@ public final class LibraryDocs {
 
     /** Every topic whose title or text contains {@code term}, case-insensitively. */
     public List<Topic> search(String term) {
+        return rank(term).stream().map(Hit::topic).toList();
+    }
+
+    /** A topic the term was found in, scored the same way a specification section is. */
+    public record Hit(Topic topic, boolean titled, int occurrences, String snippet) {}
+
+    /**
+     * The topics that say {@code term}, each with what a caller needs to rank it against a
+     * specification section: whether the title names it, how often it is said, and the line it was
+     * found on.
+     */
+    public List<Hit> rank(String term) {
+        if (term == null || term.isBlank()) {
+            return List.of();
+        }
         String needle = term.toLowerCase();
-        List<Topic> hits = new ArrayList<>();
+        List<Hit> hits = new ArrayList<>();
         for (Topic topic : byName.values()) {
-            if (topic.title().toLowerCase().contains(needle)
-                    || text(loader, topic.resource()).toLowerCase().contains(needle)) {
-                hits.add(topic);
+            String body = text(loader, topic.resource());
+            boolean titled = topic.title().toLowerCase().contains(needle)
+                    || topic.name().toLowerCase().contains(needle);
+            int occurrences = count(body.toLowerCase(), needle);
+            if (titled || occurrences > 0) {
+                hits.add(new Hit(topic, titled, occurrences, snippet(topic, term)));
             }
         }
         return hits;
+    }
+
+    private static int count(String haystack, String needle) {
+        if (needle.isEmpty()) {
+            return 0;
+        }
+        int n = 0;
+        for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length())) {
+            n++;
+        }
+        return n;
     }
 
     /** The line of {@code topic} that says {@code term}, cut to a readable width. */

@@ -37,7 +37,8 @@ public final class DocCommand {
             return 0;
         }
         if (args[0].equals("--search")) {
-            if (args.length < 2) {
+            if (args.length < 2 || args[1].isBlank()) {
+                err.println("`--search` needs a term to look for");
                 err.println("usage: souther doc --search <term> [--limit <n>]");
                 return 2;
             }
@@ -53,7 +54,7 @@ public final class DocCommand {
                 }
             }
             String term = args[1];
-            List<String> lines = hits(spec, shipped, term);
+            List<String> lines = new ArrayList<>(hits(spec, shipped, term));
             if (lines.isEmpty() && term.contains(" ")) {
                 // A phrase is matched whole, so a reader who typed a question rather than a term
                 // gets nothing. Rather than answer with silence, the words are tried separately.
@@ -112,18 +113,34 @@ public final class DocCommand {
         return 0;
     }
 
-    /** One hit per entry: the tab-separated name and title, and under it the line it matched on. */
+    /**
+     * What was found, best answer first, across the specification and every shipped doc set.
+     *
+     * <p>The two are scored the same way and sorted once. Ranking each on its own and printing one
+     * after the other would put the best answer out of reach whenever the other side has enough
+     * weak matches to fill the page, and the shipped topics — being few — are what would vanish.
+     */
+    private record Found(String name, String title, String snippet, boolean titled, int occurrences) {
+
+        String rendered() {
+            return name + "\t" + title + (snippet.isBlank() ? "" : "\n    " + snippet);
+        }
+    }
+
     private static List<String> hits(SpecDocument spec, LibraryDocs shipped, String term) {
-        List<String> lines = new ArrayList<>();
+        List<Found> found = new ArrayList<>();
         for (SpecDocument.Hit hit : spec.rank(term)) {
-            lines.add(hit.section().anchor() + "\t" + hit.section().title()
-                    + (hit.snippet().isBlank() ? "" : "\n    " + hit.snippet()));
+            found.add(new Found(hit.section().anchor(), hit.section().title(), hit.snippet(),
+                    hit.titled(), hit.occurrences()));
         }
-        for (LibraryDocs.Topic topic : shipped.search(term)) {
-            String snippet = shipped.snippet(topic, term);
-            lines.add(topic.name() + "\t" + topic.title()
-                    + (snippet.isBlank() ? "" : "\n    " + snippet));
+        for (LibraryDocs.Hit hit : shipped.rank(term)) {
+            found.add(new Found(hit.topic().name(), hit.topic().title(), hit.snippet(),
+                    hit.titled(), hit.occurrences()));
         }
-        return lines;
+        return found.stream()
+                .sorted(java.util.Comparator.comparing(Found::titled).reversed()
+                        .thenComparing(java.util.Comparator.comparingInt(Found::occurrences).reversed()))
+                .map(Found::rendered)
+                .toList();
     }
 }

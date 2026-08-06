@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.zip.ZipEntry;
 
@@ -110,7 +111,7 @@ public final class JapiCommand {
                         return new Found(Files.readAllBytes(f), entry);
                     }
                 } else if (Files.isRegularFile(entry)) {
-                    try (JarFile jar = new JarFile(entry.toFile())) {
+                    try (JarFile jar = versioned(entry)) {
                         ZipEntry e = jar.getEntry(resource);
                         if (e != null) {
                             return new Found(jar.getInputStream(e).readAllBytes(), entry);
@@ -130,6 +131,13 @@ public final class JapiCommand {
         err.println("skipping `" + entry + "`: " + e.getMessage());
     }
 
+    /**
+     * The published top-level types of {@code packageName}.
+     *
+     * <p>A class file's name says nothing about whether anyone outside its package may name the
+     * type. This command answers a dependency's public API, so the class's own access flag decides,
+     * and {@code package-info} — a descriptor rather than a type — is left out with it.
+     */
     private static List<String> classesUnder(String packageName, List<Path> entries, PrintStream err) {
         String prefix = packageName.replace('.', '/') + "/";
         List<String> classes = new ArrayList<>();
@@ -139,25 +147,62 @@ public final class JapiCommand {
                     Path dir = entry.resolve(packageName.replace('.', '/'));
                     if (Files.isDirectory(dir)) {
                         try (var files = Files.list(dir)) {
-                            files.map(f -> f.getFileName().toString())
-                                    .filter(f -> f.endsWith(".class") && !f.contains("$"))
-                                    .forEach(f -> classes.add(packageName + "." + f.substring(0, f.length() - 6)));
+                            for (Path f : files.toList()) {
+                                String simple = topLevelName(f.getFileName().toString());
+                                if (simple != null && isPublic(Files.readAllBytes(f))) {
+                                    classes.add(packageName + "." + simple);
+                                }
+                            }
                         }
                     }
                 } else if (Files.isRegularFile(entry)) {
-                    try (JarFile jar = new JarFile(entry.toFile())) {
-                        jar.stream().map(ZipEntry::getName)
-                                .filter(n -> n.startsWith(prefix) && n.endsWith(".class"))
-                                .map(n -> n.substring(prefix.length(), n.length() - 6))
-                                .filter(n -> !n.contains("/") && !n.contains("$"))
-                                .forEach(n -> classes.add(packageName + "." + n));
+                    try (JarFile jar = versioned(entry)) {
+                        for (JarEntry e : jar.versionedStream().toList()) {
+                            String name = e.getName();
+                            if (!name.startsWith(prefix)) {
+                                continue;
+                            }
+                            String simple = topLevelName(name.substring(prefix.length()));
+                            if (simple == null || simple.contains("/")) {
+                                continue;
+                            }
+                            try (java.io.InputStream in = jar.getInputStream(e)) {
+                                if (isPublic(in.readAllBytes())) {
+                                    classes.add(packageName + "." + simple);
+                                }
+                            }
+                        }
                     }
                 }
             } catch (IOException e) {
                 unreadable(entry, e, err);
             }
         }
-        return classes.stream().sorted().toList();
+        return classes.stream().distinct().sorted().toList();
+    }
+
+    /** The simple name of a top-level class file, or null for a nested type or a descriptor. */
+    private static String topLevelName(String fileName) {
+        if (!fileName.endsWith(".class") || fileName.contains("$")) {
+            return null;
+        }
+        String simple = fileName.substring(0, fileName.length() - ".class".length());
+        return simple.equals("package-info") || simple.equals("module-info") ? null : simple;
+    }
+
+    private static boolean isPublic(byte[] bytes) {
+        return ClassFile.of().parse(bytes).flags().flags().contains(AccessFlag.PUBLIC);
+    }
+
+    /**
+     * A jar read at the version this JVM runs at.
+     *
+     * <p>A multi-release jar holds a class more than once, and the plain constructor answers with
+     * the base copy — which is not what the caller's code links against. The shipped CLI jar is
+     * itself multi-release, so this is the ordinary case rather than an exotic one.
+     */
+    private static JarFile versioned(Path entry) throws IOException {
+        return new JarFile(entry.toFile(), true, java.util.zip.ZipFile.OPEN_READ, JarFile.runtimeVersion());
     }
 
     // ---- rendering ----
@@ -167,6 +212,11 @@ public final class JapiCommand {
         ClassModel cm = ClassFile.of().parse(found.bytes());
         SourceDoc doc = SourceDoc.of(found.entry(), binaryName, bundled);
         String simpleName = binaryName.substring(binaryName.lastIndexOf('.') + 1);
+        if (!cm.flags().flags().contains(AccessFlag.PUBLIC)) {
+            // Asked for by name, so it is answered — but a caller outside its package cannot name
+            // it, and this command's subject is what a dependency publishes.
+            err.println("`" + binaryName + "` is not public, so it is not part of what this jar publishes");
+        }
 
         List<String> members = new ArrayList<>();
         StringBuilder body = new StringBuilder();
@@ -180,8 +230,8 @@ public final class JapiCommand {
                 continue;
             }
             body.append("\n");
-            doc.of(name).ifPresent(d -> body.append(indent(d)).append("\n"));
-            body.append("  ").append(fieldLine(f, doc)).append("\n");
+            doc.of(name, -1).ifPresent(d -> body.append(indent(d)).append("\n"));
+            body.append("  ").append(fieldLine(f)).append("\n");
         }
         for (MethodModel m : cm.methods()) {
             Set<AccessFlag> flags = m.flags().flags();
@@ -198,7 +248,8 @@ public final class JapiCommand {
                 continue;
             }
             body.append("\n");
-            doc.of(shown).ifPresent(d -> body.append(indent(d)).append("\n"));
+            int arity = m.methodTypeSymbol().parameterCount();
+            doc.of(shown, arity).ifPresent(d -> body.append(indent(d)).append("\n"));
             body.append("  ").append(methodLine(m, simpleName, doc)).append("\n");
         }
         if (member != null && body.isEmpty()) {
@@ -258,7 +309,7 @@ public final class JapiCommand {
         return sb.toString();
     }
 
-    private static String fieldLine(FieldModel f, SourceDoc doc) {
+    private static String fieldLine(FieldModel f) {
         String type = f.findAttribute(Attributes.signature())
                 .map(a -> show(Signature.parseFrom(a.signature().stringValue())))
                 .orElse(shortName(desc(f.fieldTypeSymbol())));
@@ -282,7 +333,8 @@ public final class JapiCommand {
         }
         sb.append(ctor ? simpleName : m.methodName().stringValue()).append("(");
         String shown = ctor ? simpleName : m.methodName().stringValue();
-        List<String> names = paramNames(m, paramTypes.size(), doc.paramsOf(shown));
+        List<String> names = paramNames(m, paramTypes.size(),
+                doc.paramsOf(shown, mt.parameterCount()));
         for (int i = 0; i < paramTypes.size(); i++) {
             if (i > 0) {
                 sb.append(", ");
@@ -464,6 +516,9 @@ public final class JapiCommand {
             }
         }
 
+        /** What a doc comment is filed under when two of them would otherwise collide. */
+        private static final String AMBIGUOUS = " ambiguous";
+
         static SourceDoc parse(String source, String simpleName) {
             java.util.Map<String, String> byName = new java.util.LinkedHashMap<>();
             Optional<String> classDoc = Optional.empty();
@@ -498,20 +553,67 @@ public final class JapiCommand {
                         byName.putIfAbsent(typeName, doc);
                     }
                 } else {
-                    byName.putIfAbsent(named.group(2), doc);
+                    // A method is filed under its name and how many parameters it takes, so an
+                    // overload of a different length does not answer for this one. Two overloads
+                    // of the same length are told apart by their parameter types, which this reader
+                    // does not resolve — so neither is filed, and the members print with no prose
+                    // rather than with another method's.
+                    String key = named.group(2) + "/" + arityAt(source, m.start(2) + named.end(2));
+                    String had = byName.putIfAbsent(key, doc);
+                    if (had != null && !had.equals(doc)) {
+                        byName.put(key, AMBIGUOUS);
+                    }
                 }
             }
             return new SourceDoc(classDoc, byName);
         }
 
-        Optional<String> of(String name) {
-            return Optional.ofNullable(byName.get(name));
+        /**
+         * How many parameters the declaration beginning at {@code from} takes, counted from the
+         * source rather than from the doc comment's {@code @param} tags — a comment may document
+         * fewer than are declared, and a signature may run over several lines.
+         */
+        private static int arityAt(String source, int from) {
+            int open = source.indexOf('(', from);
+            if (open < 0) {
+                return -1;
+            }
+            int depth = 0;
+            int params = 0;
+            boolean any = false;
+            for (int i = open; i < source.length(); i++) {
+                char c = source.charAt(i);
+                if (c == '(' || c == '<' || c == '[') {
+                    depth++;
+                } else if (c == ')' || c == '>' || c == ']') {
+                    depth--;
+                    if (depth == 0) {
+                        return any ? params + 1 : 0;
+                    }
+                } else if (!Character.isWhitespace(c)) {
+                    any = true;
+                    if (c == ',' && depth == 1) {
+                        params++;
+                    }
+                }
+            }
+            return -1;
         }
 
-        /** The {@code @param} names of {@code name}'s doc comment, in the order they are written —
+        /** The doc of the member called {@code name} taking {@code arity} parameters, if exactly
+         *  one such member is documented. */
+        Optional<String> of(String name, int arity) {
+            String doc = byName.get(name + "/" + arity);
+            if (doc == null) {
+                doc = byName.get(name);   // a type or a field, which no arity distinguishes
+            }
+            return Optional.ofNullable(doc).filter(d -> !d.equals(AMBIGUOUS));
+        }
+
+        /** The {@code @param} names of the matching doc comment, in the order they are written —
          *  which is the declaration order the class file has forgotten. */
-        List<String> paramsOf(String name) {
-            String doc = byName.get(name);
+        List<String> paramsOf(String name, int arity) {
+            String doc = of(name, arity).orElse(null);
             if (doc == null) {
                 return List.of();
             }

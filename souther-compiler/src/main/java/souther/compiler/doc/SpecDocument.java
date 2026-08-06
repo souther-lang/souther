@@ -133,6 +133,11 @@ public final class SpecDocument {
      * is otherwise no answer at all — over half the document comes back and nothing is chosen.
      */
     public List<Hit> rank(String term) {
+        // A term of no characters sits at every position and matches everything, which is not an
+        // answer; a walk over its occurrences would also never advance past one.
+        if (term == null || term.isBlank()) {
+            return List.of();
+        }
         String needle = term.toLowerCase();
         List<Hit> hits = new ArrayList<>();
         for (int i = 0; i < inOrder.size(); i++) {
@@ -175,6 +180,9 @@ public final class SpecDocument {
     }
 
     private static int count(String haystack, String needle) {
+        if (needle.isEmpty()) {
+            return 0;
+        }
         int n = 0;
         for (int at = haystack.indexOf(needle); at >= 0; at = haystack.indexOf(needle, at + needle.length())) {
             n++;

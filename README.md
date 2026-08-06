@@ -134,25 +134,35 @@ The `souther` binary answers questions about the language and its libraries itse
 person nor a coding agent has to hunt through a workspace or disassemble jars:
 
 ```sh
-souther doc                    # every specification section, anchor<TAB>title
+souther doc                    # every specification section and shipped topic, name<TAB>title
 souther doc newtype            # one section, by its anchor
-souther doc raoh/tutorial      # a doc a bundled library ships (raoh's tutorial)
-souther doc --search decoder   # sections and topics that say the term
+souther doc cli/run            # a topic the command line ships about itself
+souther doc --search decoder   # ranked hits, each with the line it matched on
 souther api Option             # the stdlib surface with resolved signatures
+souther api --search fold      # the names that answer a term
 souther api --source Option    # a stdlib module's own source, comments included
-souther japi net.unit8.raoh.Issues -cp <jar>   # a dependency's public API, with javadoc
+souther japi net.unit8.raoh.Issues        # a dependency's public API, with javadoc
+souther japi net.unit8.raoh.Issues#add    # one member of it
 ```
 
+New to the language? `souther doc cli/start-here` names the four sections to read and the order.
+
 `souther doc` serves the specification the compiler was built from — it is bundled in the jar, not
-looked up on disk. `souther api` prints the signatures the type checker itself resolved. `souther
-japi` reads class files without loading them and brings javadoc along from the `-sources.jar`
-sitting next to the jar. A library can ship its own docs inside its jar under
-`META-INF/souther-docs/`, and `souther doc` lists them alongside the specification — raoh does
-this from 0.7.1 on.
+looked up on disk. `souther api` prints the signatures the type checker itself resolved, including
+the names that exist only as sugar over a private helper. `souther japi` reads class files without
+loading them, and takes javadoc from the `-sources.jar` beside the jar, or from the sources bundled
+with the CLI when there is none.
+
+A library may ship its own documentation inside its own jar under `META-INF/souther-docs/`, and
+`souther doc` then lists its topics alongside the specification and reads them by a `set/topic`
+name. The CLI's own reference is carried that way and is nothing special. No published raoh release
+carries its guides yet — souther-lang/raoh#122 adds them, and they appear here once a release with
+that change is the one this build depends on.
 
 The same answers are served over the Model Context Protocol: `souther mcp` speaks MCP on stdio,
 exposing `doc_search`, `doc_read`, `stdlib_api`, and `jar_api`, so agent harnesses that prefer
-tools over shell commands register one command:
+tools over shell commands register one command. It answers under protocol revisions `2026-07-28`,
+`2025-11-25` and `2025-06-18`, echoing the client's own when it is one of them:
 
 ```json
 { "mcpServers": { "souther": { "command": "souther", "args": ["mcp"] } } }
