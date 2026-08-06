@@ -128,6 +128,48 @@ The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/
 
 The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -jar souther-lsp.jar`. Formatting is also on the command line: `souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted.
 
+## Documentation on the command line
+
+The `souther` binary answers questions about the language and its libraries itself, so neither a
+person nor a coding agent has to hunt through a workspace or disassemble jars:
+
+```sh
+souther doc                    # every specification section and shipped topic, name<TAB>title
+souther doc newtype            # one section, by its anchor
+souther doc cli/run            # a topic the command line ships about itself
+souther doc raoh/tutorial      # a guide a bundled library ships
+souther doc --search decoder   # ranked hits, each with the line it matched on
+souther api Option             # the stdlib surface with resolved signatures
+souther api --search fold      # the names that answer a term
+souther api --source Option    # a stdlib module's own source, comments included
+souther japi net.unit8.raoh.Issues        # a dependency's public API, with javadoc
+souther japi net.unit8.raoh.Issues#add    # one member of it
+```
+
+New to the language? `souther doc cli/start-here` names the four sections to read and the order.
+
+`souther doc` serves the specification the compiler was built from — it is bundled in the jar, not
+looked up on disk. `souther api` prints the signatures the type checker itself resolved, including
+the names that exist only as sugar over a private helper. `souther japi` reads class files without
+loading them, and takes javadoc from the `-sources.jar` beside the jar, or from the sources bundled
+with the CLI when there is none.
+
+A library may ship its own documentation inside its own jar under `META-INF/souther-docs/`, and
+`souther doc` then lists its topics alongside the specification and reads them by a `set/topic`
+name. The CLI's own reference is carried that way and is nothing special; raoh ships its guides the
+same way from 0.7.1 on, so `souther doc raoh/composition-patterns` reads raoh's own guide at the
+version this build depends on.
+
+The same answers are served over the Model Context Protocol: `souther mcp` speaks MCP on stdio,
+exposing `doc_search`, `doc_read`, `stdlib_api`, and `jar_api`, so agent harnesses that prefer
+tools over shell commands register one command. It answers under protocol revisions `2025-11-25`
+and `2025-06-18` — the ones whose opening exchange is `initialize` — echoing the client's own when
+it is one of them:
+
+```json
+{ "mcpServers": { "souther": { "command": "souther", "args": ["mcp"] } } }
+```
+
 ## What Souther guarantees
 
 ### Construction of invalid data is confined

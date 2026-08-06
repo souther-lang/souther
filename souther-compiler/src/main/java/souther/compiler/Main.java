@@ -11,6 +11,10 @@ import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourceContext;
 import souther.compiler.diag.SourceContextResolver;
 import souther.compiler.diag.SourceNames;
+import souther.compiler.doc.ApiCommand;
+import souther.compiler.doc.DocCommand;
+import souther.compiler.doc.JapiCommand;
+import souther.compiler.doc.McpServer;
 import souther.compiler.fmt.Formatter;
 import souther.compiler.meta.ModulePath;
 import souther.compiler.query.Adequacy;
@@ -44,6 +48,15 @@ public final class Main {
               run <file.sou> [--behavior <name>] [--input <json>]  run a behavior, print its output
               fmt <file.sou>... [-w] [--check]                     format source (stdout, or -w in place)
               examples <file.sou>... [-cp <path>]                  how well the `example`s cover the model
+              doc [<anchor> | <set>/<topic> | --search <term>]     read the language specification
+              api [<Module>[.<name>] | --search <term>]            the stdlib surface and its signatures
+              japi <class-or-package>[#<member>] [-cp <path>]      a dependency jar's public API, with javadoc
+            options (doc):
+              --search <term>           sections and topics that say the term, best answer first
+              --limit <n>               how many hits to show (default 20; 0 for all of them)
+            options (api):
+              --source <Module>         a stdlib module's own source, design comments included
+              mcp                                                  serve doc/api/japi over MCP stdio
             options (examples):
               --module <name>           report only this module
               --behavior <name>         report only this behavior
@@ -98,6 +111,30 @@ public final class Main {
             case "compile" -> compileSubcommand(rest);
             case "fmt" -> fmtSubcommand(rest);
             case "examples" -> examplesSubcommand(rest);
+            case "doc" -> {
+                int code = DocCommand.run(rest, System.out, System.err);
+                if (code != 0) {
+                    System.exit(code);
+                }
+            }
+            case "api" -> {
+                int code = ApiCommand.run(rest, System.out, System.err);
+                if (code != 0) {
+                    System.exit(code);
+                }
+            }
+            case "japi" -> {
+                int code = JapiCommand.run(rest, System.out, System.err);
+                if (code != 0) {
+                    System.exit(code);
+                }
+            }
+            case "mcp" -> {
+                int code = McpServer.serve(System.in, System.out);
+                if (code != 0) {
+                    System.exit(code);
+                }
+            }
             default -> {
                 String hint = command.endsWith(".sou")
                         ? "no command given — did you mean `souther compile " + command

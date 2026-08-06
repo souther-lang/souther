@@ -49,7 +49,7 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.release>25</maven.compiler.release>
-        <raoh.version>0.7.0</raoh.version>
+        <raoh.version>0.7.1</raoh.version>
         <jspecify.version>1.0.0</jspecify.version>
         <junit.version>6.1.2</junit.version>
     </properties>
