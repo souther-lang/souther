@@ -1,21 +1,24 @@
 package souther.compiler.doc;
 
-import com.sun.source.tree.ArrayTypeTree;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.CompilationUnitTree;
-import com.sun.source.tree.IdentifierTree;
-import com.sun.source.tree.ImportTree;
-import com.sun.source.tree.MemberSelectTree;
 import com.sun.source.tree.MethodTree;
-import com.sun.source.tree.ParameterizedTypeTree;
-import com.sun.source.tree.PrimitiveTypeTree;
 import com.sun.source.tree.Tree;
-import com.sun.source.tree.TypeParameterTree;
 import com.sun.source.tree.VariableTree;
 import com.sun.source.util.DocTrees;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.TreePathScanner;
+import com.sun.source.util.Trees;
 
+import javax.lang.model.element.Element;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
+import javax.lang.model.type.ArrayType;
+import javax.lang.model.type.TypeKind;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
@@ -26,71 +29,57 @@ import java.net.URI;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
- * The documentation a Java source file carries, read with the compiler's own parser.
+ * The documentation a Java source file carries, read with the compiler's own front end.
  *
- * <p>A member is matched to a declaration, not to a key spelled from its name. The parser gives the
- * enclosing type as a scope and the parameters as they were written; a class file gives the erased
- * types they became. A declaration answers for a member when every parameter it declares could have
- * erased to the one the class file has, and when no other declaration could have. Where two might,
- * neither is used: this is the only thing between a reader and documentation written for something
- * else, which three rounds of narrower keys did not manage to be.
+ * <p>A member is found by the name and the erased parameter types the class file will have given
+ * it. Those are not guessed from how the source spelled them: the file is compiled against the same
+ * class path the class was read from, and the types come back from {@link Types#erasure} as binary
+ * names — the very strings the class file holds. A declaration whose types did not resolve is not
+ * registered at all, so a member either matches what it was written as or goes undocumented.
  *
- * <p>Where the parser is not there to be used — a runtime without {@code jdk.compiler} — nothing is
- * read. No documentation is the honest answer; someone else's is not.
+ * <p>This replaced a reader that matched on how names were spelled. Every rule that tried to make
+ * spelling stand in for identity — the simple name, the parameter count, the set of qualifications
+ * a file's imports allowed — had another case where two different members read the same, and each
+ * one attached documentation to something it was not written for.
+ *
+ * <p>Where the front end is not there to be used — a runtime without {@code jdk.compiler} — nothing
+ * is read. No documentation is the honest answer; someone else's is not.
  */
 final class SourceDoc {
 
-    static final SourceDoc NONE = new SourceDoc(Optional.empty(), Map.of(), List.of());
-
-    /** What a source file says about one method or constructor of the type asked for. */
-    private record Declared(String name, List<Set<String>> parameters, List<String> parameterNames,
-                            Optional<String> doc) {
-
-        /** Whether this declaration could be the member the class file describes. */
-        boolean couldBe(String memberName, List<String> erased) {
-            if (!name.equals(memberName) || parameters.size() != erased.size()) {
-                return false;
-            }
-            for (int i = 0; i < erased.size(); i++) {
-                if (!parameters.get(i).contains(erased.get(i))) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
+    static final SourceDoc NONE = new SourceDoc(Optional.empty(), Map.of(), Map.of(), Map.of());
 
     private final Optional<String> classDoc;
     private final Map<String, String> fields;
-    private final List<Declared> members;
+    private final Map<String, String> docs;
+    private final Map<String, List<String>> parameterNames;
 
-    private SourceDoc(Optional<String> classDoc, Map<String, String> fields, List<Declared> members) {
+    private SourceDoc(Optional<String> classDoc, Map<String, String> fields,
+                      Map<String, String> docs, Map<String, List<String>> parameterNames) {
         this.classDoc = classDoc;
         this.fields = fields;
-        this.members = members;
+        this.docs = docs;
+        this.parameterNames = parameterNames;
     }
 
     /**
-     * Reads {@code source} for what it says about {@code binaryName}, which may name a type nested
-     * inside the file's own top-level type.
+     * Reads {@code source} for what it says about {@code binaryName}, resolving the types it names
+     * against {@code classPath} — the same path the class file itself was found on.
      */
-    static SourceDoc of(String source, String binaryName) {
+    static SourceDoc of(String source, String binaryName, String classPath) {
         if (ToolProvider.getSystemJavaCompiler() == null) {
             return NONE;
         }
         try {
-            return read(source, binaryName);
+            return read(source, binaryName, classPath);
         } catch (RuntimeException | LinkageError | java.io.IOException e) {
-            // A source that will not parse, or a runtime with no compiler in it, leaves the API
+            // A source that will not parse, or a runtime with no front end in it, leaves the API
             // readable and undocumented, which is the failure this can afford.
             return NONE;
         }
@@ -105,41 +94,38 @@ final class SourceDoc {
         return Optional.ofNullable(fields.get(name));
     }
 
-    /** What the source says about the member the class file describes, where one declaration and
-     *  only one could be it. */
+    /** What the source says about the member the class file describes. */
     Optional<String> ofMethod(String name, MethodTypeDesc type) {
-        return only(name, type).flatMap(Declared::doc);
+        return Optional.ofNullable(docs.get(key(name, type)));
     }
 
-    /** The parameter names that member was declared with — the declaration's own, in its own order.
-     *  A {@code @param} tag names a parameter rather than taking a position, so its order says
+    /** The parameter names that member was declared with, in the order it declared them. A
+     *  {@code @param} tag names a parameter rather than taking a position, so its order says
      *  nothing about theirs. */
     List<String> paramsOf(String name, MethodTypeDesc type) {
-        return only(name, type).map(Declared::parameterNames).orElse(List.of());
+        return parameterNames.getOrDefault(key(name, type), List.of());
     }
 
-    private Optional<Declared> only(String name, MethodTypeDesc type) {
-        List<String> erased = type.parameterList().stream().map(SourceDoc::erased).toList();
-        List<Declared> could = members.stream().filter(d -> d.couldBe(name, erased)).toList();
-        return could.size() == 1 ? Optional.of(could.getFirst()) : Optional.empty();
+    private static String key(String name, MethodTypeDesc type) {
+        return name + "(" + String.join(",", type.parameterList().stream().map(SourceDoc::binary).toList()) + ")";
     }
 
-    /** A class file's parameter type, fully qualified, with a nested type spelled as its source
-     *  would spell it so the two can be compared. */
-    private static String erased(ClassDesc d) {
+    /** A class file's parameter type as its binary name. */
+    private static String binary(ClassDesc d) {
         if (d.isArray()) {
-            return erased(d.componentType()) + "[]";
+            return binary(d.componentType()) + "[]";
         }
         if (d.isPrimitive()) {
             return d.displayName();
         }
         String pkg = d.packageName();
-        return (pkg.isEmpty() ? "" : pkg + ".") + d.displayName().replace('$', '.');
+        return (pkg.isEmpty() ? "" : pkg + ".") + d.displayName();
     }
 
     // ---- reading ----
 
-    private static SourceDoc read(String source, String binaryName) throws java.io.IOException {
+    private static SourceDoc read(String source, String binaryName, String classPath)
+            throws java.io.IOException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         String simple = binaryName.substring(binaryName.lastIndexOf('.') + 1);
         String outermost = simple.split("\\$")[0];
@@ -150,59 +136,46 @@ final class SourceDoc {
                 return source;
             }
         };
+        List<String> options = classPath == null || classPath.isBlank()
+                ? List.of() : List.of("-classpath", classPath);
         JavacTask task = (JavacTask) compiler.getTask(
-                java.io.Writer.nullWriter(), null, diagnostic -> { }, List.of(), List.of(), List.of(file));
-        DocTrees docs = DocTrees.instance(task);
+                java.io.Writer.nullWriter(), null, diagnostic -> { }, options, List.of(), List.of(file));
 
-        Collector collector = new Collector(docs, simple);
-        for (CompilationUnitTree unit : task.parse()) {
+        Iterable<? extends CompilationUnitTree> units = task.parse();
+        // Types are wanted, not just trees: a name in a source file means whatever this file's
+        // imports and this class path make it mean, and only the front end knows which.
+        task.analyze();
+
+        Collector collector = new Collector(DocTrees.instance(task), Trees.instance(task),
+                task.getTypes(), task.getElements(), simple);
+        for (CompilationUnitTree unit : units) {
             collector.scan(unit, null);
         }
-        return new SourceDoc(collector.classDoc, collector.fields, collector.members);
+        return new SourceDoc(collector.classDoc, collector.fields, collector.docs, collector.parameterNames);
     }
 
     /** Walks the file, keeping the chain of enclosing type names so a member is collected under the
      *  type it is actually declared in. */
     private static final class Collector extends TreePathScanner<Void, Void> {
 
-        private final DocTrees docs;
+        private final DocTrees docTrees;
+        private final Trees trees;
+        private final Types types;
+        private final Elements elements;
         private final String target;
         private final Deque<String> enclosing = new ArrayDeque<>();
 
-        /** Type-variable name → the erasure of its first bound, for every scope now open. */
-        private final Deque<Map<String, String>> bounds = new ArrayDeque<>();
-
-        /** Simple name → what it may stand for here: an explicit import, this file's own package,
-         *  a package imported wholesale, or {@code java.lang}. */
-        private final Map<String, Set<String>> imported = new HashMap<>();
-        private final List<String> onDemand = new ArrayList<>();
-        private String packageName = "";
-
         private Optional<String> classDoc = Optional.empty();
         private final Map<String, String> fields = new LinkedHashMap<>();
-        private final List<Declared> members = new ArrayList<>();
+        private final Map<String, String> docs = new LinkedHashMap<>();
+        private final Map<String, List<String>> parameterNames = new LinkedHashMap<>();
 
-        Collector(DocTrees docs, String target) {
-            this.docs = docs;
+        Collector(DocTrees docTrees, Trees trees, Types types, Elements elements, String target) {
+            this.docTrees = docTrees;
+            this.trees = trees;
+            this.types = types;
+            this.elements = elements;
             this.target = target;
-        }
-
-        @Override
-        public Void visitCompilationUnit(CompilationUnitTree node, Void unused) {
-            packageName = node.getPackageName() == null ? "" : node.getPackageName().toString();
-            for (ImportTree i : node.getImports()) {
-                if (i.isStatic()) {
-                    continue;
-                }
-                String written = i.getQualifiedIdentifier().toString();
-                if (written.endsWith(".*")) {
-                    onDemand.add(written.substring(0, written.length() - 2));
-                } else {
-                    imported.computeIfAbsent(written.substring(written.lastIndexOf('.') + 1),
-                            k -> new LinkedHashSet<>()).add(written);
-                }
-            }
-            return super.visitCompilationUnit(node, unused);
         }
 
         private String here() {
@@ -214,29 +187,29 @@ final class SourceDoc {
         @Override
         public Void visitClass(ClassTree node, Void unused) {
             enclosing.push(node.getSimpleName().toString());
-            bounds.push(boundsOf(node.getTypeParameters()));
             if (here().equals(target)) {
                 classDoc = doc();
             }
             super.visitClass(node, unused);
-            bounds.pop();
             enclosing.pop();
             return null;
         }
 
         @Override
         public Void visitMethod(MethodTree node, Void unused) {
-            if (here().equals(target)) {
-                bounds.push(boundsOf(node.getTypeParameters()));
-                String written = node.getName().toString();
-                // A constructor is named for its own type, not for the chain it is nested in.
-                String name = written.equals("<init>")
-                        ? target.substring(target.lastIndexOf('$') + 1) : written;
-                members.add(new Declared(name,
-                        node.getParameters().stream().map(p -> candidates(p.getType())).toList(),
-                        node.getParameters().stream().map(p -> p.getName().toString()).toList(),
-                        doc()));
-                bounds.pop();
+            if (here().equals(target)
+                    && trees.getElement(getCurrentPath()) instanceof ExecutableElement member) {
+                List<String> erased = erasedParameters(member);
+                if (erased != null) {
+                    String written = node.getName().toString();
+                    // A constructor is named for its own type, not for the chain it is nested in.
+                    String name = written.equals("<init>")
+                            ? target.substring(target.lastIndexOf('$') + 1) : written;
+                    String key = name + "(" + String.join(",", erased) + ")";
+                    doc().ifPresent(text -> docs.put(key, text));
+                    parameterNames.put(key, member.getParameters().stream()
+                            .map(p -> p.getSimpleName().toString()).toList());
+                }
             }
             return super.visitMethod(node, unused);
         }
@@ -251,93 +224,39 @@ final class SourceDoc {
         }
 
         private Optional<String> doc() {
-            String comment = docs.getDocComment(getCurrentPath());
+            String comment = docTrees.getDocComment(getCurrentPath());
             return comment == null || comment.isBlank() ? Optional.empty() : Optional.of(comment);
         }
 
-        private Map<String, String> boundsOf(List<? extends TypeParameterTree> parameters) {
-            Map<String, String> scope = new HashMap<>();
-            parameters.forEach(t -> scope.put(t.getName().toString(), "java.lang.Object"));
-            for (TypeParameterTree t : parameters) {
-                if (!t.getBounds().isEmpty()) {
-                    Set<String> bound = candidates(t.getBounds().getFirst());
-                    if (bound.size() == 1) {
-                        scope.put(t.getName().toString(), bound.iterator().next());
-                    }
+        /** The binary names of this member's erased parameter types, or null where one of them did
+         *  not resolve — a dependency of the library that is not on the class path it was read
+         *  from. Unresolved is not matched against: it is the case a guess would fill in. */
+        private List<String> erasedParameters(ExecutableElement member) {
+            List<String> erased = new ArrayList<>();
+            for (VariableElement parameter : member.getParameters()) {
+                String name = binaryOf(types.erasure(parameter.asType()));
+                if (name == null) {
+                    return null;
                 }
+                erased.add(name);
             }
-            return scope;
+            return erased;
         }
 
-        /**
-         * Every fully-qualified type the written type could be, erased.
-         *
-         * <p>A source file names a type the way its imports let it, and a class file names it in
-         * full. Rather than resolve the one into the other — which needs the library's own class
-         * path, and this has none — every reading the file allows is kept, and a declaration
-         * answers for a member only when no sibling declaration allows the same reading.
-         */
-        private Set<String> candidates(Tree type) {
-            return switch (type) {
-                case ArrayTypeTree array -> candidates(array.getType()).stream()
-                        .map(c -> c + "[]").collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
-                case ParameterizedTypeTree parameterized -> candidates(parameterized.getType());
-                case PrimitiveTypeTree primitive ->
-                        Set.of(primitive.getPrimitiveTypeKind().toString().toLowerCase());
-                case MemberSelectTree member -> qualified(member.toString());
-                case IdentifierTree identifier -> named(identifier.getName().toString());
-                default -> Set.of(type.toString());
-            };
-        }
-
-        /** A name written with dots may already be complete, or may be a nested type reached
-         *  through a simple name this file can resolve. */
-        private Set<String> qualified(String written) {
-            Set<String> all = new LinkedHashSet<>();
-            all.add(written);
-            int firstDot = written.indexOf('.');
-            String head = written.substring(0, firstDot);
-            String tail = written.substring(firstDot);
-            named(head).forEach(c -> all.add(c + tail));
-            return all;
-        }
-
-        private Set<String> named(String simple) {
-            for (Map<String, String> scope : bounds) {
-                String bound = scope.get(simple);
-                if (bound != null) {
-                    return Set.of(bound);
-                }
+        private String binaryOf(TypeMirror type) {
+            if (type.getKind() == TypeKind.ARRAY) {
+                String component = binaryOf(((ArrayType) type).getComponentType());
+                return component == null ? null : component + "[]";
             }
-            Set<String> all = new LinkedHashSet<>();
-            if (imported.containsKey(simple)) {
-                all.addAll(imported.get(simple));
-                return all;   // an explicit import settles it
+            if (type.getKind().isPrimitive()) {
+                return type.toString();
             }
-            List<String> chain = new ArrayList<>(enclosing);
-            java.util.Collections.reverse(chain);
-            for (int i = chain.size(); i > 0; i--) {
-                all.add(prefixed(String.join(".", chain.subList(0, i)) + "." + simple));
+            if (type.getKind() != TypeKind.DECLARED) {
+                return null;
             }
-            all.add(prefixed(simple));
-            onDemand.forEach(p -> all.add(p + "." + simple));
-            if (isJavaLang(simple)) {
-                all.add("java.lang." + simple);
-            }
-            return all;
-        }
-
-        private String prefixed(String name) {
-            return packageName.isEmpty() ? name : packageName + "." + name;
-        }
-
-        private static boolean isJavaLang(String simple) {
-            try {
-                Class.forName("java.lang." + simple);
-                return true;
-            } catch (ClassNotFoundException | LinkageError e) {
-                return false;
-            }
+            Element element = types.asElement(type);
+            return element instanceof TypeElement declared
+                    ? elements.getBinaryName(declared).toString() : null;
         }
     }
 }

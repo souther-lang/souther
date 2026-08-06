@@ -144,6 +144,48 @@ class JavadocIsOnlyPrintedWhereItProvablyBelongsTest {
     }
 
     @Test
+    void aTypeVariablesBoundAndATypeOfTheSameNameAreDifferentParameters() throws Exception {
+        Path dir = Files.createTempDirectory("bound-vs-local");
+        Path src = dir.resolve("acme/Use.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package acme;
+
+                /** Uses things. */
+                public class Use {
+
+                    /** Uses a generic number. */
+                    public <T extends java.lang.Number> void use(T value) {
+                    }
+
+                    /** Uses the local number. */
+                    public void use(Number local) {
+                    }
+                }
+
+                class Number {
+                }
+                """);
+        Path jar = jarOf(dir, "use-1.0", src.toString());
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(dir.resolve("use-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Use.java"));
+            out.write(Files.readAllBytes(src));
+        }
+
+        String api = api("acme.Use", jar);
+
+        int generic = api.indexOf("void use(T value)");
+        int local = api.indexOf("use(acme.Number local)");
+        assertTrue(generic >= 0 && local >= 0, api);
+        int genericDoc = api.indexOf("Uses a generic number.");
+        int localDoc = api.indexOf("Uses the local number.");
+        assertTrue(genericDoc >= 0 && genericDoc < generic && generic < localDoc && localDoc < local,
+                "a type variable erased to java.lang.Number and a class called Number in this"
+                        + " package are different parameters, and each keeps its own sentence:\n" + api);
+    }
+
+    @Test
     void parameterNamesComeFromTheDeclarationRatherThanTheOrderTheTagsWereWrittenIn() throws Exception {
         Path dir = Files.createTempDirectory("tag-order");
         Path src = dir.resolve("acme/Join.java");

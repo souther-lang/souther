@@ -78,9 +78,11 @@ public final class JapiCommand {
             name = name.substring(0, hash);
         }
 
+        String classPath = entries.stream().map(Path::toString)
+                .collect(java.util.stream.Collectors.joining(java.io.File.pathSeparator));
         Found found = findClass(name, entries, err);
         if (found != null) {
-            return print(found, name, member, out, err, bundled);
+            return print(found, name, member, out, err, classPath);
         }
         if (member != null) {
             err.println("no class `" + name + "` on the class path:");
@@ -208,14 +210,14 @@ public final class JapiCommand {
     // ---- rendering ----
 
     private static int print(Found found, String binaryName, String member, PrintStream out,
-                             PrintStream err, ClassLoader bundled) {
+                             PrintStream err, String classPath) {
         ClassModel cm = ClassFile.of().parse(found.bytes());
         String simpleName = binaryName.substring(binaryName.lastIndexOf('.') + 1);
         // A constructor is named for its own type. `Outer$Inner` is how the class file spells the
         // type, and `Inner` is what the source calls the constructor.
         String constructorName = simpleName.substring(simpleName.lastIndexOf('$') + 1);
         String source = sourceOf(found.entry(), binaryName);
-        SourceDoc doc = source == null ? SourceDoc.NONE : SourceDoc.of(source, binaryName);
+        SourceDoc doc = source == null ? SourceDoc.NONE : SourceDoc.of(source, binaryName, classPath);
         if (!cm.flags().flags().contains(AccessFlag.PUBLIC)) {
             // Asked for by name, so it is answered — but a caller outside its package cannot name
             // it, and this command's subject is what a dependency publishes.
