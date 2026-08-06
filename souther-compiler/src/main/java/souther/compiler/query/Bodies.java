@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.HelperNames;
 import souther.compiler.check.InjectionSigs;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
@@ -624,8 +625,8 @@ public final class Bodies {
         HelperInliner inliner = HelperInliner.forHelpers(from.name(), table);
         Deque<String> work = new ArrayDeque<>(out.keySet());
         while (!work.isEmpty()) {
-            for (ValueName.Helper reached : HelperInliner.helpersReached(out.get(work.poll()).writtenBody())) {
-                String qualified = HelperInliner.qualified(reached.module(), reached.name());
+            for (ValueName.Helper reached : HelperNames.helpersReached(out.get(work.poll()).writtenBody())) {
+                String qualified = HelperNames.qualified(reached.module(), reached.name());
                 if (out.containsKey(qualified)) {
                     continue;
                 }

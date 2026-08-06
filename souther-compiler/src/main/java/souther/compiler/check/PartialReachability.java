@@ -37,7 +37,7 @@ import java.util.TreeSet;
  * rest on what building the graph happened to visit. Whether a name is {@code partial} is read off the
  * declaration it reaches, not off a set collected on the way — a clause names what it names, whether
  * or not a helper of this module names it too. And which declaration a name reaches is read off what
- * the name denotes ({@link HelperInliner#keyIn}), not off how it was spelled, so the answer is the same
+ * the name denotes ({@link HelperNames#keyIn}), not off how it was spelled, so the answer is the same
  * before and after the pass that writes an imported name out qualified.
  *
  * <p>A path is the shortest one, found breadth-first with each node's callees taken in name order, so
@@ -209,7 +209,7 @@ final class PartialReachability {
      */
     private static String keyOf(ValueName denotes, HelperInliner inliner) {
         return switch (denotes) {
-            case ValueName.Helper helper -> HelperInliner.keyIn(inliner.moduleName(), helper);
+            case ValueName.Helper helper -> HelperNames.keyIn(inliner.moduleName(), helper);
             case ValueName.Stdlib lib -> lib.qualified();
             case null, default -> null;
         };
