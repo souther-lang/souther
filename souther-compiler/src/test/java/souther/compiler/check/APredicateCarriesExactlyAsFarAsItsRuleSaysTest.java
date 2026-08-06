@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
@@ -139,10 +140,12 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
     /** Every row of the table is answered for here, and every answer here is a row. */
     @Test
     void everyRowIsAnsweredFor() {
-        assertEquals(DischargeRules.carryingOperations().stream().map(ValueName::name)
-                        .collect(Collectors.toCollection(TreeSet::new)),
-                PREDICATES.stream().map(APredicateCarriesExactlyAsFarAsItsRuleSaysTest::operationOf)
-                        .collect(Collectors.toCollection(TreeSet::new)),
+        Set<String> written = DischargeRules.carryingOperations().stream().map(ValueName::name)
+                .collect(Collectors.toCollection(TreeSet::new));
+        Set<String> answered = PREDICATES.stream()
+                .map(APredicateCarriesExactlyAsFarAsItsRuleSaysTest::operationOf)
+                .collect(Collectors.toCollection(TreeSet::new));
+        assertEquals(written, answered,
                 "a carrying rule has no program written against it, or the other way round");
     }
 
