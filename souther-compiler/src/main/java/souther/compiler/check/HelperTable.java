@@ -124,4 +124,28 @@ public final class HelperTable {
     public boolean declares(String name) {
         return own.containsKey(name);
     }
+
+    /**
+     * Two tables are the same table when they hold the same declarations for the same module under
+     * the same policy.
+     *
+     * <p>Said outright because a query answer is compared this way: an answer that differed between
+     * two readings of one source would make every edit look like a change to everything downstream.
+     */
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof HelperTable t
+                && module.equals(t.module) && policy == t.policy
+                && reached.equals(t.reached) && own.equals(t.own);
+    }
+
+    @Override
+    public int hashCode() {
+        return java.util.Objects.hash(module, policy, reached, own);
+    }
+
+    @Override
+    public String toString() {
+        return "HelperTable[" + module + ", " + policy + ", " + reached.size() + " reachable]";
+    }
 }

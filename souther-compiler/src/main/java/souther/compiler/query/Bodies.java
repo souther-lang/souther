@@ -4,7 +4,9 @@ import souther.compiler.ast.Ast;
 import souther.compiler.check.BehaviorRequirement;
 import souther.compiler.check.DataChecker;
 import souther.compiler.check.HelperInliner;
+import souther.compiler.check.HelperGraph;
 import souther.compiler.check.HelperNames;
+import souther.compiler.check.HelperTable;
 import souther.compiler.check.InjectionSigs;
 import souther.compiler.check.InliningPolicy;
 import souther.compiler.check.InvariantChecker;
@@ -682,12 +684,55 @@ public final class Bodies {
 
         @Override
         public Answer<Set<String>> compute(Db db) {
+            Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
+            return inliner.present() ? Answer.of(inliner.value().recursiveHelpers())
+                    : Answer.absent();
+        }
+    }
+
+    /**
+     * What a body of {@code module} is expanded against: which declaration each name reaches, and
+     * which of them recurse.
+     *
+     * <p>Both are facts about the module's declarations and neither is about any one body, so they
+     * are worked out once. Before this every question that expanded something built its own —
+     * walking each of the standard library's hundred-odd bodies again for each — and the answers only
+     * agreed because they were computed the same way.
+     *
+     * <p>Keyed by the policy as well as the module, because the two policies are two tables: the
+     * discharge representation leaves the language's own operations standing, so it does not have
+     * them to call and does not find them recursive. One answer shared by both would put the fold
+     * that {@code List.map} is into the tree the discharge rules read.
+     */
+    public record Expanding(String name, InliningPolicy policy) implements Key<Expanding.Of> {
+
+        /** @param table which declaration each name reaches
+         *  @param graph what each of them calls, and which of them recurse */
+        public record Of(HelperTable table, HelperGraph graph) {}
+
+        @Override
+        public String module() {
+            return name;
+        }
+
+        @Override
+        public Answer<Of> compute(Db db) {
             Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
             if (!helpers.present()) {
                 return Answer.absent();
             }
-            return Answer.of(HelperInliner.forHelpers(name, helpers.value()).recursiveHelpers());
+            HelperTable table = HelperTable.of(name, helpers.value(), Map.of(), policy);
+            return Answer.of(new Of(table, HelperGraph.of(table)));
         }
+    }
+
+    /** An inliner over {@link Expanding}'s answer — a fresh one, because an expansion writes bindings
+     * as it runs and what it writes belongs to the body it is written into. */
+    private static Answer<HelperInliner> expanding(Db db, String module, InliningPolicy policy) {
+        Answer<Expanding.Of> against = db.ask(new Expanding(module, policy));
+        return against.present()
+                ? Answer.of(HelperInliner.over(against.value().table(), against.value().graph()))
+                : Answer.absent();
     }
 
     /**
@@ -749,17 +794,16 @@ public final class Bodies {
         @Override
         public Answer<Ast.FnDef> compute(Db db) {
             Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
-            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
+            Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
             Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
             Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !helpers.present() || !recursive.present()
+            if (!def.present() || !inliner.present() || !recursive.present()
                     || !behaviors.present()) {
                 return Answer.absent();
             }
             try {
                 return Answer.of(Lower.body(def.value(),
-                        HelperInliner.forHelpers(module, helpers.value())
-                                .namingBehaviors(behaviors.value()),
+                        inliner.value().namingBehaviors(behaviors.value()),
                         recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -781,17 +825,16 @@ public final class Bodies {
         @Override
         public Answer<Ast.FnDef> compute(Db db) {
             Answer<Ast.FnDef> def = db.ask(new SettledFn(module, fn));
-            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
+            Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.DISCHARGE);
             Answer<Set<String>> recursive = db.ask(new RecursiveHelpers(module));
             Answer<Map<String, Integer>> behaviors = db.ask(new NamedBehaviorArity(module));
-            if (!def.present() || !helpers.present() || !recursive.present()
+            if (!def.present() || !inliner.present() || !recursive.present()
                     || !behaviors.present()) {
                 return Answer.absent();
             }
             try {
                 return Answer.of(Lower.body(def.value(),
-                        HelperInliner.forHelpers(module, helpers.value(), InliningPolicy.DISCHARGE)
-                                .namingBehaviors(behaviors.value()),
+                        inliner.value().namingBehaviors(behaviors.value()),
                         recursive.value().contains(fn), dependencyParams(db, module, fn)));
             } catch (CompileException e) {
                 return Answer.absent(e);
@@ -861,14 +904,13 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, Type>> compute(Db db) {
-            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
+            Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            if (!helpers.present() || !scope.present()) {
+            if (!inliner.present() || !scope.present()) {
                 return Answer.absent();
             }
             try {
-                return Answer.of(TypeChecker.recursiveHelperSigs(
-                        HelperInliner.forHelpers(name, helpers.value()), scope.value()));
+                return Answer.of(TypeChecker.recursiveHelperSigs(inliner.value(), scope.value()));
             } catch (CompileException e) {
                 // A recursive helper that does not say what it returns costs the signatures of all of
                 // them, and there is no module to check without them.
@@ -888,10 +930,10 @@ public final class Bodies {
 
         @Override
         public Answer<Map<String, DataChecker.Constructs>> compute(Db db) {
-            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(name));
+            Answer<HelperInliner> inliner = expanding(db, name, InliningPolicy.FULL);
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
-            if (!helpers.present() || !sigs.present() || !scope.present()) {
+            if (!inliner.present() || !sigs.present() || !scope.present()) {
                 return Answer.absent();
             }
             Map<String, Ast.Expr> bodies = new LinkedHashMap<>();
@@ -904,7 +946,7 @@ public final class Bodies {
             }
             try {
                 return Answer.of(TypeChecker.recursiveHelperConstructs(sigs.value().keySet(), bodies,
-                        HelperInliner.forHelpers(name, helpers.value()), scope.value()));
+                        inliner.value(), scope.value()));
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -977,7 +1019,7 @@ public final class Bodies {
             Answer<Symbols> scope = db.ask(new Shapes.Scope(module));
             Answer<Map<String, ReqSig>> calleeSigs = db.ask(new CalleeSigs(module));
             Answer<Map<String, ReqSig>> reqSigs = db.ask(new ReqSigs(module));
-            Answer<Map<String, Ast.FnDef>> helpers = db.ask(new Helpers(module));
+            Answer<HelperInliner> inliner = expanding(db, module, InliningPolicy.FULL);
             Answer<Map<String, Type>> sigs = db.ask(new RecursiveHelperSigs(module));
             Answer<Map<String, DataChecker.Constructs>> constructs =
                     db.ask(new RecursiveHelperConstructs(module));
@@ -985,7 +1027,7 @@ public final class Bodies {
             Answer<Map<TypeName, List<Ast.InvariantClause>>> dischargeInvariants =
                     db.ask(new Shapes.InvariantsForDischarge(module));
             if (!spec.present() || !fn.present() || !body.present() || !scope.present()
-                    || !calleeSigs.present() || !reqSigs.present() || !helpers.present()
+                    || !calleeSigs.present() || !reqSigs.present() || !inliner.present()
                     || !sigs.present() || !constructs.present()) {
                 return Answer.absent();
             }
@@ -1000,7 +1042,7 @@ public final class Bodies {
             try {
                 Core core = TypeChecker.checkBehavior(spec.value(), fn.value(), body.value().writtenBody(),
                         dischargeSource, scope.value(), calleeSigs.value(), reqSigs.value(),
-                        HelperInliner.forHelpers(module, helpers.value()), sigs.value(), constructs.value(),
+                        inliner.value(), sigs.value(), constructs.value(),
                         warnings);
                 List<Report> reports = new ArrayList<>();
                 for (Diagnostic warning : warnings) {

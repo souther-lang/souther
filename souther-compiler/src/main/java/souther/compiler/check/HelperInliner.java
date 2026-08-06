@@ -73,7 +73,10 @@ public final class HelperInliner {
      * a fact about the module rather than about any one body.
      */
     private Map<String, Integer> callableBehaviors = Map.of();
-    private final Set<String> recursive = new HashSet<>();   // own helpers on a call cycle (spec 13.1)
+    /** What each declaration this table reaches calls, and which of them recurse. A function of the
+     * table, so a narrowed table does not narrow it: what recurses was settled over the table as it
+     * was built. */
+    private final HelperGraph graph;
     private int counter = 0;
     /** The body being expanded, and the bindings this expansion introduces into it. An expansion
      * writes bindings no source wrote, so they belong to it rather than to the definition whose text
@@ -108,8 +111,9 @@ public final class HelperInliner {
      * another author's line. */
     private record LambdaOrigin(String param, String owner, SourcePos pos) {}
 
-    private HelperInliner(HelperTable table) {
+    private HelperInliner(HelperTable table, HelperGraph graph) {
         this.table = table;
+        this.graph = graph;
     }
 
     /** The body of {@code fn} in this module — what an expansion written into it belongs to. */
@@ -135,9 +139,8 @@ public final class HelperInliner {
      * than imports.
      */
     public static HelperInliner forModule(Ast.Module module, Map<String, Ast.FnDef> imported) {
-        HelperInliner inliner =
-                new HelperInliner(HelperTable.of(module, imported, InliningPolicy.FULL));
-        inliner.classifyRecursion();
+        HelperTable table = HelperTable.of(module, imported, InliningPolicy.FULL);
+        HelperInliner inliner = new HelperInliner(table, HelperGraph.of(table));
         inliner.computeReferencedPreludeRecursive(module);
         return inliner;
     }
@@ -176,9 +179,19 @@ public final class HelperInliner {
      */
     public static HelperInliner forHelpers(String module, Map<String, Ast.FnDef> own,
                                            Map<String, Ast.FnDef> imported, InliningPolicy policy) {
-        HelperInliner inliner = new HelperInliner(HelperTable.of(module, own, imported, policy));
-        inliner.classifyRecursion();
-        return inliner;
+        HelperTable table = HelperTable.of(module, own, imported, policy);
+        return over(table, HelperGraph.of(table));
+    }
+
+    /**
+     * The inlining over a table and the graph of that table, both worked out elsewhere.
+     *
+     * <p>What a call reaches and what recurses are facts about a module's declarations, so a compile
+     * asks them once and every body of that module is expanded against the same two answers. The
+     * factories above are for a caller holding declarations rather than answers.
+     */
+    public static HelperInliner over(HelperTable table, HelperGraph graph) {
+        return new HelperInliner(table, graph);
     }
 
     /**
@@ -221,39 +234,26 @@ public final class HelperInliner {
     /** Walks the module's fn bodies and data invariants, collecting the prelude recursive helpers they
      * reach transitively — those must be emitted as this module's own methods. */
     private void computeReferencedPreludeRecursive(Ast.Module module) {
-        Set<String> reachable = new HashSet<>();
-        java.util.Deque<String> work = new java.util.ArrayDeque<>();
+        Set<String> named = new LinkedHashSet<>();
         for (Ast.FnDef fn : module.fns()) {
-            collectHelperCalls(fn.writtenBody(), reachable);
+            collectHelperCalls(fn.writtenBody(), named);
         }
         for (Ast.Def d : module.defs()) {
             if (d instanceof Ast.Data data) {
                 for (Ast.InvariantClause clause : data.invariants()) {
-                    collectHelperCalls(clause.expr(), reachable);
+                    collectHelperCalls(clause.expr(), named);
                 }
             }
         }
-        forEachExampleExpr(module, e -> collectHelperCalls(e, reachable));
-        work.addAll(reachable);
-        while (!work.isEmpty()) {
-            Set<String> calls = callsOf.get(work.poll());
-            if (calls == null) {
-                continue;
-            }
-            for (String c : calls) {
-                if (reachable.add(c)) {
-                    work.add(c);
-                }
-            }
-        }
-        for (String name : reachable) {
-            if (recursive.contains(name) && !table.declares(name)) {
+        forEachExampleExpr(module, e -> collectHelperCalls(e, named));
+        for (String name : graph.reachedFrom(named)) {
+            if (graph.recurses(name) && !table.declares(name)) {
                 referencedPreludeRecursive.add(name);
             }
         }
         exampleHelpers.addAll(exampleHelpers(module, table.reachable()));
         exampleHelpers.removeAll(referencedPreludeRecursive);
-        exampleHelpers.removeIf(recursive::contains);   // already emitted as a recursive helper
+        exampleHelpers.removeIf(graph::recurses);   // already emitted as a recursive helper
     }
 
     /** Every expression an {@code example} or a {@code fake} of {@code module} writes: a row's inputs,
@@ -353,7 +353,7 @@ public final class HelperInliner {
      * module does not reach, so {@code inline} never expands one that slips in through a nested body. */
     public Set<String> recursiveHelpers() {
         Set<String> result = new java.util.LinkedHashSet<>();
-        for (String name : recursive) {
+        for (String name : graph.recursive()) {
             if (table.declares(name)) {
                 result.add(name);
             }
@@ -397,7 +397,7 @@ public final class HelperInliner {
      * body of something else it imported.
      */
     public Ast.FnDef closeAcross(Ast.FnDef fn, String module) {
-        Ast.Expr closed = recursive.contains(fn.name())
+        Ast.Expr closed = graph.recurses(fn.name())
                 ? inlineRecursiveBody(fn) : inline(fn.writtenBody(), bodyOf(fn.name()));
         return new Ast.FnDef(HelperNames.qualified(module, fn.name()), fn.params(), fn.declaredReturn(),
                 new Ast.FnBody.Written(
@@ -927,7 +927,7 @@ public final class HelperInliner {
         // a recursive helper is reached by the name it is declared under; a lambda a binding
         // holds is not one, whatever it is called
         boolean standing = !(call.denotes() instanceof ValueName.Local)
-                && recursive.contains(call.reaches());
+                && graph.recurses(call.reaches());
         if (helper == null || standing) {
             // builtin, injected behavior, a function-typed parameter, or a recursive helper —
             // a recursive helper is lowered to a method, so its call stays a Call (spec 13.1);
@@ -1217,7 +1217,7 @@ public final class HelperInliner {
             return v;
         }
         Ast.FnDef value = table.reached(v.reaches());
-        if (value == null || value.body() == null || recursive.contains(v.name())) {
+        if (value == null || value.body() == null || graph.recurses(v.name())) {
             return v;
         }
         return HelperNames.carriedByValue(inline(value.writtenBody()));
@@ -1567,27 +1567,6 @@ public final class HelperInliner {
         return out;
     }
 
-    /** Records the module's own helpers that lie on a call cycle (self or mutual). A recursive helper
-     * is lowered to a method that may call itself, rather than inlined (spec 13.1). A helper is
-     * recursive iff it can reach itself through helper calls; every member of a mutual cycle is
-     * reached from itself, so all are marked. */
-    private void classifyRecursion() {
-        // Both a module's own helpers and the shipped prelude helpers are scanned: `souther.list`'s
-        // `foldFrom` is a recursive prelude helper, and it must be left standing (lowered to a method,
-        // not inlined) exactly as a module-own recursive helper is, or the inliner would expand its
-        // self-call forever.
-        for (Map.Entry<String, Ast.FnDef> e : table.reachable().entrySet()) {
-            Set<String> called = new HashSet<>();
-            collectHelperCalls(e.getValue().writtenBody(), called);
-            callsOf.put(e.getKey(), called);
-        }
-        for (String name : table.reachable().keySet()) {
-            if (reaches(name, name, new HashSet<>())) {
-                recursive.add(name);
-            }
-        }
-    }
-
     /**
      * The value a spread copies, or null where it copies something else — a parameter, a binding, or
      * a name that merely shares a value's spelling.
@@ -1604,30 +1583,7 @@ public final class HelperInliner {
         String reached = spread.name();
         Ast.FnDef value = table.own().get(reached);
         return value == null || !value.params().isEmpty() || value.body() == null
-                || recursive.contains(reached) ? null : value;
-    }
-
-    /** Which helpers each helper's body calls. Built once, before the cycle search: {@link #reaches}
-     * walks this graph from every helper, so scanning a body per edge scanned the shipped prelude —
-     * a few hundred call sites — once per path through it rather than once. */
-    private final Map<String, Set<String>> callsOf = new HashMap<>();
-
-    /** Whether {@code target} is reachable from {@code from} through helper-call edges. Prelude
-     * helpers never call a module's own helpers, so a cycle stays within the module's own helpers. */
-    private boolean reaches(String from, String target, Set<String> seen) {
-        Set<String> called = callsOf.get(from);
-        if (called == null) {
-            return false;
-        }
-        for (String c : called) {
-            if (c.equals(target)) {
-                return true;
-            }
-            if (seen.add(c) && reaches(c, target, seen)) {
-                return true;
-            }
-        }
-        return false;
+                || graph.recurses(reached) ? null : value;
     }
 
     /**
