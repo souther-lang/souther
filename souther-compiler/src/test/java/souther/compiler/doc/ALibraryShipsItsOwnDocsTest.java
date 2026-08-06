@@ -55,6 +55,30 @@ class ALibraryShipsItsOwnDocsTest {
     }
 
     @Test
+    void aTopicTheIndexPromisesButTheJarDoesNotCarryIsSaidRatherThanAnsweredWithNothing() throws Exception {
+        Path dir = Files.createTempDirectory("broken-index");
+        Path jar = dir.resolve("brokenlib-1.0.jar");
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
+            out.putNextEntry(new JarEntry("META-INF/souther-docs/sets"));
+            out.write("brokenlib\n".getBytes(StandardCharsets.UTF_8));
+            out.putNextEntry(new JarEntry("META-INF/souther-docs/brokenlib/index"));
+            out.write("missing.md\n".getBytes(StandardCharsets.UTF_8));
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        try (URLClassLoader broken = new URLClassLoader(new java.net.URL[]{jar.toUri().toURL()}, null)) {
+            int code = DocCommand.run(new String[]{"brokenlib/missing"},
+                    new PrintStream(out, true, StandardCharsets.UTF_8),
+                    new PrintStream(err, true, StandardCharsets.UTF_8), broken);
+
+            assertEquals(2, code, "a promised topic that is not there is a failure, not an empty answer");
+        }
+        assertEquals("", out.toString(StandardCharsets.UTF_8));
+        assertTrue(err.toString(StandardCharsets.UTF_8).contains("brokenlib/missing"),
+                err.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void aTopicIsReadBackByItsName() {
         LibraryDocs docs = LibraryDocs.on(loader);
 

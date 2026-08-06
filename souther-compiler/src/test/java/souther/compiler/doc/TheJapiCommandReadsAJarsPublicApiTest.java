@@ -170,28 +170,28 @@ class TheJapiCommandReadsAJarsPublicApiTest {
     }
 
     @Test
-    void javadocIsFoundInBundledSourcesWhenNoSourcesJarSitsBesideTheJar() throws Exception {
+    void javadocIsFoundInSourcesCarriedInsideTheJarItself() throws Exception {
         // The CLI is one shaded jar with its dependencies inside it and no `-sources.jar` beside
-        // it, so this — not the sibling jar — is the path the default invocation takes.
-        Path bundled = Files.createTempDirectory("bundled-sources");
-        Path copied = bundled.resolve("META-INF/souther-sources/acme/Greeter.java");
-        Files.createDirectories(copied.getParent());
-        Files.copy(jar.resolveSibling("greeter-1.0-sources.jar"), bundled.resolve("unused.jar"));
-        Files.writeString(copied, Files.readString(sourceOfGreeter));
-        Path lone = Files.createTempDirectory("lone").resolve("greeter.jar");
-        Files.copy(jar, lone);
-
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        ByteArrayOutputStream err = new ByteArrayOutputStream();
-        try (java.net.URLClassLoader loader =
-                     new java.net.URLClassLoader(new java.net.URL[]{bundled.toUri().toURL()}, null)) {
-            JapiCommand.run(new String[]{"acme.Greeter", "-cp", lone.toString()},
-                    new PrintStream(out, true, StandardCharsets.UTF_8),
-                    new PrintStream(err, true, StandardCharsets.UTF_8), loader);
+        // it, so this — not the sibling jar — is the path the ordinary invocation takes. The
+        // sources have to be inside the very jar the class came from: a copy carried anywhere else
+        // may describe another version of the same name.
+        Path carrying = Files.createTempDirectory("carried").resolve("greeter-shaded.jar");
+        try (java.util.jar.JarOutputStream out =
+                     new java.util.jar.JarOutputStream(Files.newOutputStream(carrying));
+             java.util.jar.JarFile source = new java.util.jar.JarFile(jar.toFile())) {
+            for (java.util.jar.JarEntry e : source.stream().toList()) {
+                out.putNextEntry(new JarEntry(e.getName()));
+                out.write(source.getInputStream(e).readAllBytes());
+            }
+            out.putNextEntry(new JarEntry("META-INF/souther-sources/acme/Greeter.java"));
+            out.write(Files.readAllBytes(sourceOfGreeter));
         }
 
-        assertTrue(out.toString(StandardCharsets.UTF_8).contains("Greets whoever is put in front of it."),
-                "javadoc comes from the sources bundled with the tool: " + out);
+        Answer answer = run("acme.Greeter", "-cp", carrying.toString());
+
+        assertEquals(0, answer.code(), answer.err());
+        assertTrue(answer.out().contains("Greets whoever is put in front of it."),
+                "javadoc comes from the sources the jar carries: " + answer.out());
     }
 
     @Test

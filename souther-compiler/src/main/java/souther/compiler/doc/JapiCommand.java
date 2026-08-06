@@ -210,8 +210,18 @@ public final class JapiCommand {
     private static int print(Found found, String binaryName, String member, PrintStream out,
                              PrintStream err, ClassLoader bundled) {
         ClassModel cm = ClassFile.of().parse(found.bytes());
-        SourceDoc doc = SourceDoc.of(found.entry(), binaryName, bundled);
         String simpleName = binaryName.substring(binaryName.lastIndexOf('.') + 1);
+        // How many members share a name and a parameter count decides whether a doc comment filed
+        // under that pair can belong to one of them. It is counted from the class file, because an
+        // overload that carries no documentation of its own is invisible in the source reader and
+        // would otherwise take its namesake's.
+        java.util.Map<String, Integer> overloads = new java.util.HashMap<>();
+        for (MethodModel m : cm.methods()) {
+            String shown = m.methodName().stringValue().equals("<init>")
+                    ? simpleName : m.methodName().stringValue();
+            overloads.merge(shown + "/" + m.methodTypeSymbol().parameterCount(), 1, Integer::sum);
+        }
+        SourceDoc doc = SourceDoc.of(found.entry(), binaryName, overloads);
         if (!cm.flags().flags().contains(AccessFlag.PUBLIC)) {
             // Asked for by name, so it is answered — but a caller outside its package cannot name
             // it, and this command's subject is what a dependency publishes.
@@ -341,7 +351,20 @@ public final class JapiCommand {
             }
             sb.append(paramTypes.get(i)).append(" ").append(names.get(i));
         }
-        return sb.append(")").toString();
+        sb.append(")");
+        // A checked exception is not a remark about the method, it is part of how it is called: a
+        // caller who neither catches nor declares it does not compile.
+        List<String> thrown = sig.map(s -> s.throwableSignatures().stream().map(JapiCommand::show).toList())
+                .filter(t -> !t.isEmpty())
+                .orElseGet(() -> m.findAttribute(Attributes.exceptions())
+                        .map(a -> a.exceptions().stream()
+                                .map(e -> shortName(e.asInternalName().replace('/', '.')))
+                                .toList())
+                        .orElse(List.of()));
+        if (!thrown.isEmpty()) {
+            sb.append(" throws ").append(String.join(", ", thrown));
+        }
+        return sb.toString();
     }
 
     private static List<String> paramNames(MethodModel m, int count, List<String> fromDoc) {
@@ -468,23 +491,40 @@ public final class JapiCommand {
         private static final SourceDoc NONE = new SourceDoc(Optional.empty(), java.util.Map.of());
 
         /**
-         * The javadoc for {@code binaryName}, from the {@code -sources.jar} beside the jar it was
-         * read from, or failing that from sources bundled with this tool.
+         * The javadoc for {@code binaryName}, taken only from the artifact the class itself was
+         * read from: the {@code -sources.jar} beside it, or sources carried inside it.
          *
-         * <p>The bundled copy is what the common invocation needs: the CLI is one shaded jar with
-         * its dependencies inside it and nothing beside it, so a sibling lookup finds nothing and
-         * the javadoc this command promises would never appear.
+         * <p>Sources carried inside are what the ordinary invocation needs, since the CLI is one
+         * shaded jar with its dependencies inside it and nothing beside it. They are read out of
+         * that same jar rather than off this tool's class path, because the two are not the same
+         * question — a class taken from some other copy of a library must not be described by the
+         * copy this tool happens to carry. Where the versions differ, the prose is wrong and the
+         * parameter names taken from {@code @param} are wrong with it.
          */
-        static SourceDoc of(Path entry, String binaryName, ClassLoader bundled) {
+        static SourceDoc of(Path entry, String binaryName, java.util.Map<String, Integer> overloads) {
             String outermost = binaryName.split("\\$")[0];
             String simpleName = outermost.substring(outermost.lastIndexOf('.') + 1);
             String path = outermost.replace('.', '/') + ".java";
 
             String source = besideJar(entry, path);
             if (source == null) {
-                source = fromBundle(bundled, path);
+                source = carriedInside(entry, "META-INF/souther-sources/" + path);
             }
-            return source == null ? NONE : parse(source, simpleName);
+            return source == null ? NONE : parse(source, simpleName, overloads);
+        }
+
+        /** A source carried inside {@code entry} itself, at {@code path}. */
+        private static String carriedInside(Path entry, String path) {
+            if (!Files.isRegularFile(entry) || !entry.getFileName().toString().endsWith(".jar")) {
+                return null;
+            }
+            try (JarFile jar = versioned(entry)) {
+                ZipEntry e = jar.getEntry(path);
+                return e == null ? null
+                        : new String(jar.getInputStream(e).readAllBytes(), StandardCharsets.UTF_8);
+            } catch (IOException ex) {
+                throw new UncheckedIOException(ex);
+            }
         }
 
         private static String besideJar(Path entry, String path) {
@@ -505,21 +545,11 @@ public final class JapiCommand {
             }
         }
 
-        private static String fromBundle(ClassLoader bundled, String path) {
-            if (bundled == null) {
-                return null;
-            }
-            try (java.io.InputStream in = bundled.getResourceAsStream("META-INF/souther-sources/" + path)) {
-                return in == null ? null : new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            } catch (IOException ex) {
-                throw new UncheckedIOException(ex);
-            }
-        }
 
         /** What a doc comment is filed under when two of them would otherwise collide. */
         private static final String AMBIGUOUS = " ambiguous";
 
-        static SourceDoc parse(String source, String simpleName) {
+        static SourceDoc parse(String source, String simpleName, java.util.Map<String, Integer> overloads) {
             java.util.Map<String, String> byName = new java.util.LinkedHashMap<>();
             Optional<String> classDoc = Optional.empty();
             // Annotations may sit between the doc comment and the declaration it documents; they
@@ -559,6 +589,14 @@ public final class JapiCommand {
                     // does not resolve — so neither is filed, and the members print with no prose
                     // rather than with another method's.
                     String key = named.group(2) + "/" + arityAt(source, m.start(2) + named.end(2));
+                    if (overloads.getOrDefault(key, 1) > 1) {
+                        // More than one member answers to this name and count, and telling them
+                        // apart needs the parameter types this reader does not resolve. One of them
+                        // may well be undocumented, which is exactly when a comment filed here
+                        // would be printed against the wrong member.
+                        byName.put(key, AMBIGUOUS);
+                        continue;
+                    }
                     String had = byName.putIfAbsent(key, doc);
                     if (had != null && !had.equals(doc)) {
                         byName.put(key, AMBIGUOUS);

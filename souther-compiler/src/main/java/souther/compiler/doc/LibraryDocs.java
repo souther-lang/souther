@@ -64,10 +64,17 @@ public final class LibraryDocs {
         return List.copyOf(byName.values());
     }
 
-    /** The text of {@code set/topic}, or null when nothing ships under that name. */
+    /**
+     * The text of {@code set/topic}, or null when nothing ships under that name — including when
+     * an index names a file the jar does not carry, which is a broken doc set rather than a topic
+     * with nothing in it.
+     */
     public String read(String name) {
         Topic topic = byName.get(name);
-        return topic == null ? null : text(loader, topic.resource());
+        if (topic == null || loader.getResource(topic.resource()) == null) {
+            return null;
+        }
+        return text(loader, topic.resource());
     }
 
     /** Every topic whose title or text contains {@code term}, case-insensitively. */
