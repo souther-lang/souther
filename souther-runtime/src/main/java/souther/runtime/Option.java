@@ -40,10 +40,12 @@ public sealed interface Option<T> permits Option.Some, Option.None {
         return (Option<T>) NONE;
     }
 
-    /** Bridges a {@code java.util.Optional} (as produced by a Raoh optional-field decoder) to
-     * the Souther {@code Option}. Called by generated decode bodies for {@code ?} fields. */
-    static <T> Option<T> ofOptional(java.util.Optional<T> o) {
-        return o.isPresent() ? new Some<>(o.get()) : none();
+    /** Bridges the value a Raoh nullable-field decoder lands on to the Souther {@code Option}.
+     * Called by generated decode bodies for {@code ?} fields. A {@code ?} field is {@code None} for
+     * an absent key and for a written {@code null} alike, and that decoder answers both with a
+     * null. */
+    static <T> Option<T> ofNullable(T value) {
+        return value == null ? none() : new Some<>(value);
     }
 
     default boolean isPresent() {

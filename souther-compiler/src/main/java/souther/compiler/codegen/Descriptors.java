@@ -275,7 +275,7 @@ final class Descriptors {
     static final MethodTypeDesc MTD_leafDecimal = MethodTypeDesc.of(CD_DecimalDecoder);
     static final MethodTypeDesc MTD_leafTemporal = MethodTypeDesc.of(CD_TemporalDecoder);
     static final MethodTypeDesc MTD_field = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
-    static final MethodTypeDesc MTD_optionalField = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
+    static final MethodTypeDesc MTD_nullableField = MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
     /** {@code CombinePart}'s own decode, and the conversion for a position that wants a decoder. */
     static final MethodTypeDesc MTD_partDecode = MethodTypeDesc.of(CD_RResult, CD_Object, CD_RPath);
     static final MethodTypeDesc MTD_asDecoder = MethodTypeDesc.of(CD_RDecoder);
@@ -387,15 +387,14 @@ final class Descriptors {
     static final MethodTypeDesc MTD_Issues_isEmpty = MethodTypeDesc.of(ConstantDescs.CD_boolean);
     static final MethodTypeDesc MTD_Err_issues = MethodTypeDesc.of(CD_RIssues);
     static final MethodTypeDesc MTD_nested = MethodTypeDesc.of(CD_RDecoder, CD_RDecoder);
-    static final ClassDesc CD_JavaOptional = ClassDesc.of("java.util.Optional");
-    static final MethodTypeDesc MTD_ofOptional = MethodTypeDesc.of(CD_Option, CD_JavaOptional);
+    static final MethodTypeDesc MTD_ofNullable = MethodTypeDesc.of(CD_Option, CD_Object);
     static final MethodTypeDesc MTD_error = MethodTypeDesc.of(CD_Object);
     // Per-source (JSON / jOOQ) decode targets (spec 10.6). Every source's `field` answers a
     // `CombinePart`; the three differ only in the input type they read, which is erased.
     static final ClassDesc CD_JooqRecordDecoder = ClassDesc.of("net.unit8.raoh.jooq.JooqRecordDecoder");
     static final MethodTypeDesc MTD_fieldJooq =
             MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
-    static final MethodTypeDesc MTD_optFieldJooq =
+    static final MethodTypeDesc MTD_nullableFieldJooq =
             MethodTypeDesc.of(CD_CombinePart, CD_String, CD_RDecoder);
 
     // Value-equality / hashCode targets, shared by the value-class equality codegen and `==`. The

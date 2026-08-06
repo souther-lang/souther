@@ -79,7 +79,7 @@ final class CodecGen {
 
     private static MethodTypeDesc srcFieldMtd(Src s) { return s == Src.JOOQ ? MTD_fieldJooq : MTD_field; }
 
-    private static MethodTypeDesc srcOptFieldMtd(Src s) { return s == Src.JOOQ ? MTD_optFieldJooq : MTD_optionalField; }
+    private static MethodTypeDesc srcNullableFieldMtd(Src s) { return s == Src.JOOQ ? MTD_nullableFieldJooq : MTD_nullableField; }
 
     /** Leaf value decoders: JSON reads a JsonNode, the map/jOOQ column value is an Object. */
     private static ClassDesc srcLeafOwner(Src s) { return s == Src.JSON ? CD_JsonDecoders : CD_ObjectDecoders; }
@@ -1041,7 +1041,7 @@ final class CodecGen {
             code.loadConstant(bind.key());
             if (bind.ref() instanceof Ast.OptionDecRef opt) {
                 emitDecoderObject(code, opt.element(), src);
-                code.invokestatic(srcFieldOwner(src), "optionalField", srcOptFieldMtd(src));
+                code.invokestatic(srcFieldOwner(src), "nullableField", srcNullableFieldMtd(src));
             } else {
                 emitDecoderObject(code, bind.ref(), src);
                 code.invokestatic(srcFieldOwner(src), "field", srcFieldMtd(src));
@@ -1089,8 +1089,7 @@ final class CodecGen {
             code.checkcast(CD_ROk);
             code.invokevirtual(CD_ROk, "value", MTD_Object);
             if (bind.ref() instanceof Ast.OptionDecRef) {
-                code.checkcast(CD_JavaOptional);
-                code.invokestatic(CD_Option, "ofOptional", MTD_ofOptional, true);
+                code.invokestatic(CD_Option, "ofNullable", MTD_ofNullable, true);
                 int vSlot = gen.slot(t);
                 code.astore(vSlot);
                 gen.bind(bind.binder(), vSlot, t);
