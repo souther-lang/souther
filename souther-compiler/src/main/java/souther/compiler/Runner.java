@@ -10,6 +10,7 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issues;
+import net.unit8.raoh.ResourceBundleMessageResolver;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
@@ -95,14 +96,24 @@ public final class Runner {
             if (issues != null) {
                 // the issue text is the last argument of `run.decode.failed`, the one key that carries
                 // issues; rewriting it here is what puts the decoder's own wording into the reader's
-                // language, as far as the decoder's catalog can state it
+                // language
                 resolved = args.clone();
-                resolved[resolved.length - 1] = detail(DecodeMessages.localize(issues, locale));
+                resolved[resolved.length - 1] = detail(issues.resolve(DECODE_MESSAGES, locale));
             }
             String text = Messages.get(messageKey, locale, resolved);
             return exitCode == 2 ? text + "\n" + Messages.get("run.usage.line", locale) : text;
         }
     }
+
+    /**
+     * The decoder's own message catalog, which its issues are written against. It answers per issue
+     * rather than per code: an issue names the constraint that rejected the value, so a code covering
+     * several of them — {@code out_of_range} states a lower bound, an upper bound, or both — is
+     * described as the one it is. An entry whose placeholders the issue cannot fill is skipped rather
+     * than half-filled, and where no entry applies the message the decoder already wrote stands.
+     */
+    private static final ResourceBundleMessageResolver DECODE_MESSAGES =
+            new ResourceBundleMessageResolver("net.unit8.raoh.messages");
 
     /** A failure that names a catalog key: the English literal for a Java caller, the key for the
      * command line's chosen locale. */

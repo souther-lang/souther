@@ -2,6 +2,8 @@ package souther.compiler;
 
 import net.unit8.raoh.Issue;
 import net.unit8.raoh.Issues;
+import net.unit8.raoh.MessageKeys;
+import net.unit8.raoh.ResourceBundleMessageResolver;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -19,13 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * What a decode failure says once the catalog has had its turn. The decoder writes every issue a
- * message of its own and marks it replaceable, so a catalog entry can say the same thing in the
- * reader's language. Replacing it is only an improvement where the entry says as much: a template
- * whose placeholders the issue's metadata cannot fill states a bound that is not there
- * ({@code must be between 0 and {max}}), and a code the catalog does not carry at all resolves to the
- * code itself ({@code validation failed: invariant_violation}). Neither is worth what it replaced,
- * so the issue's own message stands (issues #365, #371).
+ * What a decode failure says once the decoder's catalog has had its turn. An issue names the
+ * constraint that rejected the value, not only the code classifying it, so a code covering several
+ * constraints — {@code out_of_range} states a lower bound, an upper bound, or both — is described as
+ * the one it is. Where no entry applies, the message the decoder already wrote stands: a rule no
+ * constraint states carries the rejecting type and clause, and losing that to the code's own name
+ * told the reader nothing (issues #365, #371).
  */
 class DecodeMessageLocalizationTest {
 
@@ -37,6 +38,10 @@ class DecodeMessageLocalizationTest {
         Files.writeString(file, source);
         return file;
     }
+
+    /** The catalog `souther run` reads its issues against. */
+    private static final ResourceBundleMessageResolver CATALOG =
+            new ResourceBundleMessageResolver("net.unit8.raoh.messages");
 
     /** Anything a catalog template would have written and no substitution reached. */
     private static final Pattern UNFILLED = Pattern.compile("\\{[A-Za-z][A-Za-z0-9_]*}");
@@ -104,17 +109,26 @@ class DecodeMessageLocalizationTest {
         assertTrue(en.contains("5"), en);
     }
 
-    /** The catalog cannot state a one-sided bound, so the reader gets the decoder's own English
-     *  rather than a Japanese sentence naming a bound that is not there. Being in the wrong language
-     *  is a smaller loss than being wrong. */
+    /** A one-sided bound has an entry of its own, so the reader gets it in their language and it
+     *  states the one end the rule has. */
     @Test
-    void aOneSidedBoundKeepsItsMeaningInEveryLocale() throws Exception {
+    void aOneSidedBoundIsStatedInTheReadersLanguage() throws Exception {
         String ja = rendered("ge0ja.sou", intBounded("ge0ja", "value >= 0"), "-1", Locale.JAPANESE);
         namesNoPlaceholder(ja);
+        assertTrue(ja.contains("以上"), ja);
         assertFalse(ja.contains("以下"), "no upper bound is stated by `value >= 0`: " + ja);
     }
 
-    /** A Decimal bound reaches the same constraints as an Int one, and the same catalog entry. */
+    @Test
+    void anUpperBoundOnlyIsStatedInTheReadersLanguage() throws Exception {
+        String ja = rendered("le100ja.sou", intBounded("le100ja", "value <= 100"), "101",
+                Locale.JAPANESE);
+        namesNoPlaceholder(ja);
+        assertTrue(ja.contains("100") && ja.contains("以下"), ja);
+        assertFalse(ja.contains("以上"), "no lower bound is stated by `value <= 100`: " + ja);
+    }
+
+    /** A Decimal bound reaches the same constraints as an Int one, and the same catalog entries. */
     @Test
     void aDecimalBoundNamesTheBoundItStates() throws Exception {
         String en = rendered("dge.sou", decimalBounded("dge", "value >= 0.0m"), "-1.0", Locale.ENGLISH);
@@ -123,18 +137,26 @@ class DecodeMessageLocalizationTest {
     }
 
     /** {@code > 0} and {@code >= 0} admit different values, so they cannot read alike. Both carry
-     *  {@code min = 0} in the metadata, which is why a catalog keyed on that alone cannot tell them
-     *  apart. */
+     *  {@code min = 0} in the metadata, so what tells them apart is the constraint each issue names,
+     *  not the bound it carries. */
     @Test
     void aStrictDecimalBoundReadsDifferentlyFromAnInclusiveOne() throws Exception {
         String strict = rendered("dgt.sou", decimalBounded("dgt", "value > 0.0m"), "0.0",
-                Locale.ENGLISH);
+                Locale.JAPANESE);
         String inclusive = rendered("dge2.sou", decimalBounded("dge2", "value >= 0.0m"), "-1.0",
-                Locale.ENGLISH);
+                Locale.JAPANESE);
         namesNoPlaceholder(strict);
         namesNoPlaceholder(inclusive);
-        assertFalse(strict.contains(inclusive.substring(inclusive.indexOf("must be"))),
-                "a rule that rejects 0 cannot read as one that admits it: " + strict);
+        assertNotEqualsIgnoringPrefix(strict, inclusive);
+    }
+
+    /** The two failures differ in the part the decoder wrote, not only in the runner's own wording
+     *  around it. */
+    private static void assertNotEqualsIgnoringPrefix(String a, String b) {
+        String reasonA = a.substring(a.indexOf("(root): "));
+        String reasonB = b.substring(b.indexOf("(root): "));
+        assertFalse(reasonA.equals(reasonB),
+                "a rule that rejects 0 cannot read as one that admits it: " + reasonA);
     }
 
     /** An invariant written with {@code &&} is two constraints, each stating one side. Whichever one
@@ -148,6 +170,24 @@ class DecodeMessageLocalizationTest {
         namesNoPlaceholder(low);
         namesNoPlaceholder(high);
         assertTrue(high.contains("100"), high);
+    }
+
+    /** An empty list is rejected as empty rather than as one element short of a bound, which is what
+     *  the constraint the mapping chose actually says. */
+    @Test
+    void anEmptyListIsStatedAsEmptiness() throws Exception {
+        String ja = rendered("lne.sou", """
+                module lne
+
+                data T = List<Int>
+                    invariant List.length(value) >= 1
+
+                behavior echo : (a: T) -> T
+
+                let echo (a) = a
+                """, "[]", Locale.JAPANESE);
+        namesNoPlaceholder(ja);
+        assertTrue(ja.contains("空"), ja);
     }
 
     // --- a rule no constraint states ---
@@ -191,7 +231,7 @@ class DecodeMessageLocalizationTest {
         assertTrue(en.contains("unnamed.T"), en);
     }
 
-    // --- what the catalog still gets to say ---
+    // --- what the runner relies on the catalog for ---
 
     /** An entry that needs no metadata applies to every issue carrying its code, and is what makes
      *  the reader's language reach the decoder's wording at all. */
@@ -207,22 +247,22 @@ class DecodeMessageLocalizationTest {
         assertTrue(ja.contains("必須です"), ja);
     }
 
-    /** An entry whose placeholders the metadata fills is the case the catalog was written for, and
-     *  keeps working — the guard is about applicability, not about refusing the catalog. */
+    /** The constraint an issue names is what the entry is chosen by, so a lower bound is not
+     *  described by the two-sided wording its code also covers. */
     @Test
-    void anEntryWhosePlaceholdersAreAllFilledIsUsed() {
+    void anEntryIsChosenByTheConstraintNotOnlyByTheCode() {
         Issues issues = new Issues(List.of(
-                Issue.of(net.unit8.raoh.Path.ROOT.append("age"), "out_of_range", "out of range",
-                        Map.of("min", 0, "max", 150))));
+                Issue.of(net.unit8.raoh.Path.ROOT.append("age"), "out_of_range",
+                        MessageKeys.OUT_OF_RANGE_MINIMUM, "must be at least 0", Map.of("min", 0))));
 
-        String message = DecodeMessages.localize(issues, Locale.JAPANESE).asList().get(0).message();
+        String message = issues.resolve(CATALOG, Locale.JAPANESE).asList().get(0).message();
         namesNoPlaceholder(message);
-        assertTrue(message.contains("0") && message.contains("150"), message);
-        assertTrue(message.contains("入力してください"), "the reader's language, not the decoder's: " + message);
+        assertTrue(message.contains("0") && message.contains("以上"), message);
+        assertFalse(message.contains("以下"), "no upper bound was stated: " + message);
     }
 
-    /** The same entry, one placeholder short: the template states an upper bound the issue never
-     *  claimed, so it does not apply and the decoder's own message stands. */
+    /** A code whose entry the metadata cannot fill, and which names no constraint of its own, is
+     *  left as the decoder wrote it. */
     @Test
     void anEntryMissingAPlaceholderLeavesTheMessageAlone() {
         Issues issues = new Issues(List.of(
@@ -230,7 +270,7 @@ class DecodeMessageLocalizationTest {
                         Map.of("min", 0))));
 
         assertEquals("must be at least 0",
-                DecodeMessages.localize(issues, Locale.JAPANESE).asList().get(0).message());
+                issues.resolve(CATALOG, Locale.JAPANESE).asList().get(0).message());
     }
 
     /** A message the decoder marked as its caller's own is not the catalog's to replace, which is
@@ -242,6 +282,6 @@ class DecodeMessageLocalizationTest {
                         .withCustomMessage("お名前を入れてください")));
 
         assertEquals("お名前を入れてください",
-                DecodeMessages.localize(issues, Locale.JAPANESE).asList().get(0).message());
+                issues.resolve(CATALOG, Locale.JAPANESE).asList().get(0).message());
     }
 }
