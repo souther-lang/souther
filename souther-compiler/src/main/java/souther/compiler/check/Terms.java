@@ -1,7 +1,6 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.DischargeRules.Built;
 import souther.compiler.check.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.SourcePos;
@@ -508,9 +507,8 @@ final class Terms {
         if (!(e instanceof Core.PreservedCall call)) {
             return false;
         }
-        Built built = DischargeRules.builtFrom(call.operation());
-        return built != null && built.from() < call.args().size()
-                && namedByRule(call.args().get(built.from()), at);
+        DischargeRules.Source built = DischargeRules.builtFrom(call);
+        return built != null && namedByRule(built.container(), at);
     }
 
     /**
