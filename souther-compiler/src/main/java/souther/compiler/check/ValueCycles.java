@@ -42,15 +42,14 @@ public final class ValueCycles {
      * module's own definitions and what each of them calls, which is settled by nothing.
      */
     public static void rejectIn(Ast.Module m, Map<String, Ast.FnDef> published) {
-        Map<String, Ast.FnDef> own = HelperInliner.helpersOf(m);
-        Map<String, Ast.FnDef> table = HelperInliner.tableFor(m, published);
+        HelperTable table = HelperTable.of(m, published, InliningPolicy.FULL);
         Map<String, Set<String>> callsOf = new LinkedHashMap<>();
-        for (Map.Entry<String, Ast.FnDef> e : own.entrySet()) {
+        for (Map.Entry<String, Ast.FnDef> e : table.own().entrySet()) {
             Set<String> called = new LinkedHashSet<>();
-            HelperInliner.helperCallsIn(e.getValue().writtenBody(), table, called);
+            HelperInliner.helperCallsIn(e.getValue().writtenBody(), table.reachable(), called);
             callsOf.put(e.getKey(), called);
         }
-        reject(own, callsOf);
+        reject(table.own(), callsOf);
     }
 
     /**
