@@ -1,6 +1,6 @@
 package souther.compiler;
 
-import souther.compiler.check.HelperInliner;
+import souther.compiler.check.HelperNames;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
@@ -516,8 +516,8 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
         ValueName.Helper foreign = new ValueName.Helper("maths", "spin");
         ValueName.Helper own = new ValueName.Helper("order", "spin");
 
-        assertEquals("maths.spin", HelperInliner.keyIn("order", foreign));
-        assertEquals("spin", HelperInliner.keyIn("order", own));
+        assertEquals("maths.spin", HelperNames.keyIn("order", foreign));
+        assertEquals("spin", HelperNames.keyIn("order", own));
     }
 
     /** An imported `partial` helper may not be handed over either. */
