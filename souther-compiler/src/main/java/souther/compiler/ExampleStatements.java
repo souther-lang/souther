@@ -300,7 +300,12 @@ public final class ExampleStatements {
                 // worker threw arrives at this one place, so classifying anywhere else leaves the
                 // paths that do not go through that place unclassified — and an Error rethrown from
                 // here is a compiler failure rather than a report about the statement.
-                if (cause instanceof StackOverflowError) {
+                if (cause instanceof StackOverflowError || cause instanceof NonTerminationException) {
+                    // Both forms of the same thing. A stack that runs out inside a helper crosses a
+                    // reflection boundary on the way here and arrives named; one that runs out
+                    // anywhere else arrives raw. Recognising only the raw one left the named one to
+                    // the rethrow below, where a `RuntimeException` leaves the compilation as a
+                    // failure of the compiler rather than as a report about the table.
                     return new Read.StackRanOut<>(policy.recursionDepthLimit());
                 }
                 // One thing ends a reading without the model or this code being at fault: a host with

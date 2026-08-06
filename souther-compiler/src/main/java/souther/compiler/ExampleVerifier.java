@@ -502,12 +502,7 @@ public final class ExampleVerifier {
                 // timing it.
                 FailurePhase overspent = overspending(cause);
                 if (overspent != null) {
-                    out.add(Diagnostic.of("E1910", "check.example.nonterminating")
-                            .title("check.example.title").at(row.pos())
-                            .args(overspent == FailurePhase.DEPTH_LIMIT
-                                    ? "reached the recursion depth limit of "
-                                            + policy.recursionDepthLimit()
-                                    : "spent its budget of " + policy.stepLimit() + " steps").build());
+                    out.add(overBudget(row, overspent));
                     evaluation.state.incomplete(overspent);
                     rows.add(outcomeOf(target, row, evaluation.state));
                     return;
@@ -562,6 +557,32 @@ public final class ExampleVerifier {
             return FailurePhase.DEPTH_LIMIT;
         }
         return null;
+    }
+
+    /**
+     * The evaluation went through more than the policy allows.
+     *
+     * <p>What this says is what the counting establishes and no more: the evaluation did not finish
+     * within the budget. Whether the model terminates is a different question and this cannot answer
+     * it — a `partial` recursion that never stops reaches this, and so does one that would have
+     * stopped a hundred steps later. Reported as "this example did not terminate", it told the author
+     * of a model that does terminate that their model does not, and pointed them at a recursion to
+     * make structural that already was.
+     *
+     * <p>The two budgets are said apart because what to do about them differs: a loop is bounded or
+     * given more, and a recursion is made structural or given more depth. Each names the limit it
+     * reached and the setting that sets it, so the reader can tell which of the two answers applies
+     * to them without being told which one their model is.
+     */
+    private Diagnostic overBudget(Ast.ExampleRow row, FailurePhase which) {
+        boolean depth = which == FailurePhase.DEPTH_LIMIT;
+        return Diagnostic.of("E1910", depth ? "check.example.overbudget.depth"
+                        : "check.example.overbudget.steps")
+                .title("check.example.title").at(row.pos())
+                .args(depth ? policy.recursionDepthLimit() : policy.stepLimit())
+                .hint(depth ? "check.example.overbudget.depth.hint"
+                        : "check.example.overbudget.steps.hint")
+                .build();
     }
 
     /**

@@ -335,10 +335,12 @@ public final class Output {
      * counted while it is in there, or the counting stops at the module boundary and the clock decides
      * again.
      *
-     * <p>What this cannot reach is a module that came from a jar. Those classes are resolved by the
-     * loader the module path builds, this compile did not generate them, and there is nothing here to
-     * generate them from. A row that does not come back inside one is not decided by a budget; it is
-     * an evaluation that did not answer.
+     * <p>A module that came from the path is regenerated here too, and counted, wherever this
+     * compiler can re-derive it: a published module travels as the source it was written as, so
+     * asking for its classes asks for the same generation any source module gets. Where that cannot
+     * be done the module is left out rather than refused — its classes are on the loader this set is
+     * put over, so the name resolves and only the counting is missing, and a row that does not come
+     * back inside one is an evaluation that did not answer rather than a budget that was spent.
      */
     public record EvaluationLinked(String name, CoverageMode coverage)
             implements Key<Map<String, byte[]>> {
@@ -353,22 +355,32 @@ public final class Output {
             if (reaches == null) {
                 return Answer.of(Map.of());
             }
+            Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             Map<String, byte[]> linked = new LinkedHashMap<>();
             // Furthest first, so the module being evaluated is put on last, as Linked does.
             for (int i = reaches.size() - 1; i >= 0; i--) {
                 String reached = reaches.get(i);
                 Answer<Map<String, byte[]>> classes = db.ask(new Evaluated(reached,
                         reached.equals(name) ? coverage : CoverageMode.NONE));
-                // A module that could not be generated makes this absent rather than making the set
-                // one class short. Carrying on would evaluate against a set with a hole in it, and
-                // what came of that — a class that will not load, a stale one found further up the
-                // loader chain, an example that fails for neither reason — reads as a fault in the
-                // model. The caller has a way to say a measurement could not be made; it has no way
-                // to notice a class that quietly was not there.
-                if (classes.value() == null) {
+                if (classes.value() != null) {
+                    linked.putAll(classes.value());
+                    continue;
+                }
+                // A module this compilation declares and could not generate makes this absent rather
+                // than making the set one class short. Carrying on would evaluate against a set with
+                // a hole in it, and what came of that — a class that will not load, a stale one
+                // found further up the loader chain, an example that fails for neither reason —
+                // reads as a fault in the model.
+                //
+                // A module that came from the path is a different case, and leaving it out is the
+                // right answer rather than a hole. Its classes are on the loader this set is put
+                // over, so the name still resolves; what is lost is the counting, which is the same
+                // thing that is lost for anything else this compile did not generate. Refusing
+                // instead would stop evaluating the rows of every module that imports a dependency
+                // whose published source this compiler cannot re-derive.
+                if (layout != null && layout.idOfModule().containsKey(reached)) {
                     return Answer.absent(classes.reports());
                 }
-                linked.putAll(classes.value());
             }
             return Answer.of(Ordered.map(linked));
         }

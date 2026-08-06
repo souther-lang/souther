@@ -23,7 +23,7 @@ class AnEvaluationSetIsWholeOrAbsentTest {
     /** Two modules, the imported one written so that it does not check. */
     private static final List<String> ONE_REACHES_A_BROKEN_ONE = List.of("""
             module example.reaches
-            import example.broken exposing (Amount)
+            import example.broken ( Amount )
 
             data Out = Int
 

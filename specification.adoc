@@ -3683,21 +3683,24 @@ A fake had no output for an input: `findManager` has no output for EmployeeId("e
 Emitted when a `+fake+` table is asked for an input it does not list and has no `+_+` default row (<<example-fakes>>).
 
 [#e1910]
-=== An example does not terminate
+=== An example exceeded its evaluation budget
 
 [,text]
 ----
-This example did not terminate (submitTravelRequest) — a `partial` recursion it reaches
-may not stop. Make it structural, or reduce it.
+The evaluation of this row did not finish within its budget of 100000000 steps.
+Hint: What the counting shows is that the evaluation did not finish, not that the model
+does not: a `partial` recursion that never stops reaches this, and so does one that would
+have stopped shortly after. If the model does finish and needs more, raise
+`souther.example.step.limit`; otherwise bound the loop or make the recursion structural.
 ----
 
-Emitted when a row's evaluation spends the budget the example runner holds it to: the number of counted points the evaluated code may pass, or the depth a recursion it reaches may go to. Both are counted by the generated code as it runs, so the reading is a property of what the row does and answers the same on every machine.
+Emitted when a row's evaluation exceeds the budget the example runner holds it to: the number of counted points the evaluated code may pass, or the depth a recursion it reaches may go to. Both are counted by the generated code as it runs, so the reading is a property of what the row does and answers the same on every machine.
 
-What that guarantees is this diagnostic and not compilation as a whole. Whether a row is reported here does not depend on how fast the host is, how loaded it is, what the JVM has compiled, or what any row before it did. Whether the compiler manages to answer at all is a separate question: work that is not counted — loading a class, decoding a value through a derived decoder, comparing two of them — still takes time, and an evaluation that stops answering within the wait it is given is reported as <<e1923>>. That work is bounded by what the counted work produced, since a value only gets large by being built, but it is bounded rather than counted, so it is measured in time.
+What this establishes is that the evaluation did not finish within the budget, and not that the model does not terminate. Those are different statements and a finite budget cannot reach the second: a recursion that never stops exceeds the budget, and so does one that would have stopped a hundred steps later. The usual cause is a `+partial+` declaration the row reaches, which publishes no termination guarantee (<<fn-rules>>) — but a model that does terminate and needs more than the budget allows reaches it too, and raising the setting is then the answer. A helper carrying the termination guarantee is not exempt: it is bounded, not free.
 
-A helper carrying the termination guarantee cannot reach this, and neither can one it reaches, so what the row ran through is a `+partial+` declaration — reached from the behavior, which publishes no such guarantee (<<fn-rules>>).
+The guarantee is about this diagnostic and not about compilation as a whole. Whether a row is reported here does not depend on how fast the host is, how loaded it is, what the JVM has compiled, or what any row before it did. Whether the compiler manages to answer at all is a separate question: work that is not counted — loading a class, decoding a value through a derived decoder, comparing two of them — still takes time, and an evaluation that stops answering within the wait it is given is reported as <<e1923>>. That work is bounded by what the counted work produced, since a value only gets large by being built, but it is bounded rather than counted, so it is measured in time.
 
-Two things end an evaluation without saying this. Where it stops answering, that is <<e1923>>; where the JVM stack runs out before the counted depth limit is reached, <<e1924>>. Neither is decided by what the model says.
+Two other things end an evaluation, and neither is decided by what the model says. Where it stops answering, that is <<e1923>>; where the JVM stack runs out before the counted depth limit is reached, <<e1924>>.
 
 [#e1911]
 === An example reached a point declared unreachable
