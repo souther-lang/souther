@@ -1033,7 +1033,7 @@ An *attempted* construction (<<attempted-construction>>) is never possibly viola
 [#invariant-discharge-terms]
 ==== What the procedure can name
 
-A term it compares is the numeric content of a location — a parameter, a field chain, a newtype's wrapped value — or the size of a container or a string: `+List.length+`, `+String.length+`, `+Set.size+`, `+Map.size+` applied to such a location. A size is named by the location it is taken of, so a guard and an invariant clause mean the same term exactly when they take the size of the same one. The size of a container is never negative, and the procedure knows that much without being told.
+A term it compares is the numeric content of a location — a parameter, a field chain, a newtype's wrapped value — or the size of a container or a string: `+List.length+`, `+String.length+`, `+Set.size+`, `+Map.size+` applied to such a location. A value the body reaches nowhere else is a location too, and carries what its type guarantees exactly as a parameter does: what a `+match+` arm binds, and what a standard-library operation hands its closure — an element, and a fold's accumulator. A size is named by the location it is taken of, so a guard and an invariant clause mean the same term exactly when they take the size of the same one. The size of a container is never negative, and the procedure knows that much without being told.
 
 [,text]
 ----
@@ -1048,6 +1048,22 @@ let build (rows) = {
 ----
 
 A size taken of a container built by an operation is read through that operation, by the rules in <<invariant-discharge-preservation>>. A size taken of anything else — of what a `+let+` returned, of a string joined from parts — is not a term, and a clause needing it is left to the run-time check.
+
+[,text]
+----
+data Q = Int invariant value >= 0
+data Held = { q: Q }
+data M = A | B
+data A = { q: Q }
+
+behavior viaMatch : (x: Held, m: M) -> Q
+let viaMatch (x, m) = match m with
+    | A as a -> x.q + a.q             // discharged: `a` carries A's invariant, as `x` does
+    | B -> x.q
+
+behavior total : (xs: List<Held>) -> Q
+let total (xs) = List.fold((acc, i) -> acc + i.q, Q(0), xs)   // discharged: both are Q
+----
 
 A binding given a location *is* that location, so `+let c = cart+` makes `+c.quantity+` the term `+cart.quantity+`. A helper is expanded by binding each argument and reading the parameter through that binding (<<invariant-discharge-representation>>), which is why a construction moved into a helper still reads the terms the caller's guards and input types settled. A binding given anything else is a term of its own; where what it was given is arithmetic over terms the procedure names the two are related, and otherwise nothing about it follows.
 
