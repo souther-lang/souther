@@ -217,8 +217,15 @@ public final class JapiCommand {
         // would otherwise take its namesake's.
         java.util.Map<String, Integer> overloads = new java.util.HashMap<>();
         for (MethodModel m : cm.methods()) {
-            String shown = m.methodName().stringValue().equals("<init>")
-                    ? simpleName : m.methodName().stringValue();
+            Set<AccessFlag> flags = m.flags().flags();
+            String methodName = m.methodName().stringValue();
+            // A bridge is the compiler's, not the author's: counting it would make a method the
+            // only one of its name in the source look like one of two, and lose its documentation.
+            if (flags.contains(AccessFlag.BRIDGE) || flags.contains(AccessFlag.SYNTHETIC)
+                    || methodName.equals("<clinit>")) {
+                continue;
+            }
+            String shown = methodName.equals("<init>") ? simpleName : methodName;
             overloads.merge(shown + "/" + m.methodTypeSymbol().parameterCount(), 1, Integer::sum);
         }
         SourceDoc doc = SourceDoc.of(found.entry(), binaryName, overloads);
@@ -502,7 +509,14 @@ public final class JapiCommand {
          * parameter names taken from {@code @param} are wrong with it.
          */
         static SourceDoc of(Path entry, String binaryName, java.util.Map<String, Integer> overloads) {
-            String outermost = binaryName.split("\\$")[0];
+            // A nested type is declared inside another type's file, and this reader has no notion
+            // of where one declaration ends and the next begins: everything it finds would be
+            // attributed to whichever type was asked for. Saying nothing is the only answer it can
+            // make true for these.
+            if (binaryName.contains("$")) {
+                return NONE;
+            }
+            String outermost = binaryName;
             String simpleName = outermost.substring(outermost.lastIndexOf('.') + 1);
             String path = outermost.replace('.', '/') + ".java";
 

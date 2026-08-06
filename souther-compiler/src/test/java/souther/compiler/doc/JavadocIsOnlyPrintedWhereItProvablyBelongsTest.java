@@ -95,6 +95,46 @@ class JavadocIsOnlyPrintedWhereItProvablyBelongsTest {
     }
 
     @Test
+    void aNestedTypeTakesNothingFromTheFileItIsDeclaredIn() throws Exception {
+        Path dir = Files.createTempDirectory("nested");
+        Path src = dir.resolve("acme/Outer.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package acme;
+
+                /** Documentation for Outer. */
+                public class Outer {
+
+                    /** Outer's own value. */
+                    public String value(String a) {
+                        return a;
+                    }
+
+                    /** Documentation for Inner. */
+                    public static class Inner {
+                        public String value(String a) {
+                            return a;
+                        }
+                    }
+                }
+                """);
+        Path jar = jarOf(dir, "outer-1.0", src.toString());
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(dir.resolve("outer-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Outer.java"));
+            out.write(Files.readAllBytes(src));
+        }
+
+        String api = api("acme.Outer$Inner", jar);
+
+        assertTrue(!api.contains("Documentation for Outer."),
+                "the enclosing type's own documentation is not this type's:\n" + api);
+        assertTrue(!api.contains("Outer's own value."),
+                "nor is a method of the enclosing type's documentation this method's:\n" + api);
+        assertTrue(api.contains("value(String arg0)"), api);
+    }
+
+    @Test
     void aJarWithNoSourcesBesideItGetsNoJavadocFromWhateverElseIsAround() throws Exception {
         Path dir = Files.createTempDirectory("wrong-version");
         Path oldSrc = dir.resolve("old/acme/Widget.java");

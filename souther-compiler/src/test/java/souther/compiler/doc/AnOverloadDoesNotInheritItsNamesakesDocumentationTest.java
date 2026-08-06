@@ -134,6 +134,55 @@ class AnOverloadDoesNotInheritItsNamesakesDocumentationTest {
     }
 
     @Test
+    void aMethodTheCompilerGaveABridgeIsStillTheOnlyOneOfItsNameAndCount() throws Exception {
+        Path dir = Files.createTempDirectory("bridged");
+        Path src = dir.resolve("acme/Box.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package acme;
+
+                import java.util.function.Supplier;
+
+                /** A box. */
+                public class Box implements Supplier<String> {
+
+                    /** The value it holds. */
+                    @Override
+                    public String get() {
+                        return "x";
+                    }
+                }
+                """);
+        JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
+        Path classes = Files.createDirectories(dir.resolve("classes"));
+        assertEquals(0, javac.run(null, OutputStream.nullOutputStream(), OutputStream.nullOutputStream(),
+                "-d", classes.toString(), src.toString()));
+        Path boxJar = dir.resolve("box-1.0.jar");
+        try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(boxJar))) {
+            try (Stream<Path> files = Files.walk(classes)) {
+                for (Path f : files.filter(Files::isRegularFile).toList()) {
+                    out.putNextEntry(new JarEntry(classes.relativize(f).toString()));
+                    out.write(Files.readAllBytes(f));
+                }
+            }
+        }
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(dir.resolve("box-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Box.java"));
+            out.write(Files.readAllBytes(src));
+        }
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        assertEquals(0, JapiCommand.run(new String[]{"acme.Box", "-cp", boxJar.toString()},
+                new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(OutputStream.nullOutputStream(), true, StandardCharsets.UTF_8)));
+        String api = out.toString(StandardCharsets.UTF_8);
+
+        assertTrue(api.contains("The value it holds."),
+                "a bridge the compiler wrote is not an overload the author did:\n" + api);
+    }
+
+    @Test
     void twoOverloadsOfTheSameCountSayNothingRatherThanSayTheWrongThing() {
         String api = api();
 

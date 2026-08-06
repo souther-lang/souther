@@ -172,6 +172,11 @@ public final class McpServer {
             return "no tool `" + name + "`";
         }
         JsonNode arguments = params.get("arguments");
+        // The schema says arguments are an object. A tool that requires none of them would
+        // otherwise take anything at all and answer as though it had been called properly.
+        if (arguments != null && !arguments.isNull() && !arguments.isObject()) {
+            return "`arguments` must be an object";
+        }
         for (String required : tool.required()) {
             JsonNode value = arguments == null ? null : arguments.get(required);
             if (value == null || value.isNull()) {

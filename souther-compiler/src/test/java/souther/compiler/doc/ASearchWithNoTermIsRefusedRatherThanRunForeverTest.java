@@ -90,6 +90,19 @@ class ASearchWithNoTermIsRefusedRatherThanRunForeverTest {
 
     @Test
     @Timeout(value = 20, unit = TimeUnit.SECONDS)
+    void argumentsThatAreNotAnObjectAreRefusedEvenWhenTheToolRequiresNothing() {
+        List<JsonNode> answers = serve(
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"
+                        + "{\"name\":\"stdlib_api\",\"arguments\":\"not an object\"}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}");
+
+        assertEquals(-32602, answers.getFirst().get("error").get("code").asInt(),
+                "a tool with no required argument still has a shape its arguments must take");
+        assertTrue(answers.get(1).has("result"));
+    }
+
+    @Test
+    @Timeout(value = 20, unit = TimeUnit.SECONDS)
     void anArgumentOfTheWrongShapeIsRefusedRatherThanCoerced() {
         List<JsonNode> answers = serve(
                 "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":"
