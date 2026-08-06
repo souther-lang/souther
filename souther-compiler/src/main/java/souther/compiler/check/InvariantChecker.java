@@ -107,17 +107,21 @@ public final class InvariantChecker {
                                                Symbols symbols) {
         InvariantChecker c = new InvariantChecker(symbols, Map.of());
         // Read over the declaration's own fields, each standing for itself: a construction hands one
-        // value per field, so a clause naming a field names something wherever it is built.
+        // value per field, so a clause naming a field names something wherever it is built. These
+        // stand for a value rather than holding one, so they are entered as locations and nothing is
+        // seeded of them — what a clause owes is the question, and answering it here would be
+        // assuming it.
         Core stated = c.clauses.typed(clause, data);
+        Denotations fields = Denotations.none().locations(c.clauses.bindingsOf(data).values());
         List<Predicates.Clause> owed;
         try {
             owed = stated == null ? null
-                    : c.predicates.obligations(stated, Known.top(), Denotations.none(), false);
+                    : c.predicates.obligations(stated, Known.top(), fields, false);
         } catch (RuntimeException _) {
             owed = null;   // fail-open, as the walk is
         }
         if (owed == null || owed.isEmpty()) {
-            return ClauseDischarge.runtimeOnly(at, c.whyUnreadable(stated));
+            return ClauseDischarge.runtimeOnly(at, c.whyUnreadable(stated, fields));
         }
         for (Predicates.Clause owe : owed) {
             if (owe.numeric() != null) {
@@ -128,11 +132,11 @@ public final class InvariantChecker {
     }
 
     /** What in {@code clause} the check cannot read, said so an author can act on it. */
-    private String whyUnreadable(Core clause) {
+    private String whyUnreadable(Core clause, Denotations fields) {
         if (clause == null) {
             return "it is not a rule this check could read as one expression";
         }
-        Core blocked = unreadable(clause);
+        Core blocked = unreadable(clause, fields);
         if (blocked instanceof Core.PreservedCall call) {
             return "it calls `" + call.operation().name()
                     + "`, which the check reads as a value and not as a term";
@@ -144,18 +148,19 @@ public final class InvariantChecker {
     }
 
     /** The innermost part of {@code e} the term grammar cannot read, or {@code null} if it reads all
-     * of it. Every location is granted, so what is left is the shape. */
-    private Core unreadable(Core e) {
+     * of it. Read under the same fields the clause was, so a field it names is a location and what
+     * is left is the shape. */
+    private Core unreadable(Core e, Denotations fields) {
         Core[] found = {null};
         Core.forEachChild(e, child -> {
             if (found[0] == null) {
-                found[0] = unreadable(child);
+                found[0] = unreadable(child, fields);
             }
         });
         if (found[0] != null) {
             return found[0];
         }
-        return terms.bodyKey(e, Denotations.none()) == null ? e : null;
+        return terms.bodyKey(e, fields) == null ? e : null;
     }
 
     /**
@@ -170,12 +175,12 @@ public final class InvariantChecker {
             return new Findings(c.errors, c.warnings);
         }
         try {
-            Known k = Known.top();
+            Entered in = new Entered(Known.top(), Denotations.none());
             for (Map.Entry<BindingId, Scope.Binding> p : params.bindings().entrySet()) {
-                k = c.seedAt(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
-                        body.pos()), k, Denotations.none(), 0);
+                in = c.enter(new Core.Read(p.getValue().name(), p.getKey(), p.getValue().type(),
+                        body.pos()), in.known(), in.at());
             }
-            c.walk(body, k, Denotations.none(), 0);
+            c.walk(body, in.known(), in.at(), 0);
         } catch (RuntimeException _) {
             // fail-open: the run-time invariant check remains the backstop
         }
@@ -213,9 +218,14 @@ public final class InvariantChecker {
                 // inside an argument is still an ordinary, aborting one.
                 checkIfConstruction(ic.construct(), k, at, true);
                 Core.forEachChild(ic.construct(), child -> walk(child, k, at, depth));
-                // The attempt built the value, so the binding is that construction and no location
-                Known k2 = seedAt(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at, 0);
-                walk(ic.then(), k2, at, depth);
+                // Reaching `then` is the construction having held, so the binding carries the type's
+                // invariant exactly as an input of that type does — which is a location, and not the
+                // construction read again. What the construction denotes is what the check could say
+                // of the attempt, and an attempt is written where it could not say enough: an
+                // expression it cannot name denotes nothing, and inheriting that would drop the one
+                // thing reaching this branch established.
+                Entered in = enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
+                walk(ic.then(), in.known(), in.at(), depth);
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
                 ic.els().forEach(arm -> walk(arm.body(), k, at, depth));
@@ -249,8 +259,15 @@ public final class InvariantChecker {
                 walk(m.scrutinee(), k, at, depth);
                 for (Core.Case c : m.cases()) {
                     // A sum has no fields of its own, so the scrutinee is not a location any clause
-                    // could have named — the case's value names only itself.
-                    walk(c.body(), k, at, depth);
+                    // could have named — the case's value names only itself. What the arm binds is a
+                    // value of the case's type, reached only here, so it is a location this arm
+                    // introduces and it carries what that type guarantees.
+                    if (c.binding() == null || c.bindType() == null) {
+                        walk(c.body(), k, at, depth);
+                        continue;
+                    }
+                    Entered in = enter(Terms.read(c.binding(), c.bindType(), c.pos()), k, at);
+                    walk(c.body(), in.known(), in.at(), depth);
                 }
             }
             case Core.PreservedCall call -> walkCall(call, k, at, depth);
@@ -258,9 +275,11 @@ public final class InvariantChecker {
         }
     }
 
-    /** Walks a call the representation kept standing, binding a combinator closure's element
-     * parameter to the container's element type (and seeding its invariant) so a construction inside
-     * the closure is analyzed rather than left opaque. */
+    /** Walks a call the representation kept standing, entering a combinator closure's parameters as
+     * the locations the application introduces — the element at the container's element type, and
+     * every other at what the closure was typed with — so a construction inside the closure is
+     * analyzed rather than left opaque. A closure is where its parameters are values, which is here
+     * and not where the block is written. */
     private void walkCall(Core.PreservedCall call, Known k, Denotations at, int depth) {
         Handed handed = Combinators.handedTo(call, at);
         for (Core arg : call.args()) {
@@ -275,14 +294,46 @@ public final class InvariantChecker {
             // The container is read where the call is written, so what is known of its elements
             // is looked up before the closure's parameter stands for anything.
             List<Quantified> relations = predicates.elementRelations(container, k, at);
-            Core element = Terms.read(handed.element(), elem, handed.step().pos());
+            Core.Read element = Terms.read(handed.element(), elem, handed.step().pos());
             // an element of a container is not a location the body can otherwise name
-            Known k2 = seedAt(element, k, at, 0);   // the element carries its type's invariant
+            Entered in = enter(element, k, at);   // the element carries its type's invariant
+            // What a fold hands its step beside the element is a value of the type it was seeded
+            // with, built through that type's checked constructor like any other — so it carries
+            // that type's invariant, and the accumulator is not the one binding that has to give
+            // its newtype up to be reasoned about.
+            in = enterOthers(handed, in);
+            Known k2 = in.known();
             for (Quantified q : relations) {
-                k2 = predicates.instantiate(q, element, k2, at);
+                k2 = predicates.instantiate(q, element, k2, in.at());
             }
-            walk(handed.step().body(), k2, at, depth);
+            walk(handed.step().body(), k2, in.at(), depth);
         }
+    }
+
+    /** {@code in} with the closure's parameters other than the element entered at the types the
+     * closure was typed with. A closure typed as anything but a function hands its parameters
+     * nothing this can name, and they stay out. */
+    private Entered enterOthers(Handed handed, Entered in) {
+        if (!(handed.step().type() instanceof Type.FnOf fn)) {
+            return in;
+        }
+        List<Ast.Binder> params = handed.step().params();
+        Entered out = in;
+        for (int i = 0; i < params.size() && i < fn.params().size(); i++) {
+            if (params.get(i) == handed.element()) {
+                continue;
+            }
+            // A call the representation kept standing was applied to a signature that accepted it,
+            // so its closure is typed. Answering an untyped parameter with the element's type would
+            // seed another type's invariant at a place this cannot read, so it is not answered.
+            Type given = fn.params().get(i);
+            if (given == null) {
+                throw new IllegalStateException("a closure a preserved call applies has an untyped"
+                        + " parameter, so what it is handed cannot be said");
+            }
+            out = enter(Terms.read(params.get(i), given, handed.step().pos()), out.known(), out.at());
+        }
+        return out;
     }
 
     // --- construction detection & discharge check ----------------------------------------------
@@ -619,6 +670,32 @@ public final class InvariantChecker {
                 Diagnostic.of("E2010", "check.invariant.violation").title("check.invariant.title")
                         .at(pos).args(type.name()).build(),
                 "constructing `" + type.name() + "` here violates its invariant on a reachable path"));
+    }
+
+    // --- introducing a binding -----------------------------------------------------------------
+
+    /**
+     * What entering a binding leaves the walk holding. Two environments, updated by one transition:
+     * a value's place and what is known of it are separate questions with separate readers, and
+     * introducing a location answers both at once. Returning only one of them is what let a binding
+     * be named without being seeded.
+     */
+    private record Entered(Known known, Denotations at) {}
+
+    /**
+     * Introduces {@code root} as a location: somewhere nothing else names, holding a value of its
+     * type. Entering it and seeding it are one act, so there is no state where the check names a
+     * place it knows nothing about — which is a clause owed with nothing to establish it, and a
+     * warning an author cannot clear.
+     *
+     * <p>Every value the walk reaches this way was built through its type's checked constructor, so
+     * what that type guarantees holds of it. That is the same argument for a behavior's parameter,
+     * for what a {@code match} arm binds, and for what a combinator hands its closure — one rule,
+     * asked here.
+     */
+    private Entered enter(Core.Read root, Known known, Denotations at) {
+        Denotations next = at.location(root.binding());
+        return new Entered(seedAt(root, known, next, 0), next);
     }
 
     // --- seeding -------------------------------------------------------------------------------
