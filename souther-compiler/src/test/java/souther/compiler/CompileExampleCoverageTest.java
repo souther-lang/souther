@@ -148,7 +148,8 @@ class CompileExampleCoverageTest {
         String module = compilation.modules().get(0);
         String sourceId = compilation.exampleSourcesOf(module).get(0);
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
-                .ask(new Adequacy.ProbedExamples(module, sourceId)).value().rows();
+                .ask(souther.compiler.query.Output.Examples.asked(
+                        compilation.db(), module, sourceId)).value().rows();
 
         assertEquals(1, rows.size());
         assertEquals(souther.compiler.observe.Disposition.INCOMPLETE, rows.get(0).disposition(),

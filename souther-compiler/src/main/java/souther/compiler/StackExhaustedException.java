@@ -5,8 +5,8 @@ package souther.compiler;
  * own diagnostic (E1910) rather than hanging the compiler, and named apart from a failing example
  * because nothing was compared.
  */
-final class NonTerminationException extends RuntimeException {
-    NonTerminationException(String message) {
+final class StackExhaustedException extends RuntimeException {
+    StackExhaustedException(String message) {
         super(message);
     }
 }

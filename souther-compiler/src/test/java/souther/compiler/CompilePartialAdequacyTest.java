@@ -639,7 +639,7 @@ class CompilePartialAdequacyTest {
         for (Db.Found found : compilation.db().allReports()) {
             codes.add(String.valueOf(found.report().diagnostic().code()));
         }
-        assertEquals(1, codes.stream().filter("E1910"::equals).count(),
+        assertEquals(1, codes.stream().filter("E1923"::equals).count(),
                 "one row was picked out, so one row did not come back: " + codes);
     }
 
@@ -657,7 +657,7 @@ class CompilePartialAdequacyTest {
     void aReasonAboutASourceCountsAgainstTheBehaviorsInIt() {
         souther.compiler.observe.Incompleteness aboutOne =
                 souther.compiler.observe.Incompleteness.of(
-                        souther.compiler.observe.Incompleteness.Code.ROW_TIMED_OUT,
+                        souther.compiler.observe.Incompleteness.Code.ROW_UNDECIDED,
                         souther.compiler.observe.Incompleteness.Scope.BEHAVIOR, "submit");
         souther.compiler.observe.Incompleteness aboutTheSource =
                 souther.compiler.observe.Incompleteness.of(
@@ -704,7 +704,8 @@ class CompilePartialAdequacyTest {
         String sourceId = compilation.exampleSourcesOf("example.loop").get(0);
 
         List<souther.compiler.observe.RowOutcome> rows = compilation.db()
-                .ask(new Adequacy.ProbedExamples("example.loop", sourceId)).value().rows();
+                .ask(souther.compiler.query.Output.Examples.asked(
+                        compilation.db(), "example.loop", sourceId)).value().rows();
 
         assertEquals(1, rows.size());
         assertEquals(Disposition.INCOMPLETE, rows.get(0).disposition());

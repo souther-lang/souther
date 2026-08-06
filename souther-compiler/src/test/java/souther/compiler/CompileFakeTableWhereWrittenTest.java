@@ -190,6 +190,43 @@ class CompileFakeTableWhereWrittenTest {
     }
 
     /**
+     * A table whose fixture loops spends the budget the policy allows, and is reported for that.
+     *
+     * <p>Said as a fact rather than by writing something slow and waiting: the helper the table
+     * applies goes round forever, the budget is small, and what comes back is the same on every host.
+     * That is what the counting is for, and it is why this test needs no deadline of its own.
+     */
+    @Test
+    void aTableWhoseFixtureLoopsIsReportedForSpendingItsSteps() {
+        List<Located> warnings = new ArrayList<>();
+        assertDoesNotThrow(() -> Compiler.compiled("""
+                module example.slow
+
+                data N = Int
+                data Found = { n: N }
+                data Missing = { why: String }
+
+                partial let spin (n: Int): Int = spin(n)
+
+                behavior find : (n: N) -> Found | Missing
+                    constructs Found
+
+                let find (n) = Found { n = n }
+
+                fake find
+                    | (N(spin(1))) -> Found { n = N(1) }
+                """, "Main", warnings, souther.compiler.query.Adequacy.Asked.NOTHING,
+                EvaluationPolicy.of(10_000L)));
+
+        List<Located> said = only("E1921", warnings);
+        assertEquals(1, said.size(), warnings.toString());
+        Diagnostic one = said.get(0).diagnostic();
+        assertTrue(rendered(one).contains("Building the `fake find` table spent its budget of"
+                        + " 10000 steps"),
+                rendered(one));
+    }
+
+    /**
      * A table that did not finish being built says so, and says nothing about being wrong: waiting
      * tells the two apart in neither direction. Nothing reads this one — no row depends on `find` and
      * none is recorded for it — so the comparison the reading would report on (E1920) never arises,
@@ -224,13 +261,13 @@ class CompileFakeTableWhereWrittenTest {
         Diagnostic one = said.get(0).diagnostic();
         assertEquals(14, one.pos().line(), "at the fake");
         assertEquals(6, one.pos().column(), "on the behavior it names");
-        // The number is read off the budget this compile was given rather than written in, so the
-        // line still holds if that budget changes. Ungrouped, which is how it is set.
-        assertTrue(rendered(one).contains("Building the `fake find` table did not finish within "
+        // The number is read off the wait this compile was given rather than written in, so the
+        // line still holds if that wait changes. Ungrouped, which is how it is set.
+        assertTrue(rendered(one).contains("Building the `fake find` table did not answer within "
                         + DoesNotComeBack.BUDGET.toMillis() + "ms"),
                 rendered(one));
-        assertTrue(rendered(one).contains("whether the `fake find` table can be built at all"),
-                "the hint names the table it is about: " + rendered(one));
+        assertTrue(rendered(one).contains("not code this compile generated"),
+                "the hint says whose fault it is not: " + rendered(one));
     }
 
     /** The one diagnostic of a compile that has one. */

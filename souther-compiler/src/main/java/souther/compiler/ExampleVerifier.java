@@ -9,6 +9,9 @@ import souther.compiler.types.TypeName;
 import souther.compiler.check.TypeOps;
 import souther.compiler.coverage.Probe;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.evaluate.DepthLimitExceeded;
+import souther.compiler.evaluate.EvaluationContext;
+import souther.compiler.evaluate.StepLimitExceeded;
 import souther.compiler.diag.Messages;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
@@ -78,13 +81,13 @@ public final class ExampleVerifier {
                                      Map<String, byte[]> classes,
                                      Map<String, List<BehaviorRequirement>> requirements,
                                      ClassLoader parent, Map<String, Ast.FnDef> values,
-                                     String sourceId, Deadline deadline) {
+                                     String sourceId, Deadline deadline, EvaluationPolicy policy) {
         if (module.examples().isEmpty()) {
             return Observations.NONE;
         }
         MemoryClassLoader loader = new MemoryClassLoader(classes, parent);
         ExampleVerifier v = new ExampleVerifier(module, symbols, sigs, requirements, loader, values,
-                deadline);
+                deadline, policy);
         v.sourceId = sourceId;
         List<Diagnostic> failures = new ArrayList<>();
         List<RowOutcome> rows = new ArrayList<>();
@@ -106,7 +109,7 @@ public final class ExampleVerifier {
         // so what a measure sees and what stopped it can never disagree.
         for (RowOutcome outcome : rows) {
             if (outcome.disposition() == Disposition.INCOMPLETE) {
-                incompleteness.add(new Incompleteness(Incompleteness.Code.ROW_TIMED_OUT,
+                incompleteness.add(new Incompleteness(Incompleteness.Code.ROW_UNDECIDED,
                         Incompleteness.Scope.BEHAVIOR, outcome.target(),
                         java.util.Optional.of(outcome.at())));
             }
@@ -176,11 +179,14 @@ public final class ExampleVerifier {
      * so two compiles in one JVM need not agree on it. Reading a written statement is held to a
      * deadline of its own, which is {@link ExampleStatements}'. */
     private final Deadline deadline;
+    /** What one row's evaluation is allowed: the steps and the depth it is decided by, and the wait
+     * the machinery running it is given. */
+    private final EvaluationPolicy policy;
 
     private ExampleVerifier(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                             Map<String, List<BehaviorRequirement>> requirements,
                             MemoryClassLoader loader, Map<String, Ast.FnDef> values,
-                            Deadline deadline) {
+                            Deadline deadline, EvaluationPolicy policy) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
@@ -188,6 +194,7 @@ public final class ExampleVerifier {
         this.loader = loader;
         this.values = values;
         this.deadline = deadline;
+        this.policy = policy;
     }
 
     /**
@@ -372,10 +379,20 @@ public final class ExampleVerifier {
         public List<Diagnostic> call() {
             List<Diagnostic> mine = new ArrayList<>();
             Probe.begin();
+            // On this thread, because this thread is the evaluation: the budget belongs to the row,
+            // and a worker reused for the next row would otherwise start where this one left off.
+            EvaluationContext.begin(verifier.policy.stepLimit(),
+                    verifier.policy.recursionDepthLimit());
             try {
                 verifier.checkRowNow(fixtures, target, sig, outCases, row, mine, state);
                 state.hits = Probe.taken();
             } finally {
+                // Read on every way out, not only the one where the row came back. A row stopped by
+                // its budget is the row whose cost is most worth knowing, and reading it after the
+                // call that throws recorded nothing for exactly that row — which then said it had
+                // spent nothing, the same thing a row that never ran says.
+                state.stepsSpent = EvaluationContext.spent(verifier.policy.stepLimit());
+                EvaluationContext.end();
                 Probe.end();
             }
             return mine;
@@ -410,6 +427,9 @@ public final class ExampleVerifier {
          * otherwise, and empty for a row that did not finish — a set read from a row still running
          * would be some of the arms rather than the arms. */
         private Set<Integer> hits = Set.of();
+        /** What the row cost, in the unit it is held to. Written by the worker when it finishes, so
+         * read only for a row that did. */
+        private long stepsSpent;
 
         /** Records where the row stopped, and that it did. */
         void failed(FailurePhase phase) {
@@ -428,7 +448,7 @@ public final class ExampleVerifier {
     private RowOutcome outcomeOf(ExampleTarget target, Ast.ExampleRow row, RowState state) {
         return new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(), row.description(),
                 state.stage, state.disposition, state.failurePhase, state.expectedArm, state.resultArm,
-                state.inputCases, state.inputs, state.hits);
+                state.inputCases, state.inputs, state.hits, state.stepsSpent);
     }
 
     /**
@@ -457,19 +477,53 @@ public final class ExampleVerifier {
                 // stop and a behavior that will not stop, which is what the author has to know.
                 Stage reached = evaluation.state.stage;
                 abandon.run();
-                out.add(Diagnostic.of("E1910", "check.example.nonterminating")
+                // Not E1910. What did not come back was not shown to go round more than an example
+                // may — it was not counted at all, which is what an evaluation reaching code this
+                // compile did not generate looks like. Saying the model does not terminate here would
+                // put a diagnostic on a model that may be right, and send its author to make
+                // something structural that already is.
+                out.add(Diagnostic.of("E1923", helper == null
+                                ? "check.example.unanswered" : "check.example.unanswered.helper")
                         .title("check.example.title")
-                        .at(row.pos()).args("did not finish within " + deadline.budgetMs() + "ms"
-                                + (helper == null ? "" : " while calling `" + helper + "`")).build());
+                        .at(row.pos())
+                        .args(helper == null ? new Object[] {Long.toString(deadline.budgetMs())}
+                                : new Object[] {Long.toString(deadline.budgetMs()), helper})
+                        .hint("check.example.unanswered.hint").build());
+                // No spend is read: the worker is still writing to its state, and a count taken
+                // while it runs would be some of what it spent rather than what it spent.
                 rows.add(new RowOutcome(new SourceRef(sourceId, row.pos()), target.name(),
                         row.description(), reached, Disposition.INCOMPLETE, FailurePhase.TIMEOUT,
-                        null, null, List.of(), List.of(), Set.of()));
+                        null, null, List.of(), List.of(), Set.of(), 0L));
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
-                if (cause instanceof NonTerminationException nt) {
-                    out.add(Diagnostic.of("E1910", "check.example.nonterminating")
-                            .title("check.example.title").at(row.pos()).args(nt.getMessage()).build());
-                    evaluation.state.incomplete(FailurePhase.TIMEOUT);
+                // The evaluated code stopped itself, having gone through more than it was allowed.
+                // What it spent is a property of what the row does, so this is the same answer on
+                // every machine — which is the whole reason the code counts rather than the compiler
+                // timing it.
+                FailurePhase overspent = overspending(cause);
+                if (overspent != null) {
+                    out.add(overBudget(row, overspent));
+                    evaluation.state.incomplete(overspent);
+                    rows.add(outcomeOf(target, row, evaluation.state));
+                    return;
+                }
+                // Every way the stack can run out arrives here, because everything the worker threw
+                // arrives here. A site that happens to cross a reflection boundary names the helper
+                // it was in; one that does not — a generated decoder, an encoder, the reader's own
+                // walk — says only that it ran out, and both are the same answer about the same
+                // thing. Classifying at the sites instead left the ones with no boundary to cross
+                // falling through as a compiler failure.
+                if (cause instanceof StackExhaustedException nt) {
+                    out.add(stackRanOut(row, nt.getMessage()));
+                    evaluation.state.incomplete(FailurePhase.STACK_EXHAUSTED);
+                    rows.add(outcomeOf(target, row, evaluation.state));
+                    return;
+                }
+                if (cause instanceof StackOverflowError) {
+                    String helper = evaluation.helper();
+                    out.add(stackRanOut(row, helper == null ? "the evaluation overflowed the stack"
+                            : "`" + helper + "` overflowed the stack"));
+                    evaluation.state.incomplete(FailurePhase.STACK_EXHAUSTED);
                     rows.add(outcomeOf(target, row, evaluation.state));
                     return;
                 }
@@ -486,6 +540,66 @@ public final class ExampleVerifier {
                 throw new IllegalStateException(cause);
             }
         }
+    }
+
+    /**
+     * Which budget {@code cause} says was spent, or null where it says nothing about a budget.
+     *
+     * <p>Told apart here rather than at each place code runs, because what an author does about the
+     * two is not the same: a loop that will not stop is bounded or made structural, and a recursion
+     * that goes too deep is made to recurse on a part of its argument.
+     */
+    private static FailurePhase overspending(Throwable cause) {
+        if (cause instanceof StepLimitExceeded) {
+            return FailurePhase.STEP_LIMIT;
+        }
+        if (cause instanceof DepthLimitExceeded) {
+            return FailurePhase.DEPTH_LIMIT;
+        }
+        return null;
+    }
+
+    /**
+     * The evaluation went through more than the policy allows.
+     *
+     * <p>What this says is what the counting establishes and no more: the evaluation did not finish
+     * within the budget. Whether the model terminates is a different question and this cannot answer
+     * it — a `partial` recursion that never stops reaches this, and so does one that would have
+     * stopped a hundred steps later. Reported as "this example did not terminate", it told the author
+     * of a model that does terminate that their model does not, and pointed them at a recursion to
+     * make structural that already was.
+     *
+     * <p>The two budgets are said apart because what to do about them differs: a loop is bounded or
+     * given more, and a recursion is made structural or given more depth. Each names the limit it
+     * reached and the setting that sets it, so the reader can tell which of the two answers applies
+     * to them without being told which one their model is.
+     */
+    private Diagnostic overBudget(Ast.ExampleRow row, FailurePhase which) {
+        boolean depth = which == FailurePhase.DEPTH_LIMIT;
+        return Diagnostic.of("E1910", depth ? "check.example.overbudget.depth"
+                        : "check.example.overbudget.steps")
+                .title("check.example.title").at(row.pos())
+                // As written, not as a number the locale groups: `50,000` is not a budget anyone
+                // set, and the setting that sets it takes the ungrouped form.
+                .args(depth ? Integer.toString(policy.recursionDepthLimit())
+                        : Long.toString(policy.stepLimit()))
+                .hint(depth ? "check.example.overbudget.depth.hint"
+                        : "check.example.overbudget.steps.hint")
+                .build();
+    }
+
+    /**
+     * The JVM stack ran out before the counted depth limit was reached.
+     *
+     * <p>Not E1910 either, and for a reason of its own: how many frames a stack holds is decided by
+     * how large they are, which is the helper's business and the JIT's. The depth limit is what is
+     * meant to stop a recursion, and reaching this instead means the two are set wrong for this model
+     * — which the author can act on, and which says nothing about whether the recursion terminates.
+     */
+    private Diagnostic stackRanOut(Ast.ExampleRow row, String why) {
+        return Diagnostic.of("E1924", "check.example.stack").title("check.example.title")
+                .at(row.pos()).args(why, Integer.toString(policy.recursionDepthLimit()))
+                .hint("check.example.stack.hint").build();
     }
 
     private void checkRowNow(FixtureReader fixtures, ExampleTarget target, Sig sig,
@@ -578,10 +692,9 @@ public final class ExampleVerifier {
                     "aborted: " + ae.getMessage()));
             state.failed(FailurePhase.INVOCATION);
             return;
-        } catch (NonTerminationException nt) {
-            out.add(Diagnostic.of("E1910", "check.example.nonterminating").title("check.example.title")
-                    .at(row.pos()).args(nt.getMessage()).build());
-            state.incomplete(FailurePhase.TIMEOUT);
+        } catch (StackExhaustedException nt) {
+            out.add(stackRanOut(row, nt.getMessage()));
+            state.incomplete(FailurePhase.STACK_EXHAUSTED);
             return;
         }
         result = projected(result, sig.out());
@@ -602,7 +715,10 @@ public final class ExampleVerifier {
     private static TypeName caseWritten(FixtureReader fixtures, Ast.Expr fixture) {
         try {
             return fixtures.constructedCase(fixture);
-        } catch (RuntimeException _) {
+        } catch (RuntimeException e) {
+            if (overspending(e) != null) {
+                throw e;   // the row's budget is gone; it is not a form that could not be read
+            }
             return null;
         }
     }
@@ -894,32 +1010,6 @@ public final class ExampleVerifier {
 
     // --- invoke the behavior ------------------------------------------------------------------
 
-    /** The budget a compile that says nothing about it is given. A total behavior finishes in well
-     * under this; a `partial` recursion that does not terminate hits it, so the compiler is bounded,
-     * never hung. Overridable with the `souther.example.timeout.ms` system property for an unusually
-     * slow example. A caller that wants a different one for one compile sets
-     * {@link souther.compiler.query.Front.ExampleBudget} instead, which is the only way two compiles
-     * in one JVM can be held to different budgets. */
-    private static final long DEFAULT_BUDGET_MS = readTimeoutMs();
-
-    /** The budget a compile is given when it asks for none. */
-    public static long defaultBudgetMs() {
-        return DEFAULT_BUDGET_MS;
-    }
-
-    private static long readTimeoutMs() {
-        String override = System.getProperty("souther.example.timeout.ms");
-        if (override == null) {
-            return 2000L;
-        }
-        try {
-            long ms = Long.parseLong(override.trim());
-            return ms > 0 ? ms : 2000L;
-        } catch (NumberFormatException _) {
-            return 2000L;
-        }
-    }
-
     /**
      * Applies the behavior. The row it belongs to is what carries the budget ({@link #checkRow}):
      * recursion is total by default, so most code cannot loop, and a `partial` recursion that does not
@@ -970,6 +1060,12 @@ public final class ExampleVerifier {
             return apply.invoke(instance, args);
         } catch (java.lang.reflect.InvocationTargetException ite) {
             Throwable cause = ite.getCause();
+            // The evaluated code stopped itself. It comes back through here because the behavior was
+            // applied reflectively, and it must go on out: read as anything else it would be reported
+            // as the model aborting, which is a wrong answer about a model that may be right.
+            if (overspending(cause) != null) {
+                throw (RuntimeException) cause;
+            }
             if (cause instanceof FakeMissException fm) {
                 throw fm;   // a fake did not cover an input — reported as its own diagnostic
             }
@@ -981,9 +1077,9 @@ public final class ExampleVerifier {
                 throw new UnreachableException(cause.getMessage());
             }
             if (cause instanceof StackOverflowError) {
-                // a non-tail `partial` recursion that does not terminate — a non-termination, not a
-                // failed example (a tail-looping one is caught by the timeout instead)
-                throw new NonTerminationException("recursion overflowed the stack");
+                // Named where the behavior was applied. Classified at the boundary, like every other
+                // way an evaluation can end.
+                throw new StackExhaustedException("the behavior overflowed the stack");
             }
             throw new AbortException(cause == null ? "aborted" : String.valueOf(cause.getMessage()));
         } catch (ReflectiveOperationException e) {

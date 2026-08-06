@@ -414,7 +414,8 @@ public final class Analyzer {
         int pending = 0;
         for (String sourceId : compilation.exampleSourcesOf(module)) {
             souther.compiler.query.Output.Examples.Of observed = compilation.db()
-                    .ask(new Adequacy.ProbedExamples(module, sourceId)).value();
+                    .ask(souther.compiler.query.Output.Examples.asked(
+                            compilation.db(), module, sourceId)).value();
             if (observed == null) {
                 continue;
             }

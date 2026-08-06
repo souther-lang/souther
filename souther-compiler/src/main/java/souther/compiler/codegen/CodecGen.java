@@ -815,6 +815,7 @@ final class CodecGen {
             code.invokevirtual(CD_RErr, "issues", MTD_Err_issues);
             code.invokevirtual(CD_RIssues, "merge", MTD_Issues_merge);
             code.astore(4);
+            ctx.countOneStep(code);
             code.goto_(loop);
             code.labelBinding(ok);
             code.aload(8);
@@ -842,6 +843,7 @@ final class CodecGen {
             code.invokevirtual(CD_RErr, "issues", MTD_Err_issues);
             code.invokevirtual(CD_RIssues, "merge", MTD_Issues_merge);
             code.astore(4);
+            ctx.countOneStep(code);
             code.goto_(loop);
             code.labelBinding(fresh);
             // out.put(decoded, entry.getValue())
@@ -851,6 +853,7 @@ final class CodecGen {
             code.invokeinterface(CD_MapEntry, "getValue", MTD_getKeyValue);
             code.invokeinterface(CD_Map, "put", MTD_Map_put);
             code.pop();
+            ctx.countOneStep(code);
             code.goto_(loop);
 
             code.labelBinding(done);

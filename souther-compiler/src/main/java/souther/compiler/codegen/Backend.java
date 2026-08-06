@@ -111,20 +111,21 @@ public final class Backend {
                                                TypeChecker.Checked checked,
                                                Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants) {
         return generate(module, symbols, typePackage, importedSigs, importedInjected, calleeSigs,
-                requirements, checked, dischargeInvariants, CoverageSites.Plan.NONE);
+                requirements, checked, dischargeInvariants, Instrumentation.NONE);
     }
 
     /**
-     * The same classes, with each arm of each body recording that it ran.
+     * The same classes, counting what the code goes through and recording which arms it took.
      *
      * <p>An overload rather than a mode on the one signature, because these classes are not the
-     * module's classes. They call into the compiler, they are never written out, and the only thing
-     * that asks for them is a measurement. Anything that ships goes through the signature above and
-     * gets bytecode with no reference to a probe in it at all.
+     * module's classes. They call into the compiler, they are never written out, and the only things
+     * that ask for them are an evaluation and a measurement. Anything that ships goes through the
+     * signature above and gets bytecode with no reference to either in it at all.
      *
-     * <p>{@code plan} must have been made from the bodies in {@code checked} — the same instances, not
-     * equal ones. The emitter looks each node up by identity and refuses to emit a body it cannot find
-     * an arm for, rather than emit one arm short and report the arm that ran as one nothing reaches.
+     * <p>An {@code instrumentation} carrying a coverage plan must have been made from the bodies in
+     * {@code checked} — the same instances, not equal ones. The emitter looks each node up by identity
+     * and refuses to emit a body it cannot find an arm for, rather than emit one arm short and report
+     * the arm that ran as one nothing reaches.
      */
     public static Map<String, byte[]> generate(Ast.Module module, Symbols symbols,
                                                Map<String, String> typePackage,
@@ -134,10 +135,10 @@ public final class Backend {
                                                Map<String, List<BehaviorRequirement>> requirements,
                                                TypeChecker.Checked checked,
                                                Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
-                                               CoverageSites.Plan plan) {
+                                               Instrumentation instrumentation) {
         try {
             return generating(module, symbols, typePackage, importedSigs, importedInjected, calleeSigs,
-                    requirements, checked, dischargeInvariants, plan);
+                    requirements, checked, dischargeInvariants, instrumentation);
         } catch (IllegalArgumentException e) {
             // Something the writer would not hold, from a member no definition here claimed — a
             // synthesised class, a shared one. It belongs to the module, which is as near as anything
@@ -154,7 +155,7 @@ public final class Backend {
                                                   Map<String, List<BehaviorRequirement>> requirements,
                                                   TypeChecker.Checked checked,
                                                   Map<TypeName, List<Ast.InvariantClause>> dischargeInvariants,
-                                                  CoverageSites.Plan plan) {
+                                                  Instrumentation instrumentation) {
         Map<String, List<String>> caseToSums = new HashMap<>();
         for (Ast.Def def : module.defs()) {
             if (def instanceof Ast.SumData sum) {
@@ -182,7 +183,8 @@ public final class Backend {
         CodegenContext ctx = new CodegenContext(module.name(), symbols, caseToSums, typePackage,
                 module.exposing().isEmpty(), exposed, recHelpers);
         ctx.setDischargeInvariants(dischargeInvariants);
-        ctx.setCoveragePlan(plan);
+        ctx.setCoveragePlan(instrumentation.coverage());
+        ctx.setCounting(instrumentation.counting());
         Backend b = new Backend(ctx, checked);
         Map<String, Sig> sigs = PipelineSigs.signatures(module, b.symbols, importedSigs);
         // Before anything is written: a declaration wide enough that its generated method cannot hold
@@ -506,8 +508,19 @@ public final class Backend {
                 int n = h.params().size();
                 ClassDesc[] params = new ClassDesc[n];
                 java.util.Arrays.fill(params, CD_Object);
-                cb.withMethodBody(CodegenContext.helperMethod(h.name()),
-                        MethodTypeDesc.of(CD_Object, params), ClassFile.ACC_STATIC,
+                MethodTypeDesc desc = MethodTypeDesc.of(CD_Object, params);
+                String called = CodegenContext.helperMethod(h.name());
+                // Where the depth is counted, what every caller reaches is the counting wrapper and the
+                // body moves aside. A recursive call is an `invokestatic` of the called name (a tail
+                // call to the same helper loops instead and adds no frame), so putting the counting
+                // there is what makes a recursion count itself however it is reached — from a row, from
+                // a fixture's helper, or from another helper in its group.
+                String emitted = ctx.counting() ? called + "$body" : called;
+                if (ctx.counting()) {
+                    cb.withMethodBody(called, desc, ClassFile.ACC_STATIC,
+                            code -> emitDepthCounted(code, cdFns, emitted, desc, n));
+                }
+                cb.withMethodBody(emitted, desc, ClassFile.ACC_STATIC,
                         code -> {
                     BodyGen gen = new BodyGen(ctx, code, null, cdFns, n);
                     for (int i = 0; i < n; i++) {
@@ -530,6 +543,42 @@ public final class Backend {
                 });
             }
         });
+    }
+
+    /**
+     * The helper as its callers reach it while an evaluation is counting: one frame counted in, the
+     * body applied, and the frame counted out however the body leaves.
+     *
+     * <p>A wrapper rather than counting inside the body, because leaving has to be counted on every
+     * path out and the body has many — every arm of every {@code match} returns on its own. One
+     * catch-all handler around one call says the same thing once, and says it for the exceptional path
+     * as well, which is the path that matters: a row is given up on by an exception thrown from inside
+     * the code, so the depth of a helper it was inside has to come back down as that leaves.
+     *
+     * <p>Counting the depth is not the same as counting the steps, and neither stands in for the
+     * other. A recursion that goes deep in few steps is stopped by this before the stack it runs on
+     * runs out, which is what stops how deep it may go from being an answer the JVM gives.
+     */
+    private static void emitDepthCounted(CodeBuilder code, ClassDesc owner, String body,
+                                         MethodTypeDesc desc, int arity) {
+        Label from = code.newLabel();
+        Label to = code.newLabel();
+        Label unwinding = code.newLabel();
+        code.invokestatic(CD_EvaluationContext, "enter", MTD_EvaluationContext_count);
+        code.labelBinding(from);
+        for (int i = 0; i < arity; i++) {
+            code.aload(i);
+        }
+        code.invokestatic(owner, body, desc);
+        code.labelBinding(to);
+        code.invokestatic(CD_EvaluationContext, "leave", MTD_EvaluationContext_count);
+        code.areturn();
+        code.exceptionCatchAll(from, to, unwinding);
+        code.labelBinding(unwinding);
+        code.astore(arity);
+        code.invokestatic(CD_EvaluationContext, "leave", MTD_EvaluationContext_count);
+        code.aload(arity);
+        code.athrow();
     }
 
     /** Emits injected required-behavior fields plus the matching constructor (or a no-arg ctor) on a

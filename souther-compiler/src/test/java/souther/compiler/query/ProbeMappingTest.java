@@ -3,6 +3,7 @@ package souther.compiler.query;
 import org.junit.jupiter.api.Test;
 
 import souther.compiler.codegen.Backend;
+import souther.compiler.codegen.Instrumentation;
 import souther.compiler.coverage.CoverageSites;
 
 import java.util.List;
@@ -55,14 +56,15 @@ class ProbeMappingTest {
         Compilation elsewhere = compiled();
         String module = emitting.modules().get(0);
         Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
-        CoverageSites.Plan somewhereElse = Output.Probed.planOf(elsewhere.db(), module);
+        CoverageSites.Plan somewhereElse = Output.Evaluated.planOf(elsewhere.db(), module);
         assertNotNull(in);
         assertTrue(somewhereElse.sites().size() > 0, "the other compile has arms of its own");
 
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.imported(),
                         in.injected(), in.callees(), in.requirements(), in.checked(),
-                        in.dischargeClauses(), somewhereElse));
+                        in.dischargeClauses(),
+                        Instrumentation.NONE.measuring(somewhereElse)));
 
         assertTrue(stopped.getMessage().contains("no probe was planned"), stopped.getMessage());
     }
@@ -81,7 +83,7 @@ class ProbeMappingTest {
         String module = emitting.modules().get(0);
         Output.Classes.Inputs in = Output.Classes.inputs(emitting.db(), module);
         assertNotNull(in);
-        CoverageSites.Plan real = Output.Probed.planOf(emitting.db(), module);
+        CoverageSites.Plan real = Output.Evaluated.planOf(emitting.db(), module);
         assertTrue(real.sites().size() > 0);
 
         // The same plan with one more arm in it than any body will emit.
@@ -95,7 +97,8 @@ class ProbeMappingTest {
         IllegalStateException stopped = assertThrows(IllegalStateException.class,
                 () -> Backend.generate(in.lowered(), in.scope(), in.typePackages(), in.imported(),
                         in.injected(), in.callees(), in.requirements(), in.checked(),
-                        in.dischargeClauses(), overcounted));
+                        in.dischargeClauses(),
+                        Instrumentation.NONE.measuring(overcounted)));
 
         assertTrue(stopped.getMessage().contains("nothing emitted"), stopped.getMessage());
     }
@@ -107,7 +110,7 @@ class ProbeMappingTest {
         Compilation emitting = compiled();
         String module = emitting.modules().get(0);
 
-        assertNotNull(emitting.db().ask(new Output.Probed(module)).value());
+        assertNotNull(emitting.db().ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value());
     }
 
     /** The query turns that into an answer with nothing in it. What reads it reports a measurement it
@@ -116,7 +119,7 @@ class ProbeMappingTest {
     void theQueryAnswersWithNothingRatherThanWithAHole() {
         Compilation emitting = compiled();
         Answer<java.util.Map<String, byte[]>> probed =
-                emitting.db().ask(new Output.Probed("no.such.module"));
+                emitting.db().ask(new Output.Evaluated("no.such.module", Output.CoverageMode.ARMS));
 
         assertTrue(!probed.present() || probed.value() == null);
     }

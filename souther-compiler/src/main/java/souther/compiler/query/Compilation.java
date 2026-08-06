@@ -35,7 +35,12 @@ public final class Compilation {
     /** The sources this compilation currently has, so one that goes away can be forgotten. */
     private final Set<String> held = new LinkedHashSet<>();
 
-    private Compilation() {}
+    private Compilation() {
+        // Read now, so this compilation is held to what the settings said when it started rather than
+        // to what the first compile in this JVM happened to read. A caller with a reason of its own
+        // says so with withEvaluationPolicy.
+        db.set(new Front.Policy(), souther.compiler.EvaluationPolicy.fromSettings());
+    }
 
     /** A compile of several sources named by their position, the way a build hands them over. An
      * import naming no module among them is resolved against {@code path}. */
@@ -176,7 +181,7 @@ public final class Compilation {
         for (String module : modules()) {
             db.ask(new Output.ConstConstructions(module));
             for (String id : exampleSourcesOf(module)) {
-                db.ask(new Output.Examples(module, id));
+                db.ask(Output.Examples.asked(db, module, id));
             }
             db.ask(new Output.SaidDisagreements(module));
             answerWarnings(module);
@@ -264,6 +269,19 @@ public final class Compilation {
      */
     public Compilation withDeadline(souther.compiler.Deadline deadline) {
         db.set(new Front.ExampleDeadline(), deadline);
+        return this;
+    }
+
+    /**
+     * What this compilation allows one row's evaluation. Returns this compilation, so it can be said
+     * where the sources are.
+     *
+     * <p>A build has no reason to say: the default is set so that no row a model states reaches it.
+     * What a caller says here is said about this compilation alone, so a test holding a row to a few
+     * steps does not hold every other compile in the same JVM to them.
+     */
+    public Compilation withEvaluationPolicy(souther.compiler.EvaluationPolicy policy) {
+        db.set(new Front.Policy(), policy);
         return this;
     }
 

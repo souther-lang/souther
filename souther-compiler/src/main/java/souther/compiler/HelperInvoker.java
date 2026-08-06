@@ -58,9 +58,18 @@ final class HelperInvoker {
             return method.invoke(null, args);
         } catch (InvocationTargetException ite) {
             Throwable cause = ite.getCause();
+            // The helper stopped itself, having gone through more than the evaluation was allowed.
+            // That is about the budget and not about this helper's value, and it belongs to whoever
+            // is holding the evaluation to that budget — read as a fixture that would not build, the
+            // reason would be lost and the report would blame the wrong thing.
+            if (cause instanceof souther.compiler.evaluate.StepLimitExceeded
+                    || cause instanceof souther.compiler.evaluate.DepthLimitExceeded) {
+                throw (RuntimeException) cause;
+            }
             if (cause instanceof StackOverflowError) {
-                // a non-tail `partial` recursion that does not terminate — not a value the row can state
-                throw new NonTerminationException("`" + name + "` overflowed the stack");
+                // Named while the name is still in hand. What decides is the boundary that reads
+                // everything an evaluation ends with; this only puts the helper into the report.
+                throw new StackExhaustedException("`" + name + "` overflowed the stack");
             }
             throw new FixtureException("`" + name + "` did not produce a value: "
                     + (cause == null ? ite : cause.getMessage()));

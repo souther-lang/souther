@@ -106,6 +106,17 @@ public final class Adequacy {
         return askedOf(db).level();
     }
 
+    /**
+     * What this compilation's rows have to record as they run.
+     *
+     * <p>Derived from the level rather than being the level, because what changes the bytecode is
+     * only whether the arms are wanted. Two levels that want the same thing are then one evaluation,
+     * and asking for a wider report does not re-run the rows.
+     */
+    static Output.CoverageMode coverageAsked(Db db) {
+        return levelOf(db).measuresArms() ? Output.CoverageMode.ARMS : Output.CoverageMode.NONE;
+    }
+
     /** What the rows say about one behavior's signature. */
     public record SignatureEvidence(OutputCaseEvidence output, List<InputCaseEvidence> inputs,
                                     MeasurementStatus status) {
@@ -208,56 +219,6 @@ public final class Adequacy {
 
     }
 
-    /**
-     * The rows of one source, run against classes that record the arms they went through.
-     *
-     * <p>Its own key rather than a mode on {@link Output.Examples}, because what a compile does with
-     * rows and what a measurement does with them are different questions asked at different times.
-     * Widening the compile's key would put instrumented bytecode into every build, where it changes the
-     * time budget a row runs under and the classes a row's constructions initialise — for the benefit
-     * of a report that build was not asked for.
-     *
-     * <p>Every adequacy measure reads these, not the compile's. Two sets of row outcomes for one model
-     * can disagree — a row that timed out under one and held under the other — and a report built half
-     * from each would say a case is verified and its branch unreached in the same breath. Where they do
-     * disagree, that is recorded rather than resolved: which of them is right is not this key's to say.
-     */
-    public record ProbedExamples(String name, String sourceId) implements Key<Output.Examples.Of> {
-
-        @Override
-        public String module() {
-            return name;
-        }
-
-        @Override
-        public String sourceId() {
-            return sourceId;
-        }
-
-        @Override
-        public Answer<Output.Examples.Of> compute(Db db) {
-            if (!levelOf(db).measuresArms()) {
-                return db.ask(new Output.Examples(name, sourceId));   // nothing asked for the arms
-            }
-            Map<String, byte[]> probed = db.ask(new Output.ProbedLinked(name)).value();
-            if (probed != null) {
-                return Output.Examples.evaluate(db, name, sourceId, probed);
-            }
-            // Asked for and not produced. That is not the same as not asked for, and the difference
-            // has to travel: the rows below ran without instrumentation, so they carry no arms, and a
-            // measure reading them would take an empty set of arms for a set of arms nothing reached.
-            // It goes in the same channel every other reason does, so that nothing downstream needs a
-            // second way of hearing about it.
-            Answer<Output.Examples.Of> plain = db.ask(new Output.Examples(name, sourceId));
-            if (plain.value() == null) {
-                return plain;
-            }
-            List<Incompleteness> why = new ArrayList<>(plain.value().incompleteness());
-            why.add(Incompleteness.of(Incompleteness.Code.PROBE_MAPPING_LOST,
-                    Incompleteness.Scope.MODULE, name));
-            return Answer.of(new Output.Examples.Of(plain.value().rows(), why), plain.reports());
-        }
-    }
 
     /**
      * Which arms of each behavior's body the rows go through.
@@ -311,7 +272,7 @@ public final class Adequacy {
             souther.compiler.coverage.CoverageSites.Plan plan =
                     souther.compiler.coverage.CoverageSites.Plan.NONE;
             if (measured) {
-                plan = Output.Probed.planOf(db, name);
+                plan = Output.Evaluated.planOf(db, name);
             }
             // A behavior with no `let` has no arms, which is not the same as a body whose arms nothing
             // reaches. The bodies say which is which; the arm count cannot, since a body with no fork
@@ -433,7 +394,7 @@ public final class Adequacy {
             return Map.of();
         }
         for (String sourceId : new LinkedHashSet<>(origins)) {
-            Output.Examples.Of observed = db.ask(new ProbedExamples(module, sourceId)).value();
+            Output.Examples.Of observed = db.ask(Output.Examples.asked(db, module, sourceId)).value();
             if (observed == null) {
                 // The source was not evaluated at all. Which behaviors it wrote rows for is exactly
                 // what cannot be read, so it counts against every one of them.

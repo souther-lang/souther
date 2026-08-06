@@ -6,46 +6,47 @@ import java.util.function.Predicate;
 /**
  * The budget a compile is given when the point of the model is a row that never finishes.
  *
- * <p>A test about what is reported when a row does not come back has to wait for the compiler to
- * stop waiting, and the default budget is set for the opposite case — long enough that no
- * terminating row is ever cut short on the slowest host a build runs on. Paying that here buys
- * nothing: the row is a `partial` recursion with no base case, so the answer at 2000ms and the answer
- * here are the same answer, reached sooner.
+ * <p>Counted rather than timed. A test about what is reported when a row does not come back used to
+ * wait for the compiler to stop waiting, which made the answer depend on how loaded the host was: a
+ * row that finishes is reported as one that did not, if the machine is busy enough. Held to a number
+ * of steps, the looping row is reported for spending them and the rows beside it are not, on every
+ * host and every time.
  *
  * <p>Said on the compilation rather than for the JVM, because the two kinds of model are mixed
- * together in one suite. {@code CompilePartialAdequacyTest} compiles a model whose rows loop and,
- * beside it, one that walks four thousand nodes and finishes — and a budget short enough for the
- * first would report the second as a row that does not terminate, which is a failure that depends on
- * how loaded the machine was rather than on anything the model says.
- *
- * <p>A model that mixes a row which comes back with one that does not may still be compiled with
- * this, and several are: what matters is not that every row loops but that the ones which finish do
- * so in microseconds — writing {@code Ok { n = 1 }} against a two-field record. The margin is then
- * four orders of magnitude, and no amount of load closes it.
+ * together in one suite. A model that mixes a row which comes back with one that does not may be
+ * compiled with this, and several are: what matters is that the ones which finish cost a handful of
+ * steps — writing {@code Ok { n = 1 }} against a two-field record — against the fifty thousand this
+ * allows.
  *
  * <p>What must keep the default is a model whose rows do real work. {@code budgetSpent} in
  * {@code CompilePartialAdequacyTest} walks four thousand nodes to spend the observation budget, and
- * it holds no looping helper at all; a budget chosen for the loops would report it as a behavior that
- * does not terminate, which is the one failure this whole arrangement exists to make impossible.
+ * it holds no looping helper at all.
  */
 final class DoesNotComeBack {
 
     /**
-     * Long enough that starting a worker, loading the generated classes and reflecting into them is
-     * never what runs out of it, and short enough that a suite full of these is not mostly waiting.
+     * The wait a test quotes when it says work did not come back.
      *
-     * <p>The rows this is used for do not terminate, so no value of it can make the test say the
-     * wrong thing — a bigger one only makes it slower. What it is for is the work <em>around</em> the
-     * loop, which is measured in single-digit milliseconds even on a cold JVM under a fully loaded
-     * host.
+     * <p>Only {@link #overrunningOn} uses it, and there it is never waited out: the work is said to
+     * overrun rather than timed. What it is for is the number the report about it quotes.
      */
     static final Duration BUDGET = Duration.ofMillis(100);
+
+    /**
+     * Steps enough for a row that finishes, and far fewer than a row that does not will spend.
+     *
+     * <p>This is what a model written so that something loops is held to. A loop reaches this in
+     * microseconds and is reported for it, and the answer is the same on every host — so a suite full
+     * of these neither waits nor races. The rows beside the looping one in these models write a
+     * literal or a two-field record, which costs a handful of steps against this.
+     */
+    static final EvaluationPolicy POLICY = EvaluationPolicy.of(50_000L);
 
     /** As {@link Compiler#compile(String)}, on this budget: the same first error, raised the same
      *  way, without waiting out a default set for models that come back. */
     static void compile(String model) {
         Compiler.compiled(model, "Main", new java.util.ArrayList<>(),
-                souther.compiler.query.Adequacy.Asked.NOTHING, BUDGET);
+                souther.compiler.query.Adequacy.Asked.NOTHING, POLICY);
     }
 
     /** As {@link Compiler#compiledModules(java.util.List, souther.compiler.meta.ModulePath,
@@ -53,7 +54,7 @@ final class DoesNotComeBack {
     static void compileModules(java.util.List<String> sources,
                                java.util.List<souther.compiler.diag.Located> warningsOut) {
         Compiler.compiledModules(sources, souther.compiler.meta.ModulePath.EMPTY, warningsOut,
-                souther.compiler.query.Adequacy.Asked.NOTHING, BUDGET);
+                souther.compiler.query.Adequacy.Asked.NOTHING, POLICY);
     }
 
     /** As {@link #compile(String)}, with the work this model does not get back from said rather
@@ -108,6 +109,38 @@ final class DoesNotComeBack {
                     // Everything the worker could have thrown, as the build's deadline hands it over:
                     // `ExampleStatements` reads a `NoClassDefFoundError` as this host having no
                     // runtime, and would never see one that came past this instead of through it.
+                    return new Outcome.Threw<>(cause);
+                }
+            }
+        };
+    }
+
+    /**
+     * A deadline under which the work a test picks out ends by throwing {@code thrown}, and
+     * everything else runs to completion.
+     *
+     * <p>For a test about how the compiler classifies what comes back out of an evaluation. Some of
+     * those are reachable by writing a model — a loop spends its budget — and some are not: a stack
+     * that runs out in a generated decoder needs a fixture the parser will not accept before the
+     * decoder ever sees it. What is being tested is the classification and not the route to it, so
+     * the route is stated.
+     */
+    static Deadline throwingOn(Predicate<Deadline.Work> which, Throwable thrown) {
+        return new Deadline() {
+
+            @Override
+            public long budgetMs() {
+                return BUDGET.toMillis();
+            }
+
+            @Override
+            public <T> Outcome<T> given(Work work, java.util.concurrent.Callable<T> body) {
+                if (which.test(work)) {
+                    return new Outcome.Threw<>(thrown);
+                }
+                try {
+                    return new Outcome.Finished<>(body.call());
+                } catch (Throwable cause) {
                     return new Outcome.Threw<>(cause);
                 }
             }
