@@ -118,6 +118,21 @@ class ARowIsHeldToStepsAndNotToTheClockTest {
     }
 
     /**
+     * A row that spent its budget says what it cost.
+     *
+     * <p>Read on the way out of the evaluation whichever way it leaves. Read only where the row came
+     * back, the row most worth knowing the cost of — the one stopped by its budget — recorded nothing,
+     * and said it had spent none, which is what a row that never ran says.
+     */
+    @Test
+    void aRowThatSpendsItsStepsSaysWhatItCost() {
+        RowOutcome row = onlyRowOf(compiled(LOOPS, holdingTo(10_000L)), "example.loops");
+
+        assertEquals(10_000L, row.stepsSpent(),
+                "it spent what it was allowed, and that is what it reports");
+    }
+
+    /**
      * A row that spent its budget leaves nothing running.
      *
      * <p>A worker asked to stop that cannot be made to goes on burning a core for as long as the JVM

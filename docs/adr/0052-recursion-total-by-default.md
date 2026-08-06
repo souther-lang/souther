@@ -20,7 +20,9 @@ Recursion is **total by default**, the way Idris2's `%default total` sets it.
 
 ### Amended: the budget is counted, not timed
 
-The budget was originally a wall clock, with a deterministic step budget named as the complete fix and deferred. It is now the counted budget, and the wall clock has moved out of the way: how many counted points a row passes is a property of what the row does, so two compiles of one model under one policy say the same thing about it however fast the host is and however loaded.
+The budget was originally a wall clock, with a deterministic step budget named as the complete fix and deferred. It is now the counted budget, and the wall clock has moved out of the way for the decision it was making: how many counted points a row passes is a property of what the row does, so two compiles of one model under one policy report the same rows however fast the host is and however loaded.
+
+The guarantee is about that decision and not about compilation as a whole, which is the honest form of it. Reaching a semantic decision is machine-independent; failing to reach one is not, and the two are separate diagnostics for that reason.
 
 What the clock was doing wrong was not a matter of degree. Whether a model compiled depended on the machine — the same row was reported as non-terminating on a busy host and held on a quiet one — and a row that was given up on could not actually be stopped, so its worker went on burning a core and made every row after it likelier to be misread the same way.
 
@@ -32,7 +34,8 @@ What this does not reach is a `partial` helper inside a published module. Its cl
 
 - User recursion is total unless explicitly `partial`; the domain core is pure (effects at `depends on`) and total (structural recursion, bounded `fold`), so its examples always terminate at compile time. This is Souther's totality guarantee — stronger than a Turing-complete language, and, like Idris2, achieved by a structural check with a `partial` escape.
 - Numeric counting is expressed with `fold` (bounded) or structural recursion on an ADT; a raw counting loop must be `partial`.
-- Whether a model compiles does not depend on the machine it is compiled on: the reading that decides a row is counted, and the settings that bound it (`souther.example.step.limit`, `souther.example.recursion.depth`) belong to the compilation rather than to the JVM.
+- Whether a row is reported as `E1910` does not depend on the machine it is compiled on: the reading that decides it is counted, and the settings that bound it (`souther.example.step.limit`, `souther.example.recursion.depth`) belong to the compilation rather than to the JVM.
+- Whether the compiler answers at all is a weaker guarantee, and deliberately so. Work the compiler owns rather than generates — loading a class, decoding a value through a derived decoder, comparing two of them — is not counted, and an evaluation that stops answering within its wait is reported as `E1923`. That work is bounded by what the counted work produced, because a value only gets large by being built and building it costs counted points; but bounded is not counted, so it is still measured in time. Counting it would mean instrumenting decoders this compiler does not generate.
 - The check is size-change termination (sound, not complete): it accepts any recursion whose descent is provable on the structural sub-term order — including lexicographic descent that a single-decreasing-position rule would reject — and rejects the rest, which must be `partial`.
 
 ## References

@@ -58,7 +58,9 @@ import java.util.Set;
  * @param stepsSpent     how many counted points the evaluation passed. What the row cost, in the unit
  *                       it is actually held to — so a build can see how much of the budget its rows
  *                       use before one of them reaches it, which is the only way to set the budget
- *                       from evidence rather than by guessing. Zero for a row that did not run.
+ *                       from evidence rather than by guessing. Zero says the row passed no counted
+ *                       point, which a row that ran a body with no loop in it does as much as one
+ *                       that never ran — {@link #disposition} is what tells those apart.
  */
 public record RowOutcome(SourceRef at,
                          String target,

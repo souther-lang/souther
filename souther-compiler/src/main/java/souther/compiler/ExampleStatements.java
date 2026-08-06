@@ -198,6 +198,8 @@ public final class ExampleStatements {
                 case Read.Got(List<Diagnostic> wrong) -> said.addAll(wrong);
                 case Read.Overspent(FailurePhase which, long limit) ->
                         said.add(unreadableFake(fk, Unread.overspending(which, limit)));
+                case Read.StackRanOut(int depthLimit) ->
+                        said.add(unreadableFake(fk, new Unread.StackRanOut(depthLimit)));
                 case Read.Unanswered(long ranOutOf) ->
                         said.add(unreadableFake(fk, new Unread.DidNotAnswer(ranOutOf)));
                 // Not about this fake: the runtime is `provided`, so a host without it builds no value
@@ -228,6 +230,11 @@ public final class ExampleStatements {
         /** The reading spent what the policy allows, and which budget it spent: the statements say
          * something this compiler will not read all of, and it says so the same way on every host. */
         record Overspent<T>(FailurePhase which, long limit) implements Read<T> {}
+
+        /** The stack ran out before the counted depth limit was reached, and the limit it did not
+         * reach. Not a statement about the table either: how many frames a stack holds is decided by
+         * how large they are. */
+        record StackRanOut<T>(int depthLimit) implements Read<T> {}
 
         /** The reading stopped answering, and the wait it was held to: what a report has to name is
          * what the wait actually was, not what a second reader of the setting makes of it later.
@@ -288,6 +295,13 @@ public final class ExampleStatements {
                 if (cause instanceof DepthLimitExceeded) {
                     return new Read.Overspent<>(FailurePhase.DEPTH_LIMIT,
                             policy.recursionDepthLimit());
+                }
+                // The stack ran out. Said here for the reason the two above are: everything the
+                // worker threw arrives at this one place, so classifying anywhere else leaves the
+                // paths that do not go through that place unclassified — and an Error rethrown from
+                // here is a compiler failure rather than a report about the statement.
+                if (cause instanceof StackOverflowError) {
+                    return new Read.StackRanOut<>(policy.recursionDepthLimit());
                 }
                 // One thing ends a reading without the model or this code being at fault: a host with
                 // no runtime to build a value against, since the runtime is `provided` (as it is for
@@ -468,6 +482,11 @@ public final class ExampleStatements {
             case Read.Overspent(FailurePhase which, long limit) -> {
                 timedOut.add(new UnreadFake(fk.target(), new SourceRef(origin, fk.pos()),
                         fk.target().length(), Unread.overspending(which, limit)));
+                return;
+            }
+            case Read.StackRanOut(int depthLimit) -> {
+                timedOut.add(new UnreadFake(fk.target(), new SourceRef(origin, fk.pos()),
+                        fk.target().length(), new Unread.StackRanOut(depthLimit)));
                 return;
             }
             case Read.Unanswered(long budgetMs) -> {
@@ -656,6 +675,9 @@ public final class ExampleStatements {
         /** The reading spent the counted budget the policy allows. */
         record Overspent(FailurePhase which, long limit) implements Unread {}
 
+        /** The stack ran out before the counted depth limit was reached. */
+        record StackRanOut(int depthLimit) implements Unread {}
+
         /** The reading stopped answering within the wait it was given. */
         record DidNotAnswer(long budgetMs) implements Unread {}
 
@@ -684,11 +706,16 @@ public final class ExampleStatements {
                     && which == FailurePhase.STEP_LIMIT;
         }
 
+        default boolean isStack() {
+            return this instanceof StackRanOut;
+        }
+
         /** The limit, as written rather than as a number a locale groups: {@code 2,000} is not a
          * budget anyone set, and the settings that name these take the ungrouped form. */
         default String limitShown() {
             return switch (this) {
                 case Overspent(FailurePhase _, long limit) -> Long.toString(limit);
+                case StackRanOut(int depthLimit) -> Integer.toString(depthLimit);
                 case DidNotAnswer(long budgetMs) -> Long.toString(budgetMs);
             };
         }
@@ -828,12 +855,14 @@ public final class ExampleStatements {
     private static Diagnostic unreadableFake(Ast.Fake fk, Unread why) {
         Diagnostic.Builder said = Diagnostic.of("E1921", why.isDepth() ? "check.fake.unchecked.deep"
                         : why.isSteps() ? "check.fake.unchecked.steps"
+                        : why.isStack() ? "check.fake.unchecked.stack"
                         : "check.fake.unchecked.unanswered")
                 .warning().title("check.example.title")
                 .at(fk.pos(), fk.target().length())
                 .args(fk.target(), why.limitShown());
         return (why.isDepth() ? said.hint("check.fake.unchecked.deep.hint", fk.target())
                 : why.isSteps() ? said.hint("check.fake.unchecked.steps.hint", fk.target())
+                : why.isStack() ? said.hint("check.fake.unchecked.stack.hint", fk.target())
                 : said.hint("check.fake.unchecked.unanswered.hint", fk.target())).build();
     }
 

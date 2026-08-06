@@ -359,9 +359,16 @@ public final class Output {
                 String reached = reaches.get(i);
                 Answer<Map<String, byte[]>> classes = db.ask(new Evaluated(reached,
                         reached.equals(name) ? coverage : CoverageMode.NONE));
-                if (classes.value() != null) {
-                    linked.putAll(classes.value());
+                // A module that could not be generated makes this absent rather than making the set
+                // one class short. Carrying on would evaluate against a set with a hole in it, and
+                // what came of that — a class that will not load, a stale one found further up the
+                // loader chain, an example that fails for neither reason — reads as a fault in the
+                // model. The caller has a way to say a measurement could not be made; it has no way
+                // to notice a class that quietly was not there.
+                if (classes.value() == null) {
+                    return Answer.absent(classes.reports());
                 }
+                linked.putAll(classes.value());
             }
             return Answer.of(Ordered.map(linked));
         }
@@ -632,6 +639,7 @@ public final class Output {
             Diagnostic.Builder said = Diagnostic.of("E1920",
                             why.isDepth() ? "check.example.disagreement.unread.deep"
                             : why.isSteps() ? "check.example.disagreement.unread.steps"
+                            : why.isStack() ? "check.example.disagreement.unread.stack"
                             : "check.example.disagreement.unread.unanswered")
                     .warning().title("check.example.title")
                     .at(f.at().pos(), f.width())
@@ -640,6 +648,8 @@ public final class Output {
                     ? said.hint("check.example.disagreement.unread.deep.hint", f.target())
                     : why.isSteps()
                     ? said.hint("check.example.disagreement.unread.steps.hint", f.target())
+                    : why.isStack()
+                    ? said.hint("check.example.disagreement.unread.stack.hint", f.target())
                     : said.hint("check.example.disagreement.unread.unanswered.hint", f.target()))
                     .build();
         }

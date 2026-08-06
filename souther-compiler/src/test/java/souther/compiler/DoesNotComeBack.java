@@ -115,6 +115,38 @@ final class DoesNotComeBack {
         };
     }
 
+    /**
+     * A deadline under which the work a test picks out ends by throwing {@code thrown}, and
+     * everything else runs to completion.
+     *
+     * <p>For a test about how the compiler classifies what comes back out of an evaluation. Some of
+     * those are reachable by writing a model — a loop spends its budget — and some are not: a stack
+     * that runs out in a generated decoder needs a fixture the parser will not accept before the
+     * decoder ever sees it. What is being tested is the classification and not the route to it, so
+     * the route is stated.
+     */
+    static Deadline throwingOn(Predicate<Deadline.Work> which, Throwable thrown) {
+        return new Deadline() {
+
+            @Override
+            public long budgetMs() {
+                return BUDGET.toMillis();
+            }
+
+            @Override
+            public <T> Outcome<T> given(Work work, java.util.concurrent.Callable<T> body) {
+                if (which.test(work)) {
+                    return new Outcome.Threw<>(thrown);
+                }
+                try {
+                    return new Outcome.Finished<>(body.call());
+                } catch (Throwable cause) {
+                    return new Outcome.Threw<>(cause);
+                }
+            }
+        };
+    }
+
     /** Every row of {@code target}, evaluated — its fixtures built, the behavior applied. */
     static Predicate<Deadline.Work> everyRowOf(String target) {
         return w -> w instanceof Deadline.Work.Row row && row.target().equals(target);

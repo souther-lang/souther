@@ -386,8 +386,12 @@ public final class ExampleVerifier {
             try {
                 verifier.checkRowNow(fixtures, target, sig, outCases, row, mine, state);
                 state.hits = Probe.taken();
-                state.stepsSpent = EvaluationContext.spent(verifier.policy.stepLimit());
             } finally {
+                // Read on every way out, not only the one where the row came back. A row stopped by
+                // its budget is the row whose cost is most worth knowing, and reading it after the
+                // call that throws recorded nothing for exactly that row — which then said it had
+                // spent nothing, the same thing a row that never ran says.
+                state.stepsSpent = EvaluationContext.spent(verifier.policy.stepLimit());
                 EvaluationContext.end();
                 Probe.end();
             }
@@ -508,8 +512,22 @@ public final class ExampleVerifier {
                     rows.add(outcomeOf(target, row, evaluation.state));
                     return;
                 }
+                // Every way the stack can run out arrives here, because everything the worker threw
+                // arrives here. A site that happens to cross a reflection boundary names the helper
+                // it was in; one that does not — a generated decoder, an encoder, the reader's own
+                // walk — says only that it ran out, and both are the same answer about the same
+                // thing. Classifying at the sites instead left the ones with no boundary to cross
+                // falling through as a compiler failure.
                 if (cause instanceof NonTerminationException nt) {
-                    out.add(stackRanOut(row, nt));
+                    out.add(stackRanOut(row, nt.getMessage()));
+                    evaluation.state.incomplete(FailurePhase.STACK_EXHAUSTED);
+                    rows.add(outcomeOf(target, row, evaluation.state));
+                    return;
+                }
+                if (cause instanceof StackOverflowError) {
+                    String helper = evaluation.helper();
+                    out.add(stackRanOut(row, helper == null ? "the evaluation overflowed the stack"
+                            : "`" + helper + "` overflowed the stack"));
                     evaluation.state.incomplete(FailurePhase.STACK_EXHAUSTED);
                     rows.add(outcomeOf(target, row, evaluation.state));
                     return;
@@ -554,9 +572,9 @@ public final class ExampleVerifier {
      * meant to stop a recursion, and reaching this instead means the two are set wrong for this model
      * — which the author can act on, and which says nothing about whether the recursion terminates.
      */
-    private Diagnostic stackRanOut(Ast.ExampleRow row, NonTerminationException why) {
+    private Diagnostic stackRanOut(Ast.ExampleRow row, String why) {
         return Diagnostic.of("E1924", "check.example.stack").title("check.example.title")
-                .at(row.pos()).args(why.getMessage(), policy.recursionDepthLimit())
+                .at(row.pos()).args(why, policy.recursionDepthLimit())
                 .hint("check.example.stack.hint").build();
     }
 
@@ -651,7 +669,7 @@ public final class ExampleVerifier {
             state.failed(FailurePhase.INVOCATION);
             return;
         } catch (NonTerminationException nt) {
-            out.add(stackRanOut(row, nt));
+            out.add(stackRanOut(row, nt.getMessage()));
             state.incomplete(FailurePhase.STACK_EXHAUSTED);
             return;
         }
