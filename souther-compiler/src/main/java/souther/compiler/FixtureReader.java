@@ -875,7 +875,10 @@ public final class FixtureReader {
                     neutral.shapeOf(declared.get(fi.name())));
             // `None` on a `T?` field yields a null; leave the key out so the optional decoder reads
             // it as absent (spec 8, absent -> None), the same neutral form as omitting the field.
+            // A spread already wrote the field, so leaving the key out means taking it back out —
+            // not writing nothing, which would leave what the spread copied standing.
             if (v == null) {
+                map.remove(fi.name());
                 continue;
             }
             map.put(fi.name(), v);

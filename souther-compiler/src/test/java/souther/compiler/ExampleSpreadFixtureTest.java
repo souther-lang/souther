@@ -245,4 +245,68 @@ class ExampleSpreadFixtureTest {
                     | "an extra field is not copied" : (narrow) -> Answer { label = "x" }
                 """));
     }
+
+    private static final String NOTES = """
+            module demo
+
+            data Note   = { body: String, tag: String? }
+            data Answer = { label: String }
+
+            let tagged = Note { body = "b", tag = "t" }
+
+            behavior tagOf : (n: Note) -> Answer
+                constructs Answer
+
+            let tagOf (n) =
+                match n.tag with
+                    | Some t -> Answer { label = t }
+                    | None   -> Answer { label = "none" }
+
+            behavior clearTag : (n: Note) -> Note
+                constructs Note
+
+            let clearTag (n) = Note { ...n, tag = None }
+            """;
+
+    @Test
+    void anOverrideToNoneSurvivesTheSpread() {
+        assertDoesNotThrow(() -> Compiler.compile(NOTES + """
+
+                example tagOf
+                    | "None written after a spread that brought a value"
+                        : (Note { ...tagged, tag = None }) -> Answer { label = "none" }
+                """));
+    }
+
+    @Test
+    void aSpreadDoesNotSupplyTheValueAnOverrideToNoneTookAway() {
+        // The row above holds because the override took, not because both sides drop it: written the
+        // other way — the value the spread brought — the same input must not hold.
+        assertThrows(CompileException.class, () -> Compiler.compile(NOTES + """
+
+                example tagOf
+                    | "the spread's value is gone"
+                        : (Note { ...tagged, tag = None }) -> Answer { label = "t" }
+                """));
+    }
+
+    @Test
+    void anExpectedValueOverriddenToNoneIsTheAbsentOptional() {
+        assertDoesNotThrow(() -> Compiler.compile(NOTES + """
+
+                example clearTag
+                    | "the expected side writes the override the input side does"
+                        : (tagged) -> Note { ...tagged, tag = None }
+                """));
+    }
+
+    @Test
+    void anExpectedValueThatKeepsTheSpreadsValueDoesNotHold() {
+        assertThrows(CompileException.class, () -> Compiler.compile(NOTES + """
+
+                example clearTag
+                    | "an expectation still carrying the tag"
+                        : (tagged) -> Note { ...tagged }
+                """));
+    }
 }
