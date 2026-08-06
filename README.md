@@ -128,6 +128,36 @@ The VS Code extension lives in [souther-lang/souther-vscode](https://github.com/
 
 The server is `souther-lsp`, a self-contained jar that speaks LSP over stdio, attached to every release here. Other editors can launch it with `java -jar souther-lsp.jar`. Formatting is also on the command line: `souther fmt <file.sou>` prints the canonical form, `-w` rewrites in place, and `--check` exits non-zero when a file is not formatted.
 
+## Documentation on the command line
+
+The `souther` binary answers questions about the language and its libraries itself, so neither a
+person nor a coding agent has to hunt through a workspace or disassemble jars:
+
+```sh
+souther doc                    # every specification section, anchor<TAB>title
+souther doc newtype            # one section, by its anchor
+souther doc raoh/tutorial      # a doc a bundled library ships (raoh's tutorial)
+souther doc --search decoder   # sections and topics that say the term
+souther api Option             # the stdlib surface with resolved signatures
+souther api --source Option    # a stdlib module's own source, comments included
+souther japi net.unit8.raoh.Issues -cp <jar>   # a dependency's public API, with javadoc
+```
+
+`souther doc` serves the specification the compiler was built from — it is bundled in the jar, not
+looked up on disk. `souther api` prints the signatures the type checker itself resolved. `souther
+japi` reads class files without loading them and brings javadoc along from the `-sources.jar`
+sitting next to the jar. A library can ship its own docs inside its jar under
+`META-INF/souther-docs/`, and `souther doc` lists them alongside the specification — raoh does
+this from 0.7.1 on.
+
+The same answers are served over the Model Context Protocol: `souther mcp` speaks MCP on stdio,
+exposing `doc_search`, `doc_read`, `stdlib_api`, and `jar_api`, so agent harnesses that prefer
+tools over shell commands register one command:
+
+```json
+{ "mcpServers": { "souther": { "command": "souther", "args": ["mcp"] } } }
+```
+
 ## What Souther guarantees
 
 ### Construction of invalid data is confined
