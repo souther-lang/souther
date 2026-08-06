@@ -138,6 +138,35 @@ class CompileJsonSourceTest {
         assertEquals("/note", issues.get(0).path().toString());
     }
 
+    /**
+     * A data whose fields are all optional read a non-object as a record of absent fields and
+     * succeeded: an optional field makes nothing of a node it cannot read, so no field objected.
+     */
+    @Test
+    void jsonDecoderDoesNotReadANonObjectAsARecordOfAbsentFields() throws Exception {
+        String src = """
+                module demo
+                data Draft = { body: String?, tag: String? }
+                """;
+        BytesClassLoader loader = new BytesClassLoader(Compiler.compile(src), getClass().getClassLoader());
+
+        assertInstanceOf(Ok.class,
+                Codecs.decode(loader, "demo.Draft", "jsonDecoder", mapper.readTree("{}")));
+        assertInstanceOf(Err.class,
+                Codecs.decode(loader, "demo.Draft", "jsonDecoder", mapper.readTree("5")));
+    }
+
+    /** A JSON null is the absent value every other decoder calls required, not a shape mismatch. */
+    @Test
+    void jsonDecoderCallsANullNodeRequired() throws Exception {
+        Result<?> r = Codecs.decode(compile(), "demo.Account", "jsonDecoder", mapper.readTree("null"));
+
+        assertInstanceOf(Err.class, r);
+        List<Issue> issues = ((Err<?>) r).issues().asList();
+        assertEquals(1, issues.size(), issues.toString());
+        assertEquals("required", issues.get(0).code());
+    }
+
     /** An object still accumulates every field's error, which is what makes the guard a guard. */
     @Test
     void jsonDecoderStillAccumulatesEveryFieldErrorOfAnObject() throws Exception {

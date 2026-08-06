@@ -1032,8 +1032,72 @@ final class CodecGen {
         emitConstructCall(code, gen, cdName, dec.result(), fields);
     }
 
+    /**
+     * Emits the JSON decoder's shape check: the node this decoder was handed either holds an object
+     * or it does not, and that is one fact about one node, reported at that node.
+     *
+     * <p>Without it the fields answer it one at a time. {@code JsonDecoders.field} reads its name out
+     * of the node it is given and rejects a node that is not an object — at the field's own path, once
+     * per field — so a node of the wrong shape becomes one report per declared field, each naming a
+     * field the author wrote correctly, and a nested one lands on the record's first field instead of
+     * the record. A data whose fields are all optional went the other way and decoded, since an absent
+     * field is what {@code nullableField} makes of a node it cannot read.
+     *
+     * <p>Only the JSON source needs it. The neutral decoder is handed a {@code Map} by its own
+     * signature, and a nested one is bridged through {@code MapDecoders.nested}, which asks the same
+     * question at the same place; a jOOQ {@code Record} is a row and has no other shape to be.
+     */
+    private void emitObjectGuard(CodeBuilder code, BodyGen gen, Src src) {
+        if (src != Src.JSON) {
+            return;
+        }
+        int node = gen.slot(Type.STRING);
+        Label required = code.newLabel();
+        Label ok = code.newLabel();
+        code.aload(1);
+        code.ifnull(required);
+        code.aload(1);
+        code.checkcast(CD_JsonNode);
+        code.astore(node);
+        code.aload(node);
+        code.invokevirtual(CD_JsonNode, "isNull", MTD_nodePredicate);
+        code.ifne(required);
+        code.aload(node);
+        code.invokevirtual(CD_JsonNode, "isMissingNode", MTD_nodePredicate);
+        code.ifne(required);
+        code.aload(node);
+        code.invokevirtual(CD_JsonNode, "isObject", MTD_nodePredicate);
+        code.ifne(ok);
+
+        code.aload(2);                                            // path
+        code.loadConstant("type_mismatch");
+        code.loadConstant("expected object");
+        code.loadConstant("expected");
+        code.loadConstant("object");
+        code.loadConstant("actual");
+        code.aload(node);
+        code.invokevirtual(CD_JsonNode, "getNodeType", MTD_getNodeType);
+        code.invokevirtual(CD_JsonNodeType, "name", MTD_enumName);
+        code.getstatic(CD_Locale, "ROOT", CD_Locale);
+        code.invokevirtual(CD_String, "toLowerCase", MTD_toLowerCase);
+        code.invokestatic(CD_Map, "of",
+                MethodTypeDesc.of(CD_Map, CD_Object, CD_Object, CD_Object, CD_Object), true);
+        code.invokestatic(CD_RResult, "fail", MTD_Rfail4, true);
+        code.areturn();
+
+        code.labelBinding(required);
+        code.aload(2);
+        code.loadConstant("required");
+        code.loadConstant("is required");
+        code.invokestatic(CD_RResult, "fail", MTD_Rfail, true);
+        code.areturn();
+
+        code.labelBinding(ok);
+    }
+
     private void emitObjectDecode(CodeBuilder code, BodyGen gen, ClassDesc cdName, Ast.ObjectDecoder obj,
                                   Map<String, Type> fields, Src src) {
+        emitObjectGuard(code, gen, src);
         List<Ast.Bind> binds = obj.binds();
         int[] resultSlots = new int[binds.size()];
         for (int i = 0; i < binds.size(); i++) {
