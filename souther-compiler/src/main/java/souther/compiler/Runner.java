@@ -185,12 +185,8 @@ public final class Runner {
         Sig sig = sigs.get(spec.name());
         List<Type> ins = sig.ins();
 
-        JsonNode[] rawArgs = splitInput(spec.name(), ins.size(), inputJson);
         MemoryClassLoader loader = new MemoryClassLoader(classes, Runner.class.getClassLoader());
-        Object[] args = new Object[ins.size()];
-        for (int i = 0; i < ins.size(); i++) {
-            args[i] = decode(loader, module.name(), ins.get(i), rawArgs[i], i);
-        }
+        Object[] args = decodeInputs(loader, module.name(), spec.name(), ins, inputJson);
 
         Object result = invoke(loader, module.name(), spec.name(), args);
         Object encoded = encodeOutput(loader, module.name(), spec.name(), sig.out(), result);
@@ -364,9 +360,22 @@ public final class Runner {
 
     // --- input --------------------------------------------------------------------------------
 
-    private static JsonNode[] splitInput(String name, int arity, String inputJson) {
+    /**
+     * The behavior's arguments, read from {@code --input}.
+     *
+     * <p>How the text is cut into arguments is not a question the syntax answers. From two inputs up
+     * it is: the text is a JSON array of that length, positionally, and an array of another length or
+     * no array at all is refused by arity alone. A single input is written as it stands, and there the
+     * same text has two readings — for {@code (xs: List<Int>)}, {@code [1,2,3]} is the argument, and
+     * {@code [[1,2,3]]} is the argument written inside the argument array the two-input form takes.
+     * Arity cannot tell them apart; only decoding against the parameter type can. So the split and the
+     * decode are one step, taken with the types in hand.
+     */
+    private static Object[] decodeInputs(MemoryClassLoader loader, String pkg, String name,
+                                         List<Type> ins, String inputJson) {
+        int arity = ins.size();
         if (arity == 0) {
-            return new JsonNode[0];
+            return new Object[0];
         }
         if (inputJson == null) {
             throw usage("run.input.missing", "`" + name + "` takes " + arity + " input"
@@ -374,7 +383,7 @@ public final class Runner {
         }
         JsonNode tree = parseJson(inputJson);
         if (arity == 1) {
-            return new JsonNode[] {tree};
+            return new Object[] {decodeSoleInput(loader, pkg, ins.get(0), tree)};
         }
         if (!tree.isArray()) {
             throw fail("run.input.notarray", "`" + name + "` takes " + arity
@@ -384,11 +393,42 @@ public final class Runner {
             throw fail("run.input.count", "`" + name + "` takes " + arity + " inputs, but --input has "
                     + tree.size(), name, arity, tree.size());
         }
-        JsonNode[] args = new JsonNode[arity];
+        Object[] args = new Object[arity];
         for (int i = 0; i < arity; i++) {
-            args[i] = tree.get(i);
+            args[i] = decode(loader, pkg, ins.get(i), tree.get(i), i);
         }
         return args;
+    }
+
+    /**
+     * The sole input, read as it stands — and only when that fails, read again as the value a
+     * one-element array wraps.
+     *
+     * <p>The order is what makes the second reading safe: an input that is an array in its own right
+     * decodes on the first attempt and never reaches it. Being an array is not the mistake; failing as
+     * the value while succeeding as the array's sole element is. When the element fails too, the input
+     * is wrong for some other reason and the decoder's own report is what says so.
+     */
+    private static Object decodeSoleInput(MemoryClassLoader loader, String pkg, Type type, JsonNode tree) {
+        try {
+            return decode(loader, pkg, type, tree, 0);
+        } catch (RunException asWritten) {
+            if (tree.isArray() && tree.size() == 1 && decodes(loader, pkg, type, tree.get(0))) {
+                throw fail("run.input.wrapped", "This behavior has one parameter. Pass its value"
+                        + " directly to --input; remove the outer array.");
+            }
+            throw asWritten;
+        }
+    }
+
+    /** Whether {@code raw} decodes as {@code type}, asked without reporting anything. */
+    private static boolean decodes(MemoryClassLoader loader, String pkg, Type type, JsonNode raw) {
+        try {
+            decode(loader, pkg, type, raw, 0);
+            return true;
+        } catch (RunException _) {
+            return false;
+        }
     }
 
     // --- decode / encode ----------------------------------------------------------------------
