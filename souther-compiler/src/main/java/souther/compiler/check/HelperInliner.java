@@ -53,16 +53,6 @@ public final class HelperInliner {
      */
     private HelperTable table;
     /**
-     * The lambdas this pass expands as helpers, each under the binding it is bound to: a lambda a
-     * block's {@code let} binds, and a lambda handed to a function parameter.
-     *
-     * <p>Apart from {@link #table} because they are apart: a declaration is reached by a name, a
-     * lambda is reached by a binding. Held together, a lambda bound to {@code f} took the place of a
-     * declared {@code f} for as long as it was in scope, which is why applying it had to be told from
-     * applying the declaration by a spelling and why a lambda naming itself had to be refused.
-     */
-    private final Map<BindingId, ScopedLambda> scopedLambdas = new HashMap<>();
-    /**
      * The behaviors a body expanded here may name, with how many inputs each takes — the module's
      * own callable ones and the ones it borrows (spec {@code [#calling-a-behavior]}).
      *
@@ -92,12 +82,37 @@ public final class HelperInliner {
      * with each would give two of them the same binding.
      */
     private final Map<BindingOwner, Integer> written = new HashMap<>();
-    /** The body being expanded, and the bindings this expansion introduces into it. An expansion
-     * writes bindings no source wrote, so they belong to it rather than to the definition whose text
-     * it is splicing, which is what keeps two copies of one helper's body apart. */
-    private Ast.Binders binders;
-    /** The body being expanded into, which the copies of a helper's bindings belong under. */
-    private BindingOwner into;
+
+    /**
+     * One writing of one body, and everything that is true only while it runs.
+     *
+     * <p>Four things were four fields, each saved and put back on its own, and one of them was left
+     * standing after a refusal because the line that emptied it was on the path that did not run.
+     * Held together they are made whole and dropped whole: what a writing holds is the writing's, and
+     * a writing that did not finish takes it with it.
+     *
+     * @param into the body being written, which the bindings an expansion introduces belong under
+     * @param binders the minter for those bindings — an expansion writes names no source wrote, so
+     *                they belong to this writing rather than to the definition whose text it splices
+     * @param dependencies which bindings the {@code depends on} parameters of a behavior's
+     *                     {@code let} are; empty while writing anything else, because only a
+     *                     behavior's {@code let} has them (spec §depends-on)
+     * @param scopedLambdas the lambdas reached by a binding rather than by a name: one a block's
+     *                      {@code let} binds, one handed to a function parameter. Apart from
+     *                      {@link #table} because they are apart — a declaration is reached by a name
+     *                      — and inside the writing because a lambda is in scope for as long as the
+     *                      body holding it is being written and not one call longer
+     */
+    private record Writing(BindingOwner into, Ast.Binders binders, Set<BindingId> dependencies,
+                           Map<BindingId, ScopedLambda> scopedLambdas) {
+
+        Writing(BindingOwner into, Ast.Binders binders, Set<BindingId> dependencies) {
+            this(into, binders, dependencies, new HashMap<>());
+        }
+    }
+
+    /** The writing in force, or null outside one. Nothing public reads it without starting one. */
+    private Writing writing;
 
     /**
      * A lambda reached by a binding, and where the author wrote it.
@@ -710,8 +725,14 @@ public final class HelperInliner {
             // applying something that is not a name: what is applied is worked out by the expression,
             // and no declaration stands behind it
             case null -> null;
+            // A binding holds a lambda only inside the writing that put it there, so asked outside
+            // one — which is where a check reads a call without expanding anything — a binding stands
+            // for nothing this can answer with. It was answered that way before by a table that
+            // happened to be empty there; it is answered that way now because there is no writing to
+            // ask.
             case ValueName.Local local -> {
-                ScopedLambda lambda = scopedLambdas.get(local.id());
+                ScopedLambda lambda = writing == null ? null
+                        : writing.scopedLambdas().get(local.id());
                 yield lambda == null ? null : lambda.fn();
             }
             case ValueName.Helper _, ValueName.Stdlib _ -> table.reached(reachedBy);
@@ -740,7 +761,7 @@ public final class HelperInliner {
      * both call the wrong thing and report a value as an uncallable name.
      */
     private List<Ast.Expr> forwardDependencies(Ast.FnDef callee, List<Ast.Expr> args) {
-        if (callee == null || dependencies.isEmpty()) {
+        if (callee == null || writing.dependencies().isEmpty()) {
             return args;
         }
         List<Ast.Expr> out = new ArrayList<>(args);
@@ -749,7 +770,7 @@ public final class HelperInliner {
             Ast.FnType want = declared == null ? null : declared.asFn();
             if (want == null || !(out.get(i) instanceof Ast.Var v)
                     || !(v.denotes() instanceof ValueName.Local local)
-                    || !dependencies.contains(local.id())) {
+                    || !writing.dependencies().contains(local.id())) {
                 continue;
             }
             out.set(i, etaExpand(v, want.params().size(), _ -> "$" + next() + "_" + v.name()));
@@ -757,21 +778,10 @@ public final class HelperInliner {
         return out;
     }
 
-    /** Which bindings the {@code depends on} parameters of the behavior {@code let} being expanded
-     * are. Empty while expanding anything else: only a behavior's {@code let} has them
-     * (spec §depends-on). */
-    private Set<BindingId> dependencies = Set.of();
-
-    /** As {@link #inline(Ast.Expr)}, for the body of a behavior {@code let} whose {@code depends on}
-     * parameters are bound at {@code binders}. */
+    /** As {@link #inline(Ast.Expr, BindingOwner)}, for the body of a behavior {@code let} whose
+     * {@code depends on} parameters are the trailing bindings named in {@code dependencies}. */
     public Ast.Expr inline(Ast.Expr e, Set<BindingId> dependencies, BindingOwner into) {
-        Set<BindingId> outer = this.dependencies;
-        this.dependencies = dependencies;
-        try {
-            return inline(e, into);
-        } finally {
-            this.dependencies = outer;
-        }
+        return writing(into, dependencies, () -> inline(e));
     }
 
     /**
@@ -781,24 +791,40 @@ public final class HelperInliner {
      * so two copies of one helper's body spliced into two definitions do not answer as one binding.
      */
     public Ast.Expr inline(Ast.Expr e, BindingOwner into) {
-        Ast.Binders outerBinders = binders;
-        BindingOwner outerInto = this.into;
-        this.into = into;
+        return writing(into, Set.of(), () -> inline(e));
+    }
+
+    /**
+     * Runs {@code expansion} as one writing into {@code into}.
+     *
+     * <p>The writing is a value and it is made whole: nothing it holds is left from the writing
+     * before, and nothing it holds outlives it — including where an expansion was refused partway
+     * through, which is a thing that happens, because a caller records a refusal and hands the next
+     * body to the same pass.
+     *
+     * <p>A writing may hold another. A helper's body is expanded while the body that called it is
+     * being expanded, so the one in force is put back when this one is done rather than dropped.
+     */
+    private Ast.Expr writing(BindingOwner into, Set<BindingId> dependencies,
+                             java.util.function.Supplier<Ast.Expr> expansion) {
+        Writing outer = writing;
         // Numbered among what this pass has written into that body, so a second writing into it — a
         // second clause of one invariant, a second argument of one helper — writes bindings of its
         // own rather than the first one's over again.
-        binders = new Ast.Binders(new BindingOwner.Synthesized(into, BindingOwner.Pass.INLINER, next()));
+        writing = new Writing(into,
+                new Ast.Binders(new BindingOwner.Synthesized(into, BindingOwner.Pass.INLINER,
+                        written.merge(into, 1, Integer::sum) - 1)),
+                dependencies);
         try {
-            return inline(e);
+            return expansion.get();
         } finally {
-            binders = outerBinders;
-            this.into = outerInto;
+            writing = outer;
         }
     }
 
     /** The next number this pass has for the body it is writing into. */
     private int next() {
-        return written.merge(into, 1, Integer::sum) - 1;
+        return written.merge(writing.into(), 1, Integer::sum) - 1;
     }
 
     /** How the source wrote an expression that is a name or a chain of field reads off one, or null
@@ -814,18 +840,17 @@ public final class HelperInliner {
         };
     }
 
-    /** Rewrites every helper call in {@code e} to its inlined body, into the body already named. */
-    public Ast.Expr inline(Ast.Expr e) {
-        if (binders == null) {
-            throw new IllegalStateException("nothing said which body this expansion is written into");
-        }
+    /** Rewrites every helper call in {@code e} to its inlined body, into the body this writing names.
+     * Private, because there is no body to write into until a writing says which, and the writings
+     * are started above. */
+    private Ast.Expr inline(Ast.Expr e) {
         return switch (e) {
             // Applying something other than a name. The applied expression is bound first and the
             // application reads the binding, which is the shape every reader downstream already has
             // — and which says outright what the order is: the function is worked out once, before
             // any argument, and the binding is what is applied.
             case Ast.Apply raw when !raw.appliesAName() -> {
-                Ast.Binder f = binders.binder("$fn" + next(), raw.function().pos());
+                Ast.Binder f = writing.binders().binder("$fn" + next(), raw.function().pos());
                 // What the application reaches is the binding, and what a report about it quotes is
                 // what the author wrote — a field read applied (`deps.count(x)`) has a spelling, and
                 // quoting the binding would name `$fn0`, which is nowhere in the source. The two are
@@ -877,9 +902,9 @@ public final class HelperInliner {
                 Ast.FnDef aliased = value instanceof Ast.Var v ? expands(v.denotes(), v.reaches()) : null;
                 if (aliased != null) {
                     BindingId alias = li.binder().id();
-                    scopedLambdas.put(alias, new ScopedLambda(aliased));
+                    writing.scopedLambdas().put(alias, new ScopedLambda(aliased));
                     Ast.Expr aliasBody = inline(li.body());
-                    scopedLambdas.remove(alias);
+                    writing.scopedLambdas().remove(alias);
                     yield references(aliasBody, alias)
                             ? new Ast.LetIn(li.binder(), value, li.declaredType(), li.annotated(),
                                     li.opens(), aliasBody, li.pos())
@@ -902,11 +927,11 @@ public final class HelperInliner {
                     params.add(new Ast.FnParam(p, null));
                 }
                 BindingId bound = li.binder().id();
-                scopedLambdas.put(bound, new ScopedLambda(
+                writing.scopedLambdas().put(bound, new ScopedLambda(
                         new Ast.FnDef(li.name(), params, null,
                                 new Ast.FnBody.Written(lambda.body()), li.pos())));
                 Ast.Expr body = inline(li.body());
-                scopedLambdas.remove(bound);
+                writing.scopedLambdas().remove(bound);
                 // if the binding is still read, the function was used as a value, not just applied —
                 // it escapes, which needs a runtime closure. Keep the binding so the check that
                 // reports an escaping block sees it.
@@ -971,7 +996,7 @@ public final class HelperInliner {
         // declared return is carried on, and every binding copied out of the callee's body.
         // One minter, so no two of them are the same binding, and a reader can ask of any of
         // them which call it came from.
-        BindingOwner mine = new BindingOwner.Expansion(into, call.denotes(), next());
+        BindingOwner mine = new BindingOwner.Expansion(writing.into(), call.denotes(), next());
         Ast.Binders ours = new Ast.Binders(mine);
         // What the callee's signature leaves open, this call decides. Its variables are
         // instantiated once, here, over the whole signature at once — so a variable it wrote
@@ -995,7 +1020,7 @@ public final class HelperInliner {
                 bound.add(lambda);
             }
         });
-        arguments.unreduced().keySet().forEach(scopedLambdas::remove);
+        arguments.unreduced().keySet().forEach(writing.scopedLambdas()::remove);
         return new Ast.Expansion(call.denotes(), mine, bound, arguments.given(),
                 instantiated(helper.declaredReturn(), applied), body, call.pos());
     }
@@ -1010,7 +1035,7 @@ public final class HelperInliner {
      */
     private CompileException wrongArity(Ast.Apply call, Ast.FnDef helper, int given) {
         ScopedLambda applied = call.denotes() instanceof ValueName.Local local
-                ? scopedLambdas.get(local.id()) : null;
+                ? writing.scopedLambdas().get(local.id()) : null;
         LambdaOrigin origin = applied == null ? null : applied.origin();
         if (origin != null) {
             return CompileException.of(
@@ -1103,7 +1128,7 @@ public final class HelperInliner {
                     }
                     // the lambda's body is caller code, so it is not renamed by this helper's
                     // substitution — only the enclosing helper body is.
-                    scopedLambdas.put(f.id(), new ScopedLambda(
+                    writing.scopedLambdas().put(f.id(), new ScopedLambda(
                             new Ast.FnDef(f.name(), lparams,
                                     declares == null ? null : declares.result(),
                                     new Ast.FnBody.Written(lambda.body()), lambda.pos()),
@@ -1163,7 +1188,7 @@ public final class HelperInliner {
         List<Ast.Binder> params = new ArrayList<>();
         List<Ast.Expr> args = new ArrayList<>();
         for (int i = 0; i < arity; i++) {
-            Ast.Binder p = binders.binder(binderName.apply(i), function.pos());
+            Ast.Binder p = writing.binders().binder(binderName.apply(i), function.pos());
             params.add(p);
             args.add(Ast.Var.local(p, function.pos()));
         }
@@ -1263,7 +1288,7 @@ public final class HelperInliner {
                 spreads.add(spread);
                 continue;
             }
-            Ast.Binder name = binders.binder("$s" + next() + "_" + spread.bare(), spread.pos());
+            Ast.Binder name = writing.binders().binder("$s" + next() + "_" + spread.bare(), spread.pos());
             bound.add(name);
             values.add(HelperNames.carriedByValue(inline(value.writtenBody())));
             spreads.add(Ast.Var.local(name, spread.pos()));
