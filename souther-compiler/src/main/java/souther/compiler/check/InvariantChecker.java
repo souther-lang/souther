@@ -1,7 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.Combinators.Combinator;
+import souther.compiler.check.Combinators.Handed;
 import souther.compiler.check.NumericDomain.LinearForm;
 import souther.compiler.core.Core;
 import souther.compiler.diag.CompileException;
@@ -262,27 +262,26 @@ public final class InvariantChecker {
      * parameter to the container's element type (and seeding its invariant) so a construction inside
      * the closure is analyzed rather than left opaque. */
     private void walkCall(Core.PreservedCall call, Known k, Denotations at, int depth) {
-        Combinator combo = Combinators.of(call.operation());
-        for (int i = 0; i < call.args().size(); i++) {
-            Core arg = call.args().get(i);
-            Core.Block step = combo != null && i == combo.closureArg() ? Terms.blockOf(arg, at) : null;
-            if (step != null && combo.elementParam() < step.params().size()
-                    && combo.containerArg() < call.args().size()) {
-                Core container = call.args().get(combo.containerArg());
-                Type elem = Terms.elementType(container.type());
-                // The container is read where the call is written, so what is known of its elements
-                // is looked up before the closure's parameter stands for anything.
-                List<Quantified> relations = predicates.elementRelations(container, k, at);
-                Core element = Terms.read(step.params().get(combo.elementParam()), elem, step.pos());
-                // an element of a container is not a location the body can otherwise name
-                Known k2 = seedAt(element, k, at, 0);   // the element carries its type's invariant
-                for (Quantified q : relations) {
-                    k2 = predicates.instantiate(q, element, k2, at);
-                }
-                walk(step.body(), k2, at, depth);
-            } else {
+        Handed handed = Combinators.handedTo(call, at);
+        for (Core arg : call.args()) {
+            // The closure is asked by identity: a call may write one expression twice, and only the
+            // argument the operation applies is the one an element arrives in.
+            if (handed == null || arg != handed.closure()) {
                 walk(arg, k, at, depth);
+                continue;
             }
+            Core container = handed.container();
+            Type elem = Terms.elementType(container.type());
+            // The container is read where the call is written, so what is known of its elements
+            // is looked up before the closure's parameter stands for anything.
+            List<Quantified> relations = predicates.elementRelations(container, k, at);
+            Core element = Terms.read(handed.element(), elem, handed.step().pos());
+            // an element of a container is not a location the body can otherwise name
+            Known k2 = seedAt(element, k, at, 0);   // the element carries its type's invariant
+            for (Quantified q : relations) {
+                k2 = predicates.instantiate(q, element, k2, at);
+            }
+            walk(handed.step().body(), k2, at, depth);
         }
     }
 

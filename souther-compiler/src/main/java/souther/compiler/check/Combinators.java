@@ -1,6 +1,8 @@
 package souther.compiler.check;
 
 import souther.compiler.Prelude;
+import souther.compiler.ast.Ast;
+import souther.compiler.core.Core;
 import souther.compiler.types.Type;
 import souther.compiler.types.ValueName;
 
@@ -38,7 +40,9 @@ import java.util.Set;
 final class Combinators {
 
     /** A combinator's closure, the parameter its element arrives on, and the container it comes
-     * from — all as argument positions of the call. */
+     * from — all as argument positions of the call. Read by the rules that resolve a call
+     * ({@link #handedTo}, {@link DischargeRules.Reads}) and by nothing else: a position is only
+     * meaningful beside the call it is a position in. */
     record Combinator(int closureArg, int elementParam, int containerArg) {}
 
     /** What {@code operation} hands its closure, or null where it hands one nothing a container
@@ -46,6 +50,56 @@ final class Combinators {
      * library operation. */
     static Combinator of(ValueName operation) {
         return operation == null ? null : Derived.RULES.get(operation);
+    }
+
+    /** What a call hands its closure: the argument that takes the function, the block that argument
+     * is, the parameter the element arrives on, and the container it comes from. */
+    record Handed(Core closure, Core.Block step, Ast.Binder element, Core container) {}
+
+    /** The same, off the tree an author wrote, where a closure is the block as written. */
+    record Written(Ast.Block step, Ast.Binder element, Ast.Expr container) {}
+
+    /**
+     * What {@code call} hands its closure, or null where it hands one nothing a container holds — or
+     * where what stands in the closure argument is not a block this can read.
+     *
+     * <p>{@code at} is what the names around the call denote, since a closure may be written as a
+     * name bound to a block. It is the denotations where the call stands: what a name means depends
+     * on which bindings it is under, so it is asked per call and not once per body.
+     */
+    static Handed handedTo(Core.PreservedCall call, Denotations at) {
+        Combinator rule = of(call.operation());
+        if (rule == null) {
+            return null;
+        }
+        Core closure = call.args().get(rule.closureArg());
+        Core.Block step = Terms.blockOf(closure, at);
+        return step == null ? null
+                : new Handed(closure, step, step.params().get(rule.elementParam()),
+                        call.args().get(rule.containerArg()));
+    }
+
+    /**
+     * The same, off the tree an author wrote — where a closure written as anything but a block is one
+     * this says nothing about, the tree not yet having been read for what names denote.
+     *
+     * <p>Nor is a call written with fewer arguments than the operation takes. That is not this table
+     * disagreeing with a signature — it is what the surface tree still holds: the walk that reads it
+     * runs beside the checks that report an arity, not after them, so a call already known to be
+     * wrong reaches here. Nothing about the arguments it does not have is true, so nothing is said,
+     * and the arity is reported by the check whose question it is. The tree a representation keeps
+     * standing needs no such answer: a {@code PreservedCall} is built only where the signature it was
+     * applied to accepted the arguments, so one that exists has them.
+     */
+    static Written handedTo(Ast.Apply call) {
+        Combinator rule = of(call.denotes());
+        if (rule == null || rule.closureArg() >= call.args().size()
+                || rule.containerArg() >= call.args().size()
+                || !(call.args().get(rule.closureArg()) instanceof Ast.Block step)) {
+            return null;
+        }
+        return new Written(step, step.params().get(rule.elementParam()),
+                call.args().get(rule.containerArg()));
     }
 
     /**

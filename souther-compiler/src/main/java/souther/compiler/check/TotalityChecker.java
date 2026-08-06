@@ -321,29 +321,27 @@ final class TotalityChecker {
                 if (group.contains(call.reaches())) {
                     calls.add(new RecCall(call.written(), call, lt, eq));
                 }
-                Combinators.Combinator combo = Combinators.of(call.denotes());
-                for (int ai = 0; ai < call.args().size(); ai++) {
-                    Ast.Expr arg = call.args().get(ai);
-                    if (combo != null && ai == combo.closureArg() && arg instanceof Ast.Block step
-                            && combo.elementParam() < step.params().size()
-                            && combo.containerArg() < call.args().size()) {
-                        // `step` consumes the container argument; each value it is handed (a list
-                        // element, a map's value, or an option's unwrapped payload) is a sub-term of that
-                        // container, so if the container is (part of) a parameter, the value is a strictly
-                        // smaller part of it. Bind the element parameter accordingly for the step body. An
-                        // operation the library states no such thing of is treated as handing its closure
-                        // nothing, which rejects a recursion rather than wrongly accepting one; a
-                        // freshly-constructed container (`Some(p)`) roots at no parameter, so its payload
-                        // is not credited as smaller either.
-                        Set<BindingId> elemRoots =
-                                rootParams(call.args().get(combo.containerArg()), lt, eq, paramNames);
-                        Map<BindingId, Set<BindingId>> inner = elemRoots.isEmpty()
-                                ? lt
-                                : with(lt, step.params().get(combo.elementParam()).id(), elemRoots);
-                        walk(step.body(), group, paramNames, inner, eq, calls);
-                    } else {
+                Combinators.Written handed = Combinators.handedTo(call);
+                for (Ast.Expr arg : call.args()) {
+                    // The closure is asked by identity: a call may write one expression twice, and
+                    // only the argument the operation applies is the one an element arrives in.
+                    if (handed == null || arg != handed.step()) {
                         walk(arg, group, paramNames, lt, eq, calls);
+                        continue;
                     }
+                    // The step consumes the container argument; each value it is handed (a list
+                    // element, a map's value, or an option's unwrapped payload) is a sub-term of that
+                    // container, so if the container is (part of) a parameter, the value is a strictly
+                    // smaller part of it. Bind the element parameter accordingly for the step body. An
+                    // operation the library states no such thing of is treated as handing its closure
+                    // nothing, which rejects a recursion rather than wrongly accepting one; a
+                    // freshly-constructed container (`Some(p)`) roots at no parameter, so its payload
+                    // is not credited as smaller either.
+                    Set<BindingId> elemRoots = rootParams(handed.container(), lt, eq, paramNames);
+                    Map<BindingId, Set<BindingId>> inner = elemRoots.isEmpty()
+                            ? lt
+                            : with(lt, handed.element().id(), elemRoots);
+                    walk(handed.step().body(), group, paramNames, inner, eq, calls);
                 }
             }
             default -> forEachChild(e, child -> walk(child, group, paramNames, lt, eq, calls));

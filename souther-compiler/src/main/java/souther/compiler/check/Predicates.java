@@ -1,10 +1,11 @@
 package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
-import souther.compiler.check.DischargeRules.Built;
-import souther.compiler.check.DischargeRules.Carried;
-import souther.compiler.check.Combinators.Combinator;
+import souther.compiler.check.Combinators.Handed;
+import souther.compiler.check.DischargeRules.Carrying;
+import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.check.DischargeRules.Shape;
+import souther.compiler.check.DischargeRules.Source;
 import souther.compiler.check.NumericDomain.LinearForm;
 import souther.compiler.check.NumericDomain.Rel;
 import souther.compiler.core.Core;
@@ -61,12 +62,12 @@ final class Predicates {
             if (!(source instanceof Core.PreservedCall call)) {
                 return found;
             }
-            Built built = DischargeRules.builtFrom(call.operation());
-            if (built == null || built.from() >= call.args().size()) {
+            Source built = DischargeRules.builtFrom(call);
+            if (built == null) {
                 return found;
             }
             crossed.add(built.shape());
-            source = call.args().get(built.from());
+            source = built.container();
         }
     }
 
@@ -103,21 +104,19 @@ final class Predicates {
                 || !DischargeRules.isQuantifier(call.operation())) {
             return;
         }
-        Combinator over = Combinators.of(call.operation());
-        Carried carried = DischargeRules.carried(call.operation());
-        if (over == null || carried == null || over.closureArg() >= call.args().size()
-                || over.containerArg() >= call.args().size()) {
+        Handed over = Combinators.handedTo(call, at);
+        Carrying carried = DischargeRules.carried(call);
+        if (over == null || carried == null || over.step().params().size() != 1) {
             return;
         }
-        Core.Block p = Terms.blockOf(call.args().get(over.closureArg()), at);
-        if (p == null || p.params().size() != 1) {
-            return;
-        }
-        String container = terms.bodyKey(call.args().get(over.containerArg()), at);
+        // The container is the carrying rule's, which is the one argument this predicate is about.
+        // What the operation hands its closure answers the same question about the same argument, and
+        // is asked here only for the closure.
+        String container = terms.bodyKey(carried.container(), at);
         if (container == null) {
             return;
         }
-        out.add(new Quantified(container, carried.through(), p));
+        out.add(new Quantified(container, carried.through(), over.step()));
     }
 
     /** Whether {@code e} is, or names, one of {@code values}. */
@@ -424,11 +423,11 @@ final class Predicates {
         if (!(container instanceof Core.PreservedCall call)) {
             return;
         }
-        Built built = DischargeRules.builtFrom(call.operation());
-        if (built == null || built.shape().keepsSize() || built.from() >= call.args().size()) {
+        Source built = DischargeRules.builtFrom(call);
+        if (built == null || built.shape().keepsSize()) {
             return;
         }
-        Core source = DischargeRules.sizeSource(call.args().get(built.from()));
+        Core source = DischargeRules.sizeSource(built.container());
         String here = terms.bodyKey(container, at);
         String there = terms.bodyKey(source, at);
         if (here == null || there == null) {
@@ -454,25 +453,25 @@ final class Predicates {
         if (!(inv instanceof Core.PreservedCall call)) {
             return keys;
         }
-        Carried carried = DischargeRules.carried(call.operation());
-        if (carried == null || carried.container() >= call.args().size()) {
+        Carrying carried = DischargeRules.carried(call);
+        if (carried == null) {
             return keys;
         }
         // The predicate over each container the one it names was built from. The container is the
         // construction's own expression, so the operations peeled off are the ones the body wrote.
-        Core container = call.args().get(carried.container());
+        Core container = carried.container();
         Core.PreservedCall stated = call;
         while (container instanceof Core.PreservedCall inner) {
-            Built built = DischargeRules.builtFrom(inner.operation());
-            if (built == null || built.from() >= inner.args().size()) {
+            Source built = DischargeRules.builtFrom(inner);
+            if (built == null) {
                 break;
             }
             Core.PreservedCall next = carries(stated, carried, inner, built, at);
             if (next == null) {
                 break;
             }
-            Core source = inner.args().get(built.from());
-            String key = terms.bodyKey(withArg(next, carried.container(), source), at);
+            Core source = built.container();
+            String key = terms.bodyKey(carried.over(next, source), at);
             if (key == null) {
                 break;
             }
@@ -489,25 +488,23 @@ final class Predicates {
      * carries nothing on its own, but a predicate stated over a projection carries when the closure
      * copied that field across, over the field it came from.
      */
-    Core.PreservedCall carries(Core.PreservedCall stated, Carried carried,
-                                       Core.PreservedCall inner, Built built, Denotations at) {
+    Core.PreservedCall carries(Core.PreservedCall stated, Carrying carried,
+                                       Core.PreservedCall inner, Source built, Denotations at) {
         if (carried.through().contains(built.shape())) {
             return stated;
         }
-        Integer projection = DischargeRules.projectionOf(stated.operation());
-        if (built.shape() != Shape.MAPS || projection == null
-                || projection >= stated.args().size()) {
+        Projection projection = DischargeRules.projectionOf(stated, at);
+        if (built.shape() != Shape.MAPS || projection == null) {
             return null;
         }
         // Where the mapping's closure is written is already stated once, by the table that says which
         // argument each combinator hands its elements to.
-        Combinator combo = Combinators.of(inner.operation());
-        if (combo == null || combo.closureArg() >= inner.args().size()) {
+        Handed combo = Combinators.handedTo(inner, at);
+        if (combo == null) {
             return null;
         }
-        Core traced = projectionThrough(stated.args().get(projection),
-                inner.args().get(combo.closureArg()), at);
-        return traced == null ? null : withArg(stated, projection, traced);
+        Core traced = projectionThrough(projection.projection(), combo.step(), at);
+        return traced == null ? null : projection.over(traced);
     }
 
     /**
@@ -523,11 +520,8 @@ final class Predicates {
      * where it is bound, so the chain built here is read at the position the closure's parameter
      * stands in, whatever it is called and whatever it was read from.
      */
-    Core projectionThrough(Core projection, Core closure, Denotations at) {
-        Core.Block proj = Terms.blockOf(projection, at);
-        Core.Block step = Terms.blockOf(closure, at);
-        if (proj == null || proj.params().size() != 1 || step == null
-                || step.params().size() != 1) {
+    Core projectionThrough(Core.Block proj, Core.Block step, Denotations at) {
+        if (proj.params().size() != 1 || step.params().size() != 1) {
             return null;
         }
         Ast.Binder element = step.params().get(0);
@@ -614,12 +608,6 @@ final class Predicates {
                 default -> null;
             };
         }
-    }
-
-    static Core.PreservedCall withArg(Core.PreservedCall call, int at, Core arg) {
-        List<Core> args = new ArrayList<>(call.args());
-        args.set(at, arg);
-        return new Core.PreservedCall(call.operation(), args, call.type(), call.pos());
     }
 
     /** An emptiness check as the comparison it means, or {@code e} unchanged. */

@@ -41,7 +41,7 @@ enum Question {
 
         @Override
         boolean answeredFor(ValueName operation) {
-            return Combinators.of(operation) != null;
+            return Combinators.answered().contains(operation);
         }
 
         @Override
@@ -67,7 +67,7 @@ enum Question {
 
         @Override
         boolean answeredFor(ValueName operation) {
-            return DischargeRules.builtFrom(operation) != null;
+            return DischargeRules.builtOperations().contains(operation);
         }
 
         @Override
@@ -93,7 +93,7 @@ enum Question {
 
         @Override
         boolean answeredFor(ValueName operation) {
-            return DischargeRules.carried(operation) != null;
+            return DischargeRules.carryingOperations().contains(operation);
         }
 
         @Override
@@ -176,7 +176,7 @@ enum Question {
 
         @Override
         boolean answeredFor(ValueName operation) {
-            return DischargeRules.projectionOf(operation) != null;
+            return DischargeRules.projections().contains(operation);
         }
 
         @Override
@@ -282,8 +282,10 @@ enum Question {
         return entry != null && asksOf(entry.signature());
     }
 
-    /** Whether a construction over {@code t} is one whose elements a shape can speak of. */
-    private static boolean holdsElements(Type t) {
+    /** Whether a construction over {@code t} is one whose elements a shape can speak of. Read where
+     * the rules are bound as well: what a rule about a container may be written over is the same
+     * question as what puts an operation in range of one. */
+    static boolean holdsElements(Type t) {
         return t instanceof Type.ListOf || t instanceof Type.SetOf || t instanceof Type.MapOf;
     }
 
