@@ -240,6 +240,14 @@ final class Descriptors {
     static final ClassDesc CD_ObjectDecoders = ClassDesc.of("net.unit8.raoh.decode.ObjectDecoders");
     static final ClassDesc CD_MapDecoders = ClassDesc.of("net.unit8.raoh.decode.map.MapDecoders");
     static final ClassDesc CD_JsonDecoders = ClassDesc.of("net.unit8.raoh.json.JsonDecoders");
+    /** Jackson's node, which a JSON decoder reads: the shape it holds is asked of the node itself. */
+    static final ClassDesc CD_JsonNode = ClassDesc.of("tools.jackson.databind.JsonNode");
+    static final ClassDesc CD_JsonNodeType = ClassDesc.of("tools.jackson.databind.node.JsonNodeType");
+    static final ClassDesc CD_Locale = ClassDesc.of("java.util.Locale");
+    static final MethodTypeDesc MTD_nodePredicate = MethodTypeDesc.of(ConstantDescs.CD_boolean);
+    static final MethodTypeDesc MTD_getNodeType = MethodTypeDesc.of(CD_JsonNodeType);
+    static final MethodTypeDesc MTD_enumName = MethodTypeDesc.of(CD_String);
+    static final MethodTypeDesc MTD_toLowerCase = MethodTypeDesc.of(CD_String, CD_Locale);
     static final ClassDesc CD_JooqDecoders = ClassDesc.of("net.unit8.raoh.jooq.JooqRecordDecoders");
     static final ClassDesc CD_RDecoders = ClassDesc.of("net.unit8.raoh.decode.Decoders");
     static final ClassDesc CD_RVariant = CD_RDecoders.nested("Variant");

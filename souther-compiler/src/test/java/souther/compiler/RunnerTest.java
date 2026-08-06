@@ -632,6 +632,118 @@ class RunnerTest {
                 e.localized(java.util.Locale.JAPANESE));
     }
 
+    // --- one input, written bare or wrapped in an array -----------------------------------------
+
+    private static final String ONE_STRING = """
+            behavior echo : (name: String) -> String
+            let echo (name) = name
+            """;
+
+    private static final String ONE_LIST = """
+            behavior echo : (xs: List<Int>) -> List<Int>
+            let echo (xs) = xs
+            """;
+
+    private static final String ONE_NESTED_LIST = """
+            behavior echo : (xs: List<List<Int>>) -> List<List<Int>>
+            let echo (xs) = xs
+            """;
+
+    private static final String ONE_RECORD = """
+            data Note = { body: String, tag: String? }
+            behavior echo : (n: Note) -> Note
+            let echo (n) = n
+            """;
+
+    /** The wrapper diagnosis, in both the language a Java caller reads and the one the CLI selects. */
+    private void assertNamesTheOuterArray(Runner.RunException e) {
+        assertEquals(1, e.exitCode);
+        assertTrue(e.getMessage().contains("remove the outer array"), e.getMessage());
+        assertFalse(e.getMessage().contains("could not be decoded"), e.getMessage());
+        assertTrue(e.localized(java.util.Locale.JAPANESE).contains("外側の配列"),
+                e.localized(java.util.Locale.JAPANESE));
+    }
+
+    @Test
+    void readsASinglePrimitiveInputWrittenBare() throws Exception {
+        assertEquals("\"world\"", Runner.run(write("one.sou", ONE_STRING), "echo", "\"world\""));
+    }
+
+    @Test
+    void namesTheOuterArrayWhenASinglePrimitiveInputIsWrappedInOne() throws Exception {
+        Path file = write("one.sou", ONE_STRING);
+        assertNamesTheOuterArray(assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "echo", "[\"world\"]")));
+    }
+
+    /**
+     * A collection input is written as its own array, so an array is not a wrapper by itself. What
+     * makes the wrapper case decidable is that the whole input fails to decode and its sole element
+     * succeeds — which is why the value is tried as it stands first.
+     */
+    @Test
+    void readsAListInputWrittenAsItsOwnArray() throws Exception {
+        assertEquals("[1,2,3]", Runner.run(write("one.sou", ONE_LIST), "echo", "[1,2,3]"));
+    }
+
+    @Test
+    void namesTheOuterArrayWhenAListInputIsWrappedInOne() throws Exception {
+        Path file = write("one.sou", ONE_LIST);
+        assertNamesTheOuterArray(assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "echo", "[[1,2,3]]")));
+    }
+
+    /** The same text is the input itself when the parameter is a list of lists. */
+    @Test
+    void readsANestedListInputWrittenAsItself() throws Exception {
+        assertEquals("[[1,2,3]]",
+                Runner.run(write("one.sou", ONE_NESTED_LIST), "echo", "[[1,2,3]]"));
+    }
+
+    @Test
+    void readsASingleRecordInputWrittenBare() throws Exception {
+        assertEquals("{\"body\":\"b\"}",
+                Runner.run(write("one.sou", ONE_RECORD), "echo", "{\"body\":\"b\"}"));
+    }
+
+    @Test
+    void namesTheOuterArrayWhenASingleRecordInputIsWrappedInOne() throws Exception {
+        Path file = write("one.sou", ONE_RECORD);
+        assertNamesTheOuterArray(assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "echo", "[{\"body\":\"b\"}]")));
+    }
+
+    /**
+     * The element has to decode for the wrapper to be the mistake. When it does not, the input is
+     * wrong for some other reason and the decoder's own report is what says so.
+     */
+    @Test
+    void keepsTheDecodeFailureWhenTheSoleElementDoesNotDecodeEither() throws Exception {
+        Path file = write("one.sou", ONE_RECORD);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "echo", "[{\"unknown\":1}]"));
+        assertEquals(1, e.exitCode);
+        assertTrue(e.getMessage().contains("could not be decoded"), e.getMessage());
+        assertFalse(e.getMessage().contains("remove the outer array"), e.getMessage());
+    }
+
+    /** Two inputs still take an array, and the arity failures they get keep saying what they said. */
+    @Test
+    void keepsTheArityFailuresOfABehaviorThatTakesSeveralInputs() throws Exception {
+        Path file = write("pair.sou", """
+                data Pair = { left: Int, right: Int }
+                behavior mkPair : (a: Int, b: Int) -> Pair constructs Pair
+                let mkPair (a, b) = Pair { left = a, right = b }
+                """);
+        Runner.RunException notArray = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "mkPair", "3"));
+        assertTrue(notArray.getMessage().contains("must be a JSON array"), notArray.getMessage());
+
+        Runner.RunException count = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "mkPair", "[3]"));
+        assertTrue(count.getMessage().contains("but --input has 1"), count.getMessage());
+    }
+
     /**
      * Deeper still, the encoder runs out of stack before the writer ever counts a level. That is not
      * a {@code RuntimeException}, so left alone it reaches the caller as a stack trace.
