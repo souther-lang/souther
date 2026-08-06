@@ -215,20 +215,8 @@ public final class JapiCommand {
         // under that pair can belong to one of them. It is counted from the class file, because an
         // overload that carries no documentation of its own is invisible in the source reader and
         // would otherwise take its namesake's.
-        java.util.Map<String, Integer> overloads = new java.util.HashMap<>();
-        for (MethodModel m : cm.methods()) {
-            Set<AccessFlag> flags = m.flags().flags();
-            String methodName = m.methodName().stringValue();
-            // A bridge is the compiler's, not the author's: counting it would make a method the
-            // only one of its name in the source look like one of two, and lose its documentation.
-            if (flags.contains(AccessFlag.BRIDGE) || flags.contains(AccessFlag.SYNTHETIC)
-                    || methodName.equals("<clinit>")) {
-                continue;
-            }
-            String shown = methodName.equals("<init>") ? simpleName : methodName;
-            overloads.merge(shown + "/" + m.methodTypeSymbol().parameterCount(), 1, Integer::sum);
-        }
-        SourceDoc doc = SourceDoc.of(found.entry(), binaryName, overloads);
+        String source = sourceOf(found.entry(), binaryName);
+        SourceDoc doc = source == null ? SourceDoc.NONE : SourceDoc.of(source, binaryName);
         if (!cm.flags().flags().contains(AccessFlag.PUBLIC)) {
             // Asked for by name, so it is answered — but a caller outside its package cannot name
             // it, and this command's subject is what a dependency publishes.
@@ -247,7 +235,7 @@ public final class JapiCommand {
                 continue;
             }
             body.append("\n");
-            doc.of(name, -1).ifPresent(d -> body.append(indent(d)).append("\n"));
+            doc.ofField(name).ifPresent(d -> body.append(indent(d)).append("\n"));
             body.append("  ").append(fieldLine(f)).append("\n");
         }
         for (MethodModel m : cm.methods()) {
@@ -265,8 +253,7 @@ public final class JapiCommand {
                 continue;
             }
             body.append("\n");
-            int arity = m.methodTypeSymbol().parameterCount();
-            doc.of(shown, arity).ifPresent(d -> body.append(indent(d)).append("\n"));
+            doc.ofMethod(shown, m.methodTypeSymbol()).ifPresent(d -> body.append(indent(d)).append("\n"));
             body.append("  ").append(methodLine(m, simpleName, doc)).append("\n");
         }
         if (member != null && body.isEmpty()) {
@@ -275,7 +262,7 @@ public final class JapiCommand {
             return 2;
         }
         if (member == null) {
-            doc.classDoc().ifPresent(out::println);
+            doc.classDoc().ifPresent(d -> out.println(indent(d).stripIndent()));
         }
         out.println(classHeader(cm, binaryName) + " {");
         out.print(body);
@@ -350,8 +337,7 @@ public final class JapiCommand {
         }
         sb.append(ctor ? simpleName : m.methodName().stringValue()).append("(");
         String shown = ctor ? simpleName : m.methodName().stringValue();
-        List<String> names = paramNames(m, paramTypes.size(),
-                doc.paramsOf(shown, mt.parameterCount()));
+        List<String> names = paramNames(m, paramTypes.size(), doc.paramsOf(shown, mt));
         for (int i = 0; i < paramTypes.size(); i++) {
             if (i > 0) {
                 sb.append(", ");
@@ -486,195 +472,53 @@ public final class JapiCommand {
                 : dotted;
     }
 
-    private static String indent(String docBlock) {
-        return docBlock.lines().map(l -> "  " + l.strip()).reduce((a, b) -> a + "\n" + b).orElse("");
+    /** The comment's own text, put back into the shape it was written in. */
+    private static String indent(String comment) {
+        StringBuilder sb = new StringBuilder("  /**");
+        comment.lines().forEach(l -> sb.append("\n   * ").append(l.strip()));
+        return sb.append("\n   */").toString();
     }
 
-    // ---- javadoc from the sources jar ----
+    // ---- the source a type was written in ----
 
-    /** The doc comments of one top-level source file, keyed by the name they precede. */
-    private record SourceDoc(Optional<String> classDoc, java.util.Map<String, String> byName) {
+    /**
+     * The source of the file {@code binaryName} is declared in, taken only from the artifact the
+     * class itself was read from: the {@code -sources.jar} beside it, or sources carried inside it.
+     *
+     * <p>Sources carried inside are what the ordinary invocation needs, since the CLI is one shaded
+     * jar with its dependencies inside it and nothing beside it. They are read out of that same jar
+     * rather than off this tool's class path, because the two are not the same question — a class
+     * taken from some other copy of a library must not be described by the copy this tool happens
+     * to carry.
+     */
+    private static String sourceOf(Path entry, String binaryName) {
+        String path = binaryName.split("\\$")[0].replace('.', '/') + ".java";
+        String beside = besideJar(entry, path);
+        return beside != null ? beside : carriedInside(entry, "META-INF/souther-sources/" + path);
+    }
 
-        private static final SourceDoc NONE = new SourceDoc(Optional.empty(), java.util.Map.of());
-
-        /**
-         * The javadoc for {@code binaryName}, taken only from the artifact the class itself was
-         * read from: the {@code -sources.jar} beside it, or sources carried inside it.
-         *
-         * <p>Sources carried inside are what the ordinary invocation needs, since the CLI is one
-         * shaded jar with its dependencies inside it and nothing beside it. They are read out of
-         * that same jar rather than off this tool's class path, because the two are not the same
-         * question — a class taken from some other copy of a library must not be described by the
-         * copy this tool happens to carry. Where the versions differ, the prose is wrong and the
-         * parameter names taken from {@code @param} are wrong with it.
-         */
-        static SourceDoc of(Path entry, String binaryName, java.util.Map<String, Integer> overloads) {
-            // A nested type is declared inside another type's file, and this reader has no notion
-            // of where one declaration ends and the next begins: everything it finds would be
-            // attributed to whichever type was asked for. Saying nothing is the only answer it can
-            // make true for these.
-            if (binaryName.contains("$")) {
-                return NONE;
-            }
-            String outermost = binaryName;
-            String simpleName = outermost.substring(outermost.lastIndexOf('.') + 1);
-            String path = outermost.replace('.', '/') + ".java";
-
-            String source = besideJar(entry, path);
-            if (source == null) {
-                source = carriedInside(entry, "META-INF/souther-sources/" + path);
-            }
-            return source == null ? NONE : parse(source, simpleName, overloads);
+    private static String besideJar(Path entry, String path) {
+        String file = entry.getFileName().toString();
+        if (!file.endsWith(".jar")) {
+            return null;
         }
+        return readFrom(entry.resolveSibling(file.substring(0, file.length() - 4) + "-sources.jar"), path);
+    }
 
-        /** A source carried inside {@code entry} itself, at {@code path}. */
-        private static String carriedInside(Path entry, String path) {
-            if (!Files.isRegularFile(entry) || !entry.getFileName().toString().endsWith(".jar")) {
-                return null;
-            }
-            try (JarFile jar = versioned(entry)) {
-                ZipEntry e = jar.getEntry(path);
-                return e == null ? null
-                        : new String(jar.getInputStream(e).readAllBytes(), StandardCharsets.UTF_8);
-            } catch (IOException ex) {
-                throw new UncheckedIOException(ex);
-            }
+    private static String carriedInside(Path entry, String path) {
+        return readFrom(entry, path);
+    }
+
+    private static String readFrom(Path jar, String path) {
+        if (!Files.isRegularFile(jar) || !jar.getFileName().toString().endsWith(".jar")) {
+            return null;
         }
-
-        private static String besideJar(Path entry, String path) {
-            String file = entry.getFileName().toString();
-            if (!file.endsWith(".jar")) {
-                return null;
-            }
-            Path sources = entry.resolveSibling(file.substring(0, file.length() - 4) + "-sources.jar");
-            if (!Files.isRegularFile(sources)) {
-                return null;
-            }
-            try (JarFile jar = new JarFile(sources.toFile())) {
-                ZipEntry e = jar.getEntry(path);
-                return e == null ? null
-                        : new String(jar.getInputStream(e).readAllBytes(), StandardCharsets.UTF_8);
-            } catch (IOException ex) {
-                throw new UncheckedIOException(ex);
-            }
-        }
-
-
-        /** What a doc comment is filed under when two of them would otherwise collide. */
-        private static final String AMBIGUOUS = " ambiguous";
-
-        static SourceDoc parse(String source, String simpleName, java.util.Map<String, Integer> overloads) {
-            java.util.Map<String, String> byName = new java.util.LinkedHashMap<>();
-            Optional<String> classDoc = Optional.empty();
-            // Annotations may sit between the doc comment and the declaration it documents; they
-            // are skipped, or the doc would be keyed by the annotation's own name-with-parentheses.
-            var m = java.util.regex.Pattern
-                    .compile("(/\\*\\*.*?\\*/)\\s*\\n(?:\\s*@[^\\n]*\\n)*\\s*([^\\n]*)",
-                            java.util.regex.Pattern.DOTALL)
-                    .matcher(source);
-            while (m.find()) {
-                String doc = m.group(1);
-                String declaration = m.group(2);
-                // A field's initializer may call a constructor — `Issues EMPTY = new Issues(...)` —
-                // so a declaration whose `=` comes before any `(` is the field, not that call.
-                int assign = declaration.indexOf('=');
-                int paren = declaration.indexOf('(');
-                var named = java.util.regex.Pattern
-                        .compile("(?:class|interface|record|enum)\\s+(\\w+)|(\\w+)\\s*\\(")
-                        .matcher(declaration);
-                if (!named.find() || (assign >= 0 && (paren < 0 || assign < paren))) {
-                    var field = java.util.regex.Pattern.compile("(\\w+)\\s*[=;]").matcher(declaration);
-                    if (field.find()) {
-                        byName.putIfAbsent(field.group(1), doc);
-                    }
-                    continue;
-                }
-                String typeName = named.group(1);
-                if (typeName != null) {
-                    if (typeName.equals(simpleName) && classDoc.isEmpty()) {
-                        classDoc = Optional.of(doc);
-                    } else {
-                        byName.putIfAbsent(typeName, doc);
-                    }
-                } else {
-                    // A method is filed under its name and how many parameters it takes, so an
-                    // overload of a different length does not answer for this one. Two overloads
-                    // of the same length are told apart by their parameter types, which this reader
-                    // does not resolve — so neither is filed, and the members print with no prose
-                    // rather than with another method's.
-                    String key = named.group(2) + "/" + arityAt(source, m.start(2) + named.end(2));
-                    if (overloads.getOrDefault(key, 1) > 1) {
-                        // More than one member answers to this name and count, and telling them
-                        // apart needs the parameter types this reader does not resolve. One of them
-                        // may well be undocumented, which is exactly when a comment filed here
-                        // would be printed against the wrong member.
-                        byName.put(key, AMBIGUOUS);
-                        continue;
-                    }
-                    String had = byName.putIfAbsent(key, doc);
-                    if (had != null && !had.equals(doc)) {
-                        byName.put(key, AMBIGUOUS);
-                    }
-                }
-            }
-            return new SourceDoc(classDoc, byName);
-        }
-
-        /**
-         * How many parameters the declaration beginning at {@code from} takes, counted from the
-         * source rather than from the doc comment's {@code @param} tags — a comment may document
-         * fewer than are declared, and a signature may run over several lines.
-         */
-        private static int arityAt(String source, int from) {
-            int open = source.indexOf('(', from);
-            if (open < 0) {
-                return -1;
-            }
-            int depth = 0;
-            int params = 0;
-            boolean any = false;
-            for (int i = open; i < source.length(); i++) {
-                char c = source.charAt(i);
-                if (c == '(' || c == '<' || c == '[') {
-                    depth++;
-                } else if (c == ')' || c == '>' || c == ']') {
-                    depth--;
-                    if (depth == 0) {
-                        return any ? params + 1 : 0;
-                    }
-                } else if (!Character.isWhitespace(c)) {
-                    any = true;
-                    if (c == ',' && depth == 1) {
-                        params++;
-                    }
-                }
-            }
-            return -1;
-        }
-
-        /** The doc of the member called {@code name} taking {@code arity} parameters, if exactly
-         *  one such member is documented. */
-        Optional<String> of(String name, int arity) {
-            String doc = byName.get(name + "/" + arity);
-            if (doc == null) {
-                doc = byName.get(name);   // a type or a field, which no arity distinguishes
-            }
-            return Optional.ofNullable(doc).filter(d -> !d.equals(AMBIGUOUS));
-        }
-
-        /** The {@code @param} names of the matching doc comment, in the order they are written —
-         *  which is the declaration order the class file has forgotten. */
-        List<String> paramsOf(String name, int arity) {
-            String doc = of(name, arity).orElse(null);
-            if (doc == null) {
-                return List.of();
-            }
-            List<String> params = new ArrayList<>();
-            var m = java.util.regex.Pattern.compile("@param\\s+(?!<)(\\w+)").matcher(doc);
-            while (m.find()) {
-                params.add(m.group(1));
-            }
-            return params;
+        try (JarFile open = versioned(jar)) {
+            ZipEntry e = open.getEntry(path);
+            return e == null ? null
+                    : new String(open.getInputStream(e).readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
         }
     }
 }

@@ -69,7 +69,8 @@ class TheShippedJarAnswersFromWhatItCarriesIT {
     @Test
     void everyDocSetOnTheClassPathIsRegistered() throws Exception {
         // Each contributing jar names its sets in a file at one path, so the shade has to append
-        // them. If it replaced instead, whichever set lost would be missing here.
+        // them. If it replaced instead, whichever set lost would be missing here — which is the
+        // whole reason both are asserted rather than one.
         Answer answer = souther("doc");
 
         List<String> sets = answer.out().lines()
@@ -79,6 +80,16 @@ class TheShippedJarAnswersFromWhatItCarriesIT {
                 .distinct()
                 .toList();
         assertTrue(sets.contains("cli"), "the sets found are " + sets);
+        assertTrue(sets.contains("raoh"),
+                "a dependency's own doc set survives the shade beside the tool's: " + sets);
+    }
+
+    @Test
+    void aDependencysGuideIsReadFromTheVersionThisBuildDependsOn() throws Exception {
+        Answer answer = souther("doc", "raoh/composition-patterns");
+
+        assertEquals(0, answer.code(), answer.err());
+        assertTrue(answer.out().contains("Composition Patterns"), answer.out());
     }
 
     @Test

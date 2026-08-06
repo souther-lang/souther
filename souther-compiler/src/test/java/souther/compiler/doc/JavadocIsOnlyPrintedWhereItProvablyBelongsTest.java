@@ -90,8 +90,12 @@ class JavadocIsOnlyPrintedWhereItProvablyBelongsTest {
 
         assertTrue(api.contains("read(byte[] arg0)"),
                 "the undocumented overload names nothing it cannot know:\n" + api);
-        assertTrue(!api.contains("Reads from text.") && !api.contains("read(String text)"),
-                "and neither overload takes the one doc comment, since nothing tells them apart:\n" + api);
+        assertTrue(api.contains("read(String text)"),
+                "while the documented one keeps what was written for it:\n" + api);
+        int documented = api.indexOf("Reads from text.");
+        assertTrue(documented >= 0 && documented < api.indexOf("read(String text)")
+                        && api.indexOf("Reads from text.", api.indexOf("read(byte[] arg0)")) < 0,
+                "and the sentence sits only above the overload it was written for:\n" + api);
     }
 
     @Test

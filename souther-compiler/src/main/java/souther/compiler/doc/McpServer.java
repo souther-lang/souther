@@ -33,14 +33,16 @@ public final class McpServer {
     /**
      * The protocol revisions this server answers under, newest first.
      *
-     * <p>What it serves — the three tools and their results — is the same under all of them; the
-     * revisions differ in what a client may additionally ask for, and this server declares only
-     * {@code tools}. So the client's own revision is echoed when it is one of these, which is what
-     * lets a newer client keep talking without the server claiming a revision it was not written
-     * against.
+     * <p>These are the revisions whose opening exchange is {@code initialize} and whose requests
+     * carry their arguments where this server looks for them. What it serves is the same under both,
+     * so a client on either is answered on its own.
+     *
+     * <p>The 2026 revisions are deliberately absent. They settle the connection's era in the opening
+     * exchange and carry each request's identity in an envelope this server neither reads nor
+     * writes; answering {@code initialize} with one of them would claim an era it does not speak.
+     * A client that can only talk that way should fail to connect rather than be told it succeeded.
      */
-    private static final List<String> PROTOCOL_VERSIONS =
-            List.of("2026-07-28", "2025-11-25", "2025-06-18");
+    private static final List<String> PROTOCOL_VERSIONS = List.of("2025-11-25", "2025-06-18");
 
     /** name → its description and input schema; order is the order tools/list answers with. */
     private static final List<Tool> TOOLS = List.of(

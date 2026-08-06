@@ -161,12 +161,19 @@ class TheJapiCommandReadsAJarsPublicApiTest {
     void aDocumentedConstantKeepsItsDocEvenWhenItsInitializerCallsAConstructor() {
         Answer answer = run("acme.Greeter", "-cp", jar.toString());
 
-        var lines = answer.out().lines().toList();
-        int doc = lines.indexOf(lines.stream()
-                .filter(l -> l.contains("What is said when nobody chose a greeting."))
-                .findFirst().orElseThrow());
-        assertTrue(lines.get(doc + 1).contains("DEFAULT"),
-                "the doc sits on the field, not on a constructor its initializer mentions:\n" + answer.out());
+        java.util.List<String> lines = answer.out().lines().toList();
+        int doc = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            if (lines.get(i).contains("What is said when nobody chose a greeting.")) {
+                doc = i;
+            }
+        }
+        assertTrue(doc >= 0, "the field's own doc is printed:\n" + answer.out());
+        String declared = lines.stream().skip(doc + 1)
+                .filter(l -> !l.isBlank() && !l.strip().equals("*/") && !l.strip().equals("*"))
+                .findFirst().orElseThrow();
+        assertTrue(declared.contains("DEFAULT"),
+                "the doc sits on the field, not on a constructor its initializer mentions: " + declared);
     }
 
     @Test

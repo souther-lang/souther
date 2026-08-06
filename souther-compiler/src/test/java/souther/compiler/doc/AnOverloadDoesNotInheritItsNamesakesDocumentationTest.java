@@ -183,12 +183,18 @@ class AnOverloadDoesNotInheritItsNamesakesDocumentationTest {
     }
 
     @Test
-    void twoOverloadsOfTheSameCountSayNothingRatherThanSayTheWrongThing() {
+    void twoOverloadsOfTheSameCountAreToldApartByTheirParameterTypes() {
         String api = api();
 
-        assertTrue(api.contains("encode(String arg0, String arg1)"), api);
-        assertTrue(api.contains("encode(String arg0, int arg1)"), api);
-        assertTrue(!api.contains("Encodes with a separator.") && !api.contains("Encodes with a repeat count."),
-                "neither doc is attached, because nothing here distinguishes the two:\n" + api);
+        assertTrue(api.contains("encode(String first, String second)"), api);
+        assertTrue(api.contains("encode(String part, int times)"), api);
+
+        int separator = api.indexOf("Encodes with a separator.");
+        int repeat = api.indexOf("Encodes with a repeat count.");
+        assertTrue(separator >= 0 && repeat >= 0, "both sentences are printed:\n" + api);
+        assertTrue(separator < api.indexOf("encode(String first, String second)")
+                        && api.indexOf("encode(String first, String second)") < repeat
+                        && repeat < api.indexOf("encode(String part, int times)"),
+                "each sits above the overload its types name:\n" + api);
     }
 }

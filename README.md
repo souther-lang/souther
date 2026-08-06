@@ -137,6 +137,7 @@ person nor a coding agent has to hunt through a workspace or disassemble jars:
 souther doc                    # every specification section and shipped topic, name<TAB>title
 souther doc newtype            # one section, by its anchor
 souther doc cli/run            # a topic the command line ships about itself
+souther doc raoh/tutorial      # a guide a bundled library ships
 souther doc --search decoder   # ranked hits, each with the line it matched on
 souther api Option             # the stdlib surface with resolved signatures
 souther api --search fold      # the names that answer a term
@@ -155,14 +156,15 @@ with the CLI when there is none.
 
 A library may ship its own documentation inside its own jar under `META-INF/souther-docs/`, and
 `souther doc` then lists its topics alongside the specification and reads them by a `set/topic`
-name. The CLI's own reference is carried that way and is nothing special. No published raoh release
-carries its guides yet — souther-lang/raoh#122 adds them, and they appear here once a release with
-that change is the one this build depends on.
+name. The CLI's own reference is carried that way and is nothing special; raoh ships its guides the
+same way from 0.7.1 on, so `souther doc raoh/composition-patterns` reads raoh's own guide at the
+version this build depends on.
 
 The same answers are served over the Model Context Protocol: `souther mcp` speaks MCP on stdio,
 exposing `doc_search`, `doc_read`, `stdlib_api`, and `jar_api`, so agent harnesses that prefer
-tools over shell commands register one command. It answers under protocol revisions `2026-07-28`,
-`2025-11-25` and `2025-06-18`, echoing the client's own when it is one of them:
+tools over shell commands register one command. It answers under protocol revisions `2025-11-25`
+and `2025-06-18` — the ones whose opening exchange is `initialize` — echoing the client's own when
+it is one of them:
 
 ```json
 { "mcpServers": { "souther": { "command": "souther", "args": ["mcp"] } } }

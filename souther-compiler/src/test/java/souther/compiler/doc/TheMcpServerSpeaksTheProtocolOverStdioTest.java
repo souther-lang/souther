@@ -42,7 +42,7 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
     }
 
     @Test
-    void aClientsOwnRevisionIsEchoedWhenItIsOneThisServerAnswersUnder() {
+    void aLegacyClientsOwnRevisionIsEchoedWhenItIsOneThisServerAnswersUnder() {
         List<JsonNode> answers = serve("""
                 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}""");
 
@@ -51,12 +51,23 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
     }
 
     @Test
-    void arevisionThisServerDoesNotKnowIsAnsweredWithTheOneItPrefers() {
+    void aRevisionThisServerDoesNotSpeakIsAnsweredWithTheNewestItDoes() {
         List<JsonNode> answers = serve("""
                 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"1999-01-01","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}""");
 
-        assertEquals("2026-07-28", answers.getFirst().get("result").get("protocolVersion").asString(),
+        assertEquals("2025-11-25", answers.getFirst().get("result").get("protocolVersion").asString(),
                 "the server names what it does answer under, and lets the client decide");
+    }
+
+    @Test
+    void anEraThisServerDoesNotImplementIsNotClaimedBackAtAClientThatAsksForIt() {
+        List<JsonNode> answers = serve("""
+                {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2026-07-28","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}""");
+
+        assertEquals("2025-11-25", answers.getFirst().get("result").get("protocolVersion").asString(),
+                "the 2026 revisions settle the era in the opening exchange and carry each request's"
+                        + " identity in an envelope this server does not read, so echoing one back"
+                        + " would claim an era it cannot hold up");
     }
 
     @Test
