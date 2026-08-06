@@ -356,32 +356,41 @@ public final class Output {
                 return Answer.of(Map.of());
             }
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            Map<String, byte[]> linked = new LinkedHashMap<>();
+            Map<String, byte[]> ownClasses = new LinkedHashMap<>();
+            Map<String, byte[]> pathClasses = new LinkedHashMap<>();
+            boolean everyPathModuleRegenerated = true;
             // Furthest first, so the module being evaluated is put on last, as Linked does.
             for (int i = reaches.size() - 1; i >= 0; i--) {
                 String reached = reaches.get(i);
+                boolean own = layout != null && layout.idOfModule().containsKey(reached);
                 Answer<Map<String, byte[]>> classes = db.ask(new Evaluated(reached,
                         reached.equals(name) ? coverage : CoverageMode.NONE));
-                if (classes.value() != null) {
-                    linked.putAll(classes.value());
+                if (classes.value() == null) {
+                    // A module this compilation declares and could not generate makes this absent
+                    // rather than making the set one class short. Evaluating against a set with a
+                    // hole in it produces a class that will not load, or a stale one found further
+                    // up the loader chain, or an example that fails for neither reason — and all
+                    // three read as a fault in the model.
+                    if (own) {
+                        return Answer.absent(classes.reports());
+                    }
+                    everyPathModuleRegenerated = false;
                     continue;
                 }
-                // A module this compilation declares and could not generate makes this absent rather
-                // than making the set one class short. Carrying on would evaluate against a set with
-                // a hole in it, and what came of that — a class that will not load, a stale one
-                // found further up the loader chain, an example that fails for neither reason —
-                // reads as a fault in the model.
-                //
-                // A module that came from the path is a different case, and leaving it out is the
-                // right answer rather than a hole. Its classes are on the loader this set is put
-                // over, so the name still resolves; what is lost is the counting, which is the same
-                // thing that is lost for anything else this compile did not generate. Refusing
-                // instead would stop evaluating the rows of every module that imports a dependency
-                // whose published source this compiler cannot re-derive.
-                if (layout != null && layout.idOfModule().containsKey(reached)) {
-                    return Answer.absent(classes.reports());
-                }
+                (own ? ownClasses : pathClasses).putAll(classes.value());
             }
+            // The path's modules go on together or not at all. A class defined by this loader and one
+            // defined by the parent are different types under one binary name, so regenerating some
+            // of a dependency closure and leaving the rest to the parent puts two versions of a
+            // shared type in one evaluation — and the failure that comes of it is a cast that cannot
+            // succeed, said about a model that is fine. Where any of them cannot be regenerated, all
+            // of them are left to the parent, which has a consistent set of them; what is lost is the
+            // counting inside those modules, and nothing about which types they are.
+            Map<String, byte[]> linked = new LinkedHashMap<>();
+            if (everyPathModuleRegenerated) {
+                linked.putAll(pathClasses);
+            }
+            linked.putAll(ownClasses);
             return Answer.of(Ordered.map(linked));
         }
     }

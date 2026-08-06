@@ -486,8 +486,8 @@ public final class ExampleVerifier {
                                 ? "check.example.unanswered" : "check.example.unanswered.helper")
                         .title("check.example.title")
                         .at(row.pos())
-                        .args(helper == null ? new Object[] {deadline.budgetMs()}
-                                : new Object[] {deadline.budgetMs(), helper})
+                        .args(helper == null ? new Object[] {Long.toString(deadline.budgetMs())}
+                                : new Object[] {Long.toString(deadline.budgetMs()), helper})
                         .hint("check.example.unanswered.hint").build());
                 // No spend is read: the worker is still writing to its state, and a count taken
                 // while it runs would be some of what it spent rather than what it spent.
@@ -579,7 +579,10 @@ public final class ExampleVerifier {
         return Diagnostic.of("E1910", depth ? "check.example.overbudget.depth"
                         : "check.example.overbudget.steps")
                 .title("check.example.title").at(row.pos())
-                .args(depth ? policy.recursionDepthLimit() : policy.stepLimit())
+                // As written, not as a number the locale groups: `50,000` is not a budget anyone
+                // set, and the setting that sets it takes the ungrouped form.
+                .args(depth ? Integer.toString(policy.recursionDepthLimit())
+                        : Long.toString(policy.stepLimit()))
                 .hint(depth ? "check.example.overbudget.depth.hint"
                         : "check.example.overbudget.steps.hint")
                 .build();
@@ -595,7 +598,7 @@ public final class ExampleVerifier {
      */
     private Diagnostic stackRanOut(Ast.ExampleRow row, String why) {
         return Diagnostic.of("E1924", "check.example.stack").title("check.example.title")
-                .at(row.pos()).args(why, policy.recursionDepthLimit())
+                .at(row.pos()).args(why, Integer.toString(policy.recursionDepthLimit()))
                 .hint("check.example.stack.hint").build();
     }
 
