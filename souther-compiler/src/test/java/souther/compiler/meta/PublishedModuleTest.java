@@ -233,6 +233,38 @@ class PublishedModuleTest {
         assertTrue(e.getMessage().contains("0.0.1-old"), e.getMessage());
     }
 
+    /**
+     * And an older one, which is the direction the termination guarantee depends on. A helper written
+     * without {@code partial} promises that nothing it reaches is {@code partial} (spec §fn-rules), and
+     * a reader answers off that word instead of walking the closure behind it. A jar built before the
+     * rule carries unmarked helpers that were never held to it, so it is refused rather than believed.
+     */
+    @Test
+    void aModuleFromAnEarlierBoundaryIsRefusedToo() {
+        Map<String, byte[]> classes = Compiler.compile("""
+                module shared.money exposing ( Amount, taxed )
+                data Amount = Int
+                let taxed (a: Amount) = Amount(a.value * 110 / 100)
+                """);
+        PublishedModule.Classes older = binaryName -> {
+            PublishedModule.Declarations d =
+                    new ClassFileDeclarations(classes::get).of(binaryName);
+            if (d == null || d.module() == null) {
+                return d;
+            }
+            PublishedModule.SoutherModuleView m = d.module();
+            return new PublishedModule.Declarations(
+                    new PublishedModule.SoutherModuleView(m.compat() - 1, "0.0.1-older", m.name(),
+                            m.header(), m.imports(), m.types(), m.behaviors(), m.invariantHelpers()),
+                    d.data(), d.behaviorSignature(), d.behaviorInjected());
+        };
+
+        CompileException e = assertThrows(CompileException.class,
+                () -> PublishedModule.read("shared.money", older));
+
+        assertTrue(e.getMessage().contains("0.0.1-older"), e.getMessage());
+    }
+
     /** A published helper's body travels as source and is compiled by whoever imports it, so what
      * that source means is part of the same boundary. A jar that disagrees is refused as a version
      * disagreement, rather than read and reported as an unresolved name inside a body nobody wrote. */

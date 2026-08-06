@@ -139,7 +139,7 @@ class CompileHelperBodyTypingTest {
                 data N = Int
                 behavior f : (n: N) -> N constructs N
                 partial let depth (n: Int): Int = if n == 0 then 0 else depth(n - 1) + 1
-                let start (m) = depth(m)
+                partial let start (m) = depth(m)
                 let f (n) = N(start(n.value))
                 """;
         assertEquals(3L, applyToInt(src, "demo.N", 3L));
@@ -677,7 +677,7 @@ class CompileHelperBodyTypingTest {
                 data B = { y: Int }
                 data U = A | B
                 data X = Int
-                partial let size (v: U): Int = match v with
+                let size (v: U): Int = match v with
                         | A as a -> a.x
                         | B as b -> b.y
                 let describe (w) = {

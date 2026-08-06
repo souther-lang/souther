@@ -214,7 +214,7 @@ class CompilePublishedHelperTest {
 
                 partial let loop (n: Int) : Int = if n == 0 then 0 else n + loop(n - 1)
 
-                let total (n: Int) = loop(n) * 2
+                partial let total (n: Int) = loop(n) * 2
                 """, """
                 module order exposing ( Out, bill )
 
@@ -237,7 +237,7 @@ class CompilePublishedHelperTest {
                 partial let even (n: Int) : Int = if n == 0 then 1 else odd(n - 1)
                 partial let odd (n: Int) : Int = if n == 0 then 0 else even(n - 1)
 
-                let classify (n: Int) = even(n)
+                partial let classify (n: Int) = even(n)
                 """, """
                 module order exposing ( Out, bill )
 
@@ -290,7 +290,7 @@ class CompilePublishedHelperTest {
 
                 import low ( summed )
 
-                let twiceSummed (n: Int) = summed(n) * 2
+                partial let twiceSummed (n: Int) = summed(n) * 2
                 """, """
                 module top exposing ( Out, bill )
 
@@ -346,7 +346,7 @@ class CompilePublishedHelperTest {
 
                 partial let step (n: Int) : Int = if n == 0 then 2 else step(n - 1)
 
-                let viaStep (n: Int) = step(n) * 10
+                partial let viaStep (n: Int) = step(n) * 10
                 """, """
                 module order exposing ( Out, bill )
 

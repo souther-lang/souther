@@ -594,12 +594,12 @@ An optional is *made* in one place: a `+?+` field being given its value (<<optio
 
 [,text]
 ----
-partial let firstOver (n: Int, xs: List<Int>) : Option<Int> = {
-    let head = List.get(0, xs)
-    match head with
-        | Some v -> if v > n then head else firstOver(n, List.drop(1, xs))
-        | None -> head                  // the absence it read, passed on
-}
+data OrgMember = { manager: OrgMember?, level: Int }
+
+let firstOver (n: Int, m: OrgMember) : Option<OrgMember> =
+    match m.manager with
+        | Some b -> if b.level > n then m.manager else firstOver(n, b)
+        | None -> m.manager             // the absence it read, passed on
 ----
 
 It MUST NOT be written in a behavior's output, whichever way it is written. To state "might not be found" as a business result, that is a domain sum (<<unmarked-sum>>); an optional output is reported as itself rather than as a composition that does not fit (<<e1701>>).
@@ -971,11 +971,11 @@ A `+let+` may be called from an invariant when it satisfies all of the following
 
 * the requirement set is empty (the corresponding behavior writes no `+depends on+`; <<depends-on>>)
 * it constructs no data (the construction set of any helper `+let+` it calls is also empty; <<blocks>>)
-* it is not `+partial+`
+* it reaches nothing `+partial+`
 
 The first is decided by reading the declaration. `+let preApprove+` does not touch the outside world directly and so is pure in the sense of <<purity>>, but `+behavior preApprove+` writes `+depends on now+`, so its requirement set is non-empty and that `+let+` MUST NOT be called from an invariant.
 
-A helper `+let+` always satisfies the first and second. To touch the outside world it can only receive a function as an argument (<<fn-declaration>>), and an invariant has no way to pass one. The third is about termination: an invariant is checked on every construction and must terminate. A `+partial+` helper disclaims totality and may loop, so it cannot appear in an invariant. A *total* helper is admissible even when it recurses — the compiler has proven it terminates (<<fn-declaration>>). This is what lets the list quantifiers `+List.all+` / `+List.any+` / `+List.contains+` and the uniqueness checks `+List.distinct+` / `+List.allDistinctBy+` appear in an invariant: each derives from the total stdlib fold `+List.foldFrom+`, which is bounded by the finite list. Only a `+partial+` helper in an invariant is a compile error.
+A helper `+let+` always satisfies the first and second. To touch the outside world it can only receive a function as an argument (<<fn-declaration>>), and an invariant has no way to pass one. The third is about termination: an invariant is checked on every construction and must terminate. A `+partial+` helper carries no termination guarantee, so it cannot appear in an invariant — nor be reached from one through any chain of calls, which is how the condition is decided. Inlining leaves a recursive helper standing, so what a clause names is not all it runs, and the whole path is reported. A *total* helper is admissible even when it recurses — the compiler has proven it terminates (<<fn-declaration>>). This is what lets the list quantifiers `+List.all+` / `+List.any+` / `+List.contains+` and the uniqueness checks `+List.distinct+` / `+List.allDistinctBy+` appear in an invariant: each derives from the total stdlib fold `+List.foldFrom+`, which is bounded by the finite list.
 
 Forbidden: Decoder, Encoder, data construction, `+partial+` recursion, `+unreachable+` (<<unreachable>>), non-deterministic processing. Data construction is barred throughout the invariant expression, including inside a quantifier's closure — an invariant observes the value being built, it does not build another. `+unreachable+` is barred for the neighbouring reason: an invariant answers whether the value holds, and it answers on every path through itself, so a path that aborts instead decides a construction by a premise the clause never stated. A behavior call is barred by the rule above, whether written in the invariant or reached through a `+let+` it calls; and a `+let+` that goes through a behavior touching the outside world has that much of a requirement set and is rejected by condition 1 as well. Only pure (empty-requirement-set) computation enters an invariant.
 
@@ -1899,7 +1899,12 @@ A value is not module state. Its expression is elaborated in the module that dec
 * A helper *may recurse* (self- and mutual recursion). A non-recursive helper is inline-expanded at its call site; a recursive helper is not inlined but lowered to a method — self- and mutual calls become plain method calls. Traversal of self-referential data that `+fold+` cannot write (climbing the manager chain to the root, counting tree depth) is written this way.
 * A recursive helper MUST *declare its return type* (above). Without a declaration it is a compile error.
 * A recursive helper MUST be *pure*: its own body MUST NOT call an injected behavior (`+depends on+`). It MAY apply a function argument that does — the effect is then the caller's, declared in the caller's `+depends on+` and carried in by the closure (<<blocks>>). An effect touching the outside world is placed on the behavior that calls the helper, or on the function it is handed.
-* Recursion is *total by default*. A recursive helper — or a group of mutually-recursive helpers — MUST terminate, proven by *size-change termination*: each recursive call relates caller parameters to callee arguments, an argument that is a strictly smaller part of a parameter is a strict decrease and one passed through unchanged is non-increasing, and every recursive cycle MUST strictly decrease some parameter. A strictly smaller part comes from a `+match+` on a field or a case (`+match s.manager with | Some b -> depth(b)+` passes the unwrapped `+OrgMember+` — an org chart, or a two-`+Option+`-field binary tree), or from a value handed to a standard-library container combinator's closure over a container that is part of a parameter — a list element (`+List.fold((acc, c) -> acc + depth(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total), or an `+Option+`'s unwrapped `+Some+` payload (`+s.manager |> Option.map(b -> depth(b) + 1)+` — the payload of `+s.manager+` is a smaller `+OrgMember+` than `+s+`, so `+Option.map+` recursion over a manager chain is total, exactly as the equivalent `+match+` is). Either way it bottoms out on the finite self-referential data. This one check covers self-recursion, mutual recursion, and structural lexicographic recursion (different calls decreasing different positions). A helper or group that cannot be shown to terminate is a compile error (E2001). Write `+partial let f ...+` to opt out: a `+partial+` helper is not checked and may not terminate, and a `+partial+` member opts its whole mutually-recursive group out. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` — private, reached through `+List.fold+` — is trusted total. An `+example+` is evaluated within a time budget, so a `+partial+` recursion that does not terminate is reported rather than hanging the compiler.
+* Recursion is *total by default*. A recursive helper — or a group of mutually-recursive helpers — MUST terminate, proven by *size-change termination*: each recursive call relates caller parameters to callee arguments, an argument that is a strictly smaller part of a parameter is a strict decrease and one passed through unchanged is non-increasing, and every recursive cycle MUST strictly decrease some parameter. A strictly smaller part comes from a `+match+` on a field or a case (`+match s.manager with | Some b -> depth(b)+` passes the unwrapped `+OrgMember+` — an org chart, or a two-`+Option+`-field binary tree), or from a value handed to a standard-library container combinator's closure over a container that is part of a parameter — a list element (`+List.fold((acc, c) -> acc + depth(c), 0, t.children)+` — an element of `+t.children+` is smaller than `+t+`, so an n-ary `+List<T>+`-children tree is total), or an `+Option+`'s unwrapped `+Some+` payload (`+s.manager |> Option.map(b -> depth(b) + 1)+` — the payload of `+s.manager+` is a smaller `+OrgMember+` than `+s+`, so `+Option.map+` recursion over a manager chain is total, exactly as the equivalent `+match+` is). Either way it bottoms out on the finite self-referential data. This one check covers self-recursion, mutual recursion, and structural lexicographic recursion (different calls decreasing different positions). A helper or group that cannot be shown to terminate is a compile error (E2001). Write `+partial let f ...+` to opt out. Numeric (`+n - 1+`) and index (`+List.get(i, xs)+` with `+i + 1+`) recursion is not structural — Souther has no inductive `+Nat+` — so it MUST be `+partial+`; counting is otherwise written with `+fold+`. There is no way to *claim* totality on non-structural recursion; `+partial+` only disclaims it. The standard library's `+List.foldFrom+` — private, reached through `+List.fold+` — is trusted total.
+* `+partial+` *declares that the helper does not carry Souther's termination guarantee*. It does not assert that the helper diverges: a recursion that does terminate and that the analysis cannot prove is written this way too, and so is one the analysis gave up on as too large. What it disclaims is the termination guarantee and nothing else — the helper is type-checked, its `+match+` is checked for exhaustiveness, and its invariants hold as any other's do. A helper written without the word does carry the guarantee.
+* *A helper's totality covers everything it reaches.* An unmarked helper MUST NOT reach a `+partial+` one, directly or through any chain of calls; doing so is a compile error (E2001) naming the path. Its caller has to say `+partial+` as well. Every member of a mutually-recursive group holding a `+partial+` member therefore needs the word — each reaches the others. Reading a `+let+` written with no parameter list is reaching it, because the value is substituted where it is named. A behavior's implementing `+let+` is not a helper and publishes no termination guarantee, so this rule is not asked of it: it MAY call a `+partial+` helper. That is not a boundary the walk stops at — it is a declaration the walk is never asked about, and a helper between the behavior and the `+partial+` one still needs the word.
+* A `+partial+` helper MUST NOT be written where a value goes. It may be applied; it may not be handed over. A function type (<<fn-value-semantics>>) says nothing about termination, so a `+partial+` helper stored in one leaves the call graph and arrives somewhere the rule above cannot see it. Writing the name in an argument, or anywhere else a function value is expected, is a compile error (E2001). A `+let+` with no parameter list is a value rather than a function and is not covered by this: reading it is reaching it, which the rule above already answers.
+* Across a module boundary the answer is the word on the declaration being called. A published helper's body travels as source (<<exposed-values>>), but a reader does not walk it: an imported helper written without `+partial+` promises that nothing it reaches is `+partial+`, because the module that published it was held to the same rule. A jar built under a different boundary version is refused rather than believed.
+* An `+example+` is evaluated within a time budget, so a recursion that does not terminate is reported rather than hanging the compiler.
 * A local lambda (`+let f = (x) -> ...+`) cannot recurse. Recursion is a property of a named module helper.
 * Two `+let+`s MUST NOT be written for one behavior.
 * A `+let+` may implement a behavior only when both are in the *same module*. A behavior of another module may be imported and called, but its implementation MUST NOT be given by a `+let+` in another module. This is the line that keeps the name-binding rule from conflicting with separate compilation.
@@ -3686,7 +3691,7 @@ This example did not terminate (submitTravelRequest) — a `partial` recursion i
 may not stop. Make it structural, or reduce it.
 ----
 
-Emitted when a row's evaluation exceeds the step budget the example runner holds it to. A helper proven total cannot reach this, so what a row reaches is a `+partial+` one (<<fn-rules>>).
+Emitted when a row's evaluation exceeds the step budget the example runner holds it to. A helper carrying the termination guarantee cannot reach this, and neither can one it reaches, so what the row ran through is a `+partial+` declaration — reached from the behavior, which publishes no such guarantee (<<fn-rules>>).
 
 [#e1911]
 === An example reached a point declared unreachable
@@ -3787,7 +3792,7 @@ was checked.
 A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when building the table where it is written (<<example-fakes>>) does not finish within the budget that build is held to. A warning rather than an error: waiting says the table was not read, not that it is wrong, and which of the two it is cannot be told from having waited.
 
 [#e2001]
-=== A recursive helper is not proven total
+=== A helper does not carry the termination guarantee it claims
 
 [,text]
 ----
@@ -3797,6 +3802,23 @@ a case), count with `fold`, or mark the helper `partial`.
 ----
 
 Emitted when a helper's recursion is not shown to terminate by size-change analysis. A group of mutually recursive helpers is reported together, and a recursion too large for the analysis says so instead of guessing; `+partial+` is the opt-out in every case (<<fn-rules>>).
+
+The same code says the two other ways the guarantee fails. One is reaching a declaration that does not carry it, reported at the helper's own name and naming the path — one report per helper, so a module needing the word in several places is told about all of them in one build.
+
+[,text]
+----
+`let depth` does not carry the termination guarantee it claims: it reaches the `partial`
+helper `spin` (depth -> measure -> spin). Mark `depth` `partial` as well, or stop
+reaching it.
+----
+
+The other is writing a `+partial+` helper where a value goes, which takes it out of reach of the walk above.
+
+[,text]
+----
+The `partial` helper `spin` is written where a value goes. A function type carries no
+termination guarantee, so a `partial` helper may be applied but not handed over.
+----
 
 [#e2010]
 === A construction violates its invariant on a reachable path

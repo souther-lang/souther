@@ -102,8 +102,9 @@ final class TotalityChecker {
         return error(anchor, members, "check.totality.sizechange",
                 "recursive helpers " + members + " are mutually recursive but not size-change"
                         + " terminating: no argument strictly decreases around every recursive cycle."
-                        + " Recurse on a strictly smaller part obtained by `match`, or mark one of them"
-                        + " `partial` to opt out");
+                        + " Recurse on a strictly smaller part obtained by `match`, or mark them"
+                        + " `partial` to opt out — each member needs the word, since each reaches the"
+                        + " others");
     }
 
     /** The rejection for a group whose size-change closure exceeds {@link #MAX_CLOSURE}: it may or may
@@ -113,7 +114,7 @@ final class TotalityChecker {
         String members = backtickJoin(group);
         return error(anchor, members, "check.totality.toocomplex",
                 "recursion " + members + " is too complex to prove total by size-change analysis;"
-                        + " mark one of them `partial` to opt out");
+                        + " mark them `partial` to opt out");
     }
 
     // --- size-change graphs -------------------------------------------------
