@@ -13,9 +13,19 @@ cannot be run this way — compile both and call the generated classes instead.
 
 ## Which behavior runs
 
-A behavior is runnable when it has a `let` and depends on nothing injected. With `--behavior` the
-named one runs. Without it, a module holding exactly one runnable behavior runs that one; if there
-are several, the run stops and lists them, and you pick one.
+`run` runs a behavior that is both runnable and exposed.
+
+It is runnable when it has a `let` and depends on nothing injected, or when it is a `>->` pipeline
+whose stages are all runnable in that same sense.
+
+It is exposed when the module's `exposing` list names it. `run` reaches a behavior the way any
+reader outside the module does, so a runnable one the module keeps to itself is refused with that as
+the reason. A file with no `exposing` list — a header-less `.sou` among them — keeps nothing to
+itself, so everything runnable in it can be run.
+
+With `--behavior` the named one runs. Without it, a module with exactly one behavior that is both
+runs that one; if there are several, the run stops and lists them, and you pick one. A runnable
+behavior the module does not expose is not among them, and naming it says so.
 
 ## How `--input` is encoded — the part that is easy to get wrong
 

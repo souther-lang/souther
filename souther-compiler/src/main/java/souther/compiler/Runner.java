@@ -53,6 +53,12 @@ import java.util.stream.Collectors;
  * $Impl} that chains the stages, so it runs like any other behavior. An injected behavior (no
  * implementation), one that needs injected dependencies, or a pipeline with such a stage has nothing
  * for {@code run} to supply; each is refused with a reason.
+ *
+ * <p>Being runnable is not the whole of it. The runner is another module's reader, reaching the
+ * compiled behavior by reflection from {@code souther.compiler}, and what a module publishes is what
+ * codegen marks public. So {@code run} drives a behavior the module exposes, and a runnable one kept
+ * to the module is refused as that — before its input type is asked for a decoder, which is the same
+ * refusal wearing another name.
  */
 public final class Runner {
 
@@ -202,6 +208,26 @@ public final class Runner {
         return String.join(", ", names);
     }
 
+    /**
+     * Whether the module publishes {@code name}. This is the same question codegen asks before it
+     * marks a generated class {@code ACC_PUBLIC} ({@code CodegenContext.pub}), and it is asked here
+     * for that reason: the runner reaches the compiled behavior by reflection from another package,
+     * which the JVM allows only for a class the module published. A module with no {@code exposing}
+     * list keeps nothing to itself, so a header-less file publishes everything in it.
+     */
+    private static boolean exposes(Ast.Module module, String name) {
+        return module.exposing().isEmpty() || module.exposing().contains(name);
+    }
+
+    /**
+     * The behavior to drive.
+     *
+     * <p>Two questions are asked, and they are not the same one. Whether a behavior can run at all is
+     * asked of the module's own workings — it has a {@code let} and needs nothing injected. Whether
+     * {@code run} can reach it is asked at the module's edge, because {@code run} stands outside the
+     * module and arrives the way any other reader does. A behavior can answer the first and not the
+     * second, and one the module keeps to itself is exactly that.
+     */
     private static Ast.BehaviorDef resolveBehavior(Ast.Module module, String requestedSpelling) {
         // What `--behavior` was given is a name arriving from outside, and it is looked up
         // against names the source settled.
@@ -209,33 +235,38 @@ public final class Runner {
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Ast.FnDef::name).collect(Collectors.toSet());
         Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
-        Map<String, Ast.BehaviorDef> runnable = new java.util.LinkedHashMap<>();
+        Map<String, Ast.BehaviorDef> drivable = new java.util.LinkedHashMap<>();
         for (Ast.BehaviorDef b : module.behaviors()) {
+            if (!exposes(module, b.name())) {
+                continue;
+            }
             if (b instanceof Ast.SpecBehavior spec
                     && implemented.contains(spec.name()) && spec.dependsOn().isEmpty()) {
-                runnable.put(spec.name(), spec);
+                drivable.put(spec.name(), spec);
             } else if (b instanceof Ast.PipeBehavior pipe
                     && pipelineBlocker(module, pipe, implemented, pipeStages) == null) {
-                runnable.put(pipe.name(), pipe);
+                drivable.put(pipe.name(), pipe);
             }
         }
         if (requested == null) {
-            if (runnable.size() == 1) {
-                return runnable.values().iterator().next();
+            if (drivable.size() == 1) {
+                return drivable.values().iterator().next();
             }
-            if (runnable.isEmpty()) {
-                throw fail("run.behavior.none", "no runnable behavior in this module. "
-                        + "A runnable behavior has a `let` and depends on nothing.");
+            if (drivable.isEmpty()) {
+                throw fail("run.behavior.none", "no behavior in this module can be run. "
+                        + "`run` runs a behavior that is runnable — implemented in Souther and"
+                        + " needing nothing injected, a `>->` pipeline when every stage is — and"
+                        + " that the module exposes.");
             }
-            String names = String.join(", ", runnable.keySet());
+            String names = String.join(", ", drivable.keySet());
             throw usage("run.behavior.several",
-                    "several runnable behaviors — pick one with --behavior: " + names, names);
+                    "several behaviors can be run — pick one with --behavior: " + names, names);
         }
-        Ast.BehaviorDef found = runnable.get(requested);
+        Ast.BehaviorDef found = drivable.get(requested);
         if (found != null) {
             return found;
         }
-        throw whyNotRunnable(module, requested, runnable.keySet());
+        throw whyNotRunnable(module, requested, drivable.keySet());
     }
 
     /** A reason a behavior cannot be driven, in both forms: the catalog key with its arguments, and
@@ -278,9 +309,16 @@ public final class Runner {
         return null;
     }
 
-    /** Why the behavior the caller named cannot be driven, with the ones that can. */
-    private static RunException whyNotRunnable(Ast.Module module, String name, java.util.Set<String> runnable) {
-        String available = runnable.isEmpty() ? "none" : String.join(", ", runnable);
+    /**
+     * Why the behavior the caller named cannot be driven, with the ones that can.
+     *
+     * <p>A behavior the module keeps to itself is answered as that and nothing else, ahead of the
+     * reasons that read its workings. Those reasons describe what is inside the module, which is not
+     * what a reader standing outside it is owed, and following one of them would only bring the
+     * author back to the same refusal.
+     */
+    private static RunException whyNotRunnable(Ast.Module module, String name, java.util.Set<String> drivable) {
+        String available = drivable.isEmpty() ? "none" : String.join(", ", drivable);
         java.util.Set<String> implemented = module.fns().stream()
                 .map(Ast.FnDef::name).collect(Collectors.toSet());
         Map<String, List<Ast.Var>> pipeStages = PipelineSigs.pipelineStages(module);
@@ -288,34 +326,40 @@ public final class Runner {
             if (!b.name().equals(name)) {
                 continue;
             }
+            if (!exposes(module, name)) {
+                return fail("run.behavior.notexposed",
+                        "`" + name + "` is not exposed, and `run` drives a behavior the module"
+                                + " exposes — add it to `exposing`. Available to run: " + available + ".",
+                        name, available);
+            }
             if (b instanceof Ast.PipeBehavior pipe) {
                 Blocker blocker = pipelineBlocker(module, pipe, implemented, pipeStages);
                 if (blocker == null) {
                     return fail("run.behavior.runnable",
-                            "`" + name + "` is runnable. Runnable: " + available + ".", name, available);
+                            "`" + name + "` is runnable. Available to run: " + available + ".", name, available);
                 }
                 Object[] args = new Object[blocker.args().length + 1];
                 System.arraycopy(blocker.args(), 0, args, 0, blocker.args().length);
                 args[args.length - 1] = available;
-                return fail(blocker.key(), blocker.message() + " Runnable: " + available + ".", args);
+                return fail(blocker.key(), blocker.message() + " Available to run: " + available + ".", args);
             }
             if (b instanceof Ast.SpecBehavior spec) {
                 if (!implemented.contains(name)) {
                     return fail("run.behavior.noimpl",
                             "`" + name + "` has no implementation (it is injected from Java). "
-                                    + "Runnable: " + available + ".", name, available);
+                                    + "Available to run: " + available + ".", name, available);
                 }
                 if (!spec.dependsOn().isEmpty()) {
                     String dependencies = dependencyNames(spec);
                     return fail("run.behavior.depends",
                             "`" + name + "` depends on injected dependencies (" + dependencies
-                                    + "), which `run` cannot supply. Runnable: " + available + ".",
+                                    + "), which `run` cannot supply. Available to run: " + available + ".",
                             name, dependencies, available);
                 }
             }
         }
         return fail("run.behavior.unknown",
-                "no behavior named `" + name + "`. Runnable: " + available + ".", name, available);
+                "no behavior named `" + name + "`. Available to run: " + available + ".", name, available);
     }
 
     // --- input --------------------------------------------------------------------------------
@@ -538,6 +582,16 @@ public final class Runner {
 
     // --- reflection helpers -------------------------------------------------------------------
 
+    /**
+     * The behavior applied to its arguments.
+     *
+     * <p>The two ways this can fail are two different things and are told apart. The behavior itself
+     * throwing arrives as an {@code InvocationTargetException} and is the behavior's failure. Anything
+     * else — the class not there, no no-arg constructor, no reachable {@code apply} — is the runner
+     * unable to start it, which after the exposed check is codegen and the runner disagreeing rather
+     * than anything the module did. Reported as one, the second reads as the behavior having run and
+     * failed, and sends the author looking through a body that was never entered.
+     */
     private static Object invoke(MemoryClassLoader loader, String pkg, String behavior, Object[] args) {
         // The public name is an interface; its no-arg constructor and erased apply live on the $Impl.
         String className = pkg + "." + behaviorClass(behavior) + "$Impl";
@@ -547,11 +601,15 @@ public final class Runner {
             Class<?>[] paramTypes = new Class<?>[args.length];
             java.util.Arrays.fill(paramTypes, Object.class);
             return c.getMethod("apply", paramTypes).invoke(instance, args);
-        } catch (ReflectiveOperationException e) {
-            Throwable cause = e instanceof java.lang.reflect.InvocationTargetException ite
-                    ? ite.getCause() : e;
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            Throwable cause = e.getCause();
             throw fail("run.behavior.failed", "`" + behavior + "` failed: " + cause,
                     behavior, String.valueOf(cause));
+        } catch (ReflectiveOperationException e) {
+            throw fail("run.behavior.unreachable",
+                    "`" + behavior + "` could not be started — the compiled `" + className
+                            + "` is not reachable: " + e + ". This is a defect in the compiler,"
+                            + " not in the module.", behavior, className, e.toString());
         }
     }
 
