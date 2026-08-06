@@ -67,8 +67,9 @@ final class HelperInvoker {
                 throw (RuntimeException) cause;
             }
             if (cause instanceof StackOverflowError) {
-                // a non-tail `partial` recursion that does not terminate — not a value the row can state
-                throw new NonTerminationException("`" + name + "` overflowed the stack");
+                // Named while the name is still in hand. What decides is the boundary that reads
+                // everything an evaluation ends with; this only puts the helper into the report.
+                throw new StackExhaustedException("`" + name + "` overflowed the stack");
             }
             throw new FixtureException("`" + name + "` did not produce a value: "
                     + (cause == null ? ite : cause.getMessage()));

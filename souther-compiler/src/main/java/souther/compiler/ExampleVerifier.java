@@ -513,7 +513,7 @@ public final class ExampleVerifier {
                 // walk — says only that it ran out, and both are the same answer about the same
                 // thing. Classifying at the sites instead left the ones with no boundary to cross
                 // falling through as a compiler failure.
-                if (cause instanceof NonTerminationException nt) {
+                if (cause instanceof StackExhaustedException nt) {
                     out.add(stackRanOut(row, nt.getMessage()));
                     evaluation.state.incomplete(FailurePhase.STACK_EXHAUSTED);
                     rows.add(outcomeOf(target, row, evaluation.state));
@@ -692,7 +692,7 @@ public final class ExampleVerifier {
                     "aborted: " + ae.getMessage()));
             state.failed(FailurePhase.INVOCATION);
             return;
-        } catch (NonTerminationException nt) {
+        } catch (StackExhaustedException nt) {
             out.add(stackRanOut(row, nt.getMessage()));
             state.incomplete(FailurePhase.STACK_EXHAUSTED);
             return;
@@ -1077,9 +1077,9 @@ public final class ExampleVerifier {
                 throw new UnreachableException(cause.getMessage());
             }
             if (cause instanceof StackOverflowError) {
-                // a non-tail `partial` recursion that does not terminate — a non-termination, not a
-                // failed example (a tail-looping one is caught by the timeout instead)
-                throw new NonTerminationException("recursion overflowed the stack");
+                // Named where the behavior was applied. Classified at the boundary, like every other
+                // way an evaluation can end.
+                throw new StackExhaustedException("the behavior overflowed the stack");
             }
             throw new AbortException(cause == null ? "aborted" : String.valueOf(cause.getMessage()));
         } catch (ReflectiveOperationException e) {

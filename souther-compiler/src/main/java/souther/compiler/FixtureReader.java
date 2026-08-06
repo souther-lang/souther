@@ -41,7 +41,7 @@ import java.util.Set;
  * — is read by the reading after it.
  *
  * <p>What a reading cannot build, and what did not finish, are a {@link FixtureException} and a
- * {@link NonTerminationException}. Which diagnostic either becomes, and what a budget is, are not
+ * {@link StackExhaustedException}. Which diagnostic either becomes, and what a budget is, are not
  * here: this class has no {@code Diagnostic}, no {@code SourceRef}, and no worker of its own. The
  * row evaluation ({@link ExampleVerifier}) and the reading of a module's written statements each say
  * what a failure means where they are, and they say different things about the same one.

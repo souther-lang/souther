@@ -3811,7 +3811,7 @@ not come back was not counted, so nothing here says the row would not have held.
 compile did not generate — a module read from a jar — is the usual reason.
 ----
 
-Emitted when an evaluation stops answering and the wait the policy allows runs out. Not <<e1910>>: what did not come back was not held to a counted budget, so nothing was shown about whether the model terminates. Counted points are placed in the code this compile generates, so what this reaches is code it did not — a module resolved from a jar, or the compiler itself.
+Emitted when an evaluation stops answering and the wait the policy allows runs out. Not <<e1910>>: what did not come back was not held to a counted budget, so nothing was shown about whether the model terminates. Counted points are placed in the code this compile generates and in the classes it loads from the module path, so what this reaches is the work the compiler does around them — loading a class, decoding a value, comparing two of them — or the compiler itself.
 
 [#e1924]
 === An example evaluation ran out of stack

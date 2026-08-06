@@ -356,52 +356,76 @@ public final class Output {
                 return Answer.of(Map.of());
             }
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
-            Map<String, byte[]> ownClasses = new LinkedHashMap<>();
-            Map<String, byte[]> pathClasses = new LinkedHashMap<>();
-            boolean everyPathModuleRegenerated = true;
+            Map<String, byte[]> linked = new LinkedHashMap<>();
             // Furthest first, so the module being evaluated is put on last, as Linked does.
             for (int i = reaches.size() - 1; i >= 0; i--) {
                 String reached = reaches.get(i);
-                boolean own = layout != null && layout.idOfModule().containsKey(reached);
-                Answer<Map<String, byte[]>> classes = db.ask(new Evaluated(reached,
-                        reached.equals(name) ? coverage : CoverageMode.NONE));
-                if (classes.value() == null) {
-                    // A module this compilation declares and could not generate makes this absent
-                    // rather than making the set one class short. Evaluating against a set with a
-                    // hole in it produces a class that will not load, or a stale one found further
-                    // up the loader chain, or an example that fails for neither reason — and all
-                    // three read as a fault in the model.
-                    if (own) {
-                        return Answer.absent(classes.reports());
-                    }
-                    everyPathModuleRegenerated = false;
+                // Only the modules this compilation declares. A module from the path is not generated
+                // here at all: what a published one carries is what an importer needs to read its
+                // declarations, so regenerating it would produce some of its classes and not the rest
+                // — and a module split between this loader and the parent hands its own types to its
+                // own implementation under two different definitions of them. The evaluation loader
+                // takes the path's classes whole and counts them on the way in.
+                if (layout == null || !layout.idOfModule().containsKey(reached)) {
                     continue;
                 }
-                (own ? ownClasses : pathClasses).putAll(classes.value());
+                Answer<Map<String, byte[]>> classes = db.ask(new Evaluated(reached,
+                        reached.equals(name) ? coverage : CoverageMode.NONE));
+                // A module this compilation declares and could not generate makes this absent rather
+                // than making the set one class short. Evaluating against a set with a hole in it
+                // produces a class that will not load, or a stale one found further up the loader
+                // chain, or an example that fails for neither reason — and all three read as a fault
+                // in the model.
+                if (classes.value() == null) {
+                    return Answer.absent(classes.reports());
+                }
+                linked.putAll(classes.value());
             }
-            // The path's modules go on together or not at all. A class defined by this loader and one
-            // defined by the parent are different types under one binary name, so regenerating some
-            // of a dependency closure and leaving the rest to the parent puts two versions of a
-            // shared type in one evaluation — and the failure that comes of it is a cast that cannot
-            // succeed, said about a model that is fine. Where any of them cannot be regenerated, all
-            // of them are left to the parent, which has a consistent set of them; what is lost is the
-            // counting inside those modules, and nothing about which types they are.
-            Map<String, byte[]> linked = new LinkedHashMap<>();
-            if (everyPathModuleRegenerated) {
-                linked.putAll(pathClasses);
-            }
-            linked.putAll(ownClasses);
             return Answer.of(Ordered.map(linked));
         }
     }
 
-    /** The class loader an evaluation runs against: this compilation's classes over the ones the
+    /** The class loader compile-time code runs against: this compilation's classes over the ones the
      * projects it depends on already built. */
     static ClassLoader loader(Db db, Map<String, byte[]> classes) {
         ModulePath path = db.ask(new Front.Path()).value();
         ClassLoader parent = path == null ? Output.class.getClassLoader()
                 : path.loader(Output.class.getClassLoader());
         return new MemoryClassLoader(classes, parent);
+    }
+
+    /**
+     * The loader an <em>evaluation</em> runs against, where a class read from the path is counted on
+     * the way in.
+     *
+     * <p>A published module carries what an importer needs to read its declarations and no more, so a
+     * behavior's body stays in the jar it was built into. Regenerating what does travel and taking
+     * the rest from the jar is the one thing that must not be done: a class defined here and one
+     * defined by the parent are different types under one binary name, so a module split between them
+     * hands its own types to its own implementation and the cast fails — which is reported as an
+     * example that does not hold, about a model that is fine.
+     *
+     * <p>So the path's classes are defined here, whole, with a counted point on every backward
+     * branch. One loader, one version of every type, and a row that loops inside a dependency spends
+     * the budget there rather than running until the wait ends.
+     */
+    static ClassLoader evaluationLoader(Db db) {
+        ModulePath path = db.ask(new Front.Path()).value();
+        ClassLoader compiler = Output.class.getClassLoader();
+        if (path == null) {
+            return compiler;
+        }
+        return new ClassLoader(compiler) {
+            @Override
+            protected Class<?> findClass(String name) throws ClassNotFoundException {
+                byte[] bytes = path.bytes(name);
+                if (bytes == null) {
+                    throw new ClassNotFoundException(name);
+                }
+                byte[] counted = souther.compiler.evaluate.Recounted.of(bytes);
+                return defineClass(name, counted, 0, counted.length);
+            }
+        };
     }
 
     /** How long this compilation gives one row or one reading, in milliseconds. A compilation that
@@ -593,7 +617,7 @@ public final class Output {
             // requirements are not settled is not one to read statements off yet — rather than
             // because reading them needs it. Nothing here applies a behavior.
             return Answer.of(souther.compiler.ExampleStatements.disagreements(prepared.value(),
-                    scope.value(), sigs.value(), classes, loader(db, Map.of()),
+                    scope.value(), sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
                     deadlineOf(db), policyOf(db)));
         }
@@ -811,7 +835,7 @@ public final class Output {
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
             // As above: `requirements` says this module is ready to be read, not what to read.
             return souther.compiler.ExampleStatements.fakeTables(prepared.value(), scope.value(),
-                    sigs.value(), classes, loader(db, Map.of()),
+                    sigs.value(), classes, evaluationLoader(db),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
                     deadlineOf(db), policyOf(db));
         }
@@ -862,7 +886,7 @@ public final class Output {
             Map<String, Ast.FnDef> values = db.ask(new Bodies.Helpers(name)).value();
             souther.compiler.ExampleVerifier.Observations observed =
                     souther.compiler.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
-                            requirements, loader(db, Map.of()),
+                            requirements, evaluationLoader(db),
                             values == null ? Map.of() : values, sourceId, deadlineOf(db),
                             policyOf(db));
             for (Diagnostic failure : observed.failures()) {

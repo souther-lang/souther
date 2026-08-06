@@ -114,15 +114,15 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
     }
 
     /**
-     * A behavior's body stays in the jar, so what it reaches is not counted.
+     * A behavior's body, which stays in the jar, is counted too.
      *
-     * <p>Written down as a test rather than as a sentence in a document, because it is the edge of
-     * what the counting reaches and two earlier attempts to describe that edge were both wider than
-     * the truth. If this ever starts holding the budget instead, the reach grew and the documents
-     * describing it are the ones to correct.
+     * <p>This is the case the counting used to stop at, and it stopped badly. The dependency's types
+     * were regenerated here and its body was not, so the row handed this loader's types to the jar's
+     * implementation and the cast failed — and what came out was "this example does not hold", about
+     * a model whose dependency loops forever.
      */
     @Test
-    void aBehaviorBodyThatStaysInTheJarIsNotCounted() {
+    void aBehaviorBodyThatStaysInTheJarIsCountedToo() {
         Map<String, byte[]> jar = Compiler.compile("""
                 module lib.svc exposing ( Amount, spin )
 
@@ -149,13 +149,21 @@ class ADependencyOnThePathIsCountedLikeAnyOtherTest {
                 example bill
                   | "reaches the dependency body": (Amount(1)) -> Receipt { total = Amount(0) }
                 """), jar::get);
+        compilation.withEvaluationPolicy(EvaluationPolicy.of(50_000L));
         compilation.answerEverything();
 
-        Map<String, byte[]> linked = compilation.db()
-                .ask(new Output.EvaluationLinked("app.calls", Output.CoverageMode.NONE)).value();
+        assertFalse(compilation.db()
+                        .ask(new Output.EvaluationLinked("app.calls", Output.CoverageMode.NONE))
+                        .value().containsKey("lib.svc.Spin$Impl"),
+                "the body is not regenerated here — it is taken from the jar and counted there");
 
-        assertFalse(linked.containsKey("lib.svc.Spin$Impl"),
-                "the behavior's body is not among the classes this compile generated");
+        String sourceId = compilation.exampleSourcesOf("app.calls").get(0);
+        List<RowOutcome> rows = compilation.db()
+                .ask(new Output.Examples("app.calls", sourceId, Output.CoverageMode.NONE))
+                .value().rows();
+
+        assertEquals(FailurePhase.STEP_LIMIT, rows.get(0).failurePhase(),
+                "the row spent its budget inside the jar's body: " + rows);
     }
 
     /** A dependency this compiler cannot read at all leaves the rows to run against whatever the

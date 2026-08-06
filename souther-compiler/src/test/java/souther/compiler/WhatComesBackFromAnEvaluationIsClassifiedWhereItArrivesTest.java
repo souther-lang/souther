@@ -79,7 +79,7 @@ class WhatComesBackFromAnEvaluationIsClassifiedWhereItArrivesTest {
     /**
      * A stack overflow arriving with no reflection boundary behind it is still a stack overflow.
      *
-     * <p>Before, only a {@code NonTerminationException} — which is what the two reflection boundaries
+     * <p>Before, only a {@code StackExhaustedException} — which is what the two reflection boundaries
      * make of one — was recognised, so this fell through to the arm that means the compiler is broken
      * and came out as an internal failure with no position and nothing an author could act on.
      */

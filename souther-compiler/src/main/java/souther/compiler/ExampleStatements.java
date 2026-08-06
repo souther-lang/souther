@@ -300,7 +300,7 @@ public final class ExampleStatements {
                 // worker threw arrives at this one place, so classifying anywhere else leaves the
                 // paths that do not go through that place unclassified — and an Error rethrown from
                 // here is a compiler failure rather than a report about the statement.
-                if (cause instanceof StackOverflowError || cause instanceof NonTerminationException) {
+                if (cause instanceof StackOverflowError || cause instanceof StackExhaustedException) {
                     // Both forms of the same thing. A stack that runs out inside a helper crosses a
                     // reflection boundary on the way here and arrives named; one that runs out
                     // anywhere else arrives raw. Recognising only the raw one left the named one to
@@ -621,7 +621,7 @@ public final class ExampleStatements {
         for (int i = 0; i < types.size(); i++) {
             try {
                 values[i] = fixtures.built(written.get(i), types.get(i));
-            } catch (FixtureException | NonTerminationException _) {
+            } catch (FixtureException | StackExhaustedException _) {
                 return null;
             }
         }
@@ -832,7 +832,7 @@ public final class ExampleStatements {
         } catch (FixtureException fe) {
             out.add(unbuildableFake(fk.pos(), fk.target(), fe.getMessage()));
             return null;
-        } catch (NonTerminationException nt) {
+        } catch (StackExhaustedException nt) {
             out.add(unbuildableFake(fk.pos(), fk.target(), nt.getMessage()));
             return null;
         }
@@ -910,7 +910,7 @@ public final class ExampleStatements {
         }
         try {
             return new Answered.Whole(fixtures.buildFixture(written, outType));
-        } catch (FixtureException | NonTerminationException _) {
+        } catch (FixtureException | StackExhaustedException _) {
             return new Answered.Unreadable();
         }
     }
@@ -933,7 +933,7 @@ public final class ExampleStatements {
         }
         try {
             return new Answered.Whole(fixtures.buildFixture(written, outType));
-        } catch (FixtureException | NonTerminationException _) {
+        } catch (FixtureException | StackExhaustedException _) {
             return new Answered.Unreadable();
         }
     }
