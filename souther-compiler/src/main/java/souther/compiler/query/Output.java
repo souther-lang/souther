@@ -11,6 +11,7 @@ import souther.compiler.check.Symbols;
 import souther.compiler.check.TypeChecker;
 import souther.compiler.check.TypeOps;
 import souther.compiler.codegen.Backend;
+import souther.compiler.codegen.Instrumentation;
 import souther.compiler.coverage.CoverageSites;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
@@ -71,7 +72,7 @@ public final class Output {
         }
 
         /**
-         * The parts of a generation both {@link Classes} and {@link Probed} need, asked once.
+         * The parts of a generation both {@link Classes} and {@link Evaluated} need, asked once.
          *
          * <p>Both answer with a module's bytecode and differ only in whether each arm records that it
          * ran. Two copies of this would be two chances for the measured classes and the shipped ones to
@@ -115,6 +116,19 @@ public final class Output {
          * only asked for once the module has checked, so they are there.
          */
         private void stamp(Db db, Map<String, byte[]> classes) {
+            stamp(db, name, classes);
+        }
+
+        /**
+         * Puts {@code module}'s declarations on {@code classes}, as its source wrote them.
+         *
+         * <p>Done for the classes an evaluation runs as well as for the ones that ship, so that the
+         * two are the same set of classes and differ only in the counting. A set that ran with one
+         * class missing would be a second program, and whether a row holds would be a fact about
+         * which of the two it met.
+         */
+        static void stamp(Db db, String module, Map<String, byte[]> classes) {
+            String name = module;
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             String id = layout == null ? null : layout.idOfModule().get(name);
             if (id == null) {
@@ -237,19 +251,35 @@ public final class Output {
         }
     }
 
+    /** How much of what an evaluation goes through is recorded as it goes. */
+    public enum CoverageMode {
+
+        /** Nothing. What an evaluation asks for when nobody is measuring it. */
+        NONE,
+
+        /** Which arm of each of the module's bodies the rows took. */
+        ARMS
+    }
+
     /**
-     * The same classes, with each arm recording that it ran.
+     * One module's classes, counting what they go through — and, where asked, recording which arms
+     * they took.
      *
-     * <p>Its own key rather than an argument to {@link Classes}, because {@link Classes} is what
-     * ships. Widening it to mean "with probes, sometimes" would put the decision of whether a jar
-     * refers to the compiler inside a parameter, and a caller that got it wrong would find out at
-     * someone else's run time. These are never stamped and never written out.
+     * <p>Its own key rather than an argument to {@link Classes}, for the reason a probed generation had one:
+     * {@link Classes} is what ships, and widening it to mean "counted, sometimes" would put the
+     * decision of whether a jar refers to the compiler inside a parameter. These are never stamped and
+     * never written out.
      *
-     * <p>Absent where the plan and the bodies do not line up, which is the one thing this must not
-     * paper over: emitting a body an arm short reports the arm that ran as one nothing reaches, and
-     * that reads as a gap in the model rather than a fault in the measurement.
+     * <p>Counting is not optional the way coverage is. Every evaluation runs against counted classes,
+     * because what holds a row to a budget it cannot exceed is the counting itself — a row evaluated
+     * against uncounted classes has nothing but a clock behind it.
+     *
+     * <p>Absent where {@link CoverageMode#ARMS} is asked for and the plan and the bodies do not line
+     * up, which is the one thing this must not paper over: emitting a body an arm short reports the
+     * arm that ran as one nothing reaches, and that reads as a gap in the model rather than a fault in
+     * the measurement.
      */
-    public record Probed(String name) implements Key<Map<String, byte[]>> {
+    public record Evaluated(String name, CoverageMode coverage) implements Key<Map<String, byte[]>> {
         @Override
         public String module() {
             return name;
@@ -261,13 +291,18 @@ public final class Output {
             if (in == null) {
                 return Answer.absent();
             }
-            CoverageSites.Plan plan = CoverageSites.of(sourceIdOf(db, name),
-                    in.checked().behaviorBodies());
+            Instrumentation instrumentation = Instrumentation.COUNTING;
+            if (coverage == CoverageMode.ARMS) {
+                instrumentation = instrumentation.measuring(
+                        CoverageSites.of(sourceIdOf(db, name), in.checked().behaviorBodies()));
+            }
             try {
-                return Answer.of(Ordered.map(new LinkedHashMap<>(Backend.generate(
+                Map<String, byte[]> classes = new LinkedHashMap<>(Backend.generate(
                         in.lowered(), in.scope(), in.typePackages(), in.imported(), in.injected(),
                         in.callees(), in.requirements(), in.checked(), in.dischargeClauses(),
-                        plan))));
+                        instrumentation));
+                Classes.stamp(db, name, classes);
+                return Answer.of(Ordered.map(classes));
             } catch (CompileException e) {
                 return Answer.absent(e);
             } catch (IllegalStateException _) {
@@ -283,21 +318,30 @@ public final class Output {
                     : CoverageSites.of(sourceIdOf(db, module), checked.behaviorBodies());
         }
 
-        private static String sourceIdOf(Db db, String module) {
+        static String sourceIdOf(Db db, String module) {
             Front.Layout.Of layout = db.ask(new Front.Layout()).value();
             return layout == null ? module : layout.idOfModule().getOrDefault(module, module);
         }
     }
 
     /**
-     * What a probed evaluation of one module loads: this module's measured classes over the plain
-     * ones of everything it reaches.
+     * What an evaluation of one module's rows loads: every module the rows can reach, counted, with
+     * arms recorded in the one module a measurement is about.
      *
-     * <p>Only this module's are replaced. Its imports' arms belong to their own modules and are
-     * measured when those modules are asked about; probing them here would number arms against a plan
-     * this module's report has no way to read.
+     * <p>The two scopes differ on purpose, and getting them the same way round is what this key is
+     * for. Arms belong to the module whose report reads the numbers, so probing an import would number
+     * arms against a plan nothing here can read. A budget belongs to the evaluation, and an evaluation
+     * goes wherever the row goes — so a row that steps into an import and loops there has to be
+     * counted while it is in there, or the counting stops at the module boundary and the clock decides
+     * again.
+     *
+     * <p>What this cannot reach is a module that came from a jar. Those classes are resolved by the
+     * loader the module path builds, this compile did not generate them, and there is nothing here to
+     * generate them from. A row that does not come back inside one is not decided by a budget; it is
+     * an evaluation that did not answer.
      */
-    public record ProbedLinked(String name) implements Key<Map<String, byte[]>> {
+    public record EvaluationLinked(String name, CoverageMode coverage)
+            implements Key<Map<String, byte[]>> {
         @Override
         public String module() {
             return name;
@@ -305,14 +349,21 @@ public final class Output {
 
         @Override
         public Answer<Map<String, byte[]>> compute(Db db) {
-            Map<String, byte[]> linked = db.ask(new Linked(name)).value();
-            Map<String, byte[]> probed = db.ask(new Probed(name)).value();
-            if (linked == null || probed == null) {
-                return Answer.absent();
+            List<String> reaches = db.ask(new Reaches(name)).value();
+            if (reaches == null) {
+                return Answer.of(Map.of());
             }
-            Map<String, byte[]> out = new LinkedHashMap<>(linked);
-            out.putAll(probed);
-            return Answer.of(Ordered.map(out));
+            Map<String, byte[]> linked = new LinkedHashMap<>();
+            // Furthest first, so the module being evaluated is put on last, as Linked does.
+            for (int i = reaches.size() - 1; i >= 0; i--) {
+                String reached = reaches.get(i);
+                Answer<Map<String, byte[]>> classes = db.ask(new Evaluated(reached,
+                        reached.equals(name) ? coverage : CoverageMode.NONE));
+                if (classes.value() != null) {
+                    linked.putAll(classes.value());
+                }
+            }
+            return Answer.of(Ordered.map(linked));
         }
     }
 
@@ -330,7 +381,19 @@ public final class Output {
      * whose reason to differ is its own (see {@link Front.ExampleBudget}). */
     static long exampleBudgetMs(Db db) {
         Long asked = db.ask(new Front.ExampleBudget()).value();
-        return asked == null ? souther.compiler.ExampleVerifier.defaultBudgetMs() : asked;
+        return asked == null ? policyOf(db).outerTimeout().toMillis() : asked;
+    }
+
+    /**
+     * What this compilation allows one row's evaluation.
+     *
+     * <p>Read from the compilation rather than from a system property at the point of use, so that two
+     * compiles in one JVM may differ and so that a long-lived one — a build daemon, an editor's
+     * language server — is not held for its whole life to whatever the first compile in it read.
+     */
+    public static souther.compiler.EvaluationPolicy policyOf(Db db) {
+        souther.compiler.EvaluationPolicy said = db.ask(new Front.Policy()).value();
+        return said == null ? souther.compiler.EvaluationPolicy.DEFAULT : said;
     }
 
     /**
@@ -342,7 +405,9 @@ public final class Output {
      */
     static souther.compiler.Deadline deadlineOf(Db db) {
         souther.compiler.Deadline said = db.ask(new Front.ExampleDeadline()).value();
-        return said != null ? said : souther.compiler.Deadline.ofMillis(exampleBudgetMs(db));
+        return said != null ? said
+                : souther.compiler.Deadline.ofMillis(exampleBudgetMs(db),
+                        policyOf(db).workerStackBytes());
     }
 
     /**
@@ -485,7 +550,8 @@ public final class Output {
                 // a module that did not check states nothing yet
                 return Answer.of(souther.compiler.ExampleStatements.Readings.NONE);
             }
-            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
+            Map<String, byte[]> classes =
+                    db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
             List<String> exampleOrigins = db.ask(new Front.ExampleOrigins(name)).value();
@@ -501,7 +567,7 @@ public final class Output {
             return Answer.of(souther.compiler.ExampleStatements.disagreements(prepared.value(),
                     scope.value(), sigs.value(), classes, loader(db, Map.of()),
                     values == null ? Map.of() : values, exampleOrigins, fakeOrigins,
-                    deadlineOf(db)));
+                    deadlineOf(db), policyOf(db)));
         }
     }
 
@@ -551,7 +617,7 @@ public final class Output {
                 reports.add(Report.saidAt(said(d),
                         Report.Delivery.atEveryRegionOf(d.recorded().at().sourceId())));
             }
-            for (souther.compiler.ExampleStatements.TimedOutFake f : read.timedOut()) {
+            for (souther.compiler.ExampleStatements.UnreadFake f : read.unread()) {
                 reports.add(Report.saidAt(unread(f),
                         Report.Delivery.atEveryRegionOf(f.at().sourceId())));
             }
@@ -559,14 +625,22 @@ public final class Output {
         }
 
         /** One fake that could not be read: the caret on the behavior it names, and what stopped. */
-        private static Diagnostic unread(souther.compiler.ExampleStatements.TimedOutFake f) {
-            return Diagnostic.of("E1920", "check.example.disagreement.unread").warning()
-                    .title("check.example.title")
+        private static Diagnostic unread(souther.compiler.ExampleStatements.UnreadFake f) {
+            // Which of the three it was travels into the message, because what to do about them
+            // differs — and one of them is not about the model at all.
+            souther.compiler.ExampleStatements.Unread why = f.why();
+            Diagnostic.Builder said = Diagnostic.of("E1920",
+                            why.isDepth() ? "check.example.disagreement.unread.deep"
+                            : why.isSteps() ? "check.example.disagreement.unread.steps"
+                            : "check.example.disagreement.unread.unanswered")
+                    .warning().title("check.example.title")
                     .at(f.at().pos(), f.width())
-                    // As written, not as a number the locale groups: `2,000ms` is not a budget
-                    // anyone set, and the property that sets it takes the ungrouped form.
-                    .args(f.target(), Long.toString(f.budgetMs()))
-                    .hint("check.example.disagreement.unread.hint", f.target())
+                    .args(f.target(), why.limitShown());
+            return (why.isDepth()
+                    ? said.hint("check.example.disagreement.unread.deep.hint", f.target())
+                    : why.isSteps()
+                    ? said.hint("check.example.disagreement.unread.steps.hint", f.target())
+                    : said.hint("check.example.disagreement.unread.unanswered.hint", f.target()))
                     .build();
         }
 
@@ -600,7 +674,25 @@ public final class Output {
      * failure stops a compile, so a change to a widely-imported data says how far it reaches in one
      * compile rather than one module per round.
      */
-    public record Examples(String name, String sourceId) implements Key<Examples.Of> {
+    public record Examples(String name, String sourceId, CoverageMode coverage)
+            implements Key<Examples.Of> {
+
+        /**
+         * The rows of one source, run the one way this compilation runs them.
+         *
+         * <p>Which mode is derived here rather than chosen by the caller, so that a compile evaluates
+         * its rows once. What a measurement needs beyond a compile is the arms each row took, and
+         * asking for that as a second key ran every row a second time — against different bytecode,
+         * on a second wait, with a second chance to be reported differently. Two sets of outcomes for
+         * one model can disagree, and a report built half from each says a case is verified and its
+         * branch unreached in the same breath.
+         *
+         * <p>Keyed on what is actually emitted rather than on the adequacy level, because two levels
+         * that measure the same thing should not be two compiles.
+         */
+        public static Examples asked(Db db, String name, String sourceId) {
+            return new Examples(name, sourceId, Adequacy.coverageAsked(db));
+        }
 
         /**
          * What this source's rows turned out to be.
@@ -635,13 +727,14 @@ public final class Output {
          * The rows this source wrote, run — and the fakes it wrote, built.
          *
          * <p>The fakes here rather than in {@link #evaluate}, which a measurement runs a second time
-         * against instrumented classes ({@link Adequacy.ProbedExamples}). Whether a table can be built
+         * against instrumented classes. Whether a table can be built
          * is not a question a measurement asks, and asking it twice would have one table answered for
          * by two builds.
          */
         @Override
         public Answer<Of> compute(Db db) {
-            Answer<Of> ran = evaluate(db, name, sourceId, db.ask(new Linked(name)).value());
+            Answer<Of> ran = evaluate(db, name, sourceId,
+                    db.ask(new EvaluationLinked(name, coverage)).value(), coverage);
             List<Diagnostic> wrong = fakeTables(db, name, sourceId);
             if (wrong.isEmpty()) {
                 return ran;
@@ -676,7 +769,8 @@ public final class Output {
             if (db.ask(new Bodies.Checked(name)).value() == null) {
                 return List.of();   // a module that did not check has nothing to build a value with
             }
-            Map<String, byte[]> classes = db.ask(new Linked(name)).value();
+            Map<String, byte[]> classes =
+                    db.ask(new EvaluationLinked(name, CoverageMode.NONE)).value();
             Map<String, List<BehaviorRequirement>> requirements =
                     db.ask(new Bodies.Requirements(name)).value();
             List<String> fakeOrigins = db.ask(new Front.FakeOrigins(name)).value();
@@ -688,7 +782,7 @@ public final class Output {
             return souther.compiler.ExampleStatements.fakeTables(prepared.value(), scope.value(),
                     sigs.value(), classes, loader(db, Map.of()),
                     values == null ? Map.of() : values, fakeOrigins, sourceId,
-                    deadlineOf(db));
+                    deadlineOf(db), policyOf(db));
         }
 
         /**
@@ -699,7 +793,8 @@ public final class Output {
          * become two evaluations. A row that held under one and failed under the other would be a
          * difference in the measurement, not in the model, and the report has no way to tell.
          */
-        static Answer<Of> evaluate(Db db, String name, String sourceId, Map<String, byte[]> classes) {
+        static Answer<Of> evaluate(Db db, String name, String sourceId, Map<String, byte[]> classes,
+                                   CoverageMode coverage) {
             Answer<Ast.Module> prepared = db.ask(new Shapes.Prepared(name));
             Answer<Symbols> scope = db.ask(new Shapes.Scope(name));
             Answer<Map<String, Sig>> sigs = db.ask(new Bodies.Signatures(name));
@@ -710,7 +805,15 @@ public final class Output {
                 return Answer.absent();   // a module that did not check has nothing to run
             }
             if (classes == null) {
-                return Answer.absent();
+                // Arms were asked for and the instrumented classes could not be made. Falling back to
+                // uncounted ones is not open: what holds a row to a budget is the counting, so a row
+                // run against them would be back on the clock. Nothing was observed, and that travels
+                // in the channel every other reason travels in.
+                return coverage == CoverageMode.NONE ? Answer.absent()
+                        : Answer.of(new Of(List.of(), List.of(
+                                souther.compiler.observe.Incompleteness.of(
+                                        souther.compiler.observe.Incompleteness.Code.PROBE_MAPPING_LOST,
+                                        souther.compiler.observe.Incompleteness.Scope.MODULE, name))));
             }
             Ast.Module rows = written(db, name, sourceId, prepared.value());
             if (rows.examples().isEmpty()) {
@@ -729,7 +832,8 @@ public final class Output {
             souther.compiler.ExampleVerifier.Observations observed =
                     souther.compiler.ExampleVerifier.check(rows, scope.value(), sigs.value(), classes,
                             requirements, loader(db, Map.of()),
-                            values == null ? Map.of() : values, sourceId, deadlineOf(db));
+                            values == null ? Map.of() : values, sourceId, deadlineOf(db),
+                            policyOf(db));
             for (Diagnostic failure : observed.failures()) {
                 reports.add(Report.of(failure));
             }

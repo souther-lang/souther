@@ -79,7 +79,8 @@ class RowClassesTest {
                 GuardThresholds.of("submit", body, plan, parameters, symbols), symbols);
 
         Output.Examples.Of observed = compilation.db()
-                .ask(new Output.Examples(module, compilation.sourceIds().get(0))).value();
+                .ask(Output.Examples.asked(compilation.db(), module,
+                        compilation.sourceIds().get(0))).value();
         assertNotNull(observed);
         return new Read(partitioning.axes(), parameters, observed.rows());
     }
@@ -157,7 +158,7 @@ class RowClassesTest {
         RowOutcome damaged = new RowOutcome(row.at(), row.target(), row.description(), row.stage(),
                 row.disposition(), row.failurePhase(), row.expectedArm(), row.resultArm(),
                 row.inputCases(),
-                List.of(new ObservedValue.Constructed(request.type(), broken)), row.hits());
+                List.of(new ObservedValue.Constructed(request.type(), broken)), row.hits(), row.stepsSpent());
 
         Map<AxisId, Classification> classes =
                 RowClasses.of(damaged, read.parameters(), read.axes());

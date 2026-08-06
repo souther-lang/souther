@@ -28,8 +28,22 @@ public enum FailurePhase {
     /** The behavior answered and the answer is not what the row expects. */
     COMPARISON,
 
-    /** The evaluation did not finish within its budget. */
+    /** The evaluated code went through more counted points than the policy allows. What the row did
+     * is what decided this, so it is decided the same way on every machine. */
+    STEP_LIMIT,
+
+    /** A recursive helper the row reaches went deeper than the policy allows. Also decided by what
+     * the row did, and told apart from {@link #STEP_LIMIT} because what an author does about the two
+     * is not the same. */
+    DEPTH_LIMIT,
+
+    /** The evaluation stopped answering and was given up on. Not a statement about the model: what
+     * did not come back was not counted, so nothing here says the row would not have held. */
     TIMEOUT,
+
+    /** The JVM stack ran out before the counted depth limit was reached. Also not a statement about
+     * the model — how many frames a stack holds is decided by how large they are. */
+    STACK_EXHAUSTED,
 
     /** Something the host was supposed to provide was not there. */
     INFRASTRUCTURE

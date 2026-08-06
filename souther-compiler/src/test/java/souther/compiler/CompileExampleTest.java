@@ -288,7 +288,8 @@ class CompileExampleTest {
         String moduleName = compilation.modules().get(0);
         compilation.answerEverything();
         List<Report> fails = compilation.db()
-                .ask(new Output.Examples(moduleName, compilation.sourceIds().get(0))).reports();
+                .ask(Output.Examples.asked(compilation.db(), moduleName,
+                        compilation.sourceIds().get(0))).reports();
         assertEquals(2, fails.size());
     }
 }

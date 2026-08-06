@@ -7,6 +7,10 @@ import souther.compiler.check.TypeOps;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.SourcePos;
 import souther.compiler.diag.SourceRef;
+import souther.compiler.evaluate.DepthLimitExceeded;
+import souther.compiler.evaluate.EvaluationContext;
+import souther.compiler.evaluate.StepLimitExceeded;
+import souther.compiler.observe.FailurePhase;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 
@@ -58,16 +62,21 @@ public final class ExampleStatements {
     /** What one written statement gets to be read within ({@link #within}). Carried rather than
      * looked up, so two compiles in one JVM need not agree on it. */
     private final Deadline deadline;
+    /** What one reading is allowed. A statement is read by running the helpers its fixtures apply, so
+     * it is held to the same counted budget a row is: what is read is decided by what the statements
+     * say, not by how fast the host reading them is. */
+    private final EvaluationPolicy policy;
 
     private ExampleStatements(Ast.Module module, Symbols symbols, Map<String, Sig> sigs,
                               MemoryClassLoader loader, Map<String, Ast.FnDef> values,
-                              Deadline deadline) {
+                              Deadline deadline, EvaluationPolicy policy) {
         this.module = module;
         this.symbols = symbols;
         this.sigs = sigs;
         this.loader = loader;
         this.values = values;
         this.deadline = deadline;
+        this.policy = policy;
         this.rendering = new FixtureReader(module, symbols, values, loader);
     }
 
@@ -105,7 +114,8 @@ public final class ExampleStatements {
                                          Map<String, Sig> sigs, Map<String, byte[]> classes,
                                          ClassLoader parent, Map<String, Ast.FnDef> values,
                                          List<String> exampleOrigins,
-                                         List<String> fakeOrigins, Deadline deadline) {
+                                         List<String> fakeOrigins, Deadline deadline,
+                                         EvaluationPolicy policy) {
         if (module.examples().isEmpty()
                 || exampleOrigins.size() != module.examples().size()
                 || fakeOrigins.size() != module.fakes().size()) {
@@ -121,7 +131,7 @@ public final class ExampleStatements {
             return Readings.NONE;
         }
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline);
+                new MemoryClassLoader(classes, parent), values, deadline, policy);
         return v.collectDisagreements(exampleOrigins, fakeOrigins, contested);
     }
 
@@ -155,13 +165,13 @@ public final class ExampleStatements {
                                               Map<String, Sig> sigs, Map<String, byte[]> classes,
                                               ClassLoader parent, Map<String, Ast.FnDef> values,
                                               List<String> fakeOrigins, String sourceId,
-                                              Deadline deadline) {
+                                              Deadline deadline, EvaluationPolicy policy) {
         if (module.fakes().isEmpty()) {
             return List.of();
         }
         boolean placed = fakeOrigins.size() == module.fakes().size();
         ExampleStatements v = new ExampleStatements(module, symbols, sigs,
-                new MemoryClassLoader(classes, parent), values, deadline);
+                new MemoryClassLoader(classes, parent), values, deadline, policy);
         List<Diagnostic> said = new ArrayList<>();
         Set<String> answering = new LinkedHashSet<>();
         for (int i = 0; i < module.fakes().size(); i++) {
@@ -186,7 +196,10 @@ public final class ExampleStatements {
             }, new Deadline.Work.Table(fk.target(), sourceId, fk.pos()));
             switch (read) {
                 case Read.Got(List<Diagnostic> wrong) -> said.addAll(wrong);
-                case Read.TimedOut(long ranOutOf) -> said.add(uncheckedFake(fk, ranOutOf));
+                case Read.Overspent(FailurePhase which, long limit) ->
+                        said.add(unreadableFake(fk, Unread.overspending(which, limit)));
+                case Read.Unanswered(long ranOutOf) ->
+                        said.add(unreadableFake(fk, new Unread.DidNotAnswer(ranOutOf)));
                 // Not about this fake: the runtime is `provided`, so a host without it builds no value
                 // at all and every fake in every module would say the same thing. Where the rows are
                 // evaluated that is recorded once, as an incompleteness.
@@ -212,10 +225,17 @@ public final class ExampleStatements {
          * nothing — an input that will not build, an expectation that cannot be read. */
         record Got<T>(T value) implements Read<T> {}
 
-        /** The reading ran out of its budget, and the budget it ran out of: what a report has to
-         * name is what the wait was actually held to, not what a second reader of the setting
-         * makes of it later. */
-        record TimedOut<T>(long budgetMs) implements Read<T> {}
+        /** The reading spent what the policy allows, and which budget it spent: the statements say
+         * something this compiler will not read all of, and it says so the same way on every host. */
+        record Overspent<T>(FailurePhase which, long limit) implements Read<T> {}
+
+        /** The reading stopped answering, and the wait it was held to: what a report has to name is
+         * what the wait actually was, not what a second reader of the setting makes of it later.
+         *
+         * <p>Not a statement about the model. Whatever did not come back was not counted — code from
+         * a jar this compile did not generate, or the compiler itself — so nothing here can say the
+         * statements are at fault. */
+        record Unanswered<T>(long budgetMs) implements Read<T> {}
 
         /** This host has no runtime to build a value against. */
         record RuntimeAbsent<T>() implements Read<T> {}
@@ -249,16 +269,26 @@ public final class ExampleStatements {
         // it may still be inside `expandedValue`, holding a binding or a half-walked expansion. What a
         // late worker can still write to is that reader, and the statement after it gets another.
         FixtureReader reader = newFixtureReader();
-        switch (deadline.given(what, () -> read.apply(reader))) {
+        switch (deadline.given(what, () -> counted(() -> read.apply(reader)))) {
             case Deadline.Outcome.Finished(T value) -> {
                 return new Read.Got<>(value);
             }
             case Deadline.Outcome.Overran(Runnable abandon) -> {
                 // Nothing here was going to read how far it got, so it is given up on at once.
                 abandon.run();
-                return new Read.TimedOut<>(deadline.budgetMs());
+                return new Read.Unanswered<>(deadline.budgetMs());
             }
             case Deadline.Outcome.Threw(Throwable cause) -> {
+                // The reading spent what the policy allows. That is an answer about the statements —
+                // the same one on every host — and is told apart from a reading that stopped answering,
+                // which is an answer about the host.
+                if (cause instanceof StepLimitExceeded) {
+                    return new Read.Overspent<>(FailurePhase.STEP_LIMIT, policy.stepLimit());
+                }
+                if (cause instanceof DepthLimitExceeded) {
+                    return new Read.Overspent<>(FailurePhase.DEPTH_LIMIT,
+                            policy.recursionDepthLimit());
+                }
                 // One thing ends a reading without the model or this code being at fault: a host with
                 // no runtime to build a value against, since the runtime is `provided` (as it is for
                 // CTFE).
@@ -276,6 +306,23 @@ public final class ExampleStatements {
                 }
                 throw new IllegalStateException(cause);
             }
+        }
+    }
+
+    /**
+     * {@code read}, run with this reading's budget counting on the thread it runs on.
+     *
+     * <p>Started here rather than around the whole reading, because a budget covering every statement
+     * is one a single statement can spend — and spending it would drop the reading of every other one
+     * with it, so a plain contradiction elsewhere in the module would go unsaid because of a fixture
+     * it has nothing to do with. It is the same reason each statement gets its own deadline.
+     */
+    private <T> T counted(java.util.function.Supplier<T> read) {
+        EvaluationContext.begin(policy.stepLimit(), policy.recursionDepthLimit());
+        try {
+            return read.get();
+        } finally {
+            EvaluationContext.end();
         }
     }
 
@@ -338,7 +385,7 @@ public final class ExampleStatements {
             return Readings.NONE;
         }
         List<Disagreement> found = new ArrayList<>();
-        List<TimedOutFake> timedOut = new ArrayList<>();
+        List<UnreadFake> timedOut = new ArrayList<>();
         // The first table for a dependency is the one that answers, as it is for the row that runs
         // against it; a second
         // one written for the same name never stands in for anything, so it states nothing to
@@ -400,7 +447,7 @@ public final class ExampleStatements {
 
     /** One fake against the rows recorded for the behavior it stands in for. */
     private void againstFake(Ast.Fake fk, String origin, Map<String, List<RecordedRow>> recorded,
-                             List<Disagreement> found, List<TimedOutFake> timedOut) {
+                             List<Disagreement> found, List<UnreadFake> timedOut) {
         List<RecordedRow> rows = recorded.get(fk.target());
         Sig sig = sigs.get(fk.target());
         if (rows == null || sig == null) {
@@ -418,9 +465,14 @@ public final class ExampleStatements {
             // evaluated — and a fake nothing depends on has no such row, so an overrun that went
             // unsaid here would leave "the two agree" as the answer to a comparison never made.
             // The caret goes on the target, which is what `fk.pos()` is.
-            case Read.TimedOut(long budgetMs) -> {
-                timedOut.add(new TimedOutFake(fk.target(), new SourceRef(origin, fk.pos()),
-                        fk.target().length(), budgetMs));
+            case Read.Overspent(FailurePhase which, long limit) -> {
+                timedOut.add(new UnreadFake(fk.target(), new SourceRef(origin, fk.pos()),
+                        fk.target().length(), Unread.overspending(which, limit)));
+                return;
+            }
+            case Read.Unanswered(long budgetMs) -> {
+                timedOut.add(new UnreadFake(fk.target(), new SourceRef(origin, fk.pos()),
+                        fk.target().length(), new Unread.DidNotAnswer(budgetMs)));
                 return;
             }
             // Not about this fake. The runtime is `provided`, so a host without it builds no value at
@@ -589,7 +641,58 @@ public final class ExampleStatements {
      *
      * @param at where the fake names the behavior it stands in for, which is what the report marks
      */
-    public record TimedOutFake(String target, SourceRef at, int width, long budgetMs) {}
+    public record UnreadFake(String target, SourceRef at, int width, Unread why) {}
+
+    /**
+     * Why a written statement was not read.
+     *
+     * <p>Two things a report must not say in one voice. Spending the budget is an answer about the
+     * statements, reached the same way on every host; not answering is an answer about the host, and
+     * a model it is said of may be perfectly good. A single "it timed out" made a reader guess which,
+     * and the guess was usually the wrong one for the model.
+     */
+    public sealed interface Unread {
+
+        /** The reading spent the counted budget the policy allows. */
+        record Overspent(FailurePhase which, long limit) implements Unread {}
+
+        /** The reading stopped answering within the wait it was given. */
+        record DidNotAnswer(long budgetMs) implements Unread {}
+
+        /** {@link Overspent} for whichever budget {@code which} names. */
+        static Unread overspending(FailurePhase which, long limit) {
+            return new Overspent(which, limit);
+        }
+
+        /**
+         * Which of the three this is, as the middle of a message key.
+         *
+         * <p>Three messages rather than one with a reason substituted in, because the sentence is
+         * mostly about what to do and that differs: a loop is bounded, a recursion is made
+         * structural, and an evaluation that stopped answering is not the model's fault at all.
+         *
+         * <p>Callers spell out the whole key rather than build it from this, so that every key the
+         * compiler names can be found by looking for it. What this saves them is the choosing.
+         */
+        default boolean isDepth() {
+            return this instanceof Overspent(FailurePhase which, long _)
+                    && which == FailurePhase.DEPTH_LIMIT;
+        }
+
+        default boolean isSteps() {
+            return this instanceof Overspent(FailurePhase which, long _)
+                    && which == FailurePhase.STEP_LIMIT;
+        }
+
+        /** The limit, as written rather than as a number a locale groups: {@code 2,000} is not a
+         * budget anyone set, and the settings that name these take the ungrouped form. */
+        default String limitShown() {
+            return switch (this) {
+                case Overspent(FailurePhase _, long limit) -> Long.toString(limit);
+                case DidNotAnswer(long budgetMs) -> Long.toString(budgetMs);
+            };
+        }
+    }
 
     /**
      * What reading a module's written statements against each other came to.
@@ -599,13 +702,13 @@ public final class ExampleStatements {
      * of the two a compile got can otherwise turn on machine load, between a build and the next
      * keystroke in the editor.
      */
-    public record Readings(List<Disagreement> disagreements, List<TimedOutFake> timedOut) {
+    public record Readings(List<Disagreement> disagreements, List<UnreadFake> unread) {
 
         public static final Readings NONE = new Readings(List.of(), List.of());
 
         public Readings {
             disagreements = List.copyOf(disagreements);
-            timedOut = List.copyOf(timedOut);
+            unread = List.copyOf(unread);
         }
     }
 
@@ -722,11 +825,16 @@ public final class ExampleStatements {
      * The budget is the one this wait was held to rather than the setting read back later, and it is
      * written out rather than passed as a number, which a locale would group into a budget nobody set.
      */
-    private static Diagnostic uncheckedFake(Ast.Fake fk, long budgetMs) {
-        return Diagnostic.of("E1921", "check.fake.unchecked").warning().title("check.example.title")
+    private static Diagnostic unreadableFake(Ast.Fake fk, Unread why) {
+        Diagnostic.Builder said = Diagnostic.of("E1921", why.isDepth() ? "check.fake.unchecked.deep"
+                        : why.isSteps() ? "check.fake.unchecked.steps"
+                        : "check.fake.unchecked.unanswered")
+                .warning().title("check.example.title")
                 .at(fk.pos(), fk.target().length())
-                .args(fk.target(), Long.toString(budgetMs))
-                .hint("check.fake.unchecked.hint", fk.target()).build();
+                .args(fk.target(), why.limitShown());
+        return (why.isDepth() ? said.hint("check.fake.unchecked.deep.hint", fk.target())
+                : why.isSteps() ? said.hint("check.fake.unchecked.steps.hint", fk.target())
+                : said.hint("check.fake.unchecked.unanswered.hint", fk.target())).build();
     }
 
     // --- comparison ---------------------------------------------------------------------------

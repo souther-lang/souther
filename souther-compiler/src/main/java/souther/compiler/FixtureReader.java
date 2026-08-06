@@ -443,7 +443,10 @@ public final class FixtureReader {
             Object encoder = staticCodec(c, "encoder");
             return net.unit8.raoh.encode.Encoder.class.getMethod("encode", Object.class)
                     .invoke(encoder, result);
-        } catch (ReflectiveOperationException | RuntimeException _) {
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
+                throw (RuntimeException) e;   // the evaluation ran out, not this value
+            }
             return null;
         }
     }
@@ -921,7 +924,10 @@ public final class FixtureReader {
         Result<?> result;
         try {
             result = decoder.decode(raw, net.unit8.raoh.Path.ROOT);
-        } catch (RuntimeException _) {
+        } catch (RuntimeException e) {
+            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
+                throw e;   // the evaluation ran out, not this fixture failing to fit
+            }
             // The decoder is generated for the declared type and casts on the way in, so a fixture of
             // another shape — a string where the parameter is a product, a number where it is a
             // string-backed newtype — fails inside it rather than returning an Err. That is the
@@ -1028,6 +1034,9 @@ public final class FixtureReader {
         try {
             return ObservedValues.of(decoded, symbols, neutral, Limits.DEFAULT);
         } catch (RuntimeException | LinkageError e) {
+            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
+                throw (RuntimeException) e;   // the evaluation ran out, not this value being unreadable
+            }
             return new ObservedValue.Unknown(e.getClass().getSimpleName());
         }
     }
@@ -1039,6 +1048,9 @@ public final class FixtureReader {
         } catch (FixtureException e) {
             return java.util.Optional.of(e.getMessage());
         } catch (RuntimeException e) {
+            if (souther.compiler.evaluate.EvaluationContext.overspending(e)) {
+                throw e;   // the evaluation ran out; whether the fixture is refused is still unread
+            }
             return java.util.Optional.of(String.valueOf(e.getMessage()));
         }
     }

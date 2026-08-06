@@ -79,15 +79,13 @@ public final class Front {
      * How long one thing built and run on a worker of its own is given, in milliseconds: an example
      * row evaluated, or one written statement read to compare it against another.
      *
-     * <p>An input rather than a constant because what the budget is for differs by who is asking. A
-     * build wants it long enough that no terminating row is ever cut short, and the default
-     * ({@link souther.compiler.ExampleVerifier#defaultBudgetMs()}) is that. A test that is about what
-     * is said when a row does not come back wants the opposite — the shortest budget that still
-     * decides — and setting it on the compilation is how it says so, rather than making every other
-     * compile in the same JVM wait on its behalf.
+     * <p>Not what decides a row. What a row is held to is counted
+     * ({@link souther.compiler.EvaluationPolicy#stepLimit}), and this is the wait after which an
+     * evaluation that has stopped answering is given up on — which is reported as the compiler
+     * failing to decide, not as the model failing to terminate.
      *
-     * <p>Absent means the default. Nothing but a caller with a reason to differ has to know this
-     * exists.
+     * <p>Absent means {@link souther.compiler.EvaluationPolicy#outerTimeout}. Nothing but a caller
+     * with a reason to differ has to know this exists.
      */
     public record ExampleBudget() implements Input<Long> {}
 
@@ -103,6 +101,20 @@ public final class Front {
      * lets the test state the fact instead.
      */
     public record ExampleDeadline() implements Input<souther.compiler.Deadline> {}
+
+    /**
+     * What this compilation allows one row's evaluation: the steps and the depth that decide it, and
+     * the wait and the stack the machinery running it is given.
+     *
+     * <p>Read once, here, rather than out of a system property wherever a row happens to be evaluated.
+     * A property read at class initialization is fixed for the life of the JVM, which is the wrong
+     * answer in every long-lived one — a build daemon, an editor's language server — where the compile
+     * a setting was written for is not the one that reads it. Held as an input, it belongs to the
+     * compilation, and two of them in one JVM may differ.
+     *
+     * <p>Absent means {@link souther.compiler.EvaluationPolicy#DEFAULT}.
+     */
+    public record Policy() implements Input<souther.compiler.EvaluationPolicy> {}
 
     /** One source, parsed, with the text of each declaration kept for publishing. Every position in
      * what comes back names this source, so a writing that later joins another file's module still

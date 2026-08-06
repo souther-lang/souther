@@ -59,7 +59,8 @@ class ProbedBytecodeTest {
 
     private static Map<String, byte[]> probed(Compilation compilation) {
         Map<String, byte[]> classes = compilation.db()
-                .ask(new Output.Probed(compilation.modules().get(0))).value();
+                .ask(new Output.Evaluated(compilation.modules().get(0),
+                        Output.CoverageMode.ARMS)).value();
         assertNotNull(classes, "the model under test compiles");
         return classes;
     }
@@ -90,7 +91,7 @@ class ProbedBytecodeTest {
     void aRunRecordsTheArmsItTook() {
         Compilation compilation = compiled();
         CoverageSites.Plan plan =
-                Output.Probed.planOf(compilation.db(), compilation.modules().get(0));
+                Output.Evaluated.planOf(compilation.db(), compilation.modules().get(0));
         Behavior submit = new Behavior(probed(compilation));
 
         Set<Integer> negative = submit.armsFor(-1L);
@@ -200,8 +201,10 @@ class ProbedBytecodeTest {
         Compilation compilation = compiled();
         String module = compilation.modules().get(0);
         Map<String, byte[]> plain = compilation.db().ask(new Output.Linked(module)).value();
-        Map<String, byte[]> measured = compilation.db().ask(new Output.Probed(module)).value();
-        Map<String, byte[]> linked = compilation.db().ask(new Output.ProbedLinked(module)).value();
+        Map<String, byte[]> measured = compilation.db()
+                .ask(new Output.Evaluated(module, Output.CoverageMode.ARMS)).value();
+        Map<String, byte[]> linked = compilation.db()
+                .ask(new Output.EvaluationLinked(module, Output.CoverageMode.ARMS)).value();
         assertNotNull(plain);
         assertNotNull(linked);
 

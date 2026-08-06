@@ -143,17 +143,34 @@ public final class Compiler {
         return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, null);
     }
 
+    /** As above, on a policy of its own — the steps and the depth a row is decided by. */
+    static Compilation compiled(String source, String defaultModuleName,
+                                List<Located> warningsOut, Adequacy.Asked measure,
+                                EvaluationPolicy policy) {
+        return compiled(source, defaultModuleName, warningsOut, measure, null, null, policy);
+    }
+
     /** As above, with what a row or a reading is given to finish within said outright — for a test
      *  stating which work does not come back rather than timing it. */
     static Compilation compiled(String source, String defaultModuleName,
                                 List<Located> warningsOut, Adequacy.Asked measure,
                                 java.time.Duration exampleBudget, Deadline deadline) {
+        return compiled(source, defaultModuleName, warningsOut, measure, exampleBudget, deadline, null);
+    }
+
+    private static Compilation compiled(String source, String defaultModuleName,
+                                        List<Located> warningsOut, Adequacy.Asked measure,
+                                        java.time.Duration exampleBudget, Deadline deadline,
+                                        EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSource(source, defaultModuleName);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
         }
         if (deadline != null) {
             compilation.withDeadline(deadline);
+        }
+        if (policy != null) {
+            compilation.withEvaluationPolicy(policy);
         }
         compilation.measure(measure);
         Db db = compilation.db();
@@ -179,7 +196,7 @@ public final class Compiler {
             for (String id : compilation.exampleSourcesOf(module)) {
                 // Only the errors: this key also carries what a clean run wants to say about how well
                 // the rows cover the model, and a warning is not a reason to fail the build.
-                for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
+                for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
                     failures.add(failure.diagnostic());
                 }
             }
@@ -280,36 +297,47 @@ public final class Compiler {
     static Compilation compiledModules(List<String> sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure,
                                        java.time.Duration exampleBudget) {
-        return linked(sources, path, warningsOut, measure, exampleBudget, null);
+        return linked(sources, path, warningsOut, measure, exampleBudget, null, null);
+    }
+
+    /** As above, on a policy of its own — the steps and the depth a row is decided by. */
+    static Compilation compiledModules(List<String> sources, ModulePath path,
+                                       List<Located> warningsOut, Adequacy.Asked measure,
+                                       EvaluationPolicy policy) {
+        return linked(sources, path, warningsOut, measure, null, null, policy);
     }
 
     /** As above, with what a row or a reading is given to finish within said outright. */
     static Compilation compiledModules(List<String> sources, ModulePath path,
                                        List<Located> warningsOut, Adequacy.Asked measure,
                                        java.time.Duration exampleBudget, Deadline deadline) {
-        return linked(sources, path, warningsOut, measure, exampleBudget, deadline);
+        return linked(sources, path, warningsOut, measure, exampleBudget, deadline, null);
     }
 
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure) {
-        return linked(sources, path, warningsOut, measure, null, null);
+        return linked(sources, path, warningsOut, measure, null, null, null);
     }
 
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure,
                                       java.time.Duration exampleBudget) {
-        return linked(sources, path, warningsOut, measure, exampleBudget, null);
+        return linked(sources, path, warningsOut, measure, exampleBudget, null, null);
     }
 
     private static Compilation linked(List<String> sources, ModulePath path,
                                       List<Located> warningsOut, Adequacy.Asked measure,
-                                      java.time.Duration exampleBudget, Deadline deadline) {
+                                      java.time.Duration exampleBudget, Deadline deadline,
+                                      EvaluationPolicy policy) {
         Compilation compilation = Compilation.ofSources(sources, path);
         if (exampleBudget != null) {
             compilation.withExampleBudget(exampleBudget);
         }
         if (deadline != null) {
             compilation.withDeadline(deadline);
+        }
+        if (policy != null) {
+            compilation.withEvaluationPolicy(policy);
         }
         compilation.measure(measure);
         Db db = compilation.db();
@@ -339,7 +367,7 @@ public final class Compiler {
                 continue;
             }
             for (String id : compilation.exampleSourcesOf(module)) {
-                for (Report failure : Report.errorsIn(db.ask(new Output.Examples(module, id)).reports())) {
+                for (Report failure : Report.errorsIn(db.ask(Output.Examples.asked(db, module, id)).reports())) {
                     exampleFailures.add(failure.diagnostic());
                     // a row from an `examples for` file is positioned in that file, not this one
                     exampleSources.add(id);

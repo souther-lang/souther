@@ -490,7 +490,13 @@ final class BodyGen {
             for (int i = call.args().size() - 1; i >= 0; i--) {
                 store(code, params.get(i).slot(), params.get(i).type());
             }
+            countOneStep();
             code.goto_(tcoEntry);
+        }
+
+        /** One counted point — see {@link CodegenContext#countOneStep}. */
+        private void countOneStep() {
+            ctx.countOneStep(code);
         }
 
         /** Pushes each field's value in declaration order: an explicit initializer, else the field
@@ -1377,6 +1383,7 @@ final class BodyGen {
             Type stepped = genExpr(step.body());   // the accumulator the step answers with
             asAccumulator(stepped, accType);
             store(code, acc, accType);
+            countOneStep();
             code.goto_(next);
             code.labelBinding(done);
 

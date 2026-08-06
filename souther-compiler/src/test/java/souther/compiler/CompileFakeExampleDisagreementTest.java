@@ -246,8 +246,8 @@ class CompileFakeExampleDisagreementTest {
     }
 
     /**
-     * A row whose fixture will not finish states nothing, so nothing is held against it. What
-     * happened is said where the row is evaluated (E1910), and the reading adds nothing beside it.
+     * A row whose fixture did not answer states nothing, so nothing is held against it. What
+     * happened is said where the row is evaluated (E1923), and the reading adds nothing beside it.
      *
      * <p>This reaches the reading through {@code builtOrNull}, which drops the row as the fixture
      * failure it is. The other way a reading can end — a helper that overruns the budget on the
@@ -278,7 +278,7 @@ class CompileFakeExampleDisagreementTest {
         for (souther.compiler.diag.Diagnostic d : e.diagnostics()) {
             codes.add(d.code());
         }
-        assertTrue(codesOf(e).contains("E1910"), codesOf(e).toString());
+        assertTrue(codesOf(e).contains("E1923"), codesOf(e).toString());
         assertFalse(codesOf(e).contains("E1919"), codesOf(e).toString());
     }
 
@@ -327,12 +327,12 @@ class CompileFakeExampleDisagreementTest {
         Diagnostic one = said.get(0).diagnostic();
         assertEquals(17, one.pos().line(), "anchored where the fake names the behavior");
         assertEquals(6, one.pos().column());
-        // What could not be done, then what stopped: the table is what did not finish, and the
-        // comparison is what that cost. The number is read off the budget this compile was given
-        // rather than written in, so the line still holds if that budget changes — and it is read as
+        // What could not be done, then what stopped: the table is what did not answer, and the
+        // comparison is what that cost. The number is read off the wait this compile was given
+        // rather than written in, so the line still holds if that wait changes — and it is read as
         // it is set and not as a locale would group it, which is what the number in this line is for.
         assertTrue(rendered(one).contains("Could not compare this fake with the rows recorded for"
-                        + " `find` — building the table did not finish within "
+                        + " `find` — building the table did not answer within "
                         + DoesNotComeBack.BUDGET.toMillis() + "ms."),
                 rendered(one));
     }
@@ -349,7 +349,7 @@ class CompileFakeExampleDisagreementTest {
 
     /**
      * A row that runs the table and the reading of the table are two attempts, and each says what it
-     * found: the row did not finish (E1910, at the row), and what the fake and the recorded rows state
+     * found: the row did not answer (E1923, at the row), and what the fake and the recorded rows state
      * was never compared (E1920, at the fake). Neither stands for the other — a table can overrun the
      * reading with no row that uses it, and a row can overrun for what its own behavior does.
      */
@@ -387,7 +387,7 @@ class CompileFakeExampleDisagreementTest {
                             | (N(spin(1))) -> Missing { why = "none" }
                         """), warnings, DoesNotComeBack.everyTableOf("find").or(DoesNotComeBack.everyRowOf("use"))));
 
-        assertTrue(codesOf(e).contains("E1910"), codesOf(e).toString());
+        assertTrue(codesOf(e).contains("E1923"), codesOf(e).toString());
         assertEquals(1, only("E1920", warnings).size(), warnings.toString());
     }
 
@@ -430,7 +430,7 @@ class CompileFakeExampleDisagreementTest {
         });
 
         assertEquals(List.of(), withoutRuntime.disagreements());
-        assertEquals(List.of(), withoutRuntime.timedOut());
+        assertEquals(List.of(), withoutRuntime.unread());
     }
 
     /** {@code disagreements} as the query asks it, but against a class loader the test chooses. */
@@ -443,12 +443,14 @@ class CompileFakeExampleDisagreementTest {
                 c.db().ask(new souther.compiler.query.Shapes.Prepared(name)).value(),
                 c.db().ask(new souther.compiler.query.Shapes.Scope(name)).value(),
                 c.db().ask(new souther.compiler.query.Bodies.Signatures(name)).value(),
-                c.db().ask(new souther.compiler.query.Output.Linked(name)).value(),
+                c.db().ask(new souther.compiler.query.Output.EvaluationLinked(
+                        name, souther.compiler.query.Output.CoverageMode.NONE)).value(),
                 parent,
                 c.db().ask(new souther.compiler.query.Bodies.Helpers(name)).value(),
                 c.db().ask(new souther.compiler.query.Front.ExampleOrigins(name)).value(),
                 c.db().ask(new souther.compiler.query.Front.FakeOrigins(name)).value(),
-                Deadline.ofMillis(ExampleVerifier.defaultBudgetMs()));
+                Deadline.ofMillis(EvaluationPolicy.DEFAULT.outerTimeout().toMillis()),
+                EvaluationPolicy.DEFAULT);
     }
 
     /** The warnings of a single-source compile that holds. */
@@ -527,7 +529,7 @@ class CompileFakeExampleDisagreementTest {
      */
     @Test
     void aRowThatWillNotFinishDoesNotTakeTheRestOfTheModuleWithIt() {
-        assertEquals(List.of("E1910", "E1919"), allCodesOf("""
+        assertEquals(List.of("E1923", "E1919"), allCodesOf("""
                 module example.b2
 
                 data N = Int

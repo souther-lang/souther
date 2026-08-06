@@ -607,7 +607,8 @@ class CompileExampleGenerateTest {
         for (String name : compilation.modules()) {
             for (String sourceId : compilation.exampleSourcesOf(name)) {
                 souther.compiler.query.Output.Examples.Of observed = compilation.db()
-                        .ask(new souther.compiler.query.Output.Examples(name, sourceId)).value();
+                        .ask(souther.compiler.query.Output.Examples.asked(
+                                compilation.db(), name, sourceId)).value();
                 if (observed != null) {
                     rows.addAll(observed.rows());
                 }

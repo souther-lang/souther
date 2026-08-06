@@ -121,6 +121,16 @@ final class Descriptors {
     /** {@code Probe.hit(int)}: records one arm and leaves the stack as it was. */
     static final MethodTypeDesc MTD_Probe_hit =
             MethodTypeDesc.of(ConstantDescs.CD_void, ConstantDescs.CD_int);
+    /**
+     * What an evaluation is allowed, called by classes generated for evaluating and by nothing that
+     * ships. Reached the way {@link #CD_Probe} is, and for the same reason.
+     */
+    static final ClassDesc CD_EvaluationContext =
+            ClassDesc.of("souther.compiler.evaluate.EvaluationContext");
+    /** {@code EvaluationContext.tick()}, {@code enter()} and {@code leave()}: each counts and leaves
+     * the stack as it was, throwing where the budget is gone. */
+    static final MethodTypeDesc MTD_EvaluationContext_count =
+            MethodTypeDesc.of(ConstantDescs.CD_void);
     /** {@code UnreachableReached.reached(String)}: aborts, typed as answering the position's value. */
     static final MethodTypeDesc MTD_reached = MethodTypeDesc.of(CD_Object, CD_String);
     /** The failure side of {@code __construct}: which clause of which type did not hold. */

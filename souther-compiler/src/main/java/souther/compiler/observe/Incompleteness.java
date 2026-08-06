@@ -46,8 +46,9 @@ public record Incompleteness(Code code, Scope scope, String subject, Optional<So
         VALUE_UNREADABLE,
         /** A value was larger than the limits allow, so only its shape was kept. */
         VALUE_TRUNCATED,
-        /** A row did not finish within its time budget, so what it would have covered is unknown. */
-        ROW_TIMED_OUT,
+        /** A row could not be decided — it spent its budget, or the evaluation did not answer — so
+         * what it would have covered is unknown. */
+        ROW_UNDECIDED,
         /** The runtime is not on this host's classpath, so no row could run. */
         RUNTIME_ABSENT,
         /** A branch probe could not be tied back to the node it belongs to. */

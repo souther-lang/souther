@@ -81,8 +81,23 @@ public interface Deadline {
         record Threw<T>(Throwable cause) implements Outcome<T> {}
     }
 
-    /** The deadline a build runs on: a worker of its own, and {@code budgetMs} on the clock. */
+    /** The deadline a build runs on: a worker of its own on the default stack, and {@code budgetMs}
+     *  on the clock. */
     static Deadline ofMillis(long budgetMs) {
+        return ofMillis(budgetMs, 0L);
+    }
+
+    /**
+     * The same, on a worker given {@code stackBytes} of stack.
+     *
+     * <p>Said rather than inherited, so how deep a recursion gets before the stack runs out is this
+     * compile's answer and not whatever {@code -Xss} the surrounding JVM was started with. The depth a
+     * recursion is actually held to is counted ({@link EvaluationPolicy#recursionDepthLimit}); this is
+     * what makes room for that count to be reached first.
+     *
+     * <p>{@code 0} asks for the platform default, which is what the JVM does with the argument.
+     */
+    static Deadline ofMillis(long budgetMs, long stackBytes) {
         return new Deadline() {
 
             @Override
@@ -96,7 +111,7 @@ public interface Deadline {
                 // A daemon, because work that overran is asked to stop and cannot be made to: a
                 // fixture's helper reaches no interrupt point, so the thread may outlive the answer
                 // about it and must not outlive the JVM.
-                Thread worker = new Thread(task, "souther-reading");
+                Thread worker = new Thread(null, task, "souther-reading", stackBytes);
                 worker.setDaemon(true);
                 worker.start();
                 try {

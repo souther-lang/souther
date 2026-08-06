@@ -55,6 +55,10 @@ import java.util.Set;
  *                       text does not say
  * @param inputs         each input as the compiler owns it, in order
  * @param hits           the branch sites this row passed through; empty until branches are measured
+ * @param stepsSpent     how many counted points the evaluation passed. What the row cost, in the unit
+ *                       it is actually held to — so a build can see how much of the budget its rows
+ *                       use before one of them reaches it, which is the only way to set the budget
+ *                       from evidence rather than by guessing. Zero for a row that did not run.
  */
 public record RowOutcome(SourceRef at,
                          String target,
@@ -66,7 +70,8 @@ public record RowOutcome(SourceRef at,
                          TypeName resultArm,
                          List<TypeName> inputCases,
                          List<ObservedValue> inputs,
-                         Set<Integer> hits) {
+                         Set<Integer> hits,
+                         long stepsSpent) {
 
     public RowOutcome {
         // A list that keeps a null in it cannot be List.copyOf'd, and an input whose case the text does

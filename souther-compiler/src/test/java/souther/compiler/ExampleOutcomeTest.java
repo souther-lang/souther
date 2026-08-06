@@ -59,7 +59,8 @@ class ExampleOutcomeTest {
         Compilation compilation = Compilation.ofSource(source, "Main");
         compilation.answerEverything();
         String module = compilation.modules().get(0);
-        Output.Examples key = new Output.Examples(module, compilation.sourceIds().get(0));
+        Output.Examples key = Output.Examples.asked(compilation.db(), module,
+                compilation.sourceIds().get(0));
         return new Evaluated(compilation.db().ask(key).value(), compilation.db().ask(key).reports());
     }
 
@@ -174,14 +175,14 @@ class ExampleOutcomeTest {
         compilation.answerEverything();
 
         Output.Examples.Of attached = compilation.db()
-                .ask(new Output.Examples("example.trip", "trip-examples.sou")).value();
+                .ask(new Output.Examples("example.trip", "trip-examples.sou", Output.CoverageMode.NONE)).value();
         assertNotNull(attached);
         assertEquals(1, attached.rows().size());
         assertEquals("trip-examples.sou", attached.rows().get(0).at().sourceId());
         assertEquals(Disposition.HELD, attached.rows().get(0).disposition());
 
         Output.Examples.Of own = compilation.db()
-                .ask(new Output.Examples("example.trip", "trip.sou")).value();
+                .ask(new Output.Examples("example.trip", "trip.sou", Output.CoverageMode.NONE)).value();
         assertNotNull(own);
         assertEquals(List.of(), own.rows(), "the module's own source wrote no rows");
     }

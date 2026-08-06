@@ -95,6 +95,43 @@ final class CodegenContext {
     }
 
     /**
+     * Whether this generation counts what the code goes through.
+     *
+     * <p>A separate question from {@link #measuring}, and it has to stay separate. Coverage is asked
+     * for by a measurement and is about one module's arms; a budget is what every evaluation is held
+     * to and covers every module a row reaches. A generation may do either, both, or neither, and the
+     * two are planned differently — an arm is a numbered node of a body the plan was made from, while
+     * a counted point is any loop the emitter emits, including ones in a decoder that no body has a
+     * node for.
+     */
+    private boolean counting;
+
+    void setCounting(boolean counting) {
+        this.counting = counting;
+    }
+
+    boolean counting() {
+        return counting;
+    }
+
+    /**
+     * One counted point, where this generation counts them.
+     *
+     * <p>Every loop the emitter emits goes through here, so a loop added later cannot be a loop that
+     * nothing counts. Put on the branch that goes back rather than at the loop's entry: what is being
+     * counted is going round again, and a loop that runs no iterations should cost nothing.
+     *
+     * <p>Emits nothing at all for a generation whose classes ship, so a jar carries no reference to
+     * the compiler.
+     */
+    void countOneStep(java.lang.classfile.CodeBuilder code) {
+        if (counting) {
+            code.invokestatic(Descriptors.CD_EvaluationContext, "tick",
+                    Descriptors.MTD_EvaluationContext_count);
+        }
+    }
+
+    /**
      * The arm numbers of one node, in the order the emitter emits them.
      *
      * <p>Throws where a measuring generation meets a node the plan does not know. Only bodies the plan

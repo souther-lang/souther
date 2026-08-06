@@ -51,7 +51,8 @@ class CompileInjectedExamplePendingTest {
         Compilation compilation = Compilation.ofSource(model, "Main");
         compilation.answerEverything();
         return compilation.db()
-                .ask(new Output.Examples(compilation.modules().get(0), compilation.sourceIds().get(0)))
+                .ask(Output.Examples.asked(compilation.db(), compilation.modules().get(0),
+                        compilation.sourceIds().get(0)))
                 .value().rows();
     }
 
