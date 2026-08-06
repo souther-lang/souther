@@ -211,10 +211,9 @@ public final class JapiCommand {
                              PrintStream err, ClassLoader bundled) {
         ClassModel cm = ClassFile.of().parse(found.bytes());
         String simpleName = binaryName.substring(binaryName.lastIndexOf('.') + 1);
-        // How many members share a name and a parameter count decides whether a doc comment filed
-        // under that pair can belong to one of them. It is counted from the class file, because an
-        // overload that carries no documentation of its own is invisible in the source reader and
-        // would otherwise take its namesake's.
+        // A constructor is named for its own type. `Outer$Inner` is how the class file spells the
+        // type, and `Inner` is what the source calls the constructor.
+        String constructorName = simpleName.substring(simpleName.lastIndexOf('$') + 1);
         String source = sourceOf(found.entry(), binaryName);
         SourceDoc doc = source == null ? SourceDoc.NONE : SourceDoc.of(source, binaryName);
         if (!cm.flags().flags().contains(AccessFlag.PUBLIC)) {
@@ -247,14 +246,14 @@ public final class JapiCommand {
             if (methodName.equals("<clinit>")) {
                 continue;
             }
-            String shown = methodName.equals("<init>") ? simpleName : methodName;
+            String shown = methodName.equals("<init>") ? constructorName : methodName;
             members.add(shown);
             if (member != null && !member.equals(shown)) {
                 continue;
             }
             body.append("\n");
             doc.ofMethod(shown, m.methodTypeSymbol()).ifPresent(d -> body.append(indent(d)).append("\n"));
-            body.append("  ").append(methodLine(m, simpleName, doc)).append("\n");
+            body.append("  ").append(methodLine(m, constructorName, doc)).append("\n");
         }
         if (member != null && body.isEmpty()) {
             err.println("`" + binaryName + "` has no public member `" + member + "`");
@@ -360,7 +359,7 @@ public final class JapiCommand {
         return sb.toString();
     }
 
-    private static List<String> paramNames(MethodModel m, int count, List<String> fromDoc) {
+    private static List<String> paramNames(MethodModel m, int count, List<String> declared) {
         List<MethodParameterInfo> given = m.findAttribute(Attributes.methodParameters())
                 .map(a -> a.parameters()).orElse(List.of());
         List<String> names = new ArrayList<>();
@@ -372,10 +371,10 @@ public final class JapiCommand {
                     ? given.get(fromEnd).name().map(n -> n.stringValue()).orElse(null)
                     : null;
             // Most libraries are not compiled with -parameters, and `arg0, arg1, arg2` says nothing
-            // about which String is the code and which the message. The javadoc `@param` order is
-            // the declaration order, so it names them where the class file does not.
-            if (name == null && i < fromDoc.size()) {
-                name = fromDoc.get(i);
+            // about which String is the code and which the message. The source declared them in an
+            // order, and that order is theirs.
+            if (name == null && declared.size() == count) {
+                name = declared.get(i);
             }
             names.add(name == null ? "arg" + i : name);
         }

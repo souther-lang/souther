@@ -88,18 +88,147 @@ class JavadocIsOnlyPrintedWhereItProvablyBelongsTest {
 
         String api = api("acme.Reader", jar);
 
-        assertTrue(api.contains("read(byte[] arg0)"),
-                "the undocumented overload names nothing it cannot know:\n" + api);
+        assertTrue(api.contains("read(byte[] bytes)"),
+                "the undocumented overload still names its parameter, because its declaration"
+                        + " does:\n" + api);
         assertTrue(api.contains("read(String text)"),
                 "while the documented one keeps what was written for it:\n" + api);
         int documented = api.indexOf("Reads from text.");
         assertTrue(documented >= 0 && documented < api.indexOf("read(String text)")
-                        && api.indexOf("Reads from text.", api.indexOf("read(byte[] arg0)")) < 0,
+                        && api.indexOf("Reads from text.", api.indexOf("read(byte[] bytes)")) < 0,
                 "and the sentence sits only above the overload it was written for:\n" + api);
     }
 
     @Test
-    void aNestedTypeTakesNothingFromTheFileItIsDeclaredIn() throws Exception {
+    void twoTypesOfTheSameSimpleNameAreNotTheSameParameter() throws Exception {
+        Path dir = Files.createTempDirectory("same-simple-name");
+        Path a = dir.resolve("a/Foo.java");
+        Path b = dir.resolve("b/Foo.java");
+        Path use = dir.resolve("acme/Use.java");
+        Files.createDirectories(a.getParent());
+        Files.createDirectories(b.getParent());
+        Files.createDirectories(use.getParent());
+        Files.writeString(a, "package a;\npublic class Foo {}\n");
+        Files.writeString(b, "package b;\npublic class Foo {}\n");
+        Files.writeString(use, """
+                package acme;
+
+                /** Uses things. */
+                public class Use {
+
+                    /** Uses the one from a. */
+                    public void use(a.Foo value) {
+                    }
+
+                    /** Uses the one from b. */
+                    public void use(b.Foo value) {
+                    }
+                }
+                """);
+        Path jar = jarOf(dir, "use-1.0", a.toString(), b.toString(), use.toString());
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(dir.resolve("use-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Use.java"));
+            out.write(Files.readAllBytes(use));
+        }
+
+        String api = api("acme.Use", jar);
+
+        int fromA = api.indexOf("use(a.Foo value)");
+        int fromB = api.indexOf("use(b.Foo value)");
+        assertTrue(fromA >= 0 && fromB >= 0, api);
+        int docA = api.indexOf("Uses the one from a.");
+        int docB = api.indexOf("Uses the one from b.");
+        assertTrue(docA >= 0 && docA < fromA && fromA < docB && docB < fromB,
+                "each overload keeps the sentence written for its own parameter type:\n" + api);
+    }
+
+    @Test
+    void parameterNamesComeFromTheDeclarationRatherThanTheOrderTheTagsWereWrittenIn() throws Exception {
+        Path dir = Files.createTempDirectory("tag-order");
+        Path src = dir.resolve("acme/Join.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package acme;
+
+                /** Joins. */
+                public class Join {
+
+                    /**
+                     * Joins two values.
+                     *
+                     * @param right the right value
+                     * @param left the left value
+                     */
+                    public String join(String left, String right) {
+                        return left + right;
+                    }
+
+                    /**
+                     * Joins three, saying nothing about most of them.
+                     *
+                     * @param third the third
+                     */
+                    public String join(String first, String second, String third) {
+                        return first + second + third;
+                    }
+                }
+                """);
+        Path jar = jarOf(dir, "join-1.0", src.toString());
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(dir.resolve("join-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Join.java"));
+            out.write(Files.readAllBytes(src));
+        }
+
+        String api = api("acme.Join", jar);
+
+        assertTrue(api.contains("join(String left, String right)"),
+                "a tag names a parameter, it does not take a position:\n" + api);
+        assertTrue(api.contains("join(String first, String second, String third)"),
+                "and a parameter no tag mentions is still named as it was declared:\n" + api);
+    }
+
+    @Test
+    void aNestedTypesConstructorIsFoundUnderTheNameItsSourceGivesIt() throws Exception {
+        Path dir = Files.createTempDirectory("nested-ctor");
+        Path src = dir.resolve("acme/Holder.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package acme;
+
+                /** Holds. */
+                public class Holder {
+
+                    /** What is held. */
+                    public static class Held {
+
+                        /**
+                         * Holds a thing.
+                         *
+                         * @param what the thing held
+                         */
+                        public Held(String what) {
+                        }
+                    }
+                }
+                """);
+        Path jar = jarOf(dir, "holder-1.0", src.toString());
+        try (JarOutputStream out = new JarOutputStream(
+                Files.newOutputStream(dir.resolve("holder-1.0-sources.jar")))) {
+            out.putNextEntry(new JarEntry("acme/Holder.java"));
+            out.write(Files.readAllBytes(src));
+        }
+
+        String api = api("acme.Holder$Held", jar);
+
+        assertTrue(api.contains("Holds a thing."), "the constructor's own doc is found:\n" + api);
+        assertTrue(api.contains("Held(String what)"),
+                "and it is named as its source declared it:\n" + api);
+    }
+
+    @Test
+    void aNestedTypeTakesItsOwnAndNoneOfTheTypeItIsDeclaredIn() throws Exception {
         Path dir = Files.createTempDirectory("nested");
         Path src = dir.resolve("acme/Outer.java");
         Files.createDirectories(src.getParent());
@@ -131,11 +260,15 @@ class JavadocIsOnlyPrintedWhereItProvablyBelongsTest {
 
         String api = api("acme.Outer$Inner", jar);
 
+        assertTrue(api.contains("Documentation for Inner."),
+                "the nested type's own documentation is its own:\n" + api);
         assertTrue(!api.contains("Documentation for Outer."),
                 "the enclosing type's own documentation is not this type's:\n" + api);
         assertTrue(!api.contains("Outer's own value."),
                 "nor is a method of the enclosing type's documentation this method's:\n" + api);
-        assertTrue(api.contains("value(String arg0)"), api);
+        assertTrue(api.contains("value(String a)"),
+                "and a method the nested type declares names its parameter as the nested type"
+                        + " declared it, not as the enclosing type declared its own:\n" + api);
     }
 
     @Test
