@@ -1,0 +1,107 @@
+package souther.compiler.doc;
+
+import org.junit.jupiter.api.Test;
+
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * `souther api` answers the standard library's published surface — each name with the signature
+ * the checker itself resolved, so nothing here can drift from what a call is checked against.
+ */
+class TheApiCommandAnswersTheStdlibSurfaceTest {
+
+    private record Answer(int code, String out, String err) {}
+
+    private Answer run(String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code = ApiCommand.run(args,
+                new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(err, true, StandardCharsets.UTF_8));
+        return new Answer(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void withNoArgumentEveryPublishedNameIsListedWithItsSignature() {
+        Answer answer = run();
+
+        assertEquals(0, answer.code());
+        List<String> lines = answer.out().lines().toList();
+        assertTrue(lines.stream().anyMatch(l -> l.startsWith("List.map(")), "List.map is listed:\n" + answer.out());
+        assertTrue(lines.stream().anyMatch(l -> l.startsWith("String.length(")), "String.length is listed");
+    }
+
+    @Test
+    void aModuleQualifierNarrowsTheListToThatModule() {
+        Answer answer = run("Option");
+
+        assertEquals(0, answer.code());
+        assertTrue(answer.out().lines().allMatch(l -> l.startsWith("Option.")), answer.out());
+        assertTrue(answer.out().lines().anyMatch(l -> l.equals("Option.withDefault(default: 'a, opt: 'a?) : 'a")),
+                "the parameter names travel with the signature, and the optional is rendered in surface syntax:\n"
+                        + answer.out());
+    }
+
+    @Test
+    void aNameCallableOnlyThroughItsSugarIsStillPartOfTheSurface() {
+        Answer answer = run("List");
+
+        assertTrue(answer.out().lines().anyMatch(l -> l.startsWith("List.fold(")),
+                "`List.fold` is what the specification tells a reader to call, and it is listed"
+                        + " even though it is written as sugar over a private helper:\n" + answer.out());
+        assertTrue(answer.out().lines().noneMatch(l -> l.startsWith("List.foldFrom(")),
+                "the private helper it rewrites to stays out of the surface:\n" + answer.out());
+    }
+
+    @Test
+    void aSugaredNameCarriesOnlyTheArgumentsItsCallerWrites() {
+        Answer answer = run("List.fold");
+
+        assertEquals(0, answer.code(), answer.err());
+        assertEquals("List.fold(step: ('acc, 'a) -> 'acc, seed: 'acc, xs: List<'a>) : 'acc",
+                answer.out().strip(),
+                "the index the rewrite supplies is not an argument the caller passes");
+    }
+
+    @Test
+    void searchFindsAFunctionWithoutKnowingItsModule() {
+        Answer answer = run("--search", "fold");
+
+        assertEquals(0, answer.code());
+        assertTrue(answer.out().lines().anyMatch(l -> l.startsWith("List.fold(")), answer.out());
+        assertTrue(answer.out().lines().allMatch(l -> l.toLowerCase().contains("fold")),
+                "every line answers the term:\n" + answer.out());
+    }
+
+    @Test
+    void aPrivateHelperIsNotPartOfTheAnswer() {
+        Answer answer = run();
+
+        assertFalse(answer.out().lines().anyMatch(l -> l.contains("private")), "nothing is listed as private");
+    }
+
+    @Test
+    void sourceOfAModulePrintsItsSouSourceWithItsComments() {
+        Answer answer = run("--source", "Option");
+
+        assertEquals(0, answer.code());
+        assertTrue(answer.out().contains("module souther.option"));
+        assertTrue(answer.out().contains("//"), "the module's own comments come along");
+    }
+
+    @Test
+    void anUnknownQualifierSaysSoAndNamesTheModules() {
+        Answer answer = run("Maybe");
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().contains("no stdlib module `Maybe`"), answer.err());
+        assertTrue(answer.err().contains("Option"), "the real module names are offered: " + answer.err());
+    }
+}

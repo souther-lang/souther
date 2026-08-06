@@ -1,0 +1,125 @@
+package souther.compiler.doc;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Documentation a dependency ships inside its own jar, under {@code META-INF/souther-docs/}.
+ *
+ * <p>Each contributing jar carries a {@code sets} registry naming its doc sets, and per set an
+ * {@code index} listing the topic files. The docs therefore version with the jar they describe:
+ * bundling a different raoh bundles that raoh's docs, and no copy is maintained anywhere else.
+ */
+public final class LibraryDocs {
+
+    private static final String ROOT = "META-INF/souther-docs/";
+
+    /** One shipped document: {@code set/topic} as it is asked for, the title of its first
+     *  markdown heading, and where its text is. */
+    public record Topic(String name, String title, String resource) {}
+
+    private final ClassLoader loader;
+    private final Map<String, Topic> byName;
+
+    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName) {
+        this.loader = loader;
+        this.byName = byName;
+    }
+
+    /** The doc sets reachable through {@code loader} — for the CLI, everything bundled with it. */
+    public static LibraryDocs on(ClassLoader loader) {
+        Map<String, Topic> byName = new LinkedHashMap<>();
+        try {
+            Enumeration<URL> registries = loader.getResources(ROOT + "sets");
+            while (registries.hasMoreElements()) {
+                for (String set : lines(registries.nextElement())) {
+                    String index = ROOT + set + "/index";
+                    URL indexUrl = loader.getResource(index);
+                    if (indexUrl == null) {
+                        continue;
+                    }
+                    for (String file : lines(indexUrl)) {
+                        String topic = set + "/" + file.replaceFirst("\\.md$", "");
+                        String resource = ROOT + set + "/" + file;
+                        byName.put(topic, new Topic(topic, titleOf(loader, resource, file), resource));
+                    }
+                }
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return new LibraryDocs(loader, byName);
+    }
+
+    /** Every shipped topic, in registry order. */
+    public List<Topic> topics() {
+        return List.copyOf(byName.values());
+    }
+
+    /** The text of {@code set/topic}, or null when nothing ships under that name. */
+    public String read(String name) {
+        Topic topic = byName.get(name);
+        return topic == null ? null : text(loader, topic.resource());
+    }
+
+    /** Every topic whose title or text contains {@code term}, case-insensitively. */
+    public List<Topic> search(String term) {
+        String needle = term.toLowerCase();
+        List<Topic> hits = new ArrayList<>();
+        for (Topic topic : byName.values()) {
+            if (topic.title().toLowerCase().contains(needle)
+                    || text(loader, topic.resource()).toLowerCase().contains(needle)) {
+                hits.add(topic);
+            }
+        }
+        return hits;
+    }
+
+    /** The line of {@code topic} that says {@code term}, cut to a readable width. */
+    public String snippet(Topic topic, String term) {
+        String needle = term.toLowerCase();
+        String line = text(loader, topic.resource()).lines()
+                .map(String::strip)
+                .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("|"))
+                .filter(l -> l.toLowerCase().contains(needle))
+                .findFirst()
+                .orElse("");
+        return line.length() <= 120 ? line : line.substring(0, 119) + "…";
+    }
+
+    private static String titleOf(ClassLoader loader, String resource, String fallback) {
+        return text(loader, resource).lines()
+                .filter(l -> l.startsWith("# "))
+                .map(l -> l.substring(2).strip())
+                .findFirst()
+                .orElse(fallback);
+    }
+
+    private static String text(ClassLoader loader, String resource) {
+        try (InputStream in = loader.getResourceAsStream(resource)) {
+            if (in == null) {
+                return "";
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private static List<String> lines(URL url) throws IOException {
+        try (InputStream in = url.openStream()) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).lines()
+                    .map(String::strip)
+                    .filter(l -> !l.isEmpty())
+                    .toList();
+        }
+    }
+}

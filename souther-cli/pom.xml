@@ -34,6 +34,42 @@
         <!-- The uber jar is `souther.jar` and the prepended launcher is `souther`. -->
         <finalName>souther</finalName>
         <plugins>
+            <!-- `souther japi` reads javadoc out of a library's sources. The shaded jar has its
+                 dependencies inside it and nothing beside it, so without the sources bundled here
+                 the javadoc it promises would never appear on the ordinary invocation. Only the
+                 boundary libraries a Souther author actually meets are unpacked; the rest would
+                 add tens of megabytes for classes nobody asks `japi` about. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>bundle-boundary-sources</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>net.unit8.raoh</groupId>
+                                    <artifactId>raoh</artifactId>
+                                    <version>${raoh.version}</version>
+                                    <classifier>sources</classifier>
+                                </artifactItem>
+                                <artifactItem>
+                                    <groupId>net.unit8.raoh</groupId>
+                                    <artifactId>raoh-json</artifactId>
+                                    <version>${raoh.version}</version>
+                                    <classifier>sources</classifier>
+                                </artifactItem>
+                            </artifactItems>
+                            <includes>**/*.java</includes>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/souther-sources</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Merge every dependency into one jar with Main-Class set. -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -69,6 +105,12 @@
                                     </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                                <!-- Every jar that ships documentation registers its set in a file
+                                     at the same path. Without appending, one jar's registry would
+                                     replace the other's and `souther doc` would lose a whole set. -->
+                                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
+                                    <resource>META-INF/souther-docs/sets</resource>
+                                </transformer>
                             </transformers>
                         </configuration>
                     </execution>
