@@ -327,11 +327,37 @@ final class DischargeRules {
         return Bound.CARRIERS.keySet();
     }
 
-    /** Which shapes of construction carry the predicate {@code operation} states, for the test that
-     * holds each rule to a program on both sides of what it names. */
-    static Set<Shape> carriedThrough(String operation) {
-        Carried carried = Bound.CARRIERS.get(op(operation));
-        return carried == null ? Set.of() : carried.through();
+    /**
+     * The kinds of container the library builds, each with the shape the building has — {@code
+     * "List.SUBSET"}, {@code "Map.MAPS"}.
+     *
+     * <p>For the test that holds a carrying rule to every shape. A shape no construction of a kind
+     * has is a cell no program can be written for, and which cells those are is the library's to say:
+     * a set holds its elements in no order, so nothing permutes one, and that stops being true the day
+     * an operation says otherwise. Read off the building table, whose every row already answers to a
+     * program that fires it.
+     */
+    static Set<String> constructionKinds() {
+        Set<String> kinds = new LinkedHashSet<>();
+        Bound.BUILDINGS.forEach((operation, built) -> {
+            Prelude.PreludeEntry entry = Prelude.entry(operation.name());
+            String kind = entry == null ? null : kindOf(entry.signature().result());
+            if (kind != null) {
+                kinds.add(kind + "." + built.shape());
+            }
+        });
+        return kinds;
+    }
+
+    /** What a container type is a container of, as the namespace its operations are written under. */
+    private static String kindOf(Type built) {
+        if (built instanceof Type.ListOf) {
+            return "List";
+        }
+        if (built instanceof Type.SetOf) {
+            return "Set";
+        }
+        return built instanceof Type.MapOf ? "Map" : null;
     }
 
     static Set<ValueName> emptinessChecks() {
@@ -410,7 +436,7 @@ final class DischargeRules {
             List<Type> params = entry.signature().params();
             Reads at = reads.apply(rule);
             int position = at.positionIn(operation);
-            if (position >= params.size()) {
+            if (position < 0 || position >= params.size()) {
                 throw new IllegalStateException(operation.name() + " takes " + params.size()
                         + " argument(s), and the rule about " + what + " reads argument "
                         + (position + 1));

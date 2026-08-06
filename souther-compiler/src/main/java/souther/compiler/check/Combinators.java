@@ -83,19 +83,27 @@ final class Combinators {
      * The same, off the tree an author wrote — where a closure written as anything but a block is one
      * this says nothing about, the tree not yet having been read for what names denote.
      *
-     * <p>Nor is a call written with fewer arguments than the operation takes. That is not this table
-     * disagreeing with a signature — it is what the surface tree still holds: the walk that reads it
-     * runs beside the checks that report an arity, not after them, so a call already known to be
-     * wrong reaches here. Nothing about the arguments it does not have is true, so nothing is said,
-     * and the arity is reported by the check whose question it is. The tree a representation keeps
-     * standing needs no such answer: a {@code PreservedCall} is built only where the signature it was
-     * applied to accepted the arguments, so one that exists has them.
+     * <p>Nor is a call the operation would not have accepted — written with fewer arguments than it
+     * takes, or handed a block with fewer parameters than it applies one to. That is not this table
+     * disagreeing with a signature: it is what the surface tree still holds, the walk that reads it
+     * running beside the checks that report an arity rather than after them, so a call already known
+     * to be wrong reaches here. A sugar is how both arrive — it has no declaration of its own, so
+     * what is said about the arity of {@code List.fold} is said against the call it becomes, and by
+     * then this has already read it. Nothing about arguments or parameters a call does not have is
+     * true, so nothing is said, and the arity is reported by the check whose question it is.
+     *
+     * <p>The tree a representation keeps standing needs no such answer: a {@code PreservedCall} is
+     * built only where the signature it was applied to accepted the arguments and typed the block it
+     * was handed, so one that exists has both.
      */
     static Written handedTo(Ast.Apply call) {
         Combinator rule = of(call.denotes());
         if (rule == null || rule.closureArg() >= call.args().size()
                 || rule.containerArg() >= call.args().size()
                 || !(call.args().get(rule.closureArg()) instanceof Ast.Block step)) {
+            return null;
+        }
+        if (rule.elementParam() >= step.params().size()) {
             return null;
         }
         return new Written(step, step.params().get(rule.elementParam()),

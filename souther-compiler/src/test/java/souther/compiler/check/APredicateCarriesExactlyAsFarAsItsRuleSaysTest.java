@@ -173,22 +173,31 @@ class APredicateCarriesExactlyAsFarAsItsRuleSaysTest {
         assertEquals(Map.of(), wrong);
     }
 
-    /** And a shape said to have no construction has none, so nothing above went untested by being
-     * quietly skipped. */
+    /**
+     * And a shape said to have no construction is one <em>the library</em> does not build, not merely
+     * one this file has no program for. Both are checked against what the building table says the
+     * library builds, so gaining a construction of a kind and shape fails here — the cell above stops
+     * being one that can be skipped, and someone has to say what the predicate does through it.
+     */
     @Test
-    void aShapeSaidToHaveNoConstructionHasNone() {
+    void aShapeSaidToHaveNoConstructionIsOneTheLibraryDoesNotBuild() {
         List<String> wrong = new ArrayList<>();
         for (Predicate p : PREDICATES) {
             for (Shape shape : Shape.values()) {
-                boolean none = p.travels().get(shape) == Travels.NO_SUCH_CONSTRUCTION;
-                if (none != (built(p.kind(), shape) == null)) {
-                    wrong.add(operationOf(p) + " through " + shape);
+                boolean builds = DischargeRules.constructionKinds().contains(p.kind() + "." + shape);
+                if (builds != (p.travels().get(shape) != Travels.NO_SUCH_CONSTRUCTION)) {
+                    wrong.add(operationOf(p) + " through " + shape
+                            + (builds ? ": the library builds this and no answer is written"
+                                    : ": said to be answerable and the library builds no such thing"));
+                }
+                if (builds != (built(p.kind(), shape) != null)) {
+                    wrong.add(p.kind() + "." + shape
+                            + (builds ? ": the library builds this and no program is written for it"
+                                    : ": a program is written for what the library does not build"));
                 }
             }
         }
-        assertEquals(List.of(), wrong,
-                "these say the library has no construction of the kind and shape, and it has one, or"
-                        + " the other way round");
+        assertEquals(List.of(), wrong);
     }
 
     /** Which rules a program can reach at all: one whose only carrying shape has no construction
