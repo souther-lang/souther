@@ -1,8 +1,10 @@
 package souther.compiler;
 
+import souther.compiler.check.HelperInliner;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
 import souther.compiler.diag.Located;
+import souther.compiler.types.ValueName;
 
 import org.junit.jupiter.api.Test;
 
@@ -339,6 +341,60 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
                 "expected an arity error, got " + e.code() + ": " + e.getMessage());
     }
 
+    /**
+     * The value-position check reads fn bodies, which is where a function value can be written. The
+     * other two surfaces reject it too, each for its own reason, and the three together are what makes
+     * reading fn bodies enough.
+     *
+     * <p>An invariant is inlined before it is checked, and a name written where a value goes is
+     * expanded there into a block that applies it — so the clause holds a call and the reachability
+     * rule answers, whether or not the helper it was handed to is expanded with it.
+     */
+    @Test
+    void anInvariantHandingOverAPartialHelperIsRejectedByWhatTheClauseReaches() {
+        assertEquals(List.of("invariant -> spin"), pathsOf("""
+                module demo
+                data Item = { n: Int }
+                partial let spin (n: Int): Int = spin(n)
+                let anyPositive (f: (Int) -> Int, items: List<Item>): Bool =
+                    List.all(i -> f(i.n) >= 0, items)
+                data X = { items: List<Item> } invariant anyPositive(spin, items)
+                """, INVARIANT));
+    }
+
+    /** And through a higher-order helper that recurses, which the inlining does not expand — the
+     * argument is expanded where it is written, so the call is in the clause either way. */
+    @Test
+    void andThroughARecursiveHigherOrderHelper() {
+        assertEquals(List.of("invariant -> spin"), pathsOf("""
+                module demo
+                partial let spin (n: Int): Int = spin(n)
+                data Tree = { child: Tree?, n: Int }
+                let walk (f: (Int) -> Int, t: Tree): Int =
+                    match t.child with | Some c -> walk(f, c) | None -> f(t.n)
+                data X = { root: Tree } invariant walk(spin, root) >= 0
+                """, INVARIANT));
+    }
+
+    /** An example row cannot name one, because a behavior cannot take a function at all: a function has
+     * no external representation, so it does not cross the boundary. That is what leaves fn bodies as
+     * the only surface a function value is written on. */
+    @Test
+    void anExampleRowHasNoFunctionToHandOver() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+                data Out = Int
+                partial let spin (n: Int): Int = spin(n)
+                let apply1 (f: (Int) -> Int, n: Int): Int = f(n)
+                behavior run : (f: (Int) -> Int) -> Out constructs Out
+                let run (f) = Out(apply1(f, 1))
+                example run
+                    | "hands over a partial helper" : (spin) -> Out(1)
+                """));
+
+        assertTrue(e.getMessage().contains("has no external representation"), e.getMessage());
+    }
+
     /** A total helper handed over is untouched: the rule is about the word, not about names in value
      * position. */
     @Test
@@ -401,6 +457,67 @@ class AnUnmarkedHelperMayNotReachAPartialOneTest {
                 behavior bill : (n: Int) -> Out constructs Out
                 let bill (n) = Out { v = wrapped(n) }
                 """)));
+    }
+
+    /**
+     * An invariant calling an imported `partial` helper with nothing of this module's in between. The
+     * marker is asked of the declaration, so it does not matter whether a helper here happens to name
+     * it too — the clause names what it names.
+     */
+    @Test
+    void anInvariantMayNotCallAnImportedPartialHelperDirectly() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compileModules(List.of("""
+                module maths exposing ( spin )
+
+                partial let spin (n: Int) : Int = spin(n)
+                """, """
+                module order
+
+                import maths ( spin )
+
+                data X = { n: Int }
+                    invariant spin(n) >= 0
+                """)));
+
+        assertTrue(e.getMessage().contains("invariant -> maths.spin"), e.getMessage());
+    }
+
+    /** An imported value read bare. The key a name is looked up by comes from what it denotes, not from
+     * how it was spelled, so the edge is there whether or not the import was written out qualified. */
+    @Test
+    void readingABareImportedPartialValueIsReachingIt() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compileModules(List.of("""
+                module maths exposing ( seed )
+
+                partial let spin (n: Int) : Int = spin(n)
+                partial let seed = spin(1)
+                """, """
+                module order
+
+                import maths ( seed )
+
+                data Out = Int
+                behavior run : (n: Int) -> Out constructs Out
+
+                let offset (n: Int): Int = n + seed
+                let run (n) = Out(offset(n))
+                """)));
+
+        assertEquals("E2001", e.code(), e.getMessage());
+        assertTrue(e.getMessage().contains("offset -> maths.seed"), e.getMessage());
+    }
+
+    /** That lookup rule, on its own. A helper of another module is filed under its qualified name and
+     * one of this module's under its bare name, and which of the two a name is depends on what it
+     * denotes. Keying by the spelling would answer differently before and after the pass that writes an
+     * imported name out qualified, and a table answers a key it has not got with silence. */
+    @Test
+    void aHelperIsKeyedByWhatItDenotesRatherThanByHowItIsWritten() {
+        ValueName.Helper foreign = new ValueName.Helper("maths", "spin");
+        ValueName.Helper own = new ValueName.Helper("order", "spin");
+
+        assertEquals("maths.spin", HelperInliner.keyIn("order", foreign));
+        assertEquals("spin", HelperInliner.keyIn("order", own));
     }
 
     /** An imported `partial` helper may not be handed over either. */

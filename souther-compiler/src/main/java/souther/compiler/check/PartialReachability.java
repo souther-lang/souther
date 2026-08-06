@@ -33,71 +33,60 @@ import java.util.TreeSet;
  * {@link souther.compiler.codegen.Backend#BOUNDARY_VERSION} records — an unmarked published helper
  * summarises its whole call closure, so a reader never walks it.
  *
+ * <p>Two things are asked of a declaration rather than of this graph, because a soundness rule may not
+ * rest on what building the graph happened to visit. Whether a name is {@code partial} is read off the
+ * declaration it reaches, not off a set collected on the way — a clause names what it names, whether
+ * or not a helper of this module names it too. And which declaration a name reaches is read off what
+ * the name denotes ({@link HelperInliner#keyIn}), not off how it was spelled, so the answer is the same
+ * before and after the pass that writes an imported name out qualified.
+ *
  * <p>A path is the shortest one, found breadth-first with each node's callees taken in name order, so
  * the same module always reports the same path.
  */
 final class PartialReachability {
 
-    /** Module-own helper -> the helpers it calls, in name order. A name absent as a key is a terminal:
-     * an imported or prelude helper, whose declaration answers for its own closure. */
+    /** Module-own helper -> the helpers it reaches, in name order. A name absent as a key is a
+     * terminal: an imported or prelude helper, whose declaration answers for its own closure. */
     private final Map<String, List<String>> calls;
-
-    /** Every helper reached from this module that is written {@code partial}, own or imported. */
-    private final Set<String> partial;
 
     private final HelperInliner inliner;
 
-    private PartialReachability(Map<String, List<String>> calls, Set<String> partial,
-                                HelperInliner inliner) {
+    private PartialReachability(Map<String, List<String>> calls, HelperInliner inliner) {
         this.calls = calls;
-        this.partial = partial;
         this.inliner = inliner;
     }
 
     static PartialReachability of(HelperInliner inliner) {
         Map<String, List<String>> calls = new LinkedHashMap<>();
-        Set<String> partial = new HashSet<>();
         for (Map.Entry<String, Ast.FnDef> entry : inliner.helpers().entrySet()) {
-            Ast.FnDef helper = entry.getValue();
-            if (!(helper.body() instanceof Ast.FnBody.Written written)) {
-                continue;   // an intrinsic declares no body to read calls out of
+            if (entry.getValue().body() instanceof Ast.FnBody.Written written) {
+                calls.put(entry.getKey(), reachedBy(written.expr(), inliner));
             }
-            calls.put(entry.getKey(), callsOf(written.expr(), inliner));
-            if (helper.partial()) {
-                partial.add(entry.getKey());
-            }
+            // an intrinsic declares no body to read what it reaches out of
         }
-        for (List<String> callees : List.copyOf(calls.values())) {
-            for (String callee : callees) {
-                if (calls.containsKey(callee)) {
-                    continue;
-                }
-                Ast.FnDef declared = inliner.helper(callee);
-                if (declared != null && declared.partial()) {
-                    partial.add(callee);
-                }
-            }
-        }
-        return new PartialReachability(calls, partial, inliner);
+        return new PartialReachability(calls, inliner);
+    }
+
+    /**
+     * Whether the declaration filed under {@code name} is {@code partial}.
+     *
+     * <p>Asked of the declaration, never of a set of names collected while building the graph. A set
+     * answers correctly only for what the collection happened to visit, and this question is put to
+     * names the collection never sees — an invariant clause names what it names, whether or not a
+     * helper of this module names it too. Which of them are visited is another pass's business, so a
+     * soundness rule may not rest on it.
+     */
+    private boolean isPartial(String name) {
+        Ast.FnDef declared = inliner.helper(name);
+        return declared != null && declared.partial();
     }
 
     /**
      * Whether {@code v} names a {@code partial} helper that takes arguments — the one thing that may
      * not be written where a value goes. A value takes none and is read rather than handed over.
-     *
-     * <p>Both spellings are tried, because a name is written bare where an import let it be and the
-     * table is keyed by the qualified name the declaration is reached by. Asking with only what was
-     * written misses an imported helper silently, which is what a table keyed by names does with a key
-     * it has not got.
      */
     boolean isPartialFunctionNamed(Ast.Var v) {
-        if (!(v.denotes() instanceof ValueName.Helper helper)) {
-            return false;
-        }
-        Ast.FnDef declared = inliner.helper(v.reaches());
-        if (declared == null) {
-            declared = inliner.helper(helper.module() + "." + helper.name());
-        }
+        Ast.FnDef declared = declarationOf(v.denotes(), inliner);
         return declared != null && declared.partial() && !declared.params().isEmpty();
     }
 
@@ -115,7 +104,7 @@ final class PartialReachability {
      * reaches none. The expression is not on the path — its caller names what it is.
      */
     Optional<List<String>> fromExpression(Ast.Expr e) {
-        return search(callsOf(e, inliner));
+        return search(reachedBy(e, inliner));
     }
 
     /** A path as a report writes it: {@code depth -> measure -> spin}. */
@@ -136,7 +125,7 @@ final class PartialReachability {
             if (!seen.add(seed)) {
                 continue;
             }
-            if (partial.contains(seed)) {
+            if (isPartial(seed)) {
                 return Optional.of(List.of(seed));
             }
             work.add(seed);
@@ -148,7 +137,7 @@ final class PartialReachability {
                     continue;
                 }
                 from.put(next, at);
-                if (partial.contains(next)) {
+                if (isPartial(next)) {
                     return Optional.of(pathTo(next, from));
                 }
                 work.add(next);
@@ -182,23 +171,52 @@ final class PartialReachability {
      * goes it becomes a function, and a {@code partial} one may not be written there at all
      * (spec §fn-rules), which is checked on its own and is why no edge is made for it here.
      */
-    private static List<String> callsOf(Ast.Expr e, HelperInliner inliner) {
-        Set<String> called = new TreeSet<>();
-        collectCalls(e, inliner, called);
-        return List.copyOf(called);
+    private static List<String> reachedBy(Ast.Expr e, HelperInliner inliner) {
+        Set<String> reached = new TreeSet<>();
+        collectReached(e, inliner, reached);
+        return List.copyOf(reached);
     }
 
-    private static void collectCalls(Ast.Expr e, HelperInliner inliner, Set<String> out) {
+    private static void collectReached(Ast.Expr e, HelperInliner inliner, Set<String> out) {
         switch (e) {
-            case Ast.Apply call when inliner.helper(call.reaches()) != null -> out.add(call.reaches());
-            case Ast.Var v when v.denotes() instanceof ValueName.Helper -> {
-                Ast.FnDef read = inliner.helper(v.reaches());
+            case Ast.Apply call -> {
+                Ast.FnDef applied = declarationOf(call.denotes(), inliner);
+                if (applied != null) {
+                    out.add(keyOf(call.denotes(), inliner));
+                }
+            }
+            case Ast.Var v -> {
+                Ast.FnDef read = declarationOf(v.denotes(), inliner);
                 if (read != null && read.params().isEmpty()) {
-                    out.add(v.reaches());
+                    out.add(keyOf(v.denotes(), inliner));
                 }
             }
             default -> { }
         }
-        Ast.forEachChild(e, child -> collectCalls(child, inliner, out));
+        Ast.forEachChild(e, child -> collectReached(child, inliner, out));
+    }
+
+    /**
+     * The key {@code denotes} is filed under, or null where it denotes nothing a helper table holds.
+     *
+     * <p>The one place a name becomes a node. Every question here goes through it — the graph's edges,
+     * the marker lookup and the value-position check — so none of them can disagree about which
+     * declaration a name reached, and none of them depends on how it was spelled.
+     *
+     * <p>A library name is a node like any other. The standard library declares nothing {@code partial}
+     * today, so keeping it changes no answer; leaving it out would make that a premise of the check
+     * rather than a fact about the library, and one the library could stop honouring in silence.
+     */
+    private static String keyOf(ValueName denotes, HelperInliner inliner) {
+        return switch (denotes) {
+            case ValueName.Helper helper -> HelperInliner.keyIn(inliner.moduleName(), helper);
+            case ValueName.Stdlib lib -> lib.qualified();
+            case null, default -> null;
+        };
+    }
+
+    private static Ast.FnDef declarationOf(ValueName denotes, HelperInliner inliner) {
+        String key = keyOf(denotes, inliner);
+        return key == null ? null : inliner.helper(key);
     }
 }

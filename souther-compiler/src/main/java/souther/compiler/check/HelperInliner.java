@@ -637,6 +637,26 @@ public final class HelperInliner {
     }
 
     /**
+     * The key {@code helper} is filed under in the table of the module named {@code module} — bare for
+     * one that module declares, qualified for one it imported.
+     *
+     * <p>Read off what the name denotes and never off how it was written. A reader writes an imported
+     * definition bare, so the spelling is a key only after {@link #qualifyImports} has run, and a check
+     * that keyed by the spelling would answer differently on either side of that pass — silently,
+     * because a miss is what a table does with a key it has not got. The pair (module, name) is what
+     * the definition is (ADR-0072), so it is what a table of definitions is asked with.
+     */
+    public static String keyIn(String module, ValueName.Helper helper) {
+        return helper.module().equals(module) ? helper.name() : qualified(helper.module(), helper.name());
+    }
+
+    /** The module these helpers belong to — what {@link #keyIn} compares a name's declaring module
+     * against. */
+    public String moduleName() {
+        return module;
+    }
+
+    /**
      * Settles the helper parameter types the author left unwritten, then inlines the helper calls in
      * every data's {@code invariant}.
      *
