@@ -62,6 +62,66 @@ class MainTest {
     }
 
     @Test
+    void docPrintsASpecificationSectionByItsAnchor() throws Exception {
+        PrintStream original = System.out;
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[]{"doc", "purpose"});
+        } finally {
+            System.setOut(original);
+        }
+        assertTrue(captured.toString(StandardCharsets.UTF_8).contains("JVM-targeted language"),
+                "the purpose section is printed");
+    }
+
+    @Test
+    void apiListsTheStdlibSurface() throws Exception {
+        PrintStream original = System.out;
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[]{"api", "Option"});
+        } finally {
+            System.setOut(original);
+        }
+        assertTrue(captured.toString(StandardCharsets.UTF_8).lines().anyMatch(l -> l.startsWith("Option.map(")),
+                "the Option module's surface is printed");
+    }
+
+    @Test
+    void japiPrintsAJarsPublicApi() throws Exception {
+        PrintStream original = System.out;
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[]{"japi", "net.unit8.raoh.Issues"});
+        } finally {
+            System.setOut(original);
+        }
+        assertTrue(captured.toString(StandardCharsets.UTF_8).contains("record net.unit8.raoh.Issues"),
+                "raoh's Issues is answered from the test classpath");
+    }
+
+    @Test
+    void mcpServesTheProtocolOnStdinAndLeavesAtItsEnd() throws Exception {
+        java.io.InputStream originalIn = System.in;
+        PrintStream originalOut = System.out;
+        ByteArrayOutputStream captured = new ByteArrayOutputStream();
+        System.setIn(new java.io.ByteArrayInputStream(
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}\n".getBytes(StandardCharsets.UTF_8)));
+        System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        try {
+            Main.main(new String[]{"mcp"});
+        } finally {
+            System.setIn(originalIn);
+            System.setOut(originalOut);
+        }
+        assertTrue(captured.toString(StandardCharsets.UTF_8).contains("\"doc_search\""),
+                "the server answered on stdout and returned at end of input");
+    }
+
+    @Test
     void fmtWriteRewritesTheFileInPlace() throws Exception {
         Path f = Files.createTempDirectory("souther-fmt").resolve("m.sou");
         String messy = "module m\ndata X = { a: Int }\n";
