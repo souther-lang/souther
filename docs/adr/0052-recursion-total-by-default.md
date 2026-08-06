@@ -16,12 +16,23 @@ Recursion is **total by default**, the way Idris2's `%default total` sets it.
 - **`partial` opts out.** `partial let f ...` disclaims totality: the helper is not checked and may not terminate. Numeric and index recursion are written this way. `partial` only *disclaims* totality — there is no way to *claim* it on non-structural recursion (no `assert_smaller`).
 - **The stdlib `List.foldFrom` is trusted total** and exempt. It walks the list by index, which is not structural, but it is bounded by the list length and stops at `None`; like Idris's library folds, it is the trusted base the derived combinators stand on. Only bare-named user helpers are checked.
 - **Mutual recursion is checked by the same analysis.** A strongly-connected group of helpers is analyzed together; if any member is `partial`, the whole group opts out — a cycle through an unchecked member cannot be certified, so its other members are not independently certified either.
-- **Example evaluation is bounded.** A row is evaluated on a daemon thread with a wall-clock timeout (overridable with the `souther.example.timeout.ms` system property); a `partial` recursion that does not terminate is reported (`E1910`) rather than hanging the compiler, whether it tail-loops or overflows the stack. The worker is interrupted best-effort — a pure compute loop has no interrupt point, so a deterministic step budget (a counter in the generated loop) is the complete fix, deferred as a follow-up. This is a safety net for `partial` code, not a proof — total code cannot loop.
+- **Example evaluation is bounded by a counted budget.** The classes generated for an evaluation count what they go through: every loop the emitter emits counts its backward branch, and every recursive helper counts the frame it adds. A row that passes more counted points than the policy allows, or recurses deeper than it allows, is reported (`E1910`). The counting is in the code, so the code stops itself: a `partial` recursion that does not terminate ends its own evaluation rather than being asked to stop and going on. This is a safety net for `partial` code, not a proof — total code cannot loop.
+
+### Amended: the budget is counted, not timed
+
+The budget was originally a wall clock, with a deterministic step budget named as the complete fix and deferred. It is now the counted budget, and the wall clock has moved out of the way: how many counted points a row passes is a property of what the row does, so two compiles of one model under one policy say the same thing about it however fast the host is and however loaded.
+
+What the clock was doing wrong was not a matter of degree. Whether a model compiled depended on the machine — the same row was reported as non-terminating on a busy host and held on a quiet one — and a row that was given up on could not actually be stopped, so its worker went on burning a core and made every row after it likelier to be misread the same way.
+
+A wall clock remains as the outer guard, for what a counter cannot reach: an evaluation that steps into a module resolved from a jar runs code this compile did not generate and so did not count. Losing to that guard is the compiler failing to answer, not the model failing to terminate, and it is reported as its own thing (`E1923`) rather than as `E1910`. The JVM stack running out before the counted depth limit is likewise its own (`E1924`) — how many frames a stack holds is decided by how large they are.
+
+What this does not reach is a `partial` helper inside a published module. Its classes come from a jar, this compile cannot regenerate them, and there are no counted points in them; a row that does not come back inside one is reported as an evaluation that did not answer. Making that case counted would mean publishing something an evaluation can re-instrument, which is a change to what an artifact carries.
 
 ## Consequences
 
 - User recursion is total unless explicitly `partial`; the domain core is pure (effects at `depends on`) and total (structural recursion, bounded `fold`), so its examples always terminate at compile time. This is Souther's totality guarantee — stronger than a Turing-complete language, and, like Idris2, achieved by a structural check with a `partial` escape.
 - Numeric counting is expressed with `fold` (bounded) or structural recursion on an ADT; a raw counting loop must be `partial`.
+- Whether a model compiles does not depend on the machine it is compiled on: the reading that decides a row is counted, and the settings that bound it (`souther.example.step.limit`, `souther.example.recursion.depth`) belong to the compilation rather than to the JVM.
 - The check is size-change termination (sound, not complete): it accepts any recursion whose descent is provable on the structural sub-term order — including lexicographic descent that a single-decreasing-position rule would reject — and rejects the rest, which must be `partial`.
 
 ## References

@@ -3691,7 +3691,11 @@ This example did not terminate (submitTravelRequest) — a `partial` recursion i
 may not stop. Make it structural, or reduce it.
 ----
 
-Emitted when a row's evaluation exceeds the step budget the example runner holds it to. A helper carrying the termination guarantee cannot reach this, and neither can one it reaches, so what the row ran through is a `+partial+` declaration — reached from the behavior, which publishes no such guarantee (<<fn-rules>>).
+Emitted when a row's evaluation spends the budget the example runner holds it to: the number of counted points the evaluated code may pass, or the depth a recursion it reaches may go to. Both are counted by the generated code as it runs, so the reading is a property of what the row does and answers the same on every machine — a model that compiles somewhere compiles everywhere.
+
+A helper carrying the termination guarantee cannot reach this, and neither can one it reaches, so what the row ran through is a `+partial+` declaration — reached from the behavior, which publishes no such guarantee (<<fn-rules>>).
+
+Two things end an evaluation without saying this. Where it stops answering, that is <<e1923>>; where the JVM stack runs out before the counted depth limit is reached, <<e1924>>. Neither is decided by what the model says.
 
 [#e1911]
 === An example reached a point declared unreachable
@@ -3774,22 +3778,49 @@ A row whose arity is wrong, whose inputs or expectation will not build, or whose
 
 [,text]
 ----
-Could not compare this fake with the rows recorded for `find` — building the table
-did not finish within 2000ms.
+Could not compare this fake with the rows recorded for `find` — building the table spent
+its budget of 100000000 steps.
 ----
 
-A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when reading a `+fake+` table against the rows recorded for that behavior (<<example-pending>>) does not finish within the budget the reading is held to, so what the two state was never compared. Being told nothing was found and being told nothing was compared are different answers, and an empty list of disagreements is what the first one looks like.
+A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when reading a `+fake+` table against the rows recorded for that behavior (<<example-pending>>) does not come to a value, so what the two state was never compared. Which of three things stopped it is said: the table spent its counted budget, it reached the recursion-depth limit, or the evaluation stopped answering. The first two are decided by what the table states and read the same on every machine; the third is not a statement about the model at all. Being told nothing was found and being told nothing was compared are different answers, and an empty list of disagreements is what the first one looks like.
 
 [#e1921]
 === A fake's table was not built in time
 
 [,text]
 ----
-Building the `fake find` table did not finish within 2000ms, so nothing it states
+Building the `fake find` table spent its budget of 100000000 steps, so nothing it states
 was checked.
 ----
 
-A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when building the table where it is written (<<example-fakes>>) does not finish within the budget that build is held to. A warning rather than an error: waiting says the table was not read, not that it is wrong, and which of the two it is cannot be told from having waited.
+A warning, quoted where the `+fake+` names the behavior it stands in for. Emitted when building the table where it is written (<<example-fakes>>) does not come to a value, with the same three reasons <<e1920>> distinguishes. A warning rather than an error: what stopped the build says the table was not read, not that it is wrong.
+
+[#e1923]
+=== An example evaluation did not answer
+
+[,text]
+----
+The evaluation of this row did not answer within 60000ms and was given up on.
+Hint: This is the compiler failing to decide, not the model failing to terminate: what did
+not come back was not counted, so nothing here says the row would not have held. Code this
+compile did not generate — a module read from a jar — is the usual reason.
+----
+
+Emitted when an evaluation stops answering and the wait the policy allows runs out. Not <<e1910>>: what did not come back was not held to a counted budget, so nothing was shown about whether the model terminates. Counted points are placed in the code this compile generates, so what this reaches is code it did not — a module resolved from a jar, or the compiler itself.
+
+[#e1924]
+=== An example evaluation ran out of stack
+
+[,text]
+----
+The evaluation of this row ran out of JVM stack (recursion overflowed the stack) before
+reaching its recursion-depth limit of 10000.
+Hint: The depth limit is what is meant to stop a recursion, and the stack got there first.
+Lower the depth limit, give the evaluation a larger stack, or rewrite the helper as tail
+recursion so it loops instead of adding frames.
+----
+
+Emitted when the JVM stack runs out before the counted recursion-depth limit is reached. Not <<e1910>> either: how many frames a stack holds depends on how large they are, which is decided by the helper and by whether the JVM has compiled it — so this says nothing about whether the recursion terminates. The depth limit and the stack an evaluation is given are set so the counted limit is reached first; this says they are set wrong for this model.
 
 [#e2001]
 === A helper does not carry the termination guarantee it claims
