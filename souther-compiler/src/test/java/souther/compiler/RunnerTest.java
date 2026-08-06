@@ -337,6 +337,25 @@ class RunnerTest {
         assertFalse(e.getMessage().contains("decoder"), e.getMessage());
     }
 
+    /** The list every refusal ends with holds what `run` can run, which is narrower than what is
+     *  runnable. Calling it the runnable ones would deny that `hidden` — a `let`, nothing injected —
+     *  is runnable at all, when what it is not is exposed. */
+    @Test
+    void doesNotCallTheBehaviorsItOffersTheRunnableOnes() throws Exception {
+        Path file = write("visible.sou", """
+                module visible exposing ( Note )
+
+                data Note = { body: String }
+
+                behavior hidden : (n: Note) -> Note
+                let hidden (n) = n
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "typo", "{\"body\":\"b\"}"));
+        assertTrue(e.getMessage().contains("no behavior named `typo`"), e.getMessage());
+        assertFalse(e.getMessage().contains("Runnable"), e.getMessage());
+    }
+
     @Test
     void drivesABehaviorTheModuleExposesAlongsideItsType() throws Exception {
         Path file = write("visible.sou", """

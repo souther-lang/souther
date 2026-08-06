@@ -253,13 +253,14 @@ public final class Runner {
                 return drivable.values().iterator().next();
             }
             if (drivable.isEmpty()) {
-                throw fail("run.behavior.none", "no behavior in this module can be driven. "
-                        + "`run` drives a behavior the module exposes, with a `let` and no"
-                        + " `depends on`.");
+                throw fail("run.behavior.none", "no behavior in this module can be run. "
+                        + "`run` runs a behavior that is runnable — implemented in Souther and"
+                        + " needing nothing injected, a `>->` pipeline when every stage is — and"
+                        + " that the module exposes.");
             }
             String names = String.join(", ", drivable.keySet());
             throw usage("run.behavior.several",
-                    "several runnable behaviors — pick one with --behavior: " + names, names);
+                    "several behaviors can be run — pick one with --behavior: " + names, names);
         }
         Ast.BehaviorDef found = drivable.get(requested);
         if (found != null) {
@@ -328,37 +329,37 @@ public final class Runner {
             if (!exposes(module, name)) {
                 return fail("run.behavior.notexposed",
                         "`" + name + "` is not exposed, and `run` drives a behavior the module"
-                                + " exposes — add it to `exposing`. Runnable: " + available + ".",
+                                + " exposes — add it to `exposing`. Available to run: " + available + ".",
                         name, available);
             }
             if (b instanceof Ast.PipeBehavior pipe) {
                 Blocker blocker = pipelineBlocker(module, pipe, implemented, pipeStages);
                 if (blocker == null) {
                     return fail("run.behavior.runnable",
-                            "`" + name + "` is runnable. Runnable: " + available + ".", name, available);
+                            "`" + name + "` is runnable. Available to run: " + available + ".", name, available);
                 }
                 Object[] args = new Object[blocker.args().length + 1];
                 System.arraycopy(blocker.args(), 0, args, 0, blocker.args().length);
                 args[args.length - 1] = available;
-                return fail(blocker.key(), blocker.message() + " Runnable: " + available + ".", args);
+                return fail(blocker.key(), blocker.message() + " Available to run: " + available + ".", args);
             }
             if (b instanceof Ast.SpecBehavior spec) {
                 if (!implemented.contains(name)) {
                     return fail("run.behavior.noimpl",
                             "`" + name + "` has no implementation (it is injected from Java). "
-                                    + "Runnable: " + available + ".", name, available);
+                                    + "Available to run: " + available + ".", name, available);
                 }
                 if (!spec.dependsOn().isEmpty()) {
                     String dependencies = dependencyNames(spec);
                     return fail("run.behavior.depends",
                             "`" + name + "` depends on injected dependencies (" + dependencies
-                                    + "), which `run` cannot supply. Runnable: " + available + ".",
+                                    + "), which `run` cannot supply. Available to run: " + available + ".",
                             name, dependencies, available);
                 }
             }
         }
         return fail("run.behavior.unknown",
-                "no behavior named `" + name + "`. Runnable: " + available + ".", name, available);
+                "no behavior named `" + name + "`. Available to run: " + available + ".", name, available);
     }
 
     // --- input --------------------------------------------------------------------------------
