@@ -247,20 +247,47 @@ public final class HelperTyping {
         return sigs;
     }
 
-    /** Rejects a call to a {@code partial} helper inside an invariant: an invariant is checked on every
-     * construction and must terminate, so it may not call a helper that disclaims totality (spec
-     * §invariant-expressions). A total helper — including the stdlib fold behind the list
-     * quantifiers — is admissible and not in {@code partial}. */
-    static void rejectPartialHelperInInvariant(Ast.Expr e, String data, Set<String> partial) {
-        if (e instanceof Ast.Apply call && partial.contains(call.reaches())) {
-            throw CompileException.of(
-                    Diagnostic.of(null, "check.invariant.partial").title("check.invariant.invalid.title")
-                            .at(call.name().region()).args(data, call.written()).build(),
-                    "the invariant of `" + data + "` calls the `partial` helper `" + call.written()
-                            + "`, which may not terminate; an invariant is checked at construction time"
-                            + " and must terminate, so only a total helper may appear in it");
+    /**
+     * Rejects an invariant that reaches a {@code partial} helper: an invariant is checked on every
+     * construction and must terminate, so everything it runs has to carry the termination guarantee
+     * (spec §invariant-expressions). A total helper — including the stdlib fold behind the list
+     * quantifiers — carries it and is admissible.
+     *
+     * <p>Reaching, not calling. Inlining leaves a recursive helper standing, so what the clause names
+     * is not all it runs; asking only about the names left in the clause let a `partial` helper through
+     * behind a recursive one. The path is reported whole, so what the clause has to stop doing is named
+     * rather than left to be found by reading the helpers.
+     */
+    static void rejectPartialHelperInInvariant(Ast.Expr e, String data,
+                                               PartialReachability reachability) {
+        List<String> path = reachability.fromExpression(e).orElse(null);
+        if (path == null) {
+            return;
         }
-        TypeChecker.forEachChild(e, c -> rejectPartialHelperInInvariant(c, data, partial));
+        String reached = path.get(path.size() - 1);
+        String rendered = "invariant -> " + PartialReachability.render(path);
+        Ast.Apply at = firstCallTo(e, path.get(0));
+        throw CompileException.of(
+                Diagnostic.of(null, "check.invariant.partial").title("check.invariant.invalid.title")
+                        .at(at == null ? null : at.name().region()).args(data, reached, rendered).build(),
+                "the invariant of `" + data + "` reaches the `partial` helper `" + reached
+                        + "` (" + rendered + "), which carries no termination guarantee; an invariant is"
+                        + " checked at construction time and must terminate");
+    }
+
+    /** The first application of {@code name} in {@code e}, for the report to underline, or null where
+     * the clause holds none (a lowering wrote the call without a name of its own). */
+    private static Ast.Apply firstCallTo(Ast.Expr e, String name) {
+        if (e instanceof Ast.Apply call && call.reaches().equals(name)) {
+            return call;
+        }
+        Ast.Apply[] found = new Ast.Apply[1];
+        TypeChecker.forEachChild(e, c -> {
+            if (found[0] == null) {
+                found[0] = firstCallTo(c, name);
+            }
+        });
+        return found[0];
     }
 
     /**

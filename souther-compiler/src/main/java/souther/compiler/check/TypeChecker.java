@@ -9,7 +9,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -200,19 +199,17 @@ public final class TypeChecker {
         // refuse the name for being a name rather than for being a behavior a helper cannot reach.
         HelperInliner inliner = HelperInliner.forModule(module, publishedToHere)
                 .namingBehaviors(InjectionSigs.arities(calleeSigs));
+        // Which declarations reach a `partial` helper, asked once for the two checks that ask it: the
+        // invariant rule just below and the totality rule further down.
+        PartialReachability reachability = PartialReachability.of(inliner);
         // An invariant runs on every construction and must terminate (spec §invariant-expressions).
         // A total recursive helper does terminate, so it is admissible — including the stdlib fold
         // (`List.foldFrom`) that backs the list quantifiers `List.all`/`any`/`member`/`distinct`,
-        // which are inlined down to it here (`withInlinedInvariants` runs before this check). Only a
-        // `partial` helper — one that disclaims totality and may loop — is barred. A non-partial
-        // recursive helper that is in fact non-total is caught later by the totality check.
-        Set<String> partialRecursiveFns = new LinkedHashSet<>();
-        for (String name : recursiveHelperFns.keySet()) {
-            Ast.FnDef helper = inliner.helper(name);
-            if (helper != null && helper.partial()) {
-                partialRecursiveFns.add(name);
-            }
-        }
+        // which are inlined down to it here (`withInlinedInvariants` runs before this check). What is
+        // barred is reaching a `partial` helper, which carries no termination guarantee. Reaching, not
+        // calling: a recursive helper is left standing by the inlining, so what a clause names is not
+        // all it runs, and deciding this on what inlining left visible is what let an invariant through
+        // to a `partial` helper behind a recursive one.
         // The invariant checks run before the data check, so a partial call or a construction is named
         // before it is otherwise reported as an unknown function or type-checked. A clause is a unit
         // of its own — it is what an attempt answers by name and what discharge answers about — so a
@@ -224,7 +221,7 @@ public final class TypeChecker {
                 for (Ast.InvariantClause clause : data.invariants()) {
                     collect(errors, abandoned, () -> {
                         HelperTyping.rejectPartialHelperInInvariant(
-                                clause.expr(), data.name(), partialRecursiveFns);
+                                clause.expr(), data.name(), reachability);
                         HelperTyping.rejectConstructionInInvariant(clause.expr(), data.name(), clause);
                         HelperTyping.rejectUnreachableInInvariant(clause.expr(), data.name(), clause);
                     });
@@ -372,6 +369,18 @@ public final class TypeChecker {
         // Recursion is total by default (spec §fn-declaration): a non-`partial` recursive helper must
         // be structurally recursive, so its examples terminate at compile time.
         collect(errors, abandoned, () -> TotalityChecker.check(inliner));
+        // And the guarantee covers what a helper reaches, not only its own descent: an unmarked helper
+        // may reach no `partial` one, and a `partial` one may not be written where a value goes. Asked
+        // per declaration, so a module needing the word in several places says so in one build.
+        for (Ast.FnDef helper : inliner.helpers().values()) {
+            collect(errors, abandoned, () -> PartialHelperUse.rejectReachingPartial(helper, reachability));
+        }
+        for (Ast.FnDef fn : module.fns()) {
+            if (fn.body() instanceof Ast.FnBody.Written written) {
+                collect(errors, abandoned,
+                        () -> PartialHelperUse.rejectNamedAsValue(written.expr(), reachability));
+            }
+        }
         // A fn matching a pipeline is rejected (a pipeline is already its own implementation, so it
         // cannot also have a fn body — spec 13.1). A fn matching a SpecBehavior is that behavior's
         // implementation, which is checked as its own question; any other fn is a helper (checked by

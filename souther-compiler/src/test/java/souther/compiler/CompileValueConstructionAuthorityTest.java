@@ -192,7 +192,7 @@ class CompileValueConstructionAuthorityTest {
                 partial let makeFloor (n: Int) : Hours =
                     if n == 0 then Hours(20.0m) else makeFloor(n - 1)
 
-                let floorHours = makeFloor(1)
+                partial let floorHours = makeFloor(1)
 
                 behavior judge : (h: Hours) -> Hours | TooShort
                     constructs TooShort
@@ -216,7 +216,7 @@ class CompileValueConstructionAuthorityTest {
                 partial let makeFloor (n: Int) : Hours =
                     if n == 0 then Hours(20.0m) else makeFloor(n - 1)
 
-                let floorHours = makeFloor(1)
+                partial let floorHours = makeFloor(1)
 
                 behavior judge : (h: Hours) -> Hours | TooShort
                     constructs TooShort

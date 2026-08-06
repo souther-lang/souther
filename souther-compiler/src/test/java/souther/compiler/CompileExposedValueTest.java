@@ -279,7 +279,7 @@ class CompileExposedValueTest {
 
                 partial let sumDown (n: Int) : Int = if n == 0 then 0 else n + sumDown(n - 1)
 
-                let standard = Amount(sumDown(10))
+                partial let standard = Amount(sumDown(10))
                 """));
     }
 
@@ -294,7 +294,7 @@ class CompileExposedValueTest {
 
                 partial let sumDown (n: Int) : Int = if n == 0 then 0 else n + sumDown(n - 1)
 
-                let standard = Amount(sumDown(10))
+                partial let standard = Amount(sumDown(10))
                 """, """
                 module order exposing ( In, Out, bill )
 
@@ -321,7 +321,7 @@ class CompileExposedValueTest {
 
                 partial let make (n: Int) : Hidden = if n == 0 then Hidden(0) else make(n - 1)
 
-                let published = make(10)
+                partial let published = make(10)
                 """));
 
         assertTrue(e.getMessage().contains("Hidden"), e.getMessage());

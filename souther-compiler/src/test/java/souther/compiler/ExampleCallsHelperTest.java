@@ -169,7 +169,7 @@ class ExampleCallsHelperTest {
 
                 partial let sumTo (n: Int) : Int = if n <= 0 then 0 else n + sumTo(n - 1)
 
-                let triangular (n: Int) = Amount(sumTo(n))
+                partial let triangular (n: Int) = Amount(sumTo(n))
 
                 example bill
                   | (triangular(4)) -> Receipt { total = Amount(10) }
@@ -376,7 +376,7 @@ class ExampleCallsHelperTest {
 
                 partial let spin (n: Int) : Int = if n < 0 then 0 else spin(n + 1)
 
-                let looping (n: Int) = Amount(spin(n))
+                partial let looping (n: Int) = Amount(spin(n))
 
                 let taxed (a: Amount) = Amount(a.value * 110 / 100)
 
@@ -406,7 +406,7 @@ class ExampleCallsHelperTest {
 
                 partial let spin (n: Int) : Int = if n < 0 then 0 else spin(n + 1)
 
-                let looping (n: Int) = Amount(spin(n))
+                partial let looping (n: Int) = Amount(spin(n))
 
                 example bill
                   | (looping(1)) -> Receipt { total = Amount(0) }

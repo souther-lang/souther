@@ -453,7 +453,7 @@ class CompileRecursiveHelperTest {
                 data Out = { xs: List<Int> }
                 partial let countDown (n: Int): List<Int> =
                     if n == 0 then [] else [n] ++ countDown(n - 1)
-                let all (b: Bag): List<Int> = List.flatMap(n -> countDown(n), b.ns)
+                partial let all (b: Bag): List<Int> = List.flatMap(n -> countDown(n), b.ns)
                 behavior go : (b: Bag) -> Out constructs Out
                 let go (b) = Out { xs = all(b) }
                 """;

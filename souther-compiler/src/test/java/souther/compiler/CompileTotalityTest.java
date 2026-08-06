@@ -285,15 +285,32 @@ class CompileTotalityTest {
     }
 
     @Test
-    void markingOneMemberPartialOptsTheWholeMutualGroupOut() {
-        // Marking `isOdd` partial opts the whole cycle out of the totality check — `isEven`, sharing
-        // the cycle, is not independently certified either.
+    void everyMemberOfAMutualGroupNeedsTheWordNotJustOne() {
+        // Marking `isOdd` partial opts the cycle out of size-change analysis, but `isEven` reaches
+        // `isOdd` and so carries no termination guarantee either. It has to say so.
         String src = """
                 module demo
                 data N = Int
                 data Out = Int
                 behavior run : (n: N) -> Out constructs Out
                 let isEven (n: Int): Int = if n == 0 then 1 else isOdd(n - 1)
+                partial let isOdd (n: Int): Int = if n == 0 then 0 else isEven(n - 1)
+                let run (n) = Out(isEven(n.value))
+                """;
+        CompileException ex = assertThrows(CompileException.class, () -> Compiler.compile(src));
+        assertTrue("E2001".equals(ex.code()), "expected E2001, got " + ex.code() + ": " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("isEven -> isOdd"),
+                "expected the path, got " + ex.getMessage());
+    }
+
+    @Test
+    void aMutualGroupWithTheWordOnEveryMemberIsAccepted() {
+        String src = """
+                module demo
+                data N = Int
+                data Out = Int
+                behavior run : (n: N) -> Out constructs Out
+                partial let isEven (n: Int): Int = if n == 0 then 1 else isOdd(n - 1)
                 partial let isOdd (n: Int): Int = if n == 0 then 0 else isEven(n - 1)
                 let run (n) = Out(isEven(n.value))
                 """;

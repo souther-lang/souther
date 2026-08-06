@@ -967,8 +967,14 @@ public final class Backend {
      * it is the front end's change rather than this package's. {@link
      * souther.compiler.meta.PublishedModule} refuses a jar that disagrees, so the disagreement is
      * reported as what it is instead of surfacing as an unresolved name inside a body nobody wrote.
+     *
+     * <p>A third thing arrived with version 6: what a published helper's declaration promises. A helper
+     * written without {@code partial} carries the termination guarantee for everything it reaches (spec
+     * §fn-rules), so a reader answers the question off the word on the declaration and does not walk the
+     * closure behind it. That only holds if the writer enforced the rule, which is why an older jar —
+     * whose unmarked helper may reach a {@code partial} one — is refused rather than read.
      */
-    public static final int BOUNDARY_VERSION = 5;
+    public static final int BOUNDARY_VERSION = 6;
 
     /** The class a module's own declarations are published on. It carries nothing but them. */
     public static String moduleClassName(String moduleName) {

@@ -27,7 +27,7 @@ class ExampleCallsPublishedHelperTest {
 
             partial let steps (n: Int) : Int = if n <= 0 then 0 else n + steps(n - 1)
 
-            let tiered (n: Int) = Amount(steps(n))
+            partial let tiered (n: Int) = Amount(steps(n))
             """;
 
     private static final String ORDER = """
