@@ -218,15 +218,14 @@ public final class InvariantChecker {
                 // inside an argument is still an ordinary, aborting one.
                 checkIfConstruction(ic.construct(), k, at, true);
                 Core.forEachChild(ic.construct(), child -> walk(child, k, at, depth));
-                // The attempt built the value, so the binding is that construction and no location.
-                // Reaching `then` is the construction having succeeded, though, so what its type
-                // guarantees holds here — this is the one binding that is an alias and still has
-                // something seeded of it, and the two are not the same statement. Seeded under the
-                // denotations the alias is already in, or the binder would name nothing to seed.
-                Denotations at2 = at.binding(ic.binder().id(), ic.construct(),
-                        terms.denotationOf(ic.construct(), at, k));
-                Known k2 = seedAt(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at2, 0);
-                walk(ic.then(), k2, at2, depth);
+                // Reaching `then` is the construction having held, so the binding carries the type's
+                // invariant exactly as an input of that type does — which is a location, and not the
+                // construction read again. What the construction denotes is what the check could say
+                // of the attempt, and an attempt is written where it could not say enough: an
+                // expression it cannot name denotes nothing, and inheriting that would drop the one
+                // thing reaching this branch established.
+                Entered in = enter(Terms.read(ic.binder(), ic.construct().type(), ic.pos()), k, at);
+                walk(ic.then(), in.known(), in.at(), depth);
                 // Each departure stands where the invariant did not hold, and nothing was built
                 // there, so none of them is seeded with anything the attempt would have guaranteed.
                 ic.els().forEach(arm -> walk(arm.body(), k, at, depth));
@@ -302,7 +301,7 @@ public final class InvariantChecker {
             // with, built through that type's checked constructor like any other — so it carries
             // that type's invariant, and the accumulator is not the one binding that has to give
             // its newtype up to be reasoned about.
-            in = enterOthers(handed, elem, in);
+            in = enterOthers(handed, in);
             Known k2 = in.known();
             for (Quantified q : relations) {
                 k2 = predicates.instantiate(q, element, k2, in.at());
@@ -314,7 +313,7 @@ public final class InvariantChecker {
     /** {@code in} with the closure's parameters other than the element entered at the types the
      * closure was typed with. A closure typed as anything but a function hands its parameters
      * nothing this can name, and they stay out. */
-    private Entered enterOthers(Handed handed, Type elem, Entered in) {
+    private Entered enterOthers(Handed handed, Entered in) {
         if (!(handed.step().type() instanceof Type.FnOf fn)) {
             return in;
         }
@@ -324,7 +323,14 @@ public final class InvariantChecker {
             if (params.get(i) == handed.element()) {
                 continue;
             }
-            Type given = fn.params().get(i) == null ? elem : fn.params().get(i);
+            // A call the representation kept standing was applied to a signature that accepted it,
+            // so its closure is typed. Answering an untyped parameter with the element's type would
+            // seed another type's invariant at a place this cannot read, so it is not answered.
+            Type given = fn.params().get(i);
+            if (given == null) {
+                throw new IllegalStateException("a closure a preserved call applies has an untyped"
+                        + " parameter, so what it is handed cannot be said");
+            }
             out = enter(Terms.read(params.get(i), given, handed.step().pos()), out.known(), out.at());
         }
         return out;

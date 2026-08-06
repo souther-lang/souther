@@ -104,6 +104,22 @@ class CompileBindingIsEnteredTest {
     }
 
     @Test
+    void anAttemptsSuccessBindingIsEnteredAndSeeded() {
+        // `x * x` is not a form the numeric domain builds, so the attempt denotes nothing this can
+        // name — which is what an attempt is written for. Reaching `then` is still the construction
+        // having held, so the binding carries the invariant whatever the attempt could be said of.
+        String m = """
+                module demo
+                """ + TYPES + """
+                data Nope
+                behavior use : (x: Int) -> Q | Nope constructs Q, Nope
+                let use (x) = if Q(x * x) as q then Q(0 - q.value - 1) else Nope
+                """;
+        assertEquals("E2010", errorFrom(m),
+                "the success binding carries the invariant the attempt established");
+    }
+
+    @Test
     void anArmBindingDischargesTheSameArithmeticAParameterDoes() {
         // The same addition over the same two types, reached two ways. Both are non-negative, so
         // both discharge; the arm reaching one through a binding is not what decides it.
