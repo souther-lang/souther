@@ -335,12 +335,12 @@ public final class Output {
      * counted while it is in there, or the counting stops at the module boundary and the clock decides
      * again.
      *
-     * <p>A module that came from the path is regenerated here too, and counted, wherever this
-     * compiler can re-derive it: a published module travels as the source it was written as, so
-     * asking for its classes asks for the same generation any source module gets. Where that cannot
-     * be done the module is left out rather than refused — its classes are on the loader this set is
-     * put over, so the name resolves and only the counting is missing, and a row that does not come
-     * back inside one is an evaluation that did not answer rather than a budget that was spent.
+     * <p>Only the modules this compilation declares are here. A module from the path is not
+     * regenerated at all: what a published one carries is what an importer needs to read its
+     * declarations, so regenerating it would produce some of its classes and not the rest, and a
+     * module split between this set and the parent hands its own types to its own implementation
+     * under two definitions of them. {@link #evaluationLoader} takes the path's classes whole and
+     * counts them on the way in, so the counting still does not stop at the import.
      */
     public record EvaluationLinked(String name, CoverageMode coverage)
             implements Key<Map<String, byte[]>> {
