@@ -17,6 +17,12 @@ A behavior is runnable when it has a `let` and depends on nothing injected. With
 named one runs. Without it, a module holding exactly one runnable behavior runs that one; if there
 are several, the run stops and lists them, and you pick one.
 
+`run` also has to reach the behavior, and it reaches it the way any reader outside the module does.
+So the module must expose it: a file with an `exposing` list drives only the behaviors on that list,
+and one kept to the module is refused with that as the reason. A file with no `exposing` list — a
+header-less `.sou` among them — keeps nothing to itself, so every runnable behavior in it can be
+driven.
+
 ## How `--input` is encoded — the part that is easy to get wrong
 
 The encoding depends on how many parameters the behavior takes.

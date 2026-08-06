@@ -229,6 +229,128 @@ class RunnerTest {
     }
 
     @Test
+    void refusesABehaviorTheModuleDoesNotExpose() throws Exception {
+        Path file = write("visible.sou", """
+                module visible exposing ( shown )
+
+                behavior shown : (s: String) -> String
+                let shown (s) = s
+
+                behavior hidden : (s: String) -> String
+                let hidden (s) = s
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "hidden", "\"x\""));
+        assertTrue(e.getMessage().contains("not exposed"), e.getMessage());
+        assertFalse(e.getMessage().contains("souther.compiler"), e.getMessage());
+    }
+
+    @Test
+    void refusesTheSoleRunnableBehaviorWhenTheModuleDoesNotExposeIt() throws Exception {
+        Path file = write("visible.sou", """
+                module visible exposing ( Note )
+
+                data Note = { body: String }
+
+                behavior hidden : (n: Note) -> Note
+                let hidden (n) = n
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, null, "{\"body\":\"b\"}"));
+        assertTrue(e.getMessage().contains("exposes"), e.getMessage());
+        assertFalse(e.getMessage().contains("souther.compiler"), e.getMessage());
+    }
+
+    @Test
+    void picksTheExposedBehaviorOverARunnableOneTheModuleKeepsToItself() throws Exception {
+        Path file = write("visible.sou", """
+                module visible exposing ( shown )
+
+                behavior shown : (s: String) -> String
+                let shown (s) = "shown " ++ s
+
+                behavior hidden : (s: String) -> String
+                let hidden (s) = "hidden " ++ s
+                """);
+        assertEquals("\"shown x\"", Runner.run(file, null, "\"x\""));
+    }
+
+    @Test
+    void offersOnlyExposedBehaviorsToPickAmong() throws Exception {
+        Path file = write("visible.sou", """
+                module visible exposing ( a, b )
+
+                behavior a : (s: String) -> String
+                let a (s) = s
+
+                behavior b : (s: String) -> String
+                let b (s) = s
+
+                behavior hidden : (s: String) -> String
+                let hidden (s) = s
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, null, "\"x\""));
+        assertTrue(e.getMessage().contains("a, b"), e.getMessage());
+        assertFalse(e.getMessage().contains("hidden"), e.getMessage());
+    }
+
+    @Test
+    void refusesAPipelineTheModuleDoesNotExpose() throws Exception {
+        Path file = write("visible.sou", """
+                module visible exposing ( shown )
+
+                data In = { v: Int }
+                data Out = { v: Int }
+
+                behavior shown : (s: String) -> String
+                let shown (s) = s
+
+                behavior stage : (i: In) -> Out constructs Out
+                let stage (i) = Out { v = i.v }
+
+                behavior flow = stage
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "flow", "{\"v\": 1}"));
+        assertTrue(e.getMessage().contains("not exposed"), e.getMessage());
+    }
+
+    /** The behavior is refused where it is chosen, so its hidden input type is never asked for a
+     *  decoder — which would have failed for the same reason and said so as a missing decoder. */
+    @Test
+    void refusesAHiddenBehaviorBeforeAskingItsInputTypeForADecoder() throws Exception {
+        Path file = write("visible.sou", """
+                module visible exposing ( other )
+
+                data Note = { body: String }
+
+                behavior hidden : (n: Note) -> Note
+                let hidden (n) = n
+
+                behavior other : (s: String) -> String
+                let other (s) = s
+                """);
+        Runner.RunException e = assertThrows(Runner.RunException.class,
+                () -> Runner.run(file, "hidden", "{\"body\":\"b\"}"));
+        assertTrue(e.getMessage().contains("not exposed"), e.getMessage());
+        assertFalse(e.getMessage().contains("decoder"), e.getMessage());
+    }
+
+    @Test
+    void drivesABehaviorTheModuleExposesAlongsideItsType() throws Exception {
+        Path file = write("visible.sou", """
+                module visible exposing ( shown, Note )
+
+                data Note = { body: String }
+
+                behavior shown : (n: Note) -> Note
+                let shown (n) = n
+                """);
+        assertEquals("{\"body\":\"b\"}", Runner.run(file, "shown", "{\"body\":\"b\"}"));
+    }
+
+    @Test
     void decodesAListOfDataAsAnInput() throws Exception {
         Path file = write("tally.sou", """
                 data Item = { name: String, price: Int }
