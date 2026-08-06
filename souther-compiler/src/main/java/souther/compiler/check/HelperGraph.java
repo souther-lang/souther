@@ -4,6 +4,7 @@ import souther.compiler.ast.Ast;
 
 import java.util.ArrayDeque;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -45,7 +46,21 @@ public record HelperGraph(Map<String, Set<String>> callsOf, Set<String> recursiv
                 recursive.add(name);
             }
         }
-        return new HelperGraph(Map.copyOf(callsOf), Set.copyOf(recursive));
+        return new HelperGraph(fixed(callsOf), Set.copyOf(recursive));
+    }
+
+    /**
+     * {@code callsOf} as a graph nothing can change, edges included.
+     *
+     * <p>Fixing the map alone leaves each of its sets the one that was built here, and both accessors
+     * hand one out. A graph is a module's answer and it is shared: what one reader did to it would be
+     * what every reader after it read, and a query answer that changes under its readers is one the
+     * store cannot tell has changed.
+     */
+    private static Map<String, Set<String>> fixed(Map<String, Set<String>> callsOf) {
+        Map<String, Set<String>> out = new LinkedHashMap<>();
+        callsOf.forEach((name, called) -> out.put(name, Collections.unmodifiableSet(called)));
+        return Collections.unmodifiableMap(out);
     }
 
     /** Whether {@code name} is on a call cycle, so a call of it is left standing rather than

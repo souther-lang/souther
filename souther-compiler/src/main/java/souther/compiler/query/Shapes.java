@@ -57,19 +57,14 @@ public final class Shapes {
 
         @Override
         public Answer<Ast.Module> compute(Db db) {
-            Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
+            // The module to expand, which is the resolved one where its values are well founded.
+            // Everything below here expands a body of it.
+            Answer<Ast.Module> resolved = db.ask(new Expandable(name));
             if (!resolved.present()) {
                 return Answer.absent();
             }
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!scope.present()) {
-                return Answer.absent();
-            }
-            // Nothing below expands a body of a module whose values are not well founded: a value is
-            // substituted at each of its references, so one that reaches itself is substituted into
-            // itself. Asked rather than checked here, so the refusal has one owner however many
-            // questions have to know it.
-            if (!db.ask(new NoValueReachesItself(name)).present()) {
                 return Answer.absent();
             }
             Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
@@ -115,30 +110,36 @@ public final class Shapes {
     }
 
     /**
-     * Whether no value of this module is defined in terms of itself.
+     * The module, where a body of it may be expanded — which is where no value of it is defined in
+     * terms of itself.
      *
      * <p>A value is substituted at each of its references (ADR-0072), so one that reaches itself is
      * substituted into itself and there is no body to reach the end of. Everything that expands a body
-     * of this module needs it to be true, and needs it before it expands anything: left until the
-     * expansion runs out of stack, what comes back names a nesting the author did not write.
+     * of this module needs that to be false, and needs to know before it expands anything: left until
+     * the expansion runs out of stack, what comes back names a nesting the author did not write.
      *
-     * <p>Its own question, and the reason it is one. The rule used to be checked wherever an expansion
-     * table was built, which is eleven places in a compile — so the refusal was raised by whichever of
-     * them ran first, from inside whatever question that was, and a question that does not expect a
-     * refusal from a table it is merely building passes it on as a failure of its own. Asked here it is
-     * answered once and read by name, and a reader that needs it says so.
+     * <p>It hands over the module rather than answering whether. The rule used to be checked wherever
+     * an expansion table was built, which is eleven places in a compile, so the refusal was raised by
+     * whichever of them ran first — from inside whatever question that was, which passed it on as a
+     * failure of its own. Answering whether moved the problem rather than removing it: three questions
+     * read the module and expand it, each said the condition over again, and one of them said it and
+     * two did not. A condition a reader has to remember is a condition a reader can forget.
+     *
+     * <p>So there is one thing to ask for and it is the thing they want. A question that expands a
+     * body asks for a module to expand and gets one or gets nothing; there is no answer here that
+     * hands over a module without having checked it, and nothing left to remember beside it.
      *
      * <p>Read off the resolved module, which is the earliest form that says what each name denotes —
      * and what a name denotes is what decides whether it is an edge at all.
      */
-    public record NoValueReachesItself(String name) implements Key<Boolean> {
+    public record Expandable(String name) implements Key<Ast.Module> {
         @Override
         public String module() {
             return name;
         }
 
         @Override
-        public Answer<Boolean> compute(Db db) {
+        public Answer<Ast.Module> compute(Db db) {
             Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
             if (!resolved.present()) {
                 return Answer.absent();
@@ -147,7 +148,7 @@ public final class Shapes {
             try {
                 ValueCycles.rejectIn(resolved.value(),
                         imported.present() ? imported.value() : Map.of());
-                return Answer.of(Boolean.TRUE);
+                return Answer.of(resolved.value());
             } catch (CompileException e) {
                 return Answer.absent(e);
             }
@@ -306,7 +307,7 @@ public final class Shapes {
 
         @Override
         public Answer<Map<TypeName, List<ClauseDischarge>>> compute(Db db) {
-            Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
+            Answer<Ast.Module> resolved = db.ask(new Expandable(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
             if (!resolved.present() || !scope.present()) {
                 return Answer.absent();
@@ -386,10 +387,9 @@ public final class Shapes {
 
         @Override
         public Answer<Map<TypeName, List<Ast.InvariantClause>>> compute(Db db) {
-            Answer<Ast.Module> resolved = db.ask(new Names.Resolved(name));
+            Answer<Ast.Module> resolved = db.ask(new Expandable(name));
             Answer<Symbols> scope = Names.symbols(db, name, Names.Stage.RESOLVED);
-            Answer<Boolean> founded = db.ask(new NoValueReachesItself(name));
-            if (!resolved.present() || !scope.present() || !founded.present()) {
+            if (!resolved.present() || !scope.present()) {
                 return Answer.absent();
             }
             Answer<Map<String, Ast.FnDef>> imported = db.ask(new Bodies.ImportedDefinitions(name));
