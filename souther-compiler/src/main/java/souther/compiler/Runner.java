@@ -10,7 +10,6 @@ import souther.compiler.diag.Located;
 import souther.compiler.diag.Messages;
 import net.unit8.raoh.Err;
 import net.unit8.raoh.Issues;
-import net.unit8.raoh.ResourceBundleMessageResolver;
 import net.unit8.raoh.Ok;
 import net.unit8.raoh.Result;
 import net.unit8.raoh.decode.Decoder;
@@ -95,18 +94,15 @@ public final class Runner {
             Object[] resolved = args;
             if (issues != null) {
                 // the issue text is the last argument of `run.decode.failed`, the one key that carries
-                // issues; rewriting it here is what resolves the decoder's own wording per locale
+                // issues; rewriting it here is what puts the decoder's own wording into the reader's
+                // language, as far as the decoder's catalog can state it
                 resolved = args.clone();
-                resolved[resolved.length - 1] = detail(issues.resolve(DECODE_MESSAGES, locale));
+                resolved[resolved.length - 1] = detail(DecodeMessages.localize(issues, locale));
             }
             String text = Messages.get(messageKey, locale, resolved);
             return exitCode == 2 ? text + "\n" + Messages.get("run.usage.line", locale) : text;
         }
     }
-
-    /** The decoder's own message catalog, which its issues are written against. */
-    private static final ResourceBundleMessageResolver DECODE_MESSAGES =
-            new ResourceBundleMessageResolver("net.unit8.raoh.messages");
 
     /** A failure that names a catalog key: the English literal for a Java caller, the key for the
      * command line's chosen locale. */
