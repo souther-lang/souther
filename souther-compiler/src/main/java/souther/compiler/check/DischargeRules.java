@@ -327,6 +327,13 @@ final class DischargeRules {
         return Bound.CARRIERS.keySet();
     }
 
+    /** Which shapes of construction carry the predicate {@code operation} states, for the test that
+     * holds each rule to a program on both sides of what it names. */
+    static Set<Shape> carriedThrough(String operation) {
+        Carried carried = Bound.CARRIERS.get(op(operation));
+        return carried == null ? Set.of() : carried.through();
+    }
+
     static Set<ValueName> emptinessChecks() {
         return EMPTINESS.keySet();
     }
