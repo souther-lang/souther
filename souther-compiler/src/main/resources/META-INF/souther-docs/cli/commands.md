@@ -23,7 +23,7 @@ souther run <file.sou> [--behavior <name>] [--input <json>]
 
 Applies one behavior of one self-contained file to JSON input and prints the JSON result. The
 `--input` encoding depends on the behavior's arity and is easy to get wrong — see
-`souther doc cli/run`.
+{{doc:cli/run}}.
 
 ## fmt
 
@@ -55,7 +55,7 @@ souther doc [<anchor> | <set>/<topic> | --search <term> [--limit <n>]]
 ```
 
 The language specification and the documentation bundled libraries ship. With no argument it lists
-every section and topic as `name<TAB>title`. New to Souther? Read `souther doc cli/start-here`.
+every section and topic as `name<TAB>title`. New to Souther? Read {{doc:cli/start-here}}.
 
 ## api
 

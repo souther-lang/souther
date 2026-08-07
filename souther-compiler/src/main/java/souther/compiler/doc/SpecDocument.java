@@ -85,18 +85,29 @@ public final class SpecDocument {
 
     /** The specification this compiler was built from, bundled in its jar. */
     public static SpecDocument bundled() {
+        return bundled(Caller.CLI);
+    }
+
+    /** The same specification, with what it sends a reader to spelled the way {@code caller} asks. */
+    static SpecDocument bundled(Caller caller) {
         try (InputStream in = SpecDocument.class.getResourceAsStream(RESOURCE)) {
             if (in == null) {
                 throw new IllegalStateException("the bundled specification is missing: " + RESOURCE);
             }
-            return of(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            return of(new String(in.readAllBytes(), StandardCharsets.UTF_8), caller);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
     public static SpecDocument of(String adoc) {
-        String[] lines = adoc.split("\n", -1);
+        return of(adoc, Caller.CLI);
+    }
+
+    static SpecDocument of(String adoc, Caller caller) {
+        // Spelled before the document is cut into sections, so that what is ranked, cut to a
+        // snippet and printed is one text rather than three readings of it.
+        String[] lines = Affordance.materialize(adoc, caller).split("\n", -1);
         record Heading(List<String> anchors, String title, int level, int anchorFrom, int bodyFrom) {}
         boolean[] takenAsItStands = opaqueLines(lines);
         List<Heading> headings = new ArrayList<>();

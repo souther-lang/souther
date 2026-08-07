@@ -22,22 +22,44 @@ public final class LibraryDocs {
 
     private static final String ROOT = "META-INF/souther-docs/";
 
-    /** One shipped document: {@code set/topic} as the jar that ships it spells the name, the title
-     *  of its first markdown heading, and where its text is. */
-    public record Topic(String name, String title, String resource) {}
+    /**
+     * One shipped document: {@code set/topic} as the jar that ships it spells the name, the title
+     * of its first markdown heading, where its text is, and the one caller whose listing names it.
+     *
+     * <p>{@code listedFor} is null for a topic every caller is shown, which is nearly all of them.
+     * A topic that documents an interface only one caller has is named in that caller's listing
+     * alone: the listing is where a client with no other map of what is here decides what to read,
+     * and a manual for a wire this one is not on is not an answer it can use. It stays readable by
+     * name, because what the toolchain is remains worth knowing to a reader who asks.
+     */
+    public record Topic(String name, String title, String resource, Caller listedFor) {
+
+        /** Whether {@code caller}'s listing names this topic. */
+        boolean listedFor(Caller caller) {
+            return listedFor == null || listedFor == caller;
+        }
+    }
 
     private final ClassLoader loader;
     /** Keyed by {@link DocName#canonical}, so a topic is found in whatever case it is asked for.
      *  The topic keeps its own spelling: the name is also the path its text is read from. */
     private final Map<String, Topic> byName;
+    /** Who the text is spelled for, wherever it sends its reader somewhere. */
+    private final Caller caller;
 
-    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName) {
+    private LibraryDocs(ClassLoader loader, Map<String, Topic> byName, Caller caller) {
         this.loader = loader;
         this.byName = byName;
+        this.caller = caller;
     }
 
     /** The doc sets reachable through {@code loader} — for the CLI, everything bundled with it. */
     public static LibraryDocs on(ClassLoader loader) {
+        return on(loader, Caller.CLI);
+    }
+
+    /** The same sets, read as {@code caller} is to be answered. */
+    static LibraryDocs on(ClassLoader loader, Caller caller) {
         Map<String, Topic> byName = new LinkedHashMap<>();
         try {
             Enumeration<URL> registries = loader.getResources(ROOT + "sets");
@@ -48,11 +70,17 @@ public final class LibraryDocs {
                     if (indexUrl == null) {
                         continue;
                     }
-                    for (String file : lines(indexUrl)) {
+                    for (String entry : lines(indexUrl)) {
+                        // A file, and after a tab the caller whose listing names it. An index that
+                        // writes only the file names every caller's listing, which is what a doc
+                        // set that has never had to think about wires writes.
+                        String[] written = entry.split("\t", 2);
+                        String file = written[0].strip();
                         String topic = set + "/" + file.replaceFirst("\\.md$", "");
                         String resource = ROOT + set + "/" + file;
                         Topic taken = byName.put(DocName.canonical(topic),
-                                new Topic(topic, titleOf(loader, resource, file), resource));
+                                new Topic(topic, titleOf(loader, resource, file, caller), resource,
+                                        written.length < 2 ? null : listedFor(written[1].strip(), topic)));
                         if (taken != null) {
                             throw new IllegalStateException(
                                     "two shipped topics are asked for by the same name: `"
@@ -64,7 +92,18 @@ public final class LibraryDocs {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return new LibraryDocs(loader, byName);
+        return new LibraryDocs(loader, byName, caller);
+    }
+
+    /** The caller an index names beside a topic, refusing one no caller answers to. */
+    private static Caller listedFor(String written, String topic) {
+        for (Caller caller : Caller.values()) {
+            if (caller.name().equalsIgnoreCase(written)) {
+                return caller;
+            }
+        }
+        throw new IllegalStateException("`" + topic + "` is listed for `" + written
+                + "`, which is nobody this answers");
     }
 
     /** Every shipped topic, in registry order. */
@@ -82,7 +121,7 @@ public final class LibraryDocs {
         if (topic == null || loader.getResource(topic.resource()) == null) {
             return null;
         }
-        return text(loader, topic.resource());
+        return text(topic.resource());
     }
 
     /** Every topic whose title or text contains {@code term}, case-insensitively. */
@@ -105,7 +144,7 @@ public final class LibraryDocs {
         String needle = term.toLowerCase();
         List<Hit> hits = new ArrayList<>();
         for (Topic topic : byName.values()) {
-            String body = text(loader, topic.resource());
+            String body = text(topic.resource());
             boolean titled = topic.title().toLowerCase().contains(needle)
                     || topic.name().toLowerCase().contains(needle);
             int occurrences = count(body.toLowerCase(), needle);
@@ -130,7 +169,7 @@ public final class LibraryDocs {
     /** The line of {@code topic} that says {@code term}, cut to a readable width. */
     public String snippet(Topic topic, String term) {
         String needle = term.toLowerCase();
-        String line = text(loader, topic.resource()).lines()
+        String line = text(topic.resource()).lines()
                 .map(String::strip)
                 .filter(l -> !l.isEmpty() && !l.startsWith("#") && !l.startsWith("|"))
                 .filter(l -> l.toLowerCase().contains(needle))
@@ -139,12 +178,23 @@ public final class LibraryDocs {
         return line.length() <= 120 ? line : line.substring(0, 119) + "…";
     }
 
-    private static String titleOf(ClassLoader loader, String resource, String fallback) {
-        return text(loader, resource).lines()
+    private static String titleOf(ClassLoader loader, String resource, String fallback, Caller caller) {
+        return Affordance.materialize(text(loader, resource), caller).lines()
                 .filter(l -> l.startsWith("# "))
                 .map(l -> l.substring(2).strip())
                 .findFirst()
                 .orElse(fallback);
+    }
+
+    /**
+     * The topic's text as this reader is to be shown it.
+     *
+     * <p>Spelled here rather than where it is printed, because a search ranks and cuts snippets
+     * from the same text. A term that named the other caller's spelling would otherwise match, and
+     * the snippet it matched in would hand back the operation this reader cannot carry out.
+     */
+    private String text(String resource) {
+        return Affordance.materialize(text(loader, resource), caller);
     }
 
     private static String text(ClassLoader loader, String resource) {

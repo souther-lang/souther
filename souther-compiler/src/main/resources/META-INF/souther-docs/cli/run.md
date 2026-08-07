@@ -53,7 +53,7 @@ that type's external form is written: a newtype is bare (`"world"`, `1200` — n
 record is an object with its field names, a date is the string form `"2026-07-25"`.
 
 A value in a sum-typed position carries a discriminator so the decoder knows which case to build;
-`souther doc sum-discrimination` says what that looks like.
+{{doc:sum-discrimination}} says what that looks like.
 
 ## Examples
 
@@ -70,4 +70,4 @@ souther run billing.sou --behavior billFor \
 
 `souther run` answers "what does this do with this one input". To pin behaviour down as part of the
 model, write `example` rows instead — they are checked at compile time and the compiler will tell
-you what they leave uncovered. See `souther doc examples` and `souther examples <file.sou>`.
+you what they leave uncovered. See {{doc:examples}} and `souther examples <file.sou>`.

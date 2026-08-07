@@ -28,14 +28,28 @@ class EveryAnswerIsReachableWithoutLeavingTheMcpToolsTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Test
-    void aClientThatKnowsNoNameIsGivenEveryNameThereIs() {
+    void aClientThatKnowsNoNameIsGivenEveryNameItCanUse() {
         String listing = text(call("doc_read", "{}"));
 
-        assertEquals(printed(new String[]{}), listing,
-                "the listing a reader gets for no argument is the listing a client gets for no name");
         assertTrue(listing.lines().count() > 300, "every section and every shipped topic, not a page of them");
         assertTrue(listing.contains("cli/start-here"),
                 "including the topic written for a reader who has never written Souther");
+
+        List<String> onlyAtAPrompt = printed(new String[]{}).lines()
+                .filter(line -> !listing.contains(line)).toList();
+        assertEquals(List.of("cli/run\tRunning a behavior: `souther run`"), onlyAtAPrompt,
+                "the listing is this caller's map, and what it leaves out is a manual for a"
+                        + " command this caller has no way to invoke");
+    }
+
+    @Test
+    void aTopicTheListingLeavesOutIsStillReadByName() {
+        JsonNode answer = call("doc_read", "{\"name\":\"cli/run\"}");
+
+        assertFalse(answer.get("isError").asBoolean(),
+                "not being on the map is not being unreachable — what the toolchain is stays"
+                        + " worth knowing to a client that asks about it");
+        assertTrue(text(answer).contains("--behavior"), text(answer));
     }
 
     @Test

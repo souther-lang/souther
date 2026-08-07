@@ -10,6 +10,10 @@ package souther.compiler.doc;
  *
  * <p>Every such offer lives here rather than at the place that prints it, so that adding a caller
  * is answering these questions once instead of finding every message that asks them.
+ *
+ * <p>These are the offers a command composes. A document that sends its reader somewhere writes
+ * the same kind of offer in its own text, as an {@link Affordance}, and this is what picks its
+ * spelling too.
  */
 enum Caller {
 
@@ -41,9 +45,6 @@ enum Caller {
 
     /** How to read a stdlib module's own source, where what a signature means is written. */
     String stdlibSource(String module) {
-        return switch (this) {
-            case CLI -> "`souther api --source " + module + "` for what it means";
-            case MCP -> "`stdlib_api_source {name: \"" + module + "\"}` for what it means";
-        };
+        return Affordance.STDLIB_SOURCE.spelled(this, module) + " for what it means";
     }
 }
