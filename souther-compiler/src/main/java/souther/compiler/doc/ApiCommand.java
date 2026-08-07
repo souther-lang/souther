@@ -80,7 +80,8 @@ public final class ApiCommand {
         return 0;
     }
 
-    /** One callable name's parameters, as written, and the type its call answers with. */
+    /** One published name's parameters, as written, and the type it answers with. A name declaring
+     *  none is a value rather than a function of no arguments. */
     record Signature(List<String> paramNames, List<Type> paramTypes, Type result) {}
 
     private static void listPublished(PrintStream out, String prefix) {
@@ -92,12 +93,12 @@ public final class ApiCommand {
     }
 
     /**
-     * Every name a call may be written with, in module order.
+     * Every name a program may write, in module order.
      *
-     * <p>This is the callable surface, not the declared one: a name written as sugar over a private
-     * helper — {@code List.fold}, which the checker rewrites to {@code List.foldFrom(…, 0)} — is
-     * what the specification tells a reader to call, so it is listed under its own name and with
-     * only the arguments its caller writes. Leaving it out would have this command contradict the
+     * <p>This is the surface a reader writes, not the declared one: a name written as sugar over a
+     * private helper — {@code List.fold}, which the checker rewrites to {@code List.foldFrom(…, 0)}
+     * — is what the specification tells a reader to call, so it is listed under its own name and
+     * with only the arguments its caller writes. Leaving it out would have this command contradict the
      * specification about what exists.
      *
      * <p>Which names those are and what order they come in are both {@link Prelude#published()}'s
@@ -136,16 +137,26 @@ public final class ApiCommand {
         return new Signature(names, kept, entry.signature().result());
     }
 
+    /**
+     * One name as its caller writes it. A parameter list is written where the declaration declares
+     * one; a declaration with none is a value, which is named where the value it stands for would go
+     * and refused where it is applied (E1803). No parameters is that case and only that case: the
+     * parameter list is what tells a function from a value, and an empty {@code ()} is refused
+     * rather than being a second spelling of either.
+     */
     private static String line(String qualifiedName, Signature signature) {
-        StringBuilder sb = new StringBuilder(qualifiedName).append("(");
-        for (int i = 0; i < signature.paramNames().size(); i++) {
-            if (i > 0) {
-                sb.append(", ");
+        StringBuilder sb = new StringBuilder(qualifiedName);
+        if (!signature.paramNames().isEmpty()) {
+            sb.append("(");
+            for (int i = 0; i < signature.paramNames().size(); i++) {
+                if (i > 0) {
+                    sb.append(", ");
+                }
+                sb.append(signature.paramNames().get(i)).append(": ")
+                        .append(Type.show(signature.paramTypes().get(i)));
             }
-            sb.append(signature.paramNames().get(i)).append(": ")
-                    .append(Type.show(signature.paramTypes().get(i)));
+            sb.append(")");
         }
-        sb.append(")");
         if (signature.result() != null) {
             sb.append(" : ").append(Type.show(signature.result()));
         }
