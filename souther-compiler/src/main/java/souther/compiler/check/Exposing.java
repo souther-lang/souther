@@ -4,6 +4,7 @@ import souther.compiler.Prelude;
 import souther.compiler.ast.Ast;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -89,21 +90,20 @@ public final class Exposing {
                 String qualified = imp.module() + "." + name;
                 if (!Prelude.isLibraryFunction(qualified)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.import.notstdfn").title("check.module.title")
+                            Diagnostic.of(DiagnosticCode.E1506, "check.import.notstdfn")
                                     .at(imp.pos()).args(name, imp.module()).build(),
                             "`" + name + "` is not a function in the standard library module `"
                                     + imp.module() + "` (spec §stdlib).");
                 }
                 if (declaredData.contains(name) || ownNames.contains(name)) {
-                    conflicts.add(Diagnostic.uncoded("check.import.conflict")
-                            .title("check.module.title").at(imp.pos()).args(name)
+                    conflicts.add(Diagnostic.of(DiagnosticCode.E1508, "check.import.conflict").at(imp.pos()).args(name)
                             .hint("check.import.conflict.hint").build());
                     continue;   // the name is refused; what it means until then is the declaration
                 }
                 String prior = exposed.putIfAbsent(name, qualified);
                 if (prior != null && !prior.equals(qualified)) {
                     throw CompileException.of(
-                            Diagnostic.uncoded("check.import.ambiguous").title("check.module.title")
+                            Diagnostic.of(DiagnosticCode.E1508, "check.import.ambiguous")
                                     .at(imp.pos()).args(name, prior, qualified).build(),
                             "`" + name + "` is exposed from both `" + prior + "` and `" + qualified
                                     + "` — call it qualified instead of importing both (spec §stdlib).");

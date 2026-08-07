@@ -1411,20 +1411,20 @@ public final class TypeOps {
             String module = symbols.moduleOfQualifier(qualifier);
             if (module == null) {
                 return CompileException.of(
-                        Diagnostic.uncoded("check.qualified.unknownmodule").title("check.module.title")
+                        Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
                                 .at(written.region()).args(qualifier, name)
                                 .suggestion(Suggest.candidate(qualifier, symbols.qualifiers()))
                                 .build(),
                         "no module named `" + qualifier + "`");
             }
-            String key = symbols.contains(new TypeName(module, name))
-                    ? "check.qualified.notexposed" : "check.qualified.notdefined";
+            boolean declared = symbols.contains(new TypeName(module, name));
             return CompileException.of(
-                    Diagnostic.uncoded(key).title("check.module.title")
+                    Diagnostic.of(declared ? DiagnosticCode.E1507 : DiagnosticCode.E1506,
+                                    declared ? "check.qualified.notexposed" : "check.qualified.notdefined")
                             .at(written.region()).args(name, module)
                             .suggestion(Suggest.candidate(name, symbols.declaredIn(module).keySet()))
                             .build(),
-                    "`" + name + "` is not " + (key.endsWith("notexposed") ? "exposed by" : "defined in")
+                    "`" + name + "` is not " + (declared ? "exposed by" : "defined in")
                             + " `" + module + "`");
         }
         Set<String> known = symbols.namesInScope();

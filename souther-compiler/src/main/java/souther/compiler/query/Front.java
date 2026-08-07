@@ -327,8 +327,7 @@ public final class Front {
                 PublishedModule published = PublishedModule.read(name, classes);
                 if (published == null) {
                     if (neededBy.containsKey(name) && !Prelude.isQualifier(name)) {
-                        reports.add(Report.of(Diagnostic.uncoded("check.module.pathincomplete")
-                                .title("check.module.title").args(name, neededBy.get(name))
+                        reports.add(Report.of(Diagnostic.of(DiagnosticCode.E1504, "check.module.pathincomplete").args(name, neededBy.get(name))
                                 .hint("check.module.pathincomplete.hint", name).build()));
                     }
                     continue;   // written in a source being compiled: still that import's own error
@@ -511,7 +510,7 @@ public final class Front {
                 return Answer.of(m.name());
             }
             return Answer.absent(Report.raised(
-                    Diagnostic.uncoded("check.module.duplicate").title("check.module.title")
+                    Diagnostic.of(DiagnosticCode.E1503, "check.module.duplicate")
                             .at(m.pos()).args(m.name()).build(),
                     "duplicate module `" + m.name() + "`"));
         }
@@ -676,7 +675,7 @@ public final class Front {
                 return Answer.of(Boolean.FALSE);
             }
             return Answer.absent(Report.raised(
-                    Diagnostic.uncoded("check.module.shadowspath").title("check.module.title")
+                    Diagnostic.of(DiagnosticCode.E1503, "check.module.shadowspath")
                             .args(name).hint("check.module.shadowspath.hint", name).build(),
                     "module `" + name + "` is compiled here and is also on the path"));
         }
@@ -753,7 +752,7 @@ public final class Front {
     static Report reservedNamespace(String name, SourcePos pos) {
         if (name.equals(RESERVED) || name.startsWith(RESERVED + ".")) {
             return Report.raised(
-                    Diagnostic.uncoded("check.module.reserved").title("check.module.title")
+                    Diagnostic.of(DiagnosticCode.E1502, "check.module.reserved")
                             .at(pos).args(name).build(),
                     "module `" + name + "` is in the reserved `" + RESERVED + "` namespace: the"
                             + " compiler ships souther.string / souther.list / souther.map /"
@@ -764,7 +763,7 @@ public final class Front {
         // imported.
         if (Prelude.isQualifier(name)) {
             return Report.raised(
-                    Diagnostic.uncoded("check.module.qualifier").title("check.module.title")
+                    Diagnostic.of(DiagnosticCode.E1502, "check.module.qualifier")
                             .at(pos).args(name).build(),
                     "module `" + name + "` uses a name reserved for the standard-library qualifier `"
                             + name + "` (as in `" + name + ".…` / `import " + name + " { … }`); pick"

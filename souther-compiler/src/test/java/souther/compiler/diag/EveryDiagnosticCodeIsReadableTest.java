@@ -187,7 +187,7 @@ class EveryDiagnosticCodeIsReadableTest {
     }
 
     /** How many diagnostics are still unmapped. Lower it as they are mapped; never raise it. */
-    private static final int UNCODED_CEILING = 190;
+    private static final int UNCODED_CEILING = 165;
 
     private static String spec() throws IOException {
         try (InputStream in = EveryDiagnosticCodeIsReadableTest.class.getResourceAsStream(SPEC)) {

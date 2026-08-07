@@ -51,6 +51,13 @@ public enum DiagnosticCode {
 
     // --- modules, requirements, composition ---
     E1501("module-dependencies-are-acyclic", "e1501.title"),
+    E1502("a-core-name-is-not-taken", "check.module.title"),
+    E1503("a-module-is-declared-in-one-place", "check.module.title"),
+    E1504("every-module-reached-is-on-the-path", "check.module.title"),
+    E1505("a-published-module-agrees-with-this-compiler", "check.module.title"),
+    E1506("a-reached-name-is-declared-by-its-module", "check.module.title"),
+    E1507("a-reached-name-is-exposed-by-its-module", "check.module.title"),
+    E1508("an-imported-name-denotes-one-thing", "check.module.title"),
     E1602("depends-on-names-every-requirement", "e1602.title"),
     E1603("depends-on-names-no-more", "e1603.title"),
     E1604("composition-output-agrees-with-inference", "e1604.title"),
@@ -58,6 +65,10 @@ public enum DiagnosticCode {
     E1606("sum-cases-are-declared-with-the-sum", "check.sum.title"),
     E1607("depends-on-names-a-dependency", "e1607.title"),
     E1608("behavior-does-not-reach-itself", "e1608.title"),
+    E1609("exposing-lists-this-modules-own-definitions", "check.module.title"),
+    E1610("exposing-is-type-granular", "check.module.title"),
+    E1611("an-exposed-signature-names-only-exposed-types", "check.module.title"),
+    E1612("an-injection-target-declares-no-depends-on", "check.module.title"),
     E1701("composition-stages-type-route", "e1701.title"),
 
     // --- examples ---

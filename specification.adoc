@@ -190,6 +190,12 @@ A Java Binding at the boundary (the Java implementation of a behavior with no im
 
 The extension is `+.sou+`. Each file defines one module.
 
+Three things hold of a module before anything in it is read:
+
+* [[a-module-is-declared-in-one-place]]a module is declared once. Two files declaring one name, or a file declaring a module that is also on the path, leave two answers to what that name means;
+* [[a-core-name-is-not-taken]]a module MUST NOT take a name the core has — the reserved `+souther+` namespace, or a standard-library qualifier such as `+List+` (<<reserved-namespace>>). A data MUST NOT take a qualifier's name either: the qualifier is the only spelling that reaches the library, so a declaration of that name hides it;
+* [[every-module-reached-is-on-the-path]]every module a compile reaches — imported, named in a qualified reference, or needed by one that is — MUST be among the modules being compiled or on the path, and what it says it declares MUST be there to read.
+
 [,text]
 ----
 module example.businesstrip
@@ -236,6 +242,10 @@ module example.order exposing (
 [#exposed-values]
 ==== A value and a helper are published
 
+[[exposing-lists-this-modules-own-definitions]]`+exposing+` lists what this module declares. A name it does not declare is not published by writing it here, and neither is an imported one: a module re-exporting another's vocabulary would put one declaration behind two surfaces.
+
+[[exposing-is-type-granular]]`+exposing+` is granular to the type. A data's derived `+decoder+` and `+encoder+` are published with it and are not named separately — they are how the type crosses a boundary, and a type that crosses one carries them (<<decoder>>, <<encoder>>).
+
 `+exposing+` MAY name a *value* — a `+let+` with no parameter list (<<fn-declaration>>) — and a *helper* — a `+let+` with them — alongside the module's data and behaviors. A limit a rule is written against, the representative record its examples are stated with, and the rule itself are part of what the module offers, and a reader names them instead of writing them out again.
 
 [,text]
@@ -261,7 +271,7 @@ A published body's source travels in the jar and is read back by the importing c
 [#exposed-surface]
 ==== What reaches out may not rest on what is kept
 
-What a module reaches out with SHALL NOT rest on a type it keeps to itself. An exposed data's field types, and an exposed behavior's input and output, are exposed by the module that declares them. A type carried inside a collection counts — `+List<UserId>+` names `+UserId+` as surely as a bare `+UserId+` does.
+[[an-exposed-signature-names-only-exposed-types]]What a module reaches out with SHALL NOT rest on a type it keeps to itself. An exposed data's field types, and an exposed behavior's input and output, are exposed by the module that declares them. A type carried inside a collection counts — `+List<UserId>+` names `+UserId+` as surely as a bare `+UserId+` does.
 
 An exposed value SHALL NOT stand for a type the module keeps to itself, and an exposed helper SHALL NOT return one or take one — a reader would hold a value it has no name for, or be unable to write the argument it has to pass. What a definition stands for is its *type*, settled from its body (<<fn-rules>>), and not the constructions the body makes on the way: a definition may name a type it never builds (`+let published (n: Int) : List<Hidden> = []+`), and a type its body reached for on the way is its own workings — requiring those would put every inner type back in the reader's import list, which is what publishing the definition was for.
 
@@ -301,6 +311,8 @@ An import says which names MAY be written without their qualifier. It does not s
 [#published-modules]
 === Importing a module another project compiled
 
+[[a-published-module-agrees-with-this-compiler]]A module read from compiled output MUST have been compiled by a Souther that agrees with this one about what an importing module may reach. What it published is read back as declarations, so a disagreement about the surface is a disagreement about the text of this compile.
+
 A module MAY be imported from the compiled output of another project, with no `+.sou+` of it in this
 one. A compiled module carries what it declares — its `+data+` definitions, its behavior
 signatures, its `+exposing+` line and the imports it was written under — on the classes it generated,
@@ -334,7 +346,11 @@ satisfy: a dependency's implementation-only dependencies need not be on the clas
 [#qualified-reference]
 === Qualified reference
 
-A type is also reachable through the module that declares it, written as the module name and the type name. Like the standard library's `+List.map+`, this needs no `+import+`: the `+import+` line only lets the name be written bare.
+A type is also reachable through the module that declares it, written as the module name and the type name.
+
+[[a-reached-name-is-declared-by-its-module]]A name reached across a module boundary MUST be one that module declares, and [[a-reached-name-is-exposed-by-its-module]]it MUST be one that module exposes. The two are separate: a name the module never declared is a mistake about what is there, and a name it declared and kept is a mistake about what it publishes, which is the module's own decision to make (<<exposed-surface>>). Both hold whether the name arrives by `+import+` or is written qualified.
+
+[[an-imported-name-denotes-one-thing]]A name an `+import+` brings in MUST denote one thing here. Two modules exposing it, an alias already in use, or this module's own declaration of that spelling each leave the reader with a name and no single answer; reaching one of them qualified is what says which. Like the standard library's `+List.map+`, this needs no `+import+`: the `+import+` line only lets the name be written bare.
 
 [,text]
 ----
@@ -1976,7 +1992,9 @@ A value is not module state. Its expression is elaborated in the module that dec
 [#injected-behavior]
 === A behavior with no implementation — outside-world dependency
 
-*If a behavior with only a type has no implementation*, its implementation is injected from Java. It corresponds to the spec DSL's `+// depends:+` and `+// side effect:+`.
+*If a behavior with only a type has no implementation*, its implementation is injected from Java.
+
+[[an-injection-target-declares-no-depends-on]]A behavior with no `+let+` MUST NOT declare `+depends on+`. It is what gets injected, and what a dependency is supplied to is the behavior that calls or composes it (<<depends-on>>); a target declaring its own would be asking to be handed something before it exists. It corresponds to the spec DSL's `+// depends:+` and `+// side effect:+`.
 
 An implementation is either a same-named `+let+` (<<fn-declaration>>) or a right-hand `+>->+` composition (<<composition>>). A `+>->+` composition behavior has no `+let+` but does have an implementation, so it is not subject to injection. What is injected is only one that wrote a type and no `+let+`.
 
@@ -3671,6 +3689,78 @@ Cyclic module dependency detected.
 
 A module depends on every module it imports and on every module it names in a qualified reference (<<qualified-reference>>), so the cycle is reported whichever of the two closes it.
 
+[#e1502]
+=== A declaration takes a name the core has
+
+[,text]
+----
+module `List` uses a name reserved for the standard-library qualifier `List` (as in `List.…` /
+`import List ( … )`); pick another module name.
+----
+
+Reported where a module or a data takes a name the core holds (<<a-core-name-is-not-taken>>) — the reserved `+souther+` namespace, or a standard-library qualifier. The qualifier is the only spelling that reaches the library, so a declaration of that name does not shadow it in one place, it hides it everywhere.
+
+[#e1503]
+=== A module is declared in two places
+
+[,text]
+----
+Module `example.employee` is compiled here and is also on the path.
+----
+
+Reported when two sources declare one module, or a compiled source declares one that is also on the path (<<a-module-is-declared-in-one-place>>). Which of the two an importer would read is not decided by the text, so neither is chosen.
+
+[#e1504]
+=== A module a compile reaches is not there
+
+[,text]
+----
+Module `example.travel` needs `example.employee`, which is not on the path either.
+----
+
+Reported where a module a compile reaches is neither compiled here nor on the path (<<every-module-reached-is-on-the-path>>) — imported, written qualified, or needed by a module that is. It also covers a module on the path that says it declares something the classpath does not carry: what it publishes is read back as declarations, and a declaration with no class behind it is not one.
+
+[#e1505]
+=== A module on the path was compiled by another Souther
+
+[,text]
+----
+Module `example.employee` was compiled by Souther 0.4.0, which does not agree with this compiler
+about what an importing module may reach.
+----
+
+Reported when reading a published module whose compiler does not agree with this one about the surface (<<a-published-module-agrees-with-this-compiler>>). Not a warning: what an importing module may reach decides what this compile's text means, so a disagreement is about the source being compiled and not about the artifact.
+
+[#e1506]
+=== A name reached across a boundary is not declared there
+
+[,text]
+----
+`Amount` is not defined in `example.employee`.
+----
+
+Reported where a name written on an `+import+` list or after a module qualifier is not one that module declares (<<a-reached-name-is-declared-by-its-module>>). The nearest name it does declare is suggested. Separate from <<e1507>>: this is a mistake about what is there, not about what is published.
+
+[#e1507]
+=== A name reached across a boundary is not exposed
+
+[,text]
+----
+`Amount` is declared in `example.employee` but not exposed by it.
+----
+
+Reported where the name exists and the module keeps it (<<a-reached-name-is-exposed-by-its-module>>). What a module publishes is its own decision (<<exposed-surface>>), so the move is to expose it there rather than to reach past the decision from here.
+
+[#e1508]
+=== An imported name denotes more than one thing
+
+[,text]
+----
+`Amount` is imported from both `example.employee` and `example.billing`.
+----
+
+Reported where a name an `+import+` brings in has more than one answer here (<<an-imported-name-denotes-one-thing>>): exposed by two modules, colliding with this module's own declaration, or an alias already in use. Reaching one of them qualified is what says which, and is why the answer is not to pick one for the author.
+
 [#e1601-removed]
 === (retired)
 
@@ -3680,6 +3770,49 @@ E1601 is retired. A requirement is reconciled between the `+depends on+` clause 
 === (retired)
 
 The `+error+` declaration and E1801 are retired. A failure is ordinary data, and whether it departs the mainline is decided by composition, so there is no distinction between a success position and a failure position (<<unmarked-sum>>, <<behavior>>, <<composition>>).
+
+[#e1609]
+=== `exposing` names something this module does not declare
+
+[,text]
+----
+`exposing` names `Amount`, which is imported into this module, not defined here; `exposing` lists a
+module's own definitions and does not re-export imported names.
+----
+
+Reported where `+exposing+` names something this module does not declare (<<exposing-lists-this-modules-own-definitions>>), whether that is nothing at all or a name it imported. Re-export is the second of those and is refused on purpose: one declaration behind two surfaces leaves a reader two modules to ask about it.
+
+[#e1610]
+=== `exposing` names a derived codec
+
+[,text]
+----
+`exposing` is type-granular: a data's `decoder`/`encoder` are always public once the data is
+exposed. Write `Amount`, not `Amount.decoder`.
+----
+
+Reported where `+exposing+` names a data's `+decoder+` or `+encoder+` (<<exposing-is-type-granular>>). They are how the type crosses a boundary, so a type that crosses one carries them; there is no state in which the data is published and they are not.
+
+[#e1611]
+=== An exposed signature names a type the module keeps
+
+[,text]
+----
+Behavior `submit` is exposed and its input names `Draft`, which this module does not expose.
+----
+
+Reported where an exposed behavior's input or output, or an exposed data's field, names a type this module keeps to itself (<<an-exposed-signature-names-only-exposed-types>>). A caller would be handed a value of a type it cannot name. An injection target says it differently, because there the caller is Java.
+
+[#e1612]
+=== An injection target declares `depends on`
+
+[,text]
+----
+behavior `now` has no `let`, so it is an injection target; it cannot declare `depends on` — the
+behavior that calls or composes it does.
+----
+
+Reported where a behavior with no `+let+` writes a `+depends on+` clause (<<an-injection-target-declares-no-depends-on>>). It is the thing being supplied, and what a dependency is supplied to is the behavior that reaches it.
 
 [#e1701]
 === behavior composition type mismatch

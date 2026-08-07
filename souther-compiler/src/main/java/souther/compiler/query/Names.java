@@ -294,7 +294,7 @@ public final class Names {
             }
             if (!db.ask(new Front.ModuleNames()).value().contains(target)) {
                 return nothing(ref, Report.raised(
-                        Diagnostic.uncoded("check.qualified.unknownmodule").title("check.module.title")
+                        Diagnostic.of(DiagnosticCode.E1504, "check.qualified.unknownmodule")
                                 .at(ref.pos()).args(qualifier, bare).build(),
                         "no module named `" + qualifier + "`"));
             }
@@ -546,7 +546,7 @@ public final class Names {
                 for (String imported : imp.names()) {
                     if (!exposed.contains(imported)) {
                         reports.add(Report.raised(
-                                Diagnostic.uncoded("check.import.notexposed").title("check.module.title")
+                                Diagnostic.of(DiagnosticCode.E1507, "check.import.notexposed")
                                         .at(imp.pos()).args(imported, imp.module()).build(),
                                 "`" + imported + "` is not exposed by `" + imp.module() + "`"));
                         nameless(scope, List.of(imported));
@@ -561,7 +561,7 @@ public final class Names {
                             continue;
                         }
                         reports.add(Report.raised(
-                                Diagnostic.uncoded("check.import.notdefined").title("check.module.title")
+                                Diagnostic.of(DiagnosticCode.E1506, "check.import.notdefined")
                                         .at(imp.pos()).args(imported, imp.module()).build(),
                                 "`" + imported + "` is not defined in `" + imp.module() + "`"));
                         nameless(scope, List.of(imported));
@@ -1416,7 +1416,7 @@ public final class Names {
 
     static Report unknownModule(Ast.Import imp) {
         return Report.raised(
-                Diagnostic.uncoded("check.import.unknownmodule").title("check.module.title")
+                Diagnostic.of(DiagnosticCode.E1504, "check.import.unknownmodule")
                         .at(imp.pos()).args(imp.module()).build(),
                 "unknown module `" + imp.module() + "`");
     }
@@ -1435,7 +1435,7 @@ public final class Names {
             return null;
         }
         return Report.raised(
-                Diagnostic.uncoded("check.import.aliastaken").title("check.module.title")
+                Diagnostic.of(DiagnosticCode.E1508, "check.import.aliastaken")
                         .at(imp.pos()).args(imp.alias(), taken)
                         .hint("check.import.aliastaken.hint").build(),
                 "the alias `" + imp.alias() + "` is already how `" + taken + "` is named here");
@@ -1466,7 +1466,7 @@ public final class Names {
             // shadow. Refused where it is declared, as a reserved module name is (see Front).
             if (Prelude.isQualifier(def.name())) {
                 reports.add(Report.raised(
-                        Diagnostic.uncoded("check.data.qualifier").title("check.duplicate.title")
+                        Diagnostic.of(DiagnosticCode.E1502, "check.data.qualifier")
                                 .at(def.pos()).args(def.name()).build(),
                         "data `" + def.name() + "` uses a name reserved for the standard-library"
                                 + " qualifier `" + def.name() + "` (as in `" + def.name()
@@ -1552,12 +1552,11 @@ public final class Names {
     private static Report importCollision(String name, Ast.Import imp, Ast.Import earlier) {
         if (earlier == null) {
             return Report.raised(
-                    Diagnostic.uncoded("check.import.conflict").title("check.module.title")
+                    Diagnostic.of(DiagnosticCode.E1508, "check.import.conflict")
                             .at(imp.pos()).args(name).hint("check.import.conflict.hint").build(),
                     "imported `" + name + "` conflicts with a local definition");
         }
-        Diagnostic.Builder b = Diagnostic.uncoded("check.import.duplicate")
-                .title("check.module.title").at(imp.pos()).args(name, earlier.module(), imp.module())
+        Diagnostic.Builder b = Diagnostic.of(DiagnosticCode.E1508, "check.import.duplicate").at(imp.pos()).args(name, earlier.module(), imp.module())
                 .secondary(Region.point(earlier.pos()), "check.import.duplicate.first", name,
                         earlier.module());
         return Report.raised(

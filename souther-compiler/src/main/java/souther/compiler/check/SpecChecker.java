@@ -755,7 +755,7 @@ public final class SpecChecker {
             return;
         }
         String name = hidden[0].name();
-        Diagnostic.Builder d = Diagnostic.uncoded(key).title("check.module.title").at(pos);
+        Diagnostic.Builder d = Diagnostic.of(DiagnosticCode.E1611, key).at(pos);
         d = field == null ? d.args(owner, name) : d.args(owner, field, name);
         throw CompileException.of(d.hint(hint, name, owner).build(),
                 "`" + owner + "` reaches outside this module and rests on `" + name

@@ -22,6 +22,7 @@ import souther.compiler.core.Core;
 import souther.compiler.core.GrowingFold;
 import souther.compiler.diag.CompileException;
 import souther.compiler.diag.Diagnostic;
+import souther.compiler.diag.DiagnosticCode;
 import souther.compiler.types.Type;
 import souther.compiler.types.TypeName;
 import souther.compiler.types.ValueName;
@@ -292,7 +293,7 @@ public final class Bodies {
          */
         private Report collision(String bare, String earlier, Ast.Import imp) {
             return Report.raised(
-                    Diagnostic.uncoded("check.import.behaviordup").title("check.module.title")
+                    Diagnostic.of(DiagnosticCode.E1508, "check.import.behaviordup")
                             .at(imp.pos()).args(bare, earlier, imp.module())
                             .hint("check.import.behaviordup.hint", bare).build(),
                     "behavior `" + bare + "` is named from both `" + earlier + "` and `"
