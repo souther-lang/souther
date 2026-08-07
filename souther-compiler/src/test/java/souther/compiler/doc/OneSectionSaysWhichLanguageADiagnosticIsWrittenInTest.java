@@ -26,28 +26,32 @@ class OneSectionSaysWhichLanguageADiagnosticIsWrittenInTest {
     private static final String OWNER = "compile-errors";
 
     private static final Pattern LANGUAGE = Pattern.compile("\\b(English|Japanese)\\b");
+    /** What the claim is about, which is a thing and not what is done to it: `localized` is a
+     *  predicate a manual takes as readily as a diagnostic does, and reading it as the subject
+     *  would make a localized document a statement about a diagnostic. Either word opens a
+     *  sentence as readily as it sits inside one, and a claim is the same claim either way. */
     private static final Pattern ABOUT_A_MESSAGE =
-            Pattern.compile("\\b(diagnostics?|messages?|localized)\\b");
-    /** A sentence ends at a full stop or a semicolon followed by a space: a specification sentence
-     *  states several clauses of one rule, and a semicolon joins them. */
-    private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.;])\\s+");
+            Pattern.compile("\\b(diagnostics?|messages?)\\b", Pattern.CASE_INSENSITIVE);
+    /** A sentence ends at a full stop followed by a space. A semicolon is not an end: a
+     *  specification sentence states the clauses of one rule and a semicolon joins them, so
+     *  ending there would read one claim as two and find a language in one half and a message in
+     *  the other. */
+    private static final Pattern SENTENCE_END = Pattern.compile("(?<=\\.)\\s+");
 
     @Test
     void noSectionOutsideTheOneThatOwnsTheRuleNamesTheLanguageAMessageIsWrittenIn() {
-        Set<String> naming = sectionsNamingTheLanguageOfAMessage(SpecDocument.bundled());
+        Set<String> elsewhere = new TreeSet<>(sectionsNamingTheLanguageOfAMessage(SpecDocument.bundled()));
+        elsewhere.remove(OWNER);
 
-        assertEquals(Set.of(OWNER), naming,
-                "a section other than `" + OWNER + "` states which language a message is written in");
+        assertEquals(Set.of(), elsewhere,
+                "these state which language a message is written in, and `" + OWNER + "` owns that");
     }
 
-    /**
-     * Without this the assertion above would also hold for a specification that had lost the rule
-     * altogether, or for a scan that matched nothing.
-     */
+    /** The other half of the rule: it is stated, and stated where it is owned. */
     @Test
-    void theSectionThatOwnsTheRuleStatesItSoTheScanIsNotMatchingNothing() {
+    void theSectionThatOwnsTheRuleIsWhereItIsStated() {
         assertTrue(sectionsNamingTheLanguageOfAMessage(SpecDocument.bundled()).contains(OWNER),
-                "the scan found no statement of the rule at all, not even where it is written");
+                "`" + OWNER + "` no longer says which language a message is written in");
     }
 
     @Test
@@ -61,6 +65,11 @@ class OneSectionSaysWhichLanguageADiagnosticIsWrittenInTest {
                 Keywords are in English, and an identifier written in Japanese binds after
                 normalization.
 
+                [#documents]
+                == Documents
+
+                The reference manual is localized in Japanese.
+
                 [#compile-errors]
                 == Compile errors
 
@@ -68,6 +77,31 @@ class OneSectionSaysWhichLanguageADiagnosticIsWrittenInTest {
                 """);
 
         assertEquals(Set.of("compile-errors"), sectionsNamingTheLanguageOfAMessage(spec));
+    }
+
+    /**
+     * The claim is one claim however its clauses are punctuated. A semicolon joins the clauses of
+     * one rule rather than ending it, so reading it as an end would look for a language and a
+     * message on either side of it and find one on each — which is the restatement this looks for,
+     * written in two clauses.
+     */
+    @Test
+    void aRestatementWrittenInTwoClausesIsStillOneStatementOfTheRule() {
+        SpecDocument spec = SpecDocument.of("""
+                = A specification
+
+                [#non-functional]
+                == Non-functional requirements
+
+                Diagnostics are localized; Japanese is the default.
+
+                [#compile-errors]
+                == Compile errors
+
+                A message is written in English unless something names another language.
+                """);
+
+        assertEquals(Set.of("compile-errors", "non-functional"), sectionsNamingTheLanguageOfAMessage(spec));
     }
 
     /** The sections with a sentence that both names a language and is talking about a message. */
