@@ -24,8 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class AMissingFieldIsNotBlamedOnASpreadThatWasNotWrittenTest {
 
-    /** The header both breaks carry: the rule, not one way of breaking it. */
+    /** The header every break carries: the rule, not one way of breaking it. A locale translates it
+     *  and does not narrow it, so both bundles are held to the same contract. */
     private static final String HEADER = "MISSING FIELD IN CONSTRUCTION";
+    private static final String HEADER_JA = "構築でのフィールド欠落";
 
     private static final String OMITTED = """
             module demo
@@ -86,6 +88,7 @@ class AMissingFieldIsNotBlamedOnASpreadThatWasNotWrittenTest {
         assertFalse(en.toLowerCase(Locale.ROOT).contains("spread"), en);
 
         String ja = rendered(OMITTED, Locale.JAPANESE);
+        assertTrue(ja.contains(HEADER_JA), ja);
         assertTrue(ja.contains("`returnedOn`"), ja);
         assertFalse(ja.contains("スプレッド"), ja);
     }
@@ -99,6 +102,7 @@ class AMissingFieldIsNotBlamedOnASpreadThatWasNotWrittenTest {
         assertTrue(en.contains("the spread does not provide it"), en);
 
         String ja = rendered(FROM_A_DATA, Locale.JAPANESE);
+        assertTrue(ja.contains(HEADER_JA), ja);
         assertTrue(ja.contains("スプレッド"), ja);
     }
 
@@ -110,6 +114,10 @@ class AMissingFieldIsNotBlamedOnASpreadThatWasNotWrittenTest {
         assertTrue(en.contains(HEADER), en);
         assertTrue(en.contains("`Doc`"), en);
         assertTrue(en.contains("`match`"), en);
+
+        String ja = rendered(FROM_A_SUM, Locale.JAPANESE);
+        assertTrue(ja.contains(HEADER_JA), ja);
+        assertTrue(ja.contains("`match`"), ja);
     }
 
     @Test
@@ -122,5 +130,10 @@ class AMissingFieldIsNotBlamedOnASpreadThatWasNotWrittenTest {
         assertTrue(omitted.contains(HEADER) && spread.contains(HEADER), omitted + spread);
         assertTrue(omitted.contains("is missing field `returnedOn`"), omitted);
         assertTrue(spread.contains("is missing field `returnedOn`"), spread);
+
+        String omittedJa = rendered(OMITTED, Locale.JAPANESE);
+        String spreadJa = rendered(FROM_A_DATA, Locale.JAPANESE);
+        assertTrue(omittedJa.contains(HEADER_JA) && spreadJa.contains(HEADER_JA),
+                omittedJa + spreadJa);
     }
 }
