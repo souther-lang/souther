@@ -65,14 +65,36 @@ public sealed interface ValueName {
          * The namespace itself, applied: {@code Date("2026-09-30")} constructs from the module the
          * alias names, and there is no operation for it to name.
          *
-         * <p>The second shape a library name has, and the reason the operation may be absent. A
-         * caller that has to tell the two apart asks whether {@link #name()} is the alias.
+         * <p>The second shape a library name has, and the reason the operation may be absent. Which
+         * of the two this is, {@link #isNamespace()} says — not the spelling: an operation a library
+         * gave its own module's name would render the same either way, and telling them apart by
+         * comparing renderings is the reading-a-name-back-out this type exists to stop.
          */
         public static Stdlib namespace(String alias) {
             return new Stdlib(alias, null);
         }
 
-        /** What is reached: the operation, or the namespace where the alias was applied itself. */
+        /** An operation of the library module published as {@code alias}. */
+        public static Stdlib operation(String alias, String name) {
+            if (name == null) {
+                throw new IllegalArgumentException("an operation has a name: " + alias);
+            }
+            return new Stdlib(alias, name);
+        }
+
+        /** Whether this is the namespace applied rather than an operation of it. */
+        public boolean isNamespace() {
+            return name == null;
+        }
+
+        /** The operation this reaches, or null where it is the namespace itself. */
+        public String operation() {
+            return name;
+        }
+
+        /** What is reached: the operation, or the namespace where the alias was applied itself.
+         * Two shapes can answer one string, so a caller asking which shape it is asks
+         * {@link #isNamespace()}. */
         @Override
         public String name() {
             return name == null ? alias : name;

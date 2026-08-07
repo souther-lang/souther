@@ -664,14 +664,6 @@ public final class Resolve {
                 : reached(written, bound);
     }
 
-    /**
-     * {@code v} with what it denotes and the name this module reaches it by, both answered here.
-     *
-     * <p>The two together, and only here: which module is doing the reading is what decides the reach
-     * name, and this pass is the last place that has it. A pass downstream working it out from the
-     * spelling would answer differently depending on which rewrites had run — which is the defect
-     * this carries the answer to avoid.
-     */
     /** An application of a name, with what the name denotes and how this module reaches it answered
      * here — the same pair, from the same place, as a name standing on its own. */
     private Ast.Expr applied(Ast.Apply call, Bindings bound) {
@@ -681,6 +673,14 @@ public final class Resolve {
         return new Ast.Apply(name, exprs(call.args(), bound), call.origin(), call.pos());
     }
 
+    /**
+     * {@code v} with what it denotes and the name this module reaches it by, both answered here.
+     *
+     * <p>The two together, and only here: which module is doing the reading is what decides the reach
+     * name, and this pass is the last place that has it. A pass downstream working it out from the
+     * spelling would answer differently depending on which rewrites had run — which is the defect
+     * this carries the answer to avoid.
+     */
     private Ast.Var reached(Ast.Var v, Bindings bound) {
         ValueName denotes = answered(v.written(), valueName(v.written(), bound));
         return v.denoting(denotes, ReachName.of(denotes, v.name(), values.module()));

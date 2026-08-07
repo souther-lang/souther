@@ -960,7 +960,7 @@ final class BodyGen {
          *  fields are built. */
         private static boolean walksInside(Core e) {
             if (e instanceof Core.Call c && (c.name().equals(FOLD)
-                    || c.fn().equals(GrowingFold.BUILD) || c.fn().equals(GrowingFold.MAP_BUILD))) {
+                    || c.fn() == Core.Emitted.BUILD_LIST || c.fn() == Core.Emitted.BUILD_MAP)) {
                 return true;
             }
             boolean[] found = {false};
@@ -1190,19 +1190,19 @@ final class BodyGen {
                 Intrinsics.emit(this, kernel.key(), call);
                 return;
             }
-            if (call.fn().equals(GrowingFold.BUILD)) {
+            if (call.fn() == Core.Emitted.BUILD_LIST) {
                 buildList(call);
                 return;
             }
-            if (call.fn().equals(GrowingFold.GROW)) {
+            if (call.fn() == Core.Emitted.GROW_LIST) {
                 growList(call);
                 return;
             }
-            if (call.fn().equals(GrowingFold.MAP_BUILD)) {
+            if (call.fn() == Core.Emitted.BUILD_MAP) {
                 buildMap(call);
                 return;
             }
-            if (call.fn().equals(GrowingFold.PUT)) {
+            if (call.fn() == Core.Emitted.PUT_MAP) {
                 putIntoMap(call);
                 return;
             }
@@ -1456,7 +1456,8 @@ final class BodyGen {
         /** The operation a library call names ({@code List.max} → {@code max}) — read off the
          * name, which holds the library's alias and the operation as two values. */
         private static String operationOf(Core.Call call) {
-            return ((ReachName.OfLibrary) call.fn()).target().name();
+            Core.Reached reached = (Core.Reached) call.fn();
+            return ((ReachName.OfLibrary) reached.name()).target().name();
         }
 
         /** {@code divide}/{@code remainder} on Int: a zero divisor takes the DivisionByZero case,

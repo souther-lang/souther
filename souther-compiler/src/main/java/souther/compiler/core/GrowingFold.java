@@ -2,8 +2,6 @@ package souther.compiler.core;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.types.BindingId;
-import souther.compiler.types.ReachName;
-import souther.compiler.types.ValueName;
 import souther.compiler.types.Type;
 
 import java.util.ArrayList;
@@ -51,22 +49,19 @@ public final class GrowingFold {
     private static final String FOLD = "List.foldFrom";
 
     /** The rewritten fold: {@code $build(step, xs, from)} walks {@code xs} with a builder as the
-     *  accumulator and seals it into a list. Emitted by the backend, written by nobody. */
-    public static final ReachName BUILD =
-            new ReachName.OfLibrary(new ValueName.Stdlib("List", "$build"));
+     *  accumulator and seals it into a list. Emitted by the backend, written by nobody — so it is
+     *  one of the operations this compiler emits and not a name any module reaches. */
+    private static final Core.CallTarget BUILD = Core.Emitted.BUILD_LIST;
 
     /** The {@code acc ++ …} inside a rewritten step: it adds to the builder the walk carries and
      *  answers with it. Only ever reached from {@link #BUILD}'s step. */
-    public static final ReachName GROW =
-            new ReachName.OfLibrary(new ValueName.Stdlib("List", "$grow"));
+    private static final Core.CallTarget GROW = Core.Emitted.GROW_LIST;
 
     /** The same for a fold accumulating a map: the walk carries a builder and hands over the map it
      *  built, and the step's {@code Map.insert} writes into it. */
-    public static final ReachName MAP_BUILD =
-            new ReachName.OfLibrary(new ValueName.Stdlib("Map", "$build"));
+    private static final Core.CallTarget MAP_BUILD = Core.Emitted.BUILD_MAP;
 
-    public static final ReachName PUT =
-            new ReachName.OfLibrary(new ValueName.Stdlib("Map", "$put"));
+    private static final Core.CallTarget PUT = Core.Emitted.PUT_MAP;
 
     /** The empty map a fold accumulating one starts from, and the insert that grows it. */
     private static final String EMPTY = "Map.empty";
@@ -94,7 +89,7 @@ public final class GrowingFold {
                 mapped = built;
             }
         }
-        if (mapped instanceof Core.Call call && call.fn().equals(BUILD)) {
+        if (mapped instanceof Core.Call call && call.fn() == BUILD) {
             Core joined = joined(call);
             if (joined != null) {
                 return joined;
@@ -121,7 +116,7 @@ public final class GrowingFold {
      * step — which is checked for rather than reasoned about.
      */
     private static Core joinedThroughBinding(Core.LetIn binding) {
-        if (!(binding.body() instanceof Core.Call outer) || !outer.fn().equals(BUILD)
+        if (!(binding.body() instanceof Core.Call outer) || outer.fn() != BUILD
                 || !(outer.args().get(1) instanceof Core.Read walked)
                 || !walked.binding().equals(binding.binder().id())
                 || uses(binding.body(), binding.binder().id()) != 1) {
@@ -133,7 +128,7 @@ public final class GrowingFold {
             kept.add(nested);
             value = nested.body();
         }
-        if (!(value instanceof Core.Call inner) || !inner.fn().equals(BUILD)) {
+        if (!(value instanceof Core.Call inner) || inner.fn() != BUILD) {
             return null;
         }
         for (Core.LetIn k : kept) {
@@ -160,7 +155,7 @@ public final class GrowingFold {
             return null;
         }
         Core seed = call.args().get(1);
-        ReachName build;
+        Core.CallTarget build;
         Core step;
         if (call.type() instanceof Type.ListOf
                 && seed instanceof Core.ListLit lit && lit.elements().isEmpty()) {
@@ -286,7 +281,7 @@ public final class GrowingFold {
         if (!(build.args().get(2) instanceof Core.Int from) || from.value() != 0) {
             return null;
         }
-        if (!(build.args().get(1) instanceof Core.Call inner) || !inner.fn().equals(BUILD)) {
+        if (!(build.args().get(1) instanceof Core.Call inner) || inner.fn() != BUILD) {
             return null;
         }
         if (!(build.args().get(0) instanceof Core.Block outer) || outer.params().size() != 2
@@ -312,7 +307,7 @@ public final class GrowingFold {
         if (e instanceof Core.Block) {
             return 0;
         }
-        int[] n = {e instanceof Core.Call c && c.fn().equals(GROW) ? 1 : 0};
+        int[] n = {e instanceof Core.Call c && c.fn() == GROW ? 1 : 0};
         Core.forEachChild(e, child -> n[0] += adds(child));
         return n[0];
     }
@@ -325,7 +320,7 @@ public final class GrowingFold {
         if (refused[0] || e instanceof Core.Block) {
             return e;
         }
-        if (e instanceof Core.Call c && c.fn().equals(GROW)) {
+        if (e instanceof Core.Call c && c.fn() == GROW) {
             if (!(c.args().get(1) instanceof Core.ListLit lit) || lit.elements().size() != 1) {
                 refused[0] = true;   // the add hands over a list, and the outer step takes an element
                 return e;

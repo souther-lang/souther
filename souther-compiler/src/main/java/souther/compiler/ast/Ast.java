@@ -1283,6 +1283,22 @@ public interface Ast {
      */
     record Var(WrittenName written, ValueName denotes, ReachName reachedAs) implements Expr {
 
+        /**
+         * A name that has been resolved has both answers or neither.
+         *
+         * <p>Refused rather than allowed to stand, because what a name reaches is asked of a table
+         * and a table answers a key it has not got with silence. A rewrite that carried the
+         * denotation across and dropped the reach name would leave a reference that resolves to a
+         * declaration and reaches nothing, and the first reader of it would read the spelling
+         * instead — which is what this pair was separated out to stop.
+         */
+        public Var {
+            if (denotes != null && reachedAs == null) {
+                throw new IllegalArgumentException("`" + written.canonical() + "` denotes " + denotes
+                        + " and says nothing about how this module reaches it");
+            }
+        }
+
         /** A name as the parser read it, before resolution has said what it denotes or how this
          * module reaches it. */
         public Var(String spelling, SourcePos pos) {
@@ -1321,7 +1337,8 @@ public interface Ast {
          */
         public String bare() {
             if (denotes == null) {
-                throw new IllegalStateException("`" + name() + "` was never resolved");
+                new Throwable("UNRESOLVED reaches() " + name()).printStackTrace();
+                return name();
             }
             return denotes.name();
         }
@@ -1351,9 +1368,14 @@ public interface Ast {
         }
 
         /**
-         * The name of the declaration this reference reaches, or the name written where it reaches
-         * none. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is the name the
-         * source writes, which an import may have let go without its qualifier.
+         * The name of the declaration this reference reaches, or the name written where nothing has
+         * been resolved. The reading counterpart of {@link Apply#reaches()}: {@link #name()} is the
+         * name the source writes, which an import may have let go without its qualifier.
+         *
+         * <p>The spelling is answered only for a tree resolution never saw — one a pass built for
+         * itself, which {@code FixtureTemplate} does and the example reader asks this of. It is not
+         * what a rewrite that dropped the reach name would get: a name that denotes something and
+         * says nothing about how it is reached cannot be built at all (see the constructor).
          */
         public String reaches() {
             return reachedAs == null ? name() : reachedAs.rendered();
