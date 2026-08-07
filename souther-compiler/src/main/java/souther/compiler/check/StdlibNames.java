@@ -8,10 +8,14 @@ import souther.compiler.diag.Region;
 import java.util.List;
 
 /**
- * What a report says about a standard-library name written bare (spec §stdlib). Two passes reach
- * this — resolution, where a bare name denotes nothing, and elaboration, where a call reaches no
- * callee — and both are answering the same question about the same name, so they say it in one
- * place rather than each writing the sentence out.
+ * What a report says about a standard-library name written bare (spec §stdlib). Three readers reach
+ * this — a bare name that denotes nothing, a call that reaches no callee, and a bare name written
+ * where a value goes — and all three are answering the same question about the same name, so they
+ * say it in one place rather than each writing the sentence out.
+ *
+ * <p>It is a name and not a function: the library publishes values too ({@code Map.empty}), and a
+ * function's own name is a value where it is handed to a combinator rather than applied. All of
+ * them are reached the same two ways, so all of them are told the same thing.
  */
 final class StdlibNames {
 
@@ -35,7 +39,7 @@ final class StdlibNames {
         return CompileException.of(
                 Diagnostic.of(null, "check.stdlib.qualified.msg").title("check.unknown.title")
                         .at(region).args(written, list).build(),
-                "`" + written + "` is a standard-library function. Write it qualified (" + list
+                "`" + written + "` is a standard-library name. Write it qualified (" + list
                         + ") or import the name you mean (spec §stdlib).");
     }
 }

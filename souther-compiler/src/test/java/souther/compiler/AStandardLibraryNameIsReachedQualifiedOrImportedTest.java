@@ -81,6 +81,57 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
         assertTrue(message.contains("import"), "the import route is offered too: " + message);
     }
 
+    /** A library value, which is written with no parameter list and applied to nothing. The rule is
+     *  about names and not about calls, so a bare one is answered the same way. */
+    private static final String VALUE = """
+            module demo
+            %s
+            data In = { n: Int }
+            data Out = { m: Map<String, Int> }
+
+            behavior go : (i: In) -> Out constructs Out
+
+            let go (i) = Out { m = %s }
+            """;
+
+    @Test
+    void aLibraryValueIsReachedTheSameTwoWays() {
+        Compiler.compile(VALUE.formatted("", "Map.empty"));
+        Compiler.compile(VALUE.formatted("import Map ( empty )", "empty"));
+    }
+
+    @Test
+    void aBareLibraryValueIsAnsweredLikeABareLibraryFunction() {
+        CompileException e = assertThrows(CompileException.class,
+                () -> Compiler.compile(VALUE.formatted("", "empty")));
+
+        String message = e.getMessage();
+        assertTrue(message.contains("`Map.empty`"), message);
+        assertTrue(message.contains("`Set.empty`"), message);
+        assertTrue(message.contains("import"), message);
+        assertFalse(message.contains("I cannot find a value"), "not an unknown name: " + message);
+    }
+
+    @Test
+    void aBareLibraryNameHandedOverAsAValueIsAnsweredToo() {
+        // `not` is applied to nothing here — it is handed to a combinator. A nearby binding is the
+        // wrong answer for it: the name exists, and how to reach it is known.
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compile("""
+                module demo
+
+                data In = { xs: List<Bool> }
+                data Out = { ok: Bool }
+
+                behavior go : (i: In) -> Out constructs Out
+
+                let go (i) = Out { ok = List.all(not, i.xs) }
+                """));
+
+        String message = e.getMessage();
+        assertTrue(message.contains("`Bool.not`"), message);
+        assertFalse(message.contains("did you mean"), "no nearby-name guess: " + message);
+    }
+
     @Test
     void aModulesOwnNameStandsBesideTheLibrarysWithoutShadowingIt() {
         // Two spellings, two declarations: the bare one is this module's, the qualified one the
@@ -189,6 +240,11 @@ class AStandardLibraryNameIsReachedQualifiedOrImportedTest {
         }
 
         assertEquals(named, bundledSourceFileNames());
+        // Counted as well as compared, because a module listed twice would name a file that is
+        // there and collapse into the set beside itself. `Reserved` refuses that where it is
+        // written; this says the two are the same length, which is what the sets cannot.
+        assertEquals(Reserved.MODULES.size(), bundledSourceFileNames().size(),
+                "one entry per bundled source");
     }
 
     /** Every published name, by its bare name, in {@link Reserved#MODULES} order — read out of the

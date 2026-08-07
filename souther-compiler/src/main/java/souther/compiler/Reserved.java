@@ -42,15 +42,30 @@ public final class Reserved {
     /** Every qualifier a call may carry (spec §stdlib), in {@link #MODULES} order. */
     public static final Set<String> QUALIFIERS = qualifiers();
 
+    /**
+     * The qualifiers, and the registry checked for being one at all while they are collected.
+     *
+     * <p>Both halves have to be unique, and for different reasons. Two entries writing one
+     * qualifier would publish two modules' declarations under one name. Two entries naming one
+     * module would load that source twice and publish its declarations under two qualifiers — which
+     * nothing downstream would report, because everything downstream derives from this and would
+     * derive the same mistake. A registry that is the single source of an answer is checked where
+     * it is written or nowhere.
+     */
     private static Set<String> qualifiers() {
-        Set<String> names = new LinkedHashSet<>();
+        Set<String> qualifiers = new LinkedHashSet<>();
+        Set<String> modules = new LinkedHashSet<>();
         for (StdlibModule module : MODULES) {
-            if (!names.add(module.qualifier())) {
+            if (!qualifiers.add(module.qualifier())) {
                 throw new IllegalStateException(
                         "two standard-library modules are written `" + module.qualifier() + "`");
             }
+            if (!modules.add(module.moduleName())) {
+                throw new IllegalStateException(
+                        "the standard-library module " + module.moduleName() + " is listed twice");
+            }
         }
-        return Collections.unmodifiableSet(names);
+        return Collections.unmodifiableSet(qualifiers);
     }
 
     /**

@@ -51,8 +51,14 @@ library function, reached either way — and the report names every module that 
 `insert` could be `Map.insert` or `Set.insert`, and offering one of them says the other does not
 exist.
 
-What stays bare is what no module publishes: operators, `if` and `match`, literals, a module's own
-declarations, and the names the language itself gives.
+What needs neither a qualifier nor an import: operators, `if` and `match`, literals, a module's own
+declarations, and the names the language itself gives. Whether the library publishes that spelling
+too does not enter into it — a module's own `not` is written bare beside `Bool.not`.
+
+This is a rule about names and not about calls. The library publishes values as well as functions —
+`Map.empty` is written with no parameter list — and a function's own name is a value where it is
+handed to a combinator rather than applied. All of them are reached the same two ways and a bare one
+is reported the same way.
 
 This settles what a module can see. How a name that is visible is then resolved — that a binding in
 force wins, and that the question is asked once — is ADR-0067's, and is unchanged.

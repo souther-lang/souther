@@ -921,6 +921,14 @@ public final class Resolve {
         if (notALibraryMember != null) {
             return notALibraryMember;
         }
+        // Asked here as well as of a call, because what the library publishes is not only functions:
+        // `Map.empty` is a value, and a function's own name is a value where it is handed over. A
+        // nearby binding is the wrong answer for any of them — the name exists and is reached.
+        CompileException bareLibraryName = StdlibNames.writtenBare(written.quoted(), name,
+                written.region());
+        if (bareLibraryName != null) {
+            return bareLibraryName;
+        }
         List<String> candidates = reachable(bound);
         return CompileException.of(
                 Diagnostic.of(null, "check.unknown.name.msg").title("check.unknown.title")
