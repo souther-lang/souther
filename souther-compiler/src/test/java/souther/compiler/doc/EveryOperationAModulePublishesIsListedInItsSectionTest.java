@@ -47,28 +47,42 @@ class EveryOperationAModulePublishesIsListedInItsSectionTest {
      *  inside a longer one is content rather than the end of it. */
     private static final Pattern LISTING = Pattern.compile("^-{4,}$");
 
+    /**
+     * The modules walked are the reserved namespace, not the ones the surface happens to have a
+     * name under. Taking them from the surface would drop a module whose last published operation
+     * went away, and the section left naming what it used to publish would be the one thing not
+     * read — the gap this check exists to close, one level up.
+     */
     @Test
     void eachModuleSectionNamesTheOperationsItsModulePublishes() {
         SpecDocument spec = SpecDocument.bundled();
+        Map<String, Set<String>> published = publishedByModule();
+        Map<String, Set<String>> publishes = new LinkedHashMap<>();
         Map<String, Set<String>> listed = new LinkedHashMap<>();
-        for (String module : publishedByModule().keySet()) {
+        for (String module : new TreeSet<>(Prelude.qualifiers())) {
             String anchor = "stdlib-" + module.toLowerCase(Locale.ROOT);
             SpecDocument.Section section = spec.section(anchor);
-            assertNotNull(section, "`" + module + "` publishes names and has no `" + anchor
-                    + "` section for a reader to find them in");
+            assertNotNull(section, "`" + module + "` has no `" + anchor
+                    + "` section for a reader to find its operations in");
+            publishes.put(module, published.getOrDefault(module, Set.of()));
             listed.put(module, namesListedIn(section.body()));
         }
 
-        assertEquals(render(publishedByModule()), render(listed),
+        assertEquals(render(publishes), render(listed),
                 "the specification's list of a module's operations and the module's published"
                         + " surface disagree. The left side is what the library publishes.");
     }
 
-    /** Both sides being empty would compare equal and say nothing. How many modules there are is
-     *  not written down here: a module arrives with a section or fails the check above. */
+    /**
+     * Both sides being empty would compare equal and say nothing, and the walk is over the reserved
+     * namespace. That it covers what is published is what makes it the wider of the two to walk;
+     * how many modules there are is not written down here.
+     */
     @Test
     void thereIsSomethingToCompareSoTheAgreementIsNotBetweenTwoEmptyThings() {
-        assertFalse(publishedByModule().isEmpty(), "the library publishes nothing to compare against");
+        assertFalse(Prelude.qualifiers().isEmpty(), "no module to compare a section against");
+        assertTrue(Prelude.qualifiers().containsAll(publishedByModule().keySet()),
+                "a module the library publishes under is a module the walk reaches");
     }
 
     /** One line per module: its name, then the names it publishes in a fixed order. */
