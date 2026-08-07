@@ -576,14 +576,10 @@ public final class CallElaborator {
                 }
                 if (callee == null) {
                     Elaborator.optionCaseWritten(call.written(), call.pos());
-                    String qualified = Prelude.qualifiedFor(call.written());
-                    if (qualified != null) {
-                        throw CompileException.of(
-                                Diagnostic.of(null, "check.stdlib.qualified.msg")
-                                        .title("check.unknown.title").at(call.name().region())
-                                        .args(call.written(), qualified).build(),
-                                "`" + call.written() + "` is a standard-library function and must be called"
-                                        + " qualified, as `" + qualified + "` (spec §stdlib).");
+                    CompileException bareLibraryName = StdlibNames.writtenBare(
+                            call.written(), call.written(), call.name().region());
+                    if (bareLibraryName != null) {
+                        throw bareLibraryName;
                     }
                     throw noCallee(call);
                 }
