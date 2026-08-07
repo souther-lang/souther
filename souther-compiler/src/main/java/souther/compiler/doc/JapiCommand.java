@@ -40,19 +40,31 @@ import java.util.zip.ZipEntry;
  */
 public final class JapiCommand {
 
-    private JapiCommand() {}
-
-    public static int run(String[] args, PrintStream out, PrintStream err) {
-        return run(args, out, err, JapiCommand.class.getClassLoader());
-    }
-
     /** How far a name may be from one on the class path and still be offered as the one that was meant. */
     private static final int NEAR_ENOUGH = 2;
 
     /** How many names a miss is answered with. */
     private static final int MOST_SUGGESTIONS = 3;
 
+    private JapiCommand() {}
+
+    public static int run(String[] args, PrintStream out, PrintStream err) {
+        return run(args, out, err, System.getProperty("java.class.path", ""));
+    }
+
+    /**
+     * The same run, with a class loader carrying whatever it carries.
+     *
+     * <p>It is not consulted: a class taken from one copy of a library is not described by another
+     * copy this tool happens to hold. The parameter is how a caller says which loader that would
+     * have been.
+     */
     static int run(String[] args, PrintStream out, PrintStream err, ClassLoader bundled) {
+        return run(args, out, err, System.getProperty("java.class.path", ""));
+    }
+
+    /** The same run, over the class path to fall back on when the caller names none. */
+    static int run(String[] args, PrintStream out, PrintStream err, String defaultClassPath) {
         String name = null;
         List<Entry> entries = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
@@ -74,7 +86,7 @@ public final class JapiCommand {
             return 2;
         }
         if (entries.isEmpty()) {
-            for (String p : System.getProperty("java.class.path", "").split(java.io.File.pathSeparator)) {
+            for (String p : defaultClassPath.split(java.io.File.pathSeparator)) {
                 if (!p.isEmpty()) {
                     entries.add(new Entry(Path.of(p), false));
                 }
@@ -90,21 +102,22 @@ public final class JapiCommand {
 
         String classPath = entries.stream().map(e -> e.path().toString())
                 .collect(java.util.stream.Collectors.joining(java.io.File.pathSeparator));
-        Found found = findClass(name, entries, err);
+        Skipped skipped = new Skipped(err, new java.util.HashSet<>());
+        Found found = findClass(name, entries, skipped);
         if (found != null) {
             return print(found, name, member, out, err, classPath);
         }
         if (member != null) {
             err.println("no class `" + name + "` on the class path:");
-            return missed(name, entries, err);
+            return missed(name, entries, err, skipped);
         }
-        List<String> classes = classesUnder(name, entries, err);
+        List<String> classes = classesUnder(name, entries, skipped);
         if (!classes.isEmpty()) {
             classes.forEach(out::println);
             return 0;
         }
         err.println("no class or package `" + name + "` on the class path:");
-        return missed(name, entries, err);
+        return missed(name, entries, err, skipped);
     }
 
     /**
@@ -122,6 +135,27 @@ public final class JapiCommand {
             Path file = path.getFileName();
             return given || file == null ? path.toString() : file.toString();
         }
+
+        /**
+         * Why this entry could not be read.
+         *
+         * <p>An {@link IOException} names the file it is about, so passing its message on would hand
+         * back by another route the path {@link #shown} keeps back. A message belongs to the caller
+         * who wrote the path it names; for an entry this command fell back on, the failure is said
+         * by what kind of failure it is.
+         */
+        String failure(IOException e) {
+            if (given) {
+                return e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+            }
+            return switch (e) {
+                case java.nio.file.NoSuchFileException _ -> "no such file";
+                case java.nio.file.AccessDeniedException _ -> "permission denied";
+                case java.io.FileNotFoundException _ -> "cannot be opened";
+                case java.util.zip.ZipException _ -> "not a readable archive";
+                default -> "cannot be read";
+            };
+        }
     }
 
     /**
@@ -131,9 +165,9 @@ public final class JapiCommand {
      * the second for every identifier in a source file. A reader of a jar has less to go on than the
      * author of a source file, not more.
      */
-    private static int missed(String name, List<Entry> entries, PrintStream err) {
+    private static int missed(String name, List<Entry> entries, PrintStream err, Skipped skipped) {
         entries.forEach(e -> err.println("  " + e.shown()));
-        List<String> near = Suggest.nearest(name, namesOn(entries, err), NEAR_ENOUGH, MOST_SUGGESTIONS);
+        List<String> near = Suggest.nearest(name, namesOn(entries, skipped), NEAR_ENOUGH, MOST_SUGGESTIONS);
         if (!near.isEmpty()) {
             err.println("did you mean: " + String.join(", ", near));
         }
@@ -148,15 +182,14 @@ public final class JapiCommand {
      * settles by parsing it, and parsing every class on the class path to phrase one guess would
      * cost more than the guess is worth.
      */
-    private static List<String> namesOn(List<Entry> entries, PrintStream err) {
+    private static List<String> namesOn(List<Entry> entries, Skipped skipped) {
         List<String> names = new ArrayList<>();
         for (Entry entry : entries) {
             try {
                 if (Files.isDirectory(entry.path())) {
                     try (var files = Files.walk(entry.path())) {
-                        for (Path f : files.filter(Files::isRegularFile).toList()) {
-                            add(names, entry.path().relativize(f).toString().replace(java.io.File.separatorChar, '/'));
-                        }
+                        files.filter(Files::isRegularFile).forEach(f -> add(names,
+                                entry.path().relativize(f).toString().replace(java.io.File.separatorChar, '/')));
                     }
                 } else if (Files.isRegularFile(entry.path())) {
                     try (JarFile jar = versioned(entry.path())) {
@@ -164,7 +197,13 @@ public final class JapiCommand {
                     }
                 }
             } catch (IOException e) {
-                unreadable(entry, e, err);
+                skipped.report(entry, e);
+            } catch (UncheckedIOException e) {
+                // A walk opens the directory it was handed straight away and every directory under
+                // it only on reaching it, so a failure below the entry arrives here rather than
+                // above. What was walked before it is kept: a name to suggest may already be among
+                // them, and looking for one is not what may end the run.
+                skipped.report(entry, e.getCause());
             }
         }
         return names.stream().distinct().toList();
@@ -188,7 +227,7 @@ public final class JapiCommand {
      *  sources jar, and with it the javadoc, is found from the entry. */
     private record Found(byte[] bytes, Path entry) {}
 
-    private static Found findClass(String binaryName, List<Entry> entries, PrintStream err) {
+    private static Found findClass(String binaryName, List<Entry> entries, Skipped skipped) {
         String resource = binaryName.replace('.', '/') + ".class";
         for (Entry entry : entries) {
             Path path = entry.path();
@@ -207,16 +246,28 @@ public final class JapiCommand {
                     }
                 }
             } catch (IOException e) {
-                unreadable(entry, e, err);
+                skipped.report(entry, e);
             }
         }
         return null;
     }
 
-    /** A class path is given, not chosen: one entry that cannot be opened is said and stepped
-     *  over, so the entries beside it still answer. */
-    private static void unreadable(Entry entry, IOException e, PrintStream err) {
-        err.println("skipping `" + entry.shown() + "`: " + e.getMessage());
+    /**
+     * Where an entry that cannot be opened is reported.
+     *
+     * <p>A class path is given, not chosen: one entry that cannot be opened is said and stepped over,
+     * so the entries beside it still answer. A miss walks the class path once for the class, once for
+     * the package and once for a name to suggest, and the same entry fails all three — so what has
+     * been said is remembered, and a reader is told once.
+     */
+    private record Skipped(PrintStream err, Set<String> said) {
+
+        void report(Entry entry, IOException e) {
+            String line = "skipping `" + entry.shown() + "`: " + entry.failure(e);
+            if (said.add(line)) {
+                err.println(line);
+            }
+        }
     }
 
     /**
@@ -226,7 +277,7 @@ public final class JapiCommand {
      * type. This command answers a dependency's public API, so the class's own access flag decides,
      * and {@code package-info} — a descriptor rather than a type — is left out with it.
      */
-    private static List<String> classesUnder(String packageName, List<Entry> entries, PrintStream err) {
+    private static List<String> classesUnder(String packageName, List<Entry> entries, Skipped skipped) {
         String prefix = packageName.replace('.', '/') + "/";
         List<String> classes = new ArrayList<>();
         for (Entry entry : entries) {
@@ -264,7 +315,7 @@ public final class JapiCommand {
                     }
                 }
             } catch (IOException e) {
-                unreadable(entry, e, err);
+                skipped.report(entry, e);
             }
         }
         return classes.stream().distinct().sorted().toList();
@@ -424,11 +475,14 @@ public final class JapiCommand {
     }
 
     /**
-     * A constant as the source that declared it would write it.
+     * A constant written as Java writes it.
      *
-     * <p>What japi prints is Java, so the value is a Java literal: the pool stores {@code boolean}
-     * and {@code char} as an int and says nothing about the width of an integer, and the field's own
-     * descriptor is what tells them apart.
+     * <p>The pool stores {@code boolean} and {@code char} as an int and says nothing about the width
+     * of an integer, so the field's own descriptor is what tells them apart.
+     *
+     * <p>Three floating-point values have no literal that spells them, and Java names them on
+     * {@code Float} and {@code Double} instead. A name is what is printed for them: what japi prints
+     * is read as Java, and {@code NaNf} — which is what a disassembler says — is not.
      */
     private static String literal(ConstantDesc value, ClassDesc type) {
         if (value instanceof String s) {
@@ -442,9 +496,16 @@ public final class JapiCommand {
         }
         return switch (value) {
             case Long l -> l + "L";
-            case Float fl -> fl + "f";
+            case Float f when f.isNaN() || f.isInfinite() -> "Float." + named(f.isNaN(), f > 0);
+            case Double d when d.isNaN() || d.isInfinite() -> "Double." + named(d.isNaN(), d > 0);
+            case Float f -> f + "f";
             default -> String.valueOf(value);
         };
+    }
+
+    /** What Java calls a floating-point value no literal spells. */
+    private static String named(boolean notANumber, boolean above) {
+        return notANumber ? "NaN" : above ? "POSITIVE_INFINITY" : "NEGATIVE_INFINITY";
     }
 
     /** {@code text} between {@code quote}s, with what Java cannot write plainly escaped. */

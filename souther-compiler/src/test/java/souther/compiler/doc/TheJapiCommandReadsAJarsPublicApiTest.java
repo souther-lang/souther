@@ -16,7 +16,9 @@ import java.util.jar.JarOutputStream;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * `souther japi` answers a dependency's public API from its class files — what javap is reached
@@ -100,6 +102,9 @@ class TheJapiCommandReadsAJarsPublicApiTest {
                     public static final int COUNT = 3;
                     public static final boolean ON = true;
                     public static final byte MASK = 7;
+                    public static final float NOT_A_NUMBER = 0.0f / 0.0f;
+                    public static final double UNBOUNDED = 1.0 / 0.0;
+                    public static final double BELOW = -1.0 / 0.0;
                     public static final Object OPEN = new Object();
                 }
                 """);
@@ -372,9 +377,8 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         Answer answer = run("acme.Nobody");
 
         assertEquals(2, answer.code());
-        assertTrue(answer.err().lines().filter(l -> l.startsWith("  "))
-                        .noneMatch(l -> l.contains(java.io.File.separator)),
-                "no path into this machine is handed out: " + answer.err());
+        assertFalse(answer.err().contains(java.io.File.separator),
+                "nothing said about this run carries a path into this machine: " + answer.err());
     }
 
     /** A path the caller wrote is theirs, and it is what they need back to see where japi looked. */
@@ -385,6 +389,105 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         assertEquals(2, answer.code());
         assertTrue(answer.err().contains(jar.toString()),
                 "the path they gave is the one they are told about: " + answer.err());
+    }
+
+    /**
+     * A floating-point value can be one no literal spells. Java has a name for each of them, and a
+     * name is what japi prints, since what it prints is Java.
+     */
+    @Test
+    void aFloatingPointValueNoLiteralSpellsIsPrintedUnderTheNameJavaGivesIt() {
+        Answer answer = run("acme.Constants", "-cp", jar.toString());
+
+        assertEquals(0, answer.code(), answer.err());
+        String out = answer.out();
+        assertTrue(out.contains("float NOT_A_NUMBER = Float.NaN"), out);
+        assertTrue(out.contains("double UNBOUNDED = Double.POSITIVE_INFINITY"), out);
+        assertTrue(out.contains("double BELOW = Double.NEGATIVE_INFINITY"), out);
+    }
+
+    /**
+     * A walk reports a directory it cannot descend into only once it reaches it, and reports it
+     * unchecked. Looking for a name to suggest must not be what ends the run — that is the miss the
+     * suggestion exists to answer.
+     */
+    @Test
+    void aDirectoryTheSearchCannotDescendIntoIsSteppedOverLikeAnyOtherEntry() throws Exception {
+        Path tree = Files.createTempDirectory("unwalkable");
+        Path shut = tree.resolve("shut");
+        Files.createDirectories(shut);
+        Files.writeString(shut.resolve("Something.class"), "not read");
+        assertTrue(shut.toFile().setReadable(false), "the fixture needs the directory closed");
+        assumeTrue(!readable(shut), "this process can read whatever it likes; nothing to step over");
+
+        Answer answer = run("acme.Greetr", "-cp", tree + java.io.File.pathSeparator + jar);
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().contains("acme.Greeter"),
+                "the entry beside it is still searched for a near name: " + answer.err());
+    }
+
+    /**
+     * An IOException names the file it is about. For an entry this command fell back on, that is
+     * the path {@link #theClassPathThisToolFellBackOnIsNamedByWhatItIsNotWhereItIs} keeps back,
+     * arriving by another route.
+     */
+    @Test
+    void aFailureOnTheClassPathThisToolFellBackOnCarriesNoPathEither() throws Exception {
+        Path shut = Files.createTempDirectory("shut-jar").resolve("shut.jar");
+        Files.writeString(shut, "not read");
+        assertTrue(shut.toFile().setReadable(false), "the fixture needs the file closed");
+        assumeTrue(!readable(shut), "this process can read whatever it likes; nothing to fail on");
+
+        Answer answer = fellBackOn(shut.toString(), "acme.Nobody");
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().contains("shut.jar"), "the entry is still named: " + answer.err());
+        assertFalse(answer.err().contains(shut.getParent().toString()),
+                "and no path into this machine rides along with the reason: " + answer.err());
+    }
+
+    /**
+     * A miss walks the class path more than once — for the class, for the package, and for a name to
+     * suggest. An entry that cannot be opened fails every one of them, and is worth saying once.
+     */
+    @Test
+    void anEntryThatCannotBeOpenedIsSaidOnceHoweverManyPassesMeetIt() throws Exception {
+        Path shut = Files.createTempDirectory("said-once").resolve("shut.jar");
+        Files.writeString(shut, "not read");
+        assertTrue(shut.toFile().setReadable(false), "the fixture needs the file closed");
+        assumeTrue(!readable(shut), "this process can read whatever it likes; nothing to fail on");
+
+        Answer answer = run("acme.Nobody", "-cp", shut + java.io.File.pathSeparator + jar);
+
+        assertEquals(2, answer.code());
+        assertEquals(1, answer.err().lines().filter(l -> l.startsWith("skipping")).count(),
+                "one entry, one report: " + answer.err());
+    }
+
+    private static boolean readable(Path path) {
+        try {
+            if (Files.isDirectory(path)) {
+                try (Stream<Path> entries = Files.list(path)) {
+                    entries.toList();
+                }
+            } else {
+                Files.readAllBytes(path);
+            }
+            return true;
+        } catch (java.io.IOException e) {
+            return false;
+        }
+    }
+
+    /** japi run over a class path it was not given but fell back on. */
+    private Answer fellBackOn(String classPath, String... args) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ByteArrayOutputStream err = new ByteArrayOutputStream();
+        int code = JapiCommand.run(args,
+                new PrintStream(out, true, StandardCharsets.UTF_8),
+                new PrintStream(err, true, StandardCharsets.UTF_8), classPath);
+        return new Answer(code, out.toString(StandardCharsets.UTF_8), err.toString(StandardCharsets.UTF_8));
     }
 
     @Test
