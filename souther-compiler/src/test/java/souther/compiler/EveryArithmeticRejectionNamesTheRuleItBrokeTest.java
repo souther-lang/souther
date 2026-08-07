@@ -5,6 +5,8 @@ import souther.compiler.diag.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -78,11 +80,15 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
     }
 
     @Test
-    void aQuotientOfTwoNewtypesIsARatioInNeitherOfThem() {
-        Diagnostic d = refusalOf("(a: Amount, b: Amount) : Amount", "a / b");
-        assertEquals("check.arith.newtype.quotient", d.messageKey(),
+    void aQuotientOfTwoNewtypesIsAValueInNeitherOfThem() {
+        Diagnostic alike = refusalOf("(a: Amount, b: Amount) : Amount", "a / b");
+        assertEquals("check.arith.newtype.quotient", alike.messageKey(),
                 "a quotient leaves the dimension the way a product does, but not for the same reason");
-        assertEquals(2, d.secondary().size(), "each operand is named with the newtype it is");
+        assertEquals(2, alike.secondary().size(), "each operand is named with the newtype it is");
+
+        Diagnostic unlike = refusalOf("(a: Amount, q: Quantity) : Amount", "a / q");
+        assertEquals("check.arith.newtype.quotient", unlike.messageKey(),
+                "unlike newtypes divide into a dimension of their own, which is refused the same way");
     }
 
     @Test
@@ -109,15 +115,54 @@ class EveryArithmeticRejectionNamesTheRuleItBrokeTest {
     }
 
     @Test
-    void aScaleIsByTheNewtypesOwnBase() {
-        Diagnostic d = refusalOf("(r: Rate, n: Int) : Rate", "r * n");
-        assertEquals("check.arith.newtype.scalarbase", d.messageKey());
+    void aValueOfAnotherBaseIsRefusedByTheBaseAndNotByTheOperator() {
+        Diagnostic scaled = refusalOf("(r: Rate, n: Int) : Rate", "r * n");
+        assertEquals("check.arith.newtype.base", scaled.messageKey());
+
+        Diagnostic added = refusalOf("(a: Amount, d: Decimal) : Amount", "a + d");
+        assertEquals("check.arith.newtype.base", added.messageKey(),
+                "reading its own base is one rule, and `+` is not a scale to be refused as one");
     }
 
     @Test
-    void anOperandThatIsNotNumericAtAllKeepsTheGenericRefusal() {
-        Diagnostic d = refusalOf("(s: String, n: Int) : Int", "s * n");
-        assertEquals("check.arith.operand", d.messageKey(),
+    void eitherOperandCanBeTheOneThatIsNotANumber() {
+        Diagnostic onTheLeft = refusalOf("(s: String, n: Int) : Int", "s * n");
+        assertEquals("check.arith.operand", onTheLeft.messageKey(),
                 "the newtype rules must not absorb the operand rule they were carved out of");
+        assertEquals(List.of("String"), List.of(onTheLeft.args()));
+
+        Diagnostic onTheRight = refusalOf("(n: Int, s: String) : Int", "n * s");
+        assertEquals("check.arith.operand", onTheRight.messageKey(),
+                "which side it stands on does not make a String an arithmetic operand");
+        assertEquals(List.of("String"), List.of(onTheRight.args()),
+                "the operand named is the one that is not a number");
+    }
+
+    @Test
+    void twoNumbersOfUnlikeBasesAreThePlainMismatchTheyAlwaysWere() {
+        Diagnostic d = refusalOf("(n: Int, d: Decimal) : Int", "n * d");
+        assertEquals("check.type.mismatch.msg", d.messageKey(),
+                "Int beside Decimal is said by a found-versus-expected block, not by a sentence");
+    }
+
+    @Test
+    void oneNameStandingForTwoTypesIsWrittenOutInTheMessageItself() {
+        CompileException e = assertThrows(CompileException.class, () -> Compiler.compileModules(List.of(
+                """
+                module one exposing ( Amount )
+                data Amount = Int
+                """,
+                """
+                module two exposing ( Amount )
+                data Amount = Int
+                """,
+                """
+                module use
+                import one ( Amount )
+                import two
+                let mix (a: Amount, b: two.Amount) : Amount = a + b
+                """)));
+        assertEquals(List.of("one.Amount", "two.Amount"), List.of(e.diagnostic().args()),
+                "`Amount and Amount are different newtypes` names nothing the author can act on");
     }
 }

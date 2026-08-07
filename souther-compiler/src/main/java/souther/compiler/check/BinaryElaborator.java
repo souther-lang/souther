@@ -85,17 +85,17 @@ public final class BinaryElaborator {
                 // here: a refusal already knows what it is, and this only points it at the source.
                 ArithmeticCheck answer = ArithmeticCheck.of(bin.op(), lt, rt,
                         isLiteralExpr(bin.left()), isLiteralExpr(bin.right()), ctx.symbols());
-                if (answer instanceof ArithmeticCheck.Allowed allowed) {
-                    yield new Core.Binary(bin.op(), left, right, allowed.resultType(), bin.pos());
-                }
-                ArithmeticCheck.Refusal refusal = ((ArithmeticCheck.Refused) answer).refusal();
-                if (refusal instanceof ArithmeticCheck.PrimitiveBasesDisagree) {
-                    // Int beside Decimal: the found-versus-expected block says it better than a
-                    // sentence would, and requireType raises it.
-                    Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");
-                    yield new Core.Binary(bin.op(), left, right, lt, bin.pos());
-                }
-                throw refused(bin, refusal, lt, rt);
+                yield switch (answer) {
+                    case ArithmeticCheck.Allowed allowed ->
+                            new Core.Binary(bin.op(), left, right, allowed.resultType(), bin.pos());
+                    case ArithmeticCheck.PlainTypeCheck ignored -> {
+                        // One type against another: the found-versus-expected block says it better
+                        // than a sentence would, and requireType raises or absorbs it.
+                        Elaborator.requireType(bin.right(), rt, lt, ctx.symbols(), "operand of arithmetic");
+                        yield new Core.Binary(bin.op(), left, right, lt, bin.pos());
+                    }
+                    case ArithmeticCheck.Refused no -> throw refused(bin, no.refusal(), lt, rt);
+                };
             }
             case CONCAT -> {
                 // `++` is Elm's appendable operator: two strings concatenate to a string, two lists to

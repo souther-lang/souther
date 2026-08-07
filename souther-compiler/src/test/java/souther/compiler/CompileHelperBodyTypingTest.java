@@ -805,7 +805,7 @@ class CompileHelperBodyTypingTest {
                 let f (x) = X(bad([ 1 ]))
                 """;
         CompileException e = assertThrows(CompileException.class, () -> Compiler.compile(src));
-        assertEquals("check.type.mismatch.msg", e.diagnostic().messageKey(), e.getMessage());
+        assertEquals("check.arith.operand", e.diagnostic().messageKey(), e.getMessage());
     }
 
     @Test
