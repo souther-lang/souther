@@ -2,6 +2,7 @@ package souther.compiler.check;
 
 import souther.compiler.ast.Ast;
 import souther.compiler.check.Combinators.Handed;
+import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carrying;
 import souther.compiler.check.DischargeRules.Projection;
 import souther.compiler.check.DischargeRules.Shape;
@@ -426,17 +427,32 @@ final class Predicates {
         }
     }
 
-    /** {@code size(c) <= size(what c was built from)}, down the chain, wherever the building can only
-     * drop elements. */
+    /** How the size of a container relates to the size of what it was built from, down the chain.
+     * Which way it is stated is what the construction's {@link Cardinality} says. */
     void bounds(ValueName sizeCall, Core container, Denotations at, List<Constraint> out) {
+        // A construction that only adds is no smaller than each container it read. It names more than
+        // one of them, so this is a loop where the building below is a single answer — and it is
+        // asked of the expression rather than of a call, since `a ++ b` is one of these and is
+        // written as an operator.
+        for (Core added : DischargeRules.noSmallerThan(container)) {
+            stated(sizeCall, container, DischargeRules.sizeSource(added), Rel.GE, at, out);
+        }
         if (!(container instanceof Core.PreservedCall call)) {
             return;
         }
         Source built = DischargeRules.builtFrom(call);
-        if (built == null || built.shape().keepsSize()) {
+        Rel rel = built == null ? null : relationOf(built.size());
+        if (rel == null) {
             return;
         }
-        Core source = DischargeRules.sizeSource(built.container());
+        stated(sizeCall, container, DischargeRules.sizeSource(built.container()), rel, at, out);
+    }
+
+    /** States how the size of {@code container} relates to the size of {@code source}, and goes on
+     * down whatever that one was built from. A container neither of them has a key for is one
+     * nothing can be said of, and stops the walk. */
+    private void stated(ValueName sizeCall, Core container, Core source, Rel rel, Denotations at,
+                        List<Constraint> out) {
         String here = terms.bodyKey(container, at);
         String there = terms.bodyKey(source, at);
         if (here == null || there == null) {
@@ -445,8 +461,18 @@ final class Predicates {
         out.add(new Constraint(
                 LinearForm.atom(Terms.sizeKey(sizeCall, here))
                         .minus(LinearForm.atom(Terms.sizeKey(sizeCall, there))),
-                Rel.LE));
+                rel));
         bounds(sizeCall, source, at, out);
+    }
+
+    /** How {@code size} is stated of the two sizes, or null where there is nothing to state: a
+     * construction of the same size answers both with one atom ({@code DischargeRules.sizeSource}),
+     * so a constraint between them would say a name is itself. */
+    private static Rel relationOf(Cardinality size) {
+        return switch (size) {
+            case AT_MOST -> Rel.LE;
+            case SAME -> null;
+        };
     }
 
     /** The keys a guard could have settled to establish this clause: the predicate as written, and

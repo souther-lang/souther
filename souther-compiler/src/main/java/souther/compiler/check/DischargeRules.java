@@ -49,24 +49,39 @@ final class DischargeRules {
             op("List.length"), op("String.length"), op("Set.size"), op("Map.size"));
 
     /**
-     * What a construction of a container keeps of the container it was built from.
+     * What a construction of a container keeps of the elements of the container it was built from.
      *
      * <ul>
      * <li>{@code PERMUTES} — the same elements in another order. Everything survives.
      * <li>{@code SUBSET} — some of the same elements. Nothing new is there, so a property of every
-     *     element survives and the size can only fall.
-     * <li>{@code MAPS} — one new element for each. As many as before, and nothing is known of what
-     *     they are.
-     * <li>{@code COLLAPSES} — at most one new element for each. Neither the elements nor the count.
+     *     element survives.
+     * <li>{@code MAPS} — one new element for each. Nothing is known of what they are.
+     * <li>{@code COLLAPSES} — at most one new element for each. Neither the elements nor what a
+     *     closure that answers about them said.
      * </ul>
+     *
+     * <p>How many there are is {@link Cardinality} and is stated beside this, not read off it. The
+     * two agree for every construction here — the same elements in another order is as many, some of
+     * them is no more — and that agreement is what made one enum look like enough. It ends at a
+     * construction given two containers: {@code List.append(a, b)} holds neither {@code a}'s elements
+     * alone nor {@code b}'s, and its size is still no less than either. A statement about the count
+     * that has to be spelled as a statement about the elements cannot be made there.
      */
     enum Shape {
-        PERMUTES, SUBSET, MAPS, COLLAPSES;
+        PERMUTES, SUBSET, MAPS, COLLAPSES
+    }
 
-        /** Whether the result has exactly as many as the container it was built from. */
-        boolean keepsSize() {
-            return this == PERMUTES || this == MAPS;
-        }
+    /**
+     * How the size of a construction's result relates to the size of the container it was built from.
+     *
+     * <ul>
+     * <li>{@code SAME} — exactly as many. Not stated as a fact: both are one atom, since
+     *     {@link #sizeSource} answers the size of the result with the size of its source.
+     * <li>{@code AT_MOST} — no more, and possibly fewer.
+     * </ul>
+     */
+    enum Cardinality {
+        SAME, AT_MOST
     }
 
     /**
@@ -145,35 +160,59 @@ final class DischargeRules {
         return new Reads.At(position);
     }
 
-    /** Which argument a container was built from, and what the building keeps of it. */
-    record Built(Reads from, Shape shape) {}
+    /** Which argument a container was built from, what the building keeps of its elements, and how
+     * many of them the result has. */
+    record Built(Reads from, Shape shape, Cardinality size) {}
 
     /** The container {@code call} built its result from, and what the building kept of it. */
-    record Source(Core container, Shape shape) {}
+    record Source(Core container, Shape shape, Cardinality size) {}
 
     private static final Map<ValueName, Built> BUILT_FROM = Map.ofEntries(
-            Map.entry(op("List.reverse"), new Built(at(0), Shape.PERMUTES)),
-            Map.entry(op("List.sort"), new Built(at(0), Shape.PERMUTES)),
-            Map.entry(op("List.sortBy"), new Built(CONTAINER, Shape.PERMUTES)),
-            Map.entry(op("List.map"), new Built(CONTAINER, Shape.MAPS)),
-            Map.entry(op("List.mapIndexed"), new Built(CONTAINER, Shape.MAPS)),
-            Map.entry(op("Map.mapValues"), new Built(CONTAINER, Shape.MAPS)),
-            Map.entry(op("List.filter"), new Built(CONTAINER, Shape.SUBSET)),
-            Map.entry(op("List.distinct"), new Built(at(0), Shape.SUBSET)),
-            Map.entry(op("List.take"), new Built(at(1), Shape.SUBSET)),
-            Map.entry(op("List.drop"), new Built(at(1), Shape.SUBSET)),
-            Map.entry(op("Set.filter"), new Built(CONTAINER, Shape.SUBSET)),
-            Map.entry(op("Map.filterEntries"), new Built(CONTAINER, Shape.SUBSET)),
-            Map.entry(op("List.distinctBy"), new Built(CONTAINER, Shape.SUBSET)),
-            Map.entry(op("Map.remove"), new Built(at(1), Shape.SUBSET)),
-            Map.entry(op("Set.remove"), new Built(at(1), Shape.SUBSET)),
-            Map.entry(op("Map.intersection"), new Built(at(0), Shape.SUBSET)),
-            Map.entry(op("Map.difference"), new Built(at(0), Shape.SUBSET)),
-            Map.entry(op("Set.intersection"), new Built(at(0), Shape.SUBSET)),
-            Map.entry(op("Set.difference"), new Built(at(0), Shape.SUBSET)),
-            Map.entry(op("Map.updateIfPresent"), new Built(CONTAINER, Shape.MAPS)),
-            Map.entry(op("List.filterMap"), new Built(CONTAINER, Shape.COLLAPSES)),
-            Map.entry(op("Set.map"), new Built(CONTAINER, Shape.COLLAPSES)));
+            Map.entry(op("List.reverse"), new Built(at(0), Shape.PERMUTES, Cardinality.SAME)),
+            Map.entry(op("List.sort"), new Built(at(0), Shape.PERMUTES, Cardinality.SAME)),
+            Map.entry(op("List.sortBy"), new Built(CONTAINER, Shape.PERMUTES, Cardinality.SAME)),
+            Map.entry(op("List.map"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+            Map.entry(op("List.mapIndexed"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+            Map.entry(op("Map.mapValues"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+            Map.entry(op("List.filter"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("List.distinct"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("List.take"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("List.drop"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Set.filter"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map.filterEntries"),
+                    new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("List.distinctBy"), new Built(CONTAINER, Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map.remove"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Set.remove"), new Built(at(1), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map.intersection"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map.difference"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Set.intersection"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Set.difference"), new Built(at(0), Shape.SUBSET, Cardinality.AT_MOST)),
+            Map.entry(op("Map.updateIfPresent"), new Built(CONTAINER, Shape.MAPS, Cardinality.SAME)),
+            Map.entry(op("List.filterMap"),
+                    new Built(CONTAINER, Shape.COLLAPSES, Cardinality.AT_MOST)),
+            Map.entry(op("Set.map"), new Built(CONTAINER, Shape.COLLAPSES, Cardinality.AT_MOST)));
+
+    /**
+     * The containers a construction's result is never smaller than.
+     *
+     * <p>Written on its own and not as a {@link Shape}, because these keep nothing of the elements:
+     * {@code List.append(a, b)} holds neither {@code a}'s elements alone nor {@code b}'s, and an
+     * insert puts in one that was in neither. How many there are survives that, and a rule that had
+     * to be spelled as a rule about the elements could not say so — which is why these sat among the
+     * constructions nothing is known of, their count discarded along with the rest.
+     *
+     * <p>No more than the bound. A union makes one entry of a key both sides have and an insert of
+     * something already there adds nothing, so neither answers the sum of what it read; appending
+     * does, and stating it for that one alone would be a second rule for one operation. The bound is
+     * what they share, and it is what a lower-bound invariant asks for.
+     */
+    private static final Map<ValueName, List<Reads>> NO_SMALLER_THAN = Map.of(
+            op("List.append"), List.of(at(0), at(1)),
+            op("Set.union"), List.of(at(0), at(1)),
+            op("Map.union"), List.of(at(0), at(1)),
+            op("Set.insert"), List.of(at(1)),
+            op("Map.insert"), List.of(at(2)));
 
     /**
      * The constructions this says nothing of, in three groups. Each reason is about what a shape can
@@ -186,7 +225,8 @@ final class DischargeRules {
      * elements from each — which is neither the elements nor a count.
      *
      * <p>They put in what the container they read did not hold. Nothing that held of every element
-     * still does, and the size can rise; a shape says neither of those.
+     * still does, which is what a shape would have had to say. How many there are is said instead by
+     * {@link #NO_SMALLER_THAN}, which those of them that only add are in.
      *
      * <p>They answer the same elements in a container of another kind. That is true and unsayable:
      * every statement the check makes names the kind it is about — {@code List.length} and
@@ -416,6 +456,18 @@ final class DischargeRules {
         private static final Map<ValueName, Reads> PROJECTIONS =
                 bind(PROJECTION_OF, Function.identity(), CLOSURE, t -> t instanceof Type.FnOf,
                         "the projection a predicate is stated over");
+        private static final Map<ValueName, List<Reads>> LOWER_BOUNDS =
+                bindEach(NO_SMALLER_THAN, CONTAINER, Question::holdsElements,
+                        "a container the result is no smaller than");
+    }
+
+    /** As {@link #bind}, for a rule that names more than one argument: each is held to the
+     * declaration on its own, since each is a separate claim about a separate argument. */
+    static Map<ValueName, List<Reads>> bindEach(Map<ValueName, List<Reads>> rules, Reads derived,
+                                                Predicate<Type> required, String what) {
+        rules.forEach((operation, reads) -> reads.forEach(one ->
+                bind(Map.of(operation, one), Function.identity(), derived, required, what)));
+        return rules;
     }
 
     /**
@@ -459,7 +511,35 @@ final class DischargeRules {
      * what the operation keeps. */
     static Source builtFrom(Core.PreservedCall call) {
         Built built = Bound.BUILDINGS.get(call.operation());
-        return built == null ? null : new Source(built.from().of(call), built.shape());
+        return built == null ? null
+                : new Source(built.from().of(call), built.shape(), built.size());
+    }
+
+    /**
+     * The containers {@code e}'s result is no smaller than, in the order the rule names them.
+     *
+     * <p>{@code a ++ b} is here beside the table rather than in it. The library declares
+     * {@code List.append} as {@code a ++ b}, so the two spellings are one operation and a rule about
+     * one is a rule about the other; and a {@code String} has no {@code append} at all, so the
+     * operator is the only spelling its concatenation has. A rule keyed by operation reaches neither,
+     * both being written as an operator and not as a call.
+     */
+    static List<Core> noSmallerThan(Core e) {
+        if (e instanceof Core.Binary b && b.op() == Ast.BinOp.CONCAT) {
+            return List.of(b.left(), b.right());
+        }
+        if (!(e instanceof Core.PreservedCall call)) {
+            return List.of();
+        }
+        List<Reads> reads = Bound.LOWER_BOUNDS.get(call.operation());
+        if (reads == null) {
+            return List.of();
+        }
+        List<Core> containers = new ArrayList<>(reads.size());
+        for (Reads one : reads) {
+            containers.add(one.of(call));
+        }
+        return containers;
     }
 
     /** Where {@code call} reads the container it states its predicate of, or null where it is not a
@@ -520,7 +600,7 @@ final class DischargeRules {
     static Core sizeSource(Core e) {
         if (e instanceof Core.PreservedCall call) {
             Source built = builtFrom(call);
-            if (built != null && built.shape().keepsSize()) {
+            if (built != null && built.size() == Cardinality.SAME) {
                 return sizeSource(built.container());
             }
         }

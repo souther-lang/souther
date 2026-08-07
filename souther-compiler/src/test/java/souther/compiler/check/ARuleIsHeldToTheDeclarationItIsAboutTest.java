@@ -1,6 +1,7 @@
 package souther.compiler.check;
 
 import souther.compiler.check.DischargeRules.Built;
+import souther.compiler.check.DischargeRules.Cardinality;
 import souther.compiler.check.DischargeRules.Carried;
 import souther.compiler.check.DischargeRules.Reads;
 import souther.compiler.check.DischargeRules.Shape;
@@ -41,7 +42,7 @@ class ARuleIsHeldToTheDeclarationItIsAboutTest {
 
     private static void bindBuilt(String operation, Reads from) {
         DischargeRules.bind(
-                Map.of(op(operation), new Built(from, Shape.SUBSET)),
+                Map.of(op(operation), new Built(from, Shape.SUBSET, Cardinality.AT_MOST)),
                 Built::from, new Reads.TheContainer(), Question::holdsElements,
                 "the container something is built from");
     }
