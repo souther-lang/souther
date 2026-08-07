@@ -76,13 +76,18 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
 
     /**
      * @param injected  whether the behavior still has no {@code let} to run
+     * @param hasBody   whether there is a body with arms in it. A {@code >->} composition is
+     *                  implemented and is not one: its stages have arms and it has none of its own, so
+     *                  a branch measure does not apply to it rather than failing on it. Read from the
+     *                  declaration, because the evidence for "not measured" and for "nothing to
+     *                  measure" is the same {@code UNAVAILABLE}
      * @param rows      how many {@code example} rows name it, across every source that writes one
      * @param pending   how many of those are recorded rather than evaluated
      * @param signature what those rows establish about the cases of its inputs and its output
      * @param findings  what the measures found and nothing filled, which is what the lines under this
      *                  behavior print and what a build is warned about — one list, read three ways
      */
-    public record BehaviorReport(String name, boolean injected, int rows, int pending,
+    public record BehaviorReport(String name, boolean injected, boolean hasBody, int rows, int pending,
                                  MeasurementStatus status,
                                  Adequacy.SignatureEvidence signature,
                                  PartitionEvidence partition,
@@ -198,8 +203,9 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                     : partitions.getOrDefault(behavior.name(), PartitionEvidence.NONE);
             Adequacy.BranchEvidence branch = branches == null ? Adequacy.BranchEvidence.UNAVAILABLE
                     : branches.getOrDefault(behavior.name(), Adequacy.BranchEvidence.UNAVAILABLE);
-            behaviors.add(new BehaviorReport(behavior.name(),
-                    ExampleVerifier.isPending(module, behavior.name()), rows.size(), pending,
+            boolean injected = ExampleVerifier.isPending(module, behavior.name());
+            behaviors.add(new BehaviorReport(behavior.name(), injected,
+                    behavior instanceof Ast.SpecBehavior && !injected, rows.size(), pending,
                     unreadable ? MeasurementStatus.PARTIAL : statusOf(signature, partition, branch),
                     signature, partition, branch,
                     findings == null ? List.of()
@@ -300,8 +306,11 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
      * like: a behavior whose arms were never asked about and one whose arms could not be measured both
      * carry an {@code UNAVAILABLE} branch, and only the first of them leaves the rows adequate.
      *
-     * <p>An injected behavior is not asked about its arms. It has no body, so there is no arm for a row
-     * to reach and nothing there for a measure to fail at.
+     * <p>Whether a measure applies at all is read from the declaration and never from the shape of
+     * what came back. A behavior with no body has no arms, and a position dropped for being past the
+     * axis limit left no boundary behind — in both cases the evidence looks exactly like a measure
+     * that was made and found nothing, so a report reading it back would call the first adequate and
+     * the second covered.
      */
     private List<MeasurementStatus> requiredMeasures() {
         List<MeasurementStatus> measures = new ArrayList<>();
@@ -313,11 +322,17 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
                 if (!askedLevel.measuresArms()) {
                     continue;
                 }
-                if (behavior.branch() != null && !behavior.injected()) {
+                if (behavior.branch() != null && behavior.hasBody()) {
                     measures.add(behavior.branch().status());
                 }
-                if (behavior.partition() != null) {
-                    behavior.partition().boundaries().forEach(b -> measures.add(b.status()));
+                if (behavior.partition() == null) {
+                    continue;
+                }
+                behavior.partition().boundaries().forEach(b -> measures.add(b.status()));
+                // An axis that was dropped carried the boundaries nothing can now ask about. The pair
+                // space is not one of these: a combination is not where a boundary comes from.
+                if (!behavior.partition().omitted().isEmpty()) {
+                    measures.add(MeasurementStatus.PARTIAL);
                 }
             }
         }
@@ -471,7 +486,10 @@ public record AdequacyReport(int schemaVersion, String compilerVersion, Adequacy
     private static void branch(StringBuilder out, BehaviorReport behavior) {
         Adequacy.BranchEvidence branch = behavior.branch();
         if (branch == null || branch.status() == MeasurementStatus.UNAVAILABLE) {
-            if (branch != null && !behavior.injected() && behavior.rows() > 0) {
+            // Said only where there were arms to measure. A `>->` composition has none of its own, and
+            // telling its author the arms were not measured sends them after a measurement that was
+            // never owed.
+            if (branch != null && behavior.hasBody() && behavior.rows() > 0) {
                 out.append("    branch      unavailable (the arms were not measured)%n"
                         .formatted());
             }

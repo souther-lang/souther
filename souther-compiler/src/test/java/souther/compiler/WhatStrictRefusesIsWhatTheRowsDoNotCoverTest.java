@@ -2,8 +2,12 @@ package souther.compiler;
 
 import org.junit.jupiter.api.Test;
 
+import souther.compiler.observe.Incompleteness;
+import souther.compiler.observe.MeasurementStatus;
+import souther.compiler.partition.BoundaryObligation;
 import souther.compiler.query.Adequacy;
 import souther.compiler.query.Compilation;
+import souther.compiler.query.PartitionEvidence;
 import souther.compiler.report.AdequacyReport;
 
 import java.io.ByteArrayOutputStream;
@@ -172,15 +176,15 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
     }
 
     /**
-     * The same missing evidence, read two ways.
+     * An arm nothing reaches is a gap only where the arms were asked about.
      *
-     * <p>At {@code witness} the arms are not asked about; at {@code all} they are, and this model's
-     * behavior has none because it has no body. Both leave the branch evidence unavailable, and the
-     * verdict differs only by what was asked. A report that decided this from the evidence alone would
-     * have to call one of the two wrong.
+     * <p>The same model and the same rows; what differs is the level. At {@code witness} the arms are
+     * not measured and the unreached one is not among the gaps, at {@code all} it is. What was asked
+     * for is not readable from the evidence — a measure nobody wanted leaves the same absence as one
+     * that could not be made — so the report carries it.
      */
     @Test
-    void whatWasNotAskedAboutIsNotWhatCouldNotBeMeasured() {
+    void anArmIsAGapOnlyWhereTheArmsWereAskedAbout() {
         AdequacyReport armsNotAsked = reportOf(UNCOVERED_ONLY, Adequacy.Level.WITNESS);
         AdequacyReport armsAsked = reportOf(UNCOVERED_ONLY, Adequacy.Level.ALL);
 
@@ -190,6 +194,92 @@ class WhatStrictRefusesIsWhatTheRowsDoNotCoverTest {
         assertTrue(armsAsked.adequacyGaps().stream()
                 .anyMatch(f -> f.kind() == Adequacy.Kind.ARM_UNREACHED), armsAsked.human());
     }
+
+    /**
+     * A measure that does not apply is not a measure that failed.
+     *
+     * <p>A {@code >->} composition is implemented and has no arms of its own — its stages have them.
+     * Its branch evidence is unavailable for that reason and not because anything went wrong, and a
+     * verdict that read the evidence back would put every model holding a composition permanently out
+     * of reach of {@code satisfied}.
+     */
+    @Test
+    void aCompositionHasNoArmsOfItsOwnAndDoesNotHoldTheVerdictOpen() {
+        AdequacyReport report = reportOf(COMPOSED, Adequacy.Level.ALL);
+
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED, report.adequacy(), report.human());
+        assertFalse(report.human().contains("the arms were not measured"), report.human());
+    }
+
+    /**
+     * An axis dropped for being past the limit leaves no boundary to miss.
+     *
+     * <p>Which is exactly what a covered position looks like from the evidence: no boundary, nothing
+     * unmet. The rules that axis drew are unmeasured and could have carried a gap, so the verdict says
+     * it does not know rather than saying the rows cover a position nothing looked at.
+     *
+     * <p>Written from the evidence rather than from a source, because reaching the limit takes
+     * thirteen axes on one behavior and the fixture would say less than this does.
+     */
+    @Test
+    void anAxisDroppedPastTheLimitLeavesTheVerdictUndetermined() {
+        PartitionEvidence.BoundaryCoverage met = new PartitionEvidence.BoundaryCoverage(
+                "weigh/w.a", "guard", BoundaryObligation.BoundarySide.AT, "100", true,
+                MeasurementStatus.COMPLETE);
+        Incompleteness dropped = Incompleteness.of(Incompleteness.Code.AXIS_OMITTED,
+                Incompleteness.Scope.BEHAVIOR, "weigh/w.m");
+
+        assertEquals(AdequacyReport.AdequacyStatus.SATISFIED,
+                verdictOf(new PartitionEvidence(List.of(), List.of(met),
+                        PartitionEvidence.PairSpace.NONE, List.of(), List.of())));
+        assertEquals(AdequacyReport.AdequacyStatus.UNDETERMINED,
+                verdictOf(new PartitionEvidence(List.of(), List.of(met),
+                        PartitionEvidence.PairSpace.NONE, List.of(), List.of(dropped))));
+    }
+
+    /** What one behavior's partition makes of the whole report, with nothing else asked about. */
+    private static AdequacyReport.AdequacyStatus verdictOf(PartitionEvidence partition) {
+        AdequacyReport.BehaviorReport behavior = new AdequacyReport.BehaviorReport(
+                "weigh", false, true, 1, 0, MeasurementStatus.COMPLETE, null, partition,
+                null, List.of());
+        return new AdequacyReport(AdequacyReport.SCHEMA_VERSION, "test", Adequacy.Level.ALL,
+                MeasurementStatus.COMPLETE,
+                List.of(new AdequacyReport.ModuleReport("example.wide", MeasurementStatus.COMPLETE,
+                        List.of(), List.of(behavior))))
+                .adequacy();
+    }
+
+    /** Two covered stages and the composition of them, which carries rows of its own. */
+    private static final String COMPOSED = """
+            module example.pipe
+
+            data Amount = Int
+                invariant value >= 0
+
+            data Doubled = { of: Amount }
+            data Tripled = { of: Amount }
+
+            behavior twice : (cost: Amount) -> Doubled
+                constructs Doubled
+
+            let twice (cost) = Doubled { of = cost }
+
+            behavior thrice : (d: Doubled) -> Tripled
+                constructs Tripled
+
+            let thrice (d) = Tripled { of = d.of }
+
+            behavior both = twice >-> thrice
+
+            example twice
+                | "zero" : (Amount(0)) -> Doubled { of = Amount(0) }
+
+            example thrice
+                | "zero" : (Doubled { of = Amount(0) }) -> Tripled { of = Amount(0) }
+
+            example both
+                | "zero" : (Amount(0)) -> Tripled { of = Amount(0) }
+            """;
 
     /**
      * A behavior with no rows is not a behavior with gaps.

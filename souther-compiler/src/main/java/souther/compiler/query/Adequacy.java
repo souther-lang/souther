@@ -715,7 +715,9 @@ public final class Adequacy {
                         branches == null ? null : branches.get(behavior.name()), found);
                 out.put(behavior.name(), List.copyOf(found));
             }
-            return Answer.of(Map.copyOf(out));
+            // Ordered, because a build reads the warnings these become and a set of warnings whose
+            // order moves between runs is a diff nobody wrote.
+            return Answer.of(Ordered.map(out));
         }
 
         /** What the rows say about the cases of the signature. Carried at the measurement's own status:

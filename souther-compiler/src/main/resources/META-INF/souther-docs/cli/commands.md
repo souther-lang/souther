@@ -60,7 +60,8 @@ the rows does not reveal.
 
 The report closes with two answers, and they are different questions. `measurement` says how much of
 itself the measuring could make; `adequacy` says whether what it measured is covered — `satisfied`,
-`not_satisfied`, or `undetermined` where a measure was not asked for or could not be made. `--strict`
+`not satisfied` (`not_satisfied` in the JSON), or `undetermined` where a measure was not asked for,
+does not apply, or could not be made. `--strict`
 refuses `not_satisfied` and nothing else, which is the same set of findings `compile --adequacy all
 --warnings error` refuses. How many rows are waiting for a `let` is reported and never gated on:
 waiting is the normal state of a model being written, and an injected behavior's recorded row is the
