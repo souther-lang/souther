@@ -26,17 +26,19 @@ import java.util.Set;
  * The intraprocedural invariant-discharge check (spec §invariant-discharge). It walks a behavior's
  * body threading what holds where it stands ({@link Known}), seeded from the input types'
  * invariants and refined along each {@code guard}/{@code if} guard (a {@code guard} is already an
- * {@code if} here). At every construction whose invariant it can carry, it asks whether the guards
- * <em>discharge</em> it. A construction proven to violate its invariant on a reachable path is a
- * compile error (the path-sensitive generalization of the constant check {@code Amount(-5)}); one it
- * cannot prove is a warning (a possible abort — guard it, or reify the relation into a type
- * invariant). An invariant naming something it cannot name is left opaque (no diagnostic; the
- * run-time check stays), so every flagged construction has a guard that discharges it.
+ * {@code if} here). At every construction whose invariant it can carry, it asks whether what is known
+ * there <em>discharges</em> it, or refutes it. A construction proven to violate its invariant on a
+ * reachable path is a compile error (the path-sensitive generalization of the constant check
+ * {@code Amount(-5)}); one it cannot prove is a warning (a possible abort — guard it, or reify the
+ * relation into a type invariant). An invariant naming something it cannot name is left opaque (no
+ * diagnostic; the run-time check stays), so every flagged construction is one whose clauses could be
+ * read at the values it is being given.
  *
- * <p>A violation is reported in the terms it was reached in: {@link Known} carries beside itself what
- * would hold had no condition on the path settled anything, and a clause that reading already refutes
- * is one the construction fails wherever it is written. Which assumption a violation needs, where it
- * needs one, is not asked — nothing here records what a refutation used.
+ * <p>A violation is reported in the terms it was reached in, and no stronger: {@link Known} carries
+ * beside itself the reading with nothing a condition on the path settled, and a clause that reading
+ * already refutes is one the construction fails wherever it is written. Which of the things known
+ * here settled the rest is not asked — nothing records what a refutation used, so a violation the
+ * values alone do not settle is said that way and not blamed on a guard.
  *
  * <p>What it reads is Core: the body in the representation the rules are written at
  * ({@link InliningPolicy#DISCHARGE}), typed by the checker like any other, and each declaration's
@@ -406,14 +408,16 @@ public final class InvariantChecker {
         PROVED,
         /** A clause is expressible and unproven: the construction may abort. */
         UNKNOWN,
-        /** A clause is proven to fail from what the construction is handed, with nothing a condition
-         * on the path settled taking part. It fails wherever the construction is written. */
+        /** A clause the reading without the path's assumptions already refutes, so the invariant
+         * fails wherever the construction is written. */
         REFUTED_ALONE,
-        /** A clause is proven to fail, and proving it takes what a condition on the path settled. */
-        REFUTED_UNDER_ASSUMPTIONS;
+        /** A clause the full reading refutes and that reading does not. Something known here beyond
+         * the values themselves settled it; which of the things known here is not asked, so this
+         * does not say a condition on the path was one of them. */
+        REFUTED_NOT_ALONE;
 
         boolean refuted() {
-            return this == REFUTED_ALONE || this == REFUTED_UNDER_ASSUMPTIONS;
+            return this == REFUTED_ALONE || this == REFUTED_NOT_ALONE;
         }
 
         /**
@@ -421,9 +425,10 @@ public final class InvariantChecker {
          * to fail only where both fail — a construction one branch satisfies does not definitely
          * violate, whichever branch is taken. Everything else is possible and unproven.
          *
-         * <p>Where both fail and only one of them needed the path to, the two together are said to
-         * need it: what is claimed of the construction is what the weaker of the two readings
-         * supports.
+         * <p>Where both fail and only one of them fails on the values alone, the two together are
+         * said not to: what is claimed of the construction is what the weaker of the two readings
+         * supports. The other direction is the clauses of one invariant, which are conjoined rather
+         * than alternative and are combined at {@link #verdictOf} the other way round.
          *
          * <p>A branch nothing reaches finds nothing to combine: {@link #reading} answers it with no
          * findings at all, and a position only one branch found is read as discharged on the other.
@@ -432,7 +437,7 @@ public final class InvariantChecker {
             if (a == b) {
                 return a;
             }
-            return a.refuted() && b.refuted() ? REFUTED_UNDER_ASSUMPTIONS : UNKNOWN;
+            return a.refuted() && b.refuted() ? REFUTED_NOT_ALONE : UNKNOWN;
         }
     }
 
@@ -468,18 +473,29 @@ public final class InvariantChecker {
                 alone = alone.assume(known.form(), known.rel());
             }
         }
-        Verdict out = Verdict.PROVED;
+        // An invariant is the conjunction of its clauses, so every one of them is read before what
+        // the invariant came out as is decided. A clause the values alone refute is the whole
+        // invariant refuted on the values alone, whatever another clause needed to be refuted —
+        // stopping at the first refutation would answer with whichever clause was declared first.
+        boolean alongside = false;
+        boolean unknown = false;
         for (Predicates.Clause c : owed) {
             if (c.dischargedBy(dom, k.facts())) {
                 continue;
             }
-            if (c.refutedBy(dom, k.facts())) {
-                return c.refutedBy(alone, k.unguarded().facts())
-                        ? Verdict.REFUTED_ALONE : Verdict.REFUTED_UNDER_ASSUMPTIONS;
+            if (!c.refutedBy(dom, k.facts())) {
+                unknown = true;
+                continue;
             }
-            out = Verdict.UNKNOWN;
+            if (c.refutedBy(alone, k.unguarded().facts())) {
+                return Verdict.REFUTED_ALONE;
+            }
+            alongside = true;
         }
-        return out;
+        if (alongside) {
+            return Verdict.REFUTED_NOT_ALONE;
+        }
+        return unknown ? Verdict.UNKNOWN : Verdict.PROVED;
     }
 
     /** Whether the constant check reads this construction: a newtype's, over a value written where
@@ -501,7 +517,7 @@ public final class InvariantChecker {
         }
         switch (verdict) {
             case REFUTED_ALONE -> reportViolation(type, pos, "check.invariant.violation.alone");
-            case REFUTED_UNDER_ASSUMPTIONS ->
+            case REFUTED_NOT_ALONE ->
                     reportViolation(type, pos, "check.invariant.violation.assumed");
             case UNKNOWN -> {
                 if (!attempted) {
@@ -693,8 +709,9 @@ public final class InvariantChecker {
     }
 
     /** Reports the violation, saying it in the terms {@code reason} was reached in: the value alone
-     * fails the invariant, or it fails under what the path assumed. The check knows which of the two
-     * decided it and does not know which assumption did, so neither message names one. */
+     * fails the invariant on its own, or it fails under what else is known where it stands. The check
+     * knows which of the two decided it and not what within the second did, so neither message names
+     * a guard. */
     private void reportViolation(Ast.Data type, SourcePos pos, String reason) {
         errors.add(CompileException.of(
                 Diagnostic.of("E2010", reason).title("check.invariant.title")

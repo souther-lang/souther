@@ -19,7 +19,8 @@ import java.util.Set;
  * Both are refined by the same acts and differ only in which acts reach both, so a clause that comes
  * out refuted can be asked which of the two refuted it. That is what a violation is explained by: one
  * the unguarded reading already refutes holds wherever the construction stands, and one only the full
- * reading refutes needs the path to be the path it is on.
+ * reading refutes took something more than the values to settle. Which something is not recorded, so
+ * it is not claimed either.
  */
 record Known(NumericDomain numbers, PredicateFacts facts, List<Quantified> quantified,
                      Set<String> spoken, Unguarded unguarded) {

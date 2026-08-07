@@ -83,8 +83,8 @@ final class Predicates {
         quantifiedBy(stated, at, true, nested);
         // A quantifier is recorded by a guard and by a type's invariant alike, and carries no record
         // of which recorded it, so what it gives an element is taken as the path's. That is the
-        // weaker of the two readings: a violation it decides is reported as one the path decides,
-        // which holds either way.
+        // weaker of the two readings: a violation it decides is reported as one the values alone did
+        // not decide, which holds either way. It is why nothing downstream says a guard decided it.
         return assume(obligations(stated, k, at, false), k, Known.Held.ON_THE_PATH).and(nested);
     }
 

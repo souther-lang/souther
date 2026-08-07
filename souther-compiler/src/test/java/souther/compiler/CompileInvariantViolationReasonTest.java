@@ -127,4 +127,31 @@ class CompileInvariantViolationReasonTest {
         assertEquals("check.invariant.violation.assumed", reasonOf(m),
                 "one reading needed the path, so the two together are said to");
     }
+
+    /** An invariant is the conjunction of its clauses, so one clause failing on the values alone is
+     * the whole invariant failing on them — whatever the other clauses needed to fail. */
+    private static final String TWO_CLAUSES = """
+            module demo
+            data Pair = { x: Int, y: Int }
+            %s
+            behavior mk : (x: Int) -> Pair constructs Pair
+            let mk (x) =
+                if x < 0 then Pair { x = x, y = 0 - 1 }
+                else Pair { x = 0, y = 0 }
+            """;
+
+    @Test
+    void aClauseRefutedOnTheValuesAloneDecidesTheReasonForTheWholeInvariant() {
+        // `x >= 0` fails only under the guard; `y >= 0` fails on `y = -1` wherever it is written
+        assertEquals("check.invariant.violation.alone",
+                reasonOf(TWO_CLAUSES.formatted("    invariant x >= 0\n    invariant y >= 0")),
+                "the invariant is already false without the guard, by its second clause");
+    }
+
+    @Test
+    void whichClauseIsWrittenFirstIsNotTheReason() {
+        assertEquals("check.invariant.violation.alone",
+                reasonOf(TWO_CLAUSES.formatted("    invariant y >= 0\n    invariant x >= 0")),
+                "the same two clauses in the other order are the same invariant");
+    }
 }
