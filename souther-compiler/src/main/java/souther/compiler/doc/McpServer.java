@@ -61,8 +61,11 @@ public final class McpServer {
                     Map.of("name", "a stdlib module or Module.name, omit for all"), List.of()),
             new Tool("jar_api",
                     "A dependency jar's public API read from its class files, with javadoc from the"
-                            + " -sources.jar beside it. Give a fully qualified class or package name.",
-                    Map.of("name", "a fully qualified class or package name",
+                            + " -sources.jar beside it. Give a fully qualified class or package name."
+                            + " To read one member of a class rather than all of them, write"
+                            + " `Class#member` — for example `net.unit8.raoh.Result#map2`.",
+                    Map.of("name", "a fully qualified class or package name, optionally followed by"
+                            + " `#member` to select one member of the class",
                             "classpath", "jars or class directories to search, path-separated;"
                                     + " omit to search the CLI's own class path"), List.of("name")));
 

@@ -84,12 +84,31 @@ class TheJapiCommandReadsAJarsPublicApiTest {
                 public record Pair<A, B>(A first, B second) {
                 }
                 """);
+        Path constants = dir.resolve("acme/Constants.java");
+        Files.writeString(constants, """
+                package acme;
+
+                /** Values settled at compile time, and one that is not. */
+                public final class Constants {
+                    public static final String GREETING = "hello";
+                    public static final String ESCAPED = "a\\"b\\\\c\\nd\\te";
+                    public static final char SEPARATOR = '\\n';
+                    public static final char QUOTED = '\\'';
+                    public static final long LIMIT = 10L;
+                    public static final float RATIO = 1.5f;
+                    public static final double SCALE = 2.5;
+                    public static final int COUNT = 3;
+                    public static final boolean ON = true;
+                    public static final byte MASK = 7;
+                    public static final Object OPEN = new Object();
+                }
+                """);
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
         Path classes = dir.resolve("classes");
         Files.createDirectories(classes);
         assertEquals(0, javac.run(null, OutputStream.nullOutputStream(), OutputStream.nullOutputStream(),
                 "-d", classes.toString(), "-parameters", src.toString(), record.toString(),
-                hidden.toString(), packageInfo.toString()));
+                hidden.toString(), packageInfo.toString(), constants.toString()));
 
         jar = dir.resolve("greeter-1.0.jar");
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
@@ -269,5 +288,110 @@ class TheJapiCommandReadsAJarsPublicApiTest {
         assertEquals(2, answer.code());
         assertTrue(answer.err().contains("acme.Nobody"), answer.err());
         assertTrue(answer.err().contains("greeter-1.0.jar"), "the classpath it searched is named: " + answer.err());
+    }
+
+    /**
+     * A compile-time constant's value is the whole of what its declaration says, and the class file
+     * carries it. It is printed as the source would write it, so what is read back is a Java literal
+     * and not a JVM {@code toString}.
+     */
+    @Test
+    void aCompileTimeConstantIsPrintedWithTheLiteralItsSourceWrote() {
+        Answer answer = run("acme.Constants", "-cp", jar.toString());
+
+        assertEquals(0, answer.code(), answer.err());
+        String out = answer.out();
+        assertTrue(out.contains("String GREETING = \"hello\""), out);
+        assertTrue(out.contains("= \"a\\\"b\\\\c\\nd\\te\""),
+                "a quote, a backslash and a control character are escaped as Java writes them: " + out);
+        assertTrue(out.contains("char SEPARATOR = '\\n'"), out);
+        assertTrue(out.contains("char QUOTED = '\\''"), out);
+        assertTrue(out.contains("long LIMIT = 10L"), out);
+        assertTrue(out.contains("float RATIO = 1.5f"), out);
+        assertTrue(out.contains("double SCALE = 2.5"), out);
+        assertTrue(out.contains("int COUNT = 3"), out);
+        assertTrue(out.contains("boolean ON = true"), out);
+        assertTrue(out.contains("byte MASK = 7"), out);
+    }
+
+    /**
+     * Only a compile-time constant has a value in the class file. A field initialized by running
+     * code has none, and japi prints what the class file holds rather than guessing at the rest.
+     */
+    @Test
+    void aFieldWhoseValueIsNotInTheClassFileIsPrintedWithoutOne() {
+        Answer answer = run("acme.Constants", "-cp", jar.toString());
+
+        assertEquals(0, answer.code(), answer.err());
+        String declared = answer.out().lines().filter(l -> l.contains("OPEN")).findFirst().orElseThrow();
+        assertTrue(declared.strip().equals("public static final Object OPEN"),
+                "no value is invented for it: " + declared);
+    }
+
+    @Test
+    void aClassNameThatAlmostSpellsOneOnTheClassPathIsToldWhatItAlmostSpells() {
+        Answer answer = run("acme.Greetr", "-cp", jar.toString());
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().contains("did you mean"), answer.err());
+        assertTrue(answer.err().contains("acme.Greeter"), answer.err());
+    }
+
+    @Test
+    void aPackageNameThatAlmostSpellsOneOnTheClassPathIsToldSoToo() {
+        Answer answer = run("acmee", "-cp", jar.toString());
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().contains("did you mean"), answer.err());
+        assertTrue(answer.err().contains("acme"), answer.err());
+    }
+
+    @Test
+    void aNameNearNothingOnTheClassPathIsOfferedNothing() {
+        Answer answer = run("acme.Bewilderment", "-cp", jar.toString());
+
+        assertEquals(2, answer.code());
+        assertTrue(!answer.err().contains("did you mean"),
+                "a name that is not a near miss gets no guess: " + answer.err());
+    }
+
+    @Test
+    void aMissOnAMemberOfAClassThatIsNotThereNamesTheClassItAlmostSpells() {
+        Answer answer = run("acme.Greetr#greet", "-cp", jar.toString());
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().contains("acme.Greeter"), answer.err());
+    }
+
+    /**
+     * The class path the caller did not choose is the tool's own hosting, and naming it by where
+     * this machine keeps it tells a reader nothing they can act on.
+     */
+    @Test
+    void theClassPathThisToolFellBackOnIsNamedByWhatItIsNotWhereItIs() {
+        Answer answer = run("acme.Nobody");
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().lines().filter(l -> l.startsWith("  "))
+                        .noneMatch(l -> l.contains(java.io.File.separator)),
+                "no path into this machine is handed out: " + answer.err());
+    }
+
+    /** A path the caller wrote is theirs, and it is what they need back to see where japi looked. */
+    @Test
+    void aClassPathTheCallerGaveIsSaidBackAsTheyWroteIt() {
+        Answer answer = run("acme.Nobody", "-cp", jar.toString());
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().contains(jar.toString()),
+                "the path they gave is the one they are told about: " + answer.err());
+    }
+
+    @Test
+    void theUsageSaysAMemberCanBeSelected() {
+        Answer answer = run();
+
+        assertEquals(2, answer.code());
+        assertTrue(answer.err().contains("#"), "the `Class#member` form is in the usage: " + answer.err());
     }
 }
