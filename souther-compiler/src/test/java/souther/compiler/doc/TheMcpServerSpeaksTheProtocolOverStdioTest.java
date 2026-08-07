@@ -79,12 +79,13 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
     }
 
     @Test
-    void toolsListNamesTheFourAnswersAndTheirSchemas() {
+    void toolsListNamesEveryAnswerAndTheirSchemas() {
         List<JsonNode> answers = serve("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
 
         JsonNode tools = answers.getFirst().get("result").get("tools");
         List<String> names = tools.valueStream().map(t -> t.get("name").asString()).toList();
-        assertEquals(List.of("doc_search", "doc_read", "stdlib_api", "jar_api"), names);
+        assertEquals(List.of("doc_search", "doc_read", "stdlib_api", "stdlib_api_search",
+                "stdlib_api_source", "jar_api"), names);
         assertTrue(tools.valueStream().allMatch(t -> t.has("inputSchema")), "every tool declares its input");
     }
 
@@ -121,6 +122,24 @@ class TheMcpServerSpeaksTheProtocolOverStdioTest {
         assertTrue(answers.getFirst().get("result").get("isError").asBoolean(),
                 "the failure is the tool call's, not the server's");
         assertTrue(answers.get(1).get("result").has("tools"), "the next request is served as usual");
+    }
+
+    /**
+     * A tool schema is the whole of what a client can find out about a tool. A form the tool accepts
+     * and the schema does not mention cannot be reached by a reader who only has the schema, so it
+     * is missing however well it works.
+     */
+    @Test
+    void theJarApiSchemaSaysThatAMemberCanBeSelected() {
+        List<JsonNode> answers = serve("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}");
+
+        JsonNode jarApi = answers.getFirst().get("result").get("tools").valueStream()
+                .filter(t -> t.get("name").asString().equals("jar_api")).findFirst().orElseThrow();
+        assertTrue(jarApi.get("description").asString().contains("Class#member"),
+                "the description names the form: " + jarApi.get("description").asString());
+        String name = jarApi.get("inputSchema").get("properties").get("name")
+                .get("description").asString();
+        assertTrue(name.contains("#member"), "and so does the argument that takes it: " + name);
     }
 
     @Test

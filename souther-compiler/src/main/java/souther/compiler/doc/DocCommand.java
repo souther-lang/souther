@@ -1,8 +1,12 @@
 package souther.compiler.doc;
 
+import souther.compiler.check.Suggest;
+
 import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * {@code souther doc}: the language specification and every doc set a bundled dependency ships,
@@ -21,10 +25,18 @@ public final class DocCommand {
     private DocCommand() {}
 
     public static int run(String[] args, PrintStream out, PrintStream err) {
-        return run(args, out, err, DocCommand.class.getClassLoader());
+        return run(args, out, err, Caller.CLI);
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller) {
+        return run(args, out, err, caller, DocCommand.class.getClassLoader());
     }
 
     static int run(String[] args, PrintStream out, PrintStream err, ClassLoader loader) {
+        return run(args, out, err, Caller.CLI, loader);
+    }
+
+    static int run(String[] args, PrintStream out, PrintStream err, Caller caller, ClassLoader loader) {
         SpecDocument spec = SpecDocument.bundled();
         LibraryDocs shipped = LibraryDocs.on(loader);
         if (args.length == 0) {
@@ -69,13 +81,13 @@ public final class DocCommand {
             }
             if (lines.isEmpty()) {
                 err.println("nothing says `" + term + "`");
-                err.println("`souther doc` lists every section and topic");
+                err.println(caller.everySectionAndTopic());
                 return 0;
             }
             int shown = limit <= 0 ? lines.size() : Math.min(limit, lines.size());
             lines.subList(0, shown).forEach(out::println);
             if (shown < lines.size()) {
-                out.println("… " + (lines.size() - shown) + " more; `--limit 0` for all of them");
+                out.println("… " + (lines.size() - shown) + " more; " + caller.everyHit());
             }
             return 0;
         }
@@ -88,7 +100,7 @@ public final class DocCommand {
             String text = shipped.read(anchor);
             if (text == null) {
                 err.println("no doc topic `" + anchor + "`");
-                err.println("`souther doc` lists every section and topic");
+                err.println(caller.everySectionAndTopic());
                 return 2;
             }
             out.print(text);
@@ -97,17 +109,11 @@ public final class DocCommand {
         SpecDocument.Section section = spec.section(anchor);
         if (section == null) {
             err.println("no section `" + anchor + "`");
-            // Through the same fold the lookup itself went through: a reader who typed the case the
-            // compiler prints would otherwise be told there is nothing near what they asked for.
-            String asked = DocName.canonical(anchor);
-            List<String> near = spec.names().stream()
-                    .filter(a -> DocName.canonical(a).contains(asked)
-                            || asked.contains(DocName.canonical(a)))
-                    .toList();
+            List<String> near = near(anchor, spec.names());
             if (!near.isEmpty()) {
                 err.println("did you mean: " + String.join(", ", near));
             }
-            err.println("`souther doc` lists every section");
+            err.println(caller.everySection());
             return 2;
         }
         if (!DocName.canonical(section.anchor()).equals(DocName.canonical(anchor))) {
@@ -119,6 +125,55 @@ public final class DocCommand {
         out.println();
         out.println(section.body());
         return 0;
+    }
+
+    /** What separates one part of a documentation name from the next. */
+    private static final String SEGMENTS = "-/";
+
+    /** How far a name may be from a section's and still be offered as the one that was meant. */
+    private static final int NEAR_ENOUGH = 2;
+
+    /** How many names a miss is answered with. */
+    private static final int MOST_SUGGESTIONS = 5;
+
+    /**
+     * The names {@code asked} may have meant, likeliest first.
+     *
+     * <p>Both tests run through the same fold the lookup itself went through, so a reader who typed
+     * the case the compiler prints is not told there is nothing near what they asked for.
+     *
+     * <p>A name that opens a section's own name is the answer on its own: {@code e1001} names the
+     * diagnostic the section {@code e1001-removed} is about, and no count of edits would put the two
+     * near each other. It is also what settles the question, so the spellings one keystroke away are
+     * not listed beside it — {@code e1002} is a keystroke from {@code e1001} and is about something
+     * else entirely.
+     *
+     * <p>Failing that the name is a typo, which is what an edit distance measures. Whether one name
+     * occurs somewhere inside another measures neither — {@code cli} sits in the middle of
+     * {@code acyclic}.
+     */
+    private static List<String> near(String asked, List<String> names) {
+        String key = DocName.canonical(asked);
+        Map<String, String> spelled = new LinkedHashMap<>();
+        names.forEach(name -> spelled.putIfAbsent(DocName.canonical(name), name));
+
+        List<String> named = spelled.entrySet().stream()
+                .filter(e -> opensWith(e.getKey(), key) || opensWith(key, e.getKey()))
+                .map(Map.Entry::getValue)
+                .limit(MOST_SUGGESTIONS)
+                .toList();
+        if (!named.isEmpty()) {
+            return named;
+        }
+        return Suggest.nearest(key, spelled.keySet(), NEAR_ENOUGH, MOST_SUGGESTIONS).stream()
+                .map(spelled::get)
+                .toList();
+    }
+
+    /** Whether {@code opening} is the whole of a leading run of {@code name}'s segments. */
+    private static boolean opensWith(String name, String opening) {
+        return name.length() > opening.length() && name.startsWith(opening)
+                && SEGMENTS.indexOf(name.charAt(opening.length())) >= 0;
     }
 
     /**

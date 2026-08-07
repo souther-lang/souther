@@ -161,8 +161,10 @@ same way from 0.7.1 on, so `souther doc raoh/composition-patterns` reads raoh's 
 version this build depends on.
 
 The same answers are served over the Model Context Protocol: `souther mcp` speaks MCP on stdio,
-exposing `doc_search`, `doc_read`, `stdlib_api`, and `jar_api`, so agent harnesses that prefer
-tools over shell commands register one command. It answers under protocol revisions `2025-11-25`
+exposing `doc_search`, `doc_read`, `stdlib_api`, `stdlib_api_search`, `stdlib_api_source` and
+`jar_api`, so agent harnesses that prefer tools over shell commands register one command.
+`doc_read` with no argument lists every section and topic, which is where a client with nothing
+else starts. It answers under protocol revisions `2025-11-25`
 and `2025-06-18` — the ones whose opening exchange is `initialize` — echoing the client's own when
 it is one of them:
 
