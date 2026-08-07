@@ -111,6 +111,11 @@ public final class DocCommand {
             err.println("`souther doc` lists every section");
             return 2;
         }
+        if (!DocName.canonical(section.anchor()).equals(DocName.canonical(anchor))) {
+            // A name written inside a section is answered with that section, and a reader who is
+            // not told so cannot tell an answer to what they asked from the nearest thing to it.
+            err.println("`" + anchor + "` is written in `" + section.anchor() + "`, which is what follows");
+        }
         out.println("=".repeat(section.level()) + " " + section.title() + " [#" + section.anchor() + "]");
         out.println();
         out.println(section.body());
