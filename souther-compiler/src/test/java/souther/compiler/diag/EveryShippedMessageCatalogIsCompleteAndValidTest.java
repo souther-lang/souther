@@ -188,6 +188,83 @@ class EveryShippedMessageCatalogIsCompleteAndValidTest {
     }
 
     /**
+     * A key names the same arguments everywhere it is written.
+     *
+     * <p>The site passes one argument list and does not know which language it will be rendered in,
+     * so which arguments a key takes is part of the key and not part of a translation. A message
+     * that leaves one out drops what the site had to say and reads fine doing it — the Japanese
+     * type mismatch said "the type here does not match" while the English one named the argument
+     * that did not: {@code argument 3 of `foo`}. One that names an argument the base does not shows
+     * the reader a bare {@code {1}}, since nothing was passed for it.
+     *
+     * <p>Neither is visible to the checks around this one. Each catalog is well-formed on its own,
+     * and each substitutes the arguments it names.
+     *
+     * <p>Order is a translation's business — a language that puts the expected type first is
+     * still saying the same thing — so it is the set that has to agree. Read through
+     * {@link MessageFormat} rather than off the text, so a brace quoted as a literal
+     * ({@code '{0}'}) is not counted as an argument that has to appear elsewhere.
+     */
+    @Test
+    void everyCatalogUsesTheSameArgumentsAsTheBase() throws IOException {
+        Properties base = load(baseCatalog().path());
+        Set<String> divergent = new TreeSet<>();
+        for (Catalog catalog : catalogs()) {
+            if (catalog.isBase()) {
+                continue;
+            }
+            Properties messages = load(catalog.path());
+            for (String key : messages.stringPropertyNames()) {
+                String there = base.getProperty(key);
+                if (there == null) {
+                    continue;   // a key the base does not define is reported next door
+                }
+                Set<Integer> mine = argumentsOf(messages.getProperty(key), catalog.locale());
+                Set<Integer> theirs = argumentsOf(there, Locale.ENGLISH);
+                if (!mine.equals(theirs)) {
+                    divergent.add(catalog.name() + ": " + key + " takes " + mine
+                            + ", the base takes " + theirs);
+                }
+            }
+        }
+        assertEquals(Set.of(), divergent,
+                "the site passes one argument list for every language");
+    }
+
+    /**
+     * The argument indexes {@code template} references, as the formatter reads them: rendered with
+     * a mark for each argument the pattern could name, and the marks that come out are the ones it
+     * does name.
+     *
+     * <p>{@code getFormatsByArgumentIndex()} gives the bound and not the set — it is as long as the
+     * highest index mentioned, so a message using {@code {0}} and {@code {2}} reports three.
+     */
+    private static Set<Integer> argumentsOf(String template, Locale locale) {
+        MessageFormat pattern;
+        try {
+            pattern = new MessageFormat(template, locale);
+        } catch (IllegalArgumentException _) {
+            return Set.of();   // refused, and reported as that rather than as an argument list
+        }
+        int bound = pattern.getFormatsByArgumentIndex().length;
+        Object[] marks = new Object[bound];
+        for (int i = 0; i < bound; i++) {
+            marks[i] = MARK + Integer.toString(i) + MARK;
+        }
+        String rendered = pattern.format(marks);
+        Set<Integer> named = new TreeSet<>();
+        for (int i = 0; i < bound; i++) {
+            if (rendered.contains(MARK + Integer.toString(i) + MARK)) {
+                named.add(i);
+            }
+        }
+        return named;
+    }
+
+    /** Stands in for an argument while its pattern is rendered; no message writes one. */
+    private static final char MARK = '\u0001';
+
+    /**
      * Every message parses as a {@link MessageFormat} pattern, whether or not it names an argument.
      *
      * <p>{@code Messages.get} renders every message as one, so a template the formatter refuses is

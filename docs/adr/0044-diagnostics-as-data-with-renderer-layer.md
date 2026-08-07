@@ -43,7 +43,10 @@ who were being served Japanese by default keep it with `SOUTHER_LANG=ja` in a sh
 
 What does bind is each catalog on its own: every catalog that ships defines the base's complete key
 set, and is valid on its own terms — no duplicate key, every message a well-formed `MessageFormat`
-pattern, every standard-library name it quotes one the library publishes. The build discovers the
+pattern, every standard-library name it quotes one the library publishes. A key also names the same
+arguments everywhere it is written: the site passes one argument list without knowing which language
+will render it, so which arguments a key takes belongs to the key and not to a translation, while
+the order they appear in belongs to the translation. The build discovers the
 catalogs from the tree rather than naming them, so a catalog added tomorrow is under all of it, and
 one language has one catalog: two files naming it are two answers to one lookup, settled by class
 path order.
