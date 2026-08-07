@@ -20,6 +20,16 @@ class TheApiCommandAnswersTheStdlibSurfaceTest {
 
     private record Answer(int code, String out, String err) {}
 
+    /** The name a listed line stands for. The type it answers with comes after {@code " : "}, and an
+     *  argument list before that is written only where the name declares parameters — a value is
+     *  written with none, so a name is not what stands before a {@code (} the line may not have. */
+    private static String nameIn(String line) {
+        int type = line.indexOf(" : ");
+        String called = type < 0 ? line : line.substring(0, type);
+        int open = called.indexOf('(');
+        return open < 0 ? called : called.substring(0, open);
+    }
+
     private Answer run(String... args) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();
@@ -45,7 +55,7 @@ class TheApiCommandAnswersTheStdlibSurfaceTest {
 
         assertEquals(0, answer.code());
         List<String> listed = answer.out().lines()
-                .map(line -> line.substring(0, line.indexOf('(')))
+                .map(TheApiCommandAnswersTheStdlibSurfaceTest::nameIn)
                 .toList();
 
         assertEquals(List.copyOf(Prelude.published()), listed,
