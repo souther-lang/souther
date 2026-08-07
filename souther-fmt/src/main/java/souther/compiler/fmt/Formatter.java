@@ -371,11 +371,12 @@ public final class Formatter {
         if (list.isEmpty()) {
             return d;   // an import that only renames the module, or only names the dependency
         }
-        List<Doc> names = new ArrayList<>();
+        List<Member> names = new ArrayList<>();
         for (SyntaxToken t : idents(list.get())) {
-            names.add(text(t.text()));
+            names.add(tokenMember(t, t, text(t.text())));
         }
-        return concat(d, text(" "), delimited("(", LINE, plain(names), ")"));
+        return concat(d, text(" "),
+                delimited("(", LINE, withEndComments(list.get(), names), ")"));
     }
 
     // --- data ---
@@ -496,16 +497,18 @@ public final class Formatter {
         }
         SyntaxNode pipe = n.child(SyntaxKind.PIPE_BEHAVIOR).orElseThrow();
         List<SyntaxNode> stages = childNodes(pipe, SyntaxKind.STAGE);
-        List<Doc> tail = new ArrayList<>();
-        for (int i = 1; i < stages.size(); i++) {
-            SyntaxNode st = stages.get(i);
-            tail.add(concat(LINE, aboveOf(st), text(">-> "), stage(st), afterOf(st)));
-        }
-        Doc body = group(nest(INDENT, concat(LINE, aboveOf(stages.get(0)),
-                stage(stages.get(0)), afterOf(stages.get(0)), concat(tail))));
         Doc declaredOut = pipe.child(SyntaxKind.RET_TYPE)
                 .map(rt -> concat(text(" -> "), retType(rt))).orElse(Doc.NIL);
-        return concat(text("behavior "), text(name), text(" ="), body, declaredOut);
+        List<Doc> parts = new ArrayList<>();
+        for (int i = 0; i < stages.size(); i++) {
+            SyntaxNode st = stages.get(i);
+            // What the declaration writes after the last stage is on that stage's line, so it comes
+            // before the comment that ends the line rather than after it.
+            parts.add(concat(LINE, aboveOf(st), text(i == 0 ? "" : ">-> "), stage(st),
+                    i == stages.size() - 1 ? declaredOut : Doc.NIL, afterOf(st)));
+        }
+        return concat(text("behavior "), text(name), text(" ="),
+                group(nest(INDENT, concat(parts))));
     }
 
     private Doc paramList(SyntaxNode n) {
@@ -534,8 +537,10 @@ public final class Formatter {
     private Doc nameList(SyntaxNode clause, int skipIdents) {
         // an entry may name through a module, so the dots of one name are kept and only a comma
         // starts the next
-        List<Doc> names = new ArrayList<>();
+        List<Member> names = new ArrayList<>();
         StringBuilder current = new StringBuilder();
+        SyntaxToken opened = null;
+        SyntaxToken ended = null;
         int skipped = 0;
         for (SyntaxElement e : meaningful(clause)) {
             if (!(e instanceof SyntaxToken t)) {
@@ -546,19 +551,27 @@ public final class Formatter {
                 continue;
             }
             switch (t.kind()) {
-                case IDENT -> current.append(t.text());
+                case IDENT -> {
+                    if (opened == null) {
+                        opened = t;
+                    }
+                    ended = t;
+                    current.append(t.text());
+                }
                 case DOT -> current.append('.');
                 case COMMA -> {
-                    names.add(text(current.toString()));
+                    names.add(tokenMember(opened, ended, text(current.toString())));
                     current.setLength(0);
+                    opened = null;
+                    ended = null;
                 }
                 default -> { }   // the `constructs` / `depends` keyword
             }
         }
         if (current.length() > 0) {
-            names.add(text(current.toString()));
+            names.add(tokenMember(opened, ended, text(current.toString())));
         }
-        return group(nest(INDENT, separated(plain(names))));
+        return group(nest(INDENT, separated(withEndComments(clause, names))));
     }
 
     /** The {@code : T} a node wrote, or nothing — a helper's return type, a local binding's annotation. */
@@ -806,14 +819,14 @@ public final class Formatter {
     }
 
     private Doc pipe(SyntaxNode n) {
-        List<Doc> stages = new ArrayList<>();
+        List<Segment> stages = new ArrayList<>();
         Doc head = collectPipe(n, stages);
-        return chained(head, segments("|> ", stages));
+        return chained(head, stages);
     }
 
     /** Flattens a left-nested {@code |>} chain: returns the head doc and fills {@code stages} with each
      * right-hand stage in source order. */
-    private Doc collectPipe(SyntaxNode n, List<Doc> stages) {
+    private Doc collectPipe(SyntaxNode n, List<Segment> stages) {
         List<SyntaxNode> ops = exprChildren(n);
         SyntaxNode left = ops.get(0);
         SyntaxNode right = ops.get(1);
@@ -821,9 +834,9 @@ public final class Formatter {
         if (left.kind() == SyntaxKind.PIPE_EXPR) {
             head = collectPipe(left, stages);
         } else {
-            head = expr(left);
+            head = concat(aboveOf(left), expr(left), afterOf(left));
         }
-        stages.add(expr(right));
+        stages.add(new Segment("|> ", concat(expr(right), afterOf(right)), aboveOf(right)));
         return head;
     }
 
@@ -837,9 +850,12 @@ public final class Formatter {
 
     private Doc listComp(SyntaxNode n) {
         List<Member> exprs = exprDocs(n);
+        Member element = exprs.get(0);
         List<Member> guards = exprs.subList(1, exprs.size());
-        return concat(text("["), exprs.get(0).doc(), text(" | "),
-                group(nest(INDENT, separated(guards))), text("]"));
+        // The `|` is the comprehension's and it is on the element's line, so it goes before the
+        // comment that ends that line — as a comma does for a member of a list.
+        return group(concat(text("["), element.doc(), text(" |"), element.trailing(),
+                nest(INDENT, concat(LINE, separated(guards))), SOFTLINE, text("]")));
     }
 
     private Doc ifExpr(SyntaxNode n) {
@@ -1145,7 +1161,7 @@ public final class Formatter {
     private static SyntaxToken nextCode(List<SyntaxToken> all, int i) {
         for (int j = i + 1; j < all.size(); j++) {
             SyntaxToken t = all.get(j);
-            if (t.isTrivia() || separates(t) || opens(t)) {
+            if (t.isTrivia() || separates(t)) {
                 continue;
             }
             return t.kind() == SyntaxKind.EOF ? null : t;
@@ -1164,9 +1180,21 @@ public final class Formatter {
     }
 
     private static void above(Attachments out, SyntaxToken next, SyntaxToken comment, SyntaxNode file) {
+        if (next != null && opens(next)) {
+            // what opens a construct is the construct's, and it shares a line with the first member
+            SyntaxElement first = firstMemberOf(next.parent());
+            if (first instanceof SyntaxNode node) {
+                add(out.above(), node, comment);
+                return;
+            }
+            if (first instanceof SyntaxToken token) {
+                out.aboveCase().computeIfAbsent(token.start(), _ -> new ArrayList<>()).add(comment);
+                return;
+            }
+        }
         if (next == null) {
             add(out.atEnd(), file, comment);          // nothing follows: it closes the file
-        } else if (isCase(next)) {
+        } else if (isBareMember(next)) {
             out.aboveCase().computeIfAbsent(next.start(), _ -> new ArrayList<>()).add(comment);
         } else if (closes(next)) {
             add(out.atEnd(), next.parent(), comment);
@@ -1180,9 +1208,9 @@ public final class Formatter {
         if (code == null) {
             return;                                   // a comment with no code before it is above
         }
-        // A case is only its own line's owner while something follows it. The last case of a sum
-        // ends where the declaration does, and what ends on that line is the declaration.
-        if (isCase(code) && code.end() != code.parent().end()) {
+        // A bare member is only its own line's owner while something follows it. The last case of a
+        // sum ends where the declaration does, and what ends on that line is the declaration.
+        if (isBareMember(code) && code.end() != code.parent().end()) {
             out.afterCase().computeIfAbsent(code.end(), _ -> new ArrayList<>()).add(comment);
             return;
         }
@@ -1196,9 +1224,47 @@ public final class Formatter {
         to.computeIfAbsent(key, _ -> new ArrayList<>()).add(c);
     }
 
-    /** A case of a sum, which the grammar writes as a bare identifier rather than as a node. */
-    private static boolean isCase(SyntaxToken t) {
-        return t.kind() == SyntaxKind.IDENT && t.parent().kind() == SyntaxKind.SUM_BODY;
+    /** The first of {@code container}'s members, which is what shares the line its opener starts.
+     * Nothing where it has no members: an empty construct's brackets open and close one line. */
+    private static SyntaxElement firstMemberOf(SyntaxNode container) {
+        for (SyntaxElement e : container.children()) {
+            if (e instanceof SyntaxNode c && takesALineOf(container.kind(), c.kind())) {
+                return c;
+            }
+            if (e instanceof SyntaxToken t && isBareMember(t)) {
+                return t;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A member the grammar writes as a bare identifier rather than as a node — a sum's cases, the
+     * names an import or a {@code constructs} clause lists. It has no node to be named by, so it is
+     * named by where its identifier is.
+     *
+     * <p>The identifier a {@code depends on} clause opens with is the {@code on}, which is the
+     * keyword and not a name.
+     */
+    private static boolean isBareMember(SyntaxToken t) {
+        if (t.kind() != SyntaxKind.IDENT) {
+            return false;
+        }
+        SyntaxNode parent = t.parent();
+        return switch (parent.kind()) {
+            case SUM_BODY, NAME_LIST, CONSTRUCTS_CLAUSE -> true;
+            case DEPENDS_CLAUSE -> !t.equals(firstIdentToken(parent));
+            default -> false;
+        };
+    }
+
+    private static SyntaxToken firstIdentToken(SyntaxNode n) {
+        for (SyntaxElement e : n.children()) {
+            if (e instanceof SyntaxToken t && t.kind() == SyntaxKind.IDENT) {
+                return t;
+            }
+        }
+        return null;
     }
 
     /** Whether {@code t} is what closes a construct whose members take a line each — the place a
@@ -1246,6 +1312,7 @@ public final class Formatter {
                     || child == SyntaxKind.DEPENDS_CLAUSE;
             case BLOCK_EXPR -> true;
             case ARG_LIST, LIST_EXPR, TUPLE_EXPR, LIST_COMP -> isExprKind(child);
+            case PIPE_EXPR -> isExprKind(child) && child != SyntaxKind.PIPE_EXPR;
             default -> false;
         };
     }
@@ -1322,6 +1389,16 @@ public final class Formatter {
             }
         }
         return concat(parts);
+    }
+
+    /** A member the grammar wrote as an identifier: the same shape as one written as a node, held
+     * against where the identifier is. */
+    private Member tokenMember(SyntaxToken above, SyntaxToken end, Doc d) {
+        List<Doc> lead = new ArrayList<>();
+        for (Doc c : aboveCase(above)) {
+            lead.add(concat(c, HARDLINE));
+        }
+        return new Member(concat(concat(lead), d), afterCase(end));
     }
 
     /** A member: what is written above its line, the member, and what ends that line — the last kept

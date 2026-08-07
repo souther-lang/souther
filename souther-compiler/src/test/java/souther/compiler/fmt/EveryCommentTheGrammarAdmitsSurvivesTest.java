@@ -10,6 +10,7 @@ import souther.compiler.cst.SyntaxToken;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -108,11 +109,9 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
             behavior through : (i: In) -> Out
                 constructs Out
 
-            behavior piped = through >-> through
+            behavior piped = through >-> through -> Out
 
             let empty = Out {}
-
-            let none () = 1
 
             let make (n) = {
                 guard Amount(n) as a else
@@ -127,11 +126,14 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
                 | "it makes" : (2) with n = 2 -> Out { n = 2 }
             """;
 
+    /** A fixture that does not parse contributes nothing: every variant of it is skipped, and the
+     * sweep reports a clean run over the ones that are left. So the fixtures are checked, and so is
+     * how many variants each of them actually contributed. */
     @Test
-    void theFixturesAreInCanonicalForm() {
+    void theFixturesParseAndAreInCanonicalForm() {
         for (String fixture : List.of(WHOLE_MODULE, THE_OTHER_FORMS)) {
-            org.junit.jupiter.api.Assertions.assertEquals(fixture, Formatter.format(fixture),
-                    "a fixture is not in canonical form");
+            assertEquals(List.of(), CstParser.parse(fixture).errors(), "a fixture does not parse");
+            assertEquals(fixture, Formatter.format(fixture), "a fixture is not in canonical form");
         }
     }
 
@@ -147,10 +149,13 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
 
     private static void sweep(boolean onItsOwnLine) {
         List<String> lost = new ArrayList<>();
+        List<String> rewritten = new ArrayList<>();
         List<String> refused = new ArrayList<>();
         int checked = 0;
+        java.util.Map<Integer, Integer> contributed = new java.util.LinkedHashMap<>();
         for (String fixture : List.of(WHOLE_MODULE, THE_OTHER_FORMS)) {
             List<String> expected = commentsOf(fixture);
+            int before = checked;
             for (String variant : variants(fixture, onItsOwnLine)) {
                 if (!CstParser.parse(variant).errors().isEmpty()) {
                     continue;   // the probe made this one unparseable; nothing to ask of it
@@ -171,15 +176,24 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
                 if (!want.equals(got)) {
                     lost.add(context(variant) + "  gave " + got);
                 }
+                if (!code(variant).equals(code(formatted))) {
+                    rewritten.add(context(variant) + "  gave " + code(formatted));
+                }
             }
+            contributed.put(contributed.size(), checked - before);
         }
 
+        for (var e : contributed.entrySet()) {
+            assertTrue(e.getValue() > 50,
+                    "a fixture contributed only " + e.getValue() + " variants; it is not being swept");
+        }
         assertTrue(checked > 150, "only " + checked + " variants parsed; the sweep found nothing");
-        assertTrue(lost.isEmpty() && refused.isEmpty(),
-                "of " + checked + " swept, " + lost.size() + " came back with the comments changed"
-                        + " and " + refused.size() + " were refused.\nchanged after:\n"
-                        + String.join("\n", lost) + "\nrefused after:\n"
-                        + String.join("\n", refused));
+        assertTrue(lost.isEmpty() && rewritten.isEmpty() && refused.isEmpty(),
+                "of " + checked + " swept, " + lost.size() + " came back with the comments changed,"
+                        + " " + rewritten.size() + " with the code changed and " + refused.size()
+                        + " were refused.\ncomments changed after:\n" + String.join("\n", lost)
+                        + "\ncode changed after:\n" + String.join("\n", rewritten)
+                        + "\nrefused after:\n" + String.join("\n", refused));
     }
 
     /** {@code source} with a probe comment written into one boundary between two of its tokens, one
@@ -202,6 +216,21 @@ class EveryCommentTheGrammarAdmitsSurvivesTest {
         for (SyntaxToken t : tokens(CstParser.parse(source).root())) {
             if (!t.isTrivia() && t.kind() != SyntaxKind.EOF && !out.contains(t.end())) {
                 out.add(t.end());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What {@code source} says, with the trivia dropped. Formatting rewrites the layout and nothing
+     * else, so this is the same before and after — and a comment that swallowed the code after it
+     * shows up here rather than in the comments, which come back one for one either way.
+     */
+    private static List<String> code(String source) {
+        List<String> out = new ArrayList<>();
+        for (SyntaxToken t : tokens(CstParser.parse(source).root())) {
+            if (!t.isTrivia()) {
+                out.add(t.kind() + " " + t.text());
             }
         }
         return out;
