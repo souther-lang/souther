@@ -15,10 +15,15 @@ import java.util.Set;
 /**
  * A value defined in terms of itself, refused before anything is expanded.
  *
- * <p>A value is substituted at each of its references (ADR-0072), so one that reaches itself is
- * substituted into itself and there is no body to reach the end of. It has to be refused before the
- * first expansion rather than caught by whatever depth guard the expansion runs into, which reports
- * a nesting the author did not write.
+ * <p>A value is substituted at each of its references, so one that reaches itself is substituted into
+ * itself and there is no body to reach the end of. It is refused here, of the module, before anything
+ * expands a body of it: the report belongs at the declaration, said once, naming the path the value
+ * goes round.
+ *
+ * <p>The expansion refuses to substitute a value into itself as well ({@link ExpansionCycle}), and
+ * that is a different statement. It bounds an algorithm handed an input this refusal rules out; it is
+ * not an answer about the program, and it does not see a value that reaches itself through a helper
+ * whose call it leaves standing. Neither stands in for the other.
  *
  * <p>The value graph is not the call graph. A helper on a call cycle is lowered to a method and
  * recurses at run time (ADR-0038); a value has no such form, so a cycle that passes through one is an

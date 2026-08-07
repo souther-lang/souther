@@ -82,6 +82,16 @@ public final class HelperInliner {
      * with each would give two of them the same binding.
      */
     private final Map<BindingOwner, Integer> written = new HashMap<>();
+    /**
+     * The values this expansion is inside, from the body being written down to here.
+     *
+     * <p>On the pass rather than in a {@link Writing}, because it is neither: a value's body is
+     * substituted within the writing that names it, and the substitution of one value can carry the
+     * expansion into another. It is a path through the tree being written, pushed and popped around
+     * each substitution, and it is empty again whenever a body is finished with — including a body
+     * that was refused partway through.
+     */
+    private final Set<String> substituting = new LinkedHashSet<>();
 
     /**
      * One writing of one body, and everything that is true only while it runs.
@@ -1271,7 +1281,35 @@ public final class HelperInliner {
         if (value == null || value.body() == null || graph.recurses(v.name())) {
             return v;
         }
-        return HelperNames.carriedByValue(inline(value.writtenBody()));
+        return substituted(v.reaches(), value.writtenBody());
+    }
+
+    /**
+     * The body of the value {@code reached} stands for, expanded here — and a refusal where this
+     * expansion is already substituting that value.
+     *
+     * <p>Substituting a value into itself has no end, so an expansion that reached one would descend
+     * until the stack ran out. Which modules that can happen to is answered before anything expands a
+     * body of one, and it is {@link ValueCycles} that answers it and says so to the author. This is
+     * not that rule said twice: it is about this algorithm rather than about the module, and what it
+     * gives is that expanding is bounded whatever it is handed. A caller that reached here with a
+     * module the answer above would have refused gets a failure naming the value, rather than a stack
+     * that ran out and a report about an expression nesting too deeply.
+     *
+     * <p>What it holds is the path and not what it has seen: a value named twice in one body is
+     * substituted twice, side by side, and only one inside the other is re-entry.
+     */
+    private Ast.Expr substituted(String reached, Ast.Expr body) {
+        if (!substituting.add(reached)) {
+            throw new ExpansionCycle("`" + reached + "` is substituted into itself ("
+                    + String.join(" -> ", substituting) + " -> " + reached + "), and a module whose"
+                    + " values are not well founded is refused before a body of it is expanded");
+        }
+        try {
+            return HelperNames.carriedByValue(inline(body));
+        } finally {
+            substituting.remove(reached);
+        }
     }
 
     /**
@@ -1294,7 +1332,7 @@ public final class HelperInliner {
             }
             Ast.Binder name = writing.binders().binder("$s" + next() + "_" + spread.bare(), spread.pos());
             bound.add(name);
-            values.add(HelperNames.carriedByValue(inline(value.writtenBody())));
+            values.add(substituted(spread.name(), value.writtenBody()));
             spreads.add(Ast.Var.local(name, spread.pos()));
         }
         Ast.Expr built = new Ast.NewData(nd.typeName(), inlineInits(nd.inits()), spreads,
